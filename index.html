@@ -5839,7 +5839,7 @@ function renderPerf(container){
 
       var tssBadgeC=tss>=150?'rgba(239,68,68,.12)':tss>=80?'rgba(252,76,2,.12)':tss>=40?'rgba(55,138,221,.12)':'rgba(0,200,150,.12)';
       var tssTxtC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
-      html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
+      html+='<div style="background:var(--s1);border-radius:14px;border:0.5px solid var(--b1);border-left:4px solid '+accentC+';overflow:hidden">'
         +'<div style="padding:12px 12px 10px">';
 
       // Header
@@ -5847,8 +5847,8 @@ function renderPerf(container){
         +'<div style="flex:1;cursor:pointer" onclick="openRideDetail('+rIdx+')">'
         +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:1px">'+(r.name||'Ride')+'</div>'
         +'<div style="font-size:11px;color:var(--t3)">'+(r.date||'')+'</div></div>'
-        +(tss?'<div style="display:flex;align-items:center;gap:6px">'
-          +'<span style="background:'+tssBadgeC+';color:'+tssTxtC+';font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">TSS '+tss+'</span>':'<div>')
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +(tss?'<span style="background:'+tssBadgeC+';color:'+tssTxtC+';font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">TSS '+tss+'</span>':'')
         +(rwkg?'<div style="background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.15);border-radius:8px;padding:5px 9px;text-align:center;margin-left:6px">'
           +'<div style="font-size:14px;font-weight:900;color:#FC4C02;line-height:1">'+rwkg+'</div>'
           +'<div style="font-size:9px;font-weight:700;color:rgba(252,76,2,.5)">W/kg</div></div>':'')
