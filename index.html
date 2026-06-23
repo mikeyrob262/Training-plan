@@ -3505,6 +3505,13 @@ function showProg(){
   var t=document.getElementById('PROG');
   if(!t)return;
 
+  // If no rides yet, wait for Firebase and retry
+  if(!(st.rides||[]).length){
+    t.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3);font-size:14px">Syncing data...</div>';
+    setTimeout(function(){ if((st.rides||[]).length) showProg(); },3000);
+    setTimeout(function(){ if((st.rides||[]).length) showProg(); },7000);
+  }
+
   // Gather data
   var now=new Date();
   var yearStart=new Date(now.getFullYear(),0,1);
@@ -3541,8 +3548,13 @@ function showProg(){
     if(Object.keys(st.cond[d]).length>0) allSessions.push({date:d,type:'conditioning'});
   });}
 
-  var thisWeekSess=allSessions.filter(function(s){var d=new Date(s.date);return d>=weekStart;}).length;
-  var thisMonthSess=allSessions.filter(function(s){var d=new Date(s.date);return d>=monthStart;}).length;
+  function parseDate(ds){
+    if(!ds) return new Date(0);
+    var p=ds.split('-');
+    return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])||1);
+  }
+  var thisWeekSess=allSessions.filter(function(s){return parseDate(s.date)>=weekStart;}).length;
+  var thisMonthSess=allSessions.filter(function(s){return parseDate(s.date)>=monthStart;}).length;
 
   // Streak (consecutive weeks with activity)
   var streak=0;
@@ -3550,7 +3562,7 @@ function showProg(){
     var ws3=new Date(now); ws3.setDate(now.getDate()-wi*7);
     ws3.setDate(ws3.getDate()-(ws3.getDay()===0?6:ws3.getDay()-1)); ws3.setHours(0,0,0,0);
     var we3=new Date(ws3); we3.setDate(ws3.getDate()+7);
-    var has=allSessions.some(function(s){var d=new Date(s.date);return d>=ws3&&d<we3;});
+    var has=allSessions.some(function(s){var d=parseDate(s.date);return d>=ws3&&d<we3;});
     if(has) streak++;
     else if(wi>0) break;
   }
@@ -3562,7 +3574,7 @@ function showProg(){
     var ws4=new Date(now); ws4.setDate(now.getDate()-wi2*7);
     ws4.setDate(ws4.getDate()-(ws4.getDay()===0?6:ws4.getDay()-1)); ws4.setHours(0,0,0,0);
     var we4=new Date(ws4); we4.setDate(ws4.getDate()+7);
-    weekCounts.push(allSessions.filter(function(s){var d=new Date(s.date);return d>=ws4&&d<we4;}).length);
+    weekCounts.push(allSessions.filter(function(s){var d=parseDate(s.date);return d>=ws4&&d<we4;}).length);
     weekLabels.push('W'+(12-wi2));
   }
 
