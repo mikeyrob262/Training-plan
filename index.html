@@ -5104,6 +5104,23 @@ function openFoodForMeal(meal){
   searchInput.style.cssText = 'flex:1;font-size:15px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 14px;color:var(--t1);font-family:inherit';
   searchRow.appendChild(searchInput);
 
+  // Quick manual add button
+  var quickAddBtn = document.createElement('button');
+  quickAddBtn.style.cssText = 'background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);color:#00C896;font-size:12px;font-weight:700;padding:0 12px;border-radius:10px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0';
+  quickAddBtn.textContent = '+ Custom';
+  quickAddBtn.addEventListener('click', function(){
+    // Scroll to bottom where custom entry is
+    foodList.scrollTop = foodList.scrollHeight;
+    // Flash the custom entry
+    var customWrap = foodList.querySelector('[data-custom="1"]');
+    if(customWrap){
+      customWrap.style.boxShadow = '0 0 0 2px #00C896';
+      setTimeout(function(){customWrap.style.boxShadow='';}, 1500);
+      customWrap.scrollIntoView({behavior:'smooth'});
+    }
+  });
+  searchRow.appendChild(quickAddBtn);
+
   // Barcode scanner button
   var scanBtn = document.createElement('button');
   scanBtn.style.cssText = 'background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:44px;height:44px;border-radius:10px;font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center';
@@ -5204,13 +5221,34 @@ function openFoodForMeal(meal){
         };
         video.addEventListener('playing', function(){ requestAnimationFrame(detect); });
       } else {
-        // Fallback: manual UPC entry
-        frame.innerHTML = '';
-        frame.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:280px;z-index:5;text-align:center';
-        frame.innerHTML = '<div style="color:white;font-size:14px;margin-bottom:12px">Barcode scanner not supported.<br>Enter UPC manually:</div>'
-          +'<input id="manual-upc" type="number" placeholder="012345678901" style="width:100%;padding:10px;border-radius:8px;border:none;font-size:16px;text-align:center">'
-          +'<button id="manual-upc-btn" style="margin-top:8px;width:100%;padding:10px;background:#FC4C02;color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Look Up</button>';
-        setTimeout(function(){var b=document.getElementById('manual-upc-btn');if(b)b.addEventListener('click',function(){var u=document.getElementById('manual-upc').value;if(u){stream.getTracks().forEach(function(t){t.stop();});camOverlay.remove();searchInput.value=u;}});},100);
+        // Fallback: use file input with camera capture for iOS
+        stream.getTracks().forEach(function(t){t.stop();});
+        camOverlay.remove();
+        var fileIn = document.createElement('input');
+        fileIn.type = 'file';
+        fileIn.accept = 'image/*';
+        fileIn.setAttribute('capture', 'environment');
+        fileIn.style.display = 'none';
+        document.body.appendChild(fileIn);
+        fileIn.addEventListener('change', function(){
+          if(!fileIn.files||!fileIn.files[0]) return;
+          var img = document.createElement('img');
+          img.onload = function(){
+            if('BarcodeDetector' in window){
+              var det = new BarcodeDetector();
+              det.detect(img).then(function(barcodes){
+                if(barcodes.length){
+                  var upc = barcodes[0].rawValue;
+                  searchInput.value = upc;
+                  searchInput.dispatchEvent(new Event('input'));
+                }
+              });
+            }
+          };
+          img.src = URL.createObjectURL(fileIn.files[0]);
+          fileIn.remove();
+        });
+        fileIn.click();
       }
     }).catch(function(){
       camOverlay.remove();
@@ -5374,6 +5412,7 @@ function renderFoodRows(container, list){
 
   // Custom food entry at bottom
   var wrap = document.createElement('div');
+  wrap.setAttribute('data-custom','1');
   wrap.style.cssText = 'background:var(--s2);border-radius:12px;padding:14px;border:1px solid var(--b2);margin-top:12px';
   var lbl = document.createElement('div');
   lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px';
