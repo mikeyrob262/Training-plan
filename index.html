@@ -3725,6 +3725,11 @@ function showProg(){
   window._progCharts={weekCounts:weekCounts,weekLabels:weekLabels,protDays:protDays,wtData:wtData,wtLabels:wtLabels,lrData:lrData,lrLabels:lrLabels};
 
   t.innerHTML=h;
+  // Auto re-render when Firebase syncs rides
+  if(!(st.rides||[]).length){
+    var _progTimer=setInterval(function(){if((st.rides||[]).length){clearInterval(_progTimer);showProg();}},2000);
+    setTimeout(function(){clearInterval(_progTimer);},15000);
+  }
   showScreen('PROG');
 
   // Build charts
