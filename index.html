@@ -6603,7 +6603,18 @@ function importRideFile(input){
     reader.onload = function(e){
       var text = e.target.result.replace(/^\uFEFF/,''); // strip BOM
       var lines = text.split('\n').filter(function(l){return l.trim();});
-      var headers = lines[0].split(',').map(function(h){return h.replace(/"/g,'').trim();});
+      function parseCSVLine(line){
+        var result=[], cur='', inQ=false;
+        for(var ci=0;ci<line.length;ci++){
+          var ch=line[ci];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){result.push(cur);cur='';}
+          else{cur+=ch;}
+        }
+        result.push(cur);
+        return result;
+      }
+      var headers = parseCSVLine(lines[0]).map(function(h){return h.replace(/"/g,'').trim();});
 
       // Detect type by headers
       var isActivities = headers.indexOf('icu_normalized_watts') >= 0;
@@ -6612,7 +6623,7 @@ function importRideFile(input){
 
       function getCol(row, key){
         var idx = headers.indexOf(key);
-        return idx >= 0 ? row[idx].replace(/"/g,'').trim() : '';
+        return idx >= 0 ? (row[idx]||'').replace(/"/g,'').trim() : '';
       }
 
       if(isActivities){
@@ -6739,7 +6750,7 @@ function importRideFile(input){
       if(isStrava){
         var stravaImported=0, stravaSkipped=0;
         for(var si2=1;si2<lines.length;si2++){
-          var sr=lines[si2].split(',');
+          var sr=parseCSVLine(lines[si2]);
           if(sr.length<5) continue;
           var atype2=getCol(sr,'Activity Type').replace(/"/g,'').trim();
           if(atype2!=='Ride'&&atype2!=='VirtualRide'){stravaSkipped++;continue;}
