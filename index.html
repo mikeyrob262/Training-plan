@@ -5076,7 +5076,7 @@ function renderNutr(){
             fields.forEach(function(fl){
               nd.meals[mn][i][fl.k]=parseFloat(inputs[fl.k].value)||0;
             });
-            sv();overlay2.remove();renderNutr();showScreen('NUTR');
+            var _sp3=document.getElementById('NUTR').scrollTop;sv();overlay2.remove();renderNutr();showScreen('NUTR');requestAnimationFrame(function(){document.getElementById('NUTR').scrollTop=_sp3;});
           };
           btnRow.appendChild(cancelBtn2);btnRow.appendChild(saveBtn2);
           box.appendChild(btnRow);
@@ -5099,7 +5099,7 @@ function renderNutr(){
           item2.p=Math.round(baseP*qty*10)/10;
           item2.c=Math.round(baseC*qty*10)/10;
           item2.f=Math.round(baseF*qty*10)/10;
-          sv();renderNutr();showScreen('NUTR');
+          sv();var _sp=document.getElementById('NUTR').scrollTop;renderNutr();showScreen('NUTR');requestAnimationFrame(function(){document.getElementById('NUTR').scrollTop=_sp;});
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
@@ -5119,7 +5119,7 @@ function renderNutr(){
             item3.c=Math.round(baseC2*qty*10)/10;
             item3.f=Math.round(baseF2*qty*10)/10;
           }
-          sv();renderNutr();showScreen('NUTR');
+          sv();var _sp2=document.getElementById('NUTR').scrollTop;renderNutr();showScreen('NUTR');requestAnimationFrame(function(){document.getElementById('NUTR').scrollTop=_sp2;});
         };
       })(meal,ii,item);
       rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(editBtn);rDiv.appendChild(rmBtn);
