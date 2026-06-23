@@ -9546,6 +9546,7 @@ function renderMob(){
 // ─────────────────────────────────────────────────────────────────────────────
 
 window.onload = function(){
+  try{
   document.getElementById('btn-prog').onclick = showProg;
   document.getElementById('btn-nutr').onclick = showNutr;
   document.getElementById('btn-perf').onclick = showPerf;
@@ -9578,6 +9579,7 @@ window.onload = function(){
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
+  }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </body>
