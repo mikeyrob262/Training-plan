@@ -3744,7 +3744,7 @@ function showProg(){
     var base={responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}}}}};
 
     var sc=document.getElementById('prog-sess-chart');
-    if(sc) new Chart(sc,{type:'bar',data:{labels:cd.weekLabels,datasets:[{data:cd.weekCounts,backgroundColor:cd.weekCounts.map(function(v,i){return i===cd.weekCounts.length-1?'#185FA5':'rgba(24,95,165,0.4)';}),borderRadius:4}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
+    if(sc) new Chart(sc,{type:'bar',data:{labels:cd.weekLabels,datasets:[{data:cd.weekCounts,backgroundColor:cd.weekCounts.map(function(v,i){return i===cd.weekCounts.length-1?'#FC4C02':'rgba(252,76,2,0.4)';}),borderRadius:4}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
 
     // Protein chart lives in Nutrition → Progress tab
 
