@@ -6608,6 +6608,7 @@ function importRideFile(input){
       // Detect type by headers
       var isActivities = headers.indexOf('icu_normalized_watts') >= 0;
       var isSummary = headers.indexOf('Fitness') >= 0 && headers.indexOf('Fatigue') >= 0;
+      var isStrava = headers.indexOf('Activity ID') >= 0 && headers.indexOf('Activity Date') >= 0;
 
       function getCol(row, key){
         var idx = headers.indexOf(key);
@@ -6730,6 +6731,55 @@ function importRideFile(input){
         st.pmcHistory.sort(function(a,b){return a.week>b.week?1:-1;});
         sv();
         toast(imported2+' weeks imported from Intervals.icu');
+        renderPerf(document.getElementById('perf-body'));
+        return;
+      }
+
+      // -- Strava activities.csv
+      if(isStrava){
+        var stravaImported=0, stravaSkipped=0;
+        for(var si2=1;si2<lines.length;si2++){
+          var sr=lines[si2].split(',');
+          if(sr.length<5) continue;
+          var atype2=getCol(sr,'Activity Type').replace(/"/g,'').trim();
+          if(atype2!=='Ride'&&atype2!=='VirtualRide'){stravaSkipped++;continue;}
+          var dateRaw3=(getCol(sr,'Activity Date')||'').replace(/"/g,'').trim();
+          var dateStr3='';
+          try{var dp3=new Date(dateRaw3);dateStr3=dp3.getFullYear()+'-'+(dp3.getMonth()+1)+'-'+dp3.getDate();}catch(e){dateStr3=dateRaw3.substring(0,10);}
+          var elapsed3=parseInt(getCol(sr,'Elapsed Time'))||0;
+          var h3=Math.floor(elapsed3/3600),m3=Math.floor((elapsed3%3600)/60),s3=elapsed3%60;
+          var dur3=h3+':'+(('0'+m3).slice(-2))+':'+(('0'+s3).slice(-2));
+          var distRaw3=parseFloat(getCol(sr,'Distance'))||0;
+          var distMi3=distRaw3>1000?Math.round(distRaw3/1609.34*10)/10:Math.round(distRaw3*0.621371*10)/10;
+          var elevM3=parseFloat(getCol(sr,'Elevation Gain'))||0;
+          var ride3={
+            id:(getCol(sr,'Activity ID')||'').replace(/"/g,''),
+            name:(getCol(sr,'Activity Name')||'Ride').replace(/"/g,'').trim(),
+            date:dateStr3,
+            type:atype2,
+            duration:dur3,
+            movingSecs:elapsed3,
+            distance:distMi3,
+            avgPwr:parseInt(getCol(sr,'Average Watts'))||0,
+            np:parseInt(getCol(sr,'Weighted Average Power'))||0,
+            maxPwr:parseInt(getCol(sr,'Max Watts'))||0,
+            tss:parseInt(getCol(sr,'Training Load'))||0,
+            avgHR:parseInt(getCol(sr,'Average Heart Rate'))||0,
+            maxHR:parseInt(getCol(sr,'Max Heart Rate'))||0,
+            calories:parseInt(getCol(sr,'Calories'))||0,
+            elev:Math.round(elevM3*3.2808),
+            cadence:Math.round(parseFloat(getCol(sr,'Average Cadence'))||0),
+            trainer:atype2==='VirtualRide',
+            source:'strava'
+          };
+          if(!st.rides) st.rides=[];
+          var existIdx3=ride3.id?function(){for(var _i=0;_i<st.rides.length;_i++){if(st.rides[_i].id===ride3.id)return _i;}return -1;}():-1;
+          if(existIdx3>=0) st.rides[existIdx3]=ride3;
+          else st.rides.push(ride3);
+          stravaImported++;
+        }
+        sv();
+        toast('Imported '+stravaImported+' Strava rides!');
         renderPerf(document.getElementById('perf-body'));
         return;
       }
