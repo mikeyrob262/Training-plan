@@ -2853,6 +2853,11 @@ function applyFirebaseData(data){
     var pb=document.getElementById('perf-body');
     if(pb&&(st.rides||[]).length>0) renderPerf(pb);
   }catch(e){}
+  // Re-render Progress if it's open
+  try{
+    var prog=document.getElementById('PROG');
+    if(prog&&prog.style.display!=='none') showProg();
+  }catch(e){}
 }
 
 // Poll Firebase every 5s for changes from other devices
@@ -3509,7 +3514,14 @@ function showProg(){
   // Sessions across all activity types
   var rides=st.rides||[]; var runs=st.runs||[];
   var allSessions=[]; // {date, type}
-  rides.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'ride'});});
+  rides.forEach(function(r){
+    if(r.date){
+      // Normalize date to YYYY-MM-DD with zero padding
+      var dp=r.date.split('-');
+      var normDate=dp[0]+'-'+(dp[1]&&dp[1].length<2?'0'+dp[1]:dp[1]||'01')+'-'+(dp[2]&&dp[2].length<2?'0'+dp[2]:dp[2]||'01');
+      allSessions.push({date:normDate,type:'ride'});
+    }
+  });
   runs.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'run'});});
   // Strength sessions
   for(var w=1;w<=50;w++){
