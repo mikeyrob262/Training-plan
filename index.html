@@ -5967,7 +5967,7 @@ function renderPerf(container){
     var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
     // Scrollable container
     html+='<div id="ride-history-list" style="margin:0 16px 16px;height:55vh;overflow-y:scroll;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px">';
-    sorted.slice(0,30).forEach(function(r,si){
+    sorted.slice(0,200).forEach(function(r,si){
       var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
       var rIdx=st.rides.indexOf(r);
       var tss=r.tss||0;
