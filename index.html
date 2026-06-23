@@ -9923,6 +9923,24 @@ window.onload = function(){
   document.getElementById('btn-wt').onclick = openPk;
   document.getElementById('pk-bg').onclick = closePk;
   if(st.cf){ st.cf.forEach(function(f){ if(!CF.find(function(x){return x.n===f.n;})) CF.push(f); }); }
+  // One-time cleanup: strip powerCurve from obvious non-cycling FIT activities
+  // Runs, swims, weight training have distance=0 or very short, or high step cadence
+  if(!st._fitCleaned && st.rides && st.rides.length){
+    var cleaned = 0;
+    st.rides.forEach(function(r){
+      if(!r.powerCurve || !Object.keys(r.powerCurve).length) return;
+      if(r.source !== 'fit') return;
+      // Non-cycling signals: distance < 2 miles, or cadence > 120 (running cadence in spm)
+      var tooShort = (r.distance || 0) < 2;
+      var runCadence = (r.cadence || 0) > 120;
+      if(tooShort || runCadence){
+        delete r.powerCurve;
+        cleaned++;
+      }
+    });
+    st._fitCleaned = true;
+    if(cleaned){ sv(); console.log('Cleaned power curves from '+cleaned+' non-cycling activities'); }
+  }
   restoreW(1);
   updHdr();
   updDots();
