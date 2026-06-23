@@ -3505,11 +3505,14 @@ function showProg(){
   var t=document.getElementById('PROG');
   if(!t)return;
 
-  // If no rides yet, wait for Firebase and retry
+  // Force Firebase sync first if no rides
   if(!(st.rides||[]).length){
     t.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3);font-size:14px">Syncing data...</div>';
-    setTimeout(function(){ if((st.rides||[]).length) showProg(); },3000);
-    setTimeout(function(){ if((st.rides||[]).length) showProg(); },7000);
+    fetch('https://mikey-training-app-default-rtdb.firebaseio.com/data.json')
+      .then(function(r){return r.json();})
+      .then(function(data){if(data){applyFirebaseData(data);showProg();}})
+      .catch(function(){});
+    return;
   }
 
   // Gather data
@@ -3552,6 +3555,10 @@ function showProg(){
     if(!ds) return new Date(0);
     var p=ds.split('-');
     return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2])||1);
+  }
+  // Force read from st.rides directly in case allSessions is empty
+  if(allSessions.length===0 && (st.rides||[]).length>0){
+    (st.rides||[]).forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'ride'});});
   }
   var thisWeekSess=allSessions.filter(function(s){return parseDate(s.date)>=weekStart;}).length;
   var thisMonthSess=allSessions.filter(function(s){return parseDate(s.date)>=monthStart;}).length;
