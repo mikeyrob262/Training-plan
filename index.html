@@ -5034,12 +5034,56 @@ function renderNutr(){
       var plusBtn=document.createElement('button');
       plusBtn.style.cssText='background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.25);color:var(--orange);width:26px;height:26px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0';
       plusBtn.textContent='+';
+      // Edit button
+      var editBtn=document.createElement('button');
+      editBtn.style.cssText='background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:11px;font-weight:700;padding:3px 8px;border-radius:8px;cursor:pointer;font-family:inherit;flex-shrink:0';
+      editBtn.textContent='Edit';
       // Remove button
       var rmBtn=document.createElement('button');
       rmBtn.style.cssText='background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px;line-height:1';
       rmBtn.textContent='×';
       (function(mn,i,it){
         rmBtn.onclick=function(){rmFood(mn,i);};
+        editBtn.onclick=function(){
+          var overlay2=document.createElement('div');
+          overlay2.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
+          var box=document.createElement('div');
+          box.style.cssText='background:var(--s1);border-radius:16px;padding:20px;width:100%;max-width:340px';
+          box.innerHTML='<div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:14px">Edit: '+it.n+'</div>';
+          var fields=[{l:'Calories',k:'cal',v:it.cal},{l:'Protein (g)',k:'p',v:it.p||0},{l:'Carbs (g)',k:'c',v:it.c||0},{l:'Fat (g)',k:'f',v:it.f||0},{l:'Fiber (g)',k:'fiber',v:it.fiber||0},{l:'Sat Fat (g)',k:'satFat',v:it.satFat||0}];
+          var inputs={};
+          fields.forEach(function(fl){
+            var lbl=document.createElement('div');
+            lbl.style.cssText='font-size:12px;color:var(--t3);margin-bottom:3px;margin-top:8px';
+            lbl.textContent=fl.l;
+            var inp=document.createElement('input');
+            inp.type='number';inp.value=fl.v;
+            inp.style.cssText='width:100%;padding:8px 10px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit';
+            box.appendChild(lbl);box.appendChild(inp);
+            inputs[fl.k]=inp;
+          });
+          var btnRow=document.createElement('div');
+          btnRow.style.cssText='display:flex;gap:8px;margin-top:14px';
+          var cancelBtn2=document.createElement('button');
+          cancelBtn2.style.cssText='flex:1;padding:10px;border:1px solid var(--b1);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit';
+          cancelBtn2.textContent='Cancel';
+          cancelBtn2.onclick=function(){overlay2.remove();};
+          var saveBtn2=document.createElement('button');
+          saveBtn2.style.cssText='flex:1;padding:10px;border:none;border-radius:10px;background:#FC4C02;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit';
+          saveBtn2.textContent='Save';
+          saveBtn2.onclick=function(){
+            var nd=getNDay(nutrDate);
+            fields.forEach(function(fl){
+              nd.meals[mn][i][fl.k]=parseFloat(inputs[fl.k].value)||0;
+            });
+            sv();overlay2.remove();renderNutr();showScreen('NUTR');
+          };
+          btnRow.appendChild(cancelBtn2);btnRow.appendChild(saveBtn2);
+          box.appendChild(btnRow);
+          overlay2.appendChild(box);
+          overlay2.onclick=function(e){if(e.target===overlay2)overlay2.remove();};
+          document.body.appendChild(overlay2);
+        };
         plusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
           // Add another serving of same food
@@ -5056,7 +5100,7 @@ function renderNutr(){
           sv();renderNutr();showScreen('NUTR');
         };
       })(meal,ii,item);
-      rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
+      rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(editBtn);rDiv.appendChild(rmBtn);
       row.appendChild(info);row.appendChild(rDiv);
       mealDiv.appendChild(row);
     });
