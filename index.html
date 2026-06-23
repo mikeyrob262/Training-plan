@@ -5639,12 +5639,12 @@ function renderPerf(container){
     +'<label style="display:flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--b2);color:var(--t1);font-size:13px;font-weight:600;padding:8px 16px;border-radius:22px;cursor:pointer">'
     +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
     +' Import'
-    +'<input type="file" accept=".tcx,.csv,.fit" style="display:none" onchange="importRideFile(this)">'
+    +'<input type="file" accept=".tcx,.csv,.fit,.fit.gz,.gz" style="display:none" onchange="importRideFile(this)">'
     +'</label>'
     +'<label style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:8px 16px;border-radius:22px;cursor:pointer">'
     +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
     +' Bulk Import'
-    +'<input type="file" accept=".tcx,.fit" multiple style="display:none" onchange="bulkImportFit(this)">'
+    +'<input type="file" accept=".tcx,.fit,.fit.gz,.gz" multiple style="display:none" onchange="bulkImportFit(this)">'
     +'</label>'
     +'</div>'
     +'<div style="padding:0 16px 10px;font-size:11px;color:var(--t3);text-align:right">TCX or FIT from Garmin . CSV from Intervals.icu</div>';
@@ -6884,13 +6884,34 @@ function bulkImportFit(input){
     }
     var r = new FileReader();
     r.onload = function(e){
-      try{
-        var ride = parseFitFile(e.target.result, file.name);
-        if(!ride){ failed++; setTimeout(next,10); return; }
-        var dup = st.rides && st.rides.some(function(r2){ return r2.date===ride.date && Math.abs((r2.movingSecs||0)-(ride.movingSecs||0))<60; });
-        if(dup){ skipped++; } else { if(!st.rides) st.rides=[]; st.rides.push(ride); done++; }
-      } catch(err){ failed++; console.error(err); }
-      setTimeout(next, 10);
+      var buf = e.target.result;
+      function processIt(ab){
+        try{
+          var ride = parseFitFile(ab, file.name);
+          if(!ride){ failed++; setTimeout(next,10); return; }
+          var dup = st.rides && st.rides.some(function(r2){ return r2.date===ride.date && Math.abs((r2.movingSecs||0)-(ride.movingSecs||0))<60; });
+          if(dup){ skipped++; } else { if(!st.rides) st.rides=[]; st.rides.push(ride); done++; }
+        } catch(err){ failed++; console.error(err); }
+        setTimeout(next, 10);
+      }
+      if(ext==='gz'){
+        try{
+          var ds = new DecompressionStream('gzip');
+          var writer = ds.writable.getWriter();
+          var reader3 = ds.readable.getReader();
+          var chunks = [];
+          writer.write(new Uint8Array(buf)); writer.close();
+          function pump(){ reader3.read().then(function(res){
+            if(res.done){
+              var total=chunks.reduce(function(a,b){return a+b.length;},0);
+              var out=new Uint8Array(total); var pos=0;
+              chunks.forEach(function(c){out.set(c,pos);pos+=c.length;});
+              processIt(out.buffer);
+            } else { chunks.push(res.value); pump(); }
+          }).catch(function(){ failed++; setTimeout(next,10); }); }
+          pump();
+        } catch(e){ failed++; setTimeout(next,10); }
+      } else { processIt(buf); }
     };
     r.readAsArrayBuffer(file);
   }
@@ -7424,21 +7445,47 @@ function importRideFile(input){
     return;
   }
 
-  if(ext==='fit'){
+  if(ext==='fit' || (ext==='gz' && fname.endsWith('.fit.gz'))){
     var fitReader = new FileReader();
     fitReader.onload = function(e){
-      try{
-        var ride = parseFitFile(e.target.result, file.name);
-        if(!ride){ toast('Could not parse FIT file'); return; }
-        // duplicate check
-        var dup = st.rides && st.rides.some(function(r){ return r.date===ride.date && Math.abs((r.movingSecs||0)-(ride.movingSecs||0))<60; });
-        if(dup){ toast('Duplicate ride — already imported'); return; }
-        if(!st.rides) st.rides=[];
-        st.rides.push(ride);
-        sv();
-        toast('FIT imported: '+ride.name+' ('+ride.distance+'mi)');
-        renderPerf(document.getElementById('perf-body'));
-      } catch(err){ toast('FIT parse error: '+err.message); console.error(err); }
+      var buf = e.target.result;
+      function processFitBuffer(ab){
+        try{
+          var ride = parseFitFile(ab, file.name);
+          if(!ride){ toast('Could not parse FIT file'); return; }
+          var dup = st.rides && st.rides.some(function(r){ return r.date===ride.date && Math.abs((r.movingSecs||0)-(ride.movingSecs||0))<60; });
+          if(dup){ toast('Duplicate ride — already imported'); return; }
+          if(!st.rides) st.rides=[];
+          st.rides.push(ride);
+          sv();
+          toast('FIT imported: '+ride.name+' ('+ride.distance+'mi)');
+          renderPerf(document.getElementById('perf-body'));
+        } catch(err){ toast('FIT parse error: '+err.message); console.error(err); }
+      }
+      if(ext==='gz'){
+        try{
+          var ds = new DecompressionStream('gzip');
+          var writer = ds.writable.getWriter();
+          var reader2 = ds.readable.getReader();
+          var chunks = [];
+          writer.write(new Uint8Array(buf));
+          writer.close();
+          function pump(){
+            reader2.read().then(function(result){
+              if(result.done){
+                var total = chunks.reduce(function(a,b){return a+b.length;},0);
+                var out = new Uint8Array(total);
+                var pos=0;
+                chunks.forEach(function(c){out.set(c,pos);pos+=c.length;});
+                processFitBuffer(out.buffer);
+              } else { chunks.push(result.value); pump(); }
+            }).catch(function(err){ toast('Decompress error: '+err.message); });
+          }
+          pump();
+        } catch(e){ toast('GZ decompress not supported in this browser'); }
+      } else {
+        processFitBuffer(buf);
+      }
     };
     fitReader.readAsArrayBuffer(file);
     input.value='';
