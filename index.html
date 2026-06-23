@@ -3505,21 +3505,7 @@ function showProg(){
   var t=document.getElementById('PROG');
   if(!t)return;
 
-  // Force Firebase sync first if no rides
-  if(!(st.rides||[]).length){
-    t.innerHTML='<div style="padding:40px;text-align:center;color:var(--t3);font-size:14px">Syncing data...</div>';
-    fetch('https://mikey-training-app-default-rtdb.firebaseio.com/data.json')
-      .then(function(r){return r.json();})
-      .then(function(data){
-        if(data){
-          if(data.rides) st.rides=data.rides;
-          if(data.settings) st.settings=data.settings;
-        }
-        showProg();
-      })
-      .catch(function(){ showProg(); });
-    return;
-  }
+
 
   // Gather data
   var now=new Date();
