@@ -5973,7 +5973,7 @@ function renderPerf(container){
       var tss=r.tss||0;
       var accentC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
 
-      var cardHtml='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid '+accentC+';margin-bottom:8px;padding:12px">';
+      var cardHtml='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid '+accentC+';margin-bottom:8px;padding:12px;cursor:pointer" onclick="openRideDetail('+rIdx+')">';
       // Name + date
       cardHtml+='<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:2px">'+(r.name||'Ride')+'</div>';
       cardHtml+='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+(r.date||'')+'</div>';
