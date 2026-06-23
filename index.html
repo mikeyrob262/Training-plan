@@ -5016,7 +5016,7 @@ function renderNutr(){
       var info=document.createElement('div');
       var iName=document.createElement('div');
       iName.style.cssText='font-size:13px;font-weight:500;color:var(--t1)';
-      iName.textContent=item.n;
+      iName.textContent=(item.qty&&item.qty>1?item.qty+'× ':'')+item.n;
       var iMeta=document.createElement('div');
       iMeta.style.cssText='font-size:11px;color:var(--t3)';
       iMeta.textContent=(item.p||0)+'g P . '+(item.c||0)+'g C . '+(item.f||0)+'g F';
@@ -5086,16 +5086,38 @@ function renderNutr(){
         };
         plusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
-          // Add another serving of same food
-          nd.meals[mn].push({n:it.n,cal:it.cal,p:it.p||0,c:it.c||0,f:it.f||0,fiber:it.fiber||0,satFat:it.satFat||0,sodium:it.sodium||0,sugar:it.sugar||0});
+          var item2=nd.meals[mn][i];
+          // Increment qty or multiply nutrients
+          var qty=(item2.qty||1)+1;
+          var base=item2.baseCalPer||(item2.cal/(item2.qty||1));
+          var baseP=item2.basePPer||(( item2.p||0)/(item2.qty||1));
+          var baseC=item2.baseCPer||((item2.c||0)/(item2.qty||1));
+          var baseF=item2.baseFPer||((item2.f||0)/(item2.qty||1));
+          item2.qty=qty;
+          item2.baseCalPer=base;item2.basePPer=baseP;item2.baseCPer=baseC;item2.baseFPer=baseF;
+          item2.cal=Math.round(base*qty);
+          item2.p=Math.round(baseP*qty*10)/10;
+          item2.c=Math.round(baseC*qty*10)/10;
+          item2.f=Math.round(baseF*qty*10)/10;
           sv();renderNutr();showScreen('NUTR');
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
-          if(nd.meals[mn].length>1){
+          var item3=nd.meals[mn][i];
+          var qty=(item3.qty||1)-1;
+          if(qty<=0){
             nd.meals[mn].splice(i,1);
           } else {
-            nd.meals[mn].splice(i,1);
+            var base2=item3.baseCalPer||(item3.cal/(item3.qty||1));
+            var baseP2=item3.basePPer||((item3.p||0)/(item3.qty||1));
+            var baseC2=item3.baseCPer||((item3.c||0)/(item3.qty||1));
+            var baseF2=item3.baseFPer||((item3.f||0)/(item3.qty||1));
+            item3.qty=qty;
+            item3.baseCalPer=base2;item3.basePPer=baseP2;item3.baseCPer=baseC2;item3.baseFPer=baseF2;
+            item3.cal=Math.round(base2*qty);
+            item3.p=Math.round(baseP2*qty*10)/10;
+            item3.c=Math.round(baseC2*qty*10)/10;
+            item3.f=Math.round(baseF2*qty*10)/10;
           }
           sv();renderNutr();showScreen('NUTR');
         };
