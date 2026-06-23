@@ -5129,6 +5129,31 @@ function renderNutr(){
     nutrContainer.appendChild(mealDiv);
   });
   t.appendChild(nutrContainer);
+
+  // Done Logging toggle
+  var doneWrap=document.createElement('div');
+  doneWrap.style.cssText='margin:12px 16px 24px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;justify-content:space-between';
+  var isDone=(st.nutr&&st.nutr[nutrDate]&&st.nutr[nutrDate].done)||false;
+  var doneLabel=document.createElement('div');
+  doneLabel.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">Done Logging</div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:2px">Mark this day complete</div>';
+  var doneToggle=document.createElement('div');
+  doneToggle.style.cssText='width:50px;height:28px;border-radius:14px;background:'+(isDone?'#00C896':'var(--s3)')+';cursor:pointer;position:relative;transition:background .2s;flex-shrink:0';
+  var doneKnob=document.createElement('div');
+  doneKnob.style.cssText='position:absolute;top:3px;left:'+(isDone?'23px':'3px')+';width:22px;height:22px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s';
+  doneToggle.appendChild(doneKnob);
+  doneToggle.addEventListener('click',function(){
+    isDone=!isDone;
+    if(!st.nutr) st.nutr={};
+    if(!st.nutr[nutrDate]) st.nutr[nutrDate]={meals:{breakfast:[],lunch:[],dinner:[],snacks:[]}};
+    st.nutr[nutrDate].done=isDone;
+    doneToggle.style.background=isDone?'#00C896':'var(--s3)';
+    doneKnob.style.left=isDone?'23px':'3px';
+    sv();
+  });
+  doneWrap.appendChild(doneLabel);
+  doneWrap.appendChild(doneToggle);
+  t.appendChild(doneWrap);
   t.appendChild(Object.assign(document.createElement('div'),{style:'height:50px'}));
 
   // Bind water and nav buttons
