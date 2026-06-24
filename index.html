@@ -3985,12 +3985,106 @@ function showSet(){
 
   // GitHub Deploy section
   var ghToken = st.ghToken||'';
+  // Intervals.icu API key from settings
+  var icuKey=st.settings&&st.settings.icuKey?st.settings.icuKey:'';
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
+    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Intervals.icu Sync</div>'
+    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'
+    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Auto-sync rides from Intervals.icu (which syncs from Garmin). Get your API key at intervals.icu → Settings → API.</div>'
+    +'<div class="ci-lbl">Athlete ID</div>'
+    +'<input class="ci-in" id="icu-athlete-id" type="text" placeholder="i544205" value="'+(st.settings&&st.settings.icuAthlete?st.settings.icuAthlete:'i544205')+'">'
+    +'<div class="ci-lbl">API Key</div>'
+    +'<input class="ci-in" id="icu-api-key" type="password" placeholder="your api key" value="'+icuKey+'">'
+    +'<div style="display:flex;gap:8px">'
+    +'<select id="icu-sync-range" style="flex:1;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit">'
+    +'<option value="7">Last 7 days</option>'
+    +'<option value="30" selected>Last 30 days</option>'
+    +'<option value="90">Last 90 days</option>'
+    +'<option value="365">Last year</option>'
+    +'<option value="all">All time</option>'
+    +'</select>'
+    +'<button id="icu-sync-btn" style="flex:1;padding:10px;background:linear-gradient(135deg,#FC4C02,#c43d02);border:none;color:white;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;font-family:inherit">⚡ Sync Now</button>'
+    +'</div>'
+    +'<div id="icu-sync-status" style="font-size:12px;color:var(--t3);text-align:center"></div>'
+    +'</div></div>';
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
 
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
 
   // Wire export/import buttons
+  // Wire Intervals.icu sync
+  var icuSyncBtn=document.getElementById('icu-sync-btn');
+  if(icuSyncBtn){
+    icuSyncBtn.addEventListener('click',function(){
+      var athleteId=document.getElementById('icu-athlete-id').value.trim()||'i544205';
+      var apiKey=document.getElementById('icu-api-key').value.trim();
+      var rangeVal=document.getElementById('icu-sync-range').value;
+      var statusEl=document.getElementById('icu-sync-status');
+      if(!apiKey){statusEl.textContent='Please enter your API key';return;}
+      // Save settings
+      if(!st.settings) st.settings={};
+      st.settings.icuKey=apiKey;
+      st.settings.icuAthlete=athleteId;
+      sv();
+      // Calculate oldest date
+      var oldest;
+      if(rangeVal==='all'){oldest='2010-01-01';}
+      else{var d=new Date();d.setDate(d.getDate()-parseInt(rangeVal));oldest=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+      statusEl.textContent='Syncing...';
+      icuSyncBtn.disabled=true;
+      var syncUrl='https://mikey-food-api2.mgrobinson07.workers.dev/?action=intervals_sync&athlete='+encodeURIComponent(athleteId)+'&key='+encodeURIComponent(apiKey)+'&oldest='+oldest;
+      fetch(syncUrl)
+        .then(function(r){return r.json();})
+        .then(function(data){
+          if(data.error){statusEl.textContent='Error: '+data.error;icuSyncBtn.disabled=false;return;}
+          var activities=data.activities||[];
+          var imported=0,skipped=0;
+          activities.forEach(function(a){
+            if(a.type!=='Ride'&&a.type!=='VirtualRide'){skipped++;return;}
+            var dateRaw=a.start_date_local||a.start_date||'';
+            var dateStr=dateRaw?dateRaw.slice(0,10):'';
+            var p=dateStr.split('-');
+            var normDate=p[0]+'-'+parseInt(p[1])+'-'+parseInt(p[2]);
+            var elapsed=a.moving_time||a.elapsed_time||0;
+            var h=Math.floor(elapsed/3600),m=Math.floor((elapsed%3600)/60),s=elapsed%60;
+            var ride={
+              id:String(a.id||a.strava_id||''),
+              name:(a.name||'Ride'),
+              date:normDate,
+              type:a.type||'Ride',
+              duration:h+':'+(('0'+m).slice(-2))+':'+(('0'+s).slice(-2)),
+              movingSecs:elapsed,
+              distance:Math.round((a.distance||0)/1609.34*10)/10,
+              avgPwr:Math.round(a.average_watts||a.icu_average_watts||0),
+              np:Math.round(a.weighted_average_watts||a.icu_normalized_watts||0),
+              tss:Math.round(a.suffer_score||a.icu_training_load||0),
+              avgHR:Math.round(a.average_heartrate||0),
+              maxHR:Math.round(a.max_heartrate||0),
+              calories:Math.round(a.calories||a.kilojoules||0),
+              elev:Math.round((a.total_elevation_gain||0)*3.2808),
+              cadence:Math.round(a.average_cadence||0),
+              trainer:a.type==='VirtualRide',
+              source:'intervals'
+            };
+            if(!st.rides) st.rides=[];
+            var existIdx=ride.id?function(){for(var i=0;i<st.rides.length;i++){if(st.rides[i].id===ride.id)return i;}return -1;}():-1;
+            if(existIdx>=0) st.rides[existIdx]=ride;
+            else st.rides.push(ride);
+            imported++;
+          });
+          sv();
+          statusEl.innerHTML='<span style="color:#0F6E56;font-weight:700">✓ Synced '+imported+' rides!</span> ('+skipped+' non-cycling skipped)';
+          icuSyncBtn.disabled=false;
+          toast('Intervals.icu sync complete: '+imported+' rides! ⚡');
+        })
+        .catch(function(e){
+          statusEl.textContent='Sync failed: '+e.message;
+          icuSyncBtn.disabled=false;
+        });
+    });
+  }
+
   var expBtn=document.getElementById('export-data-btn');
   if(expBtn){
     expBtn.addEventListener('click',function(){
