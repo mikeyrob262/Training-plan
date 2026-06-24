@@ -3572,11 +3572,18 @@ function showProg(){
   // 12-week session counts
   var weekCounts=[];
   var weekLabels=[];
+  var weekRides=[],weekRuns=[],weekSwims=[],weekStrength=[];
+  var weekLabels=[];
   for(var wi2=11;wi2>=0;wi2--){
     var ws4=new Date(now); ws4.setDate(now.getDate()-wi2*7);
     ws4.setDate(ws4.getDate()-(ws4.getDay()===0?6:ws4.getDay()-1)); ws4.setHours(0,0,0,0);
     var we4=new Date(ws4); we4.setDate(ws4.getDate()+7);
-    weekCounts.push(allSessions.filter(function(s){var d=parseDate(s.date);return d>=ws4&&d<we4;}).length);
+    var wkSess=allSessions.filter(function(s){var d=parseDate(s.date);return d>=ws4&&d<we4;});
+    weekCounts.push(wkSess.length);
+    weekRides.push(wkSess.filter(function(s){return s.type==='ride';}).length);
+    weekRuns.push(wkSess.filter(function(s){return s.type==='run';}).length);
+    weekSwims.push(wkSess.filter(function(s){return s.type==='swim';}).length);
+    weekStrength.push(wkSess.filter(function(s){return s.type==='strength'||s.type==='conditioning';}).length);
     weekLabels.push('W'+(12-wi2));
   }
 
@@ -3691,6 +3698,33 @@ function showProg(){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
+  // Tri training balance
+  var triRides=0,triRuns=0,triSwims=0,triStrength=0;
+  var fourWeeksAgo=new Date(now); fourWeeksAgo.setDate(now.getDate()-28);
+  allSessions.forEach(function(s){
+    var d=parseDate(s.date);
+    if(d>=fourWeeksAgo){
+      if(s.type==='ride') triRides++;
+      else if(s.type==='run') triRuns++;
+      else if(s.type==='swim') triSwims++;
+      else if(s.type==='strength'||s.type==='conditioning') triStrength++;
+    }
+  });
+  var triTotal=triRides+triRuns+triSwims+triStrength||1;
+  h+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Training Balance <span style="font-size:11px;font-weight:400;color:var(--t3)">Last 4 weeks</span></div>';
+  h+='<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:8px;gap:1px">';
+  if(triRides) h+='<div style="background:#FC4C02;flex:'+Math.round(triRides/triTotal*100)+'"></div>';
+  if(triRuns) h+='<div style="background:#0F6E56;flex:'+Math.round(triRuns/triTotal*100)+'"></div>';
+  if(triSwims) h+='<div style="background:#378ADD;flex:'+Math.round(triSwims/triTotal*100)+'"></div>';
+  if(triStrength) h+='<div style="background:#8B5CF6;flex:'+Math.round(triStrength/triTotal*100)+'"></div>';
+  if(!triRides&&!triRuns&&!triSwims&&!triStrength) h+='<div style="background:var(--s3);flex:1"></div>';
+  h+='</div>';
+  h+='<div style="display:flex;gap:12px;flex-wrap:wrap">';
+  [[triRides,'🚴 Rides','#FC4C02'],[triRuns,'🏃 Runs','#0F6E56'],[triSwims,'🏊 Swims','#378ADD'],[triStrength,'💪 Strength','#8B5CF6']].forEach(function(sp){
+    h+='<div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:50%;background:'+sp[2]+'"></div><span style="font-size:11px;color:var(--t3)">'+sp[1]+':</span><span style="font-size:11px;font-weight:700;color:var(--t1)">'+sp[0]+(triTotal>1?' ('+Math.round(sp[0]/triTotal*100)+'%)':'')+'</span></div>';
+  });
+  h+='</div></div>';
   h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'    +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:3px">Weekly sessions — last 12 weeks</div>'    +'<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Rides · Runs · Strength · Core · Mobility</div>'    +'<div style="position:relative;height:90px"><canvas id="prog-sess-chart" role="img" aria-label="Weekly session count chart">'+weekCounts.join(',')+'</canvas></div></div>';
 
   h+='<div style="padding:0 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Fitness</div>';
@@ -3708,6 +3742,19 @@ function showProg(){
 
   h+='<div style="padding:0 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Nutrition</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 10px">';
+  // Nutrition compliance %
+  var compliancePct=Math.round(protHits/7*100);
+  var calHits=calDays.filter(function(c){return c>=1500&&c<=2600;}).length;
+  h+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Nutrition Compliance</div>';
+  h+='<div style="font-size:20px;font-weight:900;color:'+(compliancePct>=80?'#0F6E56':compliancePct>=50?'#BA7517':'#ef4444')+'">'+compliancePct+'%</div></div>';
+  h+='<div style="background:var(--s3);border-radius:20px;height:8px;margin-bottom:8px"><div style="background:'+(compliancePct>=80?'#0F6E56':compliancePct>=50?'#BA7517':'#ef4444')+';height:8px;border-radius:20px;width:'+compliancePct+'%;transition:width .4s"></div></div>';
+  h+='<div style="display:flex;gap:12px;font-size:12px">';
+  h+='<div><span style="color:var(--t3)">Protein: </span><span style="font-weight:700;color:var(--t1)">'+protHits+'/7 days</span></div>';
+  h+='<div><span style="color:var(--t3)">Calories: </span><span style="font-weight:700;color:var(--t1)">'+calHits+'/7 days</span></div>';
+  h+='<div><span style="color:var(--t3)">Avg: </span><span style="font-weight:700;color:var(--t1)">'+avgProt+'g protein</span></div>';
+  h+='</div></div>';
   [{l:'Protein avg',v:avgProt+'g',s:'goal 165g',c:avgProt>=165?'#0F6E56':avgProt>=140?'#BA7517':'#ef4444'},{l:'Days hit goal',v:protHits+'/7',s:'this week'},{l:'Avg calories',v:avgCal?avgCal.toLocaleString():'—',s:'this week'}].forEach(function(st2){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
@@ -3742,7 +3789,7 @@ function showProg(){
   h+='<div style="height:50px"></div>';
 
   // Store chart data
-  window._progCharts={weekCounts:weekCounts,weekLabels:weekLabels,protDays:protDays,wtData:wtData,wtLabels:wtLabels,lrData:lrData,lrLabels:lrLabels};
+  window._progCharts={weekCounts:weekCounts,weekLabels:weekLabels,weekRides:weekRides,weekRuns:weekRuns,weekSwims:weekSwims,weekStrength:weekStrength,protDays:protDays,wtData:wtData,wtLabels:wtLabels,lrData:lrData,lrLabels:lrLabels};
 
   t.innerHTML=h;
   // Wire weight log - tap weight card to log
@@ -3804,7 +3851,12 @@ function showProg(){
     var base={responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}}}}};
 
     var sc=document.getElementById('prog-sess-chart');
-    if(sc) new Chart(sc,{type:'bar',data:{labels:cd.weekLabels,datasets:[{data:cd.weekCounts,backgroundColor:cd.weekCounts.map(function(v,i){return i===cd.weekCounts.length-1?'#FC4C02':'rgba(252,76,2,0.4)';}),borderRadius:4}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
+    if(sc) new Chart(sc,{type:'bar',data:{labels:cd.weekLabels,datasets:[
+      {label:'Rides',data:cd.weekRides||cd.weekCounts,backgroundColor:'rgba(252,76,2,0.8)',borderRadius:2,stack:'s'},
+      {label:'Runs',data:cd.weekRuns||[],backgroundColor:'rgba(15,110,86,0.8)',borderRadius:2,stack:'s'},
+      {label:'Swims',data:cd.weekSwims||[],backgroundColor:'rgba(55,138,221,0.8)',borderRadius:2,stack:'s'},
+      {label:'Strength',data:cd.weekStrength||[],backgroundColor:'rgba(139,92,246,0.8)',borderRadius:2,stack:'s'}
+    ]},options:Object.assign({},base,{plugins:{legend:{display:true,position:'bottom',labels:{color:tc,font:{size:9},boxWidth:10,padding:8}}},scales:{x:{stacked:true,grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{stacked:true,grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
 
     // Protein chart lives in Nutrition → Progress tab
 
@@ -4749,8 +4801,8 @@ function renderNutr(){
   // Date nav
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
   h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
-  h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
-  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dtLabels[dt]+'</div></div>';
+  h+='<div style="text-align:center;cursor:pointer" id="nutr-date-tap"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
+  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dtLabels[dt]+' · tap to change</div></div>';
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
 
@@ -5249,6 +5301,31 @@ function renderNutr(){
   // Bind water and nav buttons
   var np=document.getElementById('nutr-prev');if(np){np.onclick=null;np.addEventListener('click',function(){nutrDelta(-1);});}
   var nn=document.getElementById('nutr-next');if(nn){nn.onclick=null;nn.addEventListener('click',function(){nutrDelta(1);});}
+  // Date picker tap
+  var dtTap=document.getElementById('nutr-date-tap');
+  if(dtTap){dtTap.addEventListener('click',function(){
+    var inp=document.createElement('input');inp.type='date';
+    var parts=nutrDate.split('-');
+    inp.value=parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
+    inp.style.cssText='position:fixed;opacity:0;top:50%;left:50%';
+    document.body.appendChild(inp);
+    inp.addEventListener('change',function(){
+      if(inp.value){var p=inp.value.split('-');nutrDate=p[0]+'-'+parseInt(p[1])+'-'+parseInt(p[2]);renderNutr();showScreen('NUTR');}
+      inp.remove();
+    });
+    inp.focus();inp.click();
+    setTimeout(function(){if(document.body.contains(inp))inp.remove();},5000);
+  });}
+  // Swipe gestures on nutrition screen
+  var nutrEl=document.getElementById('NUTR');
+  if(nutrEl){
+    var _tx=0;
+    nutrEl.addEventListener('touchstart',function(e){_tx=e.touches[0].clientX;},{passive:true});
+    nutrEl.addEventListener('touchend',function(e){
+      var dx=e.changedTouches[0].clientX-_tx;
+      if(Math.abs(dx)>60){nutrDelta(dx<0?1:-1);}
+    },{passive:true});
+  }
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=null;wm.addEventListener('click',function(){updWater(-1);});}
   var wp=document.getElementById('water-plus');if(wp){wp.onclick=null;wp.addEventListener('click',function(){updWater(1);});}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=null;bb.addEventListener('click',showTrain);}
@@ -5912,6 +5989,18 @@ function renderPerf(container){
   var projCTL=Math.round(curCTL+(weeksToRace*2.8)); // ~2.8 CTL/week ramp
   projCTL=Math.min(projCTL,85);
 
+  // CTL year-over-year
+  var yearAgoDate=new Date(now); yearAgoDate.setFullYear(now.getFullYear()-1);
+  var yearAgoCTL=0;
+  if(pmcData.length){
+    var closestYA=pmcData.reduce(function(best,p){
+      var d=new Date(p.d||0);
+      return Math.abs(d-yearAgoDate)<Math.abs(new Date(best.d||0)-yearAgoDate)?p:best;
+    },pmcData[0]);
+    yearAgoCTL=Math.round(closestYA?closestYA.ctl:0);
+  }
+  var ctlDiff=Math.round(curCTL-yearAgoCTL);
+
   html+='<div style="padding:12px 16px 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Season Dashboard</div>';
 
   // HERO ROW - 4 stat cards
@@ -6011,7 +6100,8 @@ function renderPerf(container){
     ['Highest TSS',highestTSS||'—','#ef4444'],
     ['Best NP',highestNP?(highestNP+'W'):'—','var(--orange)'],
     ['Avg distance',totalRides?(Math.round(totalMiles/totalRides)+' mi'):'—','var(--t1)'],
-    ['Month miles',Math.round(monthMiles)+' mi','var(--t1)']
+    ['Month miles',Math.round(monthMiles)+' mi','var(--t1)'],
+    ['CTL vs last year',(ctlDiff>0?'+':'')+ctlDiff+' pts',ctlDiff>0?'#0F6E56':ctlDiff<0?'#ef4444':'var(--t3)']
   ];
   records.forEach(function(r){
     html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1)">';
@@ -6046,7 +6136,12 @@ function renderPerf(container){
   // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
+    +'<div id="perf-filter-bar" style="display:flex;gap:4px;overflow-x:auto;padding:8px 16px 0;-webkit-overflow-scrolling:touch">'+
+    ['All','Rides','Runs','Swims','Strength'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>'
+    +'<div style="display:flex;gap:6px">'
     +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
+    +'<button id="add-brick-btn" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.25);color:#FC4C02;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🧱 Brick</button>'
+    +'</div>'
     +'</div>';
 
 
@@ -6062,9 +6157,23 @@ function renderPerf(container){
       var tss=r.tss||0;
       var accentC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
 
-      var cardHtml='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid '+accentC+';margin-bottom:8px;padding:12px;cursor:pointer" onclick="openRideDetail('+rIdx+')">';
-      // Name + date
-      cardHtml+='<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:2px">'+(r.name||'Ride')+'</div>';
+      // Ride quality score (0-100)
+      var rqScore=0,rqLabel='',rqColor='var(--t3)';
+      if(r.np&&FTP&&r.tss){
+        var intensity=r.np/FTP;
+        var efficiencyFactor=r.avgHR?(r.np/r.avgHR):0;
+        rqScore=Math.min(100,Math.round((intensity*40)+(Math.min(r.tss,300)/3)+(efficiencyFactor>0?Math.min(efficiencyFactor*10,20):0)));
+        if(rqScore>=80){rqLabel='Excellent';rqColor='#0F6E56';}
+        else if(rqScore>=65){rqLabel='Good';rqColor='#FC4C02';}
+        else if(rqScore>=50){rqLabel='Fair';rqColor='#BA7517';}
+        else{rqLabel='Easy';rqColor='var(--t3)';}
+      }
+      var cardHtml='<div data-ride-type="'+(r.type||'Ride')+'" style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid '+accentC+';margin-bottom:8px;padding:12px;cursor:pointer" onclick="openRideDetail('+rIdx+')">';
+      // Name + date + quality score
+      cardHtml+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">';
+      cardHtml+='<div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.name||'Ride')+'</div>';
+      if(rqScore>0) cardHtml+='<div style="font-size:10px;font-weight:700;color:'+rqColor+';background:var(--s2);padding:2px 6px;border-radius:6px">'+rqLabel+'</div>';
+      cardHtml+='</div>';
       cardHtml+='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+(r.date||'')+'</div>';
       // Stats row
       cardHtml+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
@@ -6092,6 +6201,33 @@ function renderPerf(container){
   }
 
   container.innerHTML=html;
+
+  // Wire brick button
+  var brickBtn=container.querySelector('#add-brick-btn');
+  if(brickBtn) brickBtn.addEventListener('click',function(){openAddBrick();});
+
+  // Wire activity filter buttons
+  var filterBtns=container.querySelectorAll('.perf-filter-btn');
+  var activeFilter='All';
+  filterBtns.forEach(function(btn){
+    btn.addEventListener('click',function(){
+      activeFilter=btn.getAttribute('data-filter');
+      filterBtns.forEach(function(b){
+        b.style.background=b===btn?'#FC4C02':'var(--s2)';
+        b.style.color=b===btn?'white':'var(--t2)';
+      });
+      var cards=container.querySelectorAll('[data-ride-type]');
+      cards.forEach(function(card){
+        var type=card.getAttribute('data-ride-type')||'';
+        var show=activeFilter==='All'||
+          (activeFilter==='Rides'&&(type==='Ride'||type==='VirtualRide'))||
+          (activeFilter==='Runs'&&type==='Run')||
+          (activeFilter==='Swims'&&type==='Swim')||
+          (activeFilter==='Strength'&&(type==='Strength'||type==='WeightTraining'));
+        card.style.display=show?'':'none';
+      });
+    });
+  });
 
   // If no rides, auto-refresh after Firebase syncs
   if((st.rides||[]).length===0){
@@ -9610,6 +9746,74 @@ function renderMob(){
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+function openAddBrick(){
+  var overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--s1);border-radius:16px;padding:20px;width:100%;max-width:360px;max-height:85vh;overflow-y:auto';
+  var today=new Date();
+  var dk=today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+  var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  box.innerHTML='<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:4px">🧱 Log Brick Workout</div>'+
+    '<div style="font-size:12px;color:var(--t3);margin-bottom:16px">Combined bike + run session</div>'+
+    '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">Date</div>'+
+    '<input id="brick-date" type="date" value="'+todayStr+'" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:#FC4C02;margin-bottom:8px">🚴 Bike Segment</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Distance (mi)</div><input id="brick-bike-dist" type="number" placeholder="20" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Time</div><input id="brick-bike-time" type="text" placeholder="1:00:00" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Avg Power (W)</div><input id="brick-bike-pwr" type="number" placeholder="170" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Avg HR</div><input id="brick-bike-hr" type="number" placeholder="140" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '</div>'+
+    '<div style="font-size:13px;font-weight:700;color:#0F6E56;margin-bottom:8px">🏃 Run Segment</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Distance (mi)</div><input id="brick-run-dist" type="number" placeholder="3" step="0.1" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Time</div><input id="brick-run-time" type="text" placeholder="25:00" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Pace /mi</div><input id="brick-run-pace" type="text" placeholder="8:30" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Avg HR</div><input id="brick-run-hr" type="number" placeholder="155" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px">'+
+    '<button id="brick-cancel" style="flex:1;padding:12px;border:1px solid var(--b1);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'+
+    '<button id="brick-save" style="flex:1;padding:12px;border:none;border-radius:10px;background:linear-gradient(135deg,#FC4C02,#0F6E56);color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Log Brick</button>'+
+    '</div>';
+  overlay.appendChild(box);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  document.body.appendChild(overlay);
+  document.getElementById('brick-cancel').addEventListener('click',function(){overlay.remove();});
+  document.getElementById('brick-save').addEventListener('click',function(){
+    var dateVal=document.getElementById('brick-date').value||dk;
+    var p=dateVal.split('-');
+    var dateStr=p[0]+'-'+parseInt(p[1])+'-'+parseInt(p[2]);
+    var bikeDist=parseFloat(document.getElementById('brick-bike-dist').value)||0;
+    var runDist=parseFloat(document.getElementById('brick-run-dist').value)||0;
+    // Log as two connected rides
+    if(!st.rides) st.rides=[];
+    if(!st.runs) st.runs=[];
+    if(bikeDist){
+      st.rides.push({
+        name:'Brick - Bike Segment',date:dateStr,type:'Ride',
+        distance:bikeDist,duration:document.getElementById('brick-bike-time').value,
+        avgPwr:parseInt(document.getElementById('brick-bike-pwr').value)||0,
+        avgHR:parseInt(document.getElementById('brick-bike-hr').value)||0,
+        brick:true,source:'manual'
+      });
+    }
+    if(runDist){
+      st.runs.push({
+        name:'Brick - Run Segment',date:dateStr,
+        distance:runDist,duration:document.getElementById('brick-run-time').value,
+        pace:document.getElementById('brick-run-pace').value,
+        avgHR:parseInt(document.getElementById('brick-run-hr').value)||0,
+        brick:true
+      });
+    }
+    sv();overlay.remove();
+    var pb=document.getElementById('perf-body');
+    if(pb) renderPerf(pb);
+    toast('Brick logged! 🧱');
+  });
+}
 
 function showSwim(){
   var old=document.getElementById('swim-screen');
