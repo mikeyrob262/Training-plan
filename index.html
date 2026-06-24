@@ -3769,6 +3769,28 @@ function showProg(){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
+  // W/kg trajectory
+  var targetWt=150, targetWkg=3.14, FTP2=st.settings&&st.settings.ftp?parseFloat(st.settings.ftp):186;
+  var currWt2=currentWt||162.5;
+  var currWkg2=Math.round(FTP2/(currWt2/2.20462)*100)/100;
+  var wtToLose=Math.round((currWt2-targetWt)*10)/10;
+  var wkgGap=Math.round((targetWkg-currWkg2)*100)/100;
+  var weeksToGoal=wtToLose>0?Math.ceil(wtToLose/0.5):0; // ~0.5lb/week
+  h+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-size:13px;font-weight:700;color:var(--t1)">W/kg Goal Tracker</div>';
+  h+='<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">Target</div><div style="font-size:16px;font-weight:900;color:#FC4C02">3.14 W/kg</div></div></div>';
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">';
+  h+='<div style="text-align:center"><div style="font-size:11px;color:var(--t3)">Current</div><div style="font-size:18px;font-weight:900;color:var(--t1)">'+currWkg2+'</div><div style="font-size:10px;color:var(--t3)">W/kg</div></div>';
+  h+='<div style="text-align:center"><div style="font-size:11px;color:var(--t3)">Weight</div><div style="font-size:18px;font-weight:900;color:var(--t1)">'+currWt2+'</div><div style="font-size:10px;color:var(--t3)">lbs (goal '+targetWt+')</div></div>';
+  h+='<div style="text-align:center"><div style="font-size:11px;color:var(--t3)">Est. time</div><div style="font-size:18px;font-weight:900;color:'+(weeksToGoal<=12?'#0F6E56':'#BA7517')+'">'+weeksToGoal+'</div><div style="font-size:10px;color:var(--t3)">weeks</div></div>';
+  h+='</div>';
+  // Progress bar to 3.14
+  var wkgPct=Math.min(100,Math.round((currWkg2/targetWkg)*100));
+  h+='<div style="background:var(--s3);border-radius:20px;height:8px;margin-bottom:6px"><div style="background:linear-gradient(90deg,#FC4C02,#FF8C42);height:8px;border-radius:20px;width:'+wkgPct+'%"></div></div>';
+  h+='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3)"><span>2.0</span><span>Chase 2: 2.5</span><span>Cat 3: 3.14</span><span>Cat 2: 3.5</span></div>';
+  h+='</div>';
+
   if(wtData.length){
     h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'      +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">Weight trend</div>'      +'<div style="position:relative;height:80px"><canvas id="prog-wt-chart" role="img" aria-label="Weight trend chart">'+wtData.join(',')+'</canvas></div></div>';
   }
@@ -5737,8 +5759,11 @@ function showPerf(){
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='position:sticky;top:0;z-index:10;background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'
-    +'<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>';
+  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'+
+    '<div style="display:flex;gap:6px">'+
+    '<button id="race-plan-btn" style="background:rgba(55,138,221,.12);border:1px solid rgba(55,138,221,.3);color:#378ADD;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer">🏁 Race Plan</button>'+
+    '<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>';
   var body=document.createElement('div');
   body.id='perf-body';
   body.style.cssText='padding-bottom:80px';
@@ -6122,13 +6147,17 @@ function renderPerf(container){
   html+='</div>';
   html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Countdown</div>';
+  // Check for tri race
+  var triRaceDate2=st.settings&&st.settings.triRaceDate?new Date(st.settings.triRaceDate):null;
+  var triDaysLeft=triRaceDate2?Math.round((triRaceDate2-now)/(1000*60*60*24)):null;
   var raceStats=[
     ['Days to race',daysToRace,'#ef4444'],
     ['Weeks remaining',weeksToRace,'var(--t1)'],
-    ['Current CTL',curCTL,'var(--blue)'],
-    ['Projected CTL',projCTL,'var(--blue)'],
+    ['Current CTL',Math.round(curCTL)||'—','var(--blue)'],
+    ['Projected CTL',projCTL||'—','var(--blue)'],
     ['Half marathon',Math.round(((raceDate-now)/86400000/7))+'w away','var(--green)']
   ];
+  if(triDaysLeft!==null&&triDaysLeft>0) raceStats.push(['🏊🚴🏃 First Tri',triDaysLeft+'d away','#378ADD']);
   raceStats.forEach(function(r){
     html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1)">';
     html+='<span style="font-size:11px;color:var(--t3)">'+r[0]+'</span>';
@@ -6146,6 +6175,35 @@ function renderPerf(container){
 
   // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
+
+  // HR Zone Analysis
+  var maxHR2=st.settings&&st.settings.maxHR?parseInt(st.settings.maxHR):172;
+  var hrZones2=[
+    {name:'Z1',min:0,max:Math.round(maxHR2*0.60),color:'#64748b',secs:0},
+    {name:'Z2',min:Math.round(maxHR2*0.60),max:Math.round(maxHR2*0.70),color:'#3b82f6',secs:0},
+    {name:'Z3',min:Math.round(maxHR2*0.70),max:Math.round(maxHR2*0.80),color:'#22c55e',secs:0},
+    {name:'Z4',min:Math.round(maxHR2*0.80),max:Math.round(maxHR2*0.90),color:'#f59e0b',secs:0},
+    {name:'Z5',min:Math.round(maxHR2*0.90),max:9999,color:'#ef4444',secs:0}
+  ];
+  rides.forEach(function(r){
+    if(!r.avgHR||!r.movingSecs) return;
+    for(var zi=0;zi<hrZones2.length;zi++){if(r.avgHR>=hrZones2[zi].min&&r.avgHR<hrZones2[zi].max){hrZones2[zi].secs+=r.movingSecs;break;}}
+  });
+  var totalHRSecs=hrZones2.reduce(function(s,z){return s+z.secs;},0)||0;
+  if(totalHRSecs>0){
+    html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+    html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">HR Zone Distribution</div>';
+    html+='<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;margin-bottom:10px;gap:1px">';
+    hrZones2.forEach(function(z){var pct=Math.round(z.secs/totalHRSecs*100);if(pct>0)html+='<div style="background:'+z.color+';flex:'+pct+'"></div>';});
+    html+='</div><div style="display:flex;flex-wrap:wrap;gap:8px">';
+    hrZones2.forEach(function(z){
+      var pct=Math.round(z.secs/totalHRSecs*100);
+      if(pct>0){var h2=Math.floor(z.secs/3600),m2=Math.floor((z.secs%3600)/60);
+      html+='<div style="display:flex;align-items:center;gap:3px"><div style="width:7px;height:7px;border-radius:50%;background:'+z.color+'"></div><span style="font-size:10px;color:var(--t3)">'+z.name+'</span><span style="font-size:10px;font-weight:700;color:var(--t1)">'+pct+'%</span></div>';}
+    });
+    html+='</div></div>';
+  }
+
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
     +'<div id="perf-filter-bar" style="display:flex;gap:4px;overflow-x:auto;padding:8px 16px 0;-webkit-overflow-scrolling:touch">'+
     ['All','Rides','Runs','Swims','Strength'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>'
@@ -6212,6 +6270,10 @@ function renderPerf(container){
   }
 
   container.innerHTML=html;
+
+  // Wire race plan button
+  var rpBtn=document.getElementById('race-plan-btn');
+  if(rpBtn) rpBtn.addEventListener('click',function(){showRacePlanner();});
 
   // Wire brick button
   var brickBtn=container.querySelector('#add-brick-btn');
@@ -6630,11 +6692,14 @@ function openManualRide(){
       if(secs && np && FTP) tss = Math.round((secs * np * (np/FTP)) / (FTP * 3600) * 100);
     }
 
-    var ride = {name:name,date:date,duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev};
+    var ride = {name:name,date:date,duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev,type:'Ride',source:'manual'};
     if(!st.rides) st.rides=[];
+    var wasLongest=dist>0&&(!st.rides.length||dist>Math.max.apply(null,st.rides.map(function(r){return r.distance||0;})));
     st.rides.push(ride);
     sv();
     overlay.remove();
+    if(wasLongest) toast('🎉 New longest ride logged!');
+    else toast('Ride logged!');
     renderPerf();
   };
 
@@ -9758,6 +9823,105 @@ function renderMob(){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function showRacePlanner(){
+  var old=document.getElementById('race-planner-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='race-planner-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var hdrBg=isDark?'#1C1C1E':'#FFFFFF';
+  var settings=st.settings||{};
+  var rp=st.racePlan||{};
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+hdrBg+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:18px;font-weight:800">🏁 Race Day Planner</div>'+
+    '<button id="rp-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    // Race info
+    '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Info</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Race name</div><input id="rp-name" type="text" placeholder="My First Tri" value="'+(rp.name||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Race date</div><input id="rp-date" type="date" value="'+(rp.date||settings.triRaceDate||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Swim distance</div><input id="rp-swim-dist" type="text" placeholder="750m" value="'+(rp.swimDist||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Bike distance</div><input id="rp-bike-dist" type="text" placeholder="12.4 mi" value="'+(rp.bikeDist||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Run distance</div><input id="rp-run-dist" type="text" placeholder="3.1 mi" value="'+(rp.runDist||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Race type</div><select id="rp-type" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"><option '+(rp.type==='Sprint'?'selected':'')+'>Sprint</option><option '+(rp.type==='Olympic'?'selected':'')+'>Olympic</option><option '+(rp.type==='70.3'?'selected':'')+'>70.3</option><option '+(rp.type==='Ironman'?'selected':'')+'>Ironman</option></select></div>'+
+    '</div></div>'+
+    // Pacing targets
+    '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Pacing Targets</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
+    '<div><div style="font-size:11px;color:#378ADD;font-weight:700;margin-bottom:3px">🏊 Swim pace</div><input id="rp-swim-pace" type="text" placeholder="2:00/100y" value="'+(rp.swimPace||settings.cssPace||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:#FC4C02;font-weight:700;margin-bottom:3px">🚴 Bike power</div><input id="rp-bike-pwr" type="text" placeholder="160W" value="'+(rp.bikePwr||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:#0F6E56;font-weight:700;margin-bottom:3px">🏃 Run pace</div><input id="rp-run-pace" type="text" placeholder="9:00/mi" value="'+(rp.runPace||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '</div></div>'+
+    // Nutrition plan
+    '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Nutrition</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Carbs/hr on bike</div><input id="rp-carbs" type="number" placeholder="60" value="'+(rp.carbsHr||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Fluids/hr (oz)</div><input id="rp-fluids" type="number" placeholder="16" value="'+(rp.fluidsHr||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Pre-race meal</div><input id="rp-prerace" type="text" placeholder="Oatmeal, banana, coffee" value="'+(rp.preRace||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">On-course fuel</div><input id="rp-fuel" type="text" placeholder="Gels, chews, bottles" value="'+(rp.fuel||'')+'" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit"></div>'+
+    '</div></div>'+
+    // Gear checklist
+    '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Gear Checklist</div>'+
+    '<div id="gear-checklist" style="display:flex;flex-direction:column;gap:6px"></div>'+
+    '</div>'+
+    '<button id="rp-save" style="width:100%;padding:14px;background:linear-gradient(135deg,#378ADD,#FC4C02);border:none;color:white;font-size:15px;font-weight:700;border-radius:14px;cursor:pointer;font-family:inherit">Save Race Plan</button>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('rp-close').addEventListener('click',function(){overlay.remove();});
+
+  // Gear checklist items
+  var gearItems=['Wetsuit/swimsuit','Goggles','Swim cap','Bike helmet','Cycling shoes','Bike gloves','Sunglasses','Running shoes','Race belt/bib','Nutrition','Water bottles','Transition bag','Body Glide','Sunscreen','GPS watch'];
+  var gearDiv=document.getElementById('gear-checklist');
+  var savedGear=rp.gear||{};
+  gearItems.forEach(function(item){
+    var row=document.createElement('label');
+    row.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 0;font-size:13px;color:var(--t1)';
+    var cb=document.createElement('input');
+    cb.type='checkbox'; cb.checked=savedGear[item]||false;
+    cb.style.cssText='width:16px;height:16px;accent-color:#FC4C02';
+    cb.setAttribute('data-gear',item);
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(item));
+    gearDiv.appendChild(row);
+  });
+
+  document.getElementById('rp-save').addEventListener('click',function(){
+    var gear={};
+    document.querySelectorAll('#gear-checklist input[type=checkbox]').forEach(function(cb){
+      gear[cb.getAttribute('data-gear')]=cb.checked;
+    });
+    var dateVal=document.getElementById('rp-date').value;
+    var racePlan={
+      name:document.getElementById('rp-name').value,
+      date:dateVal,
+      swimDist:document.getElementById('rp-swim-dist').value,
+      bikeDist:document.getElementById('rp-bike-dist').value,
+      runDist:document.getElementById('rp-run-dist').value,
+      type:document.getElementById('rp-type').value,
+      swimPace:document.getElementById('rp-swim-pace').value,
+      bikePwr:document.getElementById('rp-bike-pwr').value,
+      runPace:document.getElementById('rp-run-pace').value,
+      carbsHr:document.getElementById('rp-carbs').value,
+      fluidsHr:document.getElementById('rp-fluids').value,
+      preRace:document.getElementById('rp-prerace').value,
+      fuel:document.getElementById('rp-fuel').value,
+      gear:gear
+    };
+    st.racePlan=racePlan;
+    if(!st.settings) st.settings={};
+    if(dateVal) st.settings.triRaceDate=dateVal;
+    sv(); overlay.remove();
+    toast('Race plan saved! 🏁');
+  });
+}
+
 function openAddBrick(){
   var overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -9776,6 +9940,10 @@ function openAddBrick(){
     '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Time</div><input id="brick-bike-time" type="text" placeholder="1:00:00" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
     '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Avg Power (W)</div><input id="brick-bike-pwr" type="number" placeholder="170" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
     '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Avg HR</div><input id="brick-bike-hr" type="number" placeholder="140" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">T1 time (m:ss)</div><input id="brick-t1" type="text" placeholder="2:30" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">T2 time (m:ss)</div><input id="brick-t2" type="text" placeholder="1:45" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
     '</div>'+
     '<div style="font-size:13px;font-weight:700;color:#0F6E56;margin-bottom:8px">🏃 Run Segment</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">'+
@@ -9810,6 +9978,12 @@ function openAddBrick(){
         brick:true,source:'manual'
       });
     }
+    var t1=document.getElementById('brick-t1')?document.getElementById('brick-t1').value:'';
+    var t2=document.getElementById('brick-t2')?document.getElementById('brick-t2').value:'';
+    if(t1||t2){
+      if(!st.transitions) st.transitions=[];
+      st.transitions.push({date:dateStr,t1:t1,t2:t2});
+    }
     if(runDist){
       st.runs.push({
         name:'Brick - Run Segment',date:dateStr,
@@ -9820,9 +9994,14 @@ function openAddBrick(){
       });
     }
     sv();overlay.remove();
+    // Check for PRs
+    var newRide=st.rides[st.rides.length-1];
+    var prMsg='';
+    if(newRide&&newRide.distance&&newRide.distance>=(longestRide||0)) prMsg+='🎉 New longest ride! ';
+    if(newRide&&newRide.np&&newRide.np>=(highestNP||0)) prMsg+='⚡ New best NP! ';
     var pb=document.getElementById('perf-body');
     if(pb) renderPerf(pb);
-    toast('Brick logged! 🧱');
+    toast((prMsg||'')+'Brick logged! 🧱');
   });
 }
 
@@ -9845,6 +10024,39 @@ function showSwim(){
     '</div>';
   document.body.appendChild(overlay);
   document.getElementById('swim-close-btn').addEventListener('click',function(){overlay.remove();});
+
+  // CSS Pace Calculator section
+  var cssSection=document.createElement('div');
+  cssSection.style.cssText='margin:0 0 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px';
+  cssSection.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px">CSS Pace Calculator</div>'+
+    '<div style="font-size:11px;color:var(--t3);margin-bottom:10px">Swim 400y and 200y time trials, enter times below</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">400y time (m:ss)</div><input id="css-400" type="text" placeholder="6:00" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">200y time (m:ss)</div><input id="css-200" type="text" placeholder="2:45" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '</div>'+
+    '<button id="css-calc-btn" style="width:100%;padding:10px;background:#378ADD;border:none;color:white;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;font-family:inherit">Calculate CSS</button>'+
+    '<div id="css-result" style="margin-top:10px;font-size:13px;color:var(--t3);text-align:center"></div>';
+
+  // Add CSS calc to overlay after swim history
+  overlay.querySelector('div:last-child').appendChild(cssSection);
+
+  // Wire CSS calculator
+  document.getElementById('css-calc-btn').addEventListener('click',function(){
+    var t400=document.getElementById('css-400').value;
+    var t200=document.getElementById('css-200').value;
+    function toSecs(t){var p=t.split(':');return p.length===2?parseInt(p[0])*60+parseFloat(p[1]):parseFloat(t);}
+    var s400=toSecs(t400), s200=toSecs(t200);
+    if(s400>0&&s200>0){
+      var css=s400-s200; // CSS = difference = pace per 100y
+      var cssMin=Math.floor(css/60), cssSec=Math.round(css%60);
+      var cssStr=cssMin+':'+(cssSec<10?'0':'')+cssSec;
+      if(!st.settings) st.settings={};
+      st.settings.cssPace=cssStr; sv();
+      document.getElementById('css-result').innerHTML='<span style="font-size:16px;font-weight:800;color:#378ADD">CSS: '+cssStr+'/100y</span><br><span style="font-size:11px;color:var(--t3)">Saved to settings</span>';
+    } else {
+      document.getElementById('css-result').textContent='Enter both times to calculate';
+    }
+  });
 
   // Render swim history
   var swims=st.swims||[];
