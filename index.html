@@ -5585,15 +5585,15 @@ function showPerf(){
   if(old) old.remove();
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
-  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;';
+  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
+  hdr.style.cssText='position:sticky;top:0;z-index:10;background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'
     +'<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>';
   var body=document.createElement('div');
   body.id='perf-body';
-  body.style.cssText='flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0;padding-bottom:80px';
+  body.style.cssText='padding-bottom:80px';
   overlay.appendChild(hdr);
   overlay.appendChild(body);
   document.body.appendChild(overlay);
