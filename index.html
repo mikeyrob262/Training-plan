@@ -6303,7 +6303,8 @@ function renderPerf(container){
   };
 
   // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
-  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
+  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">';
+  html+='</div>';
 
   // HR Zone Analysis
   var maxHR2=st.settings&&st.settings.maxHR?parseInt(st.settings.maxHR):172;
@@ -6338,6 +6339,7 @@ function renderPerf(container){
     ['All','Rides','Runs','Swims','Strength'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>'
     +'<div style="display:flex;gap:6px">'
     +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
+    +'<button onclick="dedupRides()" style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);color:var(--t2);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🔀 Dedup</button>'
     +'<button id="add-brick-btn" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.25);color:#FC4C02;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🧱 Brick</button>'
     +'</div>'
     +'</div>';
@@ -7134,9 +7136,24 @@ function importRideFile(input){
           if(!st.rides) st.rides=[];
           // Avoid duplicates by id
           var existing = ride.id ? function(){for(var _i=0;_i<st.rides.length;_i++){if(st.rides[_i].id===ride.id)return _i;}return -1;}() : -1;
-          if(existing >= 0) st.rides[existing] = ride;
-          else st.rides.push(ride);
-          imported++;
+          if(existing >= 0){ st.rides[existing] = ride; imported++; continue; }
+          // Cross-source dedup: same date + distance within 5%
+          var crossDupI=false;
+          if(ride.date&&ride.distance>0){
+            for(var ciI=0;ciI<st.rides.length;ciI++){
+              var crI=st.rides[ciI];
+              if(crI.date===ride.date&&crI.distance&&Math.abs(crI.distance-ride.distance)/crI.distance<0.05){
+                // Prefer whichever has better power data
+                if(ride.np>(crI.np||0)||ride.tss>(crI.tss||0)){
+                  ride.id=ride.id||crI.id;
+                  st.rides[ciI]=ride;
+                }
+                crossDupI=true; break;
+              }
+            }
+          }
+          if(!crossDupI){ st.rides.push(ride); imported++; }
+          else imported++;
         }
         sv();
         toast(imported+' ride(s) imported from Intervals.icu');
@@ -7215,12 +7232,26 @@ function importRideFile(input){
           };
           if(!st.rides) st.rides=[];
           var existIdx3=ride3.id?function(){for(var _i=0;_i<st.rides.length;_i++){if(st.rides[_i].id===ride3.id)return _i;}return -1;}():-1;
-          if(existIdx3>=0) st.rides[existIdx3]=ride3;
-          else st.rides.push(ride3);
-          stravaImported++;
+          if(existIdx3>=0){ st.rides[existIdx3]=ride3; stravaImported++; continue; }
+          // Cross-source dedup: same date + distance within 5%
+          var crossDup3=false;
+          if(ride3.date&&ride3.distance>0){
+            for(var ci3=0;ci3<st.rides.length;ci3++){
+              var cr3=st.rides[ci3];
+              if(cr3.date===ride3.date&&cr3.distance&&Math.abs(cr3.distance-ride3.distance)/cr3.distance<0.05){
+                if(ride3.np>(cr3.np||0)||ride3.tss>(cr3.tss||0)){
+                  ride3.id=ride3.id||cr3.id;
+                  st.rides[ci3]=ride3;
+                }
+                crossDup3=true; break;
+              }
+            }
+          }
+          if(!crossDup3){ st.rides.push(ride3); stravaImported++; }
+          else stravaSkipped++;
         }
         sv();
-        toast('Imported '+stravaImported+' Strava rides!');
+        toast('Imported '+stravaImported+' Strava rides'+(stravaSkipped?' ('+stravaSkipped+' cross-source dupes merged)':'')+'!');
         renderPerf(document.getElementById('perf-body'));
         return;
       }
@@ -7804,6 +7835,32 @@ function openRideDetail(idx){
   overlay.appendChild(hdr);
   overlay.appendChild(body);
   document.body.appendChild(overlay);
+}
+
+function dedupRides(){
+  var st=getState();
+  if(!st.rides||st.rides.length===0){toast('No rides to dedup');return;}
+  var kept=[], removed=0;
+  st.rides.forEach(function(r){
+    // Check if this ride's date+distance matches anything already in kept
+    var isDup=false;
+    for(var i=0;i<kept.length;i++){
+      var k=kept[i];
+      if(k.date===r.date&&k.distance&&r.distance&&Math.abs(k.distance-r.distance)/k.distance<0.05){
+        // Duplicate — keep whichever has better power data
+        if((r.np||(r.avgPwr||0))>(k.np||(k.avgPwr||0))||r.tss>(k.tss||0)){
+          kept[i]=r; // replace with richer version
+        }
+        isDup=true; removed++; break;
+      }
+    }
+    if(!isDup) kept.push(r);
+  });
+  st.rides=kept;
+  saveState(st);
+  localStorage.setItem('mta2_rides',JSON.stringify(kept));
+  toast('Removed '+removed+' duplicate ride(s). '+kept.length+' rides remain.');
+  renderPerf(document.getElementById('perf-body'));
 }
 
 function deleteRide(idx, e){
