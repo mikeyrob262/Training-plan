@@ -3809,7 +3809,8 @@ function showProg(){
 
   // Next race — quiet card at bottom
   if(nextRace&&raceDays!==null){
-    h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'      +'<div style="font-size:12px;color:var(--t1);font-weight:700">'+nextRace.name+'</div>'      +'<div style="display:flex;align-items:center;gap:10px">'      +'<div style="font-size:12px;color:var(--t3)">'+nextRace.date+' &nbsp;·&nbsp; <span style="font-weight:700;color:var(--t2)">'+raceDays+' days</span></div>'      +'<button onclick="showRacePlanner()" style="background:rgba(55,138,221,.15);border:1px solid rgba(55,138,221,.3);color:#378ADD;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;font-family:inherit">🏁 Race Plan</button>'      +'</div></div>';
+    h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'      +'<div style="font-size:12px;color:var(--t1);font-weight:700">'+nextRace.name+'</div>'      +'<div style="display:flex;align-items:center;gap:10px">'      +'<div style="font-size:12px;color:var(--t3)">'+nextRace.date+' &nbsp;·&nbsp; <span style="font-weight:700;color:var(--t2)">'+raceDays+' days</span></div>'      +'<button onclick="showRacePlanner()" style="background:rgba(55,138,221,.15);border:1px solid rgba(55,138,221,.3);color:#378ADD;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;font-family:inherit">🏁 Race Plan</button>'
+      +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.15);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;cursor:pointer;font-family:inherit">📋 Import Plan</button>'      +'</div></div>';
   }
 
   h+='<div style="height:50px"></div>';
@@ -4011,7 +4012,7 @@ function showSet(){
     +'</div>'
     +'<div id="icu-sync-status" style="font-size:12px;color:var(--t3);text-align:center"></div>'
     +'</div></div>';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">📋 Import Training Plan (PDF/CSV)</button>'    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
 
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
@@ -10401,6 +10402,255 @@ function showWeeklyReport(){
       aiRes.innerHTML='<div style="background:var(--s1);border-radius:12px;border:1px solid var(--b1);padding:14px;font-size:13px;line-height:1.6;color:var(--t1)">'+txt+'</div>';
     }).catch(function(){aiRes.innerHTML='<div style="color:#ef4444;font-size:12px">AI analysis unavailable</div>';});
   });
+}
+
+
+function showPlanImport(){
+  var old=document.getElementById('plan-import-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='plan-import-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:170;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var hdrBg=isDark?'#1C1C1E':'#FFFFFF';
+
+  overlay.innerHTML=
+    '<div style="position:sticky;top:0;z-index:10;background:'+hdrBg+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+      '<div style="font-size:18px;font-weight:800">📋 Import Training Plan</div>'+
+      '<button id="pi-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px;max-width:600px;margin:0 auto">'+
+
+    // Source badge
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'+
+      '<div style="background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.3);color:#FC4C02;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">McMillan Running ✓</div>'+
+      '<div style="background:rgba(55,138,221,.1);border:1px solid rgba(55,138,221,.3);color:#378ADD;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">Coach Parry ✓</div>'+
+      '<div style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">CSV / Excel ✓</div>'+
+      '<div style="background:rgba(100,116,139,.1);border:1px solid rgba(100,116,139,.25);color:var(--t2);font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">Any PDF ✓</div>'+
+    '</div>'+
+
+    // Upload zone
+    '<div id="pi-drop-zone" style="border:2px dashed var(--b2);border-radius:16px;padding:32px 16px;text-align:center;cursor:pointer;margin-bottom:16px;transition:border-color .2s">'+
+      '<div style="font-size:36px;margin-bottom:10px">📄</div>'+
+      '<div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px">Drop your plan here</div>'+
+      '<div style="font-size:13px;color:var(--t3);margin-bottom:14px">PDF or CSV/Excel accepted</div>'+
+      '<button id="pi-browse-btn" style="background:#FC4C02;border:none;color:white;font-size:14px;font-weight:700;padding:10px 24px;border-radius:20px;cursor:pointer;font-family:inherit">Browse File</button>'+
+      '<input id="pi-file-input" type="file" accept=".pdf,.csv,.xlsx,.xls" style="display:none">'+
+    '</div>'+
+
+    // Week offset
+    '<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:16px">'+
+      '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px">Start at week</div>'+
+      '<div style="display:flex;align-items:center;gap:12px">'+
+        '<input id="pi-week-start" type="number" min="1" max="17" value="1" style="width:70px;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s1);color:var(--t1);font-size:16px;font-weight:700;text-align:center;font-family:inherit">'+
+        '<div style="font-size:13px;color:var(--t3)">Which week in your Training Schedule should week 1 of the plan map to?</div>'+
+      '</div>'+
+    '</div>'+
+
+    // Status / preview area
+    '<div id="pi-status" style="display:none;background:var(--s2);border-radius:14px;padding:14px;margin-bottom:16px">'+
+      '<div id="pi-status-text" style="font-size:13px;color:var(--t3)"></div>'+
+    '</div>'+
+    '<div id="pi-preview" style="display:none">'+
+      '<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:10px">Parsed Plan Preview</div>'+
+      '<div id="pi-preview-content" style="font-size:12px;color:var(--t2);background:var(--s2);border-radius:12px;padding:12px;max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;font-family:monospace;line-height:1.6"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:12px">'+
+        '<button id="pi-apply-btn" style="flex:1;padding:13px;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit">✅ Apply to Schedule</button>'+
+        '<button id="pi-reparse-btn" style="padding:13px 16px;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit">↺ Re-parse</button>'+
+      '</div>'+
+    '</div>'+
+
+    // Stored plan reference
+    (st.importedPlan ? '<div style="margin-top:16px"><div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px">📁 Stored Plan Reference</div><div style="font-size:11px;color:var(--t3);background:var(--s2);border-radius:12px;padding:12px;max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch;white-space:pre-wrap;font-family:monospace;line-height:1.5">'+escHtml(st.importedPlan.rawText||'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:6px">Imported: '+(st.importedPlan.importedAt||'')+'</div></div>' : '')+
+
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('pi-close').addEventListener('click',function(){overlay.remove();});
+
+  var dropZone=document.getElementById('pi-drop-zone');
+  var fileInput=document.getElementById('pi-file-input');
+
+  document.getElementById('pi-browse-btn').addEventListener('click',function(e){
+    e.stopPropagation();
+    fileInput.click();
+  });
+  dropZone.addEventListener('click',function(){fileInput.click();});
+
+  dropZone.addEventListener('dragover',function(e){
+    e.preventDefault();
+    dropZone.style.borderColor='#FC4C02';
+    dropZone.style.background='rgba(252,76,2,.04)';
+  });
+  dropZone.addEventListener('dragleave',function(){
+    dropZone.style.borderColor='var(--b2)';
+    dropZone.style.background='';
+  });
+  dropZone.addEventListener('drop',function(e){
+    e.preventDefault();
+    dropZone.style.borderColor='var(--b2)';
+    dropZone.style.background='';
+    var file=e.dataTransfer.files[0];
+    if(file) handlePlanFile(file);
+  });
+  fileInput.addEventListener('change',function(){
+    if(fileInput.files[0]) handlePlanFile(fileInput.files[0]);
+  });
+
+  function handlePlanFile(file){
+    var statusDiv=document.getElementById('pi-status');
+    var statusText=document.getElementById('pi-status-text');
+    var previewDiv=document.getElementById('pi-preview');
+    previewDiv.style.display='none';
+    statusDiv.style.display='block';
+    statusText.innerHTML='<span style="color:#FC4C02;font-weight:700">⏳ Reading file...</span>';
+
+    var isPDF=file.name.toLowerCase().endsWith('.pdf');
+    var isCSV=file.name.toLowerCase().endsWith('.csv')||file.name.toLowerCase().endsWith('.xlsx')||file.name.toLowerCase().endsWith('.xls');
+
+    var reader=new FileReader();
+
+    if(isPDF){
+      reader.onload=function(ev){
+        var b64=ev.target.result.split(',')[1];
+        statusText.innerHTML='<span style="color:#FC4C02;font-weight:700">🤖 Sending to Claude for parsing...</span>';
+        parsePlanWithClaude({type:'pdf',b64:b64,fileName:file.name},statusText,previewDiv,statusDiv);
+      };
+      reader.readAsDataURL(file);
+    } else if(isCSV){
+      reader.onload=function(ev){
+        var text=ev.target.result;
+        statusText.innerHTML='<span style="color:#FC4C02;font-weight:700">🤖 Sending to Claude for parsing...</span>';
+        parsePlanWithClaude({type:'csv',text:text,fileName:file.name},statusText,previewDiv,statusDiv);
+      };
+      reader.readAsText(file);
+    } else {
+      statusText.innerHTML='<span style="color:#ef4444">❌ Please upload a PDF or CSV file.</span>';
+    }
+  }
+
+  function parsePlanWithClaude(fileData,statusText,previewDiv,statusDiv){
+    var systemPrompt='You are a training plan parser. Extract the workout schedule from the uploaded training plan and return ONLY a JSON object with no explanation, no markdown, no backticks. The JSON must have this exact structure:\n{"weeks":[{"week":1,"goal":"brief goal for the week","days":[{"day":"Mon","session":"workout name","duration":"e.g. 45 min","notes":"any key details"},...7 days...]},...]}.\nFor day names use: Mon, Tue, Wed, Thu, Fri, Sat, Sun.\nFor session names use concise labels like: Easy Run, Long Run, Tempo Run, Z2 Endurance Ride, Z4 Threshold Ride, Group Ride, Zwift, Strength A, Strength B, Rest, Cross-train, Swim Easy, Swim Intervals.\nIf a day is rest, use session "Rest" with duration "".\nInclude ALL weeks from the plan. Return ONLY the JSON object.';
+
+    var messages;
+    if(fileData.type==='pdf'){
+      messages=[{role:'user',content:[
+        {type:'document',source:{type:'base64',media_type:'application/pdf',data:fileData.b64}},
+        {type:'text',text:'Extract the full training plan schedule from this PDF and return the JSON as instructed.'}
+      ]}];
+    } else {
+      messages=[{role:'user',content:'Here is the training plan as CSV/text:\n\n'+fileData.text+'\n\nExtract the full training plan schedule and return the JSON as instructed.'}];
+    }
+
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:4000,
+        system:systemPrompt,
+        messages:messages
+      })
+    })
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(data.error){
+        statusText.innerHTML='<span style="color:#ef4444">❌ API error: '+escHtml(data.error.message)+'</span>';
+        return;
+      }
+      var raw=data.content&&data.content[0]&&data.content[0].text?data.content[0].text:'';
+      // Strip any accidental markdown fences
+      raw=raw.replace(/```json|```/g,'').trim();
+      try{
+        var parsed=JSON.parse(raw);
+        window._parsedPlan=parsed;
+        window._parsedPlanRaw=fileData.text||'(PDF — see plan reference)';
+
+        // Build preview text
+        var preview='';
+        (parsed.weeks||[]).forEach(function(wk){
+          preview+='── Week '+wk.week+(wk.goal?' ('+wk.goal+')':'')+' ──\n';
+          (wk.days||[]).forEach(function(d){
+            preview+='  '+d.day+': '+d.session+(d.duration?' ['+d.duration+']':'')+(d.notes?' — '+d.notes:'')+'\n';
+          });
+          preview+='\n';
+        });
+
+        statusDiv.style.display='none';
+        document.getElementById('pi-preview-content').textContent=preview;
+        previewDiv.style.display='block';
+
+      } catch(e){
+        statusText.innerHTML='<span style="color:#ef4444">❌ Could not parse response. Try a cleaner PDF or CSV.</span><br><small style="color:var(--t3)">'+escHtml(raw.substring(0,300))+'</small>';
+      }
+    })
+    .catch(function(err){
+      statusText.innerHTML='<span style="color:#ef4444">❌ Network error: '+escHtml(err.message)+'</span>';
+    });
+  }
+
+  document.getElementById('pi-apply-btn').addEventListener('click',function(){applyParsedPlan();});
+  document.getElementById('pi-reparse-btn').addEventListener('click',function(){
+    fileInput.click();
+  });
+
+  function applyParsedPlan(){
+    var parsed=window._parsedPlan;
+    if(!parsed||!parsed.weeks){toast('No parsed plan to apply.');return;}
+    var weekOffset=(parseInt(document.getElementById('pi-week-start').value)||1)-1;
+    var applied=0;
+    parsed.weeks.forEach(function(wk){
+      var wNum=wk.week+weekOffset;
+      if(wNum<1||wNum>17) return;
+      var s=ws(wNum);
+      if(!s.swaps) s.swaps={};
+      if(!s.fi) s.fi={};
+      // Set week goal
+      if(wk.goal){
+        if(!s.ci) s.ci={};
+        // Store as a note
+        if(!s.ci.planGoal) s.ci.planGoal=wk.goal;
+      }
+      var dayMap={Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6};
+      (wk.days||[]).forEach(function(d){
+        var dayIdx=dayMap[d.day];
+        if(dayIdx===undefined) return;
+        var sessName=d.session||'Rest';
+        // Apply session name
+        s.swaps[dayIdx]=sessName;
+        var el=document.getElementById('ws'+wNum+'_'+dayIdx);
+        if(el){el.textContent=sessName;el.style.color='var(--blue)';}
+        // Apply planned duration
+        if(d.duration){
+          if(!s.fi[dayIdx]) s.fi[dayIdx]={};
+          s.fi[dayIdx].planned=d.duration;
+          var card=document.getElementById('wc'+wNum+'_'+dayIdx);
+          if(card){
+            var plDiv=card.querySelector('.wof-pl');
+            if(plDiv) plDiv.textContent=d.duration;
+          }
+        }
+        applied++;
+      });
+    });
+    sv();
+    // Store raw plan for reference
+    var now=new Date();
+    st.importedPlan={
+      rawText:window._parsedPlanRaw,
+      parsedAt:now.toLocaleDateString(),
+      weeks:(parsed.weeks||[]).length
+    };
+    sv();
+    localStorage.setItem('mta2_importedPlan',JSON.stringify(st.importedPlan));
+    toast('Plan applied! '+applied+' sessions across '+(parsed.weeks||[]).length+' weeks.');
+    overlay.remove();
+  }
+}
+
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function showRacePlanner(){
