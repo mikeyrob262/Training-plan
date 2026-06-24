@@ -2968,11 +2968,25 @@ var FBB=[["Back Squat","3","8","Bar on traps, depth parallel"],["Single-Leg RDL"
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(function(){t.remove();},400);},2500);}
 
+
+function getMaxWeek(){
+  // Find highest week with any data or the imported plan's length
+  var planWeeks = st.importedPlan ? (st.importedPlan.weeks||0) : 0;
+  var dataWeeks = 0;
+  for(var w=1;w<=52;w++){
+    var s=ws(w);
+    var hasData=Object.values(s.wo||{}).some(Boolean)||(s.swaps&&Object.keys(s.swaps).length>0)||(s.ci&&(s.ci.weight||s.ci.notes));
+    if(hasData) dataWeeks=w;
+    else if(w>17&&!hasData) break; // stop scanning beyond 17 if no data
+  }
+  return Math.max(17, planWeeks, dataWeeks, cw+3);
+}
+
 function updDots(){
   var row=document.getElementById('dots-row');
   if(!row)return;
   // Show dots for all weeks up to current + a few ahead
-  var maxW=Math.max(17,cw+3);
+  var maxW=getMaxWeek();
   var html='';
   for(var w=1;w<=maxW;w++){
     var s=ws(w),d=Object.values(s.wo).filter(Boolean).length;
@@ -3126,7 +3140,7 @@ function SF(w,i,f,v){var s=ws(w);if(!s.fi[i])s.fi[i]={};s.fi[i][f]=v;sv();}
 function SC(w,f,v){ws(w).ci[f]=v;sv();}
 
 function openPk(){
-  var maxW=Math.max(17,cw+5);
+  var maxW=getMaxWeek()+2;
   var grid=document.getElementById('picker-grid');
   var html='';
   for(var w=1;w<=maxW;w++){
@@ -10442,7 +10456,7 @@ function showPlanImport(){
     '<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:16px">'+
       '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px">Start at week</div>'+
       '<div style="display:flex;align-items:center;gap:12px">'+
-        '<input id="pi-week-start" type="number" min="1" max="17" value="1" style="width:70px;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s1);color:var(--t1);font-size:16px;font-weight:700;text-align:center;font-family:inherit">'+
+        '<input id="pi-week-start" type="number" min="1" max="52" value="1" style="width:70px;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s1);color:var(--t1);font-size:16px;font-weight:700;text-align:center;font-family:inherit">'+
         '<div style="font-size:13px;color:var(--t3)">Which week in your Training Schedule should week 1 of the plan map to?</div>'+
       '</div>'+
     '</div>'+
@@ -10602,7 +10616,7 @@ function showPlanImport(){
     var applied=0;
     parsed.weeks.forEach(function(wk){
       var wNum=wk.week+weekOffset;
-      if(wNum<1||wNum>17) return;
+      if(wNum<1||wNum>52) return;
       var s=ws(wNum);
       if(!s.swaps) s.swaps={};
       if(!s.fi) s.fi={};
