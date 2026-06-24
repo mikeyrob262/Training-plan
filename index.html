@@ -5598,6 +5598,14 @@ function showPerf(){
   overlay.appendChild(body);
   document.body.appendChild(overlay);
   document.body.style.overflow='hidden';
+  // Force scroll to work on all browsers
+  body.addEventListener('wheel', function(e){
+    e.stopPropagation();
+    body.scrollTop += e.deltaY;
+  }, {passive:true});
+  body.addEventListener('touchmove', function(e){
+    e.stopPropagation();
+  }, {passive:true});
   renderPerf(body);
 }
 
