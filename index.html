@@ -5598,15 +5598,7 @@ function showPerf(){
   overlay.appendChild(body);
   document.body.appendChild(overlay);
   renderPerf(body);
-  // iOS scroll fix - force recognition of scrollable div
-  setTimeout(function(){
-    var rl = document.getElementById('ride-history-list');
-    if(rl){
-      rl.style.webkitOverflowScrolling = 'touch';
-      rl.scrollTop = 1;
-      rl.scrollTop = 0;
-    }
-  }, 100);
+
 }
 
 
