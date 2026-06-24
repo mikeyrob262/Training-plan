@@ -6342,7 +6342,7 @@ function renderPerf(container){
   html+='<div style="display:flex;gap:6px;padding:6px 16px 8px">'
     +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
     +'<button onclick="dedupRides()" style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);color:var(--t2);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🔀 Dedup</button>'
-    +'<button id="add-brick-btn" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.25);color:#FC4C02;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🧱 Brick</button>'
+
     +'</div>';
 
 
@@ -6408,8 +6408,7 @@ function renderPerf(container){
   if(rpBtn) rpBtn.addEventListener('click',function(){showRacePlanner();});
 
   // Wire brick button
-  var brickBtn=container.querySelector('#add-brick-btn');
-  if(brickBtn) brickBtn.addEventListener('click',function(){openAddBrick();});
+
 
   // Wire activity filter buttons
   var filterBtns=container.querySelectorAll('.perf-filter-btn');
@@ -8068,6 +8067,7 @@ var SESSION_OPTIONS = [
   'Easy Run','Tempo Run','Long Run','Fartlek Run',
   'Zwift','Zwift Intervals','Zwift Race',
   'Strength A','Strength B',
+  'Brick Workout',
   'Yoga / Mobility','Walk','Rest / Recovery'
 ];
 
@@ -8113,6 +8113,12 @@ function openAddSession(w, d){
       btn.style.color='#FC4C02';
       btn.setAttribute('data-sel','1');
       timeInp.placeholder = 'e.g. 45 min';
+      // Brick Workout — open dedicated logger immediately
+      if(opt === 'Brick Workout'){
+        overlay.remove();
+        openAddBrick();
+        return;
+      }
     };
     grid.appendChild(btn);
   });
