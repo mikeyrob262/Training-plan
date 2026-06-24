@@ -10094,7 +10094,7 @@ function showAIWorkout(){
     })
   }).then(function(r){return r.json();})
   .then(function(data){
-    var text=data.content&&data.content[0]?data.content[0].text:'Unable to generate workout.';
+    var text=data.content&&data.content[0]?data.content[0].text:(data.error?'API Error: '+data.error.message:'Unable to generate workout. Response: '+JSON.stringify(data).substring(0,200));
     document.getElementById('ai-loading').style.display='none';
     var aiDiv=document.getElementById('ai-content');
     // Convert markdown to HTML
