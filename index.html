@@ -5597,15 +5597,6 @@ function showPerf(){
   overlay.appendChild(hdr);
   overlay.appendChild(body);
   document.body.appendChild(overlay);
-  document.body.style.overflow='hidden';
-  // Force scroll to work on all browsers
-  body.addEventListener('wheel', function(e){
-    e.stopPropagation();
-    body.scrollTop += e.deltaY;
-  }, {passive:true});
-  body.addEventListener('touchmove', function(e){
-    e.stopPropagation();
-  }, {passive:true});
   renderPerf(body);
 }
 
@@ -5613,7 +5604,6 @@ function showPerf(){
 function closePerf(){
   var m=document.getElementById('perf-modal');
   if(m) m.remove();
-  document.body.style.overflow='';
 }
 
 function renderPerf(container){
