@@ -158,6 +158,10 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
       <button class="hbtn" id="btn-core" title="Core"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M8 7c-3 1-5 3.5-5 7a9 9 0 0 0 18 0c0-3.5-2-6-5-7"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
       <button class="hbtn" id="btn-mob" title="Mobility"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg></button>
       <button class="hbtn" id="btn-dark" title="Dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <button class="hbtn" id="btn-ai" title="AI Coach">🤖</button>
+      <button class="hbtn" id="btn-swim-gen" title="Swim Generator">🏊</button>
+      <button class="hbtn" id="btn-meal-tpl" title="Meal Templates">📋</button>
+      <button class="hbtn" id="btn-weekly" title="Weekly Report">📊</button>
       <button class="hbtn" id="btn-set" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
   </div>
@@ -5880,6 +5884,13 @@ function renderPerf(container){
   if(!st.rides) st.rides=[];
   var rides=st.rides;
   var FTP=parseInt(st.ftp||186);
+  // FTP reminder - if no update in 6+ weeks
+  var lastFTPDate=st.settings&&st.settings.lastFTPDate?new Date(st.settings.lastFTPDate):null;
+  var weeksSinceFTP=lastFTPDate?Math.floor((new Date()-lastFTPDate)/(7*24*60*60*1000)):99;
+  if(weeksSinceFTP>=6&&!window._ftpReminderShown){
+    window._ftpReminderShown=true;
+    setTimeout(function(){toast('💪 FTP test due! '+weeksSinceFTP+'w since last test');},2000);
+  }
   var BWT=parseFloat(st.weight||160);
   var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
   var pcurve=computePowerCurve(rides);
@@ -6257,6 +6268,30 @@ function renderPerf(container){
     html+='<span style="font-size:11px;color:var(--t3)">'+r[0]+'</span>';
     html+='<span style="font-size:12px;font-weight:700;color:'+r[2]+'">'+r[1]+'</span></div>';
   });
+  // Tri Race Predictor
+  var rp2=st.racePlan||{};
+  if(rp2.swimPace&&rp2.bikePwr&&rp2.runPace){
+    function paceToSecs(p){var pts=p.replace(/[^0-9:]/g,'').split(':');return pts.length===2?parseInt(pts[0])*60+parseInt(pts[1]):parseInt(pts[0]);}
+    var swimYards=750*1.0936; // sprint default
+    var bikeMi=parseFloat(rp2.bikeDist)||12.4;
+    var runMi=parseFloat(rp2.runDist)||3.1;
+    var swimSecs=paceToSecs(rp2.swimPace)/100*swimYards;
+    var bikeSecs=bikeMi/(parseFloat(rp2.bikePwr)||160)*3600*0.0036; // rough estimate
+    // Better bike estimate: use avg speed from power
+    var wt2=currentWt||162.5; var BWT2=wt2/2.20462;
+    var bikeWkg=(parseFloat(rp2.bikePwr)||160)/BWT2;
+    var bikeSpeed=bikeWkg*8+12; // rough: each W/kg ~8mph above 12mph base
+    bikeSecs=bikeMi/bikeSpeed*3600;
+    var runSecs=paceToSecs(rp2.runPace)*runMi;
+    var t1Secs=90, t2Secs=60; // default transitions
+    var totalSecs=Math.round(swimSecs+t1Secs+bikeSecs+t2Secs+runSecs);
+    var predH=Math.floor(totalSecs/3600),predM=Math.floor((totalSecs%3600)/60),predS=totalSecs%60;
+    html+='<div style="margin-top:10px;padding:10px;background:rgba(55,138,221,.08);border-radius:10px;text-align:center">';
+    html+='<div style="font-size:11px;color:#378ADD;font-weight:700;text-transform:uppercase;margin-bottom:4px">🏁 Predicted Finish Time</div>';
+    html+='<div style="font-size:24px;font-weight:900;color:#378ADD">'+predH+'h '+predM+'m '+predS+'s</div>';
+    html+='<div style="font-size:10px;color:var(--t3);margin-top:2px">Swim: '+Math.round(swimSecs/60)+'m · Bike: '+Math.round(bikeSecs/60)+'m · Run: '+Math.round(runSecs/60)+'m</div>';
+    html+='</div>';
+  }
   html+='</div></div>';
 
   // Store chart data for post-render
@@ -9917,6 +9952,394 @@ function renderMob(){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+
+// ============================================================
+// AI WORKOUT SUGGESTIONS
+// ============================================================
+function showAIWorkout(){
+  var old=document.getElementById('ai-workout-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='ai-workout-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+(isDark?'#1C1C1E':'#FFFFFF')+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:18px;font-weight:800">🤖 AI Coach</div>'+
+    '<button id="ai-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    '<div id="ai-loading" style="text-align:center;padding:40px;color:var(--t3)"><div style="font-size:36px;margin-bottom:12px">🤖</div><div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px">Getting your personalized workout...</div><div style="font-size:12px">Analyzing your training load and fitness</div></div>'+
+    '<div id="ai-content"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('ai-close').addEventListener('click',function(){overlay.remove();});
+
+  // Build context for Claude
+  var FTP3=parseInt(st.ftp||186);
+  var rides3=st.rides||[];
+  var recentRides=rides3.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+  var lastRide=recentRides[0];
+  var last7TSS=recentRides.filter(function(r){return new Date(r.date)>new Date(Date.now()-7*24*60*60*1000);}).reduce(function(s,r){return s+(r.tss||0);},0);
+  var pmcLast3=st.pmcHistory&&st.pmcHistory.length?st.pmcHistory[st.pmcHistory.length-1]:null;
+  var ctl3=pmcLast3?Math.round(pmcLast3.ctl):0;
+  var atl3=pmcLast3?Math.round(pmcLast3.atl):0;
+  var tsb3=ctl3-atl3;
+  var wt3=st.settings&&st.settings.weight?parseFloat(st.settings.weight):162.5;
+  var wkg3=Math.round(FTP3/(wt3/2.20462)*100)/100;
+  var swims3=(st.swims||[]).length;
+  var runs3=(st.runs||[]).length;
+  var raceDate3=st.settings&&st.settings.triRaceDate?st.settings.triRaceDate:'unknown';
+
+  var prompt='You are a triathlon coach. Here is my athlete data:\n'+
+    '- FTP: '+FTP3+'W, W/kg: '+wkg3+', Weight: '+wt3+'lbs (goal: 150lbs)\n'+
+    '- CTL (fitness): '+ctl3+', ATL (fatigue): '+atl3+', TSB (form): '+tsb3+'\n'+
+    '- Last 7 days TSS: '+last7TSS+'\n'+
+    '- Last ride: '+(lastRide?lastRide.name+' on '+lastRide.date+', TSS '+(lastRide.tss||'unknown'):'none recently')+'\n'+
+    '- Total rides: '+rides3.length+', Swims logged: '+swims3+', Runs logged: '+runs3+'\n'+
+    '- First triathlon goal, race date: '+raceDate3+'\n'+
+    '- Chase 1 group ride target (23-24mph), current ~21mph\n\n'+
+    'Based on this data, provide:\n'+
+    '1. Today\'s recommended workout (specific: type, duration, intensity, key metrics to hit)\n'+
+    '2. This week\'s training focus in 2-3 sentences\n'+
+    '3. One specific tip to improve toward the triathlon goal\n\n'+
+    'Be specific and actionable. Use the actual numbers. Format with clear sections.';
+
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:1000,
+      messages:[{role:'user',content:prompt}]
+    })
+  }).then(function(r){return r.json();})
+  .then(function(data){
+    var text=data.content&&data.content[0]?data.content[0].text:'Unable to generate workout.';
+    document.getElementById('ai-loading').style.display='none';
+    var aiDiv=document.getElementById('ai-content');
+    // Convert markdown to HTML
+    var html3=text
+      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+      .replace(/#{1,3} (.*)/g,'<div style="font-size:14px;font-weight:800;color:var(--t1);margin:12px 0 6px">$1</div>')
+      .replace(/^\d+\. /gm,'')
+      .replace(/\n\n/g,'</p><p>')
+      .replace(/\n/g,'<br>');
+    aiDiv.innerHTML='<div style="background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:16px;line-height:1.6;font-size:13px;color:var(--t1)"><p>'+html3+'</p></div>'+
+      '<button id="ai-refresh" style="width:100%;margin-top:12px;padding:12px;background:linear-gradient(135deg,#FC4C02,#c43d02);border:none;color:white;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit">🔄 Get New Suggestion</button>';
+    document.getElementById('ai-refresh').addEventListener('click',function(){
+      aiDiv.innerHTML='';
+      document.getElementById('ai-loading').style.display='block';
+      // Re-run same fetch
+      showAIWorkout();
+    });
+  })
+  .catch(function(e){
+    document.getElementById('ai-loading').innerHTML='<div style="color:#ef4444">Error: '+e.message+'</div>';
+  });
+}
+
+// ============================================================
+// SWIM WORKOUT GENERATOR
+// ============================================================
+function showSwimWorkout(){
+  var old=document.getElementById('swim-workout-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='swim-workout-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var css=st.settings&&st.settings.cssPace?st.settings.cssPace:'2:00';
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+(isDark?'#1C1C1E':'#FFFFFF')+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:18px;font-weight:800">🏊 Swim Generator</div>'+
+    '<button id="swg-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">CSS Pace (/100y)</div><input id="swg-css" type="text" value="'+css+'" placeholder="2:00" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:3px">Target yards</div><input id="swg-yards" type="number" value="2000" placeholder="2000" style="width:100%;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+    '</div>'+
+    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:6px">Workout type</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+    ['Endurance','Threshold','Speed','Recovery','Drill'].map(function(t){return '<button class="swg-type-btn" data-type="'+t+'" style="padding:6px 12px;border:1px solid var(--b2);border-radius:20px;background:var(--s2);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">'+t+'</button>';}).join('')+
+    '</div></div></div>'+
+    '<button id="swg-gen" style="width:100%;padding:12px;background:#378ADD;border:none;color:white;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit;margin-bottom:12px">Generate Workout</button>'+
+    '<div id="swg-result"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('swg-close').addEventListener('click',function(){overlay.remove();});
+
+  var selectedType='Endurance';
+  document.querySelectorAll('.swg-type-btn').forEach(function(btn){
+    if(btn.getAttribute('data-type')==='Endurance'){btn.style.background='#378ADD';btn.style.color='white';}
+    btn.addEventListener('click',function(){
+      selectedType=btn.getAttribute('data-type');
+      document.querySelectorAll('.swg-type-btn').forEach(function(b){b.style.background='var(--s2)';b.style.color='var(--t2)';});
+      btn.style.background='#378ADD';btn.style.color='white';
+    });
+  });
+
+  document.getElementById('swg-gen').addEventListener('click',function(){
+    var cssVal=document.getElementById('swg-css').value||'2:00';
+    var yards=parseInt(document.getElementById('swg-yards').value)||2000;
+    var resultDiv=document.getElementById('swg-result');
+    resultDiv.innerHTML='<div style="text-align:center;padding:20px;color:var(--t3)">Generating workout...</div>';
+
+    // Parse CSS to seconds per 100y
+    function paceToSecs2(p){var pts=p.split(':');return pts.length===2?parseInt(pts[0])*60+parseInt(pts[1]):parseInt(pts[0]);}
+    function secsToMmss(s){var m=Math.floor(s/60),sec=Math.round(s%60);return m+':'+(sec<10?'0':'')+sec;}
+    var cssSecs=paceToSecs2(cssVal);
+
+    // Generate workout based on type
+    var workout=[];
+    if(selectedType==='Endurance'){
+      workout=[
+        {set:'Warmup',detail:'400y easy freestyle',pace:secsToMmss(cssSecs*1.3)+'/100y',yards:400},
+        {set:'Drills',detail:'4x50y catch-up drill',pace:'easy',yards:200},
+        {set:'Main Set',detail:'4x300y steady',pace:secsToMmss(cssSecs*1.05)+'/100y (5% above CSS)',yards:1200},
+        {set:'Cooldown',detail:'200y easy',pace:'easy',yards:200}
+      ];
+    } else if(selectedType==='Threshold'){
+      workout=[
+        {set:'Warmup',detail:'300y easy',pace:secsToMmss(cssSecs*1.3)+'/100y',yards:300},
+        {set:'Build',detail:'3x100y descend 1-3',pace:'build to CSS',yards:300},
+        {set:'Main Set',detail:'6x200y on 20s rest',pace:secsToMmss(cssSecs)+'/100y (at CSS)',yards:1200},
+        {set:'Cooldown',detail:'200y easy',pace:'easy',yards:200}
+      ];
+    } else if(selectedType==='Speed'){
+      workout=[
+        {set:'Warmup',detail:'400y easy + drills',pace:'easy',yards:400},
+        {set:'Main Set',detail:'10x100y on 30s rest',pace:secsToMmss(cssSecs*0.95)+'/100y (5% faster than CSS)',yards:1000},
+        {set:'Kick Set',detail:'4x50y fast kick',pace:'sprint',yards:200},
+        {set:'Cooldown',detail:'200y easy',pace:'easy',yards:200}
+      ];
+    } else if(selectedType==='Recovery'){
+      workout=[
+        {set:'Easy Swim',detail:'600y continuous easy',pace:secsToMmss(cssSecs*1.4)+'/100y',yards:600},
+        {set:'Drills',detail:'4x100y choice drill',pace:'easy',yards:400},
+        {set:'Pullbuoy',detail:'400y pullbuoy focus on stroke',pace:secsToMmss(cssSecs*1.2)+'/100y',yards:400},
+        {set:'Cooldown',detail:'100y easy',pace:'easy',yards:100}
+      ];
+    } else {
+      workout=[
+        {set:'Warmup',detail:'200y easy',pace:'easy',yards:200},
+        {set:'Catch-up Drill',detail:'4x50y',pace:'easy',yards:200},
+        {set:'Fingertip Drag',detail:'4x50y',pace:'easy',yards:200},
+        {set:'Bilateral Breathing',detail:'4x100y breathe every 3',pace:secsToMmss(cssSecs*1.1)+'/100y',yards:400},
+        {set:'Kickboard',detail:'4x50y',pace:'easy',yards:200},
+        {set:'Cooldown',detail:'200y easy',pace:'easy',yards:200}
+      ];
+    }
+
+    var totalYards=workout.reduce(function(s,w){return s+w.yards;},0);
+    var estMins=Math.round(totalYards/100*cssSecs*1.15/60);
+    var html4='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden">'+
+      '<div style="background:#378ADD;padding:10px 14px;display:flex;justify-content:space-between">'+
+      '<div style="color:white;font-size:13px;font-weight:700">'+selectedType+' · '+totalYards+'y</div>'+
+      '<div style="color:rgba(255,255,255,.8);font-size:12px">~'+estMins+' min</div></div>';
+    workout.forEach(function(w){
+      html4+='<div style="padding:10px 14px;border-bottom:1px solid var(--b1)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<div><div style="font-size:13px;font-weight:700;color:var(--t1)">'+w.set+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);margin-top:2px">'+w.detail+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:11px;font-weight:700;color:#378ADD">'+w.pace+'</div>'+
+        '<div style="font-size:10px;color:var(--t3)">'+w.yards+'y</div></div>'+
+        '</div></div>';
+    });
+    html4+='<button id="swg-log" style="width:100%;padding:12px;background:#378ADD;border:none;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Log This Swim</button></div>';
+    resultDiv.innerHTML=html4;
+
+    document.getElementById('swg-log').addEventListener('click',function(){
+      if(!st.swims) st.swims=[];
+      var today3=new Date();
+      st.swims.push({
+        name:selectedType+' Swim',
+        date:today3.getFullYear()+'-'+(today3.getMonth()+1)+'-'+today3.getDate(),
+        yards:totalYards,
+        duration:Math.floor(estMins/60)+':'+(estMins%60<10?'0':'')+(estMins%60),
+        stroke:'Freestyle',
+        notes:workout.map(function(w){return w.set+': '+w.detail;}).join(', ')
+      });
+      sv();overlay.remove();toast('Swim logged! 🏊');
+    });
+  });
+}
+
+// ============================================================
+// MEAL TEMPLATES
+// ============================================================
+function showMealTemplates(){
+  var old=document.getElementById('meal-templates-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='meal-templates-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var templates=st.mealTemplates||[];
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+(isDark?'#1C1C1E':'#FFFFFF')+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:18px;font-weight:800">📋 Meal Templates</div>'+
+    '<button id="mt-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    '<button id="mt-save-today" style="width:100%;padding:12px;background:linear-gradient(135deg,#FC4C02,#c43d02);border:none;color:white;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit;margin-bottom:12px">💾 Save Today as Template</button>'+
+    '<div id="mt-list"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('mt-close').addEventListener('click',function(){overlay.remove();});
+
+  function renderTemplates(){
+    var tpls=st.mealTemplates||[];
+    var listDiv=document.getElementById('mt-list');
+    if(!tpls.length){
+      listDiv.innerHTML='<div style="text-align:center;padding:40px;color:var(--t3)"><div style="font-size:36px;margin-bottom:8px">📋</div><div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px">No templates yet</div><div style="font-size:12px">Save today\'s meals as a template to reuse</div></div>';
+      return;
+    }
+    var html5='';
+    tpls.forEach(function(t,ti){
+      var totalCal=0,totalProt=0;
+      Object.values(t.meals||{}).forEach(function(foods){
+        (foods||[]).forEach(function(f){totalCal+=f.cal||0;totalProt+=f.p||0;});
+      });
+      html5+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:8px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+t.name+'</div>'+
+        '<div style="font-size:11px;color:var(--t3)">'+Math.round(totalCal)+' cal · '+Math.round(totalProt)+'g protein</div></div>'+
+        '<div style="display:flex;gap:6px">'+
+        '<button class="mt-apply" data-idx="'+ti+'" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.3);color:#00C896;font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;cursor:pointer">Apply</button>'+
+        '<button class="mt-del" data-idx="'+ti+'" style="background:none;border:none;color:var(--t3);font-size:16px;cursor:pointer">✕</button>'+
+        '</div></div>'+
+        '<div style="font-size:11px;color:var(--t2)">'+Object.keys(t.meals||{}).map(function(m){return m+': '+(t.meals[m]||[]).length+' items';}).join(' · ')+'</div>'+
+        '</div>';
+    });
+    listDiv.innerHTML=html5;
+    document.querySelectorAll('.mt-apply').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var idx=parseInt(btn.getAttribute('data-idx'));
+        var tpl=st.mealTemplates[idx];
+        if(!st.nl) st.nl={};
+        if(!st.nl[nutrDate]) st.nl[nutrDate]={meals:{breakfast:[],lunch:[],dinner:[],snacks:[]}};
+        Object.keys(tpl.meals||{}).forEach(function(m){
+          st.nl[nutrDate].meals[m]=(tpl.meals[m]||[]).map(function(f){return Object.assign({},f);});
+        });
+        sv();overlay.remove();renderNutr();showScreen('NUTR');toast('Template applied! 🍽️');
+      });
+    });
+    document.querySelectorAll('.mt-del').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var idx=parseInt(btn.getAttribute('data-idx'));
+        st.mealTemplates.splice(idx,1);sv();renderTemplates();
+      });
+    });
+  }
+  renderTemplates();
+
+  document.getElementById('mt-save-today').addEventListener('click',function(){
+    var name=prompt('Template name:','Day '+new Date().toLocaleDateString());
+    if(!name) return;
+    var nd=st.nl&&st.nl[nutrDate];
+    if(!nd||!nd.meals){toast('No meals logged today to save');return;}
+    if(!st.mealTemplates) st.mealTemplates=[];
+    st.mealTemplates.push({name:name,meals:JSON.parse(JSON.stringify(nd.meals))});
+    sv();renderTemplates();toast('Template saved! 📋');
+  });
+}
+
+// ============================================================
+// WEEKLY TRAINING REPORT
+// ============================================================
+function showWeeklyReport(){
+  var old=document.getElementById('weekly-report-screen');
+  if(old){old.remove();return;}
+  var overlay=document.createElement('div');
+  overlay.id='weekly-report-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var now3=new Date();
+  var weekStart3=new Date(now3);
+  weekStart3.setDate(now3.getDate()-(now3.getDay()===0?6:now3.getDay()-1));
+  weekStart3.setHours(0,0,0,0);
+  var rides4=(st.rides||[]).filter(function(r){return new Date(r.date)>=weekStart3;});
+  var runs4=(st.runs||[]).filter(function(r){return new Date(r.date)>=weekStart3;});
+  var swims4=(st.swims||[]).filter(function(s){return new Date(s.date)>=weekStart3;});
+  var weekTSS=rides4.reduce(function(s,r){return s+(r.tss||0);},0);
+  var weekMiles=Math.round(rides4.reduce(function(s,r){return s+(r.distance||0);},0)*10)/10;
+  var weekTime=rides4.reduce(function(s,r){return s+(r.movingSecs||0);},0);
+  var weekAvgPwr=rides4.length?Math.round(rides4.reduce(function(s,r){return s+(r.np||r.avgPwr||0);},0)/rides4.filter(function(r){return r.np||r.avgPwr;}).length)||0:0;
+  var runMiles=Math.round(runs4.reduce(function(s,r){return s+(r.distance||0);},0)*10)/10;
+  var swimYards4=swims4.reduce(function(s,sw){return s+(sw.yards||0);},0);
+  var weekH=Math.floor(weekTime/3600),weekM=Math.floor((weekTime%3600)/60);
+
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+(isDark?'#1C1C1E':'#FFFFFF')+';padding:14px 16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:18px;font-weight:800">📊 Weekly Report</div>'+
+    '<button id="wr-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    // Week summary
+    '<div style="background:linear-gradient(135deg,rgba(252,76,2,.12),rgba(55,138,221,.08));border-radius:16px;border:1px solid var(--b1);padding:16px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px">Week of '+weekStart3.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">'+
+    '<div style="text-align:center"><div style="font-size:22px;font-weight:900;color:#FC4C02">'+weekTSS+'</div><div style="font-size:10px;color:var(--t3)">Total TSS</div></div>'+
+    '<div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--t1)">'+weekH+'h'+weekM+'m</div><div style="font-size:10px;color:var(--t3)">Training time</div></div>'+
+    '<div style="text-align:center"><div style="font-size:22px;font-weight:900;color:var(--t1)">'+(rides4.length+runs4.length+swims4.length)+'</div><div style="font-size:10px;color:var(--t3)">Sessions</div></div>'+
+    '</div></div>'+
+    // By sport
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'+
+    '<div style="background:var(--s1);border-radius:12px;border:1px solid var(--b1);border-top:3px solid #FC4C02;padding:12px;text-align:center">'+
+    '<div style="font-size:20px;margin-bottom:4px">🚴</div>'+
+    '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+rides4.length+'</div><div style="font-size:10px;color:var(--t3)">rides</div>'+
+    '<div style="font-size:12px;font-weight:700;color:#FC4C02;margin-top:4px">'+weekMiles+' mi</div>'+
+    (weekAvgPwr?'<div style="font-size:10px;color:var(--t3)">'+weekAvgPwr+'W avg NP</div>':'')+
+    '</div>'+
+    '<div style="background:var(--s1);border-radius:12px;border:1px solid var(--b1);border-top:3px solid #0F6E56;padding:12px;text-align:center">'+
+    '<div style="font-size:20px;margin-bottom:4px">🏃</div>'+
+    '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+runs4.length+'</div><div style="font-size:10px;color:var(--t3)">runs</div>'+
+    '<div style="font-size:12px;font-weight:700;color:#0F6E56;margin-top:4px">'+runMiles+' mi</div>'+
+    '</div>'+
+    '<div style="background:var(--s1);border-radius:12px;border:1px solid var(--b1);border-top:3px solid #378ADD;padding:12px;text-align:center">'+
+    '<div style="font-size:20px;margin-bottom:4px">🏊</div>'+
+    '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+swims4.length+'</div><div style="font-size:10px;color:var(--t3)">swims</div>'+
+    '<div style="font-size:12px;font-weight:700;color:#378ADD;margin-top:4px">'+(swimYards4?swimYards4+'y':'—')+'</div>'+
+    '</div></div>'+
+    // Rides this week
+    (rides4.length?'<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:12px">'+
+    '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">This Week\'s Rides</div>'+
+    rides4.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).map(function(r){
+      return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--b1)">'+
+        '<div><div style="font-size:12px;font-weight:700;color:var(--t1)">'+r.name+'</div>'+
+        '<div style="font-size:10px;color:var(--t3)">'+r.date+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:12px;font-weight:700;color:#FC4C02">'+(r.tss?'TSS '+r.tss:'')+'</div>'+
+        '<div style="font-size:10px;color:var(--t3)">'+(r.distance?r.distance+' mi':'')+(r.np?' · '+r.np+'W NP':'')+'</div></div>'+
+        '</div>';
+    }).join('')+
+    '</div>':'<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:20px;text-align:center;margin-bottom:12px;color:var(--t3)">No rides this week yet</div>')+
+    // AI summary button
+    '<button id="wr-ai" style="width:100%;padding:12px;background:linear-gradient(135deg,#FC4C02,#c43d02);border:none;color:white;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;font-family:inherit">🤖 Get AI Week Analysis</button>'+
+    '<div id="wr-ai-result" style="margin-top:12px"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('wr-close').addEventListener('click',function(){overlay.remove();});
+  document.getElementById('wr-ai').addEventListener('click',function(){
+    var aiRes=document.getElementById('wr-ai-result');
+    aiRes.innerHTML='<div style="text-align:center;padding:20px;color:var(--t3)">Analyzing your week...</div>';
+    var prompt2='Analyze this week of triathlon training and give a 3-4 sentence summary:\n'+
+      '- Rides: '+rides4.length+' ('+weekMiles+' mi, TSS '+weekTSS+', avg NP '+weekAvgPwr+'W)\n'+
+      '- Runs: '+runs4.length+' ('+runMiles+' mi)\n'+
+      '- Swims: '+swims4.length+(swimYards4?' ('+swimYards4+'y)':'')+'\n'+
+      '- Total time: '+weekH+'h '+weekM+'m\n'+
+      'Athlete is 64yo masters cyclist targeting first triathlon. FTP '+parseInt(st.ftp||186)+'W.\n'+
+      'Comment on training balance, load, and one recommendation for next week.';
+    fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,messages:[{role:'user',content:prompt2}]})
+    }).then(function(r){return r.json();})
+    .then(function(data){
+      var txt=data.content&&data.content[0]?data.content[0].text:'';
+      aiRes.innerHTML='<div style="background:var(--s1);border-radius:12px;border:1px solid var(--b1);padding:14px;font-size:13px;line-height:1.6;color:var(--t1)">'+txt+'</div>';
+    }).catch(function(){aiRes.innerHTML='<div style="color:#ef4444;font-size:12px">AI analysis unavailable</div>';});
+  });
+}
+
 function showRacePlanner(){
   var old=document.getElementById('race-planner-screen');
   if(old){old.remove();return;}
@@ -10229,6 +10652,10 @@ window.onload = function(){
   document.getElementById('btn-perf').onclick = showPerf;
   document.getElementById('btn-run').onclick = function(){ try{ showRun(); }catch(e){ console.error('Run error:',e); alert('Run error: '+e.message); } };
   document.getElementById('btn-swim').addEventListener('click', function(){ try{ showSwim(); }catch(e){ console.error('Swim error:',e); } });
+  document.getElementById('btn-ai').addEventListener('click', function(){ try{ showAIWorkout(); }catch(e){ console.error('AI error:',e); } });
+  document.getElementById('btn-swim-gen').addEventListener('click', function(){ try{ showSwimWorkout(); }catch(e){ console.error('SwimGen error:',e); } });
+  document.getElementById('btn-meal-tpl').addEventListener('click', function(){ try{ showMealTemplates(); }catch(e){ console.error('MealTpl error:',e); } });
+  document.getElementById('btn-weekly').addEventListener('click', function(){ try{ showWeeklyReport(); }catch(e){ console.error('Weekly error:',e); } });
   document.getElementById('btn-cond').onclick = showCond;
   document.getElementById('btn-core').onclick = showCore;
   document.getElementById('btn-mob').onclick = showMob;
