@@ -5304,17 +5304,28 @@ function renderNutr(){
   // Date picker tap
   var dtTap=document.getElementById('nutr-date-tap');
   if(dtTap){dtTap.addEventListener('click',function(){
-    var inp=document.createElement('input');inp.type='date';
+    // Show date picker modal
+    var pickerOverlay=document.createElement('div');
+    pickerOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:center;justify-content:center';
+    var pickerBox=document.createElement('div');
+    pickerBox.style.cssText='background:var(--s1);border-radius:16px;padding:20px;width:280px';
     var parts=nutrDate.split('-');
-    inp.value=parts[0]+'-'+String(parts[1]).padStart(2,'0')+'-'+String(parts[2]).padStart(2,'0');
-    inp.style.cssText='position:fixed;opacity:0;top:50%;left:50%';
-    document.body.appendChild(inp);
-    inp.addEventListener('change',function(){
-      if(inp.value){var p=inp.value.split('-');nutrDate=p[0]+'-'+parseInt(p[1])+'-'+parseInt(p[2]);renderNutr();showScreen('NUTR');}
-      inp.remove();
+    var dateVal=parts[0]+'-'+String(parseInt(parts[1])).padStart(2,'0')+'-'+String(parseInt(parts[2])).padStart(2,'0');
+    pickerBox.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:12px">Jump to date</div>'+
+      '<input id="nutr-date-input" type="date" value="'+dateVal+'" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:16px;font-family:inherit;margin-bottom:12px">'+
+      '<div style="display:flex;gap:8px">'+
+      '<button id="nutr-date-cancel" style="flex:1;padding:10px;border:1px solid var(--b1);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'+
+      '<button id="nutr-date-go" style="flex:1;padding:10px;border:none;border-radius:10px;background:#FC4C02;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Go</button>'+
+      '</div>';
+    pickerOverlay.appendChild(pickerBox);
+    document.body.appendChild(pickerOverlay);
+    document.getElementById('nutr-date-cancel').addEventListener('click',function(){pickerOverlay.remove();});
+    document.getElementById('nutr-date-go').addEventListener('click',function(){
+      var val=document.getElementById('nutr-date-input').value;
+      if(val){var p=val.split('-');nutrDate=p[0]+'-'+parseInt(p[1])+'-'+parseInt(p[2]);renderNutr();showScreen('NUTR');}
+      pickerOverlay.remove();
     });
-    inp.focus();inp.click();
-    setTimeout(function(){if(document.body.contains(inp))inp.remove();},5000);
+    pickerOverlay.addEventListener('click',function(e){if(e.target===pickerOverlay)pickerOverlay.remove();});
   });}
   // Swipe gestures on nutrition screen
   var nutrEl=document.getElementById('NUTR');
