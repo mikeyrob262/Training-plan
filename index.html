@@ -5598,6 +5598,15 @@ function showPerf(){
   overlay.appendChild(body);
   document.body.appendChild(overlay);
   renderPerf(body);
+  // iOS scroll fix - force recognition of scrollable div
+  setTimeout(function(){
+    var rl = document.getElementById('ride-history-list');
+    if(rl){
+      rl.style.webkitOverflowScrolling = 'touch';
+      rl.scrollTop = 1;
+      rl.scrollTop = 0;
+    }
+  }, 100);
 }
 
 
@@ -5994,7 +6003,7 @@ function renderPerf(container){
   } else {
     var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
     // Scrollable container
-    html+='<div id="ride-history-list" style="margin:0 16px 16px;height:420px;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px">';
+    html+='<div id="ride-history-list" style="margin:0 16px 16px;height:420px;overflow-y:scroll;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior-y:contain;display:flex;flex-direction:column;gap:10px">';
     sorted.forEach(function(r,si){
       var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
       var rIdx=st.rides.indexOf(r);
