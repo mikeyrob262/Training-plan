@@ -153,6 +153,7 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
       <button class="hbtn" id="btn-nutr" title="Nutrition"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></button>
       <button class="hbtn" id="btn-perf" title="Performance"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
       <button class="hbtn" id="btn-run" title="Run Training"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg></button>
+      <button class="hbtn" id="btn-swim" title="Swim Training"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M2 17c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg></button>
       <button class="hbtn" id="btn-cond" title="Conditioning"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></button>
       <button class="hbtn" id="btn-core" title="Core"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M8 7c-3 1-5 3.5-5 7a9 9 0 0 0 18 0c0-3.5-2-6-5-7"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
       <button class="hbtn" id="btn-mob" title="Mobility"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg></button>
@@ -3588,11 +3589,21 @@ function showProg(){
   var vo2=st.vo2max||'—';
 
   // Personal records from rides
-  var longestRide=0,bestNP=0,highestTSS=0;
+  var longestRide=0,bestNP=0,highestTSS=0,bestWkg=0,longestRun=0;
   rides.forEach(function(r){
-    if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
+    var dist=parseFloat(r.distance||0);
+    if(dist>longestRide) longestRide=dist;
     if(r.np&&r.np>bestNP) bestNP=r.np;
-    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    if(r.tss&&parseInt(r.tss)>highestTSS) highestTSS=parseInt(r.tss);
+    var wt=st.settings&&st.settings.weight?parseFloat(st.settings.weight):160;
+    var BWT=wt/2.20462;
+    var pwr=r.np||r.avgPwr||0;
+    if(pwr&&BWT){var wkg=Math.round(pwr/BWT*100)/100;if(wkg>bestWkg)bestWkg=wkg;}
+  });
+  // Longest run
+  (st.runs||[]).forEach(function(r){
+    var dist=parseFloat(r.distance||0);
+    if(dist>longestRun) longestRun=dist;
   });
 
   // Personal records from strength
@@ -3629,8 +3640,15 @@ function showProg(){
 
   // Recovery - weight trend
   var wtData=[];var wtLabels=[];
-  for(var w3=1;w3<=50;w3++){var ws6=ws(w3);if(ws6.ci&&ws6.ci.weight){wtData.push(parseFloat(ws6.ci.weight));wtLabels.push('W'+w3);}}
+  // Use daily weight log (st.weightLog = {date: lbs})
+  var wl=st.weightLog||{};
+  var wlKeys=Object.keys(wl).sort();
+  var last30=wlKeys.slice(-30);
+  last30.forEach(function(d){wtData.push(parseFloat(wl[d]));wtLabels.push(d.slice(5));});
+  // Fall back to weekly check-ins if no daily log
+  if(!wtData.length){for(var w3=1;w3<=50;w3++){var ws6=ws(w3);if(ws6.ci&&ws6.ci.weight){wtData.push(parseFloat(ws6.ci.weight));wtLabels.push('W'+w3);}}}
   var firstWt=wtData[0]||null; var lastWt=wtData[wtData.length-1]||null;
+  var currentWt=lastWt||(st.settings&&st.settings.weight?parseFloat(st.settings.weight):null);
   var wtChange=firstWt&&lastWt?Math.round((lastWt-firstWt)*10)/10:null;
 
   // Avg energy and sleep
@@ -3682,7 +3700,7 @@ function showProg(){
   });
   h+='</div>';
   h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'    +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">Personal records</div>';
-  var prs=[[longestRide?longestRide.toFixed(1)+' mi':'—','Longest ride','var(--blue)'],[bestNP?bestNP+'W':'—','Best NP','var(--orange)'],[highestTSS||'—','Highest TSS week','#ef4444'],[heavySquat?heavySquat+' lbs':'—','Heaviest squat','var(--t1)'],[heavyBench?heavyBench+' lbs':'—','Heaviest bench','var(--t1)'],[longestRun?longestRun.toFixed(1)+' mi':'—','Longest run','#0F6E56']];
+  var prs=[[longestRide?longestRide.toFixed(1)+' mi':'—','Longest ride','var(--blue)'],[bestNP?bestNP+'W':'—','Best NP','var(--orange)'],[bestWkg?bestWkg.toFixed(2)+' W/kg':'—','Best W/kg','#FC4C02'],[highestTSS||'—','Highest TSS ride','#ef4444'],[heavySquat?heavySquat+' lbs':'—','Heaviest squat','var(--t1)'],[heavyBench?heavyBench+' lbs':'—','Heaviest bench','var(--t1)'],[longestRun?longestRun.toFixed(1)+' mi':'—','Longest run','#0F6E56']];
   prs.forEach(function(pr,i){
     h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;'+(i<prs.length-1?'border-bottom:1px solid var(--b1)':'')+'">'      +'<span style="font-size:12px;color:var(--t3)">'+pr[1]+'</span>'      +'<span style="font-size:13px;font-weight:800;color:'+pr[2]+'">'+pr[0]+'</span></div>';
   });
@@ -3700,7 +3718,7 @@ function showProg(){
 
   h+='<div style="padding:0 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Recovery</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px">';
-  [{l:'Weight',v:lastWt?(lastWt+' lbs'):('—'),s:wtChange?(wtChange>0?'+'+wtChange:wtChange)+' trend':'no data'},{l:'Avg energy',v:avgEnergy||'—',s:'out of 10',c:avgEnergy>=7?'#0F6E56':avgEnergy>=5?'#BA7517':'#ef4444'},{l:'Avg sleep',v:avgSleep||'—',s:'hours',c:avgSleep>=7?'#0F6E56':avgSleep>=6?'#BA7517':'#ef4444'},{l:'Resting HR',v:st.restingHR||'—',s:'bpm'}].forEach(function(st2){
+  [{l:'Weight',v:currentWt?(currentWt+' lbs'):('—'),s:wtChange?(wtChange>0?'+'+wtChange:wtChange)+' trend':'tap to log'},{l:'Avg energy',v:avgEnergy||'—',s:'out of 10',c:avgEnergy>=7?'#0F6E56':avgEnergy>=5?'#BA7517':'#ef4444'},{l:'Avg sleep',v:avgSleep||'—',s:'hours',c:avgSleep>=7?'#0F6E56':avgSleep>=6?'#BA7517':'#ef4444'},{l:'Resting HR',v:st.restingHR||'—',s:'bpm'}].forEach(function(st2){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
@@ -3727,6 +3745,48 @@ function showProg(){
   window._progCharts={weekCounts:weekCounts,weekLabels:weekLabels,protDays:protDays,wtData:wtData,wtLabels:wtLabels,lrData:lrData,lrLabels:lrLabels};
 
   t.innerHTML=h;
+  // Wire weight log - tap weight card to log
+  setTimeout(function(){
+    var wtCards=document.querySelectorAll('#PROG [data-metric="weight"]');
+    var wtCard=wtCards[0];
+    if(!wtCard){
+      // Find by content
+      var allCards=document.querySelectorAll('#PROG .rec-card');
+      allCards.forEach(function(c){if(c.textContent.indexOf('Weight')>-1) wtCard=c;});
+    }
+    if(wtCard) wtCard.style.cursor='pointer';
+    // Add click to all recovery cards - weight card logs weight
+    var recSection=document.querySelector('#PROG');
+    if(recSection){
+      recSection.addEventListener('click',function(e){
+        var card=e.target.closest?e.target.closest('[data-rec]'):null;
+        // Simple approach: add a Log Weight button
+      });
+    }
+    // Add standalone log weight button near weight trend
+    var wtChart=document.getElementById('prog-wt-chart');
+    if(wtChart){
+      var logBtn=document.createElement('button');
+      logBtn.textContent='+ Log Weight';
+      logBtn.style.cssText='display:block;margin:8px auto 0;background:var(--s3);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:6px 16px;border-radius:10px;cursor:pointer;font-family:inherit';
+      logBtn.addEventListener('click',function(){
+        var today=new Date();
+        var dk2=today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+        var current=st.weightLog&&st.weightLog[dk2]?st.weightLog[dk2]:(st.settings&&st.settings.weight||'');
+        var val=prompt('Log weight for today (lbs):',current);
+        if(val&&!isNaN(parseFloat(val))){
+          if(!st.weightLog) st.weightLog={};
+          st.weightLog[dk2]=parseFloat(val);
+          // Also update settings weight
+          if(!st.settings) st.settings={};
+          st.settings.weight=parseFloat(val);
+          sv();
+          showProg();
+        }
+      });
+      wtChart.parentNode.appendChild(logBtn);
+    }
+  },200);
   // Auto re-render when Firebase syncs rides
   if(!(st.rides||[]).length){
     var _progTimer=setInterval(function(){if((st.rides||[]).length){clearInterval(_progTimer);showProg();}},2000);
@@ -9551,12 +9611,103 @@ function renderMob(){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function showSwim(){
+  var old=document.getElementById('swim-screen');
+  if(old) old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='swim-screen';
+  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  var isDark=document.body.classList.contains('dark');
+  var hdrBg=isDark?'#1C1C1E':'#FFFFFF';
+  overlay.innerHTML='<div style="position:sticky;top:0;z-index:10;background:'+hdrBg+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--b1)">'+
+    '<div style="font-size:20px;font-weight:800">Swim 🏊</div>'+
+    '<button id="swim-close-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>'+
+    '</div>'+
+    '<div style="padding:16px">'+
+    // Log swim button
+    '<button id="log-swim-btn" style="width:100%;padding:14px;background:linear-gradient(135deg,#378ADD,#1a5fa8);border:none;color:white;font-size:15px;font-weight:700;border-radius:14px;cursor:pointer;font-family:inherit;margin-bottom:16px">+ Log Swim</button>'+
+    '<div id="swim-history"></div>'+
+    '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('swim-close-btn').addEventListener('click',function(){overlay.remove();});
+
+  // Render swim history
+  var swims=st.swims||[];
+  var histDiv=document.getElementById('swim-history');
+  if(swims.length){
+    var html='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:8px">Recent Swims</div>';
+    swims.slice().reverse().forEach(function(s){
+      html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid #378ADD;padding:12px;margin-bottom:8px">'+
+        '<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:2px">'+(s.name||'Swim')+'</div>'+
+        '<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+s.date+'</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:6px">'+
+        (s.yards?'<span style="background:rgba(55,138,221,.1);color:#378ADD;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px">'+s.yards+'y</span>':'')+ 
+        (s.duration?'<span style="background:var(--s2);color:var(--t1);font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px">'+s.duration+'</span>':'')+ 
+        (s.stroke?'<span style="background:var(--s2);color:var(--t2);font-size:11px;padding:3px 8px;border-radius:20px">'+s.stroke+'</span>':'')+ 
+        (s.css?'<span style="background:var(--s2);color:var(--t2);font-size:11px;padding:3px 8px;border-radius:20px">CSS '+s.css+'/100y</span>':'')+ 
+        '</div></div>';
+    });
+    histDiv.innerHTML=html;
+  } else {
+    histDiv.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--t3)"><div style="font-size:48px;margin-bottom:12px">🏊</div><div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px">No swims logged yet</div><div style="font-size:13px">Log your first swim to get started</div></div>';
+  }
+
+  // Wire log button
+  document.getElementById('log-swim-btn').addEventListener('click',function(){
+    var modal=document.createElement('div');
+    modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px';
+    var box=document.createElement('div');
+    box.style.cssText='background:var(--s1);border-radius:16px;padding:20px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto';
+    var today2=new Date();
+    var dk3=today2.getFullYear()+'-'+(today2.getMonth()+1)+'-'+today2.getDate();
+    box.innerHTML='<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px">Log Swim</div>'+
+      '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">Session name</div>'+
+      '<input id="sw-name" type="text" placeholder="Morning swim" value="Swim" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;margin-bottom:10px">'+
+      '<div style="font-size:12px;color:var(--t3);margin-bottom:4px">Date</div>'+
+      '<input id="sw-date" type="date" value="'+today2.getFullYear()+'-'+String(today2.getMonth()+1).padStart(2,'0')+'-'+String(today2.getDate()).padStart(2,'0')+'" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit;margin-bottom:10px">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+      '<div><div style="font-size:12px;color:var(--t3);margin-bottom:4px">Yards</div><input id="sw-yards" type="number" placeholder="2000" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+      '<div><div style="font-size:12px;color:var(--t3);margin-bottom:4px">Duration</div><input id="sw-dur" type="text" placeholder="45:00" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+      '<div><div style="font-size:12px;color:var(--t3);margin-bottom:4px">Stroke</div><select id="sw-stroke" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"><option>Freestyle</option><option>Backstroke</option><option>Breaststroke</option><option>Butterfly</option><option>Mixed</option></select></div>'+
+      '<div><div style="font-size:12px;color:var(--t3);margin-bottom:4px">CSS pace (/100y)</div><input id="sw-css" type="text" placeholder="2:00" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-family:inherit"></div>'+
+      '</div>'+
+      '<div><div style="font-size:12px;color:var(--t3);margin-bottom:4px">Notes</div><textarea id="sw-notes" placeholder="Drills, sets, how it felt..." style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:10px;background:var(--s2);color:var(--t1);font-size:13px;font-family:inherit;height:70px;resize:none"></textarea></div>'+
+      '<div style="display:flex;gap:8px;margin-top:14px">'+
+      '<button id="sw-cancel" style="flex:1;padding:12px;border:1px solid var(--b1);border-radius:10px;background:var(--s2);color:var(--t1);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Cancel</button>'+
+      '<button id="sw-save" style="flex:1;padding:12px;border:none;border-radius:10px;background:#378ADD;color:white;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Save Swim</button>'+
+      '</div>';
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+    document.getElementById('sw-cancel').addEventListener('click',function(){modal.remove();});
+    document.getElementById('sw-save').addEventListener('click',function(){
+      var swim={
+        name:document.getElementById('sw-name').value||'Swim',
+        date:document.getElementById('sw-date').value||dk3,
+        yards:parseInt(document.getElementById('sw-yards').value)||0,
+        duration:document.getElementById('sw-dur').value||'',
+        stroke:document.getElementById('sw-stroke').value||'Freestyle',
+        css:document.getElementById('sw-css').value||'',
+        notes:document.getElementById('sw-notes').value||''
+      };
+      if(!st.swims) st.swims=[];
+      st.swims.push(swim);
+      sv();modal.remove();
+      document.getElementById('swim-screen').remove();
+      showSwim();
+      toast('Swim logged! 🏊');
+    });
+  });
+}
+
 window.onload = function(){
   try{
   document.getElementById('btn-prog').onclick = showProg;
   document.getElementById('btn-nutr').onclick = showNutr;
   document.getElementById('btn-perf').onclick = showPerf;
   document.getElementById('btn-run').onclick = function(){ try{ showRun(); }catch(e){ console.error('Run error:',e); alert('Run error: '+e.message); } };
+  document.getElementById('btn-swim').addEventListener('click', function(){ try{ showSwim(); }catch(e){ console.error('Swim error:',e); } });
   document.getElementById('btn-cond').onclick = showCond;
   document.getElementById('btn-core').onclick = showCore;
   document.getElementById('btn-mob').onclick = showMob;
