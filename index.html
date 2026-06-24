@@ -10070,19 +10070,26 @@ function showAIWorkout(){
   var runs3=(st.runs||[]).length;
   var raceDate3=st.settings&&st.settings.triRaceDate?st.settings.triRaceDate:'unknown';
 
-  var prompt='You are a triathlon coach. Here is my athlete data:\n'+
-    '- FTP: '+FTP3+'W, W/kg: '+wkg3+', Weight: '+wt3+'lbs (goal: 150lbs)\n'+
+  var runGoal='Grand Rapids Half Marathon (October 2026) — beginning run training next week';
+  var prompt='You are a masters endurance coach. Here is my athlete data:\n'+
+    '- Age: 64, masters cyclist and runner\n'+
+    '- FTP: '+FTP3+'W, W/kg: '+wkg3+', Weight: '+wt3+'lbs (goal: 150-152lbs)\n'+
     '- CTL (fitness): '+ctl3+', ATL (fatigue): '+atl3+', TSB (form): '+tsb3+'\n'+
     '- Last 7 days TSS: '+last7TSS+'\n'+
     '- Last ride: '+(lastRide?lastRide.name+' on '+lastRide.date+', TSS '+(lastRide.tss||'unknown'):'none recently')+'\n'+
-    '- Total rides: '+rides3.length+', Swims logged: '+swims3+', Runs logged: '+runs3+'\n'+
-    '- First triathlon goal, race date: '+raceDate3+'\n'+
-    '- Chase 1 group ride target (23-24mph), current ~21mph\n\n'+
-    'Based on this data, provide:\n'+
-    '1. Today\'s recommended workout (specific: type, duration, intensity, key metrics to hit)\n'+
+    '- Total rides logged: '+rides3.length+', Runs logged: '+runs3+'\n'+
+    '\nPrimary cycling goals:\n'+
+    '- Move from Chase 2 to Chase 1 group ride (target 23-24mph, currently ~21mph)\n'+
+    '- FTP target: 210-220W (currently '+FTP3+'W)\n'+
+    '- Thursday night group rides + Saturday long outdoor rides\n'+
+    '\nSecondary running goal:\n'+
+    '- '+runGoal+'\n'+
+    '\nNote: Triathlon is NOT a current goal. Focus on cycling performance + half marathon prep.\n'+
+    '\nBased on this data, provide:\n'+
+    '1. Today\'s recommended workout (specific: type, duration, intensity, key metrics)\n'+
     '2. This week\'s training focus in 2-3 sentences\n'+
-    '3. One specific tip to improve toward the triathlon goal\n\n'+
-    'Be specific and actionable. Use the actual numbers. Format with clear sections.';
+    '3. One tip specific to a masters athlete balancing cycling and run training\n'+
+    '\nBe specific and actionable. Use the actual numbers. Format with clear sections.';
 
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
