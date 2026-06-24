@@ -5585,7 +5585,7 @@ function showPerf(){
   if(old) old.remove();
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
-  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;';
+  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
@@ -5639,15 +5639,15 @@ function renderPerf(container){
     +'<label style="display:flex;align-items:center;gap:6px;background:var(--s2);border:1px solid var(--b2);color:var(--t1);font-size:13px;font-weight:600;padding:8px 16px;border-radius:22px;cursor:pointer">'
     +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
     +' Import'
-    +'<input type="file" accept=".tcx,.csv,.fit,.fit.gz,.gz" style="display:none" onchange="importRideFile(this)">'
+    +'<input type="file" accept=".tcx,.csv" style="display:none" onchange="importRideFile(this)">'
     +'</label>'
     +'<label style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:8px 16px;border-radius:22px;cursor:pointer">'
     +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
     +' Bulk Import'
-    +'<input type="file" multiple style="display:none" onchange="bulkImportFit(this)">'
+    +'<input type="file" accept=".tcx" multiple style="display:none" onchange="bulkImportTCX(this)">'
     +'</label>'
     +'</div>'
-    +'<div style="padding:0 16px 10px;font-size:11px;color:var(--t3);text-align:right">TCX or FIT from Garmin . CSV from Intervals.icu</div>';
+    +'<div style="padding:0 16px 10px;font-size:11px;color:var(--t3);text-align:right">TCX from Garmin . CSV from Intervals.icu</div>';
 
   // -- W/KG HERO CARD
   html+='<div style="margin:12px 16px;background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border-radius:18px;border:1px solid rgba(252,76,2,.15);padding:18px">'
@@ -6278,19 +6278,19 @@ function computePowerCurve(rides){
   var best={};
   durations.forEach(function(d){best[d]=0;});
   rides.forEach(function(r){
-    // Only use power curve from cycling (fitSport 2=cycling; exclude known non-cycling)
-    var nonCycling = r.fitSport && r.fitSport !== 2;
-    if(nonCycling) return;
-    // From TCX/FIT import (has powerCurve object)
+    // From TCX import (has powerCurve object)
     if(r.powerCurve){
       durations.forEach(function(d){
         if(r.powerCurve[d]&&r.powerCurve[d]>best[d]) best[d]=r.powerCurve[d];
       });
     }
     // From Intervals.icu: estimate peak from NP + zone data
+    // NP ~= 20min best effort proxy; use ifPct to back-calculate
     if(r.np&&r.source==='intervals'){
+      // 20min best ≈ NP * 1.05 (rough)
       var est20=Math.round(r.np*1.05);
       if(est20>best[1200]) best[1200]=est20;
+      // 60min ≈ NP * 0.95
       var est60=Math.round(r.np*0.95);
       if(est60>best[3600]) best[3600]=est60;
     }
@@ -6617,310 +6617,6 @@ function bulkImportTCX(input){
       else failed++;
       setTimeout(next, 10);
     });
-  }
-  next();
-}
-
-// ===================== FIT FILE PARSER =====================
-function parseFitFile(buffer, filename){
-  var dv = new DataView(buffer);
-  var FTP = (st.settings && st.settings.ftp) ? parseInt(st.settings.ftp) : 195;
-
-  // Header
-  var headerSize = dv.getUint8(0);
-  var protocolVer = dv.getUint8(1);
-  var dataSize = dv.getUint32(4, true);
-  var offset = headerSize;
-  var end = headerSize + dataSize;
-
-  var localMsgDefs = {};
-  var records = [];
-  var sessionData = null;
-  var lapData = [];
-
-  var FIT_BASE_TYPES = {
-    0x00:{size:1,read:function(dv,o,le){return dv.getUint8(o);}},
-    0x01:{size:1,read:function(dv,o,le){return dv.getInt8(o);}},
-    0x84:{size:2,read:function(dv,o,le){return dv.getUint16(o,le);}},
-    0x85:{size:2,read:function(dv,o,le){return dv.getInt16(o,le);}},
-    0x86:{size:4,read:function(dv,o,le){return dv.getUint32(o,le);}},
-    0x8C:{size:4,read:function(dv,o,le){return dv.getFloat32(o,le);}},
-    0x07:{size:1,read:function(dv,o,le){return dv.getUint8(o);}},
-    0x02:{size:1,read:function(dv,o,le){return dv.getUint8(o);}},
-    0x83:{size:4,read:function(dv,o,le){return dv.getInt32(o,le);}},
-    0x8D:{size:8,read:function(dv,o,le){return null;}},  // float64 skip
-    0x8E:{size:8,read:function(dv,o,le){return null;}},  // uint64 skip
-  };
-
-  // Global message numbers we care about
-  var GLOBAL_SESSION = 18;
-  var GLOBAL_RECORD  = 20;
-  var GLOBAL_LAP     = 19;
-
-  // Field defs for session (global msg 18)
-  var SESSION_FIELDS = {
-    2:  {name:'start_time', scale:1, offset_val:631065600},
-    5:  {name:'sport', scale:1},  // 2=cycling, 1=running, etc
-    7:  {name:'total_elapsed_time', scale:1000},
-    8:  {name:'total_timer_time', scale:1000},
-    9:  {name:'total_distance', scale:100},
-    11: {name:'total_calories', scale:1},
-    14: {name:'avg_power', scale:1},
-    15: {name:'max_power', scale:1},
-    16: {name:'total_ascent', scale:1},
-    17: {name:'total_descent', scale:1},
-    22: {name:'avg_heart_rate', scale:1},
-    23: {name:'max_heart_rate', scale:1},
-    53: {name:'training_stress_score', scale:10},
-    60: {name:'avg_cadence', scale:1},
-    124:{name:'normalized_power', scale:1},
-  };
-
-  // Field defs for record (global msg 20)
-  var RECORD_FIELDS = {
-    7:  {name:'power'},
-    3:  {name:'heart_rate'},
-    4:  {name:'cadence'},
-    6:  {name:'speed', scale:1000},    // mm/s -> m/s
-    5:  {name:'distance', scale:100},  // cm -> m
-  };
-
-  try {
-    while(offset < end - 1){
-      var recHdr = dv.getUint8(offset);
-      if((recHdr & 0x80) === 0x80){
-        // Compressed timestamp record — skip (advance by 1 + local def size if known)
-        var localNum2 = (recHdr >> 5) & 0x03;
-        var def2 = localMsgDefs[localNum2];
-        if(def2){ offset += 1 + def2.size; } else { offset++; }
-        continue;
-      }
-      var isDefinition = (recHdr & 0x40) !== 0;
-      var localMsgNum = recHdr & 0x0F;
-
-      if(isDefinition){
-        offset++; // skip reserved
-        offset++;
-        var arch = dv.getUint8(offset++); // 0=LE, 1=BE
-        var le = (arch === 0);
-        var globalMsgNum = le ? dv.getUint16(offset, true) : dv.getUint16(offset, false);
-        offset += 2;
-        var numFields = dv.getUint8(offset++);
-        var fields = [];
-        var totalSize = 0;
-        for(var fi=0; fi<numFields; fi++){
-          var fNum = dv.getUint8(offset++);
-          var fSize = dv.getUint8(offset++);
-          var fBaseType = dv.getUint8(offset++);
-          fields.push({num:fNum, size:fSize, baseType:fBaseType});
-          totalSize += fSize;
-        }
-        // check for dev fields (bit 5 of header)
-        if(recHdr & 0x20){
-          var numDevFields = dv.getUint8(offset++);
-          for(var dfi=0; dfi<numDevFields; dfi++){
-            var dfNum = dv.getUint8(offset++);
-            var dfSize = dv.getUint8(offset++);
-            var dfDevIdx = dv.getUint8(offset++);
-            fields.push({num:dfNum, size:dfSize, baseType:0x07, isDev:true});
-            totalSize += dfSize;
-          }
-        }
-        localMsgDefs[localMsgNum] = {global:globalMsgNum, fields:fields, size:totalSize, le:le};
-      } else {
-        // Data record
-        offset++; // consumed header byte
-        var def = localMsgDefs[localMsgNum];
-        if(!def){ continue; }
-        var recStart = offset;
-
-        if(def.global === GLOBAL_RECORD){
-          var rec = {};
-          var o2 = offset;
-          for(var fi2=0; fi2<def.fields.length; fi2++){
-            var fld = def.fields[fi2];
-            var rfDef = RECORD_FIELDS[fld.num];
-            var val = null;
-            var bt = FIT_BASE_TYPES[fld.baseType] || {size:fld.size, read:function(){return null;}};
-            if(fld.size === bt.size){
-              val = bt.read(dv, o2, def.le);
-            }
-            if(rfDef && val !== null){
-              if(rfDef.scale) val = val / rfDef.scale;
-              rec[rfDef.name] = val;
-            }
-            o2 += fld.size;
-          }
-          if(rec.power !== undefined && rec.power < 2000) records.push(rec);
-        } else if(def.global === GLOBAL_SESSION){
-          var sess = {};
-          var o3 = offset;
-          for(var fi3=0; fi3<def.fields.length; fi3++){
-            var fld3 = def.fields[fi3];
-            var sfDef = SESSION_FIELDS[fld3.num];
-            var bt3 = FIT_BASE_TYPES[fld3.baseType] || {size:fld3.size, read:function(){return null;}};
-            var val3 = null;
-            if(fld3.size === bt3.size){
-              val3 = bt3.read(dv, o3, def.le);
-            }
-            if(sfDef && val3 !== null){
-              if(sfDef.scale) val3 = val3 / sfDef.scale;
-              if(sfDef.offset_val) val3 = val3 + sfDef.offset_val;
-              sess[sfDef.name] = val3;
-            }
-            o3 += fld3.size;
-          }
-          sessionData = sess;
-        }
-        offset = recStart + def.size;
-      }
-    }
-  } catch(e){ console.warn('FIT parse partial:', e.message); }
-
-  if(!records.length && !sessionData) return null;
-
-  // Sport detection: FIT sport field 2=cycling, 1=running, 4=swimming, 10=rowing, etc
-  var sportNum = sessionData && sessionData.sport;
-  var isCycling = (sportNum === 2 || sportNum === undefined || sportNum === null);
-  // also check if there's meaningful power data (running power meters exist but values differ)
-  // if no sport field, assume cycling if there's power data and cadence looks like cycling (>50rpm avg)
-
-  // Compute best efforts from power stream — only for cycling
-  var powers = records.filter(function(r){ return r.power > 0; }).map(function(r){ return r.power; });
-  var powerCurve = {};
-  if(isCycling && powers.length > 5){
-    var durations = [5, 15, 30, 60, 300, 600, 1200, 3600];
-    durations.forEach(function(dur){
-      if(powers.length < dur) return;
-      var win = 0;
-      for(var i=0; i<dur; i++) win += powers[i];
-      var best = win;
-      for(var i=1; i<=powers.length-dur; i++){
-        win = win - powers[i-1] + powers[i+dur-1];
-        if(win > best) best = win;
-      }
-      powerCurve[dur] = Math.round(best / dur);
-    });
-  }
-
-  // Derived stats
-  var avgPwr = powers.length ? Math.round(powers.reduce(function(a,b){return a+b;},0)/powers.length) : 0;
-  var hrVals = records.filter(function(r){return r.heart_rate>30&&r.heart_rate<220;}).map(function(r){return r.heart_rate;});
-  var avgHR = hrVals.length ? Math.round(hrVals.reduce(function(a,b){return a+b;},0)/hrVals.length) : 0;
-  var cadVals = records.filter(function(r){return r.cadence>0;}).map(function(r){return r.cadence;});
-  var avgCad = cadVals.length ? Math.round(cadVals.reduce(function(a,b){return a+b;},0)/cadVals.length) : 0;
-
-  // Speed → distance
-  var lastDist = records.length ? (records[records.length-1].distance || 0) : 0;
-  var distM = lastDist || (sessionData && sessionData.total_distance) || 0;
-  var distMi = Math.round(distM / 1609.34 * 10) / 10;
-
-  var timerSec = sessionData && sessionData.total_timer_time ? sessionData.total_timer_time : records.length;
-  var np = (powerCurve[1200] ? Math.round(powerCurve[1200] * 1.05) : 0) ||
-           (sessionData && sessionData.normalized_power) || avgPwr;
-  var IF2 = np / FTP;
-  var tss = Math.round((timerSec * np * IF2) / (FTP * 3600) * 100);
-
-  var durH = Math.floor(timerSec/3600);
-  var durM = Math.floor((timerSec%3600)/60);
-  var durS = Math.round(timerSec%60);
-  var durStr = (durH>0?durH+'h ':'')+(durM>0?durM+'m ':'')+(durS+'s');
-
-  // Date from filename or session
-  var dateStr = '';
-  var fnMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
-  if(fnMatch){ dateStr = fnMatch[1]; }
-  else if(sessionData && sessionData.start_time){
-    var d = new Date(sessionData.start_time * 1000);
-    dateStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  } else {
-    var now = new Date();
-    dateStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  }
-
-  var rideName = filename.replace(/\.(fit|gz)$/gi,'').replace(/^activity_\d+/i,'').replace(/_/g,' ').trim() || 'Ride '+dateStr;
-
-  return {
-    name: rideName||'Ride '+dateStr,
-    date: dateStr,
-    duration: durStr,
-    movingSecs: Math.round(timerSec),
-    distance: distMi,
-    avgPwr: avgPwr,
-    np: np,
-    tss: tss,
-    ifPct: Math.round(IF2*100),
-    avgHR: avgHR,
-    cadence: avgCad,
-    elev: (sessionData && sessionData.total_ascent) || 0,
-    source: 'fit',
-    fitSport: sportNum || 0,
-    powerCurve: powerCurve
-  };
-}
-
-function bulkImportFit(input){
-  var files = Array.prototype.slice.call(input.files);
-  if(!files.length) return;
-  toast('Importing '+files.length+' file(s)...');
-  var done=0, skipped=0, failed=0;
-  var idx=0;
-  function next(){
-    if(idx>=files.length){
-      sv();
-      var msg = done+' imported';
-      if(skipped) msg += ', '+skipped+' duplicates';
-      if(failed) msg += ', '+failed+' failed';
-      toast(msg);
-      renderPerf(document.getElementById('perf-body'));
-      input.value='';
-      return;
-    }
-    var file = files[idx++];
-    var ext = file.name.toLowerCase().split('.').pop();
-    if(ext==='tcx'){
-      // delegate back to TCX processor
-      var r2 = new FileReader();
-      r2.onload = function(e){
-        // re-use existing single-file TCX path via a fake event
-        bulkImportTCX({files:[file]});
-        setTimeout(next, 50);
-      };
-      r2.readAsText(file);
-      return;
-    }
-    var r = new FileReader();
-    r.onload = function(e){
-      var buf = e.target.result;
-      function processIt(ab){
-        try{
-          var ride = parseFitFile(ab, file.name);
-          if(!ride){ failed++; setTimeout(next,10); return; }
-          var dup = st.rides && st.rides.some(function(r2){ return r2.date===ride.date && Math.abs((r2.movingSecs||0)-(ride.movingSecs||0))<60; });
-          if(dup){ skipped++; } else { if(!st.rides) st.rides=[]; st.rides.push(ride); done++; }
-        } catch(err){ failed++; console.error(err); }
-        setTimeout(next, 10);
-      }
-      if(ext==='gz'){
-        try{
-          var ds = new DecompressionStream('gzip');
-          var writer = ds.writable.getWriter();
-          var reader3 = ds.readable.getReader();
-          var chunks = [];
-          writer.write(new Uint8Array(buf)); writer.close();
-          function pump(){ reader3.read().then(function(res){
-            if(res.done){
-              var total=chunks.reduce(function(a,b){return a+b.length;},0);
-              var out=new Uint8Array(total); var pos=0;
-              chunks.forEach(function(c){out.set(c,pos);pos+=c.length;});
-              processIt(out.buffer);
-            } else { chunks.push(res.value); pump(); }
-          }).catch(function(){ failed++; setTimeout(next,10); }); }
-          pump();
-        } catch(e){ failed++; setTimeout(next,10); }
-      } else { processIt(buf); }
-    };
-    r.readAsArrayBuffer(file);
   }
   next();
 }
@@ -7452,49 +7148,8 @@ function importRideFile(input){
     return;
   }
 
-  if(ext==='fit' || (ext==='gz' && fname.endsWith('.fit.gz'))){
-    var fitReader = new FileReader();
-    fitReader.onload = function(e){
-      var buf = e.target.result;
-      function processFitBuffer(ab){
-        try{
-          var ride = parseFitFile(ab, file.name);
-          if(!ride){ toast('Could not parse FIT file'); return; }
-          var dup = st.rides && st.rides.some(function(r){ return r.date===ride.date && Math.abs((r.movingSecs||0)-(ride.movingSecs||0))<60; });
-          if(dup){ toast('Duplicate ride — already imported'); return; }
-          if(!st.rides) st.rides=[];
-          st.rides.push(ride);
-          sv();
-          toast('FIT imported: '+ride.name+' ('+ride.distance+'mi)');
-          renderPerf(document.getElementById('perf-body'));
-        } catch(err){ toast('FIT parse error: '+err.message); console.error(err); }
-      }
-      if(ext==='gz'){
-        try{
-          var ds = new DecompressionStream('gzip');
-          var writer = ds.writable.getWriter();
-          var reader2 = ds.readable.getReader();
-          var chunks = [];
-          writer.write(new Uint8Array(buf));
-          writer.close();
-          function pump(){
-            reader2.read().then(function(result){
-              if(result.done){
-                var total = chunks.reduce(function(a,b){return a+b.length;},0);
-                var out = new Uint8Array(total);
-                var pos=0;
-                chunks.forEach(function(c){out.set(c,pos);pos+=c.length;});
-                processFitBuffer(out.buffer);
-              } else { chunks.push(result.value); pump(); }
-            }).catch(function(err){ toast('Decompress error: '+err.message); });
-          }
-          pump();
-        } catch(e){ toast('GZ decompress not supported in this browser'); }
-      } else {
-        processFitBuffer(buf);
-      }
-    };
-    fitReader.readAsArrayBuffer(file);
+  if(ext==='fit'){
+    toast('Export as TCX or CSV from Garmin Connect - FIT is binary');
     input.value='';
   }
 
@@ -9923,24 +9578,6 @@ window.onload = function(){
   document.getElementById('btn-wt').onclick = openPk;
   document.getElementById('pk-bg').onclick = closePk;
   if(st.cf){ st.cf.forEach(function(f){ if(!CF.find(function(x){return x.n===f.n;})) CF.push(f); }); }
-  // One-time cleanup: strip powerCurve from obvious non-cycling FIT activities
-  // Runs, swims, weight training have distance=0 or very short, or high step cadence
-  if(!st._fitCleaned && st.rides && st.rides.length){
-    var cleaned = 0;
-    st.rides.forEach(function(r){
-      if(!r.powerCurve || !Object.keys(r.powerCurve).length) return;
-      if(r.source !== 'fit') return;
-      // Non-cycling signals: distance < 2 miles, or cadence > 120 (running cadence in spm)
-      var tooShort = (r.distance || 0) < 2;
-      var runCadence = (r.cadence || 0) > 120;
-      if(tooShort || runCadence){
-        delete r.powerCurve;
-        cleaned++;
-      }
-    });
-    st._fitCleaned = true;
-    if(cleaned){ sv(); console.log('Cleaned power curves from '+cleaned+' non-cycling activities'); }
-  }
   restoreW(1);
   updHdr();
   updDots();
