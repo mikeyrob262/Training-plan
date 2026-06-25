@@ -3700,14 +3700,16 @@ function renderStravaMap(rideOrId, container){
       if(!pts.length) return;
 
       // Update power fields from Strava data
-      if(data.np || data.max_watts || data.work_kj){
-        // Find and update the ride in state
+      if(data.np || data.max_watts || data.work_kj || data.suffer_score){
         if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
           var _pr=st.rides[_pi];
           if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(mapDate&&_pr.date===mapDate)){
-            if(data.np && !_pr.np){ _pr.np=Math.round(data.np); }
-            if(data.max_watts && !_pr.maxPwr){ _pr.maxPwr=Math.round(data.max_watts); }
-            if(data.work_kj && !_pr.workKj){ _pr.workKj=Math.round(data.work_kj); }
+            if(data.np) _pr.np=Math.round(data.np);
+            if(data.max_watts) _pr.maxPwr=Math.round(data.max_watts);
+            if(data.work_kj) _pr.workKj=Math.round(data.work_kj);
+            if(data.suffer_score) _pr.relEffort=Math.round(data.suffer_score);
+            // Fix IF if stored as percentage instead of decimal*100
+            if(_pr.ifPct && _pr.ifPct > 10) _pr.ifPct = Math.round(_pr.ifPct / 100 * 100) / 100 * 100;
             sv();
             // Update displayed cells live
             var npCell=document.querySelector('[data-pf="np"] .pf-val');
