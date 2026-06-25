@@ -3570,30 +3570,6 @@ function mkSVG(data,color,minY,maxY,fmtY,bars){
   return s+'</svg>';
 }
 
-
-function navigateToActivities(range){
-  // Store the date range filter for Performance screen
-  window._perfDateFilter = range;
-  // Navigate to Performance screen
-  showPerf();
-  // After render, scroll to ride list and highlight
-  setTimeout(function(){
-    var perf = document.getElementById('PERF');
-    if(!perf) return;
-    // Find the Activity History section
-    var historyHeader = perf.querySelector('[data-section="activity-history"]') ||
-      Array.from(perf.querySelectorAll('div')).find(function(d){
-        return d.textContent.trim() === 'ACTIVITY HISTORY';
-      });
-    if(historyHeader){
-      historyHeader.scrollIntoView({behavior:'smooth', block:'start'});
-    } else {
-      // Scroll down past the charts
-      perf.scrollTop = 600;
-    }
-  }, 200);
-}
-
 function showProg(){
   var t=document.getElementById('PROG');
   if(!t)return;
@@ -3790,16 +3766,8 @@ function showProg(){
 
   h+='<div style="padding:12px 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Consistency</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px">';
-  [{l:'Activity streak',v:streak,s:'weeks',c:streak>=3?'#0F6E56':'var(--t1)',nav:''},{l:'This week',v:thisWeekSess,s:'sessions',nav:'week'},{l:'This month',v:thisMonthSess,s:'sessions',nav:'month'},{l:'All time',v:allSessions.length,s:'sessions',nav:'all'}].forEach(function(st2){
-    var isLink=st2.nav!=='';
-    var cardStyle='background:var(--s2);border-radius:12px;padding:12px;text-align:center'+(isLink?';cursor:pointer':'');
-    var cardId=isLink?('id="nav-card-'+st2.nav+'"'):'';
-    h+='<div '+cardId+' style="'+cardStyle+'">'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+(isLink?('<u style="text-decoration-color:rgba(252,76,2,.4)">'+st2.s+'</u>'):st2.s)+'</div>'
-      +'</div>';
-  });
+  [{l:'Activity streak',v:streak,s:'weeks',c:streak>=3?'#0F6E56':'var(--t1)'},{l:'This week',v:thisWeekSess,s:'sessions'},{l:'This month',v:thisMonthSess,s:'sessions'},{l:'All time',v:allSessions.length,s:'sessions'}].forEach(function(st2){
+    h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
   // Tri training balance
@@ -3919,13 +3887,6 @@ function showProg(){
   window._progCharts={weekCounts:weekCounts,weekLabels:weekLabels,weekRides:weekRides,weekRuns:weekRuns,weekSwims:weekSwims,weekStrength:weekStrength,protDays:protDays,wtData:wtData,wtLabels:wtLabels,lrData:lrData,lrLabels:lrLabels};
 
   t.innerHTML=h;
-  // Wire nav cards (This Week, This Month, All Time)
-  ['week','month','all'].forEach(function(range){
-    var card=document.getElementById('nav-card-'+range);
-    if(card){
-      card.addEventListener('click',function(){navigateToActivities(range);});
-    }
-  });
   // Wire weight log - tap weight card to log
   setTimeout(function(){
     var wtCards=document.querySelectorAll('#PROG [data-metric="weight"]');
@@ -6474,25 +6435,6 @@ function renderPerf(container){
     html+='<div id="perf-empty-state" style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:32px 16px;text-align:center">'+'<div style="font-size:36px;margin-bottom:10px;opacity:.3">🚴</div>'+'<div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px">No activities yet</div>'+'<div id="perf-sync-msg" style="font-size:13px;color:var(--t3)">Syncing from Firebase...</div>'+'</div>';
   } else {
     var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
-    // Apply date filter from navigateToActivities if set
-    if(window._perfDateFilter && window._perfDateFilter !== 'all'){
-      var now2=new Date();
-      var cutoff2=new Date(now2);
-      if(window._perfDateFilter==='week'){
-        cutoff2.setDate(now2.getDate()-7);
-      } else if(window._perfDateFilter==='month'){
-        cutoff2.setDate(now2.getDate()-30);
-      }
-      sorted=sorted.filter(function(r){return r.date&&new Date(r.date)>=cutoff2;});
-    }
-    // Show date range banner if filtered
-    if(window._perfDateFilter && window._perfDateFilter !== 'all'){
-      var rangeLabel=window._perfDateFilter==='week'?'This Week':window._perfDateFilter==='month'?'This Month':'All Time';
-      html+='<div data-section="activity-history" style="margin:0 16px 6px;background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.25);border-radius:10px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center">'+
-        '<div style="font-size:12px;font-weight:700;color:#FC4C02">📅 Showing: '+rangeLabel+' ('+sorted.length+' activities)</div>'+
-        '<button onclick="window._perfDateFilter=null;renderPerf(document.getElementById(\'perf-body\'))" style="font-size:11px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:inherit">Show all</button>'+
-      '</div>';
-    }
     // Scrollable container
     html+='<div id="ride-history-list" style="margin:0 16px 16px;height:420px;overflow-y:scroll;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior-y:contain;display:flex;flex-direction:column;gap:10px">';
     sorted.forEach(function(r,si){
