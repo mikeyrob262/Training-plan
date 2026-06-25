@@ -3688,8 +3688,12 @@ function renderStravaMap(rideOrId, container){
         container.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--t3)">Token expired — please reconnect Strava</div>';
         return;
       }
+      if(data.error){
+        container.innerHTML = '<div style="padding:16px;font-size:11px;color:#ef4444">Error: '+data.error+'</div>';
+        return;
+      }
       if(!data.polyline){
-        container.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--t3)">No route data for this activity</div>';
+        container.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--t3)">No polyline. ID='+activityId+' date='+mapDate+' dist='+mapDist+'</div>';
         return;
       }
       var pts = decodePolyline(data.polyline);
