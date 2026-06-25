@@ -3681,7 +3681,7 @@ function renderStravaMap(activityId, container){
         return;
       }
       if(!data.polyline){
-        container.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--t3)">No polyline. Raw: '+JSON.stringify(data).substring(0,200)+'</div>';
+        container.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--t3);word-break:break-all">No polyline.<br>ID used: '+activityId+'<br>Raw: '+JSON.stringify(data).substring(0,400)+'</div>';
         return;
       }
       var pts = decodePolyline(data.polyline);
