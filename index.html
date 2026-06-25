@@ -4354,6 +4354,13 @@ function showSet(){
           statusEl.innerHTML='<span style="color:#0F6E56;font-weight:700">✓ Synced '+imported+' rides!</span> ('+skipped+' non-cycling skipped)';
           icuSyncBtn.disabled=false;
           toast('Intervals.icu sync complete: '+imported+' rides! ⚡');
+          // Log first ride fields for debugging
+          if(activities.length){
+            var f=activities[0];
+            var powerFields={id:f.id,strava_id:f.strava_id,np:f.icu_normalized_watts,maxPwr:f.max_watts||f.icu_max_watts||f.icu_peak_watts,work:f.kilojoules||f.icu_joules,if_pct:f.icu_intensity,tss:f.icu_training_load,p1200:f.p1200};
+            console.log('ICU activity fields:', powerFields);
+            toast('Fields: NP='+f.icu_normalized_watts+' maxW='+f.max_watts+' kj='+f.kilojoules+' if='+f.icu_intensity);
+          }
           // Also refresh PMC
           setTimeout(function(){fetchICUWellness(false);},1000);
         })
