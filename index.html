@@ -8237,31 +8237,53 @@ function openRideDetail(idx){
 
   // -- WORKOUT ANALYSIS (power blocks from chartPwr)
   if(r.chartPwr&&r.chartPwr.length>10&&FTP){
+    // Compute per-ride power curve from streams
+    if(!r.powerCurve||Object.keys(r.powerCurve).length<3){
+      var pcDurs2=[5,10,15,30,60,120,300,600,1200,1800,3600];
+      var pcResult={};
+      var sps2=r.movingSecs?r.movingSecs/r.chartPwr.length:1;
+      pcDurs2.forEach(function(dur){
+        var samples=Math.round(dur/sps2);
+        if(samples>r.chartPwr.length) return;
+        var best=0;
+        for(var si=0;si<=r.chartPwr.length-samples;si++){
+          var sum=0;for(var sj=si;sj<si+samples;sj++) sum+=r.chartPwr[sj]||0;
+          var avg=sum/samples; if(avg>best) best=avg;
+        }
+        if(best>0) pcResult[dur]=Math.round(best);
+      });
+      r.powerCurve=pcResult;
+    }
+
+    var waPwr = r.chartPwr;
+    var waMax = Math.max.apply(null, waPwr.filter(function(p){return p>0;})) || FTP*2;
+    var waContainerH = 80;
     html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Workout Analysis</div>';
     html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
-    // Color each power sample by zone
-    var waPwr = r.chartPwr;
-    var waH = 60; // height in px
-    html += '<div style="display:flex;height:'+waH+'px;gap:1px;border-radius:8px;overflow:hidden;margin-bottom:8px">';
+    html += '<div style="display:flex;align-items:flex-end;height:'+waContainerH+'px;gap:0px;border-radius:8px;overflow:hidden;margin-bottom:10px;background:var(--s2)">';
     waPwr.forEach(function(p){
       var col;
       var pct = p/FTP;
-      if(pct < 0.55) col='#64748b';
+      if(p<=0) col='transparent';
+      else if(pct < 0.55) col='#64748b';
       else if(pct < 0.75) col='#3b82f6';
       else if(pct < 0.90) col='#22c55e';
       else if(pct < 1.05) col='#f59e0b';
       else if(pct < 1.20) col='#ef4444';
       else if(pct < 1.50) col='#a855f7';
       else col='#ec4899';
-      var h = Math.min(100, Math.round(pct*60));
-      html += '<div style="flex:1;background:'+col+';height:'+waH+'px;opacity:.8;align-self:flex-end" title="'+Math.round(p)+'W"></div>';
+      var barH = p>0 ? Math.max(2, Math.round((p/waMax)*waContainerH)) : 0;
+      html += '<div style="flex:1;background:'+col+';height:'+barH+'px;opacity:.9"></div>';
     });
     html += '</div>';
+    // FTP reference line label
+    var ftpLineH = Math.round((FTP/waMax)*waContainerH);
+    html += '<div style="font-size:10px;color:var(--t3);margin-bottom:8px">FTP '+FTP+'W reference · Peak '+Math.round(waMax)+'W</div>';
     // Zone legend
-    var waZones = [{c:'#64748b',l:'Z1'},{c:'#3b82f6',l:'Z2'},{c:'#22c55e',l:'Z3'},{c:'#f59e0b',l:'Z4'},{c:'#ef4444',l:'Z5'},{c:'#a855f7',l:'Z6'},{c:'#ec4899',l:'Z7'}];
-    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    var waZones = [{c:'#64748b',l:'Z1 <55%'},{c:'#3b82f6',l:'Z2 56-75%'},{c:'#22c55e',l:'Z3 76-90%'},{c:'#f59e0b',l:'Z4 91-105%'},{c:'#ef4444',l:'Z5 106-120%'},{c:'#a855f7',l:'Z6 >120%'}];
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
     waZones.forEach(function(z){
-      html += '<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:'+z.c+'"></div><span style="font-size:11px;color:var(--t3)">'+z.l+'</span></div>';
+      html += '<div style="display:flex;align-items:center;gap:4px"><div style="width:8px;height:8px;border-radius:2px;background:'+z.c+'"></div><span style="font-size:10px;color:var(--t3)">'+z.l+'</span></div>';
     });
     html += '</div></div>';
   }
