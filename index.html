@@ -3187,7 +3187,7 @@ function doSwap(w,idx,btn){
   var rest=['Rest Day'];
 
   if(sl.indexOf('strength')>=0||sl.indexOf('full body')>=0){
-    opts=running.concat(swimming).concat(['Easy Spin 20 min']).concat(rest);
+    opts=cycling.concat(running).concat(swimming).concat(rest);
   } else if(sl.indexOf('zwift')>=0||sl.indexOf('ride')>=0||sl.indexOf('bike')>=0||sl.indexOf('chase')>=0){
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('run')>=0||sl.indexOf('jog')>=0){
