@@ -2834,12 +2834,15 @@ function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   try{if(st.rides&&st.rides.length) localStorage.setItem('mta2_rides',JSON.stringify(st.rides));}catch(e){}
+  try{if(st.stravaToken) localStorage.setItem('mta2_strava',JSON.stringify(st.stravaToken)); else localStorage.removeItem('mta2_strava');}catch(e){}
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
 
 // Apply remote snapshot - only if it has a timestamp and is newer than local
 function applyFirebaseData(data){
+  // Preserve stravaToken across Firebase syncs
+  var _savedToken = st.stravaToken || null;
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   var remoteTs = data.lastUpdate || 0;
@@ -2850,6 +2853,9 @@ function applyFirebaseData(data){
   st = data;
   if(token) st.ghToken = token;
   if(as !== undefined) st.autoSync = as;
+  // Restore stravaToken - never let Firebase overwrite it
+  if(_savedToken && !st.stravaToken) st.stravaToken = _savedToken;
+  if(!st.stravaToken){try{var _ls=localStorage.getItem('mta2_strava');if(_ls) st.stravaToken=JSON.parse(_ls);}catch(e){}}
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
@@ -3611,18 +3617,21 @@ function disconnectStrava(){
 
 // Handle OAuth callback token in URL hash
 function checkStravaCallback(){
+  // Restore token from localStorage first (survives Firebase overwrites)
+  if(!st.stravaToken){
+    try{var _st=localStorage.getItem('mta2_strava');if(_st) st.stravaToken=JSON.parse(_st);}catch(e){}
+  }
   var hash = window.location.hash;
   if(hash && hash.indexOf('strava_token=') >= 0){
     try {
       var tokenStr = decodeURIComponent(hash.split('strava_token=')[1]);
       var tokenData = JSON.parse(tokenStr);
+      // Save to localStorage immediately before Firebase can overwrite
+      localStorage.setItem('mta2_strava', JSON.stringify(tokenData));
       st.stravaToken = tokenData;
       sv();
-      // Clean hash from URL
       history.replaceState(null, '', window.location.pathname);
-      toast('✅ Strava connected!');
-      // Refresh current view
-      setTimeout(function(){ if(document.getElementById('PERF').style.display!=='none') showPerf(); }, 500);
+      toast('✅ Strava connected! Maps are live.');
     } catch(e) {
       toast('Strava auth error: '+e.message);
     }
