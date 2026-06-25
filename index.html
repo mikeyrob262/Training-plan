@@ -3657,6 +3657,10 @@ function decodePolyline(encoded){
 
 // Fetch polyline and render Leaflet map into a container element
 function renderStravaMap(activityId, container){
+  // If passed a ride object, use stravaId preferentially
+  if(activityId && typeof activityId === 'object'){
+    activityId = activityId.stravaId || activityId.id;
+  }
   var token = getStravaToken();
   if(!token){
     container.innerHTML = '<div style="padding:16px;text-align:center"><div style="font-size:13px;color:var(--t3);margin-bottom:12px">Connect Strava to see route maps</div><button onclick="connectStrava()" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:20px;cursor:pointer;font-family:inherit">Connect Strava</button></div>';
@@ -4304,6 +4308,7 @@ function showSet(){
             var h=Math.floor(elapsed/3600),m=Math.floor((elapsed%3600)/60),s=elapsed%60;
             var ride={
               id:String(a.id||a.strava_id||''),
+              stravaId:String(a.strava_id||a.id||''),
               name:(a.name||'Ride'),
               date:normDate,
               type:a.type||'Ride',
@@ -8121,8 +8126,8 @@ function openRideDetail(idx){
 
   // Render Strava map after DOM is ready
   var mapContainer = document.getElementById('strava-map-container');
-  if(mapContainer && r && r.id){
-    renderStravaMap(r.id, mapContainer);
+  if(mapContainer && r && (r.stravaId||r.id)){
+    renderStravaMap(r.stravaId||r.id, mapContainer);
   }
 }
 
