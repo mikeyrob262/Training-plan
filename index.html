@@ -3663,7 +3663,15 @@ function decodePolyline(encoded){
 }
 
 // Fetch polyline and render Leaflet map into a container element
-function renderStravaMap(activityId, container){
+function renderStravaMap(rideOrId, container){
+  var activityId, mapDate='', mapDist=0;
+  if(rideOrId && typeof rideOrId === 'object'){
+    activityId = rideOrId.stravaId || rideOrId.id || '';
+    mapDate = rideOrId.date || '';
+    mapDist = rideOrId.distance || 0;
+  } else {
+    activityId = rideOrId || '';
+  }
   var token = getStravaToken();
   if(!token){
     container.innerHTML = '<div style="padding:16px;text-align:center"><div style="font-size:13px;color:var(--t3);margin-bottom:12px">Connect Strava to see route maps</div><button onclick="connectStrava()" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:20px;cursor:pointer;font-family:inherit">Connect Strava</button></div>';
@@ -3671,7 +3679,8 @@ function renderStravaMap(activityId, container){
   }
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
-  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+activityId+'&token='+encodeURIComponent(token))
+  var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_activity&id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+encodeURIComponent(mapDate):'')+(mapDist?'&dist='+mapDist:'');
+  fetch(mapUrl)
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.error==='token_expired'){
@@ -8150,7 +8159,7 @@ function openRideDetail(idx){
   // Render Strava map after DOM is ready
   var mapContainer = document.getElementById('strava-map-container');
   if(mapContainer && r && r.id){
-    renderStravaMap(r.id, mapContainer);
+    renderStravaMap(r, mapContainer);
   }
 }
 
