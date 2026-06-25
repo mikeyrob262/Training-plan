@@ -4354,13 +4354,23 @@ function showSet(){
           statusEl.innerHTML='<span style="color:#0F6E56;font-weight:700">✓ Synced '+imported+' rides!</span> ('+skipped+' non-cycling skipped)';
           icuSyncBtn.disabled=false;
           toast('Intervals.icu sync complete: '+imported+' rides! ⚡');
-          // Log first ride fields for debugging
-          if(activities.length){
-            var f=activities[0];
-            var powerFields={id:f.id,strava_id:f.strava_id,np:f.icu_normalized_watts,maxPwr:f.max_watts||f.icu_max_watts||f.icu_peak_watts,work:f.kilojoules||f.icu_joules,if_pct:f.icu_intensity,tss:f.icu_training_load,p1200:f.p1200};
-            console.log('ICU activity fields:', powerFields);
-            toast('Fields: NP='+f.icu_normalized_watts+' maxW='+f.max_watts+' kj='+f.kilojoules+' if='+f.icu_intensity);
-          }
+          // Fetch detail for recent rides to fill in missing NP/maxPwr/max20
+          var icuDetailKey = (st.settings&&st.settings.icuKey)||'4iacdcck2cllnwssbdilq6jhw';
+          var icuDetailAthlete = (st.settings&&st.settings.icuAthlete)||'i544205';
+          var recentToDetail = (st.rides||[]).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+          recentToDetail.forEach(function(ride){
+            if(ride.id && (!ride.np || !ride.maxPwr)){
+              var dUrl='https://mikey-food-api2.mgrobinson07.workers.dev/?action=intervals_activity&athlete='+encodeURIComponent(icuDetailAthlete)+'&key='+encodeURIComponent(icuDetailKey)+'&id='+encodeURIComponent(ride.id);
+              fetch(dUrl).then(function(r){return r.json();}).then(function(d){
+                if(d.np) ride.np=Math.round(d.np);
+                if(d.maxPwr) ride.maxPwr=Math.round(d.maxPwr);
+                if(d.max20) ride.max20=Math.round(d.max20);
+                if(d.workKj) ride.workKj=Math.round(d.workKj);
+                if(d.ifPct) ride.ifPct=Math.round(d.ifPct>1?d.ifPct:d.ifPct*100);
+                sv();
+              }).catch(function(){});
+            }
+          });
           // Also refresh PMC
           setTimeout(function(){fetchICUWellness(false);},1000);
         })
