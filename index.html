@@ -2869,6 +2869,51 @@ function applyFirebaseData(data){
 }
 
 // Poll Firebase every 5s for changes from other devices
+
+// ── AUTO-FETCH CTL/ATL/TSB FROM INTERVALS.ICU ────────────────────────────
+function fetchICUWellness(silent){
+  var apiKey = (st.settings&&st.settings.icuKey) || '';
+  var athleteId = (st.settings&&st.settings.icuAthlete) || 'i544205';
+  if(!apiKey){
+    // Use hardcoded key as fallback
+    apiKey = '4iacdcck2cllnwssbdilq6jhw';
+    athleteId = 'i544205';
+  }
+  var url = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=intervals_wellness&athlete='+encodeURIComponent(athleteId)+'&key='+encodeURIComponent(apiKey)+'&days=365';
+  fetch(url)
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(data.error){if(!silent) toast('PMC sync error: '+data.error);return;}
+      var wellness = data.wellness || [];
+      if(!wellness.length){if(!silent) toast('No wellness data returned');return;}
+      // Build pmcHistory from wellness data
+      var pmcHistory = wellness
+        .filter(function(w){return w.ctl||w.atl;})
+        .map(function(w){
+          return {
+            week: w.id, // date string YYYY-MM-DD
+            fitness: Math.round((w.ctl||0)*10)/10,
+            fatigue: Math.round((w.atl||0)*10)/10,
+            form: Math.round((w.tsb||((w.ctl||0)-(w.atl||0)))*10)/10
+          };
+        });
+      if(!pmcHistory.length) return;
+      st.pmcHistory = pmcHistory;
+      // Also update latest CTL/ATL/TSB in settings for AI Coach
+      var last = pmcHistory[pmcHistory.length-1];
+      if(!st.settings) st.settings={};
+      st.settings.lastCTL = last.fitness;
+      st.settings.lastATL = last.fatigue;
+      st.settings.lastTSB = last.form;
+      st.settings.pmcFetchedAt = new Date().toISOString();
+      sv();
+      if(!silent) toast('PMC updated: CTL '+Math.round(last.fitness)+' ATL '+Math.round(last.fatigue)+' TSB '+(last.form>=0?'+':'')+Math.round(last.form));
+    })
+    .catch(function(e){
+      if(!silent) toast('PMC fetch failed: '+e.message);
+    });
+}
+
 function initFirebaseSync(){
   if(fbPollTimer) clearInterval(fbPollTimer);
   fbPollTimer = setInterval(function(){
@@ -4113,6 +4158,8 @@ function showSet(){
           statusEl.innerHTML='<span style="color:#0F6E56;font-weight:700">✓ Synced '+imported+' rides!</span> ('+skipped+' non-cycling skipped)';
           icuSyncBtn.disabled=false;
           toast('Intervals.icu sync complete: '+imported+' rides! ⚡');
+          // Also refresh PMC
+          setTimeout(function(){fetchICUWellness(false);},1000);
         })
         .catch(function(e){
           statusEl.textContent='Sync failed: '+e.message;
@@ -10085,10 +10132,21 @@ function showAIWorkout(){
   var recentRides=rides3.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
   var lastRide=recentRides[0];
   var last7TSS=recentRides.filter(function(r){return new Date(r.date)>new Date(Date.now()-7*24*60*60*1000);}).reduce(function(s,r){return s+(r.tss||0);},0);
-  var pmcLast3=st.pmcHistory&&st.pmcHistory.length?st.pmcHistory[st.pmcHistory.length-1]:null;
-  var ctl3=pmcLast3?Math.round(pmcLast3.ctl):0;
-  var atl3=pmcLast3?Math.round(pmcLast3.atl):0;
-  var tsb3=ctl3-atl3;
+  // Use pre-fetched wellness data if available, otherwise fall back to pmcHistory
+  var ctl3=0,atl3=0,tsb3=0;
+  if(st.settings&&st.settings.lastCTL){
+    ctl3=Math.round(st.settings.lastCTL||0);
+    atl3=Math.round(st.settings.lastATL||0);
+    tsb3=Math.round(st.settings.lastTSB||0);
+  } else if(st.pmcHistory&&st.pmcHistory.length){
+    var pmcLast3=st.pmcHistory[st.pmcHistory.length-1];
+    ctl3=pmcLast3?Math.round(pmcLast3.fitness||pmcLast3.ctl||0):0;
+    atl3=pmcLast3?Math.round(pmcLast3.fatigue||pmcLast3.atl||0):0;
+    tsb3=pmcLast3?Math.round(pmcLast3.form||pmcLast3.tsb||0):0;
+  } else {
+    var pmcD3=computePMC(rides3);
+    if(pmcD3.length){var l3=pmcD3[pmcD3.length-1];ctl3=Math.round(l3.ctl);atl3=Math.round(l3.atl);tsb3=Math.round(l3.tsb);}
+  }
   var wt3=st.settings&&st.settings.weight?parseFloat(st.settings.weight):162.5;
   var wkg3=Math.round(FTP3/(wt3/2.20462)*100)/100;
   var swims3=(st.swims||[]).length;
@@ -11543,6 +11601,8 @@ window.onload = function(){
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
+  // Auto-fetch PMC wellness from Intervals.icu
+  setTimeout(function(){fetchICUWellness(true);}, 3000);
   }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
