@@ -8214,6 +8214,25 @@ function openRideDetail(idx){
     html += '</div>';
   }
 
+  // -- COMPUTE POWER CURVE from chartPwr if not already done
+  if(r.chartPwr&&r.chartPwr.length>10&&FTP&&(!r.powerCurve||Object.keys(r.powerCurve).length<3)){
+    var pcDurs3=[5,10,15,30,60,120,300,600,1200,1800,3600];
+    var pcResult3={};
+    var sps3=r.movingSecs?r.movingSecs/r.chartPwr.length:1;
+    pcDurs3.forEach(function(dur){
+      var samples=Math.round(dur/sps3);
+      if(samples<1||samples>r.chartPwr.length) return;
+      var best=0;
+      for(var si=0;si<=r.chartPwr.length-samples;si++){
+        var sum=0;for(var sj=si;sj<si+samples;sj++) sum+=r.chartPwr[sj]||0;
+        var avg=sum/samples; if(avg>best) best=avg;
+      }
+      if(best>0) pcResult3[dur]=Math.round(best);
+    });
+    r.powerCurve=pcResult3;
+    sv();
+  }
+
   // -- PER-RIDE POWER CURVE
   if(r.powerCurve&&Object.keys(r.powerCurve).length>3){
     var pcD=[{d:5,l:'5s'},{d:15,l:'15s'},{d:30,l:'30s'},{d:60,l:'1m'},{d:300,l:'5m'},{d:600,l:'10m'},{d:1200,l:'20m'},{d:3600,l:'1h'}];
@@ -8253,6 +8272,7 @@ function openRideDetail(idx){
         if(best>0) pcResult[dur]=Math.round(best);
       });
       r.powerCurve=pcResult;
+      sv(); // save so power curve persists
     }
 
     var waPwr = r.chartPwr;
