@@ -2834,7 +2834,6 @@ function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   try{if(st.rides&&st.rides.length) localStorage.setItem('mta2_rides',JSON.stringify(st.rides));}catch(e){}
-  try{if(st.stravaToken) localStorage.setItem('mta2_strava_token',JSON.stringify(st.stravaToken));}catch(e){}
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
@@ -3617,25 +3616,15 @@ function checkStravaCallback(){
     try {
       var tokenStr = decodeURIComponent(hash.split('strava_token=')[1]);
       var tokenData = JSON.parse(tokenStr);
-      // Store in localStorage immediately (before Firebase overwrites state)
-      localStorage.setItem('mta2_strava_token', JSON.stringify(tokenData));
-      // Also set on current state
       st.stravaToken = tokenData;
       sv();
       // Clean hash from URL
       history.replaceState(null, '', window.location.pathname);
-      toast('✅ Strava connected! Maps are now live.');
+      toast('✅ Strava connected!');
+      // Refresh current view
+      setTimeout(function(){ if(document.getElementById('PERF').style.display!=='none') showPerf(); }, 500);
     } catch(e) {
       toast('Strava auth error: '+e.message);
-    }
-  }
-  // Also restore token from localStorage if state doesn't have it
-  if(!st.stravaToken){
-    var saved = localStorage.getItem('mta2_strava_token');
-    if(saved){
-      try {
-        st.stravaToken = JSON.parse(saved);
-      } catch(e){}
     }
   }
 }
@@ -3656,22 +3645,7 @@ function decodePolyline(encoded){
 }
 
 // Fetch polyline and render Leaflet map into a container element
-function renderStravaMap(rideOrId, container){
-  var activityId, mapDate='', mapDist=0;
-  if(rideOrId && typeof rideOrId === 'object'){
-    activityId = rideOrId.stravaId || rideOrId.id;
-    mapDate = rideOrId.date || '';
-    mapDist = rideOrId.distance || 0;
-  } else {
-    activityId = rideOrId;
-    // Try to find ride in state by ID
-    if(st.rides) for(var _fi=0;_fi<st.rides.length;_fi++){
-      var _fr=st.rides[_fi];
-      if(String(_fr.id)===String(activityId)||String(_fr.stravaId)===String(activityId)){
-        mapDate=_fr.date||''; mapDist=_fr.distance||0; break;
-      }
-    }
-  }
+function renderStravaMap(activityId, container){
   var token = getStravaToken();
   if(!token){
     container.innerHTML = '<div style="padding:16px;text-align:center"><div style="font-size:13px;color:var(--t3);margin-bottom:12px">Connect Strava to see route maps</div><button onclick="connectStrava()" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:20px;cursor:pointer;font-family:inherit">Connect Strava</button></div>';
@@ -3679,8 +3653,7 @@ function renderStravaMap(rideOrId, container){
   }
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
-  var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+encodeURIComponent(mapDate):'')+(mapDist?'&dist='+mapDist:'');
-  fetch(mapUrl)
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+activityId+'&token='+encodeURIComponent(token))
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.error==='token_expired'){
@@ -3688,12 +3661,8 @@ function renderStravaMap(rideOrId, container){
         container.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--t3)">Token expired — please reconnect Strava</div>';
         return;
       }
-      if(data.error){
-        container.innerHTML = '<div style="padding:16px;font-size:12px;color:#ef4444">API error: '+data.error+'</div>';
-        return;
-      }
       if(!data.polyline){
-        container.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--t3);word-break:break-all">No polyline.<br>ID used: '+activityId+'<br>Raw: '+JSON.stringify(data).substring(0,400)+'</div>';
+        container.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--t3)">No route data for this activity</div>';
         return;
       }
       var pts = decodePolyline(data.polyline);
@@ -4320,7 +4289,6 @@ function showSet(){
             var h=Math.floor(elapsed/3600),m=Math.floor((elapsed%3600)/60),s=elapsed%60;
             var ride={
               id:String(a.id||a.strava_id||''),
-              stravaId:String(a.strava_id||a.id||''),
               name:(a.name||'Ride'),
               date:normDate,
               type:a.type||'Ride',
@@ -4336,12 +4304,11 @@ function showSet(){
               elev:Math.round((a.total_elevation_gain||0)*3.2808),
               cadence:Math.round(a.average_cadence||0),
               trainer:a.type==='VirtualRide',
-              np:Math.round(a.weighted_average_watts||a.icu_normalized_watts||0),
               workKj:Math.round(a.kilojoules||a.icu_joules&&a.icu_joules/1000||0),
-              ifPct:Math.round(a.icu_intensity>1?(a.icu_intensity):(a.icu_intensity||0)*100),
-              relEffort:Math.round(a.suffer_score||a.icu_training_load||a.icu_rpe_calculated||0),
-              maxPwr:Math.round(a.max_watts||a.icu_max_watts||a.icu_peak_watts||0),
-              max20:Math.round(a.icu_20min_watts||a.p1200||0),
+              ifPct:Math.round((a.icu_intensity||0)*100),
+              relEffort:Math.round(a.suffer_score||a.icu_rpe_calculated||0),
+              maxPwr:Math.round(a.max_watts||a.icu_max_watts||0),
+              max20:Math.round(a.icu_20min_watts||0),
               source:'intervals'
             };
             if(!st.rides) st.rides=[];
@@ -7982,7 +7949,7 @@ function openRideDetail(idx){
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
-  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
+  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
   .forEach(function(s){
     html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">'
       +'<div style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
@@ -8139,8 +8106,8 @@ function openRideDetail(idx){
 
   // Render Strava map after DOM is ready
   var mapContainer = document.getElementById('strava-map-container');
-  if(mapContainer && r && (r.stravaId||r.id)){
-    renderStravaMap(r, mapContainer);
+  if(mapContainer && r && r.id){
+    renderStravaMap(r.id, mapContainer);
   }
 }
 
@@ -11827,8 +11794,7 @@ window.onload = function(){
   // Auto-fetch PMC wellness from Intervals.icu
   setTimeout(function(){fetchICUWellness(true);}, 3000);
   // Handle Strava OAuth callback
-  // Check Strava callback after state is fully loaded
-  setTimeout(checkStravaCallback, 1500);
+  checkStravaCallback();
   }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
