@@ -3710,6 +3710,9 @@ function renderStravaMap(rideOrId, container){
             if(data.max_watts) _pr.maxPwr=Math.round(data.max_watts);
             if(data.work_kj) _pr.workKj=Math.round(data.work_kj);
             if(data.suffer_score) _pr.relEffort=Math.round(data.suffer_score);
+            if(data.elapsed_secs) _pr.elapsedSecs=data.elapsed_secs;
+            if(data.avg_speed) _pr.avgSpeed=data.avg_speed;
+            if(data.max_speed) _pr.maxSpeed=data.max_speed;
             // Fix IF if stored as percentage instead of decimal*100
             if(_pr.ifPct && _pr.ifPct > 10) _pr.ifPct = Math.round(_pr.ifPct / 100 * 100) / 100 * 100;
             sv();
@@ -4351,6 +4354,7 @@ function showSet(){
               type:a.type||'Ride',
               duration:h+':'+(('0'+m).slice(-2))+':'+(('0'+s).slice(-2)),
               movingSecs:elapsed,
+              elapsedSecs:Math.round(a.elapsed_time||a.moving_time||elapsed),
               distance:Math.round((a.distance||0)/1609.34*10)/10,
               avgPwr:Math.round(a.average_watts||a.icu_average_watts||0),
               np:Math.round(a.weighted_average_watts||a.icu_normalized_watts||0),
@@ -8211,6 +8215,37 @@ function openRideDetail(idx){
     }
   }
 
+  // -- WORKOUT ANALYSIS (power blocks from chartPwr)
+  if(r.chartPwr&&r.chartPwr.length>10&&FTP){
+    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Workout Analysis</div>';
+    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+    // Color each power sample by zone
+    var waPwr = r.chartPwr;
+    var waH = 60; // height in px
+    html += '<div style="display:flex;height:'+waH+'px;gap:1px;border-radius:8px;overflow:hidden;margin-bottom:8px">';
+    waPwr.forEach(function(p){
+      var col;
+      var pct = p/FTP;
+      if(pct < 0.55) col='#64748b';
+      else if(pct < 0.75) col='#3b82f6';
+      else if(pct < 0.90) col='#22c55e';
+      else if(pct < 1.05) col='#f59e0b';
+      else if(pct < 1.20) col='#ef4444';
+      else if(pct < 1.50) col='#a855f7';
+      else col='#ec4899';
+      var h = Math.min(100, Math.round(pct*60));
+      html += '<div style="flex:1;background:'+col+';height:'+waH+'px;opacity:.8;align-self:flex-end" title="'+Math.round(p)+'W"></div>';
+    });
+    html += '</div>';
+    // Zone legend
+    var waZones = [{c:'#64748b',l:'Z1'},{c:'#3b82f6',l:'Z2'},{c:'#22c55e',l:'Z3'},{c:'#f59e0b',l:'Z4'},{c:'#ef4444',l:'Z5'},{c:'#a855f7',l:'Z6'},{c:'#ec4899',l:'Z7'}];
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    waZones.forEach(function(z){
+      html += '<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:'+z.c+'"></div><span style="font-size:11px;color:var(--t3)">'+z.l+'</span></div>';
+    });
+    html += '</div></div>';
+  }
+
   // -- ATHLETE INTELLIGENCE
   if(r.movingSecs&&(r.avgPwr||r.avgHR)){
     var aiTxt='';
@@ -8240,6 +8275,7 @@ function openRideDetail(idx){
   html += '<div style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);overflow:hidden">';
   var allStats=[
     ['Moving Time',r.duration||'-'],
+    ['Elapsed Time',(function(){if(!r.elapsedSecs)return '-';var h=Math.floor(r.elapsedSecs/3600),m=Math.floor((r.elapsedSecs%3600)/60),s=r.elapsedSecs%60;return h+':'+(('0'+m).slice(-2))+':'+(('0'+s).slice(-2));})()],
     ['Avg Speed',avgSpd?avgSpd.toFixed(1)+' mph':'-'],
     ['Max Speed',r.maxSpeed?r.maxSpeed.toFixed(1)+' mph':'-'],
     ['Avg Cadence',r.cadence?r.cadence+' rpm':'-'],
