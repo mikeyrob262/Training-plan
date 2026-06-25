@@ -6192,7 +6192,8 @@ function renderPerf(container){
   var weeksSinceFTP=lastFTPDate?Math.floor((new Date()-lastFTPDate)/(7*24*60*60*1000)):99;
   if(weeksSinceFTP>=6&&!window._ftpReminderShown){
     window._ftpReminderShown=true;
-    setTimeout(function(){toast('💪 FTP test due! '+weeksSinceFTP+'w since last test');},2000);
+    var ftpMsg = weeksSinceFTP>=99 ? '💪 FTP test due — no test date recorded' : '💪 FTP test due — '+weeksSinceFTP+' weeks since last test';
+    setTimeout(function(){toast(ftpMsg);},2000);
   }
   var BWT=parseFloat(st.weight||160);
   var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
