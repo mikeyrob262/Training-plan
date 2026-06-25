@@ -2859,6 +2859,16 @@ function applyFirebaseData(data){
   try{restoreExtraSessions();}catch(e){}
   // Fix IF scale after Firebase restore
   try{(st.rides||[]).forEach(function(r){if(r.ifPct&&r.ifPct>10) r.ifPct=Math.round(r.ifPct/100*100)/100;});}catch(e){}
+  // Restore streams (chartPwr/chartHR) from localStorage cache
+  try{
+    var _sc=JSON.parse(localStorage.getItem('mta2_streams')||'{}');
+    (st.rides||[]).forEach(function(r){
+      if(!r.chartPwr && _sc[String(r.id)]){
+        r.chartPwr=_sc[String(r.id)].chartPwr;
+        if(_sc[String(r.id)].chartHR) r.chartHR=_sc[String(r.id)].chartHR;
+      }
+    });
+  }catch(e){}
   // Re-render Performance if it's open and now has rides
   try{
     var pb=document.getElementById('perf-body');
@@ -3712,6 +3722,12 @@ function renderStravaMap(rideOrId, container){
             if(sd.heartrate) _rideObj.chartHR = sd.heartrate;
             if(sd.velocity) _rideObj.chartSpd = sd.velocity;
             sv();
+            // Also persist streams to localStorage so Firebase can't wipe them
+            try{
+              var streamsCache = JSON.parse(localStorage.getItem('mta2_streams')||'{}');
+              streamsCache[String(_rideObj.id)] = {chartPwr:sd.watts,chartHR:sd.heartrate||null};
+              localStorage.setItem('mta2_streams', JSON.stringify(streamsCache));
+            }catch(e){}
             // Re-render the ride detail
             var existingDetail = document.getElementById('ride-detail-modal');
             if(existingDetail){
