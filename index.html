@@ -2819,27 +2819,6 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
-// Save Strava token from URL query param IMMEDIATELY before anything overwrites it
-(function(){
-  try{
-    var search = window.location.search;
-    if(search && search.indexOf('strava_token=') >= 0){
-      var match = search.match(/[?&]strava_token=([^&]+)/);
-      if(match){
-        localStorage.setItem('mta2_strava', decodeURIComponent(match[1]));
-        // Clean URL
-        history.replaceState(null,'',window.location.pathname);
-      }
-    }
-    // Also check hash (legacy)
-    var h=window.location.hash;
-    if(h&&h.indexOf('strava_token=')>=0){
-      var t=decodeURIComponent(h.split('strava_token=')[1]);
-      localStorage.setItem('mta2_strava',t);
-      history.replaceState(null,'',window.location.pathname);
-    }
-  }catch(e){}
-})();
 var cw=1, st={}, curSW=1, svDebounce=null;
 try{var _rs=localStorage.getItem('mta2_rides');if(_rs){var _rp=JSON.parse(_rs);if(_rp&&_rp.length) st.rides=_rp;}}catch(e){}
 try{var _s=localStorage.getItem('mta2');if(_s){var _p=JSON.parse(_s);if(Array.isArray(_p)){var _o={};for(var _i=0;_i<_p.length;_i++){if(_p[_i])_o['w'+_i]=_p[_i];}if(_p.rides)_o.rides=_p.rides;if(_p.lastUpdate)_o.lastUpdate=_p.lastUpdate;if(_p.lastSbw)_o.lastSbw=_p.lastSbw;st=_o;}else{// migrate numeric string keys to w-prefix
@@ -2855,17 +2834,13 @@ function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   try{if(st.rides&&st.rides.length) localStorage.setItem('mta2_rides',JSON.stringify(st.rides));}catch(e){}
-  try{if(st.stravaToken) localStorage.setItem('mta2_strava',JSON.stringify(st.stravaToken)); else localStorage.removeItem('mta2_strava');}catch(e){}
+  try{if(st.stravaToken) localStorage.setItem('mta2_strava_token',JSON.stringify(st.stravaToken));}catch(e){}
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
 
 // Apply remote snapshot - only if it has a timestamp and is newer than local
 function applyFirebaseData(data){
-  // Always get stravaToken from localStorage - most reliable source
-  var _savedToken = null;
-  try{var _ls=localStorage.getItem('mta2_strava');if(_ls) _savedToken=JSON.parse(_ls);}catch(e){}
-  if(!_savedToken && st.stravaToken) _savedToken = st.stravaToken;
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   var remoteTs = data.lastUpdate || 0;
@@ -2876,9 +2851,6 @@ function applyFirebaseData(data){
   st = data;
   if(token) st.ghToken = token;
   if(as !== undefined) st.autoSync = as;
-  // Restore stravaToken - never let Firebase overwrite it
-  if(_savedToken && !st.stravaToken) st.stravaToken = _savedToken;
-  if(!st.stravaToken){try{var _ls=localStorage.getItem('mta2_strava');if(_ls) st.stravaToken=JSON.parse(_ls);}catch(e){}}
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
@@ -3627,21 +3599,6 @@ function refreshStravaToken(){
     });
 }
 
-
-function pasteStravaToken(){
-  var inp = document.getElementById('strava-token-inp');
-  if(!inp||!inp.value.trim()){toast('Paste the token first');return;}
-  try{
-    var t = JSON.parse(inp.value.trim());
-    if(!t.access_token){toast('Invalid token - missing access_token');return;}
-    st.stravaToken = t;
-    localStorage.setItem('mta2_strava', JSON.stringify(t));
-    sv();
-    inp.value='';
-    toast('✅ Strava token saved! Maps are live.');
-  }catch(e){toast('Invalid token format: '+e.message);}
-}
-
 function connectStrava(){
   var authUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/auth?app='+encodeURIComponent(window.location.origin+window.location.pathname);
   window.location.href = authUrl;
@@ -3655,23 +3612,30 @@ function disconnectStrava(){
 
 // Handle OAuth callback token in URL hash
 function checkStravaCallback(){
-  // Restore token from localStorage first (survives Firebase overwrites)
-  if(!st.stravaToken){
-    try{var _st=localStorage.getItem('mta2_strava');if(_st) st.stravaToken=JSON.parse(_st);}catch(e){}
-  }
   var hash = window.location.hash;
   if(hash && hash.indexOf('strava_token=') >= 0){
     try {
       var tokenStr = decodeURIComponent(hash.split('strava_token=')[1]);
       var tokenData = JSON.parse(tokenStr);
-      // Save to localStorage immediately before Firebase can overwrite
-      localStorage.setItem('mta2_strava', JSON.stringify(tokenData));
+      // Store in localStorage immediately (before Firebase overwrites state)
+      localStorage.setItem('mta2_strava_token', JSON.stringify(tokenData));
+      // Also set on current state
       st.stravaToken = tokenData;
       sv();
+      // Clean hash from URL
       history.replaceState(null, '', window.location.pathname);
-      toast('✅ Strava connected! Maps are live.');
+      toast('✅ Strava connected! Maps are now live.');
     } catch(e) {
       toast('Strava auth error: '+e.message);
+    }
+  }
+  // Also restore token from localStorage if state doesn't have it
+  if(!st.stravaToken){
+    var saved = localStorage.getItem('mta2_strava_token');
+    if(saved){
+      try {
+        st.stravaToken = JSON.parse(saved);
+      } catch(e){}
     }
   }
 }
@@ -4293,13 +4257,7 @@ function showSet(){
     +'</div>'
     +'<div id="icu-sync-status" style="font-size:12px;color:var(--t3);text-align:center"></div>'
     +'</div></div>';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">📋 Import Training Plan (PDF/CSV)</button>'    +'<button id="strava-connect-btn" style="background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.3);color:#FC4C02;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">'+(st&&st.stravaToken?'✅ Strava Connected (tap to disconnect)':'🔗 Connect Strava for Maps')+'</button>'
-    +'<div style="font-size:11px;color:var(--t3)">If redirect fails, copy the token from the Strava page and paste here:</div>'
-    +'<div style="display:flex;gap:8px;align-items:center">'
-    +'<input id="strava-token-inp" type="text" placeholder="Paste token JSON here" style="flex:1;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:11px;font-family:monospace">'
-    +'<button id="strava-token-apply" style="background:#FC4C02;border:none;color:white;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;cursor:pointer;font-family:inherit">Apply</button>'
-    +'</div>'
-    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">📋 Import Training Plan (PDF/CSV)</button>'    +'<button onclick="st.stravaToken?disconnectStrava():connectStrava()" id="strava-connect-btn" style="background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.3);color:#FC4C02;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">'+(st.stravaToken?'✅ Strava Connected (tap to disconnect)':'🔗 Connect Strava for Maps')+'</button>'    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
 
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
@@ -4358,7 +4316,7 @@ function showSet(){
               cadence:Math.round(a.average_cadence||0),
               trainer:a.type==='VirtualRide',
               workKj:Math.round(a.kilojoules||a.icu_joules&&a.icu_joules/1000||0),
-              ifPct:Math.round(a.icu_intensity>1?(a.icu_intensity):(a.icu_intensity||0)*100),
+              ifPct:Math.round((a.icu_intensity||0)*100),
               relEffort:Math.round(a.suffer_score||a.icu_rpe_calculated||0),
               maxPwr:Math.round(a.max_watts||a.icu_max_watts||0),
               max20:Math.round(a.icu_20min_watts||0),
@@ -4384,20 +4342,6 @@ function showSet(){
     });
   }
 
-  // Wire Strava connect button
-  var stravaConnBtn=document.getElementById('strava-connect-btn');
-  if(stravaConnBtn){
-    stravaConnBtn.addEventListener('click',function(){
-      if(st&&st.stravaToken) disconnectStrava(); else connectStrava();
-    });
-  }
-  // Wire Strava token paste button
-  var stravaApplyBtn=document.getElementById('strava-token-apply');
-  if(stravaApplyBtn){
-    stravaApplyBtn.addEventListener('click',function(){
-      pasteStravaToken();
-    });
-  }
   var expBtn=document.getElementById('export-data-btn');
   if(expBtn){
     expBtn.addEventListener('click',function(){
@@ -11861,8 +11805,8 @@ window.onload = function(){
   // Auto-fetch PMC wellness from Intervals.icu
   setTimeout(function(){fetchICUWellness(true);}, 3000);
   // Handle Strava OAuth callback
-  // Delay Strava callback check so Firebase has time to settle first
-  setTimeout(function(){try{checkStravaCallback();}catch(e){console.error('Strava callback error:',e);}}, 2000);
+  // Check Strava callback after state is fully loaded
+  setTimeout(checkStravaCallback, 1500);
   }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
