@@ -8153,19 +8153,106 @@ function openRideDetail(idx){
     html += '</div>';
   }
 
+  // -- HR ZONES (estimated from chartHR)
+  var maxHR2 = st.settings&&st.settings.maxHR ? parseInt(st.settings.maxHR) : 172;
+  var hrZoneDefs2 = [
+    {n:'Z1 Recovery',min:0,max:Math.round(maxHR2*.6),c:'#64748b'},
+    {n:'Z2 Aerobic',min:Math.round(maxHR2*.6),max:Math.round(maxHR2*.7),c:'#3b82f6'},
+    {n:'Z3 Tempo',min:Math.round(maxHR2*.7),max:Math.round(maxHR2*.8),c:'#22c55e'},
+    {n:'Z4 Threshold',min:Math.round(maxHR2*.8),max:Math.round(maxHR2*.9),c:'#f59e0b'},
+    {n:'Z5 Max',min:Math.round(maxHR2*.9),max:999,c:'#ef4444'}
+  ];
+  var hrZS=[0,0,0,0,0];
+  if(r.chartHR&&r.chartHR.length>5){
+    var sps=r.movingSecs?r.movingSecs/r.chartHR.length:1;
+    r.chartHR.forEach(function(hr){
+      for(var zi2=hrZoneDefs2.length-1;zi2>=0;zi2--){if(hr>=hrZoneDefs2[zi2].min){hrZS[zi2]+=sps;break;}}
+    });
+  }
+  var totalHRS=hrZS.reduce(function(a,b){return a+b;},0)||0;
+  if(totalHRS>10){
+    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Heart Rate Zones</div>';
+    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+    html += '<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:12px">';
+    hrZoneDefs2.forEach(function(z,i){var p=Math.round(hrZS[i]/totalHRS*100);if(p>0)html+='<div style="background:'+z.c+';width:'+p+'%;opacity:.85"></div>';});
+    html += '</div>';
+    hrZoneDefs2.forEach(function(z,i){
+      var p=Math.round(hrZS[i]/totalHRS*100);if(!p)return;
+      var m=Math.round(hrZS[i]/60);
+      html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+        +'<div style="width:10px;height:10px;border-radius:3px;background:'+z.c+'"></div>'
+        +'<div style="flex:1;font-size:13px;color:var(--t1);font-weight:600">'+z.n+'</div>'
+        +'<div style="font-size:11px;color:var(--t3)">'+z.min+(z.max<999?'-'+z.max:'+')+'bpm</div>'
+        +'<div style="font-size:12px;color:var(--t3)">'+m+'min</div>'
+        +'<div style="font-size:12px;font-weight:700;color:'+z.c+';min-width:32px;text-align:right">'+p+'%</div>'
+        +'</div>';
+    });
+    html += '</div>';
+  }
+
+  // -- PER-RIDE POWER CURVE
+  if(r.powerCurve&&Object.keys(r.powerCurve).length>3){
+    var pcD=[{d:5,l:'5s'},{d:15,l:'15s'},{d:30,l:'30s'},{d:60,l:'1m'},{d:300,l:'5m'},{d:600,l:'10m'},{d:1200,l:'20m'},{d:3600,l:'1h'}];
+    var pcPts=pcD.map(function(p){return {l:p.l,v:r.powerCurve[p.d]||null};}).filter(function(p){return p.v&&p.v>0;});
+    if(pcPts.length>=3){
+      var maxPCW=Math.max.apply(null,pcPts.map(function(p){return p.v;}));
+      html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power Curve</div>';
+      html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+      html += '<div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:8px">';
+      pcPts.forEach(function(p){
+        var h=Math.round((p.v/maxPCW)*76);
+        html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">'
+          +'<div style="font-size:8px;color:var(--t3)">'+p.v+'</div>'
+          +'<div style="width:100%;background:linear-gradient(180deg,#FC4C02,#c43d02);border-radius:3px 3px 0 0;height:'+h+'px"></div>'
+          +'<div style="font-size:9px;color:var(--t3)">'+p.l+'</div>'
+          +'</div>';
+      });
+      html += '</div></div>';
+    }
+  }
+
+  // -- ATHLETE INTELLIGENCE
+  if(r.movingSecs&&(r.avgPwr||r.avgHR)){
+    var aiTxt='';
+    if(r.avgPwr&&FTP){
+      var ifV=r.np?r.np/FTP:r.avgPwr/FTP;
+      var z2p=Math.round((r.z2s||0)/((r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)||r.movingSecs)*100);
+      if(ifV<0.65) aiTxt='Easy recovery ride. Stayed aerobic throughout — low training stress.';
+      else if(ifV<0.75) aiTxt='Steady endurance ride. '+z2p+'% Z2 aerobic work (avg '+r.avgHR+' bpm). Well-controlled effort.';
+      else if(ifV<0.85) aiTxt='Moderate tempo effort (IF '+ifV.toFixed(2)+'). Good training stimulus for aerobic development.';
+      else if(ifV<0.95) aiTxt='Threshold effort (IF '+ifV.toFixed(2)+'). High load — ensure adequate recovery before next hard session.';
+      else aiTxt='Race-pace effort (IF '+ifV.toFixed(2)+'). Very high intensity. Extended recovery needed.';
+    } else if(r.avgHR){
+      var hp=Math.round(r.avgHR/maxHR2*100);
+      aiTxt='Avg HR '+r.avgHR+' bpm ('+hp+'% max). '+(hp<70?'Easy aerobic effort.':hp<80?'Moderate endurance work.':'High intensity effort.');
+    }
+    if(aiTxt){
+      html+='<div style="margin:0 16px 14px;background:rgba(252,76,2,.06);border:1px solid rgba(252,76,2,.2);border-radius:16px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">'
+        +'<svg width="18" height="18" viewBox="0 0 24 24" fill="#FC4C02" style="flex-shrink:0;margin-top:2px"><path d="M9 21h6m-6-4h6m-3-13a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.6L13 13h-2l-1-2.4C8.8 9.8 8 8.5 8 7a4 4 0 0 1 4-4z"/></svg>'
+        +'<div><div style="font-size:11px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Athlete Intelligence</div>'
+        +'<div style="font-size:13px;color:var(--t1);line-height:1.6">'+aiTxt+'</div></div></div>';
+    }
+  }
+
   // -- STATS TABLE
+  var avgSpd=r.avgSpeed||(r.distance&&r.movingSecs?(r.distance/(r.movingSecs/3600)):0);
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">All Stats</div>';
-  html += '<div style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  html += '<div style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);overflow:hidden">';
   var allStats=[
+    ['Moving Time',r.duration||'-'],
+    ['Avg Speed',avgSpd?avgSpd.toFixed(1)+' mph':'-'],
+    ['Max Speed',r.maxSpeed?r.maxSpeed.toFixed(1)+' mph':'-'],
     ['Avg Cadence',r.cadence?r.cadence+' rpm':'-'],
+    ['Avg HR',r.avgHR?r.avgHR+' bpm':'-'],
     ['Max HR',r.maxHR?r.maxHR+' bpm':'-'],
     ['Elevation Gain',r.elev?r.elev+' ft':'-'],
-    ['Avg Temp',r.avgTemp?r.avgTemp+'°F':'-'],
-    ['Max Temp',r.maxTemp?r.maxTemp+'°F':'-'],
     ['Work',r.workKj?r.workKj+' kJ':'-'],
+    ['Training Load',r.tss||'-'],
+    ['Intensity Factor',r.ifPct?(r.ifPct>10?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-'],
     ['Relative Effort',r.relEffort||'-'],
+    ['Avg Temp',r.avgTemp?r.avgTemp+'°F':'-'],
     ['Source',r.source||'manual']
-  ];
+  ].filter(function(s){return s[1]&&s[1]!=='-'||s[0]==='Source';});
   allStats.forEach(function(s,i){
     html+='<div style="display:flex;justify-content:space-between;padding:11px 16px;border-bottom:'+(i<allStats.length-1?'1px solid var(--b1)':'none')+'">'
       +'<span style="font-size:13px;color:var(--t2)">'+s[0]+'</span>'
