@@ -3703,29 +3703,20 @@ function renderStravaMap(rideOrId, container){
 
       // Update power fields from Strava data
       // Fetch streams (power/HR/speed) if not already stored
-      if(data.strava_id && !r.chartPwr){
+      var _rideObj = typeof rideOrId==='object' ? rideOrId : null;
+      if(data.strava_id && _rideObj && !_rideObj.chartPwr){
         var streamsUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_streams&id='+data.strava_id+'&token='+encodeURIComponent(token);
         fetch(streamsUrl).then(function(sr){return sr.json();}).then(function(sd){
           if(sd.watts && sd.watts.length){
-            // Find ride and store streams
-            if(st.rides) for(var _si2=0;_si2<st.rides.length;_si2++){
-              var _sr2=st.rides[_si2];
-              if(String(_sr2.id)===String(activityId)||(_sr2.date===mapDate)){
-                _sr2.chartPwr = sd.watts;
-                if(sd.heartrate) _sr2.chartHR = sd.heartrate;
-                if(sd.velocity) _sr2.chartSpd = sd.velocity;
-                sv();
-                // Re-render the ride detail to show new charts
-                var existingDetail = document.getElementById('ride-detail-modal');
-                if(existingDetail){
-                  var rIdx = st.rides.indexOf(_sr2);
-                  if(rIdx >= 0){
-                    existingDetail.remove();
-                    openRideDetail(rIdx);
-                  }
-                }
-                break;
-              }
+            _rideObj.chartPwr = sd.watts;
+            if(sd.heartrate) _rideObj.chartHR = sd.heartrate;
+            if(sd.velocity) _rideObj.chartSpd = sd.velocity;
+            sv();
+            // Re-render the ride detail
+            var existingDetail = document.getElementById('ride-detail-modal');
+            if(existingDetail){
+              var rIdx = st.rides ? st.rides.indexOf(_rideObj) : -1;
+              if(rIdx >= 0){ existingDetail.remove(); openRideDetail(rIdx); }
             }
           }
         }).catch(function(){});
