@@ -3692,8 +3692,28 @@ function renderStravaMap(rideOrId, container){
         container.innerHTML = '<div style="padding:16px;font-size:12px;color:#ef4444">API error: '+data.error+'</div>';
         return;
       }
+      // Store power fields from Strava into the ride record
+      if(data.np || data.max_watts || data.work_kj){
+        if(st.rides) for(var _si=0;_si<st.rides.length;_si++){
+          var _sr=st.rides[_si];
+          if(String(_sr.id)===String(activityId)||String(_sr.stravaId)===String(activityId)||
+             (mapDate&&_sr.date===mapDate)){
+            if(data.np && !_sr.np) _sr.np=Math.round(data.np);
+            if(data.max_watts && !_sr.maxPwr) _sr.maxPwr=Math.round(data.max_watts);
+            if(data.work_kj && !_sr.workKj) _sr.workKj=Math.round(data.work_kj);
+            if(data.suffer_score && !_sr.relEffort) _sr.relEffort=Math.round(data.suffer_score);
+            sv();
+            // Update displayed cells live
+            var npCell=document.getElementById('pf-np');
+            var mpCell=document.getElementById('pf-maxPwr');
+            if(npCell&&data.np){ npCell.querySelector('div').textContent=Math.round(data.np)+'W'; }
+            if(mpCell&&data.max_watts){ mpCell.querySelector('div').textContent=Math.round(data.max_watts)+'W'; }
+            break;
+          }
+        }
+      }
       if(!data.polyline){
-        container.innerHTML = '<div style="padding:16px;font-size:11px;color:var(--t3);word-break:break-all">No polyline.<br>ID used: '+activityId+'<br>Raw: '+JSON.stringify(data).substring(0,400)+'</div>';
+        container.innerHTML = '<div style="padding:12px 16px;font-size:12px;color:var(--t3)">No route data for this activity</div>';
         return;
       }
       var pts = decodePolyline(data.polyline);
@@ -7999,9 +8019,10 @@ function openRideDetail(idx){
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
-  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
+  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power',f:''},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02',f:'np'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor',f:''},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work',f:''},{v:r.max20?(r.max20+'W'):'-',l:'20min Max',f:''},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power',f:'maxPwr'}]
   .forEach(function(s){
-    html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">'
+    var dfAttr=s.f?(' id="pf-'+s.f+'"'):\''\';
+    html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center"'+dfAttr+'>'
       +'<div style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
       +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:3px">'+s.l+'</div>'
       +'</div>';
