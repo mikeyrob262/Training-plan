@@ -8233,24 +8233,47 @@ function openRideDetail(idx){
     sv();
   }
 
-  // -- PER-RIDE POWER CURVE
+  // -- PER-RIDE POWER CURVE (SVG smooth line)
   if(r.powerCurve&&Object.keys(r.powerCurve).length>3){
     var pcD=[{d:5,l:'5s'},{d:15,l:'15s'},{d:30,l:'30s'},{d:60,l:'1m'},{d:300,l:'5m'},{d:600,l:'10m'},{d:1200,l:'20m'},{d:3600,l:'1h'}];
     var pcPts=pcD.map(function(p){return {l:p.l,v:r.powerCurve[p.d]||null};}).filter(function(p){return p.v&&p.v>0;});
     if(pcPts.length>=3){
-      var maxPCW=Math.max.apply(null,pcPts.map(function(p){return p.v;}));
+      var svgW=560,svgH=110,padL=36,padB=20,padT=14,padR=10;
+      var plotW=svgW-padL-padR,plotH=svgH-padB-padT;
+      var maxPCW=Math.max.apply(null,pcPts.map(function(p){return p.v;}))*1.08;
+      var minPCW=Math.min.apply(null,pcPts.map(function(p){return p.v;}))*0.88;
+      var n=pcPts.length;
+      var pts=pcPts.map(function(p,i){
+        return {
+          x:padL+Math.round(i/(n-1)*plotW),
+          y:padT+Math.round((1-(p.v-minPCW)/(maxPCW-minPCW))*plotH),
+          v:p.v,l:p.l
+        };
+      });
+      var path='M'+pts[0].x+','+pts[0].y;
+      for(var pi=1;pi<pts.length;pi++){
+        var cpx=Math.round((pts[pi-1].x+pts[pi].x)/2);
+        path+=' C'+cpx+','+pts[pi-1].y+' '+cpx+','+pts[pi].y+' '+pts[pi].x+','+pts[pi].y;
+      }
+      var fillPath=path+' L'+pts[pts.length-1].x+','+(padT+plotH)+' L'+padL+','+(padT+plotH)+' Z';
       html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power Curve</div>';
       html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
-      html += '<div style="display:flex;align-items:flex-end;gap:4px;height:80px;margin-bottom:8px">';
-      pcPts.forEach(function(p){
-        var h=Math.round((p.v/maxPCW)*76);
-        html+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">'
-          +'<div style="font-size:8px;color:var(--t3)">'+p.v+'</div>'
-          +'<div style="width:100%;background:linear-gradient(180deg,#FC4C02,#c43d02);border-radius:3px 3px 0 0;height:'+h+'px"></div>'
-          +'<div style="font-size:9px;color:var(--t3)">'+p.l+'</div>'
-          +'</div>';
+      html += '<svg viewBox="0 0 '+svgW+' '+svgH+'" style="width:100%;height:auto;display:block;overflow:visible">';
+      html += '<path d="'+fillPath+'" fill="rgba(252,76,2,.12)"/>';
+      html += '<path d="'+path+'" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+      if(FTP>minPCW&&FTP<maxPCW){
+        var ftpY2=padT+Math.round((1-(FTP-minPCW)/(maxPCW-minPCW))*plotH);
+        html += '<line x1="'+padL+'" y1="'+ftpY2+'" x2="'+(svgW-padR)+'" y2="'+ftpY2+'" stroke="rgba(252,76,2,.35)" stroke-width="1" stroke-dasharray="4,3"/>';
+        html += '<text x="'+(svgW-padR-2)+'" y="'+(ftpY2-3)+'" text-anchor="end" font-size="8" fill="#FC4C02" opacity="0.7">FTP '+FTP+'W</text>';
+      }
+      pts.forEach(function(p){
+        html += '<circle cx="'+p.x+'" cy="'+p.y+'" r="3" fill="#FC4C02"/>';
+        html += '<text x="'+p.x+'" y="'+(p.y-6)+'" text-anchor="middle" font-size="8" fill="var(--t3)">'+p.v+'W</text>';
+        html += '<text x="'+p.x+'" y="'+(svgH-4)+'" text-anchor="middle" font-size="8" fill="var(--t3)">'+p.l+'</text>';
       });
-      html += '</div></div>';
+      html += '<text x="'+(padL-3)+'" y="'+(padT+5)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+Math.round(maxPCW)+'</text>';
+      html += '<text x="'+(padL-3)+'" y="'+(padT+plotH)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+Math.round(minPCW)+'</text>';
+      html += '</svg></div>';
     }
   }
 
