@@ -3652,13 +3652,19 @@ function showProg(){
 
   // Nutrition - last 7 days
   var protDays=[],calDays=[],protHits=0;
+  var protBaseline=st.protBaseline||0; // user-set baseline for unlogged days
+  var calBaseline=st.calBaseline||0;
   for(var di=6;di>=0;di--){
     var d2=new Date(now); d2.setDate(now.getDate()-di);
     var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
     var days2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var nd=st.nl&&st.nl[dk];
     var prot=0,cal=0;
-    if(nd&&nd.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(f){prot+=f.p||0;cal+=f.cal||0;});});}
+    var hasLog=false;
+    if(nd&&nd.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(f){prot+=f.p||0;cal+=f.cal||0;hasLog=true;});});}
+    // Use baseline for days with no logging
+    if(!hasLog && protBaseline>0) prot=protBaseline;
+    if(!hasLog && calBaseline>0) cal=calBaseline;
     protDays.push(Math.round(prot));
     calDays.push(Math.round(cal));
     if(prot>=165) protHits++;
@@ -3937,6 +3943,14 @@ function showSet(){
     +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+(st.maxHR||172)+'" placeholder="172" id="set-maxhr"></div>'
     +'<div><div class="ci-lbl">Current Week</div><div style="font-size:22px;font-weight:800;color:var(--green);margin-top:4px">Week '+cw+'</div></div>'
     +'</div>'
+    +'<div style="padding:0 16px 10px">'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:8px">Nutrition Baseline (for unlogged days)</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px;line-height:1.5">On days you haven\'t logged food, the app will assume these values for your averages.</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +'<div><div class="ci-lbl">Daily Protein (g)</div><input class="ci-in" type="number" value="'+(st.protBaseline||'')+'" placeholder="e.g. 150" id="set-prot-baseline"></div>'
+    +'<div><div class="ci-lbl">Daily Calories</div><input class="ci-in" type="number" value="'+(st.calBaseline||'')+'" placeholder="e.g. 2200" id="set-cal-baseline"></div>'
+    +'</div>'
+    +'</div>'
     +(st.vo2maxHistory&&st.vo2maxHistory.length?'<div style="padding:0 16px 10px"><div class="ci-lbl" style="margin-bottom:6px">VO2 Max History</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+st.vo2maxHistory.slice(-8).map(function(e){return '<span style="font-size:11px;background:var(--s2);border-radius:8px;padding:3px 9px;color:var(--t2)">'+e.d+': <b>'+e.v+'</b></span>';}).join('')+'</div></div>':'')
     +'<div style="padding:0 16px 14px;display:flex;gap:8px">'
     +'<button onclick="saveProfile()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Profile</button>'
@@ -4154,6 +4168,12 @@ function saveProfile(){
   var w=document.getElementById('set-wt');
   var f=document.getElementById('set-ftp');
   var v=document.getElementById('set-vo2');
+  var pb=document.getElementById('set-prot-baseline');
+  var cb=document.getElementById('set-cal-baseline');
+  if(pb&&pb.value) st.protBaseline=parseInt(pb.value);
+  else if(pb&&!pb.value) st.protBaseline=0;
+  if(cb&&cb.value) st.calBaseline=parseInt(cb.value);
+  else if(cb&&!cb.value) st.calBaseline=0;
   var mh=document.getElementById('set-maxhr');
   if(n)st.profileName=n.value;
   if(w&&w.value)st.weight=w.value;
