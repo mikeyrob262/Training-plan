@@ -7794,13 +7794,13 @@ function openRideDetail(idx){
     html += buildRouteMap(r.gpsLats, r.gpsLons, r.chartPwr||[], FTP);
     html += '</div>';
   } else if(r.id && (r.source==='strava' || r.source==='intervals')){
-    // Strava embed map — works for any ride with a Strava activity ID
     var stravaId = r.id;
     html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Route</div>';
-    html += '<div style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += '<iframe src="https://www.strava.com/activities/'+stravaId+'/embed/'+stravaId+'" allowtransparency="true" scrolling="no" style="width:100%;height:280px;border:none;display:block" loading="lazy" title="Route map"></iframe>';
-    html += '<a href="https://www.strava.com/activities/'+stravaId+'" target="_blank" style="display:block;padding:10px 14px;font-size:12px;font-weight:700;color:#FC4C02;text-decoration:none;background:var(--s2);border-top:1px solid var(--b1)">View on Strava ↗</a>';
-    html += '</div>';
+    html += '<div style="margin:0 16px 14px">';
+    html += '<a href="https://www.strava.com/activities/'+stravaId+'" target="_blank" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.25);border-radius:14px;text-decoration:none">';
+    html += '<div style="display:flex;align-items:center;gap:12px"><svg width="24" height="24" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg><div><div style="font-size:13px;font-weight:800;color:#FC4C02">View on Strava</div><div style="font-size:11px;color:var(--t3)">See route map, segments & full data</div></div></div>';
+    html += '<div style="font-size:18px;color:#FC4C02">↗</div>';
+    html += '</a></div>';
   }
 
   // -- POWER STATS
