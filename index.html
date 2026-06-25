@@ -3656,10 +3656,21 @@ function decodePolyline(encoded){
 }
 
 // Fetch polyline and render Leaflet map into a container element
-function renderStravaMap(activityId, container){
-  // If passed a ride object, use stravaId preferentially
-  if(activityId && typeof activityId === 'object'){
-    activityId = activityId.stravaId || activityId.id;
+function renderStravaMap(rideOrId, container){
+  var activityId, mapDate='', mapDist=0;
+  if(rideOrId && typeof rideOrId === 'object'){
+    activityId = rideOrId.stravaId || rideOrId.id;
+    mapDate = rideOrId.date || '';
+    mapDist = rideOrId.distance || 0;
+  } else {
+    activityId = rideOrId;
+    // Try to find ride in state by ID
+    if(st.rides) for(var _fi=0;_fi<st.rides.length;_fi++){
+      var _fr=st.rides[_fi];
+      if(String(_fr.id)===String(activityId)||String(_fr.stravaId)===String(activityId)){
+        mapDate=_fr.date||''; mapDist=_fr.distance||0; break;
+      }
+    }
   }
   var token = getStravaToken();
   if(!token){
@@ -3668,12 +3679,7 @@ function renderStravaMap(activityId, container){
   }
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
-  // Pass date and distance so worker can look up Strava ID if needed
-  var mapRide = null;
-  if(st.rides) for(var _mi=0;_mi<st.rides.length;_mi++){ if(String(st.rides[_mi].id)===String(activityId)||String(st.rides[_mi].stravaId)===String(activityId)){mapRide=st.rides[_mi];break;} }
-  var mapDate = mapRide ? mapRide.date : '';
-  var mapDist = mapRide ? (mapRide.distance||0) : 0;
-  var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+mapDate:'')+(mapDist?'&dist='+mapDist:'');
+  var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+encodeURIComponent(mapDate):'')+(mapDist?'&dist='+mapDist:'');
   fetch(mapUrl)
     .then(function(r){return r.json();})
     .then(function(data){
@@ -8133,7 +8139,7 @@ function openRideDetail(idx){
   // Render Strava map after DOM is ready
   var mapContainer = document.getElementById('strava-map-container');
   if(mapContainer && r && (r.stravaId||r.id)){
-    renderStravaMap(r.stravaId||r.id, mapContainer);
+    renderStravaMap(r, mapContainer);
   }
 }
 
