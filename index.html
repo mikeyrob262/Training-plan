@@ -3668,7 +3668,13 @@ function renderStravaMap(activityId, container){
   }
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
-  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+activityId+'&token='+encodeURIComponent(token))
+  // Pass date and distance so worker can look up Strava ID if needed
+  var mapRide = null;
+  if(st.rides) for(var _mi=0;_mi<st.rides.length;_mi++){ if(String(st.rides[_mi].id)===String(activityId)||String(st.rides[_mi].stravaId)===String(activityId)){mapRide=st.rides[_mi];break;} }
+  var mapDate = mapRide ? mapRide.date : '';
+  var mapDist = mapRide ? (mapRide.distance||0) : 0;
+  var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity?id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+mapDate:'')+(mapDist?'&dist='+mapDist:'');
+  fetch(mapUrl)
     .then(function(r){return r.json();})
     .then(function(data){
       if(data.error==='token_expired'){
