@@ -2857,6 +2857,8 @@ function applyFirebaseData(data){
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
   try{restoreExtraSessions();}catch(e){}
+  // Fix IF scale after Firebase restore
+  try{(st.rides||[]).forEach(function(r){if(r.ifPct&&r.ifPct>10) r.ifPct=Math.round(r.ifPct/100*100)/100;});}catch(e){}
   // Re-render Performance if it's open and now has rides
   try{
     var pb=document.getElementById('perf-body');
@@ -4196,7 +4198,7 @@ function showSet(){
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px">'
     +'<div><div class="ci-lbl">Name</div><input class="ci-in" value="'+(st.profileName||'EJ')+'" id="set-name"></div>'
     +'<div><div class="ci-lbl">Weight (lbs)</div><input class="ci-in" type="number" value="'+(st.weight||'')+'" placeholder="162" id="set-wt"></div>'
-    +'<div><div class="ci-lbl">FTP (watts)</div><input class="ci-in" type="number" value="'+(st.ftp||'')+'" placeholder="185" id="set-ftp"></div>'
+    +'<div><div class="ci-lbl">FTP (watts)</div><input class="ci-in" type="number" value="'+(st.ftp||'')+'" placeholder="185" id="set-ftp"></div>'    +'<div><div class="ci-lbl">Last FTP Test Date</div><input class="ci-in" type="date" value="'+(st.settings&&st.settings.lastFTPDate?st.settings.lastFTPDate:'')+'" id="set-ftp-date"></div>'
     +'<div><div class="ci-lbl">VO2 Max</div><input class="ci-in" type="number" step="0.1" value="'+(st.vo2max||'')+'" placeholder="e.g. 47" id="set-vo2"></div>'
     +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+(st.maxHR||172)+'" placeholder="172" id="set-maxhr"></div>'
     +'<div><div class="ci-lbl">Current Week</div><div style="font-size:22px;font-weight:800;color:var(--green);margin-top:4px">Week '+cw+'</div></div>'
@@ -4438,6 +4440,11 @@ function showSet(){
 function saveProfile(){
   var n=document.getElementById('set-name');
   var w=document.getElementById('set-wt');
+  var ftpDate=document.getElementById('set-ftp-date');
+  if(ftpDate&&ftpDate.value){
+    if(!st.settings) st.settings={};
+    st.settings.lastFTPDate=ftpDate.value;
+  }
   var f=document.getElementById('set-ftp');
   var v=document.getElementById('set-vo2');
   var pb=document.getElementById('set-prot-baseline');
