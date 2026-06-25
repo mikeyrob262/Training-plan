@@ -7788,6 +7788,14 @@ function openRideDetail(idx){
     html += '<div style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.05)">';
     html += buildRouteMap(r.gpsLats, r.gpsLons, r.chartPwr||[], FTP);
     html += '</div>';
+  } else if(r.id && (r.source==='strava' || r.source==='intervals')){
+    // Strava embed map — works for any ride with a Strava activity ID
+    var stravaId = r.id;
+    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Route</div>';
+    html += '<div style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+    html += '<iframe src="https://www.strava.com/activities/'+stravaId+'/embed/'+stravaId+'" style="width:100%;height:280px;border:none;display:block" loading="lazy" title="Route map"></iframe>';
+    html += '<a href="https://www.strava.com/activities/'+stravaId+'" target="_blank" style="display:block;padding:10px 14px;font-size:12px;font-weight:700;color:#FC4C02;text-decoration:none;background:var(--s2);border-top:1px solid var(--b1)">View on Strava ↗</a>';
+    html += '</div>';
   }
 
   // -- POWER STATS
