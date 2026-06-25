@@ -2819,6 +2819,17 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
+// Save Strava token from URL hash IMMEDIATELY before anything overwrites it
+(function(){
+  var h=window.location.hash;
+  if(h&&h.indexOf('strava_token=')>=0){
+    try{
+      var t=decodeURIComponent(h.split('strava_token=')[1]);
+      localStorage.setItem('mta2_strava',t);
+      history.replaceState(null,'',window.location.pathname);
+    }catch(e){}
+  }
+})();
 var cw=1, st={}, curSW=1, svDebounce=null;
 try{var _rs=localStorage.getItem('mta2_rides');if(_rs){var _rp=JSON.parse(_rs);if(_rp&&_rp.length) st.rides=_rp;}}catch(e){}
 try{var _s=localStorage.getItem('mta2');if(_s){var _p=JSON.parse(_s);if(Array.isArray(_p)){var _o={};for(var _i=0;_i<_p.length;_i++){if(_p[_i])_o['w'+_i]=_p[_i];}if(_p.rides)_o.rides=_p.rides;if(_p.lastUpdate)_o.lastUpdate=_p.lastUpdate;if(_p.lastSbw)_o.lastSbw=_p.lastSbw;st=_o;}else{// migrate numeric string keys to w-prefix
@@ -2841,8 +2852,10 @@ function sv(){
 
 // Apply remote snapshot - only if it has a timestamp and is newer than local
 function applyFirebaseData(data){
-  // Preserve stravaToken across Firebase syncs
-  var _savedToken = st.stravaToken || null;
+  // Always get stravaToken from localStorage - most reliable source
+  var _savedToken = null;
+  try{var _ls=localStorage.getItem('mta2_strava');if(_ls) _savedToken=JSON.parse(_ls);}catch(e){}
+  if(!_savedToken && st.stravaToken) _savedToken = st.stravaToken;
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   var remoteTs = data.lastUpdate || 0;
@@ -11803,7 +11816,8 @@ window.onload = function(){
   // Auto-fetch PMC wellness from Intervals.icu
   setTimeout(function(){fetchICUWellness(true);}, 3000);
   // Handle Strava OAuth callback
-  try{checkStravaCallback();}catch(e){console.error('Strava callback error:',e);}
+  // Delay Strava callback check so Firebase has time to settle first
+  setTimeout(function(){try{checkStravaCallback();}catch(e){console.error('Strava callback error:',e);}}, 2000);
   }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
