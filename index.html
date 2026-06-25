@@ -4293,7 +4293,7 @@ function showSet(){
     +'</div>'
     +'<div id="icu-sync-status" style="font-size:12px;color:var(--t3);text-align:center"></div>'
     +'</div></div>';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">📋 Import Training Plan (PDF/CSV)</button>'    +'<button onclick="st.stravaToken?disconnectStrava():connectStrava()" id="strava-connect-btn" style="background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.3);color:#FC4C02;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">'+(st&&st.stravaToken?'✅ Strava Connected (tap to disconnect)':'🔗 Connect Strava for Maps')+'</button>'
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'<button onclick="showPlanImport()" style="background:rgba(15,110,86,.1);border:1px solid rgba(15,110,86,.3);color:#0F6E56;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">📋 Import Training Plan (PDF/CSV)</button>'    +'<button id="strava-connect-btn" style="background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.3);color:#FC4C02;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">'+(st&&st.stravaToken?'✅ Strava Connected (tap to disconnect)':'🔗 Connect Strava for Maps')+'</button>'
     +'<div style="font-size:11px;color:var(--t3)">If redirect fails, copy the token from the Strava page and paste here:</div>'
     +'<div style="display:flex;gap:8px;align-items:center">'
     +'<input id="strava-token-inp" type="text" placeholder="Paste token JSON here" style="flex:1;padding:8px;border:1px solid var(--b2);border-radius:8px;background:var(--s2);color:var(--t1);font-size:11px;font-family:monospace">'
@@ -4384,6 +4384,13 @@ function showSet(){
     });
   }
 
+  // Wire Strava connect button
+  var stravaConnBtn=document.getElementById('strava-connect-btn');
+  if(stravaConnBtn){
+    stravaConnBtn.addEventListener('click',function(){
+      if(st&&st.stravaToken) disconnectStrava(); else connectStrava();
+    });
+  }
   // Wire Strava token paste button
   var stravaApplyBtn=document.getElementById('strava-token-apply');
   if(stravaApplyBtn){
