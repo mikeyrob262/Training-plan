@@ -3686,6 +3686,28 @@ function renderStravaMap(activityId, container){
       var pts = decodePolyline(data.polyline);
       if(!pts.length) return;
 
+      // Update power fields from Strava data
+      if(data.np || data.max_watts || data.work_kj){
+        // Find and update the ride in state
+        if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
+          var _pr=st.rides[_pi];
+          if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(mapDate&&_pr.date===mapDate)){
+            if(data.np && !_pr.np){ _pr.np=Math.round(data.np); }
+            if(data.max_watts && !_pr.maxPwr){ _pr.maxPwr=Math.round(data.max_watts); }
+            if(data.work_kj && !_pr.workKj){ _pr.workKj=Math.round(data.work_kj); }
+            sv();
+            // Update displayed cells live
+            var npCell=document.querySelector('[data-pf="np"] .pf-val');
+            var mpCell=document.querySelector('[data-pf="maxPwr"] .pf-val');
+            var wkCell=document.querySelector('[data-pf="workKj"] .pf-val');
+            if(npCell&&data.np) npCell.textContent=Math.round(data.np)+'W';
+            if(mpCell&&data.max_watts) mpCell.textContent=Math.round(data.max_watts)+'W';
+            if(wkCell&&data.work_kj) wkCell.textContent=Math.round(data.work_kj)+' kJ';
+            break;
+          }
+        }
+      }
+
       // Build Leaflet map
       var mapId = 'leaflet-map-'+activityId;
       container.innerHTML = '<div id="'+mapId+'" style="width:100%;height:280px;border-radius:16px;overflow:hidden"></div>';
@@ -7969,10 +7991,11 @@ function openRideDetail(idx){
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
-  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
+  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power',f:''},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02',f:'np'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor',f:''},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work',f:'workKj'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max',f:''},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power',f:'maxPwr'}]
   .forEach(function(s){
-    html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">'
-      +'<div style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
+    var dfAttr=s.f?(' data-pf="'+s.f+'"'):'';
+    html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center"'+dfAttr+'>'
+      +'<div class="pf-val" style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
       +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:3px">'+s.l+'</div>'
       +'</div>';
   });
