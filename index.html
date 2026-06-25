@@ -3600,7 +3600,7 @@ function refreshStravaToken(){
 }
 
 function connectStrava(){
-  var authUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/strava/auth?app='+encodeURIComponent(window.location.origin+window.location.pathname);
+  var authUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_auth&app='+encodeURIComponent(window.location.origin+window.location.pathname);
   window.location.href = authUrl;
 }
 
