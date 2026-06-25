@@ -10129,40 +10129,50 @@ function showAIWorkout(){
     var text=data.content&&data.content[0]?data.content[0].text:(data.error?'API Error: '+data.error.message:'Unable to generate workout. Response: '+JSON.stringify(data).substring(0,200));
     document.getElementById('ai-loading').style.display='none';
     var aiDiv=document.getElementById('ai-content');
-    // Convert markdown to HTML
-    var html3=text
-      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
-      .replace(/#{1,3} (.*)/g,'<div style="font-size:14px;font-weight:800;color:var(--t1);margin:12px 0 6px">$1</div>')
-      .replace(/^\d+\. /gm,'')
-      .replace(/\n\n/g,'</p><p>')
-      .replace(/\n/g,'<br>');
-    // Split into sections by the numbered headers (1. 2. 3.)
-    var sections = text.split(/(?=\n?[1-3]\. (?:TODAY|THIS WEEK|ONE TIP|WORKOUT|TRAINING|TIP))/i).filter(Boolean);
+
+    // Full markdown → HTML converter
+    function mdToHtml(md){
+      return md
+        .replace(/^---+$/gm,'<hr style="border:none;border-top:1px solid var(--b1);margin:10px 0">')
+        .replace(/^### (.+)$/gm,'<div style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02;margin:14px 0 6px">$1</div>')
+        .replace(/^## (.+)$/gm,'<div style="font-size:15px;font-weight:800;color:var(--t1);margin:14px 0 6px">$1</div>')
+        .replace(/^# (.+)$/gm,'<div style="font-size:17px;font-weight:800;color:var(--t1);margin:14px 0 8px">$1</div>')
+        .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g,'<em>$1</em>')
+        .replace(/^\| (.+) \|$/gm,function(m,row){
+          var cells=row.split(' | ');
+          return '<div style="display:flex;gap:0;border-bottom:1px solid var(--b1);padding:5px 0">'+
+            cells.map(function(c){return '<div style="flex:1;font-size:12px;color:var(--t2)">'+c+'</div>';}).join('')+
+          '</div>';
+        })
+        .replace(/^\|[-|\s]+\|$/gm,'')
+        .replace(/^- (.+)$/gm,'<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#FC4C02;flex-shrink:0">•</span><span>$1</span></div>')
+        .replace(/^\d+\. (.+)$/gm,'<div style="display:flex;gap:8px;margin:3px 0"><span style="color:#FC4C02;font-weight:700;flex-shrink:0">›</span><span>$1</span></div>')
+        .replace(/\n\n/g,'<br>')
+        .replace(/\n/g,' ');
+    }
+
+    // Split into sections by ## headings
+    var rawSections = text.split(/(?=^## )/m).filter(function(s){return s.trim();});
+    var sectionColors = ['#FC4C02','#378ADD','#0F6E56','#BA7517','#8b5cf6'];
     var cardsHtml = '';
-    var sectionColors = ['#FC4C02','#378ADD','#0F6E56'];
-    var sectionIcons = ['🚴','📅','💡'];
-    if(sections.length > 1){
-      sections.forEach(function(sec, si){
+
+    if(rawSections.length > 1){
+      rawSections.forEach(function(sec, si){
         var lines = sec.trim().split('\n');
-        var title = lines[0].replace(/^[1-3]\. /,'').trim();
-        var body = lines.slice(1).join('\n').trim()
-          .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
-          .replace(/\n\n/g,'<br><br>')
-          .replace(/\n/g,'<br>');
-        var col = sectionColors[si] || '#FC4C02';
-        var icon = sectionIcons[si] || '•';
+        var titleLine = lines[0].replace(/^#{1,3}\s*/,'').replace(/[⚠️🚴📅💡✅]/g,'').trim();
+        var body = lines.slice(1).join('\n').trim();
+        var col = sectionColors[si % sectionColors.length];
         cardsHtml += '<div style="background:var(--s1);border-radius:16px;border:1px solid var(--b1);border-left:4px solid '+col+';padding:14px 16px;margin-bottom:10px">'+
-          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'+
-            '<span style="font-size:16px">'+icon+'</span>'+
-            '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:'+col+'">'+title+'</div>'+
-          '</div>'+
-          '<div style="font-size:13px;color:var(--t1);line-height:1.65">'+body+'</div>'+
+          '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:'+col+';margin-bottom:8px">'+titleLine+'</div>'+
+          '<div style="font-size:13px;color:var(--t1);line-height:1.7">'+mdToHtml(body)+'</div>'+
         '</div>';
       });
     } else {
-      // Fallback: single card
-      cardsHtml = '<div style="background:var(--s1);border-radius:16px;border:1px solid var(--b1);border-left:4px solid #FC4C02;padding:16px;line-height:1.65;font-size:13px;color:var(--t1)">'+html3+'</div>';
+      // Fallback: single card with full markdown
+      cardsHtml = '<div style="background:var(--s1);border-radius:16px;border:1px solid var(--b1);border-left:4px solid #FC4C02;padding:16px;line-height:1.7;font-size:13px;color:var(--t1)">'+mdToHtml(text)+'</div>';
     }
+
     aiDiv.innerHTML = cardsHtml +
       '<button id="ai-refresh" style="width:100%;margin-top:4px;padding:13px;background:linear-gradient(135deg,#FC4C02,#c43d02);border:none;color:white;font-size:14px;font-weight:700;border-radius:14px;cursor:pointer;font-family:inherit">↺ Get New Suggestion</button>';
     document.getElementById('ai-refresh').addEventListener('click',function(){
