@@ -6201,13 +6201,17 @@ function renderPerf(container){
   if(!st.rides) st.rides=[];
   var rides=st.rides;
   var FTP=parseInt(st.ftp||186);
-  // FTP reminder - if no update in 6+ weeks
-  var lastFTPDate=st.settings&&st.settings.lastFTPDate?new Date(st.settings.lastFTPDate):null;
-  var weeksSinceFTP=lastFTPDate?Math.floor((new Date()-lastFTPDate)/(7*24*60*60*1000)):99;
-  if(weeksSinceFTP>=6&&!window._ftpReminderShown){
-    window._ftpReminderShown=true;
-    var ftpMsg = weeksSinceFTP>=99 ? '💪 FTP test due — no test date recorded' : '💪 FTP test due — '+weeksSinceFTP+' weeks since last test';
-    setTimeout(function(){toast(ftpMsg);},2000);
+  // FTP reminder - if no update in 6+ weeks (only show once per session)
+  if(!window._ftpReminderShown){
+    var lastFTPDate=st.settings&&st.settings.lastFTPDate?new Date(st.settings.lastFTPDate):null;
+    var weeksSinceFTP=lastFTPDate?Math.floor((new Date()-lastFTPDate)/(7*24*60*60*1000)):99;
+    if(weeksSinceFTP>=6){
+      window._ftpReminderShown=true;
+      var ftpMsg = weeksSinceFTP>=99 ? '💪 FTP test due — no test date recorded' : '💪 FTP test due — '+weeksSinceFTP+' weeks since last test';
+      setTimeout(function(){toast(ftpMsg);},2000);
+    } else {
+      window._ftpReminderShown=true; // date is recent, suppress permanently this session
+    }
   }
   var BWT=parseFloat(st.weight||160);
   var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
