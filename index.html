@@ -8025,9 +8025,7 @@ function openRideDetail(idx){
   }
 
   // -- POWER STATS
-  var _dbgDate=r.date||''; var _dbgDist=r.distance||0;
-  var _dbgToken=st.stravaToken?st.stravaToken.access_token:'';
-  html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);display:flex;justify-content:space-between">Power <button onclick="debugStravaActivity(\''+_dbgDate+'\','+_dbgDist+',\''+_dbgToken+'\')" style="font-size:10px;color:var(--t3);background:none;border:1px solid var(--b1);border-radius:10px;padding:2px 8px;cursor:pointer">debug</button></div>';
+  html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);display:flex;justify-content:space-between">Power <button id="pwr-dbg-btn" data-date="'+encodeURIComponent(r.date||'')+'" data-dist="'+(r.distance||0)+'" style="font-size:10px;color:var(--t3);background:none;border:1px solid var(--b1);border-radius:10px;padding:2px 8px;cursor:pointer">debug</button></div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
   [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power',f:''},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02',f:'np'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor',f:''},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work',f:''},{v:r.max20?(r.max20+'W'):'-',l:'20min Max',f:''},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power',f:'maxPwr'}]
@@ -8186,6 +8184,25 @@ function openRideDetail(idx){
   overlay.appendChild(body);
   document.body.appendChild(overlay);
 
+  // Wire debug button
+  var dbgBtn = document.getElementById('pwr-dbg-btn');
+  if(dbgBtn){
+    dbgBtn.addEventListener('click', function(){
+      var date = decodeURIComponent(dbgBtn.getAttribute('data-date'));
+      var dist = parseFloat(dbgBtn.getAttribute('data-dist'));
+      var token = st.stravaToken ? st.stravaToken.access_token : '';
+      if(!token){toast('No Strava token');return;}
+      var url='https://mikey-food-api2.mgrobinson07.workers.dev/strava/activity_debug?date='+encodeURIComponent(date)+'&dist='+dist+'&token='+encodeURIComponent(token);
+      fetch(url).then(function(r){return r.json();}).then(function(d){
+        alert('NP: '+d.weighted_average_watts+'
+Max W: '+d.max_watts+'
+Avg W: '+d.average_watts+'
+kJ: '+d.kilojoules+'
+Device watts: '+d.device_watts+'
+Polyline: '+d.map_has_polyline);
+      }).catch(function(e){toast('Debug error: '+e.message);});
+    });
+  }
   // Render Strava map after DOM is ready
   var mapContainer = document.getElementById('strava-map-container');
   if(mapContainer && r && (r.stravaId||r.id)){
