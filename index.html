@@ -2834,7 +2834,7 @@ function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   try{if(st.rides&&st.rides.length) localStorage.setItem('mta2_rides',JSON.stringify(st.rides));}catch(e){}
-  try{if(st.stravaToken) localStorage.setItem('mta2_strava_token',JSON.stringify(st.stravaToken));}catch(e){}
+  try{if(st.stravaToken) localStorage.setItem('mta2_strava',JSON.stringify(st.stravaToken));}catch(e){}
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
@@ -3612,31 +3612,38 @@ function disconnectStrava(){
 
 // Handle OAuth callback token in URL hash
 function checkStravaCallback(){
+  // Check query param (primary method)
+  try {
+    var search = window.location.search;
+    if(search && search.indexOf('strava_token=') >= 0){
+      var match = search.match(/[?&]strava_token=([^&]+)/);
+      if(match){
+        var tokenData = JSON.parse(decodeURIComponent(match[1]));
+        localStorage.setItem('mta2_strava', JSON.stringify(tokenData));
+        st.stravaToken = tokenData;
+        sv();
+        history.replaceState(null,'',window.location.pathname);
+        toast('✅ Strava connected! Maps are live.');
+        return;
+      }
+    }
+  } catch(e){ toast('Strava token error: '+e.message); }
+  // Check hash (legacy)
   var hash = window.location.hash;
   if(hash && hash.indexOf('strava_token=') >= 0){
     try {
-      var tokenStr = decodeURIComponent(hash.split('strava_token=')[1]);
-      var tokenData = JSON.parse(tokenStr);
-      // Store in localStorage immediately (before Firebase overwrites state)
-      localStorage.setItem('mta2_strava_token', JSON.stringify(tokenData));
-      // Also set on current state
+      var tokenData = JSON.parse(decodeURIComponent(hash.split('strava_token=')[1]));
+      localStorage.setItem('mta2_strava', JSON.stringify(tokenData));
       st.stravaToken = tokenData;
       sv();
-      // Clean hash from URL
-      history.replaceState(null, '', window.location.pathname);
-      toast('✅ Strava connected! Maps are now live.');
-    } catch(e) {
-      toast('Strava auth error: '+e.message);
-    }
+      history.replaceState(null,'',window.location.pathname);
+      toast('✅ Strava connected! Maps are live.');
+      return;
+    } catch(e){ toast('Strava auth error: '+e.message); }
   }
-  // Also restore token from localStorage if state doesn't have it
+  // Restore from localStorage
   if(!st.stravaToken){
-    var saved = localStorage.getItem('mta2_strava_token');
-    if(saved){
-      try {
-        st.stravaToken = JSON.parse(saved);
-      } catch(e){}
-    }
+    try{var s=localStorage.getItem('mta2_strava');if(s) st.stravaToken=JSON.parse(s);}catch(e){}
   }
 }
 
@@ -11808,7 +11815,7 @@ window.onload = function(){
   setTimeout(function(){fetchICUWellness(true);}, 3000);
   // Handle Strava OAuth callback
   // Check Strava callback after state is fully loaded
-  setTimeout(checkStravaCallback, 1500);
+  try{checkStravaCallback();}catch(e){}
   }catch(e){alert('Load error: '+e.message);}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
