@@ -4336,11 +4336,12 @@ function showSet(){
               elev:Math.round((a.total_elevation_gain||0)*3.2808),
               cadence:Math.round(a.average_cadence||0),
               trainer:a.type==='VirtualRide',
+              np:Math.round(a.weighted_average_watts||a.icu_normalized_watts||0),
               workKj:Math.round(a.kilojoules||a.icu_joules&&a.icu_joules/1000||0),
-              ifPct:Math.round((a.icu_intensity||0)*100),
-              relEffort:Math.round(a.suffer_score||a.icu_rpe_calculated||0),
-              maxPwr:Math.round(a.max_watts||a.icu_max_watts||0),
-              max20:Math.round(a.icu_20min_watts||0),
+              ifPct:Math.round(a.icu_intensity>1?(a.icu_intensity):(a.icu_intensity||0)*100),
+              relEffort:Math.round(a.suffer_score||a.icu_training_load||a.icu_rpe_calculated||0),
+              maxPwr:Math.round(a.max_watts||a.icu_max_watts||a.icu_peak_watts||0),
+              max20:Math.round(a.icu_20min_watts||a.p1200||0),
               source:'intervals'
             };
             if(!st.rides) st.rides=[];
@@ -7981,7 +7982,7 @@ function openRideDetail(idx){
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
-  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
+  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct>1?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
   .forEach(function(s){
     html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">'
       +'<div style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
