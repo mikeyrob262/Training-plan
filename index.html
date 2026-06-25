@@ -2819,16 +2819,26 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
-// Save Strava token from URL hash IMMEDIATELY before anything overwrites it
+// Save Strava token from URL query param IMMEDIATELY before anything overwrites it
 (function(){
-  var h=window.location.hash;
-  if(h&&h.indexOf('strava_token=')>=0){
-    try{
+  try{
+    var search = window.location.search;
+    if(search && search.indexOf('strava_token=') >= 0){
+      var match = search.match(/[?&]strava_token=([^&]+)/);
+      if(match){
+        localStorage.setItem('mta2_strava', decodeURIComponent(match[1]));
+        // Clean URL
+        history.replaceState(null,'',window.location.pathname);
+      }
+    }
+    // Also check hash (legacy)
+    var h=window.location.hash;
+    if(h&&h.indexOf('strava_token=')>=0){
       var t=decodeURIComponent(h.split('strava_token=')[1]);
       localStorage.setItem('mta2_strava',t);
       history.replaceState(null,'',window.location.pathname);
-    }catch(e){}
-  }
+    }
+  }catch(e){}
 })();
 var cw=1, st={}, curSW=1, svDebounce=null;
 try{var _rs=localStorage.getItem('mta2_rides');if(_rs){var _rp=JSON.parse(_rs);if(_rp&&_rp.length) st.rides=_rp;}}catch(e){}
