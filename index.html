@@ -4375,6 +4375,11 @@ function showSet(){
           sv();
           statusEl.innerHTML='<span style="color:#0F6E56;font-weight:700">✓ Synced '+imported+' rides!</span> ('+skipped+' non-cycling skipped)';
           icuSyncBtn.disabled=false;
+          // Fix any rides with incorrectly scaled IF (stored as 81.58 instead of 0.82)
+          (st.rides||[]).forEach(function(r){
+            if(r.ifPct && r.ifPct > 10) r.ifPct = Math.round(r.ifPct / 100 * 100) / 100;
+          });
+          sv();
           toast('Intervals.icu sync complete: '+imported+' rides! ⚡');
           // Also refresh PMC
           setTimeout(function(){fetchICUWellness(false);},1000);
@@ -11854,6 +11859,12 @@ window.onload = function(){
   setTimeout(function(){fetchICUWellness(true);}, 3000);
   // Handle Strava OAuth callback
   // Check Strava callback after state is fully loaded
+  // One-time fix: correct IF scale for all rides (81.58 → 0.82)
+  try{
+    var _ifFixed=0;
+    (st.rides||[]).forEach(function(r){if(r.ifPct&&r.ifPct>10){r.ifPct=Math.round(r.ifPct/100*100)/100;_ifFixed++;}});
+    if(_ifFixed>0) sv();
+  }catch(e){}
   try{checkStravaCallback();}catch(e){}
   }catch(e){alert('Load error: '+e.message);}
 };</script>
