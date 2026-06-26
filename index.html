@@ -13239,10 +13239,10 @@ window.onload = function(){
     document.querySelectorAll('.bnav-btn').forEach(function(b){ b.classList.remove('active'); });
     var el=document.getElementById(id); if(el) el.classList.add('active');
   }
-  document.getElementById('bnav-home').addEventListener('click', function(){ showScreen('HOME'); setActiveNav('bnav-home'); });
+  document.getElementById('bnav-home').addEventListener('click', function(){ showScreen('TRAIN'); setActiveNav('bnav-home'); });
   document.getElementById('bnav-perf').addEventListener('click', function(){ showPerf(); setActiveNav('bnav-perf'); });
   document.getElementById('bnav-nutr').addEventListener('click', function(){ showNutr(); setActiveNav('bnav-nutr'); });
-  document.getElementById('bnav-activities').addEventListener('click', function(){ showPerf(); setActiveNav('bnav-activities'); });
+  document.getElementById('bnav-activities').addEventListener('click', function(){ showActivities(); setActiveNav('bnav-activities'); });
   document.getElementById('bnav-more').addEventListener('click', function(){ showMoreSheet(); setActiveNav('bnav-more'); });
 
   function showActivities(){
