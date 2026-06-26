@@ -9682,6 +9682,56 @@ function showZwiftBuilder(){
 }
 
 // ── ONBOARDING WIZARD ────────────────────────────────────────────────────
+function showMoreSheet(){
+   var old=document.getElementById('more-sheet');
+    if(old){old.remove();return;}
+    var sheet=document.createElement('div');
+    sheet.id='more-sheet';
+    sheet.style.cssText='position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.5)';
+    var items=[
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg>',label:'Daily Mobility',fn:'showMob()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'showRunningScreen()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'showSwim()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'showZwiftBuilder()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'showMealTemplates()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'showWeeklyReport()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength Log',fn:'showStr()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',label:'Dark Mode',fn:'toggleDark()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',label:'Settings',fn:'showSettings()'},
+    ];
+    var html='<div style="position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-radius:24px 24px 0 0;padding:16px 0 max(16px,env(safe-area-inset-bottom))">';
+    html+='<div style="width:40px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 20px"></div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">';
+    items.forEach(function(item){
+      html+='<button data-fn="'+item.fn+'" class="more-sheet-btn" style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
+      html+='<div style="margin-bottom:8px;color:var(--t2)">'+item.icon+'</div>';
+      html+='<div style="font-size:12px;font-weight:600;color:var(--t1)">'+item.label+'</div>';
+      html+='</button>';
+    });
+    html+='</div></div>';
+    sheet.innerHTML=html;
+    var fnMap={
+      'showMob()':showMob,
+      'showRunningScreen()':showRunningScreen,
+      'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
+      'showZwiftBuilder()':showZwiftBuilder,
+      'showMealTemplates()':showMealTemplates,
+      'showWeeklyReport()':showWeeklyReport,
+      'showStr()':function(){try{openStr('A',curSW);}catch(e){}},
+      'toggleDark()':function(){document.getElementById('btn-dark').click();},
+      'showSettings()':showSet
+    };
+    sheet.querySelectorAll('.more-sheet-btn').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        sheet.remove();setActiveNav('bnav-home');
+        var fn=fnMap[btn.getAttribute('data-fn')];
+        if(fn) try{fn();}catch(e){console.error(e);}
+      });
+    });
+    sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();setActiveNav('bnav-home');}});
+    document.body.appendChild(sheet);
+}
+
 function showOnboarding(){
   if(document.getElementById('onboard-overlay')) return;
   var overlay=document.createElement('div');
@@ -13254,55 +13304,7 @@ window.onload = function(){
     }, 300);
   }
 
-  function showMoreSheet(){
-    var old=document.getElementById('more-sheet');
-    if(old){old.remove();return;}
-    var sheet=document.createElement('div');
-    sheet.id='more-sheet';
-    sheet.style.cssText='position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.5)';
-    var items=[
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg>',label:'Daily Mobility',fn:'showMob()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'showRunningScreen()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'showSwim()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'showZwiftBuilder()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'showMealTemplates()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'showWeeklyReport()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength Log',fn:'showStr()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',label:'Dark Mode',fn:'toggleDark()'},
-      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',label:'Settings',fn:'showSettings()'},
-    ];
-    var html='<div style="position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-radius:24px 24px 0 0;padding:16px 0 max(16px,env(safe-area-inset-bottom))">';
-    html+='<div style="width:40px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 20px"></div>';
-    html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">';
-    items.forEach(function(item){
-      html+='<button data-fn="'+item.fn+'" class="more-sheet-btn" style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
-      html+='<div style="margin-bottom:8px;color:var(--t2)">'+item.icon+'</div>';
-      html+='<div style="font-size:12px;font-weight:600;color:var(--t1)">'+item.label+'</div>';
-      html+='</button>';
-    });
-    html+='</div></div>';
-    sheet.innerHTML=html;
-    var fnMap={
-      'showMob()':showMob,
-      'showRunningScreen()':showRunningScreen,
-      'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
-      'showZwiftBuilder()':showZwiftBuilder,
-      'showMealTemplates()':showMealTemplates,
-      'showWeeklyReport()':showWeeklyReport,
-      'showStr()':function(){try{openStr('A',curSW);}catch(e){}},
-      'toggleDark()':function(){document.getElementById('btn-dark').click();},
-      'showSettings()':showSet
-    };
-    sheet.querySelectorAll('.more-sheet-btn').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        sheet.remove();setActiveNav('bnav-home');
-        var fn=fnMap[btn.getAttribute('data-fn')];
-        if(fn) try{fn();}catch(e){console.error(e);}
-      });
-    });
-    sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();setActiveNav('bnav-home');}});
-    document.body.appendChild(sheet);
-  }
+
   document.getElementById('btn-set').onclick = showSet;
   // Dark mode toggle
   var darkBtn = document.getElementById('btn-dark');
