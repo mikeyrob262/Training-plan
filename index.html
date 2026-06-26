@@ -3328,12 +3328,72 @@ function applySwap(w,idx,val){
       btnArea.appendChild(lb);
     } else if(vl.indexOf('core only')>=0||vl.indexOf('yoga')>=0||vl.indexOf('mobility')>=0){
       var lb=document.createElement('button');lb.className='str-btn';
-      lb.textContent='Log '+val;
-      lb.style.opacity='0.6';
+      lb.textContent='Open Mobility Routine';
+      lb.style.cssText='background:linear-gradient(135deg,#0F6E56,#0a5240);color:white;border:none;border-radius:20px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
+      lb.addEventListener('click',function(){showMobility(curSW);});
       btnArea.appendChild(lb);
     }
   }
   toast('Swapped to: '+val);
+}
+
+// ── MOBILITY ROUTINE ─────────────────────────────────────────────────────
+var MOBILITY_EXERCISES = [
+  {name:'Hip Flexor Lunge Stretch', dur:'60s each side', desc:'Kneeling lunge, push hips forward. Essential for cyclists.', url:'https://www.youtube.com/watch?v=YQmpO9VT2X4'},
+  {name:'Pigeon Pose', dur:'90s each side', desc:'Deep glute and hip opener. Counteracts saddle time.', url:'https://www.youtube.com/watch?v=2Lx_bfBmkQo'},
+  {name:'Thoracic Spine Rotation', dur:'10 reps each side', desc:'T-spine mobility for aero position and breathing.', url:'https://www.youtube.com/watch?v=3F93-RGv_XA'},
+  {name:'Standing Quad Stretch', dur:'45s each side', desc:'Stretch quads after hard rides. Hold ankle to glute.', url:'https://www.youtube.com/watch?v=lbozmE8WBPM'},
+  {name:'Seated Hamstring Stretch', dur:'60s each side', desc:'Sitting hamstring tightness limits power output.', url:'https://www.youtube.com/watch?v=TM5a5JBjv5M'},
+  {name:'Figure-4 Glute Stretch', dur:'60s each side', desc:'Lying on back, cross ankle over knee. Targets piriformis.', url:'https://www.youtube.com/watch?v=NzZU2N1gMXQ'},
+  {name:'Doorway Chest Stretch', dur:'45s each side', desc:'Opens chest and pecs tightened from riding position.', url:'https://www.youtube.com/watch?v=EHPzOdpSvLY'},
+  {name:'Cat-Cow', dur:'10 slow reps', desc:'Warms up the spine. Do slowly with full breath.', url:'https://www.youtube.com/watch?v=kqnua4rHVVA'},
+  {name:'Calf Raises + Stretch', dur:'15 reps + 30s hold', desc:'Eccentric calf work. Critical for run transition.', url:'https://www.youtube.com/watch?v=gwLzBJYoWlI'},
+  {name:'World\'s Greatest Stretch', dur:'5 reps each side', desc:'Full-body mobility in one move. Cyclists love this.', url:'https://www.youtube.com/watch?v=_IONFqYTOEI'}
+];
+
+function showMobility(week){
+  var modal=document.createElement('div');
+  modal.id='mobility-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:flex-end;justify-content:center';
+
+  var html='<div style="background:var(--bg);border-radius:24px 24px 0 0;padding:20px;max-height:88vh;overflow-y:auto;width:100%;max-width:680px;-webkit-overflow-scrolling:touch">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">';
+  html+='<div><div style="font-size:18px;font-weight:800">Mobility Routine</div>';
+  html+='<div style="font-size:12px;color:var(--t3)">20-30 min · Cycling-specific</div></div>';
+  html+='<button id="mob-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Close</button>';
+  html+='</div>';
+
+  MOBILITY_EXERCISES.forEach(function(ex, i){
+    html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px;margin-bottom:8px">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">';
+    html+='<div style="flex:1">';
+    html+='<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:2px">'+(i+1)+'. '+ex.name+'</div>';
+    html+='<div style="font-size:12px;color:#FC4C02;font-weight:600;margin-bottom:4px">'+ex.dur+'</div>';
+    html+='<div style="font-size:12px;color:var(--t2);line-height:1.4">'+ex.desc+'</div>';
+    html+='</div>';
+    html+='<a href="'+ex.url+'" target="_blank" style="flex-shrink:0;background:#FF0000;border-radius:8px;padding:6px 10px;text-decoration:none;display:flex;align-items:center;gap:5px">';
+    html+='<svg width="14" height="10" viewBox="0 0 24 17" fill="white"><path d="M23.5 2.7A3 3 0 0 0 21.4.6C19.5 0 12 0 12 0S4.5 0 2.6.6A3 3 0 0 0 .5 2.7C0 4.6 0 8.5 0 8.5s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1C4.5 17 12 17 12 17s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 12.1V4.9l6.3 3.6-6.3 3.6z"/></svg>';
+    html+='<span style="font-size:11px;font-weight:700;color:white">Demo</span>';
+    html+='</a>';
+    html+='</div></div>';
+  });
+
+  html+='<button id="mob-log" style="width:100%;background:linear-gradient(135deg,#0F6E56,#0a5240);border:none;color:white;font-size:15px;font-weight:800;padding:14px;border-radius:14px;cursor:pointer;font-family:inherit;margin-top:8px">✓ Log Mobility Session</button>';
+  html+='</div>';
+
+  modal.innerHTML=html;
+  document.body.appendChild(modal);
+  modal.querySelector('#mob-close').addEventListener('click',function(){modal.remove();});
+  modal.querySelector('#mob-log').addEventListener('click',function(){
+    if(week){
+      var s=ws(week);
+      if(!s.ci) s.ci={};
+      s.ci.mobDone=(s.ci.mobDone||0)+1;
+      sv();
+    }
+    modal.remove();
+    toast('Mobility session logged! 🧘');
+  });
 }
 
 function openStr(letter,w){
