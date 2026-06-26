@@ -11152,7 +11152,7 @@ function showAIWorkout(){
     '3. One tip specific to a masters athlete balancing cycling and run training\n'+
     '\nBe specific and actionable. Use the actual numbers. Format with clear sections.';
 
-  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/?action=claude',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
@@ -11513,7 +11513,7 @@ function showWeeklyReport(){
       '- Total time: '+weekH+'h '+weekM+'m\n'+
       'Athlete is 64yo masters cyclist targeting first triathlon. FTP '+parseInt(st.ftp||186)+'W.\n'+
       'Comment on training balance, load, and one recommendation for next week.';
-    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/?action=claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:500,messages:[{role:'user',content:prompt2}]})
@@ -11910,7 +11910,7 @@ function openAIReplan(w){
 
     var userMsg = weekSummary + '\nUser request: '+prompt;
 
-    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/?action=claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -12124,7 +12124,7 @@ function showPlanImport(){
       messages=[{role:'user',content:'Here is the training plan as CSV/text:\n\n'+fileData.text+'\n\nExtract the full training plan schedule and return the JSON as instructed.'}];
     }
 
-    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/?action=claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
