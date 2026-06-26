@@ -13188,11 +13188,7 @@ function showSwim(){
 
 window.onload = function(){
   try{
-  document.getElementById('btn-prog').onclick = showProg;
-  document.getElementById('btn-nutr').onclick = showNutr;
-  document.getElementById('btn-perf').onclick = showPerf;
-  document.getElementById('btn-run').onclick = function(){ try{ showRun(); }catch(e){ console.error('Run error:',e); alert('Run error: '+e.message); } };
-  document.getElementById('btn-swim').addEventListener('click', function(){ try{ showSwim(); }catch(e){ console.error('Swim error:',e); } });
+  // Old header buttons removed - now handled by bottom nav and More sheet
   document.getElementById('btn-ai').addEventListener('click', function(){ try{ showAIWorkout(); }catch(e){ console.error('AI error:',e); } });
 
   // ── BOTTOM NAV ────────────────────────────────────────────────────────────
