@@ -3752,6 +3752,7 @@ function renderStravaMap(rideOrId, container){
       }
 
       if(data.strava_id){
+        toast('Strava data: '+JSON.stringify({id:activityId,date:mapDate,dist:data.distance_mi,secs:data.moving_secs,avg:data.avg_watts}).substring(0,100));
         if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
           var _pr=st.rides[_pi];
           var _prDate=_pr.date?_pr.date.replace(/-0(\d)/g,'-$1'):'';
