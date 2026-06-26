@@ -6737,7 +6737,14 @@ function renderPerf(container){
     var atlData2=weeklyPMC2.map(function(p){return Math.round(p.atl||0);});
     html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Fitness (CTL) · 12 Weeks</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-    var ctlDates2=weeklyPMC2.map(function(p){return p.d||(p.date||'');});
+    // Generate dates for each weekly sample
+    var ctlDates2=weeklyPMC2.map(function(p,i){
+      if(p.d) return p.d;
+      // Calculate date from weeks back
+      var weeksBack=weeklyPMC2.length-1-i;
+      var d=new Date(); d.setDate(d.getDate()-weeksBack*7);
+      return (d.getMonth()+1)+'/'+(d.getDate());
+    });
     html+=buildLineChart(ctlData2,'#4D9FFF','','CTL: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1],null,ctlDates2);
     html+='</div>';
   }
