@@ -6710,6 +6710,11 @@ function renderPerf(container){
 
   // ── ELEVATION MOUNTAIN CHART ────────────────────────────────────────────
   var elevRides=rides.filter(function(r){return r.elev&&r.elev>0&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(-60);
+  // Debug: always show section
+  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last Rides</div>';
+  html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;font-size:12px;color:var(--t3)">';
+  html+='Total rides: '+rides.length+' · With elev: '+elevRides.length+' · Sample: '+(rides[0]?JSON.stringify({elev:rides[0].elev,date:rides[0].date}):'none');
+  html+='</div>';
   if(elevRides.length>=3){
     var maxElev=Math.max.apply(null,elevRides.map(function(r){return r.elev;}));
     var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
