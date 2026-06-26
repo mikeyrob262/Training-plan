@@ -3843,13 +3843,23 @@ function renderStravaMap(rideOrId, container){
       }
 
       if(data.strava_id){
-        // Cache polyline on ride to avoid future API calls
-        if(data.polyline && typeof rideOrId==='object') rideOrId.polyline=data.polyline;
-        if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
-          var _pr=st.rides[_pi];
-          var _prDate=_pr.date?_pr.date.replace(/-0(\d)/g,'-$1'):'';
-          var _mapDateN=mapDate?mapDate.replace(/-0(\d)/g,'-$1'):'';
-          if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(_mapDateN&&_prDate===_mapDateN)){
+        // Update the ride object directly if we have it
+        var _target = typeof rideOrId==='object' ? rideOrId : null;
+        if(!_target && st.rides){
+          for(var _pi=0;_pi<st.rides.length;_pi++){
+            var _pr2=st.rides[_pi];
+            var _d1=_pr2.date?_pr2.date.split('-').map(Number).join('-'):'';
+            var _d2=mapDate?mapDate.split('-').map(Number).join('-'):'';
+            if(String(_pr2.id)===String(activityId)||String(_pr2.stravaId)===String(activityId)||(_d1&&_d2&&_d1===_d2)){
+              _target=_pr2; break;
+            }
+          }
+        }
+        if(data.polyline && _target) _target.polyline=data.polyline;
+        if(_target && st.rides){
+          var _pi=st.rides.indexOf(_target);
+          var _pr=_target;
+          if(true){
             if(data.name&&(!_pr.name||_pr.name==='Ride'||_pr.name==='Activity')) _pr.name=data.name;
             if(data.activity_type) _pr.type=data.activity_type;
             if(data.np) _pr.np=Math.round(data.np);
@@ -3875,8 +3885,7 @@ function renderStravaMap(rideOrId, container){
             sv();
             // Re-render the detail screen with fresh data
             var _modal=document.getElementById('ride-detail-modal');
-            if(_modal){ _modal.remove(); openRideDetail(_pi); }
-            break;
+            if(_modal && _pi>=0){ _modal.remove(); openRideDetail(_pi); }
           }
         }
       }
