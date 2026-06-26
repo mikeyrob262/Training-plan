@@ -6718,7 +6718,8 @@ function renderPerf(container){
     var elevData=elevRides.map(function(r){return r.elev;});
     html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-    html+=buildLineChart(elevData,'#6366f1','ft',elevRides[0].date+' → '+elevRides[en-1].date,null);
+    var elevDates=elevRides.map(function(r){return r.date;});
+    html+=buildLineChart(elevData,'#6366f1','ft','',null,elevDates);
     html+='<div style="display:flex;gap:0;border-top:1px solid var(--b1);margin-top:8px;padding-top:8px">';
     [{v:Math.round(totalElev).toLocaleString()+'ft',l:'Total'},{v:Math.round(totalElev/en).toLocaleString()+'ft',l:'Avg/Ride'},{v:maxElev.toLocaleString()+'ft',l:'Best Ride'},{v:Math.round(totalElev/5280).toFixed(1)+'mi',l:'Vertical'}].forEach(function(s){
       html+='<div style="flex:1;text-align:center"><div style="font-size:13px;font-weight:800;color:#6366f1">'+s.v+'</div><div style="font-size:9px;color:var(--t3);margin-top:1px">'+s.l+'</div></div>';
@@ -6736,7 +6737,8 @@ function renderPerf(container){
     var atlData2=weeklyPMC2.map(function(p){return Math.round(p.atl||0);});
     html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Fitness (CTL) · 12 Weeks</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-    html+=buildLineChart(ctlData2,'#4D9FFF','','CTL today: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1],null);
+    var ctlDates2=weeklyPMC2.map(function(p){return p.d||(p.date||'');});
+    html+=buildLineChart(ctlData2,'#4D9FFF','','CTL: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1],null,ctlDates2);
     html+='</div>';
   }
 
@@ -8659,7 +8661,7 @@ function buildRouteMap(lats, lons, pwrData, FTP){
 // Interactive chart counter
 var _chartCount = 0;
 
-function buildLineChart(data, color, unit, label, refLine){
+function buildLineChart(data, color, unit, label, refLine, dates){
   if(!data||!data.length) return '';
   var chartId = 'chart-' + (++_chartCount);
   var tooltipId = 'tt-' + chartId;
@@ -8697,7 +8699,7 @@ function buildLineChart(data, color, unit, label, refLine){
       var dpr = window.devicePixelRatio || 1;
       ctx.scale(dpr, dpr);
       var cW = canvas.offsetWidth, cH = 110;
-      var pad = {l:4,r:4,t:14,b:4};
+      var pad = {l:4,r:4,t:14,b:14};
       var plotW = cW-pad.l-pad.r, plotH = cH-pad.t-pad.b;
 
       var slice = data.slice(viewStart, viewStart+viewLen);
@@ -8765,6 +8767,23 @@ function buildLineChart(data, color, unit, label, refLine){
       ctx.fillStyle = 'rgba(128,128,128,.6)';
       ctx.fillText(Math.round(mn)+unit, cW-pad.r, pad.t+plotH);
 
+      // X-axis date labels
+      if(dates && dates.length){
+        var sliceDates = dates.slice(viewStart, viewStart+viewLen);
+        ctx.font = '8px -apple-system,sans-serif';
+        ctx.fillStyle = 'rgba(128,128,128,.5)';
+        // Show start, middle, end
+        [[0,'start'],[Math.floor(sliceDates.length/2),'center'],[sliceDates.length-1,'end']].forEach(function(p){
+          var di=p[0]; var align=p[1];
+          if(sliceDates[di]){
+            var d=sliceDates[di]; var short=typeof d==='string'?d.slice(5):d;
+            ctx.textAlign=align==='start'?'left':align==='end'?'right':'center';
+            var lx=align==='start'?pad.l:align==='end'?cW-pad.r:cW/2;
+            ctx.fillText(short, lx, cH-1);
+          }
+        });
+      }
+
       // Highlight point
       if(highlightIdx!==undefined && highlightIdx>=0 && highlightIdx<slice.length){
         var hx=sx(highlightIdx), hy=sy(slice[highlightIdx]);
@@ -8782,7 +8801,9 @@ function buildLineChart(data, color, unit, label, refLine){
         ctx.moveTo(hx,pad.t); ctx.lineTo(hx,pad.t+plotH);
         ctx.stroke(); ctx.setLineDash([]);
         if(tooltip){
-          tooltip.textContent = Math.round(slice[highlightIdx])+unit;
+          var sliceDates2=dates?dates.slice(viewStart,viewStart+viewLen):null;
+          var dateStr=sliceDates2&&sliceDates2[highlightIdx]?(' · '+(sliceDates2[highlightIdx].slice?sliceDates2[highlightIdx].slice(5):sliceDates2[highlightIdx])):'';
+          tooltip.textContent = Math.round(slice[highlightIdx])+unit+dateStr;
           tooltip.style.opacity='1';
         }
       } else {
