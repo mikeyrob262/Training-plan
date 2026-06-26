@@ -8656,41 +8656,209 @@ function buildRouteMap(lats, lons, pwrData, FTP){
 }
 
 
+// Interactive chart counter
+var _chartCount = 0;
+
 function buildLineChart(data, color, unit, label, refLine){
   if(!data||!data.length) return '';
-  var W=600, H=100;
-  var mn=Math.min.apply(null,data), mx=Math.max.apply(null,data);
-  var rng=mx-mn||1;
-  function sx(i){ return Math.round(10+(i/(data.length-1))*(W-20)); }
-  function sy(v){ return Math.round(H-10-((v-mn)/rng)*(H-25)); }
+  var chartId = 'chart-' + (++_chartCount);
+  var tooltipId = 'tt-' + chartId;
 
-  var path='M';
-  data.forEach(function(v,i){ path+=(i?'L':'')+sx(i)+','+sy(v); });
+  // Return a canvas-based interactive chart
+  var html = '<div style="position:relative;width:100%;user-select:none">';
+  html += '<canvas id="'+chartId+'" height="110" style="width:100%;height:110px;display:block;cursor:crosshair"></canvas>';
+  html += '<div id="'+tooltipId+'" style="position:absolute;top:6px;left:0;right:0;text-align:center;font-size:11px;font-weight:700;color:'+color+';pointer-events:none;opacity:0;transition:opacity .15s"></div>';
+  html += '</div>';
+  if(label) html += '<div style="text-align:center;font-size:11px;color:var(--t3);margin-top:4px">'+label+'</div>';
 
-  // Area fill
-  var area=path+' L'+sx(data.length-1)+','+(H-10)+' L'+sx(0)+','+(H-10)+' Z';
+  // Defer canvas draw until DOM is ready
+  var chartData = {data:data,color:color,unit:unit,refLine:refLine};
+  setTimeout(function(){
+    var canvas = document.getElementById(chartId);
+    if(!canvas) return;
+    var tooltip = document.getElementById(tooltipId);
+    var ctx = canvas.getContext('2d');
 
-  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px">';
+    // State
+    var viewStart = 0; // index
+    var viewLen = data.length;
+    var pinchStartDist = 0;
+    var pinchStartLen = viewLen;
+    var dragStartX = 0;
+    var dragStartView = 0;
+    var isDragging = false;
 
-  // Reference line (FTP)
-  if(refLine){
-    var ry=sy(refLine);
-    if(ry>10&&ry<H-10){
-      svg+='<line x1="10" y1="'+ry+'" x2="'+(W-10)+'" y2="'+ry+'" stroke="rgba(0,0,0,.15)" stroke-width="1" stroke-dasharray="4,3"/>';
-      svg+='<text x="12" y="'+(ry-2)+'" font-size="8" fill="rgba(0,0,0,.4)" font-family="-apple-system,sans-serif">FTP</text>';
+    function getColor(){ return getComputedStyle(document.documentElement).getPropertyValue('--t3').trim()||'#94a3b8'; }
+
+    function draw(highlightIdx){
+      var W = canvas.offsetWidth * window.devicePixelRatio || canvas.offsetWidth;
+      var H = 110 * window.devicePixelRatio;
+      canvas.width = W; canvas.height = H;
+      var dpr = window.devicePixelRatio || 1;
+      ctx.scale(dpr, dpr);
+      var cW = canvas.offsetWidth, cH = 110;
+      var pad = {l:4,r:4,t:14,b:4};
+      var plotW = cW-pad.l-pad.r, plotH = cH-pad.t-pad.b;
+
+      var slice = data.slice(viewStart, viewStart+viewLen);
+      if(!slice.length) return;
+      var mn = Math.min.apply(null,slice);
+      var mx = Math.max.apply(null,slice);
+      var rng = mx-mn||1;
+
+      function sx(i){ return pad.l + (i/(slice.length-1||1))*plotW; }
+      function sy(v){ return pad.t + (1-(v-mn)/rng)*plotH; }
+
+      ctx.clearRect(0,0,cW,cH);
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(128,128,128,.1)';
+      ctx.lineWidth = 0.5;
+      for(var gi=0;gi<3;gi++){
+        var gy = pad.t + (gi/2)*plotH;
+        ctx.beginPath(); ctx.moveTo(pad.l,gy); ctx.lineTo(pad.l+plotW,gy); ctx.stroke();
+      }
+
+      // Reference line (FTP)
+      if(refLine && refLine>=mn && refLine<=mx){
+        var ry = sy(refLine);
+        ctx.strokeStyle = 'rgba(252,76,2,.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4,3]);
+        ctx.beginPath(); ctx.moveTo(pad.l,ry); ctx.lineTo(pad.l+plotW,ry); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(252,76,2,.5)';
+        ctx.font = '8px -apple-system,sans-serif';
+        ctx.fillText('FTP',pad.l+2,ry-2);
+      }
+
+      // Area fill
+      ctx.beginPath();
+      ctx.moveTo(sx(0), sy(slice[0]));
+      slice.forEach(function(v,i){ if(i>0) ctx.lineTo(sx(i),sy(v)); });
+      ctx.lineTo(sx(slice.length-1), pad.t+plotH);
+      ctx.lineTo(sx(0), pad.t+plotH);
+      ctx.closePath();
+      ctx.fillStyle = color.replace('#',''); // will fix below
+      // Parse color for fill
+      var r=parseInt(color.slice(1,3),16),g=parseInt(color.slice(3,5),16),b=parseInt(color.slice(5,7),16);
+      var grad = ctx.createLinearGradient(0,pad.t,0,pad.t+plotH);
+      grad.addColorStop(0,'rgba('+r+','+g+','+b+',.25)');
+      grad.addColorStop(1,'rgba('+r+','+g+','+b+',.02)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.moveTo(sx(0), sy(slice[0]));
+      slice.forEach(function(v,i){ if(i>0) ctx.lineTo(sx(i),sy(v)); });
+      ctx.stroke();
+
+      // Min/Max labels
+      ctx.font = '9px -apple-system,sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = color;
+      ctx.fillText(Math.round(mx)+unit, cW-pad.r, pad.t+9);
+      ctx.fillStyle = 'rgba(128,128,128,.6)';
+      ctx.fillText(Math.round(mn)+unit, cW-pad.r, pad.t+plotH);
+
+      // Highlight point
+      if(highlightIdx!==undefined && highlightIdx>=0 && highlightIdx<slice.length){
+        var hx=sx(highlightIdx), hy=sy(slice[highlightIdx]);
+        ctx.beginPath();
+        ctx.arc(hx,hy,4,0,Math.PI*2);
+        ctx.fillStyle=color; ctx.fill();
+        ctx.beginPath();
+        ctx.arc(hx,hy,6,0,Math.PI*2);
+        ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.stroke();
+        // Vertical cursor line
+        ctx.beginPath();
+        ctx.strokeStyle='rgba(128,128,128,.2)';
+        ctx.lineWidth=1;
+        ctx.setLineDash([3,2]);
+        ctx.moveTo(hx,pad.t); ctx.lineTo(hx,pad.t+plotH);
+        ctx.stroke(); ctx.setLineDash([]);
+        if(tooltip){
+          tooltip.textContent = Math.round(slice[highlightIdx])+unit;
+          tooltip.style.opacity='1';
+        }
+      } else {
+        if(tooltip) tooltip.style.opacity='0';
+      }
     }
-  }
 
-  svg+='<path d="'+area+'" fill="'+color+'" opacity=".1"/>';
-  svg+='<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round"/>';
+    draw();
 
-  // Min/Max labels
-  svg+='<text x="'+(W-8)+'" y="18" text-anchor="end" font-size="9" fill="'+color+'" font-family="-apple-system,sans-serif">'+mx+unit+'</text>';
-  svg+='<text x="'+(W-8)+'" y="'+(H-2)+'" text-anchor="end" font-size="9" fill="rgba(0,0,0,.4)" font-family="-apple-system,sans-serif">'+mn+unit+'</text>';
+    // Touch: tap/drag for tooltip + scrub
+    function getIdx(clientX){
+      var rect = canvas.getBoundingClientRect();
+      var x = clientX - rect.left;
+      var pad = 4;
+      var plotW = rect.width - pad*2;
+      var frac = Math.max(0,Math.min(1,(x-pad)/plotW));
+      var slice = data.slice(viewStart, viewStart+viewLen);
+      return Math.round(frac*(slice.length-1));
+    }
 
-  svg+='</svg>';
-  if(label) svg+='<div style="text-align:center;font-size:11px;color:var(--t3);margin-top:4px">'+label+'</div>';
-  return svg;
+    canvas.addEventListener('touchstart', function(e){
+      e.preventDefault();
+      if(e.touches.length===1){
+        isDragging=true;
+        dragStartX=e.touches[0].clientX;
+        dragStartView=viewStart;
+        draw(getIdx(e.touches[0].clientX));
+      } else if(e.touches.length===2){
+        isDragging=false;
+        var dx=e.touches[0].clientX-e.touches[1].clientX;
+        var dy=e.touches[0].clientY-e.touches[1].clientY;
+        pinchStartDist=Math.sqrt(dx*dx+dy*dy);
+        pinchStartLen=viewLen;
+      }
+    },{passive:false});
+
+    canvas.addEventListener('touchmove', function(e){
+      e.preventDefault();
+      if(e.touches.length===1 && isDragging){
+        // Scrub tooltip
+        draw(getIdx(e.touches[0].clientX));
+      } else if(e.touches.length===2){
+        // Pinch zoom
+        var dx=e.touches[0].clientX-e.touches[1].clientX;
+        var dy=e.touches[0].clientY-e.touches[1].clientY;
+        var dist=Math.sqrt(dx*dx+dy*dy);
+        var scale=pinchStartDist/dist;
+        viewLen=Math.round(Math.max(5,Math.min(data.length,pinchStartLen*scale)));
+        viewStart=Math.max(0,Math.min(data.length-viewLen,viewStart));
+        draw();
+      }
+    },{passive:false});
+
+    canvas.addEventListener('touchend', function(e){
+      isDragging=false;
+      if(e.touches.length===0) setTimeout(function(){draw();},1500);
+    });
+
+    // Mouse support for desktop
+    canvas.addEventListener('mousemove', function(e){
+      draw(getIdx(e.clientX));
+    });
+    canvas.addEventListener('mouseleave', function(){ draw(); });
+
+    // Wheel to zoom
+    canvas.addEventListener('wheel', function(e){
+      e.preventDefault();
+      var delta = e.deltaY > 0 ? 1.1 : 0.9;
+      viewLen = Math.round(Math.max(5, Math.min(data.length, viewLen*delta)));
+      viewStart = Math.max(0, Math.min(data.length-viewLen, viewStart));
+      draw();
+    },{passive:false});
+
+  }, 100);
+
+  return html;
 }
 
 function promptRideName(defaultName, callback){
