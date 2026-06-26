@@ -3781,7 +3781,36 @@ function renderStravaMap(rideOrId, container){
       }
       if(window.L) _initCached();
       else{var _ls=document.createElement('script');_ls.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';_ls.onload=_initCached;document.head.appendChild(_ls);}
-      return; // Don't hit Strava API again
+      // If missing key fields, still fetch data from Strava
+      var _needsData = !rideOrId.movingSecs || !rideOrId.distance || !rideOrId.avgPwr;
+      if(_needsData && token){
+        fetch(mapUrl).then(function(r){return r.json();}).then(function(d){
+          if(d.strava_id && typeof rideOrId==='object'){
+            if(d.name&&(!rideOrId.name||rideOrId.name==='Ride')) rideOrId.name=d.name;
+            if(d.moving_secs) rideOrId.movingSecs=d.moving_secs;
+            if(d.distance_mi) rideOrId.distance=d.distance_mi;
+            if(d.avg_watts) rideOrId.avgPwr=Math.round(d.avg_watts);
+            if(d.np) rideOrId.np=Math.round(d.np);
+            if(d.avg_hr) rideOrId.avgHR=Math.round(d.avg_hr);
+            if(d.max_hr) rideOrId.maxHR=Math.round(d.max_hr);
+            if(d.calories) rideOrId.calories=Math.round(d.calories);
+            if(d.work_kj) rideOrId.workKj=Math.round(d.work_kj);
+            if(d.max_watts) rideOrId.maxPwr=Math.round(d.max_watts);
+            if(d.elev_ft&&!rideOrId.elev) rideOrId.elev=d.elev_ft;
+            if(d.cadence) rideOrId.cadence=Math.round(d.cadence);
+            if(rideOrId.movingSecs&&(!rideOrId.duration||rideOrId.duration==='0:00:00')){
+              var _hh=Math.floor(rideOrId.movingSecs/3600),_mm=Math.floor((rideOrId.movingSecs%3600)/60),_ss=rideOrId.movingSecs%60;
+              rideOrId.duration=_hh+':'+('0'+_mm).slice(-2)+':'+('0'+_ss).slice(-2);
+            }
+            sv();
+            // Re-render detail screen
+            var _idx=-1;
+            for(var _i=0;_i<(st.rides||[]).length;_i++){if(st.rides[_i]===rideOrId||(st.rides[_i].id&&String(st.rides[_i].id)===String(rideOrId.id))){_idx=_i;break;}}
+            if(_idx>=0){var _m=document.getElementById('ride-detail-modal');if(_m){_m.remove();openRideDetail(_idx);}}
+          }
+        }).catch(function(){});
+      }
+      return; // Don't re-fetch for map
     }
   }
 
@@ -3842,7 +3871,6 @@ function renderStravaMap(rideOrId, container){
         }).catch(function(){});
       }
 
-      toast('Strava returned: id='+data.strava_id+' dist='+data.distance_mi+' secs='+data.moving_secs);
       if(data.strava_id){
         // Update the ride object directly if we have it
         var _target = typeof rideOrId==='object' ? rideOrId : null;
