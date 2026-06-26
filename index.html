@@ -3751,19 +3751,32 @@ function renderStravaMap(rideOrId, container){
         }).catch(function(){});
       }
 
-      if(data.np || data.max_watts || data.work_kj || data.suffer_score){
+      if(data.strava_id){
         if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
           var _pr=st.rides[_pi];
           if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(mapDate&&_pr.date===mapDate)){
+            if(data.name&&(!_pr.name||_pr.name==='Ride'||_pr.name==='Activity')) _pr.name=data.name;
+            if(data.activity_type) _pr.type=data.activity_type;
             if(data.np) _pr.np=Math.round(data.np);
+            if(data.avg_watts) _pr.avgPwr=Math.round(data.avg_watts);
             if(data.max_watts) _pr.maxPwr=Math.round(data.max_watts);
             if(data.work_kj) _pr.workKj=Math.round(data.work_kj);
             if(data.suffer_score) _pr.relEffort=Math.round(data.suffer_score);
             if(data.elapsed_secs) _pr.elapsedSecs=data.elapsed_secs;
+            if(data.moving_secs&&!_pr.movingSecs) _pr.movingSecs=data.moving_secs;
+            if(data.distance_mi&&!_pr.distance) _pr.distance=data.distance_mi;
+            if(data.avg_hr&&!_pr.avgHR) _pr.avgHR=Math.round(data.avg_hr);
+            if(data.max_hr&&!_pr.maxHR) _pr.maxHR=Math.round(data.max_hr);
+            if(data.calories&&!_pr.calories) _pr.calories=Math.round(data.calories);
             if(data.avg_speed) _pr.avgSpeed=data.avg_speed;
             if(data.max_speed) _pr.maxSpeed=data.max_speed;
-            // Fix IF if stored as percentage instead of decimal*100
-            if(_pr.ifPct && _pr.ifPct > 10) _pr.ifPct = Math.round(_pr.ifPct / 100 * 100) / 100 * 100;
+            if(data.elev_ft&&!_pr.elev) _pr.elev=data.elev_ft;
+            if(data.cadence&&!_pr.cadence) _pr.cadence=Math.round(data.cadence);
+            if(_pr.ifPct&&_pr.ifPct>10) _pr.ifPct=Math.round(_pr.ifPct/100*100)/100;
+            if(_pr.movingSecs&&(!_pr.duration||_pr.duration==='0:00:00')){
+              var _h=Math.floor(_pr.movingSecs/3600),_m=Math.floor((_pr.movingSecs%3600)/60),_s=_pr.movingSecs%60;
+              _pr.duration=_h+':'+('0'+_m).slice(-2)+':'+('0'+_s).slice(-2);
+            }
             sv();
             // Update displayed cells live
             var npCell=document.querySelector('[data-pf="np"] .pf-val');
