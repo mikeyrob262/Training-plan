@@ -13282,10 +13282,22 @@ window.onload = function(){
     });
     html+='</div></div>';
     sheet.innerHTML=html;
+    var fnMap={
+      'showMob()':showMob,
+      'showRunningScreen()':showRunningScreen,
+      'showSwim()':showSwim,
+      'showZwiftBuilder()':showZwiftBuilder,
+      'showMealTemplates()':showMealTemplates,
+      'showWeeklyReport()':showWeeklyReport,
+      'showStr()':showStr,
+      'toggleDark()':toggleDark,
+      'showSettings()':showSettings
+    };
     sheet.querySelectorAll('.more-sheet-btn').forEach(function(btn){
       btn.addEventListener('click',function(){
         sheet.remove();setActiveNav('bnav-home');
-        try{ eval(btn.getAttribute('data-fn')); }catch(e){ console.error(e); }
+        var fn=fnMap[btn.getAttribute('data-fn')];
+        if(fn) try{fn();}catch(e){console.error(e);}
       });
     });
     sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();setActiveNav('bnav-home');}});
