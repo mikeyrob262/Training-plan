@@ -6715,51 +6715,42 @@ function renderPerf(container){
   if(elevRides.length>=3){
     var maxElev=Math.max.apply(null,elevRides.map(function(r){return r.elev;}));
     var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
-    var svgEW=560,svgEH=70,epadL=32,epadB=16,epadT=6,epadR=8;
+    // Elevation chart with proper padding so labels stay inside
+    var svgEW=560,svgEH=100,epadL=4,epadB=18,epadT=16,epadR=4;
     var eplotW=svgEW-epadL-epadR,eplotH=svgEH-epadB-epadT;
     var en=elevRides.length;
     var elevPts=elevRides.map(function(r,i){
       return {
         x:epadL+Math.round(i/(en-1||1)*eplotW),
         y:epadT+Math.round((1-r.elev/maxElev)*eplotH),
-        v:r.elev,
-        d:r.date
+        v:r.elev,d:r.date
       };
     });
-    // Build mountain path
     var ePath='M'+epadL+','+(epadT+eplotH);
-    elevPts.forEach(function(p){ ePath+=' L'+p.x+','+p.y; });
+    elevPts.forEach(function(p){ePath+=' L'+p.x+','+p.y;});
     ePath+=' L'+(epadL+eplotW)+','+(epadT+eplotH)+' Z';
-    // Smooth line on top
     var eLinePath='M'+elevPts[0].x+','+elevPts[0].y;
-    for(var ei=1;ei<elevPts.length;ei++){
-      var ecx=Math.round((elevPts[ei-1].x+elevPts[ei].x)/2);
-      eLinePath+=' C'+ecx+','+elevPts[ei-1].y+' '+ecx+','+elevPts[ei].y+' '+elevPts[ei].x+','+elevPts[ei].y;
-    }
-    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides · '+Math.round(totalElev).toLocaleString()+'ft total</div>';
-    html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
-    html+='<svg viewBox="0 0 '+svgEW+' '+svgEH+'" style="width:100%;height:auto;display:block">';
-    // Gradient fill
-    html+='<defs><linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6366f1" stop-opacity="0.6"/><stop offset="100%" stop-color="#6366f1" stop-opacity="0.05"/></linearGradient></defs>';
+    for(var ei=1;ei<elevPts.length;ei++){var ecx=Math.round((elevPts[ei-1].x+elevPts[ei].x)/2);eLinePath+=' C'+ecx+','+elevPts[ei-1].y+' '+ecx+','+elevPts[ei].y+' '+elevPts[ei].x+','+elevPts[ei].y;}
+    var maxPt=elevPts.reduce(function(a,b){return b.v>a.v?b:a;});
+    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
+    html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:10px 10px 6px">';
+    html+='<svg viewBox="0 0 '+svgEW+' '+svgEH+'" style="width:100%;height:auto;display:block;overflow:hidden">';
+    html+='<defs><linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6366f1" stop-opacity="0.5"/><stop offset="100%" stop-color="#6366f1" stop-opacity="0.03"/></linearGradient></defs>';
     html+='<path d="'+ePath+'" fill="url(#elevGrad)"/>';
     html+='<path d="'+eLinePath+'" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-    // Max elevation marker
-    var maxPt=elevPts.reduce(function(a,b){return b.v>a.v?b:a;});
+    // Peak dot + label INSIDE chart (label above dot but within padT space)
     html+='<circle cx="'+maxPt.x+'" cy="'+maxPt.y+'" r="3" fill="#6366f1"/>';
-    html+='<text x="'+maxPt.x+'" y="'+(maxPt.y-5)+'" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="700">'+maxPt.v.toLocaleString()+'ft</text>';
-    // Y axis
-    html+='<text x="'+(epadL-3)+'" y="'+(epadT+5)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+maxElev.toLocaleString()+'</text>';
-    html+='<text x="'+(epadL-3)+'" y="'+(epadT+eplotH)+'" text-anchor="end" font-size="8" fill="var(--t3)">0</text>';
-    // Date labels
-    html+='<text x="'+epadL+'" y="'+svgEH+'" text-anchor="start" font-size="8" fill="var(--t3)">'+elevRides[0].date+'</text>';
-    html+='<text x="'+(epadL+eplotW)+'" y="'+svgEH+'" text-anchor="end" font-size="8" fill="var(--t3)">'+elevRides[en-1].date+'</text>';
+    var lblY=Math.max(12,maxPt.y-5);
+    html+='<text x="'+Math.min(svgEW-20,Math.max(20,maxPt.x))+'" y="'+lblY+'" text-anchor="middle" font-size="9" fill="#6366f1" font-weight="700">'+maxPt.v.toLocaleString()+'ft</text>';
+    // Date labels at very bottom inside svg
+    html+='<text x="'+epadL+'" y="'+(svgEH-3)+'" text-anchor="start" font-size="8" fill="var(--t3)">'+elevRides[0].date+'</text>';
+    html+='<text x="'+(epadL+eplotW)+'" y="'+(svgEH-3)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+elevRides[en-1].date+'</text>';
     html+='</svg>';
-    // Summary stats
-    html+='<div style="display:flex;gap:12px;margin-top:8px">';
-    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:#6366f1">'+Math.round(totalElev).toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Total</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/elevRides.length).toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Avg/Ride</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+maxElev.toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Best Ride</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/5280).toFixed(1)+'mi</div><div style="font-size:9px;color:var(--t3)">Vertical</div></div>';
+    // Compact stats row
+    html+='<div style="display:flex;gap:0;border-top:1px solid var(--b1);margin-top:4px;padding-top:6px">';
+    [{v:Math.round(totalElev).toLocaleString()+'ft',l:'Total'},{v:Math.round(totalElev/en).toLocaleString()+'ft',l:'Avg'},{v:maxElev.toLocaleString()+'ft',l:'Best'},{v:Math.round(totalElev/5280).toFixed(1)+'mi',l:'Vertical'}].forEach(function(s){
+      html+='<div style="flex:1;text-align:center"><div style="font-size:12px;font-weight:800;color:#6366f1">'+s.v+'</div><div style="font-size:9px;color:var(--t3)">'+s.l+'</div></div>';
+    });
     html+='</div></div>';
   }
 
@@ -6775,29 +6766,36 @@ function renderPerf(container){
     }
     if(!weeklyPMC.length) weeklyPMC=trendData.slice(-12);
     var maxCTL=Math.max.apply(null,weeklyPMC.map(function(p){return p.ctl||0;}))*1.1||100;
-    var svgTW=560,svgTH=90,tpadL=28,tpadB=16,tpadT=8,tpadR=8;
+    // CTL chart - labels inside, proper padding
+    var svgTW=560,svgTH=90,tpadL=4,tpadB=4,tpadT=18,tpadR=4;
     var tplotW=svgTW-tpadL-tpadR,tplotH=svgTH-tpadB-tpadT;
     var tn=weeklyPMC.length;
-    var ctlPts=weeklyPMC.map(function(p,i){return {x:tpadL+Math.round(i/(tn-1||1)*tplotW),y:tpadT+Math.round((1-(p.ctl||0)/maxCTL)*tplotH),v:Math.round(p.ctl||0)};});
-    var atlPts=weeklyPMC.map(function(p,i){return {x:tpadL+Math.round(i/(tn-1||1)*tplotW),y:tpadT+Math.round((1-(p.atl||0)/maxCTL)*tplotH),v:Math.round(p.atl||0)};});
-    function makePath(pts){var d='M'+pts[0].x+','+pts[0].y;for(var pi=1;pi<pts.length;pi++){var cx=Math.round((pts[pi-1].x+pts[pi].x)/2);d+=' C'+cx+','+pts[pi-1].y+' '+cx+','+pts[pi].y+' '+pts[pi].x+','+pts[pi].y;}return d;}
-    var ctlPath=makePath(ctlPts);
-    var atlPath=makePath(atlPts);
+    var minCTL=Math.min.apply(null,weeklyPMC.map(function(p){return Math.min(p.ctl||0,p.atl||0);}));
+    minCTL=Math.max(0,minCTL*0.85);
+    var ctlRange=maxCTL-minCTL||1;
+    var ctlPts=weeklyPMC.map(function(p,i){return {x:tpadL+Math.round(i/(tn-1||1)*tplotW),y:tpadT+Math.round((1-((p.ctl||0)-minCTL)/ctlRange)*tplotH),v:Math.round(p.ctl||0)};});
+    var atlPts=weeklyPMC.map(function(p,i){return {x:tpadL+Math.round(i/(tn-1||1)*tplotW),y:tpadT+Math.round((1-((p.atl||0)-minCTL)/ctlRange)*tplotH),v:Math.round(p.atl||0)};});
+    function makePath2(pts){var d='M'+pts[0].x+','+pts[0].y;for(var pi=1;pi<pts.length;pi++){var cx=Math.round((pts[pi-1].x+pts[pi].x)/2);d+=' C'+cx+','+pts[pi-1].y+' '+cx+','+pts[pi].y+' '+pts[pi].x+','+pts[pi].y;}return d;}
+    var ctlPath=makePath2(ctlPts);
+    var atlPath=makePath2(atlPts);
     var ctlFill=ctlPath+' L'+ctlPts[ctlPts.length-1].x+','+(tpadT+tplotH)+' L'+tpadL+','+(tpadT+tplotH)+' Z';
-    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">CTL Trend · 12 Weeks</div>';
-    html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
-    html+='<svg viewBox="0 0 '+svgTW+' '+svgTH+'" style="width:100%;height:auto;display:block">';
-    html+='<path d="'+ctlFill+'" fill="rgba(77,159,255,.1)"/>';
+    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">CTL Trend · 12 Weeks</div>';
+    html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:10px 10px 8px">';
+    html+='<svg viewBox="0 0 '+svgTW+' '+svgTH+'" style="width:100%;height:auto;display:block;overflow:hidden">';
+    html+='<path d="'+ctlFill+'" fill="rgba(77,159,255,.12)"/>';
     html+='<path d="'+ctlPath+'" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
     html+='<path d="'+atlPath+'" fill="none" stroke="#FC4C02" stroke-width="1.5" stroke-dasharray="4,2" stroke-linecap="round" stroke-linejoin="round"/>';
+    // Labels INSIDE chart at top
     ctlPts.forEach(function(p,i){
       if(i===0||i===ctlPts.length-1||i===Math.floor(ctlPts.length/2)){
         html+='<circle cx="'+p.x+'" cy="'+p.y+'" r="3" fill="#4D9FFF"/>';
-        html+='<text x="'+p.x+'" y="'+(p.y-5)+'" text-anchor="middle" font-size="9" fill="var(--t3)">'+p.v+'</text>';
+        var lx=Math.min(svgTW-12,Math.max(12,p.x));
+        var ly=Math.max(10,p.y-5);
+        html+='<text x="'+lx+'" y="'+ly+'" text-anchor="middle" font-size="9" fill="#4D9FFF" font-weight="700">'+p.v+'</text>';
       }
     });
     html+='</svg>';
-    html+='<div style="display:flex;gap:16px;margin-top:6px"><div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:3px;background:#4D9FFF;border-radius:2px"></div><span style="font-size:11px;color:var(--t3)">Fitness (CTL)</span></div><div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:0;border-top:2px dashed #FC4C02"></div><span style="font-size:11px;color:var(--t3)">Fatigue (ATL)</span></div></div>';
+    html+='<div style="display:flex;gap:16px;margin-top:4px"><div style="display:flex;align-items:center;gap:5px"><div style="width:14px;height:3px;background:#4D9FFF;border-radius:2px"></div><span style="font-size:10px;color:var(--t3)">Fitness (CTL)</span></div><div style="display:flex;align-items:center;gap:5px"><div style="width:14px;height:0;border-top:2px dashed #FC4C02"></div><span style="font-size:10px;color:var(--t3)">Fatigue (ATL)</span></div></div>';
     html+='</div>';
   }
 
