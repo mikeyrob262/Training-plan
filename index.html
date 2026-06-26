@@ -19,7 +19,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Mikey's Training App v2</title>
+<title>Athlete IQ</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -149,7 +149,7 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 
 <div class="hdr">
   <div class="hdr-top">
-    <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Mikey's Training App</span></div>
+    <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Athlete IQ</span></div>
     <div class="hdr-btns">
       <button class="hbtn" id="btn-prog" title="Progress"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
       <button class="hbtn" id="btn-nutr" title="Nutrition"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></button>
@@ -11659,40 +11659,71 @@ function showAIWorkout(){
 
   function buildPrompt(mode,customQ){
     var c=getCtx();
-    var base='Masters endurance coach. Athlete:\n'
-      +'Age 64, FTP '+c.FTP+'W, W/kg '+c.wkg+', Weight '+c.wt+'lbs (goal 150-152)\n'
-      +'CTL '+c.ctl+' ATL '+c.atl+' TSB '+c.tsb+'\n'
-      +'Goal: Chase 1 (23-24mph), currently ~21mph. FTP target 210-220W\n'
-      +'Anchors: Thursday group ride + Saturday long ride\n'
-      +'Secondary: Grand Rapids Half Marathon October 2026\n\n';
     var now=new Date();
     var rides=c.rides;
+
+    // Sport-aware context
+    var sport=(st.settings&&st.settings.primarySport)||'cycling';
+    var firstName=(st.settings&&st.settings.firstName)||'Athlete';
+    var age=(st.settings&&st.settings.age)||'';
+    var goals=(st.settings&&st.settings.goals&&st.settings.goals.length)?st.settings.goals.join(', '):'general fitness';
+    var fitnessLevel=(st.settings&&st.settings.fitnessLevel)||'';
+    var weightGoal=(st.settings&&st.settings.weightGoal)||'';
+
+    // Sport-specific threshold label
+    var threshLabel=sport==='running'?'Threshold pace: '+(st.settings&&st.settings.thresholdPace?st.settings.thresholdPace+'min/mi':'not set')
+      :sport==='swimming'?'CSS: '+(st.settings&&st.settings.css?st.settings.css+'min/100m':'not set')
+      :'FTP: '+c.FTP+'W, W/kg: '+c.wkg;
+
+    // Sport-specific goals context
+    var sportGoals=sport==='running'?'Running performance, half/full marathon prep, pace improvement'
+      :sport==='triathlon'?'Triathlon performance across swim/bike/run'
+      :sport==='swimming'?'Swimming fitness, CSS improvement, open water'
+      :sport==='strength'?'Strength and conditioning, muscle building'
+      :'Cycling performance, FTP improvement, group ride capability';
+
+    var base='You are an expert endurance coach. Athlete profile:\n'
+      +'Name: '+firstName+(age?', Age: '+age:'')+'\n'
+      +'Primary sport: '+sport+(fitnessLevel?', Level: '+fitnessLevel:'')+'\n'
+      +'Weight: '+c.wt+'lbs'+(weightGoal?', Goal: '+weightGoal+'lbs':'')+'\n'
+      +threshLabel+'\n'
+      +'CTL: '+c.ctl+', ATL: '+c.atl+', TSB: '+c.tsb+'\n'
+      +'Goals: '+goals+'\n'
+      +'Sport focus: '+sportGoals+'\n\n';
+
+    // Sport-specific today prompt
+    var todayFocus=sport==='running'?'1) Today run (type, distance, pace zones, HR). 2) Week focus. 3) Injury prevention tip.'
+      :sport==='triathlon'?'1) Today session (which discipline, duration, targets). 2) Week balance across S/B/R. 3) Recovery tip.'
+      :sport==='swimming'?'1) Today swim (sets, distance, pace). 2) Week focus. 3) Technique tip.'
+      :sport==='strength'?'1) Today strength session (exercises, sets, reps, load). 2) Week split. 3) Recovery tip.'
+      :'1) Today workout (type, duration, power/HR targets). 2) Week focus. 3) Sport-specific tip.';
+
     var q,msg;
     if(mode==='today'){
       var rec=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,5);
       var l7=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-7*864e5);}).reduce(function(s,r){return s+(r.tss||0);},0);
-      q='Recent activities:\n'+rec.map(fmtRide).join('\n')+'\nLast 7d TSS: '+l7+'\n\nGive: 1) Today workout (specific type/duration/power/HR). 2) Week focus. 3) Masters tip.';
+      q='Recent activities:\n'+rec.map(fmtRide).join('\n')+'\nLast 7d TSS: '+l7+'\n\nGive: '+todayFocus;
       msg='Building today\'s plan...';
     } else if(mode==='week'){
       var w7=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-7*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-      q='Last 7 days:\n'+w7.map(fmtRide).join('\n')+'\n'+rideSummary(w7)+'\n\nAnalyze load, quality, recovery. What to adjust?';
+      q='Last 7 days:\n'+w7.map(fmtRide).join('\n')+'\n'+rideSummary(w7)+'\n\nAnalyze load distribution, quality, recovery. What to adjust next week for '+sport+'?';
       msg='Analyzing your week...';
     } else if(mode==='month'){
       var m30=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-30*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-      q='Last 30 days ('+m30.length+' rides):\n'+m30.map(fmtRide).join('\n')+'\n'+rideSummary(m30)+'\n\nMonthly patterns, fitness trajectory, improvements, next month focus.';
+      q='Last 30 days ('+m30.length+' activities):\n'+m30.map(fmtRide).join('\n')+'\n'+rideSummary(m30)+'\n\nMonthly patterns, fitness trajectory, key improvements needed for '+sport+'.';
       msg='Analyzing your month...';
     } else if(mode==='season'){
       var s90=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-90*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-      q='Last 90 days ('+s90.length+' rides):\n'+s90.slice(-25).map(fmtRide).join('\n')+'\n'+rideSummary(s90)+'\n\nSeasonal arc, power trends, Chase 1 readiness, next 90 day priorities.';
+      q='Last 90 days ('+s90.length+' activities):\n'+s90.slice(-25).map(fmtRide).join('\n')+'\n'+rideSummary(s90)+'\n\nSeasonal arc, fitness progression, readiness for goals, next 90-day priorities.';
       msg='Analyzing your season...';
     } else if(mode==='thursday'){
-      var thu=rides.filter(function(r){return r.date&&new Date(r.date).getDay()===4&&(r.distance||0)>10;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-      q='All Thursday activities ('+thu.length+'):\n'+thu.map(fmtRide).join('\n')+'\n\nGroup ride progression. Getting faster? What to do to move from Chase 2 to Chase 1?';
+      var thu=rides.filter(function(r){return r.date&&new Date(r.date).getDay()===4&&(r.distance||0)>5;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+      var dayLabel=sport==='running'?'Thursday run':'Thursday activity';
+      q='All '+dayLabel+'s ('+thu.length+'):\n'+thu.map(fmtRide).join('\n')+'\n\nProgression over time — getting fitter? What trends do you see? What should change?';
       msg='Analyzing Thursday progression...';
     } else if(mode==='nutrition'){
       var lastR=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
       var next2=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,2);
-      // Get today's logged nutrition if available
       var todayKey=(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
       var todayNutr=st.nl&&st.nl[todayKey];
       var nutrSummary='No nutrition logged today.';
@@ -11703,12 +11734,14 @@ function showAIWorkout(){
         });
         nutrSummary='Today logged: '+Math.round(totalCal)+' kcal, '+Math.round(totalProt)+'g protein so far.';
       }
+      var foodPrefs=st.settings&&st.settings.foodPrefs?st.settings.foodPrefs:'no restrictions noted';
       q='Last activity: '+(lastR?fmtRide(lastR):'None recently')
         +' | Next: '+next2.map(fmtRide).join(' / ')
         +' | '+nutrSummary
-        +' | Weight: '+c.wt+'lbs (goal 150-152)'
-        +' | Prefers: chicken/turkey/tuna/shrimp/eggs/dairy. No salmon/cod/tilapia.'
-        +' | Provide: 1) Post-ride recovery meal (protein g, carb g, timing). 2) 24hr meal plan with specific foods. 3) Pre-workout nutrition for next session. 4) Weight note. Be specific with amounts.';
+        +' | Weight: '+c.wt+'lbs'+(weightGoal?' (goal: '+weightGoal+'lbs)':'')
+        +' | Food preferences: '+foodPrefs
+        +' | Sport: '+sport
+        +' | Provide: 1) Post-workout recovery nutrition (specific foods, protein g, carb g, timing). 2) Full 24hr meal plan. 3) Pre-workout fuel for next session. 4) Weight note if relevant. Be specific with foods and amounts.';
       msg='Building nutrition plan...';
     } else {
       var cx=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-90*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
