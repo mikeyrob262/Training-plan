@@ -3842,6 +3842,7 @@ function renderStravaMap(rideOrId, container){
         }).catch(function(){});
       }
 
+      toast('Strava returned: id='+data.strava_id+' dist='+data.distance_mi+' secs='+data.moving_secs);
       if(data.strava_id){
         // Update the ride object directly if we have it
         var _target = typeof rideOrId==='object' ? rideOrId : null;
