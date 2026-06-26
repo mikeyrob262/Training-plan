@@ -3702,6 +3702,29 @@ function renderStravaMap(rideOrId, container){
     container.innerHTML = '<div style="padding:16px;text-align:center"><div style="font-size:13px;color:var(--t3);margin-bottom:12px">Connect Strava to see route maps</div><button onclick="connectStrava()" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:20px;cursor:pointer;font-family:inherit">Connect Strava</button></div>';
     return;
   }
+  // If ride already has full data + polyline, render from cache
+  if(typeof rideOrId==='object' && rideOrId.polyline && rideOrId.movingSecs && rideOrId.distance){
+    var _cpts=decodePolyline(rideOrId.polyline);
+    if(_cpts.length){
+      var _cid='leaflet-map-'+activityId;
+      container.innerHTML='<div id="'+_cid+'" style="width:100%;height:280px;border-radius:16px;overflow:hidden"></div>';
+      function _initCached(){
+        var L=window.L;
+        var _cmap=L.map(_cid,{zoomControl:true,scrollWheelZoom:false,attributionControl:false});
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_cmap);
+        var _cpoly=L.polyline(_cpts,{color:'#FC4C02',weight:3,opacity:.85}).addTo(_cmap);
+        _cmap.fitBounds(_cpoly.getBounds(),{padding:[16,16]});
+        var _sIcon=L.divIcon({html:'<div style="width:12px;height:12px;background:#0F6E56;border:2px solid white;border-radius:50%"></div>',className:'',iconAnchor:[6,6]});
+        var _eIcon=L.divIcon({html:'<div style="width:12px;height:12px;background:#ef4444;border:2px solid white;border-radius:50%"></div>',className:'',iconAnchor:[6,6]});
+        L.marker(_cpts[0],{icon:_sIcon}).addTo(_cmap);
+        L.marker(_cpts[_cpts.length-1],{icon:_eIcon}).addTo(_cmap);
+      }
+      if(window.L) _initCached();
+      else{var _ls=document.createElement('script');_ls.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';_ls.onload=_initCached;document.head.appendChild(_ls);}
+      return; // Don't hit Strava API again
+    }
+  }
+
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
   var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_activity&id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+encodeURIComponent(mapDate):'')+(mapDist?'&dist='+mapDist:'');
@@ -3752,7 +3775,8 @@ function renderStravaMap(rideOrId, container){
       }
 
       if(data.strava_id){
-        toast('Strava data: '+JSON.stringify({id:activityId,date:mapDate,dist:data.distance_mi,secs:data.moving_secs,avg:data.avg_watts}).substring(0,100));
+        // Cache polyline on ride to avoid future API calls
+        if(data.polyline && typeof rideOrId==='object') rideOrId.polyline=data.polyline;
         if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
           var _pr=st.rides[_pi];
           var _prDate=_pr.date?_pr.date.replace(/-0(\d)/g,'-$1'):'';
