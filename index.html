@@ -8788,14 +8788,13 @@ function openRideDetail(idx){
           if(typeof rideIdx==='number'&&st.rides&&st.rides[rideIdx]) Object.assign(st.rides[rideIdx],r);
           sv();
           // Update DOM directly
-          var _t=document.getElementById('rd-time'); if(_t&&r.duration) _t.textContent=r.duration;
-          var _dd=document.getElementById('rd-dist'); if(_dd&&r.distance) _dd.textContent=r.distance+'mi';
-          var _hh2=document.getElementById('rd-hr'); if(_hh2&&r.avgHR) _hh2.textContent=r.avgHR+' bpm';
-          var _cc=document.getElementById('rd-cal'); if(_cc&&r.calories) _cc.textContent=r.calories+' kcal';
-          var _fnp=r.np||r.avgPwr; var _fwkg=_fnp&&BWT?(_fnp/BWT*2.20462).toFixed(2):null;
-          var _ww=document.getElementById('rd-wkg'); if(_ww&&_fwkg) _ww.textContent=_fwkg+' W/kg';
-          var _wrap=document.getElementById('fetch-btn-wrap'); if(_wrap) _wrap.remove();
-          toast('Activity data loaded ✓');
+          toast('Activity data loaded ✓ — refreshing...');
+          // Re-open the detail screen with fresh data
+          setTimeout(function(){
+            var _m=document.getElementById('ride-detail-modal');
+            if(_m) _m.remove();
+            openRideDetail(idx);
+          }, 300);
         } else {
           fetchBtn.textContent='⚡ Retry Fetch';
           fetchBtn.disabled=false;
