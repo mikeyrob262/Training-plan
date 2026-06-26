@@ -6711,14 +6711,10 @@ function renderPerf(container){
   // ── ELEVATION MOUNTAIN CHART ────────────────────────────────────────────
   var elevRides=rides.filter(function(r){return r.elev&&r.elev>0&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(-60);
   // Debug: always show section
-  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last Rides</div>';
-  html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;font-size:12px;color:var(--t3)">';
-  html+='Total rides: '+rides.length+' · With elev: '+elevRides.length+' · Sample: '+(rides[0]?JSON.stringify({elev:rides[0].elev,date:rides[0].date}):'none');
-  html+='</div>';
   if(elevRides.length>=3){
     var maxElev=Math.max.apply(null,elevRides.map(function(r){return r.elev;}));
     var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
-    var svgEW=560,svgEH=120,epadL=32,epadB=20,epadT=10,epadR=8;
+    var svgEW=560,svgEH=70,epadL=32,epadB=16,epadT=6,epadR=8;
     var eplotW=svgEW-epadL-epadR,eplotH=svgEH-epadB-epadT;
     var en=elevRides.length;
     var elevPts=elevRides.map(function(r,i){
@@ -6739,7 +6735,7 @@ function renderPerf(container){
       var ecx=Math.round((elevPts[ei-1].x+elevPts[ei].x)/2);
       eLinePath+=' C'+ecx+','+elevPts[ei-1].y+' '+ecx+','+elevPts[ei].y+' '+elevPts[ei].x+','+elevPts[ei].y;
     }
-    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
+    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides · '+Math.round(totalElev).toLocaleString()+'ft total</div>';
     html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
     html+='<svg viewBox="0 0 '+svgEW+' '+svgEH+'" style="width:100%;height:auto;display:block">';
     // Gradient fill
@@ -6748,8 +6744,8 @@ function renderPerf(container){
     html+='<path d="'+eLinePath+'" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
     // Max elevation marker
     var maxPt=elevPts.reduce(function(a,b){return b.v>a.v?b:a;});
-    html+='<circle cx="'+maxPt.x+'" cy="'+maxPt.y+'" r="4" fill="#6366f1"/>';
-    html+='<text x="'+maxPt.x+'" y="'+(maxPt.y-7)+'" text-anchor="middle" font-size="9" fill="#6366f1" font-weight="700">'+maxPt.v.toLocaleString()+'ft</text>';
+    html+='<circle cx="'+maxPt.x+'" cy="'+maxPt.y+'" r="3" fill="#6366f1"/>';
+    html+='<text x="'+maxPt.x+'" y="'+(maxPt.y-5)+'" text-anchor="middle" font-size="8" fill="#6366f1" font-weight="700">'+maxPt.v.toLocaleString()+'ft</text>';
     // Y axis
     html+='<text x="'+(epadL-3)+'" y="'+(epadT+5)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+maxElev.toLocaleString()+'</text>';
     html+='<text x="'+(epadL-3)+'" y="'+(epadT+eplotH)+'" text-anchor="end" font-size="8" fill="var(--t3)">0</text>';
@@ -6758,11 +6754,11 @@ function renderPerf(container){
     html+='<text x="'+(epadL+eplotW)+'" y="'+svgEH+'" text-anchor="end" font-size="8" fill="var(--t3)">'+elevRides[en-1].date+'</text>';
     html+='</svg>';
     // Summary stats
-    html+='<div style="display:flex;gap:16px;margin-top:8px">';
-    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:#6366f1">'+Math.round(totalElev).toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Total Elevation</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/elevRides.length).toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Avg per Ride</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+maxElev.toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Best Single Ride</div></div>';
-    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/5280).toFixed(1)+'</div><div style="font-size:10px;color:var(--t3)">Total Miles Up</div></div>';
+    html+='<div style="display:flex;gap:12px;margin-top:8px">';
+    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:#6366f1">'+Math.round(totalElev).toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Total</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/elevRides.length).toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Avg/Ride</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+maxElev.toLocaleString()+'ft</div><div style="font-size:9px;color:var(--t3)">Best Ride</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:13px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/5280).toFixed(1)+'mi</div><div style="font-size:9px;color:var(--t3)">Vertical</div></div>';
     html+='</div></div>';
   }
 
