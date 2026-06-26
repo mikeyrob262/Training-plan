@@ -3788,8 +3788,10 @@ function renderStravaMap(rideOrId, container){
   container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Loading map...</div>';
 
   var mapUrl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_activity&id='+encodeURIComponent(activityId)+'&token='+encodeURIComponent(token)+(mapDate?'&date='+encodeURIComponent(mapDate):'')+(mapDist?'&dist='+mapDist:'');
-  fetch(mapUrl)
-    .then(function(r){return r.json();})
+  var mapController = new AbortController();
+  var mapTimeout = setTimeout(function(){ mapController.abort(); }, 10000);
+  fetch(mapUrl, {signal: mapController.signal})
+    .then(function(r){ clearTimeout(mapTimeout); return r.json(); })
     .then(function(data){
       if(data.error==='token_expired'){
         refreshStravaToken();
