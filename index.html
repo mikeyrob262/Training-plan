@@ -10917,29 +10917,29 @@ function renderMyMeals(container){
 // ── MOBILITY MODULE ──────────────────────────────────────────────────────────
 
 var MOB_EX = [
-  // [name, hold/reps, cue, goal_tag]
-  ['Standing Forward Fold',          '30s hold',          'Knees soft, let gravity work — straighten legs gradually over time', 'palms-floor'],
-  ['Jefferson Curl',                 '5 slow reps',       'Tuck chin, roll down one vertebra at a time, 5–15 lbs max', 'palms-floor'],
-  ['Seated Pike Stretch',            '30s hold',          'Legs straight, hinge at hips — no rounding the back', 'palms-floor'],
-  ['Straddle Stretch',               '40s hold',          'Wide legs, hinge forward at hips — chest toward floor, not nose', 'palms-floor'],
-  ['Strap-Assisted Toe Touch',       '30s hold',          'Loop a strap around feet, pull yourself forward — feel the hamstrings load', 'palms-floor'],
-  ['Deep Squat Hold',                '60s hold',          'Heels flat, chest up, elbows push knees out — work toward 2 min', 'stand-up'],
-  ['Squat-to-Stand',                 '8 reps',            'Squat deep, grab toes, straighten legs while holding — repeat', 'stand-up'],
-  ['90/90 Hip Stretch',              '40s each side',     'Front shin parallel, back shin parallel — sit tall, no lean', 'stand-up'],
-  ['Couch Stretch',                  '40s each side',     'Back foot on wall, front shin vertical — critical for cyclists', 'stand-up'],
-  ['Single-Leg Balance (eyes closed)','30s each side',    'Stand on one foot, eyes closed — proprioception for floor-to-stand control', 'stand-up'],
-  ['Slow Eccentric Step-Up',         '6 reps each side',  '3-count lower off a step — builds quad/glute control for sit-to-stand', 'stand-up'],
-  ['Toe Yoga',                       '10 reps',           'Lift big toe only, hold 3s. Then lift other 4 toes only, hold 3s', 'toe-lift'],
-  ['Towel Scrunches',                '20 reps',           'Scrunch a towel with your toes — builds intrinsic foot muscles', 'toe-lift'],
-  ['Marble Pickups',                 '10 each foot',      'Pick up marbles with toes and drop in a cup — fastest intrinsic foot builder', 'toe-lift'],
-  ['Single-Leg Calf Raise + Toe Spread','12 reps each',  'At the top of each raise, actively spread all toes wide before lowering', 'toe-lift'],
-  ['Ankle Circles + Dorsiflexion',   '10 each direction', 'Circles full range. Then drive knee over pinky toe for dorsiflexion', 'toe-lift'],
-  ['Thoracic Rotation',              '10 reps each side', 'Side-lying, rotate top shoulder to floor — open chest, not hips', 'cycling'],
-  ['Pigeon Pose / Figure-4',         '45s each side',     'Glute and hip external rotator stretch — key for saddle comfort', 'cycling'],
-  ['Doorway Pec Stretch',            '30s each side',     'Arm at 90°, lean through doorway — counters chronic forward hunch from riding', 'cycling'],
-  ['Cat-Cow',                        '10 slow reps',      'On all fours — full spinal flexion and extension, 3s each direction', 'cycling'],
-  ['Childs Pose with Lateral Reach','30s each side',    'From childs pose, walk hands to one side — thoracic and lat stretch', 'cycling'],
-  ['Wrist Circles + Extensions',     '10 each direction', 'Full circles both ways, then prayer stretch and reverse prayer — for aero position', 'cycling'],
+  // [name, hold/reps, cue, goal_tag, youtube_url]
+  ['Standing Forward Fold',          '30s hold',          'Knees soft, let gravity work — straighten legs gradually over time', 'palms-floor', 'https://www.youtube.com/watch?v=Fmh8mwwBWqo'],
+  ['Jefferson Curl',                 '5 slow reps',       'Tuck chin, roll down one vertebra at a time, 5–15 lbs max', 'palms-floor', 'https://www.youtube.com/watch?v=5pBkHRp4uYo'],
+  ['Seated Pike Stretch',            '30s hold',          'Legs straight, hinge at hips — no rounding the back', 'palms-floor', 'https://www.youtube.com/watch?v=TM5a5JBjv5M'],
+  ['Straddle Stretch',               '40s hold',          'Wide legs, hinge forward at hips — chest toward floor, not nose', 'palms-floor', 'https://www.youtube.com/watch?v=UGEpQ1vGVvc'],
+  ['Strap-Assisted Toe Touch',       '30s hold',          'Loop a strap around feet, pull yourself forward — feel the hamstrings load', 'palms-floor', 'https://www.youtube.com/watch?v=Fmh8mwwBWqo'],
+  ['Deep Squat Hold',                '60s hold',          'Heels flat, chest up, elbows push knees out — work toward 2 min', 'stand-up', 'https://www.youtube.com/watch?v=sBeAULDoEAE'],
+  ['Squat-to-Stand',                 '8 reps',            'Squat deep, grab toes, straighten legs while holding — repeat', 'stand-up', 'https://www.youtube.com/watch?v=kpBpFyAcEgA'],
+  ['90/90 Hip Stretch',              '40s each side',     'Front shin parallel, back shin parallel — sit tall, no lean', 'stand-up', 'https://www.youtube.com/watch?v=LKpE6joAanM'],
+  ['Couch Stretch',                  '40s each side',     'Back foot on wall, front shin vertical — critical for cyclists', 'stand-up', 'https://www.youtube.com/watch?v=HeW9lqFB0ps'],
+  ['Single-Leg Balance (eyes closed)','30s each side',   'Stand on one foot, eyes closed — proprioception for floor-to-stand control', 'stand-up', 'https://www.youtube.com/watch?v=yVtPcYNmiNQ'],
+  ['Slow Eccentric Step-Up',         '6 reps each side',  '3-count lower off a step — builds quad/glute control for sit-to-stand', 'stand-up', 'https://www.youtube.com/watch?v=dQqApCGd5Ss'],
+  ['Toe Yoga',                       '10 reps',           'Lift big toe only, hold 3s. Then lift other 4 toes only, hold 3s', 'toe-lift', 'https://www.youtube.com/watch?v=8Ty8JxuVu7s'],
+  ['Towel Scrunches',                '20 reps',           'Scrunch a towel with your toes — builds intrinsic foot muscles', 'toe-lift', 'https://www.youtube.com/watch?v=lqRnHJMz_mA'],
+  ['Marble Pickups',                 '10 each foot',      'Pick up marbles with toes and drop in a cup — fastest intrinsic foot builder', 'toe-lift', 'https://www.youtube.com/watch?v=lqRnHJMz_mA'],
+  ['Single-Leg Calf Raise + Toe Spread','12 reps each',  'At the top of each raise, actively spread all toes wide before lowering', 'toe-lift', 'https://www.youtube.com/watch?v=gwLzBJYoWlI'],
+  ['Ankle Circles + Dorsiflexion',   '10 each direction', 'Circles full range. Then drive knee over pinky toe for dorsiflexion', 'toe-lift', 'https://www.youtube.com/watch?v=ED4Cw5sMhLs'],
+  ['Thoracic Rotation',              '10 reps each side', 'Side-lying, rotate top shoulder to floor — open chest, not hips', 'cycling', 'https://www.youtube.com/watch?v=3F93-RGv_XA'],
+  ['Pigeon Pose / Figure-4',         '45s each side',     'Glute and hip external rotator stretch — key for saddle comfort', 'cycling', 'https://www.youtube.com/watch?v=2Lx_bfBmkQo'],
+  ['Doorway Pec Stretch',            '30s each side',     'Arm at 90°, lean through doorway — counters chronic forward hunch from riding', 'cycling', 'https://www.youtube.com/watch?v=EHPzOdpSvLY'],
+  ['Cat-Cow',                        '10 slow reps',      'On all fours — full spinal flexion and extension, 3s each direction', 'cycling', 'https://www.youtube.com/watch?v=kqnua4rHVVA'],
+  ['Childs Pose with Lateral Reach', '30s each side',     'From childs pose, walk hands to one side — thoracic and lat stretch', 'cycling', 'https://www.youtube.com/watch?v=2fIs5B7Zn3A'],
+  ['Wrist Circles + Extensions',     '10 each direction', 'Full circles both ways, then prayer stretch and reverse prayer — for aero position', 'cycling', 'https://www.youtube.com/watch?v=mSZWSQSSEjE'],
 ];
 
 var MOB_GOALS = {
@@ -11050,9 +11050,11 @@ function renderMob(){
       var info=document.createElement('div');
       info.style.cssText='flex:1;min-width:0';
       var nameStyle='font-size:14px;font-weight:700;color:'+(done?'var(--t3)':'var(--t1)')+';text-decoration:'+(done?'line-through':'none');
+      var ytBtn=ex[4]?('<a href="'+ex[4]+'" target="_blank" style="flex-shrink:0;background:#FF0000;border-radius:8px;padding:5px 9px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;margin-top:6px"><svg width="12" height="9" viewBox="0 0 24 17" fill="white"><path d="M23.5 2.7A3 3 0 0 0 21.4.6C19.5 0 12 0 12 0S4.5 0 2.6.6A3 3 0 0 0 .5 2.7C0 4.6 0 8.5 0 8.5s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1C4.5 17 12 17 12 17s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 12.1V4.9l6.3 3.6-6.3 3.6z"/></svg><span style="font-size:10px;font-weight:700;color:white">Demo</span></a>'):'';
       info.innerHTML='<div style="'+nameStyle+'">'+ex[0]+'</div>'
         +'<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:1px">'+ex[1]+'</div>'
-        +'<div style="font-size:11px;color:var(--t3);margin-top:2px;line-height:1.4">'+ex[2]+'</div>';
+        +'<div style="font-size:11px;color:var(--t3);margin-top:2px;line-height:1.4">'+ex[2]+'</div>'
+        +ytBtn;
 
       row.appendChild(chk); row.appendChild(info);
       card.appendChild(row);
