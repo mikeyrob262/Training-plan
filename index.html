@@ -4389,8 +4389,11 @@ function showSet(){
           var activities=data.activities||[];
           var imported=0,skipped=0;
           activities.forEach(function(a){
-            var cyclingTypes=['Ride','VirtualRide','MountainBikeRide','GravelRide','Workout','IndoorCycling','EBikeRide','VirtualRow'];
-            if(cyclingTypes.indexOf(a.type)===-1&&!(a.sport_type&&a.sport_type.toLowerCase().indexOf('ride')>=0)&&!(a.sport_type&&a.sport_type.toLowerCase().indexOf('cycling')>=0)){skipped++;return;}
+            // Accept all training activities - only skip non-training types
+            var skipTypes=['Commute','EBikeRide','Handcycle','InlineSkate','IceSkate','Kitesurf','Sail','Snowboard','Snowshoe','Surfing','Windsurf'];
+            if(skipTypes.indexOf(a.type)!==-1){skipped++;return;}
+            // Set display type for non-cycling activities
+            var actType=a.type||'Workout';
             var dateRaw=a.start_date_local||a.start_date||'';
             var dateStr=dateRaw?dateRaw.slice(0,10):'';
             var p=dateStr.split('-');
@@ -4401,7 +4404,7 @@ function showSet(){
               id:String(a.id||a.strava_id||''),
               name:(a.name||'Ride'),
               date:normDate,
-              type:a.type||'Ride',
+              type:actType,
               duration:h+':'+(('0'+m).slice(-2))+':'+(('0'+s).slice(-2)),
               movingSecs:elapsed,
               elapsedSecs:Math.round(a.elapsed_time||a.moving_time||elapsed),
@@ -6850,7 +6853,7 @@ function renderPerf(container){
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
     +'</div>'
     +'<div id="perf-filter-bar" style="display:flex;gap:4px;overflow-x:auto;padding:4px 16px 0;-webkit-overflow-scrolling:touch">'+
-    ['All','Rides','Runs','Swims','Strength'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>';
+    ['All','Rides','Runs','Swims','Strength','Mobility'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>';
   html+='<div style="display:flex;gap:6px;padding:6px 16px 8px">'
     +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Activity</button>'
     +'<button onclick="dedupRides()" style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);color:var(--t2);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🔀 Dedup</button>'
@@ -6956,10 +6959,11 @@ function renderPerf(container){
       cards.forEach(function(card){
         var type=card.getAttribute('data-ride-type')||'';
         var show=activeFilter==='All'||
-          (activeFilter==='Rides'&&(type==='Ride'||type==='VirtualRide'))||
-          (activeFilter==='Runs'&&type==='Run')||
-          (activeFilter==='Swims'&&type==='Swim')||
-          (activeFilter==='Strength'&&(type==='Strength'||type==='WeightTraining'));
+          (activeFilter==='Rides'&&(type==='Ride'||type==='VirtualRide'||type==='MountainBikeRide'||type==='GravelRide'||type==='IndoorCycling'||type==='Workout'))||
+          (activeFilter==='Runs'&&(type==='Run'||type==='VirtualRun'||type==='TrailRun'||type==='Treadmill'))||
+          (activeFilter==='Swims'&&(type==='Swim'||type==='OpenWaterSwim'))||
+          (activeFilter==='Strength'&&(type==='Strength'||type==='WeightTraining'||type==='Yoga'||type==='Pilates'||type==='Crossfit'||type==='Elliptical'||type==='StairStepper'))||
+          (activeFilter==='Mobility'&&(type==='Yoga'||type==='Pilates'||type==='Stretching'||type==='Meditation'||type==='MobilitySession'));
         card.style.display=show?'':'none';
       });
     });
