@@ -8404,8 +8404,9 @@ function openRideDetail(idx){
   } else if(r.id && (r.source==='strava' || r.source==='intervals')){
     var stravaId = r.id;
     html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Route</div>';
-    // Show fetch button if key data is missing
-    if(!r.duration||r.duration==='0:00:00'||!r.distance){
+    // Always show fetch button so user can refresh data
+    var _missingData = !r.distance || !r.avgPwr || r.duration==='0:00:00' || !r.duration;
+    if(_missingData){
       html += '<div style="margin:0 16px 6px" id="fetch-btn-wrap"><button id="fetch-strava-btn" style="width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;font-family:inherit">⚡ Fetch Full Data from Strava</button></div>';
     }
     html += '<div id="strava-map-container" style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);min-height:60px"></div>';
