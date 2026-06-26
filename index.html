@@ -3780,13 +3780,9 @@ function renderStravaMap(rideOrId, container){
               _pr.duration=_h+':'+('0'+_m).slice(-2)+':'+('0'+_s).slice(-2);
             }
             sv();
-            // Update displayed cells live
-            var npCell=document.querySelector('[data-pf="np"] .pf-val');
-            var mpCell=document.querySelector('[data-pf="maxPwr"] .pf-val');
-            var wkCell=document.querySelector('[data-pf="workKj"] .pf-val');
-            if(npCell&&data.np) npCell.textContent=Math.round(data.np)+'W';
-            if(mpCell&&data.max_watts) mpCell.textContent=Math.round(data.max_watts)+'W';
-            if(wkCell&&data.work_kj) wkCell.textContent=Math.round(data.work_kj)+' kJ';
+            // Re-render the detail screen with fresh data
+            var _modal=document.getElementById('ride-detail-modal');
+            if(_modal){ _modal.remove(); openRideDetail(_pi); }
             break;
           }
         }
