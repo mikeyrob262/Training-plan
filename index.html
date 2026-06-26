@@ -13285,13 +13285,13 @@ window.onload = function(){
     var fnMap={
       'showMob()':showMob,
       'showRunningScreen()':showRunningScreen,
-      'showSwim()':showSwim,
+      'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
       'showZwiftBuilder()':showZwiftBuilder,
       'showMealTemplates()':showMealTemplates,
       'showWeeklyReport()':showWeeklyReport,
-      'showStr()':showStr,
-      'toggleDark()':toggleDark,
-      'showSettings()':showSettings
+      'showStr()':function(){try{openStr('A',curSW);}catch(e){}},
+      'toggleDark()':function(){document.getElementById('btn-dark').click();},
+      'showSettings()':showSet
     };
     sheet.querySelectorAll('.more-sheet-btn').forEach(function(btn){
       btn.addEventListener('click',function(){
