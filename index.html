@@ -8788,15 +8788,17 @@ function openRideDetail(idx){
           if(typeof rideIdx==='number'&&st.rides&&st.rides[rideIdx]) Object.assign(st.rides[rideIdx],r);
           sv();
           // Update DOM directly
-          // Write back to st.rides[idx] directly before re-opening
-          if(st.rides && st.rides[idx]) Object.assign(st.rides[idx], r);
+          // Snapshot the updated ride data
+          var _snap = JSON.parse(JSON.stringify(r));
           sv();
           toast('Activity data loaded ✓');
           setTimeout(function(){
+            // Re-apply snapshot to override any Firebase overwrite
+            if(st.rides && st.rides[idx]) Object.assign(st.rides[idx], _snap);
             var _m=document.getElementById('ride-detail-modal');
             if(_m) _m.remove();
             openRideDetail(idx);
-          }, 400);
+          }, 800);
         } else {
           fetchBtn.textContent='⚡ Retry Fetch';
           fetchBtn.disabled=false;
