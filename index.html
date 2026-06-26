@@ -6709,29 +6709,16 @@ function renderPerf(container){
     html+='</div></div>';
   }
 
-  // ── ELEVATION CHART (div bars) ─────────────────────────────────────────
+  // ── ELEVATION CHART ─────────────────────────────────────────────────────
   var elevRides=rides.filter(function(r){return r.elev&&r.elev>0&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(-60);
   if(elevRides.length>=3){
     var maxElev=Math.max.apply(null,elevRides.map(function(r){return r.elev;}));
     var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
     var en=elevRides.length;
+    var elevData=elevRides.map(function(r){return r.elev;});
     html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-    // Bar chart using divs
-    html+='<div style="display:flex;align-items:flex-end;gap:2px;height:80px;width:100%">';
-    elevRides.forEach(function(r){
-      var pct=Math.round((r.elev/maxElev)*100);
-      var h=Math.max(2,Math.round(pct*0.8));
-      html+='<div style="flex:1;background:linear-gradient(180deg,#6366f1,rgba(99,102,241,.3));border-radius:2px 2px 0 0;height:'+h+'px" title="'+r.elev+'ft · '+r.date+'"></div>';
-    });
-    html+='</div>';
-    // X axis labels
-    html+='<div style="display:flex;justify-content:space-between;margin-top:4px">';
-    html+='<span style="font-size:9px;color:var(--t3)">'+elevRides[0].date+'</span>';
-    html+='<span style="font-size:9px;color:var(--t3)">'+elevRides[Math.floor(en/2)].date+'</span>';
-    html+='<span style="font-size:9px;color:var(--t3)">'+elevRides[en-1].date+'</span>';
-    html+='</div>';
-    // Stats
+    html+=buildLineChart(elevData,'#6366f1','ft',elevRides[0].date+' → '+elevRides[en-1].date,null);
     html+='<div style="display:flex;gap:0;border-top:1px solid var(--b1);margin-top:8px;padding-top:8px">';
     [{v:Math.round(totalElev).toLocaleString()+'ft',l:'Total'},{v:Math.round(totalElev/en).toLocaleString()+'ft',l:'Avg/Ride'},{v:maxElev.toLocaleString()+'ft',l:'Best Ride'},{v:Math.round(totalElev/5280).toFixed(1)+'mi',l:'Vertical'}].forEach(function(s){
       html+='<div style="flex:1;text-align:center"><div style="font-size:13px;font-weight:800;color:#6366f1">'+s.v+'</div><div style="font-size:9px;color:var(--t3);margin-top:1px">'+s.l+'</div></div>';
@@ -6739,36 +6726,18 @@ function renderPerf(container){
     html+='</div></div>';
   }
 
-  // ── CTL TREND (div bars) ────────────────────────────────────────────────
+  // ── CTL TREND ────────────────────────────────────────────────────────────
   if(pmcData && pmcData.length > 7){
-    var trendDays2=84;
-    var trendData2=pmcData.slice(-trendDays2);
+    var trendData2=pmcData.slice(-84);
     var weeklyPMC2=[];
     for(var wi2=0;wi2<trendData2.length;wi2+=7) weeklyPMC2.push(trendData2[wi2]);
     if(!weeklyPMC2.length) weeklyPMC2=trendData2.slice(-12);
-    var maxCTL2=Math.max.apply(null,weeklyPMC2.map(function(p){return Math.max(p.ctl||0,p.atl||0);}));
-    var tn2=weeklyPMC2.length;
-    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">CTL Trend · 12 Weeks</div>';
+    var ctlData2=weeklyPMC2.map(function(p){return Math.round(p.ctl||0);});
+    var atlData2=weeklyPMC2.map(function(p){return Math.round(p.atl||0);});
+    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Fitness (CTL) · 12 Weeks</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-    html+='<div style="display:flex;align-items:flex-end;gap:3px;height:70px">';
-    weeklyPMC2.forEach(function(p,i){
-      var ctlH=Math.max(2,Math.round(((p.ctl||0)/maxCTL2)*66));
-      var atlH=Math.max(2,Math.round(((p.atl||0)/maxCTL2)*66));
-      html+='<div style="flex:1;display:flex;align-items:flex-end;gap:1px">';
-      html+='<div style="flex:1;background:#4D9FFF;border-radius:2px 2px 0 0;height:'+ctlH+'px;opacity:.85" title="CTL '+(Math.round(p.ctl||0))+'"></div>';
-      html+='<div style="flex:1;background:#FC4C02;border-radius:2px 2px 0 0;height:'+atlH+'px;opacity:.6" title="ATL '+(Math.round(p.atl||0))+'"></div>';
-      html+='</div>';
-    });
+    html+=buildLineChart(ctlData2,'#4D9FFF','','CTL today: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1],null);
     html+='</div>';
-    html+='<div style="display:flex;justify-content:space-between;margin-top:4px">';
-    html+='<span style="font-size:9px;color:var(--t3)">12w ago</span>';
-    html+='<span style="font-size:9px;color:var(--t3)">6w ago</span>';
-    html+='<span style="font-size:9px;color:var(--t3)">Today: CTL '+Math.round(weeklyPMC2[tn2-1].ctl||0)+' / ATL '+Math.round(weeklyPMC2[tn2-1].atl||0)+'</span>';
-    html+='</div>';
-    html+='<div style="display:flex;gap:12px;margin-top:6px">';
-    html+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#4D9FFF"></div><span style="font-size:10px;color:var(--t3)">Fitness (CTL)</span></div>';
-    html+='<div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;border-radius:2px;background:#FC4C02;opacity:.7"></div><span style="font-size:10px;color:var(--t3)">Fatigue (ATL)</span></div>';
-    html+='</div></div>';
   }
 
   // ── TRAINING READINESS ──────────────────────────────────────────────────
