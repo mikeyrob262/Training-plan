@@ -6745,7 +6745,9 @@ function renderPerf(container){
       var d=new Date(); d.setDate(d.getDate()-weeksBack*7);
       return (d.getMonth()+1)+'/'+(d.getDate());
     });
-    html+=buildLineChart(ctlData2,'#4D9FFF','','CTL: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1]+' · dates: '+ctlDates2[0]+'→'+ctlDates2[ctlDates2.length-1],null,ctlDates2);
+    var _12wAgo=new Date(); _12wAgo.setDate(_12wAgo.getDate()-84);
+    var _12wLabel=(_12wAgo.getMonth()+1)+'/'+_12wAgo.getDate()+'/'+_12wAgo.getFullYear().toString().slice(2)+' → '+((now.getMonth()+1)+'/'+now.getDate()+'/'+now.getFullYear().toString().slice(2));
+    html+=buildLineChart(ctlData2,'#4D9FFF','','CTL: '+ctlData2[ctlData2.length-1]+' · ATL: '+atlData2[atlData2.length-1]+' · '+_12wLabel,null,ctlDates2);
     html+='</div>';
   }
 
