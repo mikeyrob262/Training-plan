@@ -2832,6 +2832,17 @@ var FB_NUTR_URL = 'https://mikey-training-app-default-rtdb.firebaseio.com/nutrit
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
 
+// Check if we need to reopen a ride after reload
+(function(){
+  try{
+    var _ri=sessionStorage.getItem('reopenRide');
+    if(_ri!==null){
+      sessionStorage.removeItem('reopenRide');
+      setTimeout(function(){ openRideDetail(parseInt(_ri)); }, 2000);
+    }
+  }catch(e){}
+})();
+
 // Save to localStorage, then debounce-push to Firebase after 1.5s
 function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
@@ -8772,7 +8783,6 @@ function openRideDetail(idx){
       if(!_tk){ toast('Connect Strava first'); return; }
       var _furl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_activity&id='+encodeURIComponent(r.id||'')+'&token='+encodeURIComponent(_tk)+'&date='+encodeURIComponent(r.date||'')+'&dist='+(r.distance||'');
       fetch(_furl).then(function(res){return res.json();}).then(function(d){
-        toast('d: '+JSON.stringify(d).substring(0,120));
         if(d.strava_id){
           if(d.moving_secs){r.movingSecs=d.moving_secs;var _hh=Math.floor(d.moving_secs/3600),_mm=Math.floor((d.moving_secs%3600)/60),_ss=d.moving_secs%60;r.duration=_hh+':'+('0'+_mm).slice(-2)+':'+('0'+_ss).slice(-2);}
           if(d.distance_mi) r.distance=d.distance_mi;
@@ -8789,17 +8799,11 @@ function openRideDetail(idx){
           if(typeof rideIdx==='number'&&st.rides&&st.rides[rideIdx]) Object.assign(st.rides[rideIdx],r);
           sv();
           // Update DOM directly
-          // Snapshot the updated ride data
-          var _snap = JSON.parse(JSON.stringify(r));
           sv();
-          toast('Activity data loaded ✓');
-          setTimeout(function(){
-            // Re-apply snapshot to override any Firebase overwrite
-            if(st.rides && st.rides[idx]) Object.assign(st.rides[idx], _snap);
-            var _m=document.getElementById('ride-detail-modal');
-            if(_m) _m.remove();
-            openRideDetail(idx);
-          }, 800);
+          // Store the index to reopen after reload
+          try{ sessionStorage.setItem('reopenRide', idx); } catch(e){}
+          toast('Saved! Reloading...');
+          setTimeout(function(){ location.reload(); }, 800);
         } else {
           fetchBtn.textContent='⚡ Retry Fetch';
           fetchBtn.disabled=false;
