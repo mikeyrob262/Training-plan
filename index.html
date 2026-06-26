@@ -9691,7 +9691,7 @@ function showOnboarding(){
   var steps=[
     {
       id:'welcome',
-      icon:'🏃',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',
       title:'Welcome to\nAthlete IQ',
       sub:'Your AI-powered training companion for endurance athletes.',
       cta:'Get Started',
@@ -9699,7 +9699,7 @@ function showOnboarding(){
     },
     {
       id:'sport',
-      icon:'🎯',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
       title:'What\'s your\nprimary sport?',
       sub:'We\'ll personalize your experience around what you do most.',
       cta:'Next',
@@ -9707,7 +9707,7 @@ function showOnboarding(){
     },
     {
       id:'profile',
-      icon:'👤',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
       title:'Tell us about\nyourself',
       sub:'Used to calculate your training zones and nutrition targets.',
       cta:'Next',
@@ -9720,7 +9720,7 @@ function showOnboarding(){
     },
     {
       id:'goals',
-      icon:'🏆',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 12 2 16 6"/><path d="M7 10h10l-1 7H8L7 10z"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>',
       title:'What are your\ngoals?',
       sub:'Select all that apply.',
       cta:'Next',
@@ -9728,7 +9728,7 @@ function showOnboarding(){
     },
     {
       id:'foodprefs',
-      icon:'🥗',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>',
       title:'Food\nPreferences',
       sub:'We will personalize your nutrition recommendations.',
       cta:'Next',
@@ -9736,7 +9736,7 @@ function showOnboarding(){
     },
     {
       id:'connect',
-      icon:'🔗',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
       title:'Connect your\naccounts',
       sub:'Optional — pull in your real training data automatically.',
       cta:'Next',
@@ -9744,7 +9744,7 @@ function showOnboarding(){
     },
     {
       id:'ftp',
-      icon:'⚡',
+      icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
       title:'What\'s your\nfitness baseline?',
       sub:'Don\'t worry if you don\'t know — you can update this later.',
       cta:'Finish Setup',
@@ -9800,7 +9800,7 @@ function showOnboarding(){
         sportOptions.forEach(function(s){
           var sel=answers.sport===s.id;
           html+='<button data-sport="'+s.id+'" style="background:'+(sel?'#FC4C02':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
-          html+='<div style="font-size:28px;margin-bottom:6px">'+s.emoji+'</div>';
+          if(s.emoji) html+='<div style="font-size:28px;margin-bottom:6px">'+s.emoji+'</div>';
           html+='<div style="font-size:13px;font-weight:700;color:'+(sel?'white':'var(--t1)')+'">'+s.label+'</div>';
           html+='</button>';
         });
@@ -9810,7 +9810,7 @@ function showOnboarding(){
         goalOptions.forEach(function(g){
           var sel=answers.goals.indexOf(g.id)>=0;
           html+='<button data-goal="'+g.id+'" style="background:'+(sel?'rgba(252,76,2,.1)':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:10px">';
-          html+='<span style="font-size:22px">'+g.emoji+'</span>';
+          if(g.emoji) html+='<span style="font-size:22px">'+g.emoji+'</span>';
           html+='<span style="font-size:13px;font-weight:700;color:var(--t1)">'+g.label+'</span>';
           html+='</button>';
         });
@@ -13218,22 +13218,22 @@ window.onload = function(){
     sheet.id='more-sheet';
     sheet.style.cssText='position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.5)';
     var items=[
-      {icon:'🧘',label:'Daily Mobility',fn:'showMob()'},
-      {icon:'🏃',label:'Run Training',fn:'showRun()'},
-      {icon:'🏊',label:'Swim Training',fn:'showSwim()'},
-      {icon:'⚡',label:'Zwift Builder',fn:'showZwiftBuilder()'},
-      {icon:'🍽️',label:'Meal Templates',fn:'showMealTemplates()'},
-      {icon:'📊',label:'Weekly Report',fn:'showWeeklyReport()'},
-      {icon:'💪',label:'Strength Log',fn:'showStr()'},
-      {icon:'🌙',label:'Dark Mode',fn:'toggleDark()'},
-      {icon:'⚙️',label:'Settings',fn:'showSettings()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg>',label:'Daily Mobility',fn:'showMob()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'showRunningScreen()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'showSwim()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'showZwiftBuilder()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'showMealTemplates()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'showWeeklyReport()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength Log',fn:'showStr()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',label:'Dark Mode',fn:'toggleDark()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',label:'Settings',fn:'showSettings()'},
     ];
     var html='<div style="position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-radius:24px 24px 0 0;padding:16px 0 max(16px,env(safe-area-inset-bottom))">';
     html+='<div style="width:40px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 20px"></div>';
     html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">';
     items.forEach(function(item){
       html+='<button data-fn="'+item.fn+'" class="more-sheet-btn" style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
-      html+='<div style="font-size:28px;margin-bottom:6px">'+item.icon+'</div>';
+      html+='<div style="margin-bottom:8px;color:var(--t2)">'+item.icon+'</div>';
       html+='<div style="font-size:12px;font-weight:600;color:var(--t1)">'+item.label+'</div>';
       html+='</button>';
     });
