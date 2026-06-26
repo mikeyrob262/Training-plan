@@ -3754,7 +3754,9 @@ function renderStravaMap(rideOrId, container){
       if(data.strava_id){
         if(st.rides) for(var _pi=0;_pi<st.rides.length;_pi++){
           var _pr=st.rides[_pi];
-          if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(mapDate&&_pr.date===mapDate)){
+          var _prDate=_pr.date?_pr.date.replace(/-0(\d)/g,'-$1'):'';
+          var _mapDateN=mapDate?mapDate.replace(/-0(\d)/g,'-$1'):'';
+          if(String(_pr.id)===String(activityId)||String(_pr.stravaId)===String(activityId)||(_mapDateN&&_prDate===_mapDateN)){
             if(data.name&&(!_pr.name||_pr.name==='Ride'||_pr.name==='Activity')) _pr.name=data.name;
             if(data.activity_type) _pr.type=data.activity_type;
             if(data.np) _pr.np=Math.round(data.np);
