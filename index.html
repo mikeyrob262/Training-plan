@@ -6708,6 +6708,59 @@ function renderPerf(container){
     html+='</div></div>';
   }
 
+  // ── ELEVATION MOUNTAIN CHART ────────────────────────────────────────────
+  var elevRides=rides.filter(function(r){return r.elev&&r.elev>0&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);}).slice(-60);
+  if(elevRides.length>=3){
+    var maxElev=Math.max.apply(null,elevRides.map(function(r){return r.elev;}));
+    var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
+    var svgEW=560,svgEH=120,epadL=32,epadB=20,epadT=10,epadR=8;
+    var eplotW=svgEW-epadL-epadR,eplotH=svgEH-epadB-epadT;
+    var en=elevRides.length;
+    var elevPts=elevRides.map(function(r,i){
+      return {
+        x:epadL+Math.round(i/(en-1||1)*eplotW),
+        y:epadT+Math.round((1-r.elev/maxElev)*eplotH),
+        v:r.elev,
+        d:r.date
+      };
+    });
+    // Build mountain path
+    var ePath='M'+epadL+','+(epadT+eplotH);
+    elevPts.forEach(function(p){ ePath+=' L'+p.x+','+p.y; });
+    ePath+=' L'+(epadL+eplotW)+','+(epadT+eplotH)+' Z';
+    // Smooth line on top
+    var eLinePath='M'+elevPts[0].x+','+elevPts[0].y;
+    for(var ei=1;ei<elevPts.length;ei++){
+      var ecx=Math.round((elevPts[ei-1].x+elevPts[ei].x)/2);
+      eLinePath+=' C'+ecx+','+elevPts[ei-1].y+' '+ecx+','+elevPts[ei].y+' '+elevPts[ei].x+','+elevPts[ei].y;
+    }
+    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
+    html+='<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+    html+='<svg viewBox="0 0 '+svgEW+' '+svgEH+'" style="width:100%;height:auto;display:block">';
+    // Gradient fill
+    html+='<defs><linearGradient id="elevGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6366f1" stop-opacity="0.6"/><stop offset="100%" stop-color="#6366f1" stop-opacity="0.05"/></linearGradient></defs>';
+    html+='<path d="'+ePath+'" fill="url(#elevGrad)"/>';
+    html+='<path d="'+eLinePath+'" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+    // Max elevation marker
+    var maxPt=elevPts.reduce(function(a,b){return b.v>a.v?b:a;});
+    html+='<circle cx="'+maxPt.x+'" cy="'+maxPt.y+'" r="4" fill="#6366f1"/>';
+    html+='<text x="'+maxPt.x+'" y="'+(maxPt.y-7)+'" text-anchor="middle" font-size="9" fill="#6366f1" font-weight="700">'+maxPt.v.toLocaleString()+'ft</text>';
+    // Y axis
+    html+='<text x="'+(epadL-3)+'" y="'+(epadT+5)+'" text-anchor="end" font-size="8" fill="var(--t3)">'+maxElev.toLocaleString()+'</text>';
+    html+='<text x="'+(epadL-3)+'" y="'+(epadT+eplotH)+'" text-anchor="end" font-size="8" fill="var(--t3)">0</text>';
+    // Date labels
+    html+='<text x="'+epadL+'" y="'+svgEH+'" text-anchor="start" font-size="8" fill="var(--t3)">'+elevRides[0].date+'</text>';
+    html+='<text x="'+(epadL+eplotW)+'" y="'+svgEH+'" text-anchor="end" font-size="8" fill="var(--t3)">'+elevRides[en-1].date+'</text>';
+    html+='</svg>';
+    // Summary stats
+    html+='<div style="display:flex;gap:16px;margin-top:8px">';
+    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:#6366f1">'+Math.round(totalElev).toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Total Elevation</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/elevRides.length).toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Avg per Ride</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+maxElev.toLocaleString()+'ft</div><div style="font-size:10px;color:var(--t3)">Best Single Ride</div></div>';
+    html+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(totalElev/5280).toFixed(1)+'</div><div style="font-size:10px;color:var(--t3)">Total Miles Up</div></div>';
+    html+='</div></div>';
+  }
+
   // ── CTL TREND CHART (12 weeks) ──────────────────────────────────────────
   if(pmcData && pmcData.length > 7){
     var trendW=12; // weeks to show
