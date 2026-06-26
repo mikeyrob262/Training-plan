@@ -9692,8 +9692,8 @@ function showOnboarding(){
     {
       id:'welcome',
       icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',
-      title:'Welcome to\nAthlete IQ',
-      sub:'Your AI-powered training companion for endurance athletes.',
+      title:'Welcome to\nAthlete',
+      sub:'Your AI-powered training companion for every athlete.',
       cta:'Get Started',
       fields:[]
     },
@@ -9788,7 +9788,7 @@ function showOnboarding(){
     if(curStep>0) html+='<div style="text-align:right;padding:12px 20px 0"><button id="ob-skip" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;font-family:inherit">Skip</button></div>';
     // Icon + title
     html+='<div style="padding:40px 24px 0;text-align:center">';
-    html+='<div style="font-size:64px;margin-bottom:20px">'+step.icon+'</div>';
+    html+='<div style="width:72px;height:72px;background:rgba(252,76,2,.1);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;color:#FC4C02">'+step.icon+'</div>';
     html+='<div style="font-size:28px;font-weight:900;color:var(--t1);line-height:1.2;margin-bottom:10px;white-space:pre-line">'+step.title+'</div>';
     html+='<div style="font-size:15px;color:var(--t3);line-height:1.5;margin-bottom:32px">'+step.sub+'</div>';
     html+='</div>';
