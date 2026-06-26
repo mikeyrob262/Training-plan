@@ -6751,6 +6751,34 @@ function renderPerf(container){
     html+='</div>';
   }
 
+  // ── FITNESS SCALE GUIDE ─────────────────────────────────────────────────
+  var ctlNow = Math.round(curCTL||0);
+  var ctlZone = ctlNow>=80?{l:'Elite',c:'#a855f7',d:'World-class endurance fitness. Podium-level.'}:
+                ctlNow>=65?{l:'Chase 1 Ready',c:'#00C896',d:'Strong enough to compete at Chase 1 (23-24 mph). Your goal zone.'}:
+                ctlNow>=50?{l:'Building',c:'#4D9FFF',d:'Solid base. Chase 2 group ride level. Keep adding volume.'}:
+                ctlNow>=35?{l:'Base Fitness',c:'#FC4C02',d:'Recreational level. Good aerobic base, room to grow.'}:
+                {l:'Starting Out',c:'#64748b',d:'Early fitness. Consistency is key right now.'};
+  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:10px">What does CTL '+ctlNow+' mean?</div>';
+  // Scale bar
+  var ctlPct=Math.min(100,Math.round(ctlNow/100*100));
+  html+='<div style="position:relative;height:8px;background:linear-gradient(90deg,#64748b 0%,#FC4C02 35%,#4D9FFF 50%,#00C896 65%,#a855f7 80%);border-radius:4px;margin-bottom:6px">';
+  html+='<div style="position:absolute;top:-3px;left:calc('+ctlPct+'% - 7px);width:14px;height:14px;background:white;border:3px solid '+ctlZone.c+';border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>';
+  html+='</div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-bottom:10px"><span>0</span><span>35</span><span>50</span><span>65</span><span>80</span><span>100</span></div>';
+  html+='<div style="display:flex;align-items:center;gap:10px">';
+  html+='<div style="font-size:28px;font-weight:900;color:'+ctlZone.c+'">'+ctlNow+'</div>';
+  html+='<div><div style="font-size:14px;font-weight:800;color:'+ctlZone.c+'">'+ctlZone.l+'</div>';
+  html+='<div style="font-size:12px;color:var(--t2);line-height:1.4">'+ctlZone.d+'</div></div>';
+  html+='</div>';
+  // Benchmark table
+  html+='<div style="margin-top:12px;border-top:1px solid var(--b1);padding-top:10px">';
+  html+='<div style="font-size:10px;font-weight:700;color:var(--t3);margin-bottom:6px">CHASE 1 GOAL: CTL 65+</div>';
+  [{l:'Chase 1 Ready',v:'65+',c:'#00C896'},{l:'Current',v:ctlNow,c:ctlZone.c},{l:'Need',v:Math.max(0,65-ctlNow)+' more',c:'#FC4C02'}].forEach(function(r){
+    html+='<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="font-size:12px;color:var(--t2)">'+r.l+'</span><span style="font-size:12px;font-weight:700;color:'+r.c+'">'+r.v+'</span></div>';
+  });
+  html+='</div></div>';
+
   // ── TRAINING READINESS ──────────────────────────────────────────────────
   var tsb3=Math.round((pmcData.length?pmcData[pmcData.length-1].tsb:0)||0);
   var readColor=tsb3>=15?'#00C896':tsb3>=0?'#4D9FFF':tsb3>=-20?'#FC4C02':'#ef4444';
