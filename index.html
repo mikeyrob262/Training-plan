@@ -9757,25 +9757,32 @@ function showOnboarding(){
   ];
 
   var curStep=0;
-  var answers={sport:'cycling',goals:[],firstName:'',age:'',weight:'',fitnessLevel:'',ftp:'',maxHR:''};
+  var answers={sport:'cycling',goals:[],firstName:'',age:'',weight:'',fitnessLevel:'',ftp:'',maxHR:'',foodPrefs:[],foodAvoid:'',connected:[]};
 
   var sportOptions=[
-    {id:'cycling',emoji:'🚴',label:'Cycling'},
-    {id:'running',emoji:'🏃',label:'Running'},
-    {id:'triathlon',emoji:'🏊',label:'Triathlon'},
-    {id:'swimming',emoji:'🏊',label:'Swimming'},
-    {id:'strength',emoji:'🏋️',label:'Strength'}
+    {id:'cycling',label:'Cycling'},
+    {id:'running',label:'Running'},
+    {id:'triathlon',label:'Triathlon'},
+    {id:'swimming',label:'Swimming'},
+    {id:'strength',label:'Strength'},
+    {id:'golf',label:'Golf'},
+    {id:'soccer',label:'Soccer'},
+    {id:'football',label:'Football'},
+    {id:'basketball',label:'Basketball'},
+    {id:'hiking',label:'Hiking'},
+    {id:'crossfit',label:'CrossFit'},
+    {id:'tennis',label:'Tennis'},
   ];
 
   var goalOptions=[
-    {id:'fitness',emoji:'💪',label:'General Fitness'},
-    {id:'weight',emoji:'⚖️',label:'Weight Management'},
-    {id:'race',emoji:'🏁',label:'Race / Event'},
-    {id:'speed',emoji:'⚡',label:'Get Faster'},
-    {id:'endurance',emoji:'🔋',label:'Build Endurance'},
-    {id:'strength',emoji:'🏋️',label:'Get Stronger'},
-    {id:'health',emoji:'❤️',label:'Overall Health'},
-    {id:'habit',emoji:'📅',label:'Build a Habit'}
+    {id:'fitness',label:'General Fitness'},
+    {id:'weight',label:'Weight Management'},
+    {id:'race',label:'Race / Event'},
+    {id:'speed',label:'Get Faster'},
+    {id:'endurance',label:'Build Endurance'},
+    {id:'strength',label:'Get Stronger'},
+    {id:'health',label:'Overall Health'},
+    {id:'habit',label:'Build a Habit'}
   ];
 
   function render(){
@@ -9796,11 +9803,10 @@ function showOnboarding(){
     html+='<div style="padding:0 20px">';
     step.fields.forEach(function(f){
       if(f.type==='sport'){
-        html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">';
+        html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px">';
         sportOptions.forEach(function(s){
           var sel=answers.sport===s.id;
           html+='<button data-sport="'+s.id+'" style="background:'+(sel?'#FC4C02':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
-          if(s.emoji) html+='<div style="font-size:28px;margin-bottom:6px">'+s.emoji+'</div>';
           html+='<div style="font-size:13px;font-weight:700;color:'+(sel?'white':'var(--t1)')+'">'+s.label+'</div>';
           html+='</button>';
         });
@@ -9810,28 +9816,26 @@ function showOnboarding(){
         goalOptions.forEach(function(g){
           var sel=answers.goals.indexOf(g.id)>=0;
           html+='<button data-goal="'+g.id+'" style="background:'+(sel?'rgba(252,76,2,.1)':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:10px">';
-          if(g.emoji) html+='<span style="font-size:22px">'+g.emoji+'</span>';
           html+='<span style="font-size:13px;font-weight:700;color:var(--t1)">'+g.label+'</span>';
           html+='</button>';
         });
         html+='</div>';
       } else if(f.type==='foodprefs'){
         var dietOptions=[
-          {id:'omnivore',label:'🍖 Omnivore','sub':'Eat everything'},
-          {id:'vegetarian',label:'🥗 Vegetarian','sub':'No meat'},
-          {id:'vegan',label:'🌱 Vegan','sub':'No animal products'},
-          {id:'glutenfree',label:'🌾 Gluten-Free','sub':'No gluten'},
-          {id:'dairyfree',label:'🥛 Dairy-Free','sub':'No dairy'},
-          {id:'keto',label:'🥑 Keto/Low-Carb','sub':'High fat, low carb'},
-          {id:'paleo',label:'🦴 Paleo','sub':'Whole foods only'},
-          {id:'halal',label:'☪️ Halal','sub':'Halal certified'},
+          {id:'omnivore',label:'Omnivore','sub':'Eat everything'},
+          {id:'vegetarian',label:'Vegetarian','sub':'No meat'},
+          {id:'vegan',label:'Vegan','sub':'No animal products'},
+          {id:'glutenfree',label:'Gluten-Free','sub':'No gluten'},
+          {id:'dairyfree',label:'Dairy-Free','sub':'No dairy'},
+          {id:'keto',label:'Keto/Low-Carb','sub':'High fat, low carb'},
+          {id:'paleo',label:'Paleo','sub':'Whole foods only'},
+          {id:'halal',label:'Halal','sub':'Halal certified'},
         ];
         html+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px">';
         dietOptions.forEach(function(d){
           var sel=answers.foodPrefs&&answers.foodPrefs.indexOf(d.id)>=0;
           html+='<button data-pref="'+d.id+'" style="background:'+(sel?'rgba(252,76,2,.1)':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:14px;padding:12px;cursor:pointer;font-family:inherit;text-align:left">';
-          html+='<div style="font-size:18px;margin-bottom:3px">'+d.label.split(' ')[0]+'</div>';
-          html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">'+d.label.split(' ').slice(1).join(' ')+'</div>';
+          html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">'+d.label+'</div>';
           html+='<div style="font-size:11px;color:var(--t3)">'+d.sub+'</div>';
           html+='</button>';
         });
