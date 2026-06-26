@@ -8788,13 +8788,15 @@ function openRideDetail(idx){
           if(typeof rideIdx==='number'&&st.rides&&st.rides[rideIdx]) Object.assign(st.rides[rideIdx],r);
           sv();
           // Update DOM directly
-          toast('Activity data loaded ✓ — refreshing...');
-          // Re-open the detail screen with fresh data
+          // Write back to st.rides[idx] directly before re-opening
+          if(st.rides && st.rides[idx]) Object.assign(st.rides[idx], r);
+          sv();
+          toast('Activity data loaded ✓');
           setTimeout(function(){
             var _m=document.getElementById('ride-detail-modal');
             if(_m) _m.remove();
             openRideDetail(idx);
-          }, 300);
+          }, 400);
         } else {
           fetchBtn.textContent='⚡ Retry Fetch';
           fetchBtn.disabled=false;
