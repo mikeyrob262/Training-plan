@@ -9839,19 +9839,32 @@ function showOnboarding(){
         html+='<div style="margin-bottom:14px"><label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);display:block;margin-bottom:6px">Allergies or foods to avoid</label>';
         html+='<input id="ob-foodAvoid" type="text" placeholder="e.g. nuts, shellfish, salmon" value="'+(answers.foodAvoid||'')+'" style="width:100%;padding:12px 14px;border:1.5px solid var(--b2);border-radius:12px;background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit;box-sizing:border-box"></div>';
       } else if(f.type==='connect'){
-        html+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
-        // Strava
-        html+='<div style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px">';
-        html+='<div style="width:40px;height:40px;background:#FC4C02;border-radius:10px;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg></div>';
-        html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t1)">Strava</div><div style="font-size:12px;color:var(--t3)">Import your activities automatically</div></div>';
-        html+='<button id="ob-strava" style="background:#FC4C02;border:none;color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Connect</button>';
-        html+='</div>';
-        // Intervals.icu
-        html+='<div style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px">';
-        html+='<div style="width:40px;height:40px;background:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center"><span style="color:white;font-size:16px;font-weight:900">ICU</span></div>';
-        html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t1)">Intervals.icu</div><div style="font-size:12px;color:var(--t3)">Sync fitness metrics (CTL, ATL, TSB)</div></div>';
-        html+='<button id="ob-icu" style="background:#2563eb;border:none;color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Connect</button>';
-        html+='</div>';
+        var connectApps=[
+          {id:'strava',name:'Strava',desc:'Import activities automatically',bg:'#FC4C02',logo:'<svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>',sports:['cycling','running','triathlon','swimming','strength','hiking','crossfit']},
+          {id:'icu',name:'Intervals.icu',desc:'Sync CTL, ATL, TSB fitness metrics',bg:'#2563eb',logo:'<span style="color:white;font-size:14px;font-weight:900">ICU</span>',sports:['cycling','running','triathlon','swimming']},
+          {id:'garmin',name:'Garmin Connect',desc:'Sync from your Garmin device',bg:'#007CC3',logo:'<span style="color:white;font-size:12px;font-weight:900">GC</span>',sports:['cycling','running','triathlon','swimming','golf','hiking']},
+          {id:'garmin_golf',name:'Garmin Golf',desc:'Rounds, handicap, shot tracking',bg:'#00873E',logo:'<span style="color:white;font-size:12px;font-weight:900">GG</span>',sports:['golf']},
+          {id:'whoop',name:'WHOOP',desc:'Recovery, strain and sleep data',bg:'#000000',logo:'<span style="color:white;font-size:12px;font-weight:900">W</span>',sports:['cycling','running','triathlon','strength','crossfit','football','soccer','basketball']},
+          {id:'apple',name:'Apple Health',desc:'Steps, workouts, heart rate',bg:'#FF3B30',logo:'<svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>',sports:['running','strength','crossfit','golf','tennis','basketball','soccer','football']},
+          {id:'myfitnesspal',name:'MyFitnessPal',desc:'Import your nutrition logs',bg:'#0064D2',logo:'<span style="color:white;font-size:12px;font-weight:900">MFP</span>',sports:['cycling','running','triathlon','strength','crossfit','golf','soccer','football','basketball','tennis']},
+          {id:'zwift',name:'Zwift',desc:'Virtual cycling and running',bg:'#F4602B',logo:'<span style="color:white;font-size:12px;font-weight:900">Z</span>',sports:['cycling','running','triathlon']},
+          {id:'trainingpeaks',name:'TrainingPeaks',desc:'Training plans and analytics',bg:'#1565C0',logo:'<span style="color:white;font-size:11px;font-weight:900">TP</span>',sports:['cycling','running','triathlon','swimming']},
+        ];
+        // Filter by selected sport
+        var relevantApps=connectApps.filter(function(a){return a.sports.indexOf(answers.sport)>=0;});
+        html+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">';
+        relevantApps.forEach(function(app){
+          var connected=answers.connected&&answers.connected.indexOf(app.id)>=0;
+          html+='<div style="background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px">';
+          html+='<div style="width:40px;height:40px;background:'+app.bg+';border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+app.logo+'</div>';
+          html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t1)">'+app.name+'</div><div style="font-size:12px;color:var(--t3)">'+app.desc+'</div></div>';
+          if(connected){
+            html+='<div style="font-size:12px;font-weight:700;color:#0F6E56">Connected</div>';
+          } else {
+            html+='<button data-connect="'+app.id+'" style="background:'+app.bg+';border:none;color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0">Connect</button>';
+          }
+          html+='</div>';
+        });
         html+='</div>';
       } else if(f.type==='ftpSport'){
         var label=answers.sport==='running'?'Threshold Pace (min/mi)':answers.sport==='swimming'?'CSS Pace (min/100m)':'FTP (watts)';
@@ -9877,7 +9890,14 @@ function showOnboarding(){
     // CTA button (fixed bottom)
     html+='</div>';
     html+='<div style="position:fixed;bottom:0;left:0;right:0;padding:16px 20px;background:var(--bg);border-top:1px solid var(--b1)">';
-    html+='<button id="ob-next" style="width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:16px;font-weight:800;padding:16px;border-radius:16px;cursor:pointer;font-family:inherit">'+step.cta+'</button>';
+    if(curStep>0){
+      html+='<div style="display:flex;gap:10px">';
+      html+='<button id="ob-back" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:15px;font-weight:700;padding:16px 20px;border-radius:16px;cursor:pointer;font-family:inherit">Back</button>';
+      html+='<button id="ob-next" style="flex:1;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:16px;font-weight:800;padding:16px;border-radius:16px;cursor:pointer;font-family:inherit">'+step.cta+'</button>';
+      html+='</div>';
+    } else {
+      html+='<button id="ob-next" style="width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:16px;font-weight:800;padding:16px;border-radius:16px;cursor:pointer;font-family:inherit">'+step.cta+'</button>';
+    }
     html+='</div>';
     overlay.innerHTML=html;
 
@@ -9913,27 +9933,46 @@ function showOnboarding(){
       });
     });
 
-    // Wire Strava connect
-    var stravaBtn=overlay.querySelector('#ob-strava');
-    if(stravaBtn) stravaBtn.addEventListener('click',function(){
-      var authUrl='https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_auth&app='+encodeURIComponent(window.location.origin+window.location.pathname);
-      window.location.href=authUrl;
+    // Wire all connect buttons
+    overlay.querySelectorAll('[data-connect]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var appId=btn.getAttribute('data-connect');
+        if(appId==='strava'){
+          var authUrl='https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_auth&app='+encodeURIComponent(window.location.origin+window.location.pathname);
+          window.location.href=authUrl;
+        } else if(appId==='icu'){
+          var athleteId=prompt('Enter your Intervals.icu Athlete ID (e.g. i544205):');
+          var apiKey=prompt('Enter your Intervals.icu API Key:');
+          if(athleteId&&apiKey){
+            if(!st.settings) st.settings={};
+            st.settings.icuAthlete=athleteId;
+            st.settings.icuKey=apiKey;
+            sv();
+            if(!answers.connected) answers.connected=[];
+            answers.connected.push('icu');
+            render();
+          }
+        } else if(appId==='garmin'||appId==='garmin_golf'){
+          toast('Garmin syncs via Strava — connect Strava first, then link Garmin in your Strava settings.');
+        } else if(appId==='zwift'){
+          toast('Zwift auto-syncs to Strava. Connect Strava and Zwift rides appear automatically.');
+        } else if(appId==='apple'){
+          toast('Apple Health: coming soon in the iOS app.');
+        } else if(appId==='whoop'){
+          toast('WHOOP: coming soon.');
+        } else if(appId==='trainingpeaks'){
+          toast('TrainingPeaks: coming soon.');
+        } else if(appId==='myfitnesspal'){
+          toast('Use the Nutrition screen to log meals directly in Athlete.');
+        } else {
+          toast(appId+' integration coming soon!');
+        }
+      });
     });
 
-    // Wire ICU connect
-    var icuBtn=overlay.querySelector('#ob-icu');
-    if(icuBtn) icuBtn.addEventListener('click',function(){
-      var athleteId=prompt('Enter your Intervals.icu Athlete ID (e.g. i544205):');
-      var apiKey=prompt('Enter your Intervals.icu API Key:');
-      if(athleteId&&apiKey){
-        if(!st.settings) st.settings={};
-        st.settings.icuAthlete=athleteId;
-        st.settings.icuKey=apiKey;
-        sv();
-        icuBtn.textContent='✓ Connected';
-        icuBtn.style.background='#0F6E56';
-      }
-    });
+    // Wire back
+    var backBtn=overlay.querySelector('#ob-back');
+    if(backBtn) backBtn.addEventListener('click',function(){ if(curStep>0){curStep--;render();} });
 
     // Wire skip
     var skipBtn=overlay.querySelector('#ob-skip');
