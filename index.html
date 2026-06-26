@@ -3883,22 +3883,21 @@ function renderStravaMap(rideOrId, container){
               _pr.duration=_h+':'+('0'+_m).slice(-2)+':'+('0'+_s).slice(-2);
             }
             sv();
-            // Update DOM directly without full re-render
+            // Re-render by finding index multiple ways
             var _modal=document.getElementById('ride-detail-modal');
             if(_modal){
-              // Find real index by date+id
               var _realIdx=-1;
-              for(var _ri=0;_ri<(st.rides||[]).length;_ri++){
-                var _rr=st.rides[_ri];
-                if(_rr===_pr||String(_rr.id)===String(_pr.id)){_realIdx=_ri;break;}
+              var rides2=st.rides||[];
+              // Try all matching strategies
+              for(var _ri=0;_ri<rides2.length;_ri++){
+                var _rr=rides2[_ri];
+                if(_rr===_pr){ _realIdx=_ri; break; }
               }
-              if(_realIdx>=0){ _modal.remove(); openRideDetail(_realIdx); }
-              else {
-                // Just update visible text nodes directly
-                var _heads=_modal.querySelectorAll('.hero-val');
-                if(_heads[0]&&_pr.duration) _heads[0].textContent=_pr.duration;
-                if(_heads[1]&&_pr.distance) _heads[1].textContent=_pr.distance+'mi';
-              }
+              if(_realIdx<0){ for(var _ri2=0;_ri2<rides2.length;_ri2++){ if(String(rides2[_ri2].id)===String(_pr.id)){_realIdx=_ri2;break;} } }
+              if(_realIdx<0){ for(var _ri3=0;_ri3<rides2.length;_ri3++){ var _rd=rides2[_ri3].date||''; if(_rd===_pr.date&&rides2[_ri3].name===_pr.name){_realIdx=_ri3;break;} } }
+              if(_realIdx<0){ for(var _ri4=0;_ri4<rides2.length;_ri4++){ var _rd2=rides2[_ri4].date||''; if(_rd2.split('-').map(Number).join('-')===(_pr.date||'').split('-').map(Number).join('-')){_realIdx=_ri4;break;} } }
+              toast('Strava data loaded! '+(_realIdx>=0?'Refreshing...':'(saved)'));
+              if(_realIdx>=0){ setTimeout(function(){_modal.remove();openRideDetail(_realIdx);},100); }
             }
           }
         }
