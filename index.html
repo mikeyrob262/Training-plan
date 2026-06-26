@@ -3816,8 +3816,20 @@ function renderStravaMap(rideOrId, container){
                 _found.duration=_hh+':'+('0'+_mm).slice(-2)+':'+('0'+_ss).slice(-2);
               }
               sv();
-              var _m2=document.getElementById('ride-detail-modal');
-              if(_m2){_m2.remove();openRideDetail(_foundIdx);}
+              // Update DOM directly - much faster than full re-render
+              var _t=document.getElementById('rd-time');
+              var _d=document.getElementById('rd-dist');
+              var _h2=document.getElementById('rd-hr');
+              var _c=document.getElementById('rd-cal');
+              var _w=document.getElementById('rd-wkg');
+              var _fnp=_found.np||_found.avgPwr;
+              var _fwkg=_fnp&&BWT?(_fnp/BWT*2.20462).toFixed(2):null;
+              if(_t&&_found.duration) _t.textContent=_found.duration;
+              if(_d&&_found.distance) _d.textContent=_found.distance+'mi';
+              if(_h2&&_found.avgHR) _h2.textContent=_found.avgHR+' bpm';
+              if(_c&&_found.calories) _c.textContent=_found.calories+' kcal';
+              if(_w&&_fwkg) _w.textContent=_fwkg+' W/kg';
+              toast('Activity data loaded ✓');
             }
           }
         }).catch(function(){});
@@ -8363,10 +8375,10 @@ function openRideDetail(idx){
   // -- HERO STATS
   var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b1)">';
-  [{v:r.duration||'-',l:'Time'},{v:(r.distance||'-')+(r.distance?'mi':''),l:'Distance'},{v:rwkg?rwkg+' W/kg':'-',l:'W/kg',c:'#FC4C02'},{v:r.tss||'-',l:'TSS',c:'#2980B9'}]
+  [{v:r.duration||'-',l:'Time',id:'rd-time'},{v:(r.distance||'-')+(r.distance?'mi':''),l:'Distance',id:'rd-dist'},{v:rwkg?rwkg+' W/kg':'-',l:'W/kg',c:'#FC4C02',id:'rd-wkg'},{v:r.tss||'-',l:'TSS',c:'#2980B9',id:'rd-tss'}]
   .forEach(function(s){
     html+='<div style="background:var(--s1);padding:14px 8px;text-align:center">'
-      +'<div style="font-size:20px;font-weight:900;color:'+(s.c||'var(--t1)')+';letter-spacing:-.5px">'+s.v+'</div>'
+      +'<div id="'+(s.id||'')+'" style="font-size:20px;font-weight:900;color:'+(s.c||'var(--t1)')+';letter-spacing:-.5px">'+s.v+'</div>'
       +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:3px">'+s.l+'</div>'
       +'</div>';
   });
