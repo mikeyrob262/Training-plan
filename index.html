@@ -3797,17 +3797,14 @@ function renderStravaMap(rideOrId, container){
         return;
       }
       if(data.error){
-        var errMsg = data.error;
-        if(errMsg.indexOf('429')>=0||errMsg.toLowerCase().indexOf('rate')>=0){
-          container.innerHTML = '<div style="padding:16px;text-align:center">'
-            +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Strava rate limit — try again in a few minutes</div>'
-            +'<button id="retry-map-btn" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:8px 18px;border-radius:20px;cursor:pointer;font-family:inherit">Retry Map</button>'
-            +'</div>';
-          var retryBtn = document.getElementById('retry-map-btn');
-          if(retryBtn) retryBtn.addEventListener('click', function(){ renderStravaMap(rideOrId, container); });
-        } else {
-          container.innerHTML = '<div style="padding:16px;font-size:11px;color:#ef4444">Error: '+errMsg+'</div>';
-        }
+        var errMsg = String(data.error);
+        var isRateLimit = errMsg.indexOf('429')>=0||errMsg.toLowerCase().indexOf('rate')>=0||errMsg.toLowerCase().indexOf('limit')>=0;
+        var errLabel = isRateLimit ? 'Strava rate limit — wait a few minutes then retry' : 'Map unavailable: '+errMsg;
+        container.innerHTML = '<div style="padding:16px;text-align:center">'
+          +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">'+errLabel+'</div>'
+          +'<button class="retry-map-btn" style="background:#FC4C02;border:none;color:white;font-size:13px;font-weight:700;padding:8px 18px;border-radius:20px;cursor:pointer;font-family:inherit">↺ Retry</button>'
+          +'</div>';
+        container.querySelector('.retry-map-btn').addEventListener('click', function(){ renderStravaMap(rideOrId, container); });
         return;
       }
       if(!data.polyline){
