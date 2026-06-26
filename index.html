@@ -2827,6 +2827,7 @@ var _o2={};Object.keys(_p).forEach(function(k){if(/^\d+$/.test(k))_o2['w'+k]=_p[
 
 // -- FIREBASE SYNC ------------------------------------------------------------
 var FB_URL     = 'https://mikey-training-app-default-rtdb.firebaseio.com/data.json';
+var FB_NUTR_URL = 'https://mikey-training-app-default-rtdb.firebaseio.com/nutrition.json';
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
 
@@ -2836,8 +2837,9 @@ function sv(){
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   try{if(st.rides&&st.rides.length) localStorage.setItem('mta2_rides',JSON.stringify(st.rides));}catch(e){}
   try{if(st.stravaToken) localStorage.setItem('mta2_strava',JSON.stringify(st.stravaToken));}catch(e){}
+  try{if(st.nl) localStorage.setItem('mta2_nutr',JSON.stringify(st.nl));}catch(e){}
   clearTimeout(svDebounce);
-  svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
+  svDebounce = setTimeout(function(){ fbPush(true); try{fbPushNutr();}catch(e){} }, 1500);
 }
 
 // Apply remote snapshot - only if it has a timestamp and is newer than local
@@ -2860,6 +2862,15 @@ function applyFirebaseData(data){
   try{restoreExtraSessions();}catch(e){}
   // Fix IF scale after Firebase restore
   try{(st.rides||[]).forEach(function(r){if(r.ifPct&&r.ifPct>10) r.ifPct=Math.round(r.ifPct/100*100)/100;});}catch(e){}
+  // Restore nutrition from localStorage (separate from main Firebase node)
+  try{
+    if(!st.nl||!Object.keys(st.nl).length){
+      var _nl=localStorage.getItem('mta2_nutr');
+      if(_nl) st.nl=JSON.parse(_nl);
+    }
+  }catch(e){}
+  // Also pull nutrition from Firebase
+  try{fbPullNutr();}catch(e){}
   // Restore streams (chartPwr/chartHR) from localStorage cache
   try{
     var _sc=JSON.parse(localStorage.getItem('mta2_streams')||'{}');
