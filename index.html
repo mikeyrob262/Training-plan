@@ -11095,6 +11095,7 @@ function showAIWorkout(){
   tabsHtml+='<button class="ai-tab" data-mode="month" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">30 Days</button>';
   tabsHtml+='<button class="ai-tab" data-mode="season" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">90 Days</button>';
   tabsHtml+='<button class="ai-tab" data-mode="thursday" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Thu Rides</button>';
+  tabsHtml+='<button class="ai-tab" data-mode="nutrition" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Nutrition</button>';
   tabsHtml+='<button class="ai-tab" data-mode="custom" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Custom</button>';
   tabsHtml+='</div>';
 
@@ -11176,6 +11177,27 @@ function showAIWorkout(){
       var thu=rides.filter(function(r){return r.date&&new Date(r.date).getDay()===4&&(r.distance||0)>10;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
       q='All Thursday rides ('+thu.length+'):\n'+thu.map(fmtRide).join('\n')+'\n\nGroup ride progression. Getting faster? What to do to move from Chase 2 to Chase 1?';
       msg='Analyzing Thursday progression...';
+    } else if(mode==='nutrition'){
+      var lastR=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
+      var next2=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,2);
+      // Get today's logged nutrition if available
+      var todayKey=(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
+      var todayNutr=st.nl&&st.nl[todayKey];
+      var nutrSummary='No nutrition logged today.';
+      if(todayNutr&&todayNutr.meals){
+        var totalCal=0,totalProt=0;
+        Object.values(todayNutr.meals).forEach(function(meal){
+          (meal||[]).forEach(function(item){totalCal+=(item.cal||0);totalProt+=(item.prot||0);});
+        });
+        nutrSummary='Today logged: '+Math.round(totalCal)+' kcal, '+Math.round(totalProt)+'g protein so far.';
+      }
+      q='Last ride: '+(lastR?fmtRide(lastR):'None recently')
+        +' | Next: '+next2.map(fmtRide).join(' / ')
+        +' | '+nutrSummary
+        +' | Weight: '+c.wt+'lbs (goal 150-152)'
+        +' | Prefers: chicken/turkey/tuna/shrimp/eggs/dairy. No salmon/cod/tilapia.'
+        +' | Provide: 1) Post-ride recovery meal (protein g, carb g, timing). 2) 24hr meal plan with specific foods. 3) Pre-workout nutrition for next session. 4) Weight note. Be specific with amounts.';
+      msg='Building nutrition plan...';
     } else {
       var cx=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-90*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
       q='Context (last 90d):\n'+cx.slice(-20).map(fmtRide).join('\n')+'\n'+rideSummary(cx)+'\n\nQuestion: '+customQ;
