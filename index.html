@@ -2874,6 +2874,8 @@ function applyFirebaseData(data){
   try{restoreExtraSessions();}catch(e){}
   // Fix IF scale after Firebase restore
   try{(st.rides||[]).forEach(function(r){if(r.ifPct&&r.ifPct>10) r.ifPct=Math.round(r.ifPct/100*100)/100;});}catch(e){}
+  // Check if first-time user
+  try{ checkOnboarding(); }catch(e){}
   // Restore nutrition from localStorage (separate from main Firebase node)
   try{
     if(!st.nl||!Object.keys(st.nl).length){
@@ -9659,6 +9661,264 @@ function showZwiftBuilder(){
   
   renderBuilder();
   document.body.appendChild(modal);
+}
+
+// ── ONBOARDING WIZARD ────────────────────────────────────────────────────
+function showOnboarding(){
+  if(document.getElementById('onboard-overlay')) return;
+  var overlay=document.createElement('div');
+  overlay.id='onboard-overlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:9999;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  var steps=[
+    {
+      id:'welcome',
+      icon:'🏃',
+      title:'Welcome to\nAthlete IQ',
+      sub:'Your AI-powered training companion for endurance athletes.',
+      cta:'Get Started',
+      fields:[]
+    },
+    {
+      id:'sport',
+      icon:'🎯',
+      title:'What\'s your\nprimary sport?',
+      sub:'We\'ll personalize your experience around what you do most.',
+      cta:'Next',
+      fields:[{type:'sport'}]
+    },
+    {
+      id:'profile',
+      icon:'👤',
+      title:'Tell us about\nyourself',
+      sub:'Used to calculate your training zones and nutrition targets.',
+      cta:'Next',
+      fields:[
+        {type:'text',label:'First Name',key:'firstName',placeholder:'e.g. Michael'},
+        {type:'number',label:'Age',key:'age',placeholder:'e.g. 35'},
+        {type:'number',label:'Weight (lbs)',key:'weight',placeholder:'e.g. 165'},
+        {type:'select',label:'Fitness Level',key:'fitnessLevel',options:['Beginner (just getting started)','Intermediate (training regularly)','Advanced (competitive athlete)','Elite (racing seriously)']}
+      ]
+    },
+    {
+      id:'goals',
+      icon:'🏆',
+      title:'What are your\ngoals?',
+      sub:'Select all that apply.',
+      cta:'Next',
+      fields:[{type:'goals'}]
+    },
+    {
+      id:'connect',
+      icon:'🔗',
+      title:'Connect your\naccounts',
+      sub:'Optional — pull in your real training data automatically.',
+      cta:'Next',
+      fields:[{type:'connect'}]
+    },
+    {
+      id:'ftp',
+      icon:'⚡',
+      title:'What\'s your\nfitness baseline?',
+      sub:'Don\'t worry if you don\'t know — you can update this later.',
+      cta:'Finish Setup',
+      fields:[
+        {type:'ftpSport'},
+        {type:'number',label:'FTP / Threshold Pace',key:'ftp',placeholder:'e.g. 200 (watts) or 8:30 (min/mi)'},
+        {type:'number',label:'Max Heart Rate',key:'maxHR',placeholder:'e.g. 178 bpm (or leave blank)'}
+      ]
+    }
+  ];
+
+  var curStep=0;
+  var answers={sport:'cycling',goals:[],firstName:'',age:'',weight:'',fitnessLevel:'',ftp:'',maxHR:''};
+
+  var sportOptions=[
+    {id:'cycling',emoji:'🚴',label:'Cycling'},
+    {id:'running',emoji:'🏃',label:'Running'},
+    {id:'triathlon',emoji:'🏊',label:'Triathlon'},
+    {id:'swimming',emoji:'🏊',label:'Swimming'},
+    {id:'strength',emoji:'🏋️',label:'Strength'}
+  ];
+
+  var goalOptions=[
+    {id:'fitness',emoji:'💪',label:'General Fitness'},
+    {id:'weight',emoji:'⚖️',label:'Weight Management'},
+    {id:'race',emoji:'🏁',label:'Race / Event'},
+    {id:'speed',emoji:'⚡',label:'Get Faster'},
+    {id:'endurance',emoji:'🔋',label:'Build Endurance'},
+    {id:'strength',emoji:'🏋️',label:'Get Stronger'},
+    {id:'health',emoji:'❤️',label:'Overall Health'},
+    {id:'habit',emoji:'📅',label:'Build a Habit'}
+  ];
+
+  function render(){
+    var step=steps[curStep];
+    var pct=Math.round((curStep/steps.length)*100);
+    var html='<div style="max-width:480px;margin:0 auto;padding:0 0 80px">';
+    // Progress bar
+    html+='<div style="height:3px;background:var(--b1)"><div style="height:3px;background:#FC4C02;width:'+pct+'%;transition:width .4s"></div></div>';
+    // Skip button
+    if(curStep>0) html+='<div style="text-align:right;padding:12px 20px 0"><button id="ob-skip" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;font-family:inherit">Skip</button></div>';
+    // Icon + title
+    html+='<div style="padding:40px 24px 0;text-align:center">';
+    html+='<div style="font-size:64px;margin-bottom:20px">'+step.icon+'</div>';
+    html+='<div style="font-size:28px;font-weight:900;color:var(--t1);line-height:1.2;margin-bottom:10px;white-space:pre-line">'+step.title+'</div>';
+    html+='<div style="font-size:15px;color:var(--t3);line-height:1.5;margin-bottom:32px">'+step.sub+'</div>';
+    html+='</div>';
+    // Fields
+    html+='<div style="padding:0 20px">';
+    step.fields.forEach(function(f){
+      if(f.type==='sport'){
+        html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">';
+        sportOptions.forEach(function(s){
+          var sel=answers.sport===s.id;
+          html+='<button data-sport="'+s.id+'" style="background:'+(sel?'#FC4C02':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:16px;padding:16px 8px;cursor:pointer;font-family:inherit;text-align:center">';
+          html+='<div style="font-size:28px;margin-bottom:6px">'+s.emoji+'</div>';
+          html+='<div style="font-size:13px;font-weight:700;color:'+(sel?'white':'var(--t1)')+'">'+s.label+'</div>';
+          html+='</button>';
+        });
+        html+='</div>';
+      } else if(f.type==='goals'){
+        html+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px">';
+        goalOptions.forEach(function(g){
+          var sel=answers.goals.indexOf(g.id)>=0;
+          html+='<button data-goal="'+g.id+'" style="background:'+(sel?'rgba(252,76,2,.1)':'var(--s2)')+';border:2px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:14px;padding:14px;cursor:pointer;font-family:inherit;text-align:left;display:flex;align-items:center;gap:10px">';
+          html+='<span style="font-size:22px">'+g.emoji+'</span>';
+          html+='<span style="font-size:13px;font-weight:700;color:var(--t1)">'+g.label+'</span>';
+          html+='</button>';
+        });
+        html+='</div>';
+      } else if(f.type==='connect'){
+        html+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
+        // Strava
+        html+='<div style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px">';
+        html+='<div style="width:40px;height:40px;background:#FC4C02;border-radius:10px;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg></div>';
+        html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t1)">Strava</div><div style="font-size:12px;color:var(--t3)">Import your activities automatically</div></div>';
+        html+='<button id="ob-strava" style="background:#FC4C02;border:none;color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Connect</button>';
+        html+='</div>';
+        // Intervals.icu
+        html+='<div style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;gap:14px">';
+        html+='<div style="width:40px;height:40px;background:#2563eb;border-radius:10px;display:flex;align-items:center;justify-content:center"><span style="color:white;font-size:16px;font-weight:900">ICU</span></div>';
+        html+='<div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--t1)">Intervals.icu</div><div style="font-size:12px;color:var(--t3)">Sync fitness metrics (CTL, ATL, TSB)</div></div>';
+        html+='<button id="ob-icu" style="background:#2563eb;border:none;color:white;font-size:12px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Connect</button>';
+        html+='</div>';
+        html+='</div>';
+      } else if(f.type==='ftpSport'){
+        var label=answers.sport==='running'?'Threshold Pace (min/mi)':answers.sport==='swimming'?'CSS Pace (min/100m)':'FTP (watts)';
+        html+='<div style="background:var(--s2);border-radius:12px;padding:12px 14px;margin-bottom:10px;font-size:13px;color:var(--t3)">'+
+          (answers.sport==='running'?'Threshold pace = pace you could hold for ~1 hour in a race':
+           answers.sport==='cycling'?'FTP = power you can sustain for ~1 hour':'Leave blank to set later')+
+          '</div>';
+      } else if(f.type==='text'||f.type==='number'){
+        html+='<div style="margin-bottom:14px">';
+        html+='<label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);display:block;margin-bottom:6px">'+f.label+'</label>';
+        html+='<input id="ob-'+f.key+'" type="'+f.type+'" placeholder="'+f.placeholder+'" value="'+(answers[f.key]||'')+'" style="width:100%;padding:12px 14px;border:1.5px solid var(--b2);border-radius:12px;background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit;box-sizing:border-box">';
+        html+='</div>';
+      } else if(f.type==='select'){
+        html+='<div style="margin-bottom:14px">';
+        html+='<label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);display:block;margin-bottom:6px">'+f.label+'</label>';
+        html+='<select id="ob-'+f.key+'" style="width:100%;padding:12px 14px;border:1.5px solid var(--b2);border-radius:12px;background:var(--s2);color:var(--t1);font-size:15px;font-family:inherit;box-sizing:border-box">';
+        html+='<option value="">Select...</option>';
+        f.options.forEach(function(o){html+='<option value="'+o+'"'+(answers[f.key]===o?' selected':'')+'>'+o+'</option>';});
+        html+='</select></div>';
+      }
+    });
+    html+='</div>';
+    // CTA button (fixed bottom)
+    html+='</div>';
+    html+='<div style="position:fixed;bottom:0;left:0;right:0;padding:16px 20px;background:var(--bg);border-top:1px solid var(--b1)">';
+    html+='<button id="ob-next" style="width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:16px;font-weight:800;padding:16px;border-radius:16px;cursor:pointer;font-family:inherit">'+step.cta+'</button>';
+    html+='</div>';
+    overlay.innerHTML=html;
+
+    // Wire sport buttons
+    overlay.querySelectorAll('[data-sport]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        answers.sport=btn.getAttribute('data-sport');
+        render();
+      });
+    });
+
+    // Wire goal buttons
+    overlay.querySelectorAll('[data-goal]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var g=btn.getAttribute('data-goal');
+        var idx=answers.goals.indexOf(g);
+        if(idx>=0) answers.goals.splice(idx,1); else answers.goals.push(g);
+        render();
+      });
+    });
+
+    // Wire Strava connect
+    var stravaBtn=overlay.querySelector('#ob-strava');
+    if(stravaBtn) stravaBtn.addEventListener('click',function(){
+      var authUrl='https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_auth&app='+encodeURIComponent(window.location.origin+window.location.pathname);
+      window.location.href=authUrl;
+    });
+
+    // Wire ICU connect
+    var icuBtn=overlay.querySelector('#ob-icu');
+    if(icuBtn) icuBtn.addEventListener('click',function(){
+      var athleteId=prompt('Enter your Intervals.icu Athlete ID (e.g. i544205):');
+      var apiKey=prompt('Enter your Intervals.icu API Key:');
+      if(athleteId&&apiKey){
+        if(!st.settings) st.settings={};
+        st.settings.icuAthlete=athleteId;
+        st.settings.icuKey=apiKey;
+        sv();
+        icuBtn.textContent='✓ Connected';
+        icuBtn.style.background='#0F6E56';
+      }
+    });
+
+    // Wire skip
+    var skipBtn=overlay.querySelector('#ob-skip');
+    if(skipBtn) skipBtn.addEventListener('click',function(){ curStep++; if(curStep>=steps.length) finish(); else render(); });
+
+    // Wire next
+    overlay.querySelector('#ob-next').addEventListener('click',function(){
+      // Collect field values
+      step.fields.forEach(function(f){
+        if(f.key){
+          var el=overlay.querySelector('#ob-'+f.key);
+          if(el) answers[f.key]=el.value;
+        }
+      });
+      curStep++;
+      if(curStep>=steps.length) finish();
+      else render();
+    });
+  }
+
+  function finish(){
+    // Save all answers to settings
+    if(!st.settings) st.settings={};
+    if(answers.firstName) st.settings.firstName=answers.firstName;
+    if(answers.age) st.settings.age=parseInt(answers.age);
+    if(answers.weight) st.settings.weight=parseFloat(answers.weight);
+    if(answers.fitnessLevel) st.settings.fitnessLevel=answers.fitnessLevel;
+    if(answers.ftp) st.ftp=parseInt(answers.ftp)||st.ftp||183;
+    if(answers.maxHR) st.settings.maxHR=parseInt(answers.maxHR);
+    st.settings.primarySport=answers.sport;
+    st.settings.goals=answers.goals;
+    st.settings.onboardingDone=true;
+    sv();
+    overlay.remove();
+    // Show personalized welcome toast
+    var name=answers.firstName?answers.firstName:'Athlete';
+    toast('Welcome, '+name+'! Your dashboard is ready 🎉');
+  }
+
+  render();
+  document.body.appendChild(overlay);
+}
+
+// Check if onboarding needed on load
+function checkOnboarding(){
+  if(!st.settings||!st.settings.onboardingDone){
+    setTimeout(showOnboarding, 1000);
+  }
 }
 
 function showRun(){ renderRun(); }
