@@ -4389,7 +4389,8 @@ function showSet(){
           var activities=data.activities||[];
           var imported=0,skipped=0;
           activities.forEach(function(a){
-            if(a.type!=='Ride'&&a.type!=='VirtualRide'){skipped++;return;}
+            var cyclingTypes=['Ride','VirtualRide','MountainBikeRide','GravelRide','Workout','IndoorCycling','EBikeRide','VirtualRow'];
+            if(cyclingTypes.indexOf(a.type)===-1&&!(a.sport_type&&a.sport_type.toLowerCase().indexOf('ride')>=0)&&!(a.sport_type&&a.sport_type.toLowerCase().indexOf('cycling')>=0)){skipped++;return;}
             var dateRaw=a.start_date_local||a.start_date||'';
             var dateStr=dateRaw?dateRaw.slice(0,10):'';
             var p=dateStr.split('-');
