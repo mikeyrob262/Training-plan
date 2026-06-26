@@ -6716,7 +6716,7 @@ function renderPerf(container){
     var totalElev=elevRides.reduce(function(a,r){return a+(r.elev||0);},0);
     var en=elevRides.length;
     var elevData=elevRides.map(function(r){return r.elev;});
-    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Rides</div>';
+    html+='<div style="padding:4px 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation · Last '+en+' Activities</div>';
     html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:12px">';
     var elevDates=elevRides.map(function(r){return r.date;});
     html+=buildLineChart(elevData,'#6366f1','ft','',null,elevDates);
@@ -6851,7 +6851,7 @@ function renderPerf(container){
     +'<div id="perf-filter-bar" style="display:flex;gap:4px;overflow-x:auto;padding:4px 16px 0;-webkit-overflow-scrolling:touch">'+
     ['All','Rides','Runs','Swims','Strength'].map(function(f,fi){return '<button class="perf-filter-btn" data-filter="'+f+'" style="background:'+(fi===0?'#FC4C02':'var(--s2)')+';color:'+(fi===0?'white':'var(--t2)')+';border:1px solid var(--b1);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;font-family:inherit">'+f+'</button>';}).join('')+'</div>';
   html+='<div style="display:flex;gap:6px;padding:6px 16px 8px">'
-    +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
+    +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Activity</button>'
     +'<button onclick="dedupRides()" style="background:rgba(100,116,139,.12);border:1px solid rgba(100,116,139,.25);color:var(--t2);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">🔀 Dedup</button>'
 
     +'</div>';
@@ -6973,7 +6973,7 @@ function renderPerf(container){
         renderPerf(pb);
       } else {
         var msg=document.getElementById('perf-sync-msg');
-        if(msg) msg.textContent='No rides found. Import TCX or add manually.';
+        if(msg) msg.textContent='No activities found. Import TCX or add manually.';
       }
     },7000);
   }
@@ -7013,7 +7013,7 @@ function renderPerf(container){
           plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.raw+'W ('+(ctx.raw?Math.round(ctx.raw/parseInt(st.ftp||186)*100)+'% FTP':'')+')';}}}},
           scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return v+'W';}},min:0}}}});
       } else {
-        pkc.parentElement.innerHTML='<div style="text-align:center;padding:20px;color:'+textC+';font-size:12px">Import rides with power data to see peak power chart</div>';
+        pkc.parentElement.innerHTML='<div style="text-align:center;padding:20px;color:'+textC+';font-size:12px">Import activities with power data to see peak power chart</div>';
       }
     }
     var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,
@@ -8511,8 +8511,8 @@ function openRideDetail(idx){
     if(r.avgPwr&&FTP){
       var ifV=r.np?r.np/FTP:r.avgPwr/FTP;
       var z2p=Math.round((r.z2s||0)/((r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)||r.movingSecs)*100);
-      if(ifV<0.65) aiTxt='Easy recovery ride. Stayed aerobic throughout — low training stress.';
-      else if(ifV<0.75) aiTxt='Steady endurance ride. '+z2p+'% Z2 aerobic work (avg '+r.avgHR+' bpm). Well-controlled effort.';
+      if(ifV<0.65) aiTxt='Easy recovery effort. Stayed aerobic throughout — low training stress.';
+      else if(ifV<0.75) aiTxt='Steady endurance effort. '+z2p+'% Z2 aerobic work (avg '+r.avgHR+' bpm). Well-controlled effort.';
       else if(ifV<0.85) aiTxt='Moderate tempo effort (IF '+ifV.toFixed(2)+'). Good training stimulus for aerobic development.';
       else if(ifV<0.95) aiTxt='Threshold effort (IF '+ifV.toFixed(2)+'). High load — ensure adequate recovery before next hard session.';
       else aiTxt='Race-pace effort (IF '+ifV.toFixed(2)+'). Very high intensity. Extended recovery needed.';
@@ -11094,7 +11094,7 @@ function showAIWorkout(){
   tabsHtml+='<button class="ai-tab" data-mode="week" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">7 Days</button>';
   tabsHtml+='<button class="ai-tab" data-mode="month" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">30 Days</button>';
   tabsHtml+='<button class="ai-tab" data-mode="season" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">90 Days</button>';
-  tabsHtml+='<button class="ai-tab" data-mode="thursday" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Thu Rides</button>';
+  tabsHtml+='<button class="ai-tab" data-mode="thursday" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Thu Activity</button>';
   tabsHtml+='<button class="ai-tab" data-mode="nutrition" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Nutrition</button>';
   tabsHtml+='<button class="ai-tab" data-mode="custom" style="flex-shrink:0;background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:12px;font-weight:700;padding:7px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Custom</button>';
   tabsHtml+='</div>';
@@ -11126,7 +11126,7 @@ function showAIWorkout(){
   }
 
   function rideSummary(arr){
-    if(!arr.length) return 'No rides.';
+    if(!arr.length) return 'No activities.';
     var tss=arr.reduce(function(s,r){return s+(r.tss||0);},0);
     var dist=arr.reduce(function(s,r){return s+(r.distance||0);},0);
     var nps=arr.filter(function(r){return r.np;});
@@ -11159,7 +11159,7 @@ function showAIWorkout(){
     if(mode==='today'){
       var rec=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,5);
       var l7=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-7*864e5);}).reduce(function(s,r){return s+(r.tss||0);},0);
-      q='Recent rides:\n'+rec.map(fmtRide).join('\n')+'\nLast 7d TSS: '+l7+'\n\nGive: 1) Today workout (specific type/duration/power/HR). 2) Week focus. 3) Masters tip.';
+      q='Recent activities:\n'+rec.map(fmtRide).join('\n')+'\nLast 7d TSS: '+l7+'\n\nGive: 1) Today workout (specific type/duration/power/HR). 2) Week focus. 3) Masters tip.';
       msg='Building today\'s plan...';
     } else if(mode==='week'){
       var w7=rides.filter(function(r){return r.date&&new Date(r.date)>new Date(now-7*864e5);}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
@@ -11175,7 +11175,7 @@ function showAIWorkout(){
       msg='Analyzing your season...';
     } else if(mode==='thursday'){
       var thu=rides.filter(function(r){return r.date&&new Date(r.date).getDay()===4&&(r.distance||0)>10;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-      q='All Thursday rides ('+thu.length+'):\n'+thu.map(fmtRide).join('\n')+'\n\nGroup ride progression. Getting faster? What to do to move from Chase 2 to Chase 1?';
+      q='All Thursday activities ('+thu.length+'):\n'+thu.map(fmtRide).join('\n')+'\n\nGroup ride progression. Getting faster? What to do to move from Chase 2 to Chase 1?';
       msg='Analyzing Thursday progression...';
     } else if(mode==='nutrition'){
       var lastR=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0];
@@ -11191,7 +11191,7 @@ function showAIWorkout(){
         });
         nutrSummary='Today logged: '+Math.round(totalCal)+' kcal, '+Math.round(totalProt)+'g protein so far.';
       }
-      q='Last ride: '+(lastR?fmtRide(lastR):'None recently')
+      q='Last activity: '+(lastR?fmtRide(lastR):'None recently')
         +' | Next: '+next2.map(fmtRide).join(' / ')
         +' | '+nutrSummary
         +' | Weight: '+c.wt+'lbs (goal 150-152)'
