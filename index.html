@@ -8772,6 +8772,7 @@ function openRideDetail(idx){
       if(!_tk){ toast('Connect Strava first'); return; }
       var _furl = 'https://mikey-food-api2.mgrobinson07.workers.dev/?action=strava_activity&id='+encodeURIComponent(r.id||'')+'&token='+encodeURIComponent(_tk)+'&date='+encodeURIComponent(r.date||'')+'&dist='+(r.distance||'');
       fetch(_furl).then(function(res){return res.json();}).then(function(d){
+        toast('d: '+JSON.stringify(d).substring(0,120));
         if(d.strava_id){
           if(d.moving_secs){r.movingSecs=d.moving_secs;var _hh=Math.floor(d.moving_secs/3600),_mm=Math.floor((d.moving_secs%3600)/60),_ss=d.moving_secs%60;r.duration=_hh+':'+('0'+_mm).slice(-2)+':'+('0'+_ss).slice(-2);}
           if(d.distance_mi) r.distance=d.distance_mi;
