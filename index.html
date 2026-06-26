@@ -3782,6 +3782,7 @@ function renderStravaMap(rideOrId, container){
       if(window.L) _initCached();
       else{var _ls=document.createElement('script');_ls.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';_ls.onload=_initCached;document.head.appendChild(_ls);}
       // If missing key fields, still fetch data from Strava
+      toast('Cache hit: secs='+rideOrId.movingSecs+' dist='+rideOrId.distance+' avg='+rideOrId.avgPwr);
       var _needsData = !rideOrId.movingSecs || !rideOrId.distance || !rideOrId.avgPwr;
       if(_needsData && token){
         fetch(mapUrl).then(function(r){return r.json();}).then(function(d){
