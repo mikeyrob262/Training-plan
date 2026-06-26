@@ -3883,9 +3883,23 @@ function renderStravaMap(rideOrId, container){
               _pr.duration=_h+':'+('0'+_m).slice(-2)+':'+('0'+_s).slice(-2);
             }
             sv();
-            // Re-render the detail screen with fresh data
+            // Update DOM directly without full re-render
             var _modal=document.getElementById('ride-detail-modal');
-            if(_modal && _pi>=0){ _modal.remove(); openRideDetail(_pi); }
+            if(_modal){
+              // Find real index by date+id
+              var _realIdx=-1;
+              for(var _ri=0;_ri<(st.rides||[]).length;_ri++){
+                var _rr=st.rides[_ri];
+                if(_rr===_pr||String(_rr.id)===String(_pr.id)){_realIdx=_ri;break;}
+              }
+              if(_realIdx>=0){ _modal.remove(); openRideDetail(_realIdx); }
+              else {
+                // Just update visible text nodes directly
+                var _heads=_modal.querySelectorAll('.hero-val');
+                if(_heads[0]&&_pr.duration) _heads[0].textContent=_pr.duration;
+                if(_heads[1]&&_pr.distance) _heads[1].textContent=_pr.distance+'mi';
+              }
+            }
           }
         }
       }
