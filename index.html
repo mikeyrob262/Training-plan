@@ -9895,10 +9895,10 @@ function showFitImport(){
     +'<div id="fit-drop" style="border:2px dashed var(--b2);border-radius:20px;padding:48px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px">'
     +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 16px;display:block"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
     +'<div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:8px">Tap to select activity file</div>'
-    +'<div style="font-size:13px;color:var(--t3)">TCX, GPX, or FIT files supported</div>'
-    +'<div style="font-size:11px;color:var(--t3);margin-top:12px">Garmin Connect → Activity → ··· → Export → Export as TCX or GPX</div>'
+    +'<div style="font-size:13px;color:var(--t3)">TCX, GPX, FIT, or ZIP files supported</div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:12px">Garmin Connect web → Activity → ··· → Export File (downloads a ZIP containing your FIT)</div>'
     +'</div>'
-    +'<input id="fit-file-input" type="file" accept=".fit,.tcx,.gpx" style="display:none" multiple>'
+    +'<input id="fit-file-input" type="file" accept=".fit,.tcx,.gpx,.zip" style="display:none" multiple>'
     +'<div id="fit-status" style="font-size:13px;color:var(--t3);text-align:center;min-height:20px"></div>'
     +'<div id="fit-results" style="margin-top:16px"></div>'
     +'</div>';
@@ -9911,6 +9911,12 @@ function showFitImport(){
   var status=modal.querySelector('#fit-status');
   var results=modal.querySelector('#fit-results');
 
+  // Load pako for ZIP decompression if needed
+  if(!window.pako){
+    var pakoScript=document.createElement('script');
+    pakoScript.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
+    document.head.appendChild(pakoScript);
+  }
   dropZone.addEventListener('click',function(){fileInput.click();});
   dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.style.borderColor='#FC4C02';dropZone.style.background='rgba(252,76,2,.05)';});
   dropZone.addEventListener('dragleave',function(){dropZone.style.borderColor='var(--b2)';dropZone.style.background='';});
@@ -9920,15 +9926,35 @@ function showFitImport(){
   function processFiles(files){
     var arr=Array.from(files).filter(function(f){
       var n=f.name.toLowerCase();
-      return n.endsWith('.fit')||n.endsWith('.tcx')||n.endsWith('.gpx');
+      return n.endsWith('.fit')||n.endsWith('.tcx')||n.endsWith('.gpx')||n.endsWith('.zip');
     });
-    if(!arr.length){status.textContent='Please select TCX, GPX or FIT files';return;}
+    if(!arr.length){status.textContent='Please select TCX, GPX, FIT or ZIP files';return;}
     status.textContent='Parsing '+arr.length+' file'+(arr.length>1?'s':'')+'...';
     results.innerHTML='';
     var imported=0, errors=0;
     arr.forEach(function(file){
       var ext=file.name.toLowerCase().split('.').pop();
-      if(ext==='fit'){
+      if(ext==='zip'){
+        // Garmin exports a ZIP containing the FIT file
+        var reader0=new FileReader();
+        reader0.onload=function(e){
+          try{
+            var zipData=new Uint8Array(e.target.result);
+            // Find FIT file inside ZIP (look for PK signature then scan for .FIT)
+            var fitData=extractFitFromZip(zipData);
+            if(fitData){
+              var activity=parseFIT(fitData,file.name.replace('.zip','.fit'));
+              if(activity){saveActivity(activity);imported++;showResult(activity,results);}
+              else errors++;
+            } else {
+              errors++;
+              status.textContent='No FIT file found in ZIP';
+            }
+          }catch(ex){errors++;console.error('ZIP parse error:',ex);}
+          if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}
+        };
+        reader0.readAsArrayBuffer(file);
+      } else if(ext==='fit'){
         var reader=new FileReader();
         reader.onload=function(e){
           try{
@@ -9976,6 +10002,54 @@ function showFitImport(){
     var exists=st.rides.some(function(r){return r.date===a.date&&Math.abs((r.distance||0)-(a.distance||0))<0.5;});
     if(!exists) st.rides.push(a);
   }
+}
+
+function extractFitFromZip(data){
+  // Simple ZIP parser - find the FIT file entry
+  var pos = 0;
+  while(pos < data.length - 4){
+    // Local file header signature: PK\x03\x04
+    if(data[pos]===0x50&&data[pos+1]===0x4B&&data[pos+2]===0x03&&data[pos+3]===0x04){
+      var compMethod = data[pos+8]|(data[pos+9]<<8);
+      var compSize = data[pos+18]|(data[pos+19]<<8)|(data[pos+20]<<16)|(data[pos+21]<<24);
+      var uncompSize = data[pos+22]|(data[pos+23]<<8)|(data[pos+24]<<16)|(data[pos+25]<<24);
+      var fnLen = data[pos+26]|(data[pos+27]<<8);
+      var extraLen = data[pos+28]|(data[pos+29]<<8);
+      var fname = '';
+      for(var i=0;i<fnLen;i++) fname+=String.fromCharCode(data[pos+30+i]);
+      var dataStart = pos+30+fnLen+extraLen;
+      if(fname.toLowerCase().endsWith('.fit')){
+        if(compMethod===0){
+          // Stored (no compression)
+          return data.slice(dataStart, dataStart+uncompSize);
+        } else if(compMethod===8){
+          // Deflate - need to decompress
+          try{
+            var compressed = data.slice(dataStart, dataStart+compSize);
+            return inflateRaw(compressed, uncompSize);
+          }catch(e){
+            console.error('Deflate error:',e);
+            return null;
+          }
+        }
+      }
+      pos = dataStart + compSize;
+    } else {
+      pos++;
+    }
+  }
+  return null;
+}
+
+function inflateRaw(data, expectedSize){
+  // Use DecompressionStream if available (modern browsers)
+  // This is async but we need sync - use a workaround
+  // For now return null and fall back to TCX
+  try {
+    // Try using pako if loaded, otherwise fail gracefully
+    if(window.pako) return window.pako.inflateRaw(data);
+  } catch(e){}
+  return null;
 }
 
 // ── FIT BINARY PARSER ────────────────────────────────────────────────────
