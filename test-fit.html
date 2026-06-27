@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>FIT Test</title></head>
+<body>
+<input type="file" accept=".fit" id="f">
+<pre id="out"></pre>
+<script src="https://cdn.jsdelivr.net/npm/fit-file-parser@1.10.0/dist/fit-file-parser.min.js"></script>
+<script>
+document.getElementById('f').addEventListener('change', function(e){
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var fitParser = new FitParser({force: true, speedUnit: 'mph', lengthUnit: 'mi', temperatureUnit: 'fahrenheit', elapsedRecordField: true, mode: 'both'});
+    fitParser.parse(ev.target.result, function(err, data){
+      if(err) document.getElementById('out').textContent = 'ERROR: ' + err;
+      else document.getElementById('out').textContent = JSON.stringify(data.sessions||data, null, 2).substring(0, 3000);
+    });
+  };
+  reader.readAsArrayBuffer(e.target.files[0]);
+});
+</script>
+</body>
+</html>
