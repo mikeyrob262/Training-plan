@@ -9428,6 +9428,227 @@ function showZwiftBuilder(){
   document.body.appendChild(modal);
 }
 
+function showFitImport(){
+  var old=document.getElementById('fit-import-modal');
+  if(old){old.remove();return;}
+  var modal=document.createElement('div');
+  modal.id='fit-import-modal';
+  modal.style.cssText='position:fixed;inset:0;z-index:200;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch';
+  modal.innerHTML='<div style="padding:20px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">'
+    +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">Import Activity File</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-top:2px">TCX, GPX or FIT — no Strava needed</div></div>'
+    +'<button id="fit-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Close</button>'
+    +'</div>'
+    +'<div style="border:2px dashed var(--b2);border-radius:20px;padding:40px 24px;text-align:center;margin-bottom:16px">'
+    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 16px;display:block"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:8px">Select activity file</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:16px">TCX, GPX, or FIT (ZIP also accepted)</div>'
+    +'<input id="fit-file-input" type="file" accept=".fit,.tcx,.gpx,.zip" multiple style="font-size:13px;color:var(--t2)">'
+    +'</div>'
+    +'<div id="fit-status" style="font-size:13px;color:var(--t3);text-align:center;margin-bottom:12px"></div>'
+    +'<div id="fit-results"></div>'
+    +'</div>';
+  document.body.appendChild(modal);
+  modal.querySelector('#fit-close').addEventListener('click',function(){modal.remove();});
+
+  var fileInput=modal.querySelector('#fit-file-input');
+  var status=modal.querySelector('#fit-status');
+  var results=modal.querySelector('#fit-results');
+
+  fileInput.addEventListener('change',function(){
+    if(!fileInput.files||!fileInput.files.length) return;
+    processFiles(fileInput.files);
+  });
+
+  function processFiles(files){
+    var arr=Array.from(files).filter(function(f){
+      var n=f.name.toLowerCase();
+      return n.endsWith('.fit')||n.endsWith('.tcx')||n.endsWith('.gpx')||n.endsWith('.zip');
+    });
+    if(!arr.length){status.textContent='No supported files selected';return;}
+    status.textContent='Importing '+arr.length+' file'+(arr.length>1?'s':'')+'...';
+    results.innerHTML='';
+    var done=0;
+    arr.forEach(function(file){
+      var ext=file.name.toLowerCase().split('.').pop();
+      var reader=new FileReader();
+      if(ext==='tcx'||ext==='gpx'){
+        reader.onload=function(e){
+          try{
+            var act=ext==='tcx'?parseTCXText(e.target.result):parseGPXText(e.target.result);
+            if(act){saveAct(act);showResult(act);}
+          }catch(ex){console.error(ex);}
+          if(++done===arr.length){status.textContent='Done: '+results.children.length+' imported';sv();}
+        };
+        reader.readAsText(file);
+      } else {
+        reader.onload=function(e){
+          var raw=new Uint8Array(e.target.result);
+          var fitData=ext==='zip'?extractFitFromZip(raw):raw;
+          if(!fitData){if(++done===arr.length){status.textContent='Done: '+results.children.length+' imported';sv();}return;}
+          ensureFitParser(function(){
+            parseFITLib(fitData).then(function(act){
+              if(act){saveAct(act);showResult(act);}
+              if(++done===arr.length){status.textContent='Done: '+results.children.length+' imported';sv();}
+            });
+          });
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    });
+  }
+
+  function saveAct(a){
+    if(!st.rides) st.rides=[];
+    var exists=st.rides.some(function(r){return r.date===a.date&&Math.abs((r.distance||0)-(a.distance||0))<0.5;});
+    if(!exists) st.rides.push(a);
+  }
+
+  function showResult(a){
+    var div=document.createElement('div');
+    div.style.cssText='background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:12px;margin-bottom:8px';
+    div.innerHTML='<div style="font-weight:700;color:var(--t1);margin-bottom:4px">'+(a.name||'Activity')+'</div>'
+      +'<div style="font-size:12px;color:var(--t3)">'+(a.date||'')+(a.distance?' · '+a.distance+'mi':'')+(a.duration?' · '+a.duration:'')+(a.tss?' · TSS '+a.tss:'')+(a.avgHR?' · '+a.avgHR+'bpm':'')+'</div>';
+    results.appendChild(div);
+  }
+}
+
+function ensureFitParser(cb){
+  if(window.FitParser){cb();return;}
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/fit-file-parser@1.10.0/dist/fit-file-parser.min.js';
+  s.onload=cb;
+  document.head.appendChild(s);
+}
+
+function parseFITLib(data){
+  return new Promise(function(resolve){
+    if(!window.FitParser){resolve(null);return;}
+    var fp=new FitParser({force:true,speedUnit:'mph',lengthUnit:'mi',temperatureUnit:'fahrenheit',elapsedRecordField:true,mode:'both'});
+    fp.parse(data.buffer,function(err,d){
+      if(err){console.error('FIT error:',err);resolve(null);return;}
+      var s=(d.sessions&&d.sessions[0])||{};
+      var records=d.records||[];
+      var start=s.start_time?new Date(s.start_time):new Date();
+      var dateStr=start.getFullYear()+'-'+(start.getMonth()+1)+'-'+start.getDate();
+      var elap=s.total_elapsed_time||0;
+      var h=Math.floor(elap/3600),m=Math.floor((elap%3600)/60),sc=Math.round(elap%60);
+      var dur=h+':'+('0'+m).slice(-2)+':'+('0'+sc).slice(-2);
+      var tod=start.getHours()<12?'Morning':start.getHours()<17?'Afternoon':'Evening';
+      var smap={'cycling':'Cycling','running':'Run','swimming':'Swimming','strength_training':'Strength','hiking':'Hiking'};
+      var type=smap[(s.sport||'').toLowerCase()]||'Cycling';
+      function ds(a,n){if(!a||a.length<=n)return a;var st=a.length/n;return Array.from({length:n},function(_,i){return a[Math.floor(i*st)];});}
+      var pwrVals=records.filter(function(r){return r.power!=null;}).map(function(r){return r.power;});
+      var hrVals=records.filter(function(r){return r.heart_rate!=null;}).map(function(r){return r.heart_rate;});
+      var result={
+        id:'fit_'+start.getTime(), name:tod+' '+(type==='Cycling'?'Ride':type),
+        date:dateStr, type:type, source:'fit',
+        duration:dur, elapsedSecs:elap,
+        distance:Math.round((s.total_distance||0)*10)/10,
+        avgSpeed:Math.round((s.avg_speed||0)*10)/10,
+        avgPwr:Math.round(s.avg_power||0)||null,
+        np:Math.round(s.normalized_power||0)||null,
+        maxPwr:Math.round(s.max_power||0)||null,
+        tss:s.training_stress_score?Math.round(s.training_stress_score):null,
+        ifPct:s.intensity_factor?Math.round(s.intensity_factor*100)/100:null,
+        avgHR:Math.round(s.avg_heart_rate||0)||null,
+        maxHR:Math.round(s.max_heart_rate||0)||null,
+        cadence:Math.round(s.avg_cadence||0)||null,
+        calories:Math.round(s.total_calories||0)||null,
+        elev:s.total_ascent?Math.round(s.total_ascent*3.2808):null,
+      };
+      if(pwrVals.length>10) result.chartPwr=ds(pwrVals,200);
+      if(hrVals.length>10) result.chartHR=ds(hrVals,200);
+      resolve(result);
+    });
+  });
+}
+
+function extractFitFromZip(data){
+  var pos=0;
+  while(pos<data.length-4){
+    if(data[pos]===0x50&&data[pos+1]===0x4B&&data[pos+2]===0x03&&data[pos+3]===0x04){
+      var compMethod=data[pos+8]|(data[pos+9]<<8);
+      var compSize=data[pos+18]|(data[pos+19]<<8)|(data[pos+20]<<16)|(data[pos+21]<<24);
+      var uncompSize=data[pos+22]|(data[pos+23]<<8)|(data[pos+24]<<16)|(data[pos+25]<<24);
+      var fnLen=data[pos+26]|(data[pos+27]<<8);
+      var extraLen=data[pos+28]|(data[pos+29]<<8);
+      var fname='';
+      for(var i=0;i<fnLen;i++) fname+=String.fromCharCode(data[pos+30+i]);
+      var dataStart=pos+30+fnLen+extraLen;
+      if(fname.toLowerCase().endsWith('.fit')){
+        if(compMethod===0) return data.slice(dataStart,dataStart+uncompSize);
+        if(compMethod===8&&window.pako) try{return window.pako.inflateRaw(data.slice(dataStart,dataStart+compSize));}catch(e){}
+      }
+      pos=dataStart+compSize;
+    } else pos++;
+  }
+  return null;
+}
+
+function parseTCXText(text){
+  var xml=new DOMParser().parseFromString(text,'text/xml');
+  var laps=Array.from(xml.querySelectorAll('Lap'));
+  var totalDist=0,totalTime=0,totalCal=0,hrSum=0,hrCount=0,maxHR=0;
+  laps.forEach(function(lap){
+    totalDist+=parseFloat((lap.querySelector('DistanceMeters')||{}).textContent||0);
+    totalTime+=parseFloat((lap.querySelector('TotalTimeSeconds')||{}).textContent||0);
+    totalCal+=parseFloat((lap.querySelector('Calories')||{}).textContent||0);
+    var avHR=parseInt((lap.querySelector('AverageHeartRateBpm Value')||{}).textContent||0);
+    var mxHR=parseInt((lap.querySelector('MaximumHeartRateBpm Value')||{}).textContent||0);
+    if(avHR){hrSum+=avHR;hrCount++;}
+    if(mxHR>maxHR) maxHR=mxHR;
+  });
+  var startEl=xml.querySelector('Id')||xml.querySelector('StartTime');
+  var start=startEl?new Date(startEl.textContent):new Date();
+  var dateStr=start.getFullYear()+'-'+(start.getMonth()+1)+'-'+start.getDate();
+  var h=Math.floor(totalTime/3600),m=Math.floor((totalTime%3600)/60),s=Math.round(totalTime%60);
+  return {
+    id:'tcx_'+start.getTime(), name:'Morning Ride', date:dateStr, type:'Cycling', source:'tcx',
+    duration:h+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2), elapsedSecs:Math.round(totalTime),
+    distance:Math.round(totalDist/1609.34*10)/10,
+    avgHR:hrCount?Math.round(hrSum/hrCount):null, maxHR:maxHR||null,
+    calories:Math.round(totalCal)||null,
+  };
+}
+
+function parseGPXText(text){
+  var xml=new DOMParser().parseFromString(text,'text/xml');
+  var trkpts=Array.from(xml.querySelectorAll('trkpt'));
+  if(!trkpts.length) return null;
+  var latLngs=[],elevVals=[],times=[],hrVals=[];
+  trkpts.forEach(function(pt){
+    var lat=parseFloat(pt.getAttribute('lat')),lng=parseFloat(pt.getAttribute('lon'));
+    if(!isNaN(lat)&&!isNaN(lng)) latLngs.push([lat,lng]);
+    var ele=pt.querySelector('ele'); if(ele) elevVals.push(parseFloat(ele.textContent)||0);
+    var time=pt.querySelector('time'); if(time) times.push(new Date(time.textContent));
+    var hr=pt.querySelector('hr,gpxtpx\:hr'); if(hr) hrVals.push(parseInt(hr.textContent)||0);
+  });
+  var start=times.length?times[0]:new Date();
+  var end=times.length?times[times.length-1]:new Date();
+  var totalSec=Math.round((end-start)/1000);
+  var dateStr=start.getFullYear()+'-'+(start.getMonth()+1)+'-'+start.getDate();
+  var totalDistM=0;
+  for(var i=1;i<latLngs.length;i++){
+    var dLat=(latLngs[i][0]-latLngs[i-1][0])*Math.PI/180;
+    var dLon=(latLngs[i][1]-latLngs[i-1][1])*Math.PI/180;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(latLngs[i-1][0]*Math.PI/180)*Math.cos(latLngs[i][0]*Math.PI/180)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    totalDistM+=6371000*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  }
+  var elevGain=0;
+  for(var j=1;j<elevVals.length;j++) if(elevVals[j]>elevVals[j-1]) elevGain+=elevVals[j]-elevVals[j-1];
+  var h=Math.floor(totalSec/3600),m=Math.floor((totalSec%3600)/60),s=totalSec%60;
+  var name=xml.querySelector('trk name');
+  return {
+    id:'gpx_'+start.getTime(), name:name?name.textContent:'Activity', date:dateStr, type:'Cycling', source:'gpx',
+    duration:h+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2), elapsedSecs:totalSec,
+    distance:Math.round(totalDistM/1609.34*10)/10,
+    elev:Math.round(elevGain*3.2808)||null,
+    avgHR:hrVals.length?Math.round(hrVals.reduce(function(a,b){return a+b;},0)/hrVals.length):null,
+  };
+}
+
 function showMoreSheet(){
   var old=document.getElementById('more-sheet');
   if(old){old.remove();return;}
@@ -9442,6 +9663,7 @@ function showMoreSheet(){
     {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'meals'},
     {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'weekly'},
     {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength',fn:'str'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',label:'Import File',fn:'import'},
     {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',label:'Dark Mode',fn:'dark'},
     {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',label:'Settings',fn:'set'},
   ];
@@ -9468,6 +9690,7 @@ function showMoreSheet(){
         else if(fn==='meals') showMealTemplates();
         else if(fn==='weekly') showWeeklyReport();
         else if(fn==='str') showCond();
+        else if(fn==='import') showFitImport();
         else if(fn==='dark') document.getElementById('btn-dark').click();
         else if(fn==='set') showSet();
       }catch(e){console.error('More sheet error:',e);}
