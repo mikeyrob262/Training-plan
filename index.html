@@ -9537,7 +9537,8 @@ function parseFITLib(data){
       var start=s.start_time?new Date(s.start_time):new Date();
       var dateStr=start.getFullYear()+'-'+(start.getMonth()+1)+'-'+start.getDate();
       var elap=s.total_elapsed_time||0;
-      var h=Math.floor(elap/3600),m=Math.floor((elap%3600)/60),sc=Math.round(elap%60);
+      var moving=s.total_timer_time||s.total_moving_time||elap;
+      var h=Math.floor(moving/3600),m=Math.floor((moving%3600)/60),sc=Math.round(moving%60);
       var dur=h+':'+('0'+m).slice(-2)+':'+('0'+sc).slice(-2);
       var tod=start.getHours()<12?'Morning':start.getHours()<17?'Afternoon':'Evening';
       var smap={'cycling':'Cycling','running':'Run','swimming':'Swimming','strength_training':'Strength','hiking':'Hiking'};
@@ -9560,7 +9561,8 @@ function parseFITLib(data){
         maxHR:Math.round(s.max_heart_rate||0)||null,
         cadence:Math.round(s.avg_cadence||0)||null,
         calories:Math.round(s.total_calories||0)||null,
-        elev:s.total_ascent?Math.round(s.total_ascent*3.2808):null,
+        elev:s.total_ascent&&s.total_ascent>1?Math.round(s.total_ascent*3.2808):
+              s.total_ascent&&s.total_ascent<=1?Math.round(s.total_ascent*5280):null,
       };
       if(pwrVals.length>10) result.chartPwr=ds(pwrVals,200);
       if(hrVals.length>10) result.chartHR=ds(hrVals,200);
