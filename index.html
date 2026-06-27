@@ -9927,11 +9927,13 @@ function showFitImport(){
   fileInput.addEventListener('change',function(){processFiles(fileInput.files);});
 
   function processFiles(files){
+    toast('Files selected: '+files.length+' types: '+Array.from(files).map(function(f){return f.name;}).join(', '));
     var arr=Array.from(files).filter(function(f){
       var n=f.name.toLowerCase();
       return n.endsWith('.fit')||n.endsWith('.tcx')||n.endsWith('.gpx')||n.endsWith('.zip');
     });
     if(!arr.length){status.textContent='Please select TCX, GPX, FIT or ZIP files';return;}
+    toast('Matched: '+arr.length+' files, ext: '+arr.map(function(f){return f.name.split('.').pop();}).join(', '));
     status.textContent='Parsing '+arr.length+' file'+(arr.length>1?'s':'')+'...';
     results.innerHTML='';
     var imported=0, errors=0;
