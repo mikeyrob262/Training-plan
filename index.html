@@ -9720,27 +9720,30 @@ function showMoreSheet(){
     html+='</div></div>';
     sheet.innerHTML=html;
     var fnMap={
-      'showMob()':showMob,
-      'showRunningScreen()':showRunningScreen,
-      'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
-      'showZwiftBuilder()':showZwiftBuilder,
-      'showPRDashboard()':showPRDashboard,
-      'showFitImport()':showFitImport,
-      'showMealTemplates()':showMealTemplates,
-      'showWeeklyReport()':showWeeklyReport,
+      'showMob()':function(){try{showMob();}catch(e){console.error(e);}},
+      'showRunningScreen()':function(){try{showRunningScreen();}catch(e){console.error(e);}},
+      'showSwim()':function(){try{showSwim();}catch(e){try{showSwimWorkout();}catch(e2){}}},
+      'showZwiftBuilder()':function(){try{showZwiftBuilder();}catch(e){console.error(e);}},
+      'showPRDashboard()':function(){try{showPRDashboard();}catch(e){console.error(e);}},
+      'showFitImport()':function(){try{showFitImport();}catch(e){console.error(e);}},
+      'showMealTemplates()':function(){try{showMealTemplates();}catch(e){console.error(e);}},
+      'showWeeklyReport()':function(){try{showWeeklyReport();}catch(e){console.error(e);}},
       'showStr()':function(){try{openStr('A',curSW);}catch(e){}},
-      'toggleDark()':function(){document.getElementById('btn-dark').click();},
-      'showSettings()':showSet
+      'toggleDark()':function(){try{document.getElementById('btn-dark').click();}catch(e){}},
+      'showSettings()':function(){try{showSet();}catch(e){console.error(e);}}
     };
     sheet.querySelectorAll('.more-sheet-btn').forEach(function(btn){
       btn.addEventListener('click',function(){
-        sheet.remove();setActiveNav('bnav-home');
-        var fn=fnMap[btn.getAttribute('data-fn')];
-        if(fn) try{fn();}catch(e){console.error(e);}
+        try{sheet.remove();}catch(e){}
+        try{setActiveNav('bnav-home');}catch(e){}
+        var fnKey=btn.getAttribute('data-fn');
+        var fn=fnMap[fnKey];
+        if(fn){try{fn();}catch(e){console.error('More sheet error:',fnKey,e);toast('Error: '+e.message);}}
+        else{console.warn('No function for:',fnKey);}
       });
     });
-    sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();setActiveNav('bnav-home');}});
-    document.body.appendChild(sheet);
+    sheet.addEventListener('click',function(e){if(e.target===sheet){try{sheet.remove();}catch(e){} try{setActiveNav('bnav-home');}catch(e){}}});
+    try{document.body.appendChild(sheet);}catch(e){console.error('Sheet append error:',e);}
 }
 
 // ── FIT FILE IMPORT ──────────────────────────────────────────────────────
