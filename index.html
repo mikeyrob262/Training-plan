@@ -10174,26 +10174,36 @@ function parseFIT(data, filename){
   var startTs=session.start_time?new Date((session.start_time+FIT_EPOCH)*1000):new Date();
   var dateStr=startTs.getFullYear()+'-'+(startTs.getMonth()+1)+'-'+startTs.getDate();
 
-  var distM=session.total_distance||0;
+  // FIT scale factors: distance=cm, time=ms, speed=mm/s, altitude=m/5-500, TSS=*10, IF=*1000
+  var distRaw=session.total_distance||0;
+  // FIT distance is in cm (semicircles * scale) - detect by magnitude
+  var distM = distRaw > 1000000 ? distRaw/100 : distRaw; // cm→m if >1000km raw
   var distMi=Math.round(distM/1609.34*10)/10;
-  var elapsedSec=session.total_elapsed_time?Math.round(session.total_elapsed_time/1000):0;
+
+  var elapsedRaw=session.total_elapsed_time||0;
+  // FIT time is in ms (1000ths of second)
+  var elapsedSec=Math.round(elapsedRaw/1000);
   var h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60;
   var durStr=h+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2);
 
-  var np=session.normalized_power||0;
-  var tss=session.training_stress_score?Math.round(session.training_stress_score/100):null;
-  var ifPct=session.intensity_factor?Math.round(session.intensity_factor/100*100)/100:null;
-  var avgPwr=session.avg_power||0;
+  var np=session.normalized_power||0; // watts, no scale
+  var tssRaw=session.training_stress_score||0;
+  var tss=tssRaw>0?Math.round(tssRaw/10):null; // scale factor 10
+  var ifRaw=session.intensity_factor||0;
+  var ifPct=ifRaw>0?Math.round(ifRaw/1000*100)/100:null; // scale factor 1000
+  var avgPwr=session.avg_power||0; // watts
   var maxPwr=session.max_power||0;
   var avgHR=session.avg_heart_rate||0;
   var maxHR=session.max_heart_rate||0;
   var cadence=session.avg_cadence||0;
-  var calories=session.total_calories||0;
-  var workKj=session.total_work?Math.round(session.total_work/1000):null;
-  var ascM=(session.total_ascent||0);
-  var elevFt=Math.round(ascM*3.2808/10)*10; // rough
-  var avgSpeedMS=session.avg_speed||0;
-  var avgSpeedMph=Math.round(avgSpeedMS*2.23694*10)/10;
+  var calories=session.total_calories||0; // kcal, no scale
+  var workRaw=session.total_work||0;
+  var workKj=workRaw>0?Math.round(workRaw/1000):null; // joules→kJ
+  var ascRaw=session.total_ascent||0;
+  var elevFt=ascRaw>0?Math.round(ascRaw*3.2808):0; // meters→feet
+  var speedRaw=session.avg_speed||0;
+  // FIT speed is in mm/s
+  var avgSpeedMph=speedRaw>0?Math.round(speedRaw/1000*2.23694*10)/10:0;
 
   // Sport type
   var sportMap={0:'Generic',1:'Run',2:'Cycling',5:'Swimming',11:'Strength',17:'Hiking',26:'Football',27:'Soccer',29:'Basketball',31:'Tennis',26:'Golf'};
