@@ -9927,13 +9927,11 @@ function showFitImport(){
   fileInput.addEventListener('change',function(){processFiles(fileInput.files);});
 
   function processFiles(files){
-    toast('Files selected: '+files.length+' types: '+Array.from(files).map(function(f){return f.name;}).join(', '));
     var arr=Array.from(files).filter(function(f){
       var n=f.name.toLowerCase();
       return n.endsWith('.fit')||n.endsWith('.tcx')||n.endsWith('.gpx')||n.endsWith('.zip');
     });
     if(!arr.length){status.textContent='Please select TCX, GPX, FIT or ZIP files';return;}
-    toast('Matched: '+arr.length+' files, ext: '+arr.map(function(f){return f.name.split('.').pop();}).join(', '));
     status.textContent='Parsing '+arr.length+' file'+(arr.length>1?'s':'')+'...';
     results.innerHTML='';
     var imported=0, errors=0;
@@ -9945,19 +9943,16 @@ function showFitImport(){
         reader0.onload=function(e){
           try{
             var zipData=new Uint8Array(e.target.result);
-            toast('ZIP size: '+zipData.length+' bytes');
             var fitData=extractFitFromZip(zipData);
-            toast('FIT extracted: '+(fitData?fitData.length+' bytes':'null'));
             if(fitData){
               var activity=parseFIT(fitData,file.name.replace('.zip','.fit'));
-              toast('Activity: '+(activity?activity.name:'null'));
               if(activity){saveActivity(activity);imported++;showResult(activity,results);}
               else errors++;
             } else {
               errors++;
               status.textContent='No FIT file found in ZIP';
             }
-          }catch(ex){errors++;toast('ZIP error: '+ex.message);console.error('ZIP parse error:',ex);}
+          }catch(ex){errors++;console.error('ZIP parse error:',ex);}
           if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}
         };
         reader0.readAsArrayBuffer(file);
@@ -10208,9 +10203,6 @@ function parseFIT(data, filename){
   var speedRaw=session.avg_speed||0;
   // FIT speed is in mm/s
   var avgSpeedMph=speedRaw>0?Math.round(speedRaw/1000*2.23694*10)/10:0;
-
-  // Debug raw values
-  toast('RAW: dist='+session.total_distance+' time='+session.total_elapsed_time+' tss='+session.training_stress_score+' speed='+session.avg_speed+' cal='+session.total_calories);
 
   // Sport type
   var sportMap={0:'Generic',1:'Run',2:'Cycling',5:'Swimming',11:'Strength',17:'Hiking',26:'Football',27:'Soccer',29:'Basketball',31:'Tennis',26:'Golf'};
