@@ -9943,17 +9943,19 @@ function showFitImport(){
         reader0.onload=function(e){
           try{
             var zipData=new Uint8Array(e.target.result);
-            // Find FIT file inside ZIP (look for PK signature then scan for .FIT)
+            toast('ZIP size: '+zipData.length+' bytes');
             var fitData=extractFitFromZip(zipData);
+            toast('FIT extracted: '+(fitData?fitData.length+' bytes':'null'));
             if(fitData){
               var activity=parseFIT(fitData,file.name.replace('.zip','.fit'));
+              toast('Activity: '+(activity?activity.name:'null'));
               if(activity){saveActivity(activity);imported++;showResult(activity,results);}
               else errors++;
             } else {
               errors++;
               status.textContent='No FIT file found in ZIP';
             }
-          }catch(ex){errors++;console.error('ZIP parse error:',ex);}
+          }catch(ex){errors++;toast('ZIP error: '+ex.message);console.error('ZIP parse error:',ex);}
           if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}
         };
         reader0.readAsArrayBuffer(file);
