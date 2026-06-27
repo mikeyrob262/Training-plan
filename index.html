@@ -45,6 +45,11 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .logo-tx{font-size:14px;font-weight:700;color:var(--t1)}
 .hdr-btns{display:flex;gap:4px;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:calc(100vw - 120px)}
 .hbtn{background:var(--s2);border:1px solid var(--b2);color:var(--t2);width:32px;height:32px;border-radius:9px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}.hbtn:active{background:var(--s3)}
+.bnav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:var(--bg);border-top:1px solid var(--b1);display:flex;padding:6px 0 max(6px,env(safe-area-inset-bottom));backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;background:none;border:none;cursor:pointer;font-family:inherit;color:var(--t3);transition:color .15s}
+.bnav-btn.active{color:#FC4C02}
+.bnav-btn svg{width:22px;height:22px}
+.bnav-lbl{font-size:10px;font-weight:600;letter-spacing:.02em}
 .phase-pill{background:var(--orange);color:white;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
 .hdr-nav{display:flex;align-items:center;gap:10px}
 .narr{background:var(--s2);border:1px solid var(--b2);color:var(--t2);width:36px;height:36px;border-radius:10px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:300}
@@ -149,25 +154,37 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 
 <div class="hdr">
   <div class="hdr-top">
-    <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Mikey's Training App</span></div>
+    <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Athlete IQ</span></div>
     <div class="hdr-btns">
-      <button class="hbtn" id="btn-prog" title="Progress"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></button>
-      <button class="hbtn" id="btn-nutr" title="Nutrition"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg></button>
-      <button class="hbtn" id="btn-perf" title="Performance"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></button>
-      <button class="hbtn" id="btn-run" title="Run Training"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg></button>
-      <button class="hbtn" id="btn-swim" title="Swim Training"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M2 17c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg></button>
-      <button class="hbtn" id="btn-cond" title="Conditioning"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></button>
-      <button class="hbtn" id="btn-core" title="Core"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/><path d="M8 7c-3 1-5 3.5-5 7a9 9 0 0 0 18 0c0-3.5-2-6-5-7"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
-      <button class="hbtn" id="btn-mob" title="Mobility"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg></button>
-      <button class="hbtn" id="btn-dark" title="Dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
       <button class="hbtn" id="btn-ai" title="AI Coach"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6l-.7 1H9l-.7-1A7 7 0 0 1 5 9a7 7 0 0 1 7-7z"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/><line x1="9" y1="12" x2="9" y2="14"/><line x1="12" y1="11" x2="12" y2="14"/><line x1="15" y1="12" x2="15" y2="14"/></svg></button>
-      <button class="hbtn" id="btn-zwift" title="Zwift Builder"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></button>
-      <button class="hbtn" id="btn-swim-gen" title="Swim Workout"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M2 17c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 4l3-2 3 2"/><line x1="12" y1="2" x2="12" y2="8"/></svg></button>
-      <button class="hbtn" id="btn-meal-tpl" title="Meal Templates"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button>
-      <button class="hbtn" id="btn-weekly" title="Weekly Report"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></button>
+      <button class="hbtn" id="btn-dark" title="Dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
       <button class="hbtn" id="btn-set" title="Settings"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
   </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bnav" id="bottom-nav">
+    <button class="bnav-btn active" id="bnav-home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span class="bnav-lbl">Home</span>
+    </button>
+    <button class="bnav-btn" id="bnav-perf">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="bnav-lbl">Analytics</span>
+    </button>
+    <button class="bnav-btn" id="bnav-nutr">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+      <span class="bnav-lbl">Nutrition</span>
+    </button>
+    <button class="bnav-btn" id="bnav-activities">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span class="bnav-lbl">Activities</span>
+    </button>
+    <button class="bnav-btn" id="bnav-more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+      <span class="bnav-lbl">More</span>
+    </button>
+  </nav>
   <div class="hdr-nav">
     <button class="narr" id="btn-pv"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     <div class="wi">
@@ -9411,6 +9428,55 @@ function showZwiftBuilder(){
   document.body.appendChild(modal);
 }
 
+function showMoreSheet(){
+  var old=document.getElementById('more-sheet');
+  if(old){old.remove();return;}
+  var sheet=document.createElement('div');
+  sheet.id='more-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:150;background:rgba(0,0,0,.5)';
+  var items=[
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v5l-3 5"/><path d="M12 12l3 5"/><path d="M9 17h6"/></svg>',label:'Daily Mobility',fn:'mob'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'run'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'swim'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'zwift'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'meals'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'weekly'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength',fn:'str'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',label:'Dark Mode',fn:'dark'},
+    {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',label:'Settings',fn:'set'},
+  ];
+  var html='<div style="position:absolute;bottom:0;left:0;right:0;background:var(--bg);border-radius:24px 24px 0 0;padding:16px 0 max(16px,env(safe-area-inset-bottom))">';
+  html+='<div style="width:40px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 20px"></div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px">';
+  items.forEach(function(item){
+    html+='<button data-fn="'+item.fn+'" style="background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:14px 8px;cursor:pointer;font-family:inherit;text-align:center">';
+    html+='<div style="margin-bottom:8px;color:var(--t2)">'+item.icon+'</div>';
+    html+='<div style="font-size:12px;font-weight:600;color:var(--t1)">'+item.label+'</div>';
+    html+='</button>';
+  });
+  html+='</div></div>';
+  sheet.innerHTML=html;
+  sheet.querySelectorAll('[data-fn]').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      sheet.remove();
+      var fn=btn.getAttribute('data-fn');
+      try{
+        if(fn==='mob') showMob();
+        else if(fn==='run') showRun();
+        else if(fn==='swim') showSwim();
+        else if(fn==='zwift') showZwiftBuilder();
+        else if(fn==='meals') showMealTemplates();
+        else if(fn==='weekly') showWeeklyReport();
+        else if(fn==='str') showCond();
+        else if(fn==='dark') document.getElementById('btn-dark').click();
+        else if(fn==='set') showSet();
+      }catch(e){console.error('More sheet error:',e);}
+    });
+  });
+  sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();}});
+  document.body.appendChild(sheet);
+}
+
 function showRun(){ renderRun(); }
 function getRuns(){ return st.runs||[]; }
 
@@ -12541,20 +12607,15 @@ function showSwim(){
 
 window.onload = function(){
   try{
-  document.getElementById('btn-prog').onclick = showProg;
-  document.getElementById('btn-nutr').onclick = showNutr;
-  document.getElementById('btn-perf').onclick = showPerf;
-  document.getElementById('btn-run').onclick = function(){ try{ showRun(); }catch(e){ console.error('Run error:',e); alert('Run error: '+e.message); } };
-  document.getElementById('btn-swim').addEventListener('click', function(){ try{ showSwim(); }catch(e){ console.error('Swim error:',e); } });
   document.getElementById('btn-ai').addEventListener('click', function(){ try{ showAIWorkout(); }catch(e){ console.error('AI error:',e); } });
-  document.getElementById('btn-swim-gen').addEventListener('click', function(){ try{ showSwimWorkout(); }catch(e){ console.error('SwimGen error:',e); } });
-  document.getElementById('btn-zwift').addEventListener('click', function(){ try{ showZwiftBuilder(); }catch(e){ alert('Zwift error: '+e.message); } });
-  document.getElementById('btn-meal-tpl').addEventListener('click', function(){ try{ showMealTemplates(); }catch(e){ console.error('MealTpl error:',e); } });
-  document.getElementById('btn-weekly').addEventListener('click', function(){ try{ showWeeklyReport(); }catch(e){ console.error('Weekly error:',e); } });
-  document.getElementById('btn-cond').onclick = showCond;
-  document.getElementById('btn-core').onclick = showCore;
-  document.getElementById('btn-mob').onclick = showMob;
   document.getElementById('btn-set').onclick = showSet;
+  // Bottom nav
+  function setActiveNav(id){ document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');}); var el=document.getElementById(id); if(el) el.classList.add('active'); }
+  document.getElementById('bnav-home').addEventListener('click', function(){ showScreen('TRAIN'); setActiveNav('bnav-home'); });
+  document.getElementById('bnav-perf').addEventListener('click', function(){ showPerf(); setActiveNav('bnav-perf'); });
+  document.getElementById('bnav-nutr').addEventListener('click', function(){ showNutr(); setActiveNav('bnav-nutr'); });
+  document.getElementById('bnav-activities').addEventListener('click', function(){ showPerf(); setActiveNav('bnav-activities'); });
+  document.getElementById('bnav-more').addEventListener('click', function(){ showMoreSheet(); setActiveNav('bnav-more'); });
   // Dark mode toggle
   var darkBtn = document.getElementById('btn-dark');
   var isDark = localStorage.getItem('darkMode') === '1';
