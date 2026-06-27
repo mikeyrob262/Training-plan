@@ -4648,8 +4648,11 @@ function showSet(){
             };
             if(!st.rides) st.rides=[];
             var existIdx=ride.id?function(){for(var i=0;i<st.rides.length;i++){if(st.rides[i].id===ride.id)return i;}return -1;}():-1;
+            var isNew = existIdx<0;
             if(existIdx>=0) st.rides[existIdx]=ride;
             else st.rides.push(ride);
+            // Check for new PRs on newly added activities
+            if(isNew){ var newPRs=checkNewPRs(ride); if(newPRs.length) setTimeout(function(){toast('New PR: '+newPRs[0]);},2000); }
             imported++;
           });
           sv();
@@ -7120,6 +7123,7 @@ function renderPerf(container){
       if(rideDOW===4&&r.distance&&r.distance>15&&r.avgSpeed&&r.avgSpeed>19) groupRideTag='Thu Night';
       else if(rideDOW===6&&r.distance&&r.distance>40) groupRideTag='Sat Long';
       else if(r.source==='zwift'||(r.name&&r.name.toLowerCase().indexOf('zwift')>=0)) groupRideTag='Zwift';
+      var _prBadges=renderPRBadges(r);
       var cardHtml='<div data-ride-type="'+(r.type||'Ride')+'" style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);border-left:4px solid '+accentC+';margin-bottom:8px;padding:12px;cursor:pointer" onclick="openRideDetail('+rIdx+')">';
       // Name + date + quality score + group ride tag
       cardHtml+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px">';
@@ -8403,6 +8407,9 @@ function openRideDetail(idx){
 
   var html = '';
 
+  // -- PR BADGES on detail screen
+  var _detailPRs = renderPRBadges(r);
+  if(_detailPRs) html += '<div style="padding:12px 16px 0">'+_detailPRs+'</div>';
   // -- HERO STATS
   var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b1)">';
@@ -9693,6 +9700,7 @@ function showMoreSheet(){
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'showRunningScreen()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'showSwim()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'showZwiftBuilder()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 12 2 16 6"/><path d="M7 10h10l-1 7H8L7 10z"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>',label:'My PRs',fn:'showPRDashboard()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',label:'Import FIT',fn:'showFitImport()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'showMealTemplates()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'showWeeklyReport()'},
@@ -9716,6 +9724,7 @@ function showMoreSheet(){
       'showRunningScreen()':showRunningScreen,
       'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
       'showZwiftBuilder()':showZwiftBuilder,
+      'showPRDashboard()':showPRDashboard,
       'showFitImport()':showFitImport,
       'showMealTemplates()':showMealTemplates,
       'showWeeklyReport()':showWeeklyReport,
@@ -10026,6 +10035,211 @@ function parseFIT(data, filename){
   if(session.training_stress_score) result.tss=Math.round(session.training_stress_score/100);
 
   return result;
+}
+
+// ── PERSONAL RECORDS SYSTEM ──────────────────────────────────────────────
+
+function computePRs(){
+  var rides = st.rides || [];
+  if(!rides.length) return {};
+
+  var prs = {
+    longestRide: null,
+    mostElevation: null,
+    highestNP: null,
+    highestTSS: null,
+    highestAvgPwr: null,
+    fastestPace: null,
+    highestCTL: null,
+    biggestClimb: null,
+  };
+
+  rides.forEach(function(r){
+    if(!r.date) return;
+    // Longest ride by distance
+    if(r.distance && (!prs.longestRide || r.distance > prs.longestRide.distance)) prs.longestRide = r;
+    // Most elevation
+    if(r.elev && (!prs.mostElevation || r.elev > prs.mostElevation.elev)) prs.mostElevation = r;
+    // Highest NP
+    if(r.np && (!prs.highestNP || r.np > prs.highestNP.np)) prs.highestNP = r;
+    // Highest TSS
+    if(r.tss && (!prs.highestTSS || r.tss > prs.highestTSS.tss)) prs.highestTSS = r;
+    // Highest avg power
+    if(r.avgPwr && (!prs.highestAvgPwr || r.avgPwr > prs.highestAvgPwr.avgPwr)) prs.highestAvgPwr = r;
+    // Fastest pace (runs - lowest avgSpeed is actually slowest, highest is fastest)
+    if((r.type==='Run'||r.type==='VirtualRun')&&r.avgSpeed && (!prs.fastestPace || r.avgSpeed > prs.fastestPace.avgSpeed)) prs.fastestPace = r;
+    // Biggest climbing day
+    if(r.elev && r.distance && (!prs.biggestClimb || (r.elev/r.distance) > (prs.biggestClimb.elev/prs.biggestClimb.distance))) prs.biggestClimb = r;
+  });
+
+  return prs;
+}
+
+function getActivityPRs(ride){
+  // Returns array of PR labels this activity holds
+  var prs = computePRs();
+  var badges = [];
+
+  if(prs.longestRide && prs.longestRide === ride) badges.push({label:'Longest '+((ride.type==='Run')?'Run':'Ride'), icon:'distance'});
+  if(prs.mostElevation && prs.mostElevation === ride) badges.push({label:'Most Elevation', icon:'climb'});
+  if(prs.highestNP && prs.highestNP === ride) badges.push({label:'Highest NP', icon:'power'});
+  if(prs.highestTSS && prs.highestTSS === ride) badges.push({label:'Highest TSS', icon:'effort'});
+  if(prs.highestAvgPwr && prs.highestAvgPwr === ride) badges.push({label:'Best Avg Power', icon:'power'});
+  if(prs.fastestPace && prs.fastestPace === ride) badges.push({label:'Fastest Run', icon:'speed'});
+  if(prs.biggestClimb && prs.biggestClimb === ride) badges.push({label:'Best Climbing', icon:'climb'});
+
+  return badges;
+}
+
+function checkNewPRs(newRide){
+  // Called after a new activity is added - returns any new PRs set
+  var rides = (st.rides||[]).filter(function(r){return r!==newRide;});
+  var newPRs = [];
+  var FTP = parseInt(st.ftp||183);
+
+  // Check each PR category
+  var prevLongest = rides.reduce(function(best,r){return r.distance>(best||0)?r.distance:best;},0);
+  if(newRide.distance && newRide.distance > prevLongest) newPRs.push('Longest '+(newRide.type==='Run'?'Run':'Ride')+': '+newRide.distance+'mi');
+
+  var prevElev = rides.reduce(function(best,r){return r.elev>(best||0)?r.elev:best;},0);
+  if(newRide.elev && newRide.elev > prevElev) newPRs.push('Most Elevation: '+newRide.elev+'ft');
+
+  var prevNP = rides.reduce(function(best,r){return r.np>(best||0)?r.np:best;},0);
+  if(newRide.np && newRide.np > prevNP) newPRs.push('Highest NP: '+newRide.np+'W');
+
+  var prevTSS = rides.reduce(function(best,r){return r.tss>(best||0)?r.tss:best;},0);
+  if(newRide.tss && newRide.tss > prevTSS) newPRs.push('Highest TSS: '+newRide.tss);
+
+  var prevPwr = rides.reduce(function(best,r){return r.avgPwr>(best||0)?r.avgPwr:best;},0);
+  if(newRide.avgPwr && newRide.avgPwr > prevPwr) newPRs.push('Best Avg Power: '+newRide.avgPwr+'W');
+
+  return newPRs;
+}
+
+// PR badge SVG icons
+function prBadgeSVG(icon, label){
+  var icons = {
+    distance: '<path d="M3 12h18M3 6h18M3 18h18"/>',
+    climb: '<polyline points="22 17 13 8 8 13 2 7"/><polyline points="16 17 22 17 22 11"/>',
+    power: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    effort: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    speed: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  };
+  var path = icons[icon] || icons.effort;
+  return '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg>';
+}
+
+function renderPRBadges(ride){
+  var badges = getActivityPRs(ride);
+  if(!badges.length) return '';
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">';
+  badges.forEach(function(b){
+    html += '<div style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#f59e0b,#d97706);color:white;font-size:9px;font-weight:800;padding:3px 7px;border-radius:20px;letter-spacing:.02em">';
+    html += prBadgeSVG(b.icon, b.label);
+    html += ' '+b.label.toUpperCase();
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function showPRDashboard(){
+  var old = document.getElementById('pr-dashboard');
+  if(old){old.remove();return;}
+  var prs = computePRs();
+  var rides = st.rides||[];
+  var FTP = parseInt(st.ftp||183);
+
+  // Compute achievements
+  var achievements = [];
+  var totalDist = rides.reduce(function(s,r){return s+(r.distance||0);},0);
+  var totalElev = rides.reduce(function(s,r){return s+(r.elev||0);},0);
+  var totalRides = rides.length;
+  var centuryRides = rides.filter(function(r){return (r.distance||0)>=100;}).length;
+  var highTSSRides = rides.filter(function(r){return (r.tss||0)>=200;}).length;
+
+  var allAchievements = [
+    {id:'first_ride', label:'First Activity', desc:'Completed your first activity', earned: totalRides>=1, icon:'activity'},
+    {id:'ten_rides', label:'10 Activities', desc:'Completed 10 activities', earned: totalRides>=10, icon:'activity'},
+    {id:'fifty_rides', label:'50 Activities', desc:'Completed 50 activities', earned: totalRides>=50, icon:'activity'},
+    {id:'century', label:'Century', desc:'Completed a 100+ mile ride', earned: centuryRides>=1, icon:'distance'},
+    {id:'first_climb', label:'Climber', desc:'2,000+ ft elevation in one ride', earned: prs.mostElevation&&(prs.mostElevation.elev||0)>=2000, icon:'climb'},
+    {id:'big_climb', label:'Mountain Goat', desc:'5,000+ ft elevation in one ride', earned: prs.mostElevation&&(prs.mostElevation.elev||0)>=5000, icon:'climb'},
+    {id:'everest', label:'Everester', desc:'29,029+ ft total elevation climbed', earned: totalElev>=29029, icon:'climb'},
+    {id:'century_club', label:'Century Club', desc:'3+ centuries completed', earned: centuryRides>=3, icon:'distance'},
+    {id:'savage', label:'Savage', desc:'TSS 300+ in a single activity', earned: highTSSRides>=1, icon:'effort'},
+    {id:'power_house', label:'Powerhouse', desc:'NP over 200W', earned: prs.highestNP&&(prs.highestNP.np||0)>=200, icon:'power'},
+    {id:'iron_legs', label:'Iron Legs', desc:'1,000 total miles', earned: totalDist>=1000, icon:'distance'},
+    {id:'road_warrior', label:'Road Warrior', desc:'5,000 total miles', earned: totalDist>=5000, icon:'distance'},
+  ];
+
+  var modal = document.createElement('div');
+  modal.id = 'pr-dashboard';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:160;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  var html = '<div style="padding:16px 16px 80px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">';
+  html += '<div style="font-size:22px;font-weight:900;color:var(--t1)">Personal Records</div>';
+  html += '<button id="pr-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Close</button>';
+  html += '</div>';
+
+  // PR Cards
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#FC4C02;margin-bottom:10px">Your Best Performances</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px">';
+
+  var prCards = [
+    {label:'Longest Activity', val:prs.longestRide?(prs.longestRide.distance+'mi'):'-', sub:prs.longestRide?prs.longestRide.date:'', icon:'distance', color:'#3b82f6'},
+    {label:'Most Elevation', val:prs.mostElevation?(prs.mostElevation.elev+'ft'):'-', sub:prs.mostElevation?prs.mostElevation.date:'', icon:'climb', color:'#22c55e'},
+    {label:'Highest NP', val:prs.highestNP?(prs.highestNP.np+'W'):'-', sub:prs.highestNP?prs.highestNP.date:'', icon:'power', color:'#FC4C02'},
+    {label:'Highest TSS', val:prs.highestTSS?(prs.highestTSS.tss+''):'-', sub:prs.highestTSS?prs.highestTSS.date:'', icon:'effort', color:'#a855f7'},
+    {label:'Best Avg Power', val:prs.highestAvgPwr?(prs.highestAvgPwr.avgPwr+'W'):'-', sub:prs.highestAvgPwr?prs.highestAvgPwr.date:'', icon:'power', color:'#f59e0b'},
+    {label:'Best Climbing', val:prs.biggestClimb?(Math.round(prs.biggestClimb.elev/prs.biggestClimb.distance)+'ft/mi'):'-', sub:prs.biggestClimb?prs.biggestClimb.date:'', icon:'climb', color:'#06b6d4'},
+  ];
+
+  prCards.forEach(function(c){
+    html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:14px;border-top:3px solid '+c.color+'">';
+    html += '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">'+c.label+'</div>';
+    html += '<div style="font-size:22px;font-weight:900;color:'+c.color+'">'+c.val+'</div>';
+    html += '<div style="font-size:10px;color:var(--t3);margin-top:2px">'+c.sub+'</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  // Lifetime stats
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#FC4C02;margin-bottom:10px">Lifetime Stats</div>';
+  html += '<div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:14px;margin-bottom:20px">';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;text-align:center">';
+  [
+    {v:totalRides, l:'Activities'},
+    {v:Math.round(totalDist).toLocaleString()+'mi', l:'Total Miles'},
+    {v:Math.round(totalElev).toLocaleString()+'ft', l:'Total Climbing'},
+    {v:centuryRides, l:'Centuries'},
+    {v:Math.round(totalDist/5280).toFixed(1)+'mi', l:'Vertical Miles'},
+    {v:highTSSRides, l:'Epic Days'},
+  ].forEach(function(s){
+    html += '<div><div style="font-size:18px;font-weight:800;color:var(--t1)">'+s.v+'</div>';
+    html += '<div style="font-size:10px;color:var(--t3)">'+s.l+'</div></div>';
+  });
+  html += '</div></div>';
+
+  // Achievements
+  html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#FC4C02;margin-bottom:10px">Achievements</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">';
+  allAchievements.forEach(function(a){
+    var earned = a.earned;
+    html += '<div style="background:var(--s1);border:1px solid '+(earned?'#f59e0b':'var(--b1)')+';border-radius:14px;padding:12px;text-align:center;opacity:'+(earned?'1':'.4')+'">';
+    html += '<div style="width:36px;height:36px;border-radius:50%;background:'+(earned?'linear-gradient(135deg,#f59e0b,#d97706)':'var(--s2)')+';display:flex;align-items:center;justify-content:center;margin:0 auto 8px;color:'+(earned?'white':'var(--t3)')+'">';
+    html += '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 12 2 16 6"/><path d="M7 10h10l-1 7H8L7 10z"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8" y1="21" x2="16" y2="21"/></svg>';
+    html += '</div>';
+    html += '<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:2px">'+a.label+'</div>';
+    html += '<div style="font-size:9px;color:var(--t3);line-height:1.3">'+a.desc+'</div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  modal.innerHTML = html;
+  document.body.appendChild(modal);
+  modal.querySelector('#pr-close').addEventListener('click',function(){modal.remove();});
 }
 
 function showOnboarding(){
