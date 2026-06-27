@@ -9920,11 +9920,12 @@ function showFitImport(){
     pakoScript.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
     document.head.appendChild(pakoScript);
   }
-  dropZone.addEventListener('click',function(){fileInput.click();});
+  // label element natively triggers file input - no click handler needed
   dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.style.borderColor='#FC4C02';dropZone.style.background='rgba(252,76,2,.05)';});
   dropZone.addEventListener('dragleave',function(){dropZone.style.borderColor='var(--b2)';dropZone.style.background='';});
   dropZone.addEventListener('drop',function(e){e.preventDefault();dropZone.style.borderColor='var(--b2)';dropZone.style.background='';processFiles(e.dataTransfer.files);});
-  fileInput.addEventListener('change',function(){processFiles(fileInput.files);});
+  fileInput.addEventListener('change',function(){if(fileInput.files&&fileInput.files.length){processFiles(fileInput.files);}});
+  fileInput.addEventListener('input',function(){if(fileInput.files&&fileInput.files.length){processFiles(fileInput.files);}});
 
   function processFiles(files){
     var arr=Array.from(files).filter(function(f){
