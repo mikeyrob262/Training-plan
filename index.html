@@ -10205,6 +10205,9 @@ function parseFIT(data, filename){
   // FIT speed is in mm/s
   var avgSpeedMph=speedRaw>0?Math.round(speedRaw/1000*2.23694*10)/10:0;
 
+  // Debug raw values
+  toast('RAW: dist='+session.total_distance+' time='+session.total_elapsed_time+' tss='+session.training_stress_score+' speed='+session.avg_speed+' cal='+session.total_calories);
+
   // Sport type
   var sportMap={0:'Generic',1:'Run',2:'Cycling',5:'Swimming',11:'Strength',17:'Hiking',26:'Football',27:'Soccer',29:'Basketball',31:'Tennis',26:'Golf'};
   var sportId=session.sport||2;
