@@ -8561,6 +8561,9 @@ function openRideDetail(idx){
     ['Work',r.workKj?r.workKj+' kJ':'-'],
     ['Training Load',r.tss||'-'],
     ['Intensity Factor',r.ifPct?(r.ifPct>10?(r.ifPct/100).toFixed(2):r.ifPct.toFixed(2)):'-'],
+    ['L/R Balance',r.leftBalance?r.leftBalance+'% L / '+r.rightBalance+'% R':'-'],
+    ['Aerobic TE',r.aerobicTE?r.aerobicTE.toFixed(1):'-'],
+    ['Anaerobic TE',r.anaerobicTE?r.anaerobicTE.toFixed(1):'-'],
     ['Relative Effort',r.relEffort||'-'],
     ['Avg Temp',r.avgTemp?r.avgTemp+'°F':'-'],
     ['Source',r.source||'manual']
@@ -9546,12 +9549,19 @@ function parseFITLib(data){
       function ds(a,n){if(!a||a.length<=n)return a;var st=a.length/n;return Array.from({length:n},function(_,i){return a[Math.floor(i*st)];});}
       var pwrVals=records.filter(function(r){return r.power!=null;}).map(function(r){return r.power;});
       var hrVals=records.filter(function(r){return r.heart_rate!=null;}).map(function(r){return r.heart_rate;});
+      // L/R Balance
+      var lr=s.left_right_balance;
+      var leftBal=null,rightBal=null;
+      if(lr&&typeof lr==='object'&&lr.value!=null){leftBal=lr.value;rightBal=100-lr.value;}
+      else if(lr&&typeof lr==='number'){leftBal=lr&0x7F;rightBal=100-(lr&0x7F);}
+
       var result={
         id:'fit_'+start.getTime(), name:tod+' '+(type==='Cycling'?'Ride':type),
         date:dateStr, type:type, source:'fit',
-        duration:dur, elapsedSecs:elap,
+        duration:dur, elapsedSecs:moving, movingSecs:moving,
         distance:Math.round((s.total_distance||0)*10)/10,
         avgSpeed:Math.round((s.avg_speed||0)*10)/10,
+        maxSpeed:Math.round((s.max_speed||0)*10)/10,
         avgPwr:Math.round(s.avg_power||0)||null,
         np:Math.round(s.normalized_power||0)||null,
         maxPwr:Math.round(s.max_power||0)||null,
@@ -9563,6 +9573,10 @@ function parseFITLib(data){
         calories:Math.round(s.total_calories||0)||null,
         elev:s.total_ascent&&s.total_ascent>1?Math.round(s.total_ascent*3.2808):
               s.total_ascent&&s.total_ascent<=1?Math.round(s.total_ascent*5280):null,
+        workKj:s.total_work?Math.round(s.total_work/1000):null,
+        leftBalance:leftBal, rightBalance:rightBal,
+        aerobicTE:s.total_training_effect||null,
+        anaerobicTE:s.total_anaerobic_training_effect||null,
       };
       if(pwrVals.length>10) result.chartPwr=ds(pwrVals,200);
       if(hrVals.length>10) result.chartHR=ds(hrVals,200);
