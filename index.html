@@ -9901,7 +9901,7 @@ function showFitImport(){
     +'<div style="font-size:13px;color:var(--t3)">TCX, GPX, FIT, or ZIP files supported</div>'
     +'<div style="font-size:11px;color:var(--t3);margin-top:12px">Garmin Connect web → Activity → ··· → Export File (downloads a ZIP containing your FIT)</div>'
     +'</div>'
-    +'<input id="fit-file-input" type="file" style="display:none" multiple>'
+    +'<input id="fit-file-input" type="file" accept=".fit,.tcx,.gpx,.zip" multiple style="display:block;width:100%;margin-top:12px;font-size:13px;color:var(--t2);cursor:pointer">'
     +'<div id="fit-status" style="font-size:13px;color:var(--t3);text-align:center;min-height:20px"></div>'
     +'<div id="fit-results" style="margin-top:16px"></div>'
     +'</div>';
@@ -9920,7 +9920,7 @@ function showFitImport(){
     pakoScript.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
     document.head.appendChild(pakoScript);
   }
-  // label element natively triggers file input - no click handler needed
+  dropZone.addEventListener('click',function(e){if(e.target!==fileInput)fileInput.click();});
   dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.style.borderColor='#FC4C02';dropZone.style.background='rgba(252,76,2,.05)';});
   dropZone.addEventListener('dragleave',function(){dropZone.style.borderColor='var(--b2)';dropZone.style.background='';});
   dropZone.addEventListener('drop',function(e){e.preventDefault();dropZone.style.borderColor='var(--b2)';dropZone.style.background='';processFiles(e.dataTransfer.files);});
