@@ -10205,6 +10205,18 @@ function parseFIT(data, filename){
   // FIT speed is in mm/s
   var avgSpeedMph=speedRaw>0?Math.round(speedRaw/1000*2.23694*10)/10:0;
 
+  console.log('FIT RAW SESSION:', JSON.stringify({
+    dist: session.total_distance,
+    elapsed: session.total_elapsed_time,
+    moving: session.total_moving_time,
+    tss: session.training_stress_score,
+    speed: session.avg_speed,
+    np: session.normalized_power,
+    cal: session.total_calories,
+    ascent: session.total_ascent,
+    if: session.intensity_factor
+  }));
+
   // Sport type
   var sportMap={0:'Generic',1:'Run',2:'Cycling',5:'Swimming',11:'Strength',17:'Hiking',26:'Football',27:'Soccer',29:'Basketball',31:'Tennis',26:'Golf'};
   var sportId=session.sport||2;
