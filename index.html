@@ -9524,9 +9524,13 @@ function ensureFitParser(cb){
 
 function parseFITLib(data){
   return new Promise(function(resolve){
-    if(!window.FitParser){resolve(null);return;}
+    if(!window.FitParser){console.error('No FitParser');resolve(null);return;}
+    // Timeout safety
+    var timer=setTimeout(function(){console.error('FIT parse timeout');resolve(null);},10000);
+    try{
     var fp=new FitParser({force:true,speedUnit:'mph',lengthUnit:'mi',temperatureUnit:'fahrenheit',elapsedRecordField:true,mode:'both'});
     fp.parse(data.buffer,function(err,d){
+      clearTimeout(timer);
       if(err){console.error('FIT error:',err);resolve(null);return;}
       var s=(d.sessions&&d.sessions[0])||{};
       var records=d.records||[];
@@ -9562,6 +9566,7 @@ function parseFITLib(data){
       if(hrVals.length>10) result.chartHR=ds(hrVals,200);
       resolve(result);
     });
+    }catch(ex){clearTimeout(timer);console.error('FIT exception:',ex);resolve(null);}
   });
 }
 
