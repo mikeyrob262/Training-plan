@@ -10064,10 +10064,12 @@ function parseFIT(data, filename){
 
   // Validate FIT signature
   var sig=String.fromCharCode(data[8],data[9],data[10],data[11]);
-  if(sig!=='.FIT') throw new Error('Not a valid FIT file');
+  console.log('FIT sig:', sig, 'header:', data[0], 'size:', data.length);
+  if(sig!=='.FIT') throw new Error('Not a valid FIT file: '+sig);
 
   var headerSize=data[0];
   var dataSize=view.getUint32(4,true);
+  console.log('FIT headerSize:', headerSize, 'dataSize:', dataSize);
 
   // Parse records
   var pos=headerSize;
@@ -10140,6 +10142,7 @@ function parseFIT(data, filename){
 
         // Session message (18)
         if(def.globalMsgNum===18){
+          console.log('Found session message, fields:', JSON.stringify(msgData).substring(0,200));
           Object.keys(SESSION_FIELDS).forEach(function(k){
             if(msgData[parseInt(k)]!==undefined) session[SESSION_FIELDS[k]]=msgData[parseInt(k)];
           });
