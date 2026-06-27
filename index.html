@@ -9921,6 +9921,15 @@ function showFitImport(){
     pakoScript.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
     document.head.appendChild(pakoScript);
   }
+  // Ensure FitParser library is loaded
+  function ensureFitParser(cb){
+    if(window.FitParser){cb();return;}
+    var s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/fit-file-parser@1.10.0/dist/fit-file-parser.min.js';
+    s.onload=cb;
+    s.onerror=function(){status.textContent='Error loading FIT parser library';};
+    document.head.appendChild(s);
+  }
   dropZone.addEventListener('click',function(e){if(e.target!==fileInput)fileInput.click();});
   dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.style.borderColor='#FC4C02';dropZone.style.background='rgba(252,76,2,.05)';});
   dropZone.addEventListener('dragleave',function(){dropZone.style.borderColor='var(--b2)';dropZone.style.background='';});
@@ -9945,10 +9954,12 @@ function showFitImport(){
           var rawData=new Uint8Array(e.target.result);
           var fitData=ext==='zip'?extractFitFromZip(rawData):rawData;
           if(!fitData){errors++;if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}return;}
-          parseFIT(fitData,file.name).then(function(activity){
-            if(activity){saveActivity(activity);imported++;showResult(activity,results);}
-            else errors++;
-            if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}
+          ensureFitParser(function(){
+            parseFIT(fitData,file.name).then(function(activity){
+              if(activity){saveActivity(activity);imported++;showResult(activity,results);}
+              else errors++;
+              if(imported+errors===arr.length){status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');sv();}
+            });
           });
         };
         readerF.readAsArrayBuffer(file);
