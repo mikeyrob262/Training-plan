@@ -9693,6 +9693,7 @@ function showMoreSheet(){
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7.5 17l2-7 3 3 2-4.5"/><path d="M17 16l-3-5-1.5 3"/></svg>',label:'Run Training',fn:'showRunningScreen()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M9 6l3-3 3 3"/><path d="M12 3v6"/></svg>',label:'Swim Training',fn:'showSwim()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',label:'Zwift Builder',fn:'showZwiftBuilder()'},
+      {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',label:'Import FIT',fn:'showFitImport()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',label:'Meal Templates',fn:'showMealTemplates()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>',label:'Weekly Report',fn:'showWeeklyReport()'},
       {icon:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 8h12M6 16h12"/></svg>',label:'Strength Log',fn:'showStr()'},
@@ -9715,6 +9716,7 @@ function showMoreSheet(){
       'showRunningScreen()':showRunningScreen,
       'showSwim()':function(){try{showSwim();}catch(e){showSwimWorkout();}},
       'showZwiftBuilder()':showZwiftBuilder,
+      'showFitImport()':showFitImport,
       'showMealTemplates()':showMealTemplates,
       'showWeeklyReport()':showWeeklyReport,
       'showStr()':function(){try{openStr('A',curSW);}catch(e){}},
@@ -9730,6 +9732,300 @@ function showMoreSheet(){
     });
     sheet.addEventListener('click',function(e){if(e.target===sheet){sheet.remove();setActiveNav('bnav-home');}});
     document.body.appendChild(sheet);
+}
+
+// ── FIT FILE IMPORT ──────────────────────────────────────────────────────
+// Parses Garmin .FIT files entirely client-side - no API needed
+
+function showFitImport(){
+  var old=document.getElementById('fit-import-modal');
+  if(old){old.remove();return;}
+  var modal=document.createElement('div');
+  modal.id='fit-import-modal';
+  modal.style.cssText='position:fixed;inset:0;z-index:200;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  modal.innerHTML='<div style="padding:20px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">'
+    +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">Import FIT File</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-top:2px">Import directly from Garmin — no Strava needed</div></div>'
+    +'<button id="fit-close" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;padding:6px 14px;border-radius:20px;cursor:pointer;font-family:inherit">Close</button>'
+    +'</div>'
+    // Drop zone
+    +'<div id="fit-drop" style="border:2px dashed var(--b2);border-radius:20px;padding:48px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:16px">'
+    +'<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 16px;display:block"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+    +'<div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:8px">Tap to select .FIT file</div>'
+    +'<div style="font-size:13px;color:var(--t3)">Or drag and drop here</div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:12px">From Garmin: Connect → Activity → Share → Export Original</div>'
+    +'</div>'
+    +'<input id="fit-file-input" type="file" accept=".fit" style="display:none" multiple>'
+    +'<div id="fit-status" style="font-size:13px;color:var(--t3);text-align:center;min-height:20px"></div>'
+    +'<div id="fit-results" style="margin-top:16px"></div>'
+    +'</div>';
+
+  document.body.appendChild(modal);
+  modal.querySelector('#fit-close').addEventListener('click',function(){modal.remove();});
+
+  var dropZone=modal.querySelector('#fit-drop');
+  var fileInput=modal.querySelector('#fit-file-input');
+  var status=modal.querySelector('#fit-status');
+  var results=modal.querySelector('#fit-results');
+
+  dropZone.addEventListener('click',function(){fileInput.click();});
+  dropZone.addEventListener('dragover',function(e){e.preventDefault();dropZone.style.borderColor='#FC4C02';dropZone.style.background='rgba(252,76,2,.05)';});
+  dropZone.addEventListener('dragleave',function(){dropZone.style.borderColor='var(--b2)';dropZone.style.background='';});
+  dropZone.addEventListener('drop',function(e){e.preventDefault();dropZone.style.borderColor='var(--b2)';dropZone.style.background='';processFiles(e.dataTransfer.files);});
+  fileInput.addEventListener('change',function(){processFiles(fileInput.files);});
+
+  function processFiles(files){
+    var arr=Array.from(files).filter(function(f){return f.name.toLowerCase().endsWith('.fit');});
+    if(!arr.length){status.textContent='Please select .FIT files';return;}
+    status.textContent='Parsing '+arr.length+' file'+(arr.length>1?'s':'')+'...';
+    results.innerHTML='';
+    var imported=0, errors=0;
+    arr.forEach(function(file){
+      var reader=new FileReader();
+      reader.onload=function(e){
+        try{
+          var activity=parseFIT(new Uint8Array(e.target.result),file.name);
+          if(activity){
+            saveActivity(activity);
+            imported++;
+            showResult(activity, results);
+          }
+        }catch(ex){
+          errors++;
+          console.error('FIT parse error:',ex);
+        }
+        if(imported+errors===arr.length){
+          status.textContent='Done: '+imported+' imported'+(errors?' ('+errors+' errors)':'');
+          sv();
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function showResult(a, container){
+    var div=document.createElement('div');
+    div.style.cssText='background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:14px;margin-bottom:8px';
+    div.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px">'+(a.name||'Activity')+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+      +(a.date?'<span style="font-size:12px;color:var(--t3)">'+a.date+'</span>':'')
+      +(a.distance?'<span style="font-size:12px;color:var(--t3)">'+a.distance+'mi</span>':'')
+      +(a.duration?'<span style="font-size:12px;color:var(--t3)">'+a.duration+'</span>':'')
+      +(a.np?'<span style="font-size:12px;color:#FC4C02">NP '+a.np+'W</span>':'')
+      +(a.tss?'<span style="font-size:12px;color:#FC4C02">TSS '+a.tss+'</span>':'')
+      +(a.avgHR?'<span style="font-size:12px;color:var(--t3)">HR '+a.avgHR+'bpm</span>':'')
+      +(a.elev?'<span style="font-size:12px;color:var(--t3)">+'+a.elev+'ft</span>':'')
+      +'</div>';
+    container.appendChild(div);
+  }
+
+  function saveActivity(a){
+    if(!st.rides) st.rides=[];
+    // Check for duplicate by date
+    var exists=st.rides.some(function(r){return r.date===a.date&&Math.abs((r.distance||0)-(a.distance||0))<0.5;});
+    if(!exists) st.rides.push(a);
+  }
+}
+
+// ── FIT BINARY PARSER ────────────────────────────────────────────────────
+function parseFIT(data, filename){
+  // FIT file structure: header (12-14 bytes) + data records + CRC
+  if(data.length < 12) throw new Error('File too small');
+
+  var view=new DataView(data.buffer);
+
+  // Validate FIT signature
+  var sig=String.fromCharCode(data[8],data[9],data[10],data[11]);
+  if(sig!=='.FIT') throw new Error('Not a valid FIT file');
+
+  var headerSize=data[0];
+  var dataSize=view.getUint32(4,true);
+
+  // Parse records
+  var pos=headerSize;
+  var end=headerSize+dataSize;
+  var localMsgDefs={};
+
+  // Collected data
+  var records=[];
+  var laps=[];
+  var session={};
+  var activity={};
+
+  // FIT field definitions we care about
+  var SESSION_FIELDS={
+    253:'timestamp',2:'start_time',7:'total_elapsed_time',9:'total_distance',
+    14:'avg_speed',15:'max_speed',16:'avg_heart_rate',17:'max_heart_rate',
+    18:'avg_cadence',19:'max_cadence',20:'avg_power',21:'max_power',
+    22:'total_ascent',23:'total_descent',24:'total_calories',
+    33:'normalized_power',34:'left_right_balance',35:'training_stress_score',
+    49:'intensity_factor',53:'sport',59:'total_work'
+  };
+
+  var RECORD_FIELDS={
+    253:'timestamp',0:'position_lat',1:'position_long',
+    2:'altitude',3:'heart_rate',4:'cadence',5:'distance',
+    6:'speed',7:'power',8:'compressed_speed_distance',
+    9:'grade',13:'temperature'
+  };
+
+  try{
+    while(pos < end){
+      var header=data[pos];
+      pos++;
+
+      if(header & 0x40){ // Definition message
+        var localMsgType=header & 0x0F;
+        pos++; // reserved
+        var arch=data[pos++];
+        var globalMsgNum=arch===0?view.getUint16(pos,true):view.getUint16(pos,false);
+        pos+=2;
+        var numFields=data[pos++];
+        var fields=[];
+        for(var f=0;f<numFields;f++){
+          fields.push({num:data[pos],size:data[pos+1],type:data[pos+2]});
+          pos+=3;
+        }
+        // Check for dev fields
+        if(header & 0x20){
+          var numDevFields=data[pos++];
+          for(var d=0;d<numDevFields;d++) pos+=3;
+        }
+        localMsgDefs[localMsgType]={globalMsgNum:globalMsgNum,arch:arch,fields:fields};
+      } else { // Data message
+        var localType=header & 0x0F;
+        var def=localMsgDefs[localType];
+        if(!def){pos++;continue;}
+
+        var msgData={};
+        var little=def.arch===0;
+
+        def.fields.forEach(function(field){
+          var val=null;
+          if(field.size===1) val=data[pos];
+          else if(field.size===2) val=little?view.getUint16(pos,true):view.getUint16(pos,false);
+          else if(field.size===4) val=little?view.getUint32(pos,true):view.getUint32(pos,false);
+          else if(field.size===8) val=little?Number(view.getBigUint64(pos,true)):Number(view.getBigUint64(pos,false));
+          pos+=field.size;
+          msgData[field.num]=val;
+        });
+
+        // Session message (18)
+        if(def.globalMsgNum===18){
+          Object.keys(SESSION_FIELDS).forEach(function(k){
+            if(msgData[parseInt(k)]!==undefined) session[SESSION_FIELDS[k]]=msgData[parseInt(k)];
+          });
+        }
+        // Record message (20) - individual data points
+        else if(def.globalMsgNum===20){
+          var rec={};
+          if(msgData[3]!==undefined&&msgData[3]<255) rec.hr=msgData[3];
+          if(msgData[7]!==undefined&&msgData[7]<65535) rec.pwr=msgData[7];
+          if(msgData[4]!==undefined&&msgData[4]<255) rec.cad=msgData[4];
+          if(msgData[2]!==undefined){rec.alt=msgData[2]/5-500;}
+          if(msgData[0]!==undefined) rec.lat=msgData[0]*(180/Math.pow(2,31));
+          if(msgData[1]!==undefined) rec.lng=msgData[1]*(180/Math.pow(2,31));
+          if(Object.keys(rec).length) records.push(rec);
+        }
+        // Activity message (34)
+        else if(def.globalMsgNum===34){
+          if(msgData[253]!==undefined) activity.timestamp=msgData[253];
+        }
+      }
+    }
+  }catch(ex){
+    console.warn('FIT parse warning:',ex);
+  }
+
+  // Build activity from session data
+  var FTP=parseInt(st.ftp||183);
+  var BWT=st.settings&&st.settings.weight?parseFloat(st.settings.weight)/2.20462:73.5;
+
+  // Convert FIT timestamp (seconds since Dec 31 1989) to JS date
+  var FIT_EPOCH=631065600; // seconds between Unix epoch and FIT epoch
+  var startTs=session.start_time?new Date((session.start_time+FIT_EPOCH)*1000):new Date();
+  var dateStr=startTs.getFullYear()+'-'+(startTs.getMonth()+1)+'-'+startTs.getDate();
+
+  var distM=session.total_distance||0;
+  var distMi=Math.round(distM/1609.34*10)/10;
+  var elapsedSec=session.total_elapsed_time?Math.round(session.total_elapsed_time/1000):0;
+  var h=Math.floor(elapsedSec/3600),m=Math.floor((elapsedSec%3600)/60),s=elapsedSec%60;
+  var durStr=h+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2);
+
+  var np=session.normalized_power||0;
+  var tss=session.training_stress_score?Math.round(session.training_stress_score/100):null;
+  var ifPct=session.intensity_factor?Math.round(session.intensity_factor/100*100)/100:null;
+  var avgPwr=session.avg_power||0;
+  var maxPwr=session.max_power||0;
+  var avgHR=session.avg_heart_rate||0;
+  var maxHR=session.max_heart_rate||0;
+  var cadence=session.avg_cadence||0;
+  var calories=session.total_calories||0;
+  var workKj=session.total_work?Math.round(session.total_work/1000):null;
+  var ascM=(session.total_ascent||0);
+  var elevFt=Math.round(ascM*3.2808/10)*10; // rough
+  var avgSpeedMS=session.avg_speed||0;
+  var avgSpeedMph=Math.round(avgSpeedMS*2.23694*10)/10;
+
+  // Sport type
+  var sportMap={0:'Generic',1:'Run',2:'Cycling',5:'Swimming',11:'Strength',17:'Hiking',26:'Football',27:'Soccer',29:'Basketball',31:'Tennis',26:'Golf'};
+  var sportId=session.sport||2;
+  var actType=sportMap[sportId]||'Workout';
+
+  // Extract power/HR streams from records
+  var pwrVals=records.filter(function(r){return r.pwr;}).map(function(r){return r.pwr;});
+  var hrVals=records.filter(function(r){return r.hr;}).map(function(r){return r.hr;});
+
+  // Downsample for storage
+  function downsample(arr,n){if(arr.length<=n)return arr;var step=arr.length/n;return Array.from({length:n},function(_,i){return arr[Math.floor(i*step)];});}
+
+  // Generate activity name
+  var timeOfDay=startTs.getHours();
+  var tod=timeOfDay<12?'Morning':timeOfDay<17?'Afternoon':'Evening';
+  var sportName=actType==='Cycling'?'Ride':actType;
+  var actName=tod+' '+sportName;
+
+  var result={
+    id:'fit_'+(session.start_time||Date.now()),
+    name:actName,
+    date:dateStr,
+    type:actType,
+    source:'fit',
+    duration:durStr,
+    elapsedSecs:elapsedSec,
+    movingSecs:elapsedSec,
+    distance:distMi,
+    avgSpeed:avgSpeedMph,
+    avgPwr:avgPwr||null,
+    np:np||null,
+    maxPwr:maxPwr||null,
+    tss:tss,
+    ifPct:ifPct,
+    avgHR:avgHR||null,
+    maxHR:maxHR||null,
+    cadence:cadence||null,
+    calories:calories||null,
+    workKj:workKj,
+    elev:elevFt||null,
+  };
+
+  // Add streams if we have them
+  if(pwrVals.length>10) result.chartPwr=downsample(pwrVals,200);
+  if(hrVals.length>10) result.chartHR=downsample(hrVals,200);
+
+  // L/R balance
+  if(session.left_right_balance){
+    var lr=session.left_right_balance;
+    result.leftBalance=lr&0x7F;
+    result.rightBalance=100-(lr&0x7F);
+  }
+
+  // Training Effect (stored in activity message or session)
+  if(session.training_stress_score) result.tss=Math.round(session.training_stress_score/100);
+
+  return result;
 }
 
 function showOnboarding(){
