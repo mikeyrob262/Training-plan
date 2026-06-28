@@ -2860,42 +2860,6 @@ function sv(){
   svDebounce = setTimeout(function(){ fbPush(true); try{fbPushNutr();}catch(e){} }, 1500);
 }
 
-// ---- DATA SCRUBBER: fix corrupted TSS/NP/elev from past bad imports ----
-function scrubRideData(){
-  if(!st.rides||!st.rides.length) return 0;
-  var ftp=parseInt(st.ftp||186);
-  var fixed=0;
-  st.rides.forEach(function(r){
-    // NP: cap at 700W (well above any realistic sustained power for Mikey)
-    if(r.np&&(r.np>700||r.np<0)){r.np=null;fixed++;}
-    // avgPwr: cap at 600W
-    if(r.avgPwr&&(r.avgPwr>600||r.avgPwr<0)){r.avgPwr=null;fixed++;}
-    // maxPwr: cap at 2000W
-    if(r.maxPwr&&(r.maxPwr>2000||r.maxPwr<0)){r.maxPwr=null;fixed++;}
-    // NP can never be less than avgPwr or more than 1.5x avgPwr (physics)
-    if(r.np&&r.avgPwr&&(r.np<r.avgPwr*0.8||r.np>r.avgPwr*1.5)){r.np=null;fixed++;}
-    // TSS >450 for a single ride is not realistic (would require 7+ hrs at threshold)
-    if(r.tss&&(r.tss>450||r.tss<0)){
-      // Try to recompute from NP
-      if(r.np&&r.np>50&&r.np<700&&ftp>0&&r.movingSecs>0){
-        var IF2=r.np/ftp;
-        var calc=Math.round((r.movingSecs*r.np*IF2)/(ftp*3600)*100);
-        r.tss=(calc>0&&calc<450)?calc:null;
-      } else {
-        r.tss=null;
-      }
-      fixed++;
-    }
-    // Elevation sanity: single ride > 20000ft is bogus
-    if(r.elev&&r.elev>20000){r.elev=null;fixed++;}
-    // Elevation stored as meters instead of feet (values 1-500 for a long ride are suspiciously low)
-    // If a ride is >10 miles and elevation is <50ft it might be 0/missing, not wrong unit
-  });
-  if(fixed>0){sv();console.log('Scrubbed '+fixed+' bad data points from rides');}
-  return fixed;
-}
-
-
 // Apply remote snapshot - only if it has a timestamp and is newer than local
 function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
@@ -3038,7 +3002,6 @@ function fbPull(silent){
       if(token) st.ghToken = token;
       if(as !== undefined) st.autoSync = as;
       fbWriteTs = 0;
-      try{scrubRideData();}catch(e){} // clean corrupt TSS/NP/elev on every load
       try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
       document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
@@ -4460,27 +4423,18 @@ function showSet(){
               elapsedSecs:Math.round(a.elapsed_time||a.moving_time||elapsed),
               distance:Math.round((a.distance||0)/1609.34*10)/10,
               avgPwr:Math.round(a.average_watts||a.icu_average_watts||0),
-              np:(function(){var v=Math.round(a.icu_normalized_watts||a.weighted_average_watts||0);return (v>50&&v<700)?v:null;})(),
-              tss:(function(){var v=Math.round(a.icu_training_load||0);if(v>0&&v<450) return v;
-                // If no ICU TSS or too large, compute from NP
-                var np2=Math.round(a.icu_normalized_watts||a.weighted_average_watts||0);
-                var ftp=parseInt(st.ftp||186);
-                var secs=a.moving_time||a.elapsed_time||0;
-                if(np2>50&&np2<700&&ftp>0&&secs>0){var IF2=np2/ftp;var calc=Math.round((secs*np2*IF2)/(ftp*3600)*100);if(calc>0&&calc<450) return calc;}
-                return null;})(),
+              np:Math.round(a.weighted_average_watts||a.icu_normalized_watts||0),
+              tss:Math.round(a.suffer_score||a.icu_training_load||0),
               avgHR:Math.round(a.average_heartrate||0),
               maxHR:Math.round(a.max_heartrate||0),
               calories:Math.round(a.calories||a.kilojoules||0),
-              elev:(function(){
-                var em=a.total_elevation_gain||0;
-                return em>0?Math.round(em*3.2808):null;
-              })(),
+              elev:Math.round((a.total_elevation_gain||0)*3.2808),
               cadence:Math.round(a.average_cadence||0),
               trainer:a.type==='VirtualRide',
               workKj:Math.round(a.kilojoules||a.icu_joules&&a.icu_joules/1000||0),
               ifPct:Math.round((a.icu_intensity||0)*100),
               relEffort:Math.round(a.suffer_score||a.icu_rpe_calculated||0),
-              maxPwr:(function(){var v=Math.round(a.max_watts||a.icu_max_watts||0);return (v>0&&v<2000)?v:null;})(),
+              maxPwr:Math.round(a.max_watts||a.icu_max_watts||0),
               max20:Math.round(a.icu_20min_watts||0),
               source:'intervals'
             };
@@ -7812,18 +7766,10 @@ function importRideFile(input){
             duration:dur3,
             movingSecs:elapsed3,
             distance:distMi3,
-            avgPwr:(function(){var v=parseInt(getCol(sr,'Average Watts'))||0;return (v>0&&v<3000)?v:0;})(),
-            np:(function(){var v=parseInt(getCol(sr,'Weighted Average Power'))||0;return (v>50&&v<700)?v:null;})(),
-            maxPwr:(function(){var v=parseInt(getCol(sr,'Max Watts'))||0;return (v>0&&v<3000)?v:0;})(),
-            tss:(function(){
-              var v=parseInt(getCol(sr,'Training Load'))||0;
-              if(v>0&&v<450) return v;
-              // Compute TSS from NP if Training Load is missing/bad
-              var np2=parseInt(getCol(sr,'Weighted Average Power'))||0;
-              var ftp=parseInt(st.ftp||186);
-              var secs=parseInt(getCol(sr,'Moving Time')||getCol(sr,'Elapsed Time'))||0;
-              if(np2>50&&np2<700&&ftp>0&&secs>0){var IF2=np2/ftp;var calc=Math.round((secs*np2*IF2)/(ftp*3600)*100);if(calc>0&&calc<450) return calc;}
-              return 0;})(),
+            avgPwr:parseInt(getCol(sr,'Average Watts'))||0,
+            np:parseInt(getCol(sr,'Weighted Average Power'))||0,
+            maxPwr:parseInt(getCol(sr,'Max Watts'))||0,
+            tss:parseInt(getCol(sr,'Training Load'))||0,
             avgHR:parseInt(getCol(sr,'Average Heart Rate'))||0,
             maxHR:parseInt(getCol(sr,'Max Heart Rate'))||0,
             calories:parseInt(getCol(sr,'Calories'))||0,
@@ -9677,16 +9623,7 @@ function parseFITLib(data){
         avgPwr:Math.round(s.avg_power||0)||null,
         np:Math.round(s.normalized_power||0)||null,
         maxPwr:Math.round(s.max_power||0)||null,
-        tss:(function(){
-          var v=s.training_stress_score?Math.round(s.training_stress_score):0;
-          if(v>0&&v<1500) return v;
-          // Compute TSS from NP if FIT doesn't include it (Zwift often omits it)
-          var np3=Math.round(s.normalized_power||0);
-          var ftp3=parseInt(st.ftp||186);
-          var secs3=s.total_timer_time||s.total_elapsed_time||0;
-          if(np3>0&&np3<2500&&ftp3>0&&secs3>0){var IF3=np3/ftp3;return Math.round((secs3*np3*IF3)/(ftp3*3600)*100);}
-          return null;
-        })(),
+        tss:s.training_stress_score?Math.round(s.training_stress_score):null,
         ifPct:s.intensity_factor?Math.round(s.intensity_factor*100)/100:null,
         avgHR:Math.round(s.avg_heart_rate||0)||null,
         maxHR:Math.round(s.max_heart_rate||0)||null,
@@ -9713,20 +9650,6 @@ function parseFITLib(data){
           if(avg>best20) best20=avg;
         }
         if(best20>0) result.max20=Math.round(best20);
-      }
-
-      // Compute elevation from altitude stream if total_ascent is missing (common for Zwift)
-      if(!result.elev||result.elev===0){
-        var altVals=records.filter(function(r){return r.altitude!=null||r.enhanced_altitude!=null;})
-                           .map(function(r){return r.enhanced_altitude!=null?r.enhanced_altitude:r.altitude;});
-        if(altVals.length>10){
-          var totalAscent=0;
-          for(var ai=1;ai<altVals.length;ai++){
-            var diff=altVals[ai]-altVals[ai-1];
-            if(diff>0&&diff<50) totalAscent+=diff; // ignore spikes > 50m between samples
-          }
-          if(totalAscent>0) result.elev=Math.round(totalAscent*3.2808);
-        }
       }
 
       // Extract GPS for map
