@@ -5417,6 +5417,8 @@ function renderFoodRows(container, list){
 function showPerf(){
   var old=document.getElementById('perf-modal');
   if(old) old.remove();
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
   overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;';
@@ -5437,6 +5439,8 @@ function showPerf(){
 
 
 function closePerf(){
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var hb=document.getElementById('bnav-home');if(hb)hb.classList.add('active');
   var m=document.getElementById('perf-modal');
   if(m) m.remove();
   document.body.style.overflow='';
@@ -9387,12 +9391,23 @@ window.onload = function(){
 
 function bnavGo(tab){
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  document.getElementById('bnav-'+tab).classList.add('active');
-  if(tab==='home'){ showScreen('TRAIN'); }
-  else if(tab==='analytics'){ showPerf(); }
-  else if(tab==='nutrition'){ showNutr(); }
-  else if(tab==='activities'){ showPerf(); }
-  else if(tab==='more'){ showSet(); }
+  var btn=document.getElementById('bnav-'+tab);
+  if(btn) btn.classList.add('active');
+  if(tab==='home'){
+    // Close any open modal
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showScreen('TRAIN');
+  } else if(tab==='analytics'){
+    showPerf();
+  } else if(tab==='nutrition'){
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showNutr();
+  } else if(tab==='activities'){
+    showPerf();
+  } else if(tab==='more'){
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showSet();
+  }
 }
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
