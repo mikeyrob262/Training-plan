@@ -2843,9 +2843,6 @@ try{var _rs=localStorage.getItem('mta2_rides');if(_rs){var _rp=JSON.parse(_rs);i
 try{var _s=localStorage.getItem('mta2');if(_s){var _p=JSON.parse(_s);if(Array.isArray(_p)){var _o={};for(var _i=0;_i<_p.length;_i++){if(_p[_i])_o['w'+_i]=_p[_i];}if(_p.rides)_o.rides=_p.rides;if(_p.lastUpdate)_o.lastUpdate=_p.lastUpdate;if(_p.lastSbw)_o.lastSbw=_p.lastSbw;st=_o;}else{// migrate numeric string keys to w-prefix
 var _o2={};Object.keys(_p).forEach(function(k){if(/^\d+$/.test(k))_o2['w'+k]=_p[k];else _o2[k]=_p[k];});st=_o2;}}}catch(e){}
 
-// Scrub bad data from localStorage on startup (function defined below, safe to call late)
-window.addEventListener('DOMContentLoaded', function(){ try{scrubRideData();}catch(e){} });
-
 // -- FIREBASE SYNC ------------------------------------------------------------
 var FB_URL     = 'https://mikey-training-app-default-rtdb.firebaseio.com/data.json';
 var FB_NUTR_URL = 'https://mikey-training-app-default-rtdb.firebaseio.com/nutrition.json';
