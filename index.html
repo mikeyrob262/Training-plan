@@ -9652,6 +9652,20 @@ function parseFITLib(data){
         if(best20>0) result.max20=Math.round(best20);
       }
 
+      // Compute elevation from altitude stream if total_ascent missing (common for Zwift)
+      if(!result.elev||result.elev===0){
+        var altVals=records.filter(function(r){return r.altitude!=null||r.enhanced_altitude!=null;})
+                           .map(function(r){return r.enhanced_altitude!=null?r.enhanced_altitude:r.altitude;});
+        if(altVals.length>10){
+          var totalAscent=0;
+          for(var ai=1;ai<altVals.length;ai++){
+            var diff=altVals[ai]-altVals[ai-1];
+            if(diff>0&&diff<50) totalAscent+=diff;
+          }
+          if(totalAscent>0) result.elev=Math.round(totalAscent*3.2808);
+        }
+      }
+
       // Extract GPS for map
       var gpsPoints=records.filter(function(r){return r.position_lat!=null&&r.position_long!=null;});
       if(gpsPoints.length>10){
