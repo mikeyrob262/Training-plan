@@ -5443,6 +5443,11 @@ function closePerf(){
 function renderPerf(container){
   if(!container) container=document.getElementById('perf-body');
   if(!container) return;
+  // Destroy any existing Chart.js instances to prevent ghost rendering on re-render
+  ['perf-peak-chart','perf-miles-chart','perf-np-chart','perf-tss-chart','perf-ctl-chart'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){try{var ch=Chart.getChart(el);if(ch)ch.destroy();}catch(e){}}
+  });
   if(!st.rides) st.rides=[];
   var rides=st.rides;
   var FTP=parseInt(st.ftp||186);
