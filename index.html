@@ -6070,7 +6070,7 @@ function buildPMCChart(data){
     return '<path d="'+d+'" fill="'+color+'" opacity="0.12"/>';
   }
 
-  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;overflow:visible">';
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;overflow:hidden">';
 
   // Background grid lines
   var gridVals = [mn + rng*0.25, mn + rng*0.5, mn + rng*0.75];
