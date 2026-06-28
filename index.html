@@ -5417,8 +5417,7 @@ function showPerf(){
   if(old) old.remove();
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
-  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
-  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;height:100%;z-index:150;overflow:hidden;background:'+bgCol+';display:flex;flex-direction:column;';
+  overlay.style.cssText='position:fixed;inset:0;z-index:150;background:var(--bg);display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
@@ -5426,7 +5425,7 @@ function showPerf(){
     +'<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>';
   var body=document.createElement('div');
   body.id='perf-body';
-  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100%';
+  body.style.cssText='flex:1;overflow-y:auto;padding-bottom:80px';
   overlay.appendChild(hdr);
   overlay.appendChild(body);
   document.body.appendChild(overlay);
@@ -5483,6 +5482,7 @@ function renderPerf(container){
     +'<div style="padding:0 16px 10px;font-size:11px;color:var(--t3);text-align:right">TCX from Garmin . CSV from Intervals.icu</div>';
 
   // -- W/KG HERO CARD
+  html+='<div style="margin:12px 16px;background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border-radius:18px;border:1px solid rgba(252,76,2,.15);padding:18px">'
   // W/kg category labels
   var wkgLabel=wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational';
   var wkgColor=wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b';
@@ -5592,7 +5592,7 @@ function renderPerf(container){
   html+='</div>';
 
   // PMC Chart with labeled points
-  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;overflow:hidden">';
+  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
   html+='<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:3px">8-week trend</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">8-week performance trend</div>';
   html+=buildPMCChart(pmcData);
@@ -5713,7 +5713,7 @@ function renderPerf(container){
   html+='</div>';
 
   // POWER + TSS ROW
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 10px">';
 
   // Power trend
   html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
@@ -5776,7 +5776,7 @@ function renderPerf(container){
   html+='</div></div>';
 
   // RECORDS + STREAKS ROW
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 10px">';
   html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Ride Records</div>';
   var records=[
@@ -6065,7 +6065,7 @@ function buildPMCChart(data){
     return '<path d="'+d+'" fill="'+color+'" opacity="0.12"/>';
   }
 
-  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:100%;height:'+H+'px;overflow:hidden;display:block">';
+  var svg = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;overflow:visible">';
 
   // Background grid lines
   var gridVals = [mn + rng*0.25, mn + rng*0.5, mn + rng*0.75];
@@ -9383,6 +9383,11 @@ window.onload = function(){
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
+  // Immediate pull on startup
+  fetch(FB_URL)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(data){ if(data) applyFirebaseData(data); })
+    .catch(function(){});
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </body>
