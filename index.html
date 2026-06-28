@@ -5425,7 +5425,7 @@ function showPerf(){
     +'<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>';
   var body=document.createElement('div');
   body.id='perf-body';
-  body.style.cssText='flex:1;overflow-y:auto;padding-bottom:80px';
+  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px';
   overlay.appendChild(hdr);
   overlay.appendChild(body);
   document.body.appendChild(overlay);
