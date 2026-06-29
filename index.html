@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782701443 -->
+<!DOCTYPE html><!-- v1782701537 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9709,8 +9709,7 @@ function stravaBackfill() {
         }).then(function(r){return r.json();}).then(function(d){
           if(!d.access_token){toast('Auth failed: '+(d.message||'unknown'));return;}
           st.stravaToken=d.access_token;st.stravaRefreshToken=d.refresh_token;sv();
-          if(st.rides) st.rides=st.rides.filter(function(r){return r.source!=='strava';});
-          toast('Fetching activities...');
+          toast('Fetching new activities...');
           fetchStravaPage(d.access_token,1,0);
         });
       }
