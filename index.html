@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782701039 -->
+<!DOCTYPE html><!-- v1782701443 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9686,8 +9686,7 @@ function stravaBackfill() {
       st.stravaToken=d.access_token;
       st.stravaRefreshToken=d.refresh_token;
       sv();
-      if(st.rides) st.rides=st.rides.filter(function(r){return r.source!=='strava';});
-      toast('Fetching activities...');
+      toast('Fetching new activities...');
       fetchStravaPage(d.access_token,1,0);
     }).catch(function(){toast('Network error');});
     return;
@@ -9721,7 +9720,17 @@ function stravaBackfill() {
 }
 
 function fetchStravaPage(token, page, imported) {
-  fetch('https://www.strava.com/api/v3/athlete/activities?per_page=50&page=' + page, {
+  // On first page, find most recent strava ride date to use as after= param
+  var afterParam = '';
+  if(page===1 && st.rides && st.rides.length){
+    var stravaRides = st.rides.filter(function(r){return r.source==='strava'&&r.date;});
+    if(stravaRides.length){
+      var latest = stravaRides.reduce(function(a,b){return a.date>b.date?a:b;});
+      var afterTs = Math.floor(new Date(latest.date).getTime()/1000);
+      afterParam = '&after='+afterTs;
+    }
+  }
+  fetch('https://www.strava.com/api/v3/athlete/activities?per_page=50&page=' + page + afterParam, {
     headers: { 'Authorization': 'Bearer ' + token }
   })
   .then(function(r){
