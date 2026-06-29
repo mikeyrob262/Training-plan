@@ -9913,40 +9913,15 @@ function showAICoach(){
   }
   
   var prompt = 'You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
-    +'
-
-ATHLETE PROFILE:'
-    +'
-- FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
-    +'
-- CTL (fitness): '+ctl+', ATL (fatigue): '+atl+', TSB (form): '+tsb
-    +(tsb < -20 ? ' (TIRED - needs recovery)' : tsb > 5 ? ' (FRESH - ready to perform)' : ' (NEUTRAL)')
-    +'
-
-TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
-    +'
-
-RECENT RIDES (last 7 days):
-'+recentRides.map(function(r){
-      return '- '+r.name+' ('+r.date+'): '+(r.distance||0)+'mi, TSS:'+(r.tss||0)+', NP:'+(r.np||r.avgPwr||0)+'W';
-    }).join('
-')
-    +'
-
-UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
-    +'
-
-Write a concise daily briefing with these sections:'
-    +'
-1. TODAY (what to do and how to approach it)'
-    +'
-2. FORM CHECK (brief assessment of CTL/ATL/TSB)'
-    +'
-3. KEY FOCUS (one specific thing to nail this week)'
-    +'
-4. NUTRITION TIP (one actionable tip based on training load)'
-    +'
-Keep each section to 2-3 sentences. Be direct and motivating.';
+    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
+    +', CTL (fitness): '+ctl+', ATL (fatigue): '+atl+', TSB (form): '+tsb
+    +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
+    +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
+    +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
+      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
+    }).join('; ')
+    +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
+    +'. Write a concise daily briefing with 4 sections labeled: 1. TODAY 2. FORM CHECK 3. KEY FOCUS 4. NUTRITION TIP. Keep each to 2-3 sentences. Be direct and motivating.'
   
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
