@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782745114 -->
+<!DOCTYPE html><!-- v1782745176 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6744,6 +6744,12 @@ function bulkImportTCX(input){
               tss:ride2.tss||existing.tss, elev:ride2.elev||existing.elev,
               calories:ride2.calories||existing.calories,
               workKj:ride2.workKj||existing.workKj,
+              ifPct:ride2.ifPct||existing.ifPct,
+              cadence:ride2.cadence||existing.cadence,
+              avgTemp:ride2.avgTemp||existing.avgTemp,
+              maxTemp:ride2.maxTemp||existing.maxTemp,
+              lrBalance:ride2.lrBalance||existing.lrBalance,
+              powerCurve:ride2.powerCurve||existing.powerCurve,
               lats:ride2.lats||existing.lats, lons:ride2.lons||existing.lons
             });
             sv();
@@ -7272,6 +7278,8 @@ function importRideFile(input){
               st.rides[dupIdx2]=Object.assign({},ex2,{
                 max20:ride2.max20||ex2.max20, maxPwr:ride2.maxPwr||ex2.maxPwr,
                 powerCurve:ride2.powerCurve||ex2.powerCurve,
+                avgTemp:ride2.avgTemp||ex2.avgTemp,
+                maxTemp:ride2.maxTemp||ex2.maxTemp,
                 lrBalance:ride2.lrBalance||ex2.lrBalance,
                 z1s:ride2.z1s||ex2.z1s, z2s:ride2.z2s||ex2.z2s, z3s:ride2.z3s||ex2.z3s,
                 z4s:ride2.z4s||ex2.z4s, z5s:ride2.z5s||ex2.z5s, z6s:ride2.z6s||ex2.z6s,
