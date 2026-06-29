@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782741449 -->
+<!DOCTYPE html><!-- v1782741515 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6682,7 +6682,6 @@ function bulkImportTCX(input){
           }
           if(dupIdx>=0){
             // Merge FIT data into existing ride (overwrite with richer fields)
-            console.log('MERGE: ride2.max20=',ride2.max20,'data.peak20=',data.peak20,'ride2.calories=',ride2.calories);
             var existing=st.rides[dupIdx];
             st.rides[dupIdx]=Object.assign({},existing,{
               max20:ride2.max20||existing.max20,
