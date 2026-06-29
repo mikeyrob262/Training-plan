@@ -2993,8 +2993,11 @@ function applyFirebaseData(data){
   if(Array.isArray(data)) data=Object.assign({},data);
   var remoteTs = data.lastUpdate || 0;
   if(remoteTs <= fbWriteTs) return;            // our write is newer, skip
-  // Only skip if local is strictly newer AND has rides
-  if(remoteTs > 0 && remoteTs <= (st.lastUpdate||0) && (st.rides||[]).length > 0) return;
+  // Skip if local has more rides (freshly synced) even if timestamps are close
+  var localRides = (st.rides||[]).length;
+  var remoteRides = (data.rides||[]).length;
+  if(localRides > remoteRides + 10) return;   // local has significantly more rides, keep it
+  if(remoteTs > 0 && remoteTs <= (st.lastUpdate||0) && localRides > 0) return;
   var token = st.ghToken; var as = st.autoSync;
   st = data;
   if(token) st.ghToken = token;
@@ -10358,6 +10361,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
     imported += newCount;
     if(acts.length < 50){
       sv();
+      fbPush(true); // force immediate push so Firebase has the latest rides
       toast('Strava sync done: ' + imported + ' imported');
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
     } else {
