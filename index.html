@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782698656 -->
+<!DOCTYPE html><!-- v1782698878 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,40 +9624,11 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  var STRAVA_CLIENT_ID = '260935';
-  var STRAVA_CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
-  // Use stored token or default
-  if(!st.stravaToken) st.stravaToken = 'b21aa88386ea43fe3c0ec3bc2921e79beb6cb303';
+  var DEFAULT_TOKEN = 'b21aa88386ea43fe3c0ec3bc2921e79beb6cb303';
+  var token = st.stravaToken || DEFAULT_TOKEN;
+  if(!st.stravaToken){ st.stravaToken = DEFAULT_TOKEN; sv(); }
   toast('Fetching Strava activities...');
-  // Try current token first; if 401, refresh
-  fetch('https://www.strava.com/api/v3/athlete', {
-    headers: {'Authorization': 'Bearer ' + st.stravaToken}
-  }).then(function(r){
-    if(r.status === 401 && st.stravaRefreshToken) {
-      // Refresh the token
-      return fetch('https://www.strava.com/oauth/token', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          client_id: STRAVA_CLIENT_ID,
-          client_secret: STRAVA_CLIENT_SECRET,
-          grant_type: 'refresh_token',
-          refresh_token: st.stravaRefreshToken
-        })
-      }).then(function(r2){ return r2.json(); })
-        .then(function(d){
-          if(d.access_token){
-            st.stravaToken = d.access_token;
-            st.stravaRefreshToken = d.refresh_token;
-            sv();
-          }
-          fetchStravaPage(st.stravaToken, 1, 0);
-        });
-    }
-    fetchStravaPage(st.stravaToken, 1, 0);
-  }).catch(function(){
-    fetchStravaPage(st.stravaToken, 1, 0);
-  });
+  fetchStravaPage(token, 1, 0);
 }
 
 function fetchStravaPage(token, page, imported) {
@@ -9681,7 +9652,7 @@ function fetchStravaPage(token, page, imported) {
     acts.forEach(function(a){
       var dateStr = (a.start_date||'').split('T')[0];
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
-      var dup = st.rides.find(function(r){ return r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5; });
+      var dup = st.rides.find(function(r){ return (r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5); });
       if(dup) return;
       var dur = a.elapsed_time||0;
       var np = a.weighted_average_watts||null;
