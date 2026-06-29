@@ -8509,11 +8509,15 @@ function renderRun(){
       }
 
       // Mini GPS map
-      if(r.gpsLats && r.gpsLats.length > 5){
+      if(r.gpsLats && Array.isArray(r.gpsLats) && r.gpsLats.length > 5 && r.gpsLons && r.gpsLons.length > 5){
         var mapWrap=document.createElement('div');
-        mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1)';
-        mapWrap.innerHTML=buildRouteMap(r.gpsLats, r.gpsLons, [], 0);
-        rcard.appendChild(mapWrap);
+        mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1);height:160px';
+        try {
+          var mapHtml = buildRouteMap(r.gpsLats, r.gpsLons, [], 0);
+          mapHtml = mapHtml.replace('height:260px', 'height:160px');
+          mapWrap.innerHTML = mapHtml;
+          rcard.appendChild(mapWrap);
+        } catch(e) {}
       }
 
       // HR warning
