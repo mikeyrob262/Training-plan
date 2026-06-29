@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782698340 -->
+<!DOCTYPE html><!-- v1782698474 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,63 +9624,76 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  var WORKER = 'https://training-plan.mgrobinson07.workers.dev';
+  var token = st.stravaToken;
+  if(!token) {
+    // Prompt for token
+    var t = prompt('Enter your Strava Access Token (get from Settings > Strava API or use stravaauth.com):');
+    if(!t) return;
+    st.stravaToken = t.trim();
+    sv();
+    token = st.stravaToken;
+  }
   toast('Fetching Strava activities...');
-  fetchStravaPage(WORKER, 1, 0);
+  fetchStravaPage(token, 1, 0);
 }
 
-function fetchStravaPage(WORKER, page, imported) {
-  fetch(WORKER + '/strava?page=' + page + '&per_page=50')
-    .then(function(r){ return r.json(); })
-    .then(function(acts){
-      if(!acts || !acts.length || acts.error){
-        sv();
-        toast('Strava sync done: ' + imported + ' imported');
-        var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
-        return;
+function fetchStravaPage(token, page, imported) {
+  fetch('https://www.strava.com/api/v3/athlete/activities?per_page=50&page=' + page, {
+    headers: { 'Authorization': 'Bearer ' + token }
+  })
+  .then(function(r){
+    if(r.status === 401){ st.stravaToken=null; sv(); toast('Strava token expired — re-enter in Sync Strava'); return null; }
+    return r.json();
+  })
+  .then(function(acts){
+    if(!acts || !acts.length){
+      sv();
+      toast('Strava sync done: ' + imported + ' imported');
+      var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
+      return;
+    }
+    var ftp = parseInt(st.ftp||186);
+    if(!st.rides) st.rides=[];
+    var newCount=0;
+    acts.forEach(function(a){
+      var dateStr = (a.start_date||'').split('T')[0];
+      var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
+      var dup = st.rides.find(function(r){ return r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5; });
+      if(dup) return;
+      var dur = a.elapsed_time||0;
+      var np = a.weighted_average_watts||null;
+      var avgPwr = a.average_watts||null;
+      var tss = null;
+      if(np && dur && ftp) tss = Math.round((dur*np*(np/ftp))/(ftp*3600)*100);
+      var elev = a.total_elevation_gain ? Math.round(a.total_elevation_gain*3.28084) : null;
+      var gpsLats=null, gpsLons=null;
+      if(a.map && a.map.summary_polyline) {
+        try {
+          var decoded = decodePolyline(a.map.summary_polyline);
+          if(decoded.lats.length > 5){ gpsLats=decoded.lats; gpsLons=decoded.lons; }
+        } catch(e){}
       }
-      var ftp = parseInt(st.ftp||186);
-      if(!st.rides) st.rides=[];
-      var newCount=0;
-      acts.forEach(function(a){
-        var dateStr = (a.start_date||'').split('T')[0];
-        var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
-        var dup = st.rides.find(function(r){ return r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5; });
-        if(dup) return;
-        var dur = a.elapsed_time||0;
-        var np = a.weighted_average_watts||null;
-        var avgPwr = a.average_watts||null;
-        var tss = null;
-        if(np && dur && ftp) tss = Math.round((dur*np*(np/ftp))/(ftp*3600)*100);
-        var elev = a.total_elevation_gain ? Math.round(a.total_elevation_gain*3.28084) : null;
-        var gpsLats=null, gpsLons=null;
-        if(a.map && a.map.summary_polyline) {
-          try {
-            var decoded = decodePolyline(a.map.summary_polyline);
-            if(decoded.lats.length > 5){ gpsLats=decoded.lats; gpsLons=decoded.lons; }
-          } catch(e){}
-        }
-        st.rides.push({
-          name: a.name||'Strava Activity',
-          date: dateStr, duration: dur, distance: distMi,
-          avgPwr: avgPwr, np: np, hr: a.average_heartrate||null,
-          tss: tss, elev: elev, calories: a.calories||null,
-          gpsLats: gpsLats, gpsLons: gpsLons,
-          source: 'strava', stravaId: a.id
-        });
-        newCount++;
+      st.rides.push({
+        name: a.name||'Strava Activity',
+        date: dateStr, duration: dur, distance: distMi,
+        avgPwr: avgPwr, np: np, hr: a.average_heartrate||null,
+        tss: tss, elev: elev, calories: a.calories||null,
+        gpsLats: gpsLats, gpsLons: gpsLons,
+        source: 'strava', stravaId: a.id
       });
-      imported += newCount;
-      if(acts.length < 50){
-        sv();
-        toast('Strava sync done: ' + imported + ' imported');
-        var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
-      } else {
-        toast('Page ' + page + '...');
-        setTimeout(function(){ fetchStravaPage(WORKER, page+1, imported); }, 300);
-      }
-    })
-    .catch(function(e){ toast('Strava error: '+e.message); });
+      newCount++;
+    });
+    imported += newCount;
+    if(acts.length < 50){
+      sv();
+      toast('Strava sync done: ' + imported + ' imported');
+      var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
+    } else {
+      toast('Page ' + page + '...');
+      setTimeout(function(){ fetchStravaPage(token, page+1, imported); }, 300);
+    }
+  })
+  .catch(function(e){ toast('Strava error: '+e.message); });
 }
 
 window.onload = function(){
