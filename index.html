@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782743298 -->
+<!DOCTYPE html><!-- v1782743430 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4734,6 +4734,53 @@ function nutrDelta(d){
 
 function showNutr(){try{nutrDate=getTodayKey();renderNutr();showScreen('NUTR');}catch(e){console.error('showNutr error:',e);alert('Nutrition error: '+e.message);}}
 
+
+function editFoodItem(meal, idx) {
+  var nd = getNDay(nutrDate);
+  var item = nd.meals[meal][idx];
+  if(!item) return;
+  var modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:400;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'background:var(--s1);border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:480px;box-sizing:border-box';
+  var qty = item._qty||1;
+  var baseC = Math.round((item.cal||0)/qty);
+  var baseP = Math.round((item.p||0)/qty*10)/10;
+  var baseCa = Math.round((item.c||0)/qty*10)/10;
+  var baseF = Math.round((item.f||0)/qty*10)/10;
+  sheet.innerHTML = '<div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:16px">Edit Food</div>'
+    + '<div style="display:grid;gap:10px">'
+    + '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Name</div><input id="ef-name" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 12px;color:var(--t1);font-size:14px;font-family:inherit" value="'+item.n+'"></div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">'
+    + '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Cal</div><input id="ef-cal" type="number" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 8px;color:var(--t1);font-size:14px;font-family:inherit;text-align:center" value="'+baseC+'"></div>'
+    + '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Protein</div><input id="ef-p" type="number" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 8px;color:var(--t1);font-size:14px;font-family:inherit;text-align:center" value="'+baseP+'"></div>'
+    + '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Carbs</div><input id="ef-c" type="number" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 8px;color:var(--t1);font-size:14px;font-family:inherit;text-align:center" value="'+baseCa+'"></div>'
+    + '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px">Fat</div><input id="ef-f" type="number" style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 8px;color:var(--t1);font-size:14px;font-family:inherit;text-align:center" value="'+baseF+'"></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">'
+    + '<button id="ef-cancel" style="padding:13px;border-radius:12px;border:1px solid var(--b2);background:var(--s2);color:var(--t1);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>'
+    + '<button id="ef-save" style="padding:13px;border-radius:12px;border:none;background:#FC4C02;color:white;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Save</button>'
+    + '</div></div>';
+  modal.appendChild(sheet);
+  document.body.appendChild(modal);
+  document.getElementById('ef-cancel').onclick = function(){ modal.remove(); };
+  modal.onclick = function(e){ if(e.target===modal) modal.remove(); };
+  document.getElementById('ef-save').onclick = function(){
+    var newName = document.getElementById('ef-name').value.trim()||item.n;
+    var newCal = parseFloat(document.getElementById('ef-cal').value)||0;
+    var newP = parseFloat(document.getElementById('ef-p').value)||0;
+    var newC = parseFloat(document.getElementById('ef-c').value)||0;
+    var newF = parseFloat(document.getElementById('ef-f').value)||0;
+    nd.meals[meal][idx] = {
+      n: newName, _baseName: newName, _qty: qty,
+      cal: Math.round(newCal*qty), p: Math.round(newP*qty*10)/10,
+      c: Math.round(newC*qty*10)/10, f: Math.round(newF*qty*10)/10,
+      fiber: item.fiber||0, satFat: item.satFat||0, sodium: item.sodium||0, sugar: item.sugar||0
+    };
+    sv(); modal.remove(); renderNutr(); showScreen('NUTR');
+  };
+}
+
 function renderNutr(){
   MTGT = calcMTGT(); // recalc in case weight changed
   var nd=getNDay(nutrDate),tot=getDTots(nutrDate);
@@ -5165,6 +5212,8 @@ function renderNutr(){
       var iMeta=document.createElement('div');
       iMeta.style.cssText='font-size:11px;color:var(--t3)';
       iMeta.textContent=(item.p||0)+'g P . '+(item.c||0)+'g C . '+(item.f||0)+'g F';
+      info.style.cursor='pointer';
+      (function(mn,i){ info.onclick=function(){ editFoodItem(mn,i); }; })(meal,ii);
       info.appendChild(iName);info.appendChild(iMeta);
       var rDiv=document.createElement('div');
       rDiv.style.cssText='display:flex;align-items:center;gap:6px';
