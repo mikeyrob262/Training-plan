@@ -9908,9 +9908,7 @@ function showAICoach(){
         model:'claude-sonnet-4-6',
         max_tokens:400,
         system:'You are a personal cycling and endurance coach. Be concise, specific, and motivating. Use the athlete data provided.',
-        messages:[{role:'user',content:'Athlete context: '+context+'
-
-Question: '+q}]
+        messages:[{role:'user',content:'Athlete context: '+context+' Question: '+q}]
       })
     }).then(function(r){return r.json();}).then(function(d){
       thinkBub.innerHTML='<b style="color:#a855f7">Coach</b><br>'+(d.content&&d.content[0]&&d.content[0].text||'Sorry, try again');
