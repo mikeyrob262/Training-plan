@@ -8447,10 +8447,12 @@ function renderRun(){
     scr.appendChild(empty);
   } else {
     var yearStr=new Date().getFullYear()+'-01-01';
-  var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,4);
+    var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+    var runList=document.createElement('div');
+    runList.style.cssText='margin:0 16px 16px;height:380px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)';
     sorted.forEach(function(r,ri){
       var rcard=document.createElement('div');
-      rcard.style.cssText='margin:0 16px 8px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:14px';
+      rcard.style.cssText='background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden;margin-bottom:8px;padding:14px';
       var hrWarn=r.avgHR&&r.avgHR>121&&(r.type==='Easy Run'||r.type==='Long Run'||r.type==='Walk/Run');
       var typeColor=r.type==='Tempo Run'?{bg:'#FAEEDA',tc:'#633806'}:r.type==='Long Run'?{bg:'#E6F1FB',tc:'#0C447C'}:{bg:'#EAF3DE',tc:'#27500A'};
       var rpeColor=r.rpe<=4?{bg:'#EAF3DE',tc:'#27500A'}:r.rpe<=6?{bg:'#FAEEDA',tc:'#633806'}:{bg:'#FCEBEB',tc:'#791F1F'};
@@ -8545,8 +8547,9 @@ function renderRun(){
       (function(idx){delBtn.onclick=function(){if(confirm('Delete this run?')){st.runs.splice(idx,1);sv();renderRun();toast('Run deleted');}}})(runs.indexOf(r));
       rcard.appendChild(delBtn);
 
-      scr.appendChild(rcard);
+      runList.appendChild(rcard);
     });
+    scr.appendChild(runList);
   }
 
   // Weekly chart
