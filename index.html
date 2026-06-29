@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782751955 -->
+<!DOCTYPE html><!-- v1782752006 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3314,13 +3314,13 @@ function doSwap(w,idx,btn){
   var race=['Race'];
 
   if(sl.indexOf('strength')>=0||sl.indexOf('full body')>=0){
-    opts=running.concat(swimming).concat(['Easy Spin 20 min']).concat(rest);
+    opts=['Race'].concat(running).concat(swimming).concat(['Easy Spin 20 min']).concat(rest);
   } else if(sl.indexOf('zwift')>=0||sl.indexOf('ride')>=0||sl.indexOf('bike')>=0||sl.indexOf('chase')>=0){
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('run')>=0||sl.indexOf('jog')>=0){
     opts=running.concat(cycling).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('swim')>=0){
-    opts=swimming.concat(running).concat(cycling).concat(rest);
+    opts=['Race'].concat(swimming).concat(running).concat(cycling).concat(rest);
   } else {
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   }
