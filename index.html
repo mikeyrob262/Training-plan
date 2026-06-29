@@ -10164,6 +10164,7 @@ function showMoreSheet(){
     ]},
     {label:'Data', items:[
       {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z', fn:'stravaBackfill',  c:'#FC4C02'},
+      {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', fn:'stravaFullResync', c:'#4D9FFF'},
       {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15', fn:'showDropZone', c:'#00C896'},
     ]},
     {label:'AI', items:[
@@ -10214,6 +10215,27 @@ function decodePolyline(str) {
   return {lats:lats, lons:lons};
 }
 
+function stravaFullResync() {
+  // Clear the last sync timestamp so fetchStravaPage pulls everything
+  if(!st.stravaRefreshToken && !st.stravaToken) {
+    toast('Connect Strava first via Sync Strava');
+    return;
+  }
+  toast('Starting full resync from Strava...');
+  if(st.stravaRefreshToken) {
+    var CLIENT_ID='260935', CLIENT_SECRET='570c52239e99be3ba40d9c47ed78d5107c5725ba';
+    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(!d.access_token){toast('Token refresh failed');return;}
+      st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv();
+      fetchStravaPage(d.access_token,1,0,true); // pass forceAll=true
+    });
+  } else {
+    fetchStravaPage(st.stravaToken,1,0,true);
+  }
+}
+
 function stravaBackfill() {
   var CLIENT_ID = '260935';
   var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
@@ -10262,10 +10284,10 @@ function stravaBackfill() {
   },500);
 }
 
-function fetchStravaPage(token, page, imported) {
+function fetchStravaPage(token, page, imported, forceAll) {
   // On first page, find most recent strava ride date to use as after= param
   var afterParam = '';
-  if(page===1 && st.rides && st.rides.length){
+  if(!forceAll && page===1 && st.rides && st.rides.length){
     var stravaRides = st.rides.filter(function(r){return r.source==='strava'&&r.date;});
     if(stravaRides.length){
       var latest = stravaRides.reduce(function(a,b){return a.date>b.date?a:b;});
