@@ -5484,9 +5484,11 @@ function openFoodForMeal(meal){
       } else { local = allLocal; }
       if(local.length || !q){
         renderFoodRows(foodList, local.slice(0,30));
+      } else if(local.length > 0) {
+        // Local results found - show them, no need for API
+        renderFoodRows(foodList, local.slice(0,30));
       } else {
         foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
-        // Search USDA FoodData Central via Cloudflare Worker
         fetch('https://mikey-food-api2.mgrobinson07.workers.dev/search?q=' + encodeURIComponent(q))
           .then(function(r){ return r.json(); })
           .then(function(d){
@@ -10588,6 +10590,55 @@ var LOCAL_FOODS = [
   {n:"Waffles Homemade (2)",cal:310,p:9,c:36,f:14,fiber:2,sodium:450},
   {n:"French Toast (2 slices)",cal:300,p:11,c:38,f:11,fiber:2,sodium:410},
   {n:"Omelette 2 egg with cheese",cal:300,p:19,c:3,f:23,fiber:0,sodium:410},
+  // APPLEGATE
+  {n:"Applegate Chicken Sausage (1 link)",cal:90,p:11,c:1,f:5,fiber:0,sodium:420},
+  {n:"Applegate Naturals Chicken Sausage",cal:90,p:11,c:1,f:5,fiber:0,sodium:420},
+  {n:"Applegate Farms Turkey Bacon (2 slices)",cal:35,p:6,c:0,f:2,fiber:0,sodium:330},
+  {n:"Applegate Organic Turkey Slices (2 oz)",cal:50,p:11,c:0,f:1,fiber:0,sodium:360},
+  {n:"Applegate Beef Hot Dog (1)",cal:110,p:6,c:1,f:9,fiber:0,sodium:360},
+  // ADDITIONAL COMMON ITEMS
+  {n:"Everything Bagel (1)",cal:270,p:10,c:52,f:2,fiber:2,sodium:510},
+  {n:"Cream of Mushroom Soup (1 cup)",cal:129,p:2,c:9,f:10,fiber:1,sodium:870},
+  {n:"Progresso Minestrone Soup (1 cup)",cal:100,p:5,c:19,f:1,fiber:4,sodium:690},
+  {n:"Campbell's Chicken Tortilla Soup (1 cup)",cal:110,p:7,c:17,f:2,fiber:1,sodium:790},
+  {n:"Velveeta Cheese (1 oz)",cal:82,p:5,c:3,f:6,fiber:0,sodium:430},
+  {n:"Laughing Cow Cheese Wedge (1)",cal:35,p:2,c:1,f:3,fiber:0,sodium:170},
+  {n:"Philadelphia Cream Cheese Chive (2 tbsp)",cal:90,p:2,c:1,f:9,fiber:0,sodium:110},
+  {n:"Ricotta Cheese Whole Milk (1/4 cup)",cal:108,p:7,c:2,f:8,fiber:0,sodium:52},
+  {n:"Feta Cheese Crumbled (1 oz)",cal:75,p:4,c:1,f:6,fiber:0,sodium:316},
+  {n:"Gouda Cheese (1 oz)",cal:101,p:7,c:1,f:8,fiber:0,sodium:232},
+  {n:"Brie Cheese (1 oz)",cal:95,p:6,c:0,f:8,fiber:0,sodium:178},
+  {n:"Blue Cheese (1 oz)",cal:100,p:6,c:1,f:8,fiber:0,sodium:395},
+  {n:"Honey Greek Yogurt Chobani",cal:160,p:11,c:23,f:2,fiber:0,sodium:65},
+  {n:"Activia Vanilla Yogurt (1 container)",cal:120,p:5,c:20,f:3,fiber:1,sodium:85},
+  {n:"Skyr Icelandic Provisions (5.3 oz)",cal:130,p:15,c:15,f:2,fiber:0,sodium:55},
+  {n:"Fairlife Milk Whole (1 cup)",cal:150,p:13,c:12,f:8,fiber:0,sodium:120},
+  {n:"Fairlife Milk 2% (1 cup)",cal:120,p:13,c:12,f:5,fiber:0,sodium:120},
+  {n:"Sausage Egg Cheese Biscuit Homemade",cal:500,p:20,c:34,f:31,fiber:1,sodium:1100},
+  {n:"Breakfast Burrito Egg Cheese (1)",cal:350,p:17,c:35,f:15,fiber:2,sodium:780},
+  {n:"Hash Brown Patty Frozen (1)",cal:130,p:1,c:15,f:7,fiber:1,sodium:310},
+  {n:"Sausage Patty (1)",cal:191,p:8,c:1,f:18,fiber:0,sodium:349},
+  {n:"Deli Turkey Boars Head (2 oz)",cal:60,p:11,c:2,f:1,fiber:0,sodium:440},
+  {n:"Deli Ham Boars Head (2 oz)",cal:60,p:10,c:1,f:2,fiber:0,sodium:480},
+  {n:"Deli Roast Beef Boars Head (2 oz)",cal:80,p:14,c:1,f:2,fiber:0,sodium:310},
+  {n:"Deli Chicken Breast Boars Head (2 oz)",cal:60,p:12,c:0,f:1,fiber:0,sodium:420},
+  {n:"Pepperoni Slices Hormel (1 oz)",cal:140,p:6,c:0,f:13,fiber:0,sodium:500},
+  {n:"Spam (2 oz)",cal:180,p:7,c:2,f:16,fiber:0,sodium:580},
+  {n:"Tuna Pouch StarKist (2.6 oz)",cal:70,p:16,c:0,f:1,fiber:0,sodium:230},
+  {n:"Salmon Canned (3 oz)",cal:117,p:17,c:0,f:5,fiber:0,sodium:471},
+  {n:"Sardines in Oil (3 oz)",cal:189,p:21,c:0,f:11,fiber:0,sodium:465},
+  {n:"Chicken Breast Deli (2 oz)",cal:60,p:12,c:2,f:1,fiber:0,sodium:430},
+  {n:"Pulled Pork BBQ (3 oz)",cal:220,p:15,c:10,f:13,fiber:0,sodium:540},
+  {n:"Beef Brisket (3 oz)",cal:246,p:21,c:0,f:17,fiber:0,sodium:56},
+  {n:"Lamb Chop (3 oz)",cal:205,p:20,c:0,f:13,fiber:0,sodium:65},
+  {n:"Venison (3 oz)",cal:134,p:26,c:0,f:3,fiber:0,sodium:46},
+  {n:"Tofu Firm (3 oz)",cal:71,p:8,c:2,f:4,fiber:0,sodium:8},
+  {n:"Tofu Silken (3 oz)",cal:45,p:5,c:2,f:2,fiber:0,sodium:5},
+  {n:"Tempeh (3 oz)",cal:162,p:15,c:8,f:9,fiber:0,sodium:9},
+  {n:"Beyond Burger (1 patty)",cal:230,p:20,c:9,f:14,fiber:2,sodium:390},
+  {n:"Impossible Burger (1 patty)",cal:240,p:19,c:9,f:14,fiber:3,sodium:370},
+  {n:"Black Bean Burger (1 patty)",cal:180,p:10,c:25,f:5,fiber:5,sodium:400},
+  {n:"Morning Star Veggie Patty (1)",cal:110,p:12,c:9,f:4,fiber:3,sodium:380},
 ];
 
 window.onload = function(){
