@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782751799 -->
+<!DOCTYPE html><!-- v1782751955 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3302,9 +3302,9 @@ function doSwap(w,idx,btn){
   var sl=sessName.toLowerCase();
   var opts=[];
   // Cycling options
-  var cycling=['Outdoor Ride','Race','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Easy Spin 30 min'];
+  var cycling=['Race','Outdoor Ride','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Easy Spin 30 min'];
   // Run options  
-  var running=['Easy Run','Tempo Run','Fartlek Run','Hill Repeats','400m Repeats x8','800m Repeats x6','Mile Repeats x4','Track Intervals','Treadmill Run','Walk 30 min'];
+  var running=['Race','Easy Run','Tempo Run','Fartlek Run','Hill Repeats','400m Repeats x8','800m Repeats x6','Mile Repeats x4','Track Intervals','Treadmill Run','Walk 30 min'];
   // Swim options
   var swimming=['Swim Easy 30 min','Swim Steady 40 min','Swim Intervals','Open Water Swim'];
   // Strength options
@@ -3316,13 +3316,13 @@ function doSwap(w,idx,btn){
   if(sl.indexOf('strength')>=0||sl.indexOf('full body')>=0){
     opts=running.concat(swimming).concat(['Easy Spin 20 min']).concat(rest);
   } else if(sl.indexOf('zwift')>=0||sl.indexOf('ride')>=0||sl.indexOf('bike')>=0||sl.indexOf('chase')>=0){
-    opts=race.concat(cycling).concat(running).concat(swimming).concat(strength).concat(rest);
+    opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('run')>=0||sl.indexOf('jog')>=0){
-    opts=race.concat(running).concat(cycling).concat(swimming).concat(strength).concat(rest);
+    opts=running.concat(cycling).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('swim')>=0){
     opts=swimming.concat(running).concat(cycling).concat(rest);
   } else {
-    opts=race.concat(cycling).concat(running).concat(swimming).concat(strength).concat(rest);
+    opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   }
   var card=document.getElementById('wc'+w+'_'+idx);
   if(!card)return;
