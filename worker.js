@@ -7802,7 +7802,7 @@ function closeRideDetail(){
 function buildRouteMap(lats, lons, pwrData, FTP){
   if(!lats||!lats.length) return '';
   // Generate unique map ID
-  var mapId = 'leaflet-map-' + Date.now();
+  if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
   var html = '<div id="'+mapId+'" style="width:100%;height:260px;border-radius:16px;overflow:hidden"></div>';
 
   // Initialize map after DOM insertion
