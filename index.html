@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782702039 -->
+<!DOCTYPE html><!-- v1782739005 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6003,7 +6003,7 @@ function renderPerf(container){
         +'</div>';
 
       // Stats grid - flex so no empty cells
-      var statItems2=[{v:r.duration,l:'Time'},{v:r.distance?(r.distance+' mi'):null,l:'Miles'},{v:r.np?(r.np+'W'):r.avgPwr?(r.avgPwr+'W'):null,l:r.np?'NP':'Pwr',c:'#FC4C02'},{v:r.avgHR?(r.avgHR+' bpm'):null,l:'HR',c:'#ef4444'}].filter(function(s){return s.v;});
+      var _durDisp=r.duration?(typeof r.duration==='number'?(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(r.duration):r.duration):null;var statItems2=[{v:_durDisp,l:'Time'},{v:r.distance?(r.distance+' mi'):null,l:'Miles'},{v:r.np?(r.np+'W'):r.avgPwr?(r.avgPwr+'W'):null,l:r.np?'NP':'Pwr',c:'#FC4C02'},{v:r.avgHR?(r.avgHR+' bpm'):null,l:'HR',c:'#ef4444'}].filter(function(s){return s.v;});
       if(statItems2.length){
         html+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
         statItems2.forEach(function(s){
@@ -6122,6 +6122,20 @@ function renderPerf(container){
       options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:8}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9}},min:0}}})});
   }
   setTimeout(buildPerfCharts, 100);
+  // Wire drag and drop zone
+  setTimeout(function(){
+    var dz=document.getElementById('ride-drop-zone');
+    if(!dz) return;
+    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';dz.style.color='#FC4C02';});
+    dz.addEventListener('dragleave',function(){dz.style.borderColor='';dz.style.color='';});
+    dz.addEventListener('drop',function(e){
+      e.preventDefault();dz.style.borderColor='';dz.style.color='';
+      var files=e.dataTransfer.files;
+      if(!files.length) return;
+      bulkImportTCX({files:files,value:''});
+    });
+    dz.addEventListener('click',function(){showImportFromMore();});
+  }, 200);
 }
 
 function buildPMCFromHistory(history){
@@ -8573,7 +8587,7 @@ function injectRideStats(w){
         var statsGrid=document.createElement('div');
         statsGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
         var stats=[];
-        if(r.duration) stats.push({v:r.duration,l:'Time'});
+        if(r.duration) stats.push({v:(typeof r.duration==='number'?(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(r.duration):r.duration),l:'Time'});
         if(r.distance) stats.push({v:r.distance+' mi',l:'Miles'});
         if(r.np) stats.push({v:r.np+'W',l:'NP',c:'#FFB938'});
         else if(r.avgPwr) stats.push({v:r.avgPwr+'W',l:'Avg Pwr',c:'#FFB938'});
