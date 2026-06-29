@@ -9738,7 +9738,7 @@ function renderMob(){
   // Header
   var hdr=document.createElement('div');
   hdr.style.cssText='padding:16px 16px 0;';
-  hdr.innerHTML='';
+  hdr.innerHTML='<button id="mob-back" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8592;</button>';
   container.appendChild(hdr);
   document.getElementById('mob-back').onclick=function(){showScreen('TRAIN');};
 
