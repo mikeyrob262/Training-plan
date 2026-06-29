@@ -5781,14 +5781,21 @@ function renderPerf(container){
   var startOfYear = new Date(now.getFullYear(),0,1);
   var yearStr = now.getFullYear()+'-01-01';
   
-  // Weekly stats - compare date strings directly to avoid timezone issues
-  var weekRides = rides.filter(function(r){return r&&r.date&&r.date>=monStr;});
+  // Normalize date helper
+  function normDate(d){
+    if(!d) return '';
+    var p=d.split('-');
+    if(p.length!==3) return d;
+    return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
+  }
+  // Weekly stats
+  var weekRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=monStr;});
   var weekMi = weekRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var weekMiGoal = st.weeklyMileageGoal || 100;
   var weekMiPct = Math.min(100, Math.round(weekMi/weekMiGoal*100));
   
   // Year stats
-  var yearRides = rides.filter(function(r){return r&&r.date&&r.date>=yearStr;});
+  var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
   var yearMi = Math.round(yearRides.reduce(function(a,r){return a+(r.distance||0);},0));
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
@@ -5800,7 +5807,7 @@ function renderPerf(container){
     var wMonStr = wMon.getFullYear()+'-'+String(wMon.getMonth()+1).padStart(2,'0')+'-'+String(wMon.getDate()).padStart(2,'0');
     var wSun = new Date(wMon); wSun.setDate(wMon.getDate()+6);
     var wSunStr = wSun.getFullYear()+'-'+String(wSun.getMonth()+1).padStart(2,'0')+'-'+String(wSun.getDate()).padStart(2,'0');
-    var hasActivity = rides.some(function(r){return r&&r.date&&r.date>=wMonStr&&r.date<=wSunStr;});
+    var hasActivity = rides.some(function(r){var nd=normDate(r&&r.date);return nd&&nd>=wMonStr&&nd<=wSunStr;});
     if(hasActivity) streak++; else break;
   }
   
