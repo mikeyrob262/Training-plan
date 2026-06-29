@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782740144 -->
+<!DOCTYPE html><!-- v1782740328 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -239,9 +239,10 @@ window.parseFitFile = function(arrayBuffer, callback) {
           if (msgData[9]) result.distance = parseFloat((msgData[9].val / 1609.344 / 100).toFixed(1));
           if (msgData[14]) result.avgPwr = msgData[14].val;
           if (msgData[34]) result.np = msgData[34].val;
+          if (msgData[21]) result.maxPwr = msgData[21].val;
           if (msgData[16]) result.hr = msgData[16].val;
           if (msgData[11]) result.calories = msgData[11].val;
-          if (msgData[22]) result.elev = Math.round(msgData[22].val / 5 * 3.28084);
+          if (msgData[22]) result.elev = Math.round(msgData[22].val * 3.28084);
           if (msgData[33]) result.tss = Math.round(msgData[33].val / 100);
         }
         
@@ -279,6 +280,12 @@ window.parseFitFile = function(arrayBuffer, callback) {
       result.tss = Math.round((result.duration * result.np * (result.np/ftp)) / (ftp * 3600) * 100);
     }
     
+    // Downsample GPS to max 300 points
+    if (result.lats.length > 300) {
+      var step = Math.floor(result.lats.length / 300);
+      result.lats = result.lats.filter(function(_,i){return i%step===0;}).slice(0,300);
+      result.lons = result.lons.filter(function(_,i){return i%step===0;}).slice(0,300);
+    }
     callback(null, result);
   } catch(e) {
     callback(e.message, null);
