@@ -8321,8 +8321,8 @@ function renderRun(){
     if(d&&d>=yearStart) ytdMi+=mi;
     if(d&&d>=monthStart) monthMi+=mi;
     if(d&&d>=weekStart) weekMi+=mi;
-    if(mi>longestRun) longestRun=mi;
-    if(r.elevation) totalElev+=parseFloat(r.elevation)||0;
+    if(d&&d>=yearStart&&mi>longestRun) longestRun=mi;
+    if(d&&d>=yearStart&&r.elevation) totalElev+=parseFloat(r.elevation)||0;
     if(r.cadence) allCadence.push(parseInt(r.cadence));
     if(r.pace) allPaces.push(r.pace);
   });
