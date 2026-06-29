@@ -5978,15 +5978,7 @@ function renderPerf(container){
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#00C896;display:inline-block;border-radius:2px"></span>Form (TSB)</span>'
     +'</div>';
 
-  // TSB zone guide
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr 1fr;gap:0;border:0.5px solid var(--b1);border-radius:8px;overflow:hidden;font-size:10px;text-align:center;margin-top:10px">';
-  [{z:'< −20',n:'Overreached',c:'rgba(239,68,68,.08)',tc:'#ef4444'},{z:'−20 to 0',n:'Training',c:'transparent',tc:'var(--t2)'},{z:'0 to +20',n:'Fresh',c:'rgba(0,200,150,.06)',tc:'#00C896'},{z:'+20 to +25',n:'Peak',c:'rgba(77,159,255,.06)',tc:'#4D9FFF'}].forEach(function(z,zi){
-    html+='<div style="padding:6px 4px;background:'+z.c+(zi<3?';border-right:0.5px solid var(--b1)':'')+'">'
-      +'<div style="color:var(--t3);margin-bottom:2px">'+z.z+'</div>'
-      +'<div style="font-weight:700;color:'+z.tc+'">'+z.n+'</div>'
-      +'</div>';
-  });
-  html+='</div></div>';
+  html+='</div>';
 
   // -- SEASON DASHBOARD
   // Calculate all stats from rides
@@ -6459,12 +6451,12 @@ function computePMC(rides){
 }
 
 function buildPMCChart(data){
-  var W = 360, H = 140;
+  var W = 360, H = 200;
   var PAD = {top:20, right:40, bottom:30, left:36};
   var pts = data.slice(-52); // last year
   if(pts.length < 2){
     // Not enough data — show placeholder message
-    return '<div style="height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
+    return '<div style="height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
       +'<div style="font-size:28px">📈</div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--t2)">Building your fitness curve</div>'
       +'<div style="font-size:12px;color:var(--t3);text-align:center;padding:0 20px">Log rides to see your Fitness, Fatigue, and Form trend over time</div>'
