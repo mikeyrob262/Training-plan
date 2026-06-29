@@ -5798,16 +5798,15 @@ function renderPerf(container){
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
   
   // Training log: Today rings + YTD rings
+  var ytdCycMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
+  var ytdRunMi = Math.round(yearRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0));
   var sportDefs = [
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',color:'#FC4C02',
      todayV:parseFloat(todayCycMi),todayMax:50,todayUnit:'mi',
-     ytdV:parseFloat(yearMi),ytdMax:yearMiGoal,ytdUnit:'mi'},
+     ytdV:ytdCycMi,ytdMax:yearMiGoal,ytdUnit:'mi'},
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',color:'#4D9FFF',
      todayV:parseFloat(todayRunMi),todayMax:15,todayUnit:'mi',
-     ytdV:Math.round(yearRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0)),ytdMax:750,ytdUnit:'mi'},
-    {path:'M2 12s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M2 17s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM8 7l4-2 4 2v5',label:'Swim',color:'#00C896',
-     todayV:parseFloat(todaySwimMi),todayMax:3,todayUnit:'mi',
-     ytdV:Math.round(yearRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0)),ytdMax:100,ytdUnit:'mi'},
+     ytdV:ytdRunMi,ytdMax:750,ytdUnit:'mi'},
     {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',color:'#a855f7',
      todayV:todayStrCt,todayMax:2,todayUnit:'x',
      ytdV:yearRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length,ytdMax:100,ytdUnit:'x'}
