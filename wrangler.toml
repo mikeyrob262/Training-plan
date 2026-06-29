@@ -1,3 +1,9 @@
 name = "training-plan"
 main = "worker.js"
 compatibility_date = "2024-01-01"
+
+[rules]
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
