@@ -5792,7 +5792,7 @@ function renderPerf(container){
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
   var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  function isRun(r){ return r.type==='run'||(r.source==='strava'&&/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'')); }
+  function isRun(r){ return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||''); }
   var todayRunMi = todayRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todaySwimMi = todayRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todayStrCt = todayRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length;
@@ -8257,7 +8257,7 @@ function showRun(){ renderRun(); }
 function getRuns(){
   var rides = st.rides||[];
   var stravaRuns = rides.filter(function(r){
-    return r.type==='run'||(r.source==='strava'&&/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||''));
+    return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');
   }).map(function(r){
     // Map Strava ride fields to run card fields
     return {
