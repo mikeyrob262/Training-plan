@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782701537 -->
+<!DOCTYPE html><!-- v1782701607 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7155,10 +7155,9 @@ function importRideFile(input){
             if(!data.date) data.date = getTodayKey();
             
             var ride2 = {
-              var fitDurSec = data.duration||0;
-              var fitH=Math.floor(fitDurSec/3600),fitM=Math.floor((fitDurSec%3600)/60),fitS=Math.round(fitDurSec%60);
-              var fitDurStr = fitH+':'+(fitM<10?'0':'')+fitM+':'+(fitS<10?'0':'')+fitS;
-              name: name2, date: data.date, duration: fitDurStr, movingSecs: fitDurSec, distance: data.distance,
+              name: name2, date: data.date,
+              duration: (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(data.duration||0),
+              movingSecs: data.duration||0, distance: data.distance,
               avgPwr: data.avgPwr, np: data.np, hr: data.hr, tss: data.tss, elev: data.elev,
               calories: data.calories,
               z1s: data.z1s, z2s: data.z2s, z3s: data.z3s, z4s: data.z4s, z5s: data.z5s, z6s: data.z6s,
