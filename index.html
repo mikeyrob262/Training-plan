@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699448 -->
+<!DOCTYPE html><!-- v1782699565 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,34 +9624,9 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  var CLIENT_ID = '260935';
-  var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
-  var REFRESH_TOKEN = st.stravaRefreshToken || 'eddf2354f016912c955d2d945d1a3f841471fc9a';
-
-  toast('Refreshing Strava token...');
-  fetch('https://www.strava.com/oauth/token', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      grant_type: 'refresh_token',
-      refresh_token: REFRESH_TOKEN
-    })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if(!d.access_token){ toast('Token refresh failed: ' + (d.message||JSON.stringify(d))); return; }
-    st.stravaToken = d.access_token;
-    st.stravaRefreshToken = d.refresh_token;
-    sv();
-    // Check scope — need activity:read_all
-    if(d.athlete && d.errors){ toast('Scope error — re-auth needed'); return; }
-    if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
-    toast('Fetching activities...');
-    fetchStravaPage(d.access_token, 1, 0);
-  })
-  .catch(function(e){ toast('Strava error: ' + e.message); });
+  if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
+  toast('Fetching Strava activities...');
+  fetchStravaPage('b21aa88386ea43fe3c0ec3bc2921e79beb6cb303', 1, 0);
 }
 
 function fetchStravaPage(token, page, imported) {
