@@ -6452,7 +6452,7 @@ function computePMC(rides){
 
 function buildPMCChart(data){
   var W = 360, H = 200;
-  var PAD = {top:20, right:40, bottom:30, left:36};
+  var PAD = {top:10, right:40, bottom:20, left:36};
   var pts = data.slice(-52); // last year
   if(pts.length < 2){
     // Not enough data — show placeholder message
