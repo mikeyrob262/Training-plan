@@ -6451,12 +6451,12 @@ function computePMC(rides){
 }
 
 function buildPMCChart(data){
-  var W = 360, H = 200;
-  var PAD = {top:10, right:40, bottom:20, left:36};
+  var W = 360, H = 150;
+  var PAD = {top:8, right:40, bottom:18, left:36};
   var pts = data.slice(-52); // last year
   if(pts.length < 2){
     // Not enough data — show placeholder message
-    return '<div style="height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
+    return '<div style="height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
       +'<div style="font-size:28px">📈</div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--t2)">Building your fitness curve</div>'
       +'<div style="font-size:12px;color:var(--t3);text-align:center;padding:0 20px">Log rides to see your Fitness, Fatigue, and Form trend over time</div>'
