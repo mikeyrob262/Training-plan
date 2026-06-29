@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782739005 -->
+<!DOCTYPE html><!-- v1782739480 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9766,7 +9766,7 @@ function fetchStravaPage(token, page, imported) {
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
       var dup = st.rides.find(function(r){ return (r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5); });
       if(dup) return;
-      var dur = a.elapsed_time||0;
+      var dur = a.moving_time||a.elapsed_time||0;
       var np = a.weighted_average_watts||null;
       var avgPwr = a.average_watts||null;
       var tss = null;
