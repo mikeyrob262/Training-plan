@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782741811 -->
+<!DOCTYPE html><!-- v1782742016 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5968,7 +5968,6 @@ function renderPerf(container){
   };
 
   // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
-  html+='<div id="ride-drop-zone" style="margin:0 16px 8px;border:2px dashed #FC4C02;border-radius:12px;padding:14px;text-align:center;color:#FC4C02;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">⬆ Drop FIT / TCX files here to import</div>';
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
     +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
@@ -6047,20 +6046,7 @@ function renderPerf(container){
   }
 
   container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'</div>';
-  // Wire drag and drop zone immediately after DOM insert
-  (function(){
-    var dz=document.getElementById('ride-drop-zone');
-    if(!dz) return;
-    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';dz.style.color='#FC4C02';});
-    dz.addEventListener('dragleave',function(){dz.style.borderColor='';dz.style.color='';});
-    dz.addEventListener('drop',function(e){
-      e.preventDefault();dz.style.borderColor='';dz.style.color='';
-      var files=e.dataTransfer.files;
-      if(!files.length) return;
-      bulkImportTCX({files:files,value:''});
-    });
-    dz.addEventListener('click',function(){showImportFromMore();});
-  })();
+
 
   // If no rides, auto-refresh after Firebase syncs
   if((st.rides||[]).length===0){
@@ -9663,6 +9649,28 @@ function bnavGo(tab){
   else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
 }
 
+function showDropZone(){
+  var old=document.getElementById('drop-zone-overlay');if(old)old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='drop-zone-overlay';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:300;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--s1);border:3px dashed #FC4C02;border-radius:20px;padding:40px;text-align:center;color:#FC4C02;font-size:16px;font-weight:700;max-width:320px;width:90%;';
+  box.innerHTML='<div style="font-size:40px;margin-bottom:16px">⬆</div>Drop FIT or TCX files here<div style="font-size:12px;color:var(--t3);margin-top:12px;font-weight:400">or tap to browse</div>';
+  box.addEventListener('dragover',function(e){e.preventDefault();box.style.background='rgba(252,76,2,.1)';});
+  box.addEventListener('dragleave',function(){box.style.background='var(--s1)';});
+  box.addEventListener('drop',function(e){
+    e.preventDefault();overlay.remove();
+    var files=e.dataTransfer.files;
+    if(files.length) bulkImportTCX({files:files,value:''});
+  });
+  box.addEventListener('click',function(){showImportFromMore();overlay.remove();});
+  overlay.appendChild(box);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)overlay.remove();});
+  document.getElementById('more-sheet')&&document.getElementById('more-sheet').remove();
+  document.body.appendChild(overlay);
+}
+
 function showImportFromMore(){
   var inp=document.createElement('input');
   inp.type='file';inp.accept='.tcx,.fit,.csv';inp.multiple=true;
@@ -9684,6 +9692,7 @@ function showMoreSheet(){
     ['Core','M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z','showCore'],
     ['Mobility','M12 7v5l-3 5 M12 12l3 5 M9 17h6','showMob'],
     ['Sync Strava','M13 2L3 14h9l-1 8 10-12h-9l1-8z','stravaBackfill'],
+    ['Drop Zone','M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15','showDropZone'],
     ['Import Activities','M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15','showImportFromMore'],
     ['Settings','M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z','showSet']
   ];
