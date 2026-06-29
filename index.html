@@ -5822,11 +5822,11 @@ function renderPerf(container){
   // Relative effort (sum of TSS this week)
   var weekTSS = Math.round(weekRides.reduce(function(a,r){return a+(r.tss||r.relEffort||0);},0));
   
-  html += '<div style="margin:0 12px 10px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:12px">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Training Log</div>';
+  html += '<div style="margin:0 12px 8px;background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:8px 10px">';
+  html += '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Training Log</div>';
   
   // Sport icons row
-  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  html += '<div style="display:flex;gap:4px;margin-bottom:8px">';
   var sportsData = [
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',count:weekCycling.length,val:weekCycling.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#FC4C02'},
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',count:weekRun.length,val:weekRun.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#4D9FFF'},
@@ -5837,60 +5837,55 @@ function renderPerf(container){
     var active = s.count > 0;
     var col = active ? s.color : '#888';
     var ringPct = active ? Math.min(100, s.count * 25) : 0;
-    var r = 14, circ = 2 * Math.PI * r;
+    var r = 11, circ = 2 * Math.PI * r;
     var dash = circ * ringPct / 100;
-    html += '<div style="flex:1;text-align:center;padding:4px 2px">'
-      // Ring + icon
-      +'<div style="position:relative;width:40px;height:40px;margin:0 auto 4px">'
-      // SVG ring
-      +'<svg width="40" height="40" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
+    html += '<div style="flex:1;text-align:center;padding:2px 0">'
+      +'<div style="position:relative;width:30px;height:30px;margin:0 auto 2px">'
+      +'<svg width="30" height="30" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
       +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'22" stroke-width="4"/>'
       +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="4"'
       +' stroke-dasharray="'+dash+' '+circ+'" stroke-dashoffset="'+circ*0.25+'"'
       +' stroke-linecap="round" transform="rotate(-90 26 26)"/>'
       +'</svg>'
-      // Sport icon centered
       +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">'
-      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
+      +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
       +'</div>'
       +'</div>'
-      // Label
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">'+s.label+'</div>'
-      // Value
-      +'<div style="font-size:13px;font-weight:800;color:'+col+';margin-top:2px">'+s.val+'</div>'
+      +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">'+s.label+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+col+';margin-top:1px">'+s.val+'</div>'
       +'</div>';
   });
   html += '</div>';
   
   // Weekly mileage vs goal
-  html += '<div style="margin-bottom:12px">';
-  html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">'
+  html += '<div style="margin-bottom:6px">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
     +'<span style="color:var(--t2)">This Week</span>'
     +'<span style="font-weight:700;color:var(--t1)">'+weekMi+' / '+weekMiGoal+' mi</span></div>';
-  html += '<div style="height:8px;background:var(--b1);border-radius:4px"><div style="height:8px;background:#FC4C02;border-radius:4px;width:'+weekMiPct+'%"></div></div>';
+  html += '<div style="height:5px;background:var(--b1);border-radius:3px"><div style="height:5px;background:#FC4C02;border-radius:3px;width:'+weekMiPct+'%"></div></div>';
   html += '</div>';
   
   // Year mileage vs goal
-  html += '<div style="margin-bottom:12px">';
-  html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">'
+  html += '<div style="margin-bottom:8px">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
     +'<span style="color:var(--t2)">This Year</span>'
     +'<span style="font-weight:700;color:var(--t1)">'+yearMi.toLocaleString()+' / '+yearMiGoal.toLocaleString()+' mi</span></div>';
-  html += '<div style="height:8px;background:var(--b1);border-radius:4px"><div style="height:8px;background:#4D9FFF;border-radius:4px;width:'+yearMiPct+'%"></div></div>';
+  html += '<div style="height:5px;background:var(--b1);border-radius:3px"><div style="height:5px;background:#4D9FFF;border-radius:3px;width:'+yearMiPct+'%"></div></div>';
   html += '</div>';
   
   // Streak + Relative Effort
-  html += '<div style="display:flex;gap:10px">';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
-    +'<div style="font-size:24px;font-weight:900;color:#FC4C02">'+streak+'</div>'
-    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Week Streak 🔥</div>'
+  html += '<div style="display:flex;gap:6px">';
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
+    +'<div style="font-size:16px;font-weight:900;color:#FC4C02;line-height:1">'+streak+'</div>'
+    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Streak 🔥</div>'
     +'</div>';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
-    +'<div style="font-size:24px;font-weight:900;color:#a855f7">'+weekTSS+'</div>'
-    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Relative Effort</div>'
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
+    +'<div style="font-size:16px;font-weight:900;color:#a855f7;line-height:1">'+weekTSS+'</div>'
+    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Rel. Effort</div>'
     +'</div>';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
-    +'<div style="font-size:24px;font-weight:900;color:#00C896">'+weekRides.length+'</div>'
-    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Activities</div>'
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
+    +'<div style="font-size:16px;font-weight:900;color:#00C896;line-height:1">'+weekRides.length+'</div>'
+    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Activities</div>'
     +'</div>';
   html += '</div>';
   
@@ -5900,22 +5895,22 @@ function renderPerf(container){
   // W/kg category labels
   var wkgLabel=wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational';
   var wkgColor=wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b';
-  html+='<div style="margin:0 12px 10px;background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border-radius:16px;border:1px solid rgba(252,76,2,.15);padding:12px 14px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+  html+='<div style="margin:0 12px 8px;background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border-radius:12px;border:1px solid rgba(252,76,2,.15);padding:8px 10px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
     +'<div>'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Current W/kg</div>'
-    +'<div style="font-size:26px;font-weight:900;color:#FC4C02;line-height:1.1;letter-spacing:-1px">'+wkg.toFixed(2)+'</div>'
-    +'<div style="font-size:10px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' · '+FTP+'W · '+BWT+'lbs</div>'
+    +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Current W/kg</div>'
+    +'<div style="font-size:20px;font-weight:900;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkg.toFixed(2)+'</div>'
+    +'<div style="font-size:9px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' · '+FTP+'W · '+BWT+'lbs</div>'
     +'</div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Target</div>'
-    +'<div style="font-size:26px;font-weight:900;color:#FFB938;line-height:1.1;letter-spacing:-1px">'+targetWkg.toFixed(2)+'</div>'
-    +'<div style="font-size:10px;color:#FFB938;font-weight:700">Chase 1 · '+targetFTP+'W · '+targetBW+'lbs</div>'
+    +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Target</div>'
+    +'<div style="font-size:20px;font-weight:900;color:#FFB938;line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
+    +'<div style="font-size:9px;color:#FFB938;font-weight:700">Chase 1 · '+targetFTP+'W · '+targetBW+'lbs</div>'
     +'</div>'
     +'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:4px"><span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
-    +'<div style="height:7px;background:rgba(255,255,255,.08);border-radius:4px"><div style="height:7px;background:linear-gradient(90deg,#00C896,#FFB938);border-radius:4px;width:'+wkgPct+'%;transition:width .5s ease"></div></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-top:4px">'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:3px"><span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+    +'<div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px"><div style="height:5px;background:linear-gradient(90deg,#00C896,#FFB938);border-radius:3px;width:'+wkgPct+'%;transition:width .5s ease"></div></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-top:3px">'
     +'<span>2.0</span><span>2.5 Chase 2</span><span>3.0 Cat 3</span><span>3.5 Cat 2</span><span>4.0</span>'
     +'</div>'
     +'</div>';
