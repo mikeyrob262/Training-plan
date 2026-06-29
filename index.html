@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782753673 -->
+<!DOCTYPE html><!-- v1782753955 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3128,7 +3128,10 @@ function updDots(){
 }
 
 function updHdr(){
-  var today=new Date();var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];var dateStr=days[today.getDay()]+' '+months[today.getMonth()]+' '+today.getDate();document.getElementById('btn-wt').innerHTML='Week '+cw+' . '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var weekStart=getWeekStartDate(cw);
+  var dateStr=days[weekStart.getDay()]+' '+months[weekStart.getMonth()]+' '+weekStart.getDate();
+  document.getElementById('btn-wt').innerHTML='Week '+cw+' . '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
   document.getElementById('btn-pv').disabled=false;
   document.getElementById('btn-nx').disabled=false;
 }
