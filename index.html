@@ -5833,7 +5833,8 @@ function renderPerf(container){
     var showAll=false;
     var visibleRides=sorted.slice(0,4);
     html+='<div id="ride-history-list" style="margin:0 16px 16px;display:flex;flex-direction:column;gap:10px">';
-    sorted.slice(0,30).forEach(function(r,si){
+    var rideLimit=window._showAllRides?30:4;
+    sorted.slice(0,rideLimit).forEach(function(r,si){
       var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
       var ifVal=r.np&&FTP?(r.np/FTP*100).toFixed(0):null;
       var rIdx=st.rides.indexOf(r);
@@ -5894,6 +5895,10 @@ function renderPerf(container){
     });
     html+='</div>';
     if(sorted.length>4) html+='<div style="text-align:center;padding:8px 16px 16px"><button onclick="var l=document.getElementById(\'ride-history-list\');l.querySelectorAll(\'div[style*=border-radius]\').forEach(function(el,i){if(i>=4)el.style.display=el.style.display===\'none\'?\'\':\'none\';});this.textContent=this.textContent===\'Show More\'?\'Show Less\':\'Show More\';" style="background:var(--s2);border:1px solid var(--b2);color:var(--t2);font-size:13px;font-weight:600;padding:8px 20px;border-radius:20px;cursor:pointer">Show More</button></div>';
+    if(sorted.length>4){
+      var label=window._showAllRides?'Show Less':'Show More';
+      html+='<div style="text-align:center;padding:8px 16px 16px"><button onclick="window._showAllRides=!window._showAllRides;renderPerf();" style="background:var(--s2);border:1px solid var(--b2);color:var(--t2);font-size:13px;font-weight:600;padding:8px 20px;border-radius:20px;cursor:pointer">'+label+'</button></div>';
+    }
     html+='</div>';
   }
 
