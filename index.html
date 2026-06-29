@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782744573 -->
+<!DOCTYPE html><!-- v1782744676 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5636,7 +5636,7 @@ function showPerf(){
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
   var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
-  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
