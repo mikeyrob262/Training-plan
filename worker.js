@@ -8351,41 +8351,30 @@ function renderRun(){
 
   // Vertical bars container
   var barWrap2=document.createElement('div');
-  barWrap2.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:end;height:140px';
+  barWrap2.style.cssText='display:flex;flex-direction:column;gap:6px';
 
   RUN_ZONES.forEach(function(z){
-    var col=document.createElement('div');
-    col.style.cssText='display:flex;flex-direction:column;align-items:center;height:100%';
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;background:var(--s3);border-radius:10px;padding:8px 12px;border-left:4px solid '+z.c;
 
-    // Value label at top
-    var valLbl=document.createElement('div');
-    valLbl.style.cssText='font-size:12px;font-weight:800;color:'+z.c+';margin-bottom:4px;text-align:center';
-    valLbl.textContent=(z.lo?z.lo+'–':'')+z.hi;
-    col.appendChild(valLbl);
+    var namePart=document.createElement('div');
+    namePart.style.cssText='min-width:80px';
+    namePart.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1)">'+z.n+'</div>'
+      +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'+(z.desc.split('.')[0])+'</div>';
+    row.appendChild(namePart);
 
-    // Bar wrapper (fills remaining space, bar grows from bottom)
-    var barOuter=document.createElement('div');
-    barOuter.style.cssText='flex:1;width:100%;display:flex;align-items:flex-end;background:var(--s3);border-radius:6px;overflow:hidden';
-
-    var barInner=document.createElement('div');
+    var bar=document.createElement('div');
+    bar.style.cssText='flex:1;height:8px;background:var(--s1);border-radius:4px;overflow:hidden';
     var pct=Math.round((z.hi/172)*100);
-    barInner.style.cssText='width:100%;background:'+z.c+';border-radius:6px;height:'+pct+'%;opacity:.85;transition:height .4s';
-    barOuter.appendChild(barInner);
-    col.appendChild(barOuter);
+    bar.innerHTML='<div style="height:8px;background:'+z.c+';border-radius:4px;width:'+pct+'%;opacity:.85"></div>';
+    row.appendChild(bar);
 
-    // Zone name label
-    var nameLbl=document.createElement('div');
-    nameLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t1);margin-top:6px;text-align:center';
-    nameLbl.textContent=z.n;
-    col.appendChild(nameLbl);
+    var rangeLbl=document.createElement('div');
+    rangeLbl.style.cssText='font-size:12px;font-weight:800;color:'+z.c+';min-width:60px;text-align:right';
+    rangeLbl.textContent=(z.lo?z.lo+'–':'')+z.hi;
+    row.appendChild(rangeLbl);
 
-    // Description
-    var descLbl=document.createElement('div');
-    descLbl.style.cssText='font-size:9px;color:var(--t3);text-align:center;margin-top:2px;line-height:1.3';
-    descLbl.textContent=z.desc.split('.')[0]+'.';
-    col.appendChild(descLbl);
-
-    barWrap2.appendChild(col);
+    barWrap2.appendChild(row);
   });
 
   zoneChartCard.appendChild(barWrap2);
@@ -8418,7 +8407,7 @@ function renderRun(){
 
   // Log button
   var logBtn=document.createElement('button');
-  logBtn.style.cssText='display:block;width:calc(100% - 32px);margin:0 16px 14px;padding:15px;background:#FC4C02;border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit';
+  logBtn.style.cssText='display:inline-flex;align-items:center;gap:6px;margin:0 16px 14px;padding:8px 16px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
   logBtn.textContent='+ Log a Run';
   logBtn.onclick=function(){ openRunLog(); };
   scr.appendChild(logBtn);
