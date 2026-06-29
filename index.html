@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699944 -->
+<!DOCTYPE html><!-- v1782700081 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9599,7 +9599,12 @@ function showMoreSheet(){
   ];
   var h='<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:8px">More</div>';
   rows.forEach(function(r){
-    h+='<div onclick="document.getElementById(\'more-sheet\').remove();'+r[2]+'();" style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--b1);cursor:pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+r[1]+'"/></svg><span style="font-size:15px;font-weight:600;color:var(--t1)">'+r[0]+'</span></div>';
+    var isStrava = r[2]==='stravaBackfill';
+    if(isStrava){
+      h+='<button onclick="document.getElementById(\'more-sheet\').remove();stravaBackfill();" style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--b1);cursor:pointer;width:100%;background:none;border-left:none;border-right:none;border-top:none;text-align:left"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+r[1]+'"/></svg><span style="font-size:15px;font-weight:600;color:var(--t1)">'+r[0]+'</span></button>';
+    } else {
+      h+='<div onclick="document.getElementById(\'more-sheet\').remove();'+r[2]+'();" style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--b1);cursor:pointer"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+r[1]+'"/></svg><span style="font-size:15px;font-weight:600;color:var(--t1)">'+r[0]+'</span></div>';
+    }
   });
   sheet.innerHTML=h;
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
