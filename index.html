@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782751434 -->
+<!DOCTYPE html><!-- v1782751548 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5879,7 +5879,7 @@ function renderPerf(container){
     var hrs=r.movingSecs?(r.movingSecs/3600):0;
     var el=parseFloat(r.elev||r.elevation)||0;
     var cal=parseFloat(r.calories)||0;
-    if(mi>longestRide){longestRide=mi;longestRideName=r.name||'Ride';}
+    if(mi>longestRide){longestRide=mi;longestRideName=r.name||'Activity';}
     if(r.np&&r.np>highestNP) highestNP=r.np;
     if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
     if(r.avgSpeed&&r.avgSpeed>fastestSpeed) fastestSpeed=r.avgSpeed;
@@ -6068,7 +6068,7 @@ function renderPerf(container){
   // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
-    +'<button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
+    +'<button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
     +'</div>';
 
 
@@ -6096,7 +6096,7 @@ function renderPerf(container){
       // Header
       html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px">'
         +'<div style="flex:1;cursor:pointer" onclick="openRideDetail('+rIdx+')">'
-        +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:1px">'+(r.name||'Ride')+'</div>'
+        +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:1px">'+(r.name||'Activity')+'</div>'
         +'<div style="font-size:11px;color:var(--t3)">'+(r.date||'')+'</div></div>'
         +(tss?'<div style="display:flex;align-items:center;gap:6px">'
           +'<span style="background:'+tssBadgeC+';color:'+tssTxtC+';font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">TSS '+tss+'</span>':'<div>')
@@ -6248,8 +6248,8 @@ function renderRideList(container){
   var rides=(st.rides||[]).slice().reverse();
   var html='';
   // Drop zone
-  html+='<div id="ride-drop-zone" style="margin:12px 16px 8px;border:2px dashed #FC4C02;border-radius:12px;padding:14px;text-align:center;color:#FC4C02;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">⬆ Drop FIT / TCX files here to import</div>';
-  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
+  html+='<div id="ride-drop-zone" style="margin:12px 16px 8px;border:2px dashed #FC4C02;border-radius:12px;padding:14px;text-align:center;color:#FC4C02;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">⬆ Drop FIT / TCX / GPX files here to import</div>';
+  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
   rides.forEach(function(r,idx){
     var realIdx=st.rides.length-1-idx;
@@ -6529,7 +6529,7 @@ function buildPowerCurveChart(pcurve, FTP, BWT){
   return svg + tbl;
 }
 
-function openManualRide(){
+function openManualActivity(){
   var old = document.getElementById('ride-modal');
   if(old) old.remove();
 
@@ -6579,7 +6579,7 @@ function openManualRide(){
   saveBtn.style.cssText = 'background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:15px;font-weight:700;padding:13px;border-radius:12px;width:100%;cursor:pointer';
   saveBtn.textContent = 'Save Ride';
   saveBtn.onclick = function(){
-    var name = document.getElementById('rm-name').value.trim() || 'Ride';
+    var name = document.getElementById('rm-name').value.trim() || 'Activity';
     var date = document.getElementById('rm-date').value.trim();
     var dur = document.getElementById('rm-dur').value.trim();
     var dist = parseFloat(document.getElementById('rm-dist').value)||0;
@@ -6925,7 +6925,7 @@ function importRideFile(input){
 
           var ride = {
             id: getCol(row,'id'),
-            name: getCol(row,'name')||'Ride',
+            name: getCol(row,'name')||'Activity',
             date: dateParts,
             type: getCol(row,'type'),
             duration: durStr,
@@ -6966,7 +6966,7 @@ function importRideFile(input){
           imported++;
         }
         sv();
-        toast(imported+' ride(s) imported from Intervals.icu');
+        toast(imported+' activities imported from Intervals.icu');
         renderPerf(document.getElementById('perf-body'));
         return;
       }
@@ -7070,7 +7070,7 @@ function importRideFile(input){
         });
 
         // Prompt for ride name
-        var defaultGarminName = file.name.replace(/activity_\d+\.csv$/i,'Ride').replace(/_/g,' ').trim()||'Ride';
+        var defaultGarminName = file.name.replace(/activity_\d+\.csv$/i,'Activity').replace(/_/g,' ').trim()||'Activity';
         // Build ride object first, then prompt for name
         var ride = {
           name: defaultGarminName,
@@ -7124,13 +7124,13 @@ function importRideFile(input){
         if(pts3.length===3) durSec3=parseInt(pts3[0])*3600+parseInt(pts3[1])*60+parseInt(pts3[2]);
         else if(pts3.length===2) durSec3=parseInt(pts3[0])*3600+parseInt(pts3[1])*60;
         if(!tss3&&np3&&durSec3&&FTP3) tss3=Math.round((durSec3*np3*(np3/FTP3))/(FTP3*3600)*100);
-        var ride3={name:get('activity name')||get('title')||get('name')||'Ride',date:get('date')||get('activity date')||getTodayKey(),duration:durS,distance:parseFloat(get('distance')||0),avgPwr:avgP,np:np3,tss:tss3};
+        var ride3={name:get('activity name')||get('title')||get('name')||'Activity',date:get('date')||get('activity date')||getTodayKey(),duration:durS,distance:parseFloat(get('distance')||0),avgPwr:avgP,np:np3,tss:tss3};
         if(!st.rides) st.rides=[];
         st.rides.push(ride3);
         imported3++;
       }
       sv();
-      toast(imported3+' ride(s) imported');
+      toast(imported3+' activities imported');
       renderPerf(document.getElementById('perf-body'));
     };
     reader.readAsText(file);
@@ -7290,7 +7290,7 @@ function importRideFile(input){
       var minTemp2=tempVals.length?Math.min.apply(null,tempVals):0;
 
       var ride2={
-        name: name||'Ride', date:date2, duration:durStr2, movingSecs:durSec2,
+        name: name||'Activity', date:date2, duration:durStr2, movingSecs:durSec2,
         distance:distMi2, avgPwr:avgPwr2, np:np2, tss:tss2,
         ifPct:Math.round(IF2*100), avgHR:avgHR2, maxHR:maxHR||Math.max.apply(null,hrVals)||0,
         calories:totalCal, cadence:avgCad2, powerCurve:powerCurve2,
@@ -7306,12 +7306,12 @@ function importRideFile(input){
       };
 
       if(!st.rides) st.rides=[];
-      ride2.name = name||'Ride';
+      ride2.name = name||'Activity';
       st.rides.push(ride2);
       sv();
       var savedRideId = ride2.id || (Date.now()+'');
       ride2.id = savedRideId;
-      promptRideName(name||'Ride', function(finalName){
+      promptRideName(name||'Activity', function(finalName){
         if(!st.rides) st.rides=[];
         var idx2 = function(){for(var _i=0;_i<st.rides.length;_i++){if(st.rides[_i].id===savedRideId)return _i;}return -1;}();
         if(idx2 < 0){ st.rides.push(ride2); idx2=st.rides.length-1; }
@@ -7379,13 +7379,13 @@ function importRideFile(input){
                 maxHR:ride2.maxHR||ex2.maxHR, cadence:ride2.cadence||ex2.cadence
               });
               sv();
-              toast('FIT merged: '+name2+(ride2.peak20?' · 20m '+ride2.peak20+'W':''));
+              toast('Merged: '+name2+(ride2.peak20?' · 20m '+ride2.peak20+'W':''));
               var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
               input.value=''; return;
             }
             st.rides.push(ride2);
             sv();
-            toast('Imported FIT: '+name2+(data.peak20?' · 20m '+data.peak20+'W':''));
+            toast('Imported: '+name2+(data.peak20?' · 20m '+data.peak20+'W':''));
             var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
           } catch(ex){ toast('FIT processing error: '+ex.message); }
         });
@@ -7404,7 +7404,7 @@ function importRideFile(input){
 
 function renameRide(idx){
   var r = st.rides[idx]; if(!r) return;
-  var newName = prompt('Rename ride:', r.name||'Ride');
+  var newName = prompt('Rename ride:', r.name||'Activity');
   if(newName===null) return;
   newName = newName.trim();
   if(!newName) return;
@@ -7447,7 +7447,7 @@ function openRideDetail(idx){
   }
 
   hdr.innerHTML = '<button onclick="closeRideDetail()" style="background:none;border:none;color:#FC4C02;font-size:15px;font-weight:700;padding:6px 8px;cursor:pointer">← Back</button>'
-    + '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Ride') + '</div>'
+    + '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Activity') + '</div>'
     + '<div style="font-size:11px;color:var(--t3);margin-top:1px">' + dtStr + '</div></div>'
     + '<button onclick="renameRide('+idx+')" style="background:var(--s2);border:1px solid var(--b1);color:var(--orange);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">Rename</button>';
 
@@ -7831,7 +7831,7 @@ function promptRideName(defaultName, callback){
   save.textContent = 'Save Ride';
   save.style.cssText = 'flex:2;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#FC4C02,#FF7043);color:white;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit';
   save.onclick = function(){
-    var name = inp.value.trim() || defaultName || 'Ride';
+    var name = inp.value.trim() || defaultName || 'Activity';
     overlay.remove();
     callback(name);
   };
@@ -8734,7 +8734,7 @@ function injectRideStats(w){
     // Build summary label for button
     var summaryParts=[];
     activities.forEach(function(a){
-      if(a.type==='ride') summaryParts.push(a.data.name||(a.data.tss?'Ride (TSS '+a.data.tss+')':'Ride'));
+      if(a.type==='ride') summaryParts.push(a.data.name||(a.data.tss?'Activity (TSS '+a.data.tss+')':'Activity'));
       if(a.type==='strength') summaryParts.push('Strength '+a.letter+' ('+a.done+'/'+a.total+' sets)');
       if(a.type==='core') summaryParts.push('Core ('+a.done+'/'+a.total+' sets)');
       if(a.type==='cond') summaryParts.push('Conditioning ('+a.count+' exercises)');
@@ -8765,7 +8765,7 @@ function injectRideStats(w){
         var r=a.data;
         var rideIdx = st.rides.indexOf(a.data);
         aDiv.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+(r.name||'Ride')+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+(r.name||'Activity')+'</div>'
           +'<button onclick="deleteRideFromCard('+rideIdx+')" style="font-size:11px;color:#ef4444;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
           +'</div>';
         var statsGrid=document.createElement('div');
