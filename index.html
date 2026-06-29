@@ -9859,70 +9859,147 @@ function bnavGo(tab){
 function showAICoach(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
   var overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;z-index:200;background:var(--s1);display:flex;flex-direction:column';
+  overlay.style.cssText='position:fixed;inset:0;z-index:200;background:var(--s1);display:flex;flex-direction:column;overflow:hidden';
+  
   var hdr=document.createElement('div');
-  hdr.style.cssText='padding:16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;flex-shrink:0';
-  // title set above
+  hdr.style.cssText='padding:14px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--s1)';
+  var backBtn=document.createElement('button');
+  backBtn.textContent='← Back';
+  backBtn.style.cssText='background:none;border:none;color:#a855f7;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit';
+  backBtn.onclick=function(){overlay.remove();};
+  var title=document.createElement('div');
+  title.style.cssText='font-size:18px;font-weight:800;color:var(--t1)';
+  title.textContent='AI Coach';
+  hdr.appendChild(backBtn);hdr.appendChild(title);
+  
   var body=document.createElement('div');
   body.style.cssText='flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px';
-  var msgs=document.createElement('div');
-  msgs.id='ai-msgs';
-  msgs.style.cssText='flex:1;display:flex;flex-direction:column;gap:10px';
-  var inputRow=document.createElement('div');
-  inputRow.style.cssText='display:flex;gap:8px;padding-top:8px;border-top:1px solid var(--b1)';
-  var inp=document.createElement('input');
-  inp.placeholder='Ask your coach...';
-  inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit';
-  var sendBtn=document.createElement('button');
-  sendBtn.textContent='Send';
-  sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 18px;border-radius:20px;cursor:pointer;font-family:inherit';
   
-  // Welcome message
-  var welcome=document.createElement('div');
-  welcome.style.cssText='background:rgba(168,85,247,.1);border-radius:12px;padding:12px 16px;font-size:14px;color:var(--t1);border:1px solid rgba(168,85,247,.2)';
-  welcome.innerHTML='<b style="color:#a855f7">AI Coach</b><br>Hi ' + (st.name||'Mikey') + '! I know your training data — ask me anything about your workouts, recovery, nutrition, or goals.';
-  msgs.appendChild(welcome);
-
-  function sendMsg(){
-    var q=inp.value.trim();if(!q)return;
-    inp.value='';
-    var userBub=document.createElement('div');
-    userBub.style.cssText='background:var(--s2);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t1);align-self:flex-end;max-width:80%';
-    userBub.textContent=q;
-    msgs.appendChild(userBub);
-    var thinkBub=document.createElement('div');
-    thinkBub.style.cssText='background:rgba(168,85,247,.1);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t3);border:1px solid rgba(168,85,247,.2)';
-    thinkBub.textContent='Thinking...';
-    msgs.appendChild(thinkBub);
-    msgs.scrollTop=msgs.scrollHeight;
-    
-    var rides=(st.rides||[]).slice(-10);
-    var context='Athlete: '+(st.name||'Mikey')+', FTP:'+(st.ftp||186)+'W, Weight:'+(st.weight||162)+'lbs, W/kg goal:3.14'
-      +', CTL:'+(st.iculast&&st.iculast.ctl||57)+', ATL:'+(st.iculast&&st.iculast.atl||75)
-      +'. Recent rides: '+rides.map(function(r){return r.name+' ('+r.date+', '+r.distance+'mi, NP:'+r.np+'W, TSS:'+r.tss+')';}).join('; ');
-    
-    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:500,
-        system:'You are a personal cycling and endurance coach. Be concise, specific, and motivating.',
-        messages:[{role:'user',content:'Athlete context: '+context+' Question: '+q}]
-      })
-    }).then(function(r){return r.json();}).then(function(d){
-      var text = d.content&&d.content[0]&&d.content[0].text;
-      thinkBub.innerHTML='<b style="color:#a855f7">Coach</b><br>'+(text||JSON.stringify(d.error)||'Sorry, try again');
-      msgs.scrollTop=msgs.scrollHeight;
-    }).catch(function(){thinkBub.textContent='Error — check connection';});
+  // Loading state
+  body.innerHTML='<div style="text-align:center;padding:40px;color:var(--t3)"><div style="font-size:32px;margin-bottom:12px">🧠</div><div style="font-size:15px;font-weight:600">Analyzing your training...</div></div>';
+  
+  overlay.appendChild(hdr);
+  overlay.appendChild(body);
+  document.body.appendChild(overlay);
+  
+  // Build context
+  var today = new Date();
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var todayName = days[today.getDay()];
+  var ctl = st.iculast&&st.iculast.ctl || 57;
+  var atl = st.iculast&&st.iculast.atl || 75;
+  var tsb = ctl - atl;
+  var ftp = parseInt(st.ftp||186);
+  var weight = parseFloat(st.weight||162);
+  var wkg = (ftp/weight*2.20462).toFixed(2);
+  
+  // Get this week's plan
+  var weekData = ws(cw);
+  var todayIdx = today.getDay()===0?6:today.getDay()-1;
+  var dayNames2=['mon','tue','wed','thu','fri','sat','sun'];
+  var todayKey = dayNames2[todayIdx];
+  var todayWorkout = weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null;
+  
+  // Get recent rides (last 7 days)
+  var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
+  var recentRides = (st.rides||[]).filter(function(r){
+    return r && r.date && new Date(r.date) >= sevenDaysAgo;
+  });
+  
+  // Get upcoming workouts this week
+  var upcoming = [];
+  for(var d=todayIdx+1;d<7;d++){
+    if(weekData.wo&&weekData.wo[d]) upcoming.push({day:dayNames2[d],name:weekData.wo[d]});
   }
   
-  sendBtn.onclick=sendMsg;
-  inp.onkeydown=function(e){if(e.key==='Enter')sendMsg();};
-  inputRow.appendChild(inp);inputRow.appendChild(sendBtn);
-  body.appendChild(msgs);body.appendChild(inputRow);
-  overlay.appendChild(hdr);overlay.appendChild(body);
-  document.body.appendChild(overlay);
+  var prompt = 'You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
+    +'
+
+ATHLETE PROFILE:'
+    +'
+- FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
+    +'
+- CTL (fitness): '+ctl+', ATL (fatigue): '+atl+', TSB (form): '+tsb
+    +(tsb < -20 ? ' (TIRED - needs recovery)' : tsb > 5 ? ' (FRESH - ready to perform)' : ' (NEUTRAL)')
+    +'
+
+TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
+    +'
+
+RECENT RIDES (last 7 days):
+'+recentRides.map(function(r){
+      return '- '+r.name+' ('+r.date+'): '+(r.distance||0)+'mi, TSS:'+(r.tss||0)+', NP:'+(r.np||r.avgPwr||0)+'W';
+    }).join('
+')
+    +'
+
+UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
+    +'
+
+Write a concise daily briefing with these sections:'
+    +'
+1. TODAY (what to do and how to approach it)'
+    +'
+2. FORM CHECK (brief assessment of CTL/ATL/TSB)'
+    +'
+3. KEY FOCUS (one specific thing to nail this week)'
+    +'
+4. NUTRITION TIP (one actionable tip based on training load)'
+    +'
+Keep each section to 2-3 sentences. Be direct and motivating.';
+  
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:600,
+      messages:[{role:'user',content:prompt}]
+    })
+  }).then(function(r){return r.json();}).then(function(d){
+    var text = d.content&&d.content[0]&&d.content[0].text;
+    if(!text){body.innerHTML='<div style="padding:20px;color:var(--t3)">Coach unavailable. Check connection.</div>';return;}
+    
+    // Parse sections and render nicely
+    body.innerHTML='';
+    
+    // Stats row
+    var statsRow=document.createElement('div');
+    statsRow.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px';
+    [{l:'FITNESS',v:ctl,c:'#4D9FFF'},{l:'FATIGUE',v:atl,c:'#FF7A45'},{l:'FORM',v:(tsb>0?'+':'')+tsb,c:tsb>0?'#00C896':tsb<-20?'#ef4444':'#FFB938'}].forEach(function(s){
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--s2);border-radius:12px;padding:10px;text-align:center;border:1px solid var(--b1)';
+      card.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700">'+s.l+'</div><div style="font-size:22px;font-weight:800;color:'+s.c+'">'+s.v+'</div>';
+      statsRow.appendChild(card);
+    });
+    body.appendChild(statsRow);
+    
+    // Coach text - split into sections
+    var sections = text.split(/
+(?=\d\.|TODAY|FORM|KEY|NUTRITION)/);
+    sections.forEach(function(sec){
+      if(!sec.trim()) return;
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
+      var lines=sec.trim().split('
+');
+      var heading=lines[0].replace(/^\d+\.\s*/,'').replace(/[:\s]*$/,'');
+      var bodyText=lines.slice(1).join(' ').trim()||lines[0];
+      card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+heading+'</div>'
+        +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+bodyText+'</div>';
+      body.appendChild(card);
+    });
+    
+    // Refresh button
+    var refresh=document.createElement('button');
+    refresh.textContent='↻ Refresh';
+    refresh.style.cssText='margin-top:4px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#a855f7;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
+    refresh.onclick=function(){overlay.remove();showAICoach();};
+    body.appendChild(refresh);
+    
+  }).catch(function(e){
+    body.innerHTML='<div style="padding:20px;color:var(--t3)">Coach unavailable: '+e.message+'</div>';
+  });
 }
 
 function showDropZone(){
