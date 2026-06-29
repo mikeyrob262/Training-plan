@@ -5772,30 +5772,35 @@ function renderPerf(container){
 
   // -- TRAINING LOG / STREAK SECTION
   var now = new Date();
-  var startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - (now.getDay()===0?6:now.getDay()-1));
-  startOfWeek.setHours(0,0,0,0);
+  // Use local date string for comparison to avoid UTC offset issues
+  var todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  var dow = now.getDay(); // 0=Sun
+  var daysFromMon = dow===0?6:dow-1;
+  var monDate = new Date(now); monDate.setDate(now.getDate()-daysFromMon);
+  var monStr = monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0');
   var startOfYear = new Date(now.getFullYear(),0,1);
+  var yearStr = now.getFullYear()+'-01-01';
   
-  // Weekly stats
-  var weekRides = rides.filter(function(r){return r&&r.date&&new Date(r.date)>=startOfWeek;});
+  // Weekly stats - compare date strings directly to avoid timezone issues
+  var weekRides = rides.filter(function(r){return r&&r.date&&r.date>=monStr;});
   var weekMi = weekRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var weekMiGoal = st.weeklyMileageGoal || 100;
   var weekMiPct = Math.min(100, Math.round(weekMi/weekMiGoal*100));
   
   // Year stats
-  var yearRides = rides.filter(function(r){return r&&r.date&&new Date(r.date)>=startOfYear;});
+  var yearRides = rides.filter(function(r){return r&&r.date&&r.date>=yearStr;});
   var yearMi = Math.round(yearRides.reduce(function(a,r){return a+(r.distance||0);},0));
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
   
   // Streak - consecutive weeks with activity
   var streak = 0;
-  var checkWeek = new Date(startOfWeek);
   for(var w=0;w<52;w++){
-    var wStart = new Date(checkWeek); wStart.setDate(checkWeek.getDate()-w*7);
-    var wEnd = new Date(wStart); wEnd.setDate(wStart.getDate()+7);
-    var hasActivity = rides.some(function(r){var d=r&&r.date&&new Date(r.date);return d&&d>=wStart&&d<wEnd;});
+    var wMon = new Date(monDate); wMon.setDate(monDate.getDate()-w*7);
+    var wMonStr = wMon.getFullYear()+'-'+String(wMon.getMonth()+1).padStart(2,'0')+'-'+String(wMon.getDate()).padStart(2,'0');
+    var wSun = new Date(wMon); wSun.setDate(wMon.getDate()+6);
+    var wSunStr = wSun.getFullYear()+'-'+String(wSun.getMonth()+1).padStart(2,'0')+'-'+String(wSun.getDate()).padStart(2,'0');
+    var hasActivity = rides.some(function(r){return r&&r.date&&r.date>=wMonStr&&r.date<=wSunStr;});
     if(hasActivity) streak++; else break;
   }
   
@@ -5808,7 +5813,7 @@ function renderPerf(container){
   // Relative effort (sum of TSS this week)
   var weekTSS = Math.round(weekRides.reduce(function(a,r){return a+(r.tss||r.relEffort||0);},0));
   
-  html += '<div style="margin:0 12px 14px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:16px">';
+  html += '<div style="margin:0 12px 10px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:12px">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Training Log</div>';
   
   // Sport icons row
@@ -5823,13 +5828,13 @@ function renderPerf(container){
     var active = s.count > 0;
     var col = active ? s.color : '#888';
     var ringPct = active ? Math.min(100, s.count * 25) : 0;
-    var r = 18, circ = 2 * Math.PI * r;
+    var r = 14, circ = 2 * Math.PI * r;
     var dash = circ * ringPct / 100;
     html += '<div style="flex:1;text-align:center;padding:4px 2px">'
       // Ring + icon
-      +'<div style="position:relative;width:52px;height:52px;margin:0 auto 4px">'
+      +'<div style="position:relative;width:40px;height:40px;margin:0 auto 4px">'
       // SVG ring
-      +'<svg width="52" height="52" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
+      +'<svg width="40" height="40" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
       +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'22" stroke-width="4"/>'
       +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="4"'
       +' stroke-dasharray="'+dash+' '+circ+'" stroke-dashoffset="'+circ*0.25+'"'
