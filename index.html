@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782700846 -->
+<!DOCTYPE html><!-- v1782701039 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7155,7 +7155,10 @@ function importRideFile(input){
             if(!data.date) data.date = getTodayKey();
             
             var ride2 = {
-              name: name2, date: data.date, duration: data.duration, distance: data.distance,
+              var fitDurSec = data.duration||0;
+              var fitH=Math.floor(fitDurSec/3600),fitM=Math.floor((fitDurSec%3600)/60),fitS=Math.round(fitDurSec%60);
+              var fitDurStr = fitH+':'+(fitM<10?'0':'')+fitM+':'+(fitS<10?'0':'')+fitS;
+              name: name2, date: data.date, duration: fitDurStr, movingSecs: fitDurSec, distance: data.distance,
               avgPwr: data.avgPwr, np: data.np, hr: data.hr, tss: data.tss, elev: data.elev,
               calories: data.calories,
               z1s: data.z1s, z2s: data.z2s, z3s: data.z3s, z4s: data.z4s, z5s: data.z5s, z6s: data.z6s,
@@ -7166,9 +7169,29 @@ function importRideFile(input){
             };
             
             if(!st.rides) st.rides=[];
-            // Deduplicate by date+distance
-            var dup=st.rides.find(function(r){return r.date===ride2.date && Math.abs((r.distance||0)-(ride2.distance||0))<0.5;});
-            if(dup){ toast('Duplicate: '+name2); input.value=''; return; }
+            // Merge into existing Strava ride if same date+distance
+            var dupIdx2=-1;
+            for(var _j=0;_j<st.rides.length;_j++){
+              var _r2=st.rides[_j];
+              if(_r2.date===ride2.date && Math.abs((_r2.distance||0)-(ride2.distance||0))<0.5){ dupIdx2=_j; break; }
+            }
+            if(dupIdx2>=0){
+              var ex2=st.rides[dupIdx2];
+              st.rides[dupIdx2]=Object.assign({},ex2,{
+                peak20:ride2.peak20||ex2.peak20, lrBalance:ride2.lrBalance||ex2.lrBalance,
+                z1s:ride2.z1s||ex2.z1s, z2s:ride2.z2s||ex2.z2s, z3s:ride2.z3s||ex2.z3s,
+                z4s:ride2.z4s||ex2.z4s, z5s:ride2.z5s||ex2.z5s, z6s:ride2.z6s||ex2.z6s,
+                np:ride2.np||ex2.np, avgPwr:ride2.avgPwr||ex2.avgPwr,
+                tss:ride2.tss||ex2.tss, elev:ride2.elev||ex2.elev,
+                calories:ride2.calories||ex2.calories,
+                lats:ride2.lats||ex2.lats, lons:ride2.lons||ex2.lons,
+                maxHR:ride2.maxHR||ex2.maxHR, cadence:ride2.cadence||ex2.cadence
+              });
+              sv();
+              toast('FIT merged: '+name2+(ride2.peak20?' · 20m '+ride2.peak20+'W':''));
+              var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
+              input.value=''; return;
+            }
             st.rides.push(ride2);
             sv();
             toast('Imported FIT: '+name2+(data.peak20?' · 20m '+data.peak20+'W':''));
