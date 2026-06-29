@@ -9364,6 +9364,13 @@ function bnavGo(tab){
   else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
 }
 
+function showImportFromMore(){
+  var inp=document.createElement('input');
+  inp.type='file';inp.accept='.tcx,.csv';inp.multiple=true;
+  inp.onchange=function(){bulkImportTCX(inp);};
+  inp.click();
+}
+
 function showMoreSheet(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
   var overlay=document.createElement('div');
@@ -9377,6 +9384,7 @@ function showMoreSheet(){
     ['Conditioning','M13 2L3 14h9l-1 8 10-12h-9l1-8z','showCond'],
     ['Core','M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z','showCore'],
     ['Mobility','M12 7v5l-3 5 M12 12l3 5 M9 17h6','showMob'],
+    ['Import Activities','M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15','showImportFromMore'],
     ['Settings','M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z','showSet']
   ];
   var h='<div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:8px">More</div>';
