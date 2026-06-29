@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782696690 -->
+<!DOCTYPE html><!-- v1782696778 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7123,7 +7123,7 @@ function importRideFile(input){
             if(dup){ toast('Duplicate: '+name2); input.value=''; return; }
             st.rides.push(ride2);
             sv();
-            toast('Imported FIT: '+name2+(peak20?' · 20m '+peak20+'W':''));
+            toast('Imported FIT: '+name2+(data.peak20?' · 20m '+data.peak20+'W':''));
             var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
           } catch(ex){ toast('FIT processing error: '+ex.message); }
         });
