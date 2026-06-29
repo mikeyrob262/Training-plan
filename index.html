@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782742016 -->
+<!DOCTYPE html><!-- v1782742269 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -262,17 +262,23 @@ window.parseFitFile = function(arrayBuffer, callback) {
       }
     }
     
-    // Calculate 20min max power
-    if (result.pwrStream.length > 1200) {
-      var win = 1200, best = 0, sum = 0;
-      for (var i = 0; i < win; i++) sum += result.pwrStream[i];
-      best = sum;
-      for (var i = win; i < result.pwrStream.length; i++) {
-        sum += result.pwrStream[i] - result.pwrStream[i-win];
-        if (sum > best) best = sum;
+    // Calculate power curve for all durations
+    var pwrDurations = [5,15,30,60,120,300,600,1200,1800,3600];
+    result.powerCurve = {};
+    pwrDurations.forEach(function(win) {
+      if (result.pwrStream.length >= win) {
+        var sum = 0;
+        for (var i = 0; i < win; i++) sum += result.pwrStream[i];
+        var best = sum;
+        for (var i = win; i < result.pwrStream.length; i++) {
+          sum += result.pwrStream[i] - result.pwrStream[i-win];
+          if (sum > best) best = sum;
+        }
+        result.powerCurve[win] = Math.round(best / win);
       }
-      result.peak20 = Math.round(best / win);
-    }
+    });
+    result.peak20 = result.powerCurve[1200] || null;
+    result.maxPwr = result.powerCurve[5] || null;
     
     // Calculate TSS if missing
     if (!result.tss && result.np && result.duration) {
@@ -6312,13 +6318,18 @@ function computePowerCurve(rides){
         if(r.powerCurve[d]&&r.powerCurve[d]>best[d]) best[d]=r.powerCurve[d];
       });
     }
+    // From FIT import: use stored powerCurve
+    if(r.powerCurve){
+      durations.forEach(function(d){
+        if(r.powerCurve[d]&&r.powerCurve[d]>best[d]) best[d]=r.powerCurve[d];
+      });
+    }
+    // Use max20 if no powerCurve
+    if(r.max20&&r.max20>best[1200]) best[1200]=r.max20;
     // From Intervals.icu: estimate peak from NP + zone data
-    // NP ~= 20min best effort proxy; use ifPct to back-calculate
     if(r.np&&r.source==='intervals'){
-      // 20min best ≈ NP * 1.05 (rough)
       var est20=Math.round(r.np*1.05);
       if(est20>best[1200]) best[1200]=est20;
-      // 60min ≈ NP * 0.95
       var est60=Math.round(r.np*0.95);
       if(est60>best[3600]) best[3600]=est60;
     }
@@ -6654,7 +6665,7 @@ function bulkImportTCX(input){
             z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
             lats: data.lats && data.lats.length>10 ? data.lats : null,
             lons: data.lons && data.lons.length>10 ? data.lons : null,
-            max20: data.peak20||null, maxPwr: data.maxPwr||null,
+            max20: data.peak20||null, maxPwr: data.maxPwr||null, powerCurve: data.powerCurve||null,
             workKj: data.workKj||null,
             avgHR: data.hr||null, maxHR: data.maxHR||null,
             ifPct: (data.np&&data.ftp)?Math.round((data.np/data.ftp)*100):null,
@@ -6672,6 +6683,7 @@ function bulkImportTCX(input){
             st.rides[dupIdx]=Object.assign({},existing,{
               max20:ride2.max20||existing.max20,
               maxPwr:ride2.maxPwr||existing.maxPwr,
+              powerCurve:ride2.powerCurve||existing.powerCurve,
               lrBalance:ride2.lrBalance||existing.lrBalance,
               z1s:ride2.z1s||existing.z1s, z2s:ride2.z2s||existing.z2s,
               z3s:ride2.z3s||existing.z3s, z4s:ride2.z4s||existing.z4s,
@@ -7209,6 +7221,7 @@ function importRideFile(input){
               var ex2=st.rides[dupIdx2];
               st.rides[dupIdx2]=Object.assign({},ex2,{
                 max20:ride2.max20||ex2.max20, maxPwr:ride2.maxPwr||ex2.maxPwr,
+                powerCurve:ride2.powerCurve||ex2.powerCurve,
                 lrBalance:ride2.lrBalance||ex2.lrBalance,
                 z1s:ride2.z1s||ex2.z1s, z2s:ride2.z2s||ex2.z2s, z3s:ride2.z3s||ex2.z3s,
                 z4s:ride2.z4s||ex2.z4s, z5s:ride2.z5s||ex2.z5s, z6s:ride2.z6s||ex2.z6s,
