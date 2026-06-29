@@ -9356,8 +9356,28 @@ function renderMob(){
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function bnavGo(tab){
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var btn=document.getElementById('bnav-'+tab);
+  if(btn) btn.classList.add('active');
+  if(tab==='home'){
+    // Close any open modal
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showScreen('TRAIN');
+  } else if(tab==='analytics'){
+    showPerf();
+  } else if(tab==='nutrition'){
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showNutr();
+  } else if(tab==='activities'){
+    showPerf();
+  } else if(tab==='more'){
+    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
+    showSet();
+  }
+}
+
 window.onload = function(){
-  document.getElementById('btn-nutr').onclick = showNutr;
   document.getElementById('btn-set').onclick = showSet;
   // Dark mode toggle
   var darkBtn = document.getElementById('btn-dark');
@@ -9389,26 +9409,6 @@ window.onload = function(){
     .then(function(data){ if(data) applyFirebaseData(data); })
     .catch(function(){});
 
-function bnavGo(tab){
-  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  var btn=document.getElementById('bnav-'+tab);
-  if(btn) btn.classList.add('active');
-  if(tab==='home'){
-    // Close any open modal
-    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
-    showScreen('TRAIN');
-  } else if(tab==='analytics'){
-    showPerf();
-  } else if(tab==='nutrition'){
-    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
-    showNutr();
-  } else if(tab==='activities'){
-    showPerf();
-  } else if(tab==='more'){
-    var pm=document.getElementById('perf-modal');if(pm)pm.remove();
-    showSet();
-  }
-}
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
