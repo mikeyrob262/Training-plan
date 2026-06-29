@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782753112 -->
+<!DOCTYPE html><!-- v1782753301 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3183,11 +3183,11 @@ function renderDynWeek(w){
 }
 
 function showTrain(){
-  document.getElementById('TRAIN').style.display='block';
-  document.getElementById('PROG').style.display='none';
-  document.getElementById('NUTR').style.display='none';
-  document.getElementById('ACT').style.display='none';
-  document.getElementById('SET').style.display='none';
+  var ids=['TRAIN','PROG','NUTR','ACT','SET'];
+  ids.forEach(function(id){
+    var el=document.getElementById(id);
+    if(el) el.style.display=(id==='TRAIN'?'block':'none');
+  });
 }
 
 function restoreW(w){
