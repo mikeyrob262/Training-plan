@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782744525 -->
+<!DOCTYPE html><!-- v1782744573 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7352,7 +7352,7 @@ function openRideDetail(idx){
     dtStr = r.date;
   }
 
-  hdr.innerHTML = '<button onclick="closeRideDetail()" style="background:none;border:none;color:var(--t2);font-size:15px;font-weight:600;padding:6px 8px;cursor:pointer">← Back</button>'
+  hdr.innerHTML = '<button onclick="closeRideDetail()" style="background:none;border:none;color:#FC4C02;font-size:15px;font-weight:700;padding:6px 8px;cursor:pointer">← Back</button>'
     + '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Ride') + '</div>'
     + '<div style="font-size:11px;color:var(--t3);margin-top:1px">' + dtStr + '</div></div>'
     + '<button onclick="renameRide('+idx+')" style="background:var(--s2);border:1px solid var(--b1);color:var(--orange);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">Rename</button>';
