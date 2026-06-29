@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782744009 -->
+<!DOCTYPE html><!-- v1782744225 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -231,19 +231,27 @@ window.parseFitFile = function(arrayBuffer, callback) {
         // Session message (18)
         if (g === 18) {
           var ts = msgData[253] ? msgData[253].val + FIT_EPOCH : null;
-          if (ts) {
-            var d = new Date(ts * 1000);
-            result.date = d.toISOString().split('T')[0];
-          }
-          if (msgData[7]) result.duration = Math.round(msgData[7].val / 1000);
+          if (ts) { var d = new Date(ts * 1000); result.date = d.toISOString().split('T')[0]; }
+          if (msgData[8]) result.duration = Math.round(msgData[8].val / 1000); // total_timer_time (moving)
           if (msgData[9]) result.distance = parseFloat((msgData[9].val / 1609.344 / 100).toFixed(1));
-          if (msgData[14]) result.avgPwr = msgData[14].val;
-          if (msgData[34]) result.np = msgData[34].val;
+          if (msgData[20]) result.avgPwr = msgData[20].val;
           if (msgData[21]) result.maxPwr = msgData[21].val;
+          if (msgData[34]) result.np = msgData[34].val;
+          if (msgData[35]) result.tss = Math.round(msgData[35].val / 10);
+          if (msgData[36]) result.ifPct = Math.round(msgData[36].val / 10);
           if (msgData[16]) result.hr = msgData[16].val;
+          if (msgData[17]) result.maxHR = msgData[17].val;
+          if (msgData[18]) result.cadence = msgData[18].val;
           if (msgData[11]) result.calories = msgData[11].val;
           if (msgData[22]) result.elev = Math.round(msgData[22].val * 3.28084);
-          if (msgData[33]) result.tss = Math.round(msgData[33].val / 100);
+          if (msgData[48]) result.workKj = Math.round(msgData[48].val / 1000);
+          if (msgData[57]) result.avgTemp = Math.round(msgData[57].val * 9/5 + 32);
+          if (msgData[58]) result.maxTemp = Math.round(msgData[58].val * 9/5 + 32);
+          if (msgData[37]) {
+            var lrRaw = msgData[37].val;
+            var lrLeft = lrRaw & 0x3FFF;
+            if (lrLeft > 0 && lrLeft < 10000) result.lrBalance = Math.round(lrLeft/100) + '/' + (100 - Math.round(lrLeft/100));
+          }
         }
         
         // Record message (20) - GPS and power stream
@@ -6708,10 +6716,10 @@ function bulkImportTCX(input){
             lats: data.lats && data.lats.length>10 ? data.lats : null,
             lons: data.lons && data.lons.length>10 ? data.lons : null,
             max20: data.peak20||null, maxPwr: data.maxPwr||null, powerCurve: data.powerCurve||null,
-            workKj: data.workKj||null,
-            avgHR: data.hr||null, maxHR: data.maxHR||null,
-            ifPct: (data.np&&data.ftp)?Math.round((data.np/data.ftp)*100):null,
-            lrBalance: data.lrBalance, source:'fit'
+            workKj: data.workKj||null, ifPct: data.ifPct||null, tss: data.tss||null,
+            avgHR: data.hr||null, maxHR: data.maxHR||null, cadence: data.cadence||null,
+            avgTemp: data.avgTemp||null, maxTemp: data.maxTemp||null,
+            lrBalance: data.lrBalance||null, source:'fit'
           };
           if(!st.rides) st.rides=[];
           var dupIdx=-1;
