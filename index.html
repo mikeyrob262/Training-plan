@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782752006 -->
+<!DOCTYPE html><!-- v1782752078 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3221,6 +3221,7 @@ function applySwapLogBtn(w,idx,val){
   if(!val) return;
   var vl=val.toLowerCase();
   if(vl.indexOf('strength')<0&&vl.indexOf('full body')<0&&vl.indexOf('core only')<0&&vl.indexOf('yoga')<0&&vl.indexOf('mobility')<0) return;
+  if(opts.indexOf('Race')<0) opts=['Race'].concat(opts);
   var card=document.getElementById('wc'+w+'_'+idx);
   if(!card) return;
   var btnArea=card.querySelector('.swap-log-area');
