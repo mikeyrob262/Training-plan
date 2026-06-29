@@ -5872,8 +5872,8 @@ function renderPerf(container){
       if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s){
         var zTotal2=((r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0)+(r.z7s||0))||1;
         var zData2=[{s:r.z1s||0,c:'#64748b',l:'Z1'},{s:r.z2s||0,c:'#3b82f6',l:'Z2'},{s:r.z3s||0,c:'#22c55e',l:'Z3'},{s:r.z4s||0,c:'#f59e0b',l:'Z4'},{s:r.z5s||0,c:'#ef4444',l:'Z5'},{s:r.z6s||0,c:'#a855f7',l:'Z6'}];
-        html+='<div style="margin-top:8px">';
-        html+='<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px;margin-bottom:5px">';
+        html+='<div style="margin-top:8px;overflow:hidden;max-width:100%">';
+        html+='<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px;margin-bottom:5px;max-width:100%;width:100%">';
         zData2.forEach(function(z){if(z.s>0)html+='<div style="background:'+z.c+';width:'+Math.round(z.s/zTotal2*100)+'%;min-width:2px"></div>';});
         html+='</div>';
         html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
