@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782752947 -->
+<!DOCTYPE html><!-- v1782752975 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8917,7 +8917,7 @@ function getCurrentPlanWeek(){
   planStart.setHours(0,0,0,0);
   var today = new Date(); today.setHours(0,0,0,0);
   var diff = Math.floor((today - planStart) / (7*24*60*60*1000));
-  return Math.max(1, Math.min(17, diff + 1));
+  return Math.max(1, diff + 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
