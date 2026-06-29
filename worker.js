@@ -8331,7 +8331,8 @@ function renderRun(){
   // Stats row 1
   var s1=document.createElement('div');
   s1.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 8px';
-  [{l:'Miles YTD',v:ytdMi.toFixed(1),s:'running',c:'#0F6E56'},{l:'This month',v:monthMi.toFixed(1),s:'mi'},{l:'Total runs',v:runs.length,s:'logged'},{l:'Streak',v:weekStreak,s:'weeks',c:weekStreak>=3?'#0F6E56':'var(--t1)'}].forEach(function(st2){
+  var ytdRuns=runs.filter(function(r){var d=r.date?new Date(r.date):null;return d&&d>=yearStart;});
+  [{l:'Miles YTD',v:ytdMi.toFixed(1),s:'running',c:'#0F6E56'},{l:'This month',v:monthMi.toFixed(1),s:'mi'},{l:'YTD runs',v:ytdRuns.length,s:'activities'},{l:'Streak',v:weekStreak,s:'weeks',c:weekStreak>=3?'#0F6E56':'var(--t1)'}].forEach(function(st2){
     var c=document.createElement('div');
     c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
     c.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
@@ -8445,7 +8446,8 @@ function renderRun(){
       +'<div style="font-size:12px;color:var(--t3)">Tap Log a Run to get started</div>';
     scr.appendChild(empty);
   } else {
-    var sorted=runs.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,4);
+    var yearStr=new Date().getFullYear()+'-01-01';
+  var sorted=runs.filter(function(r){return r.date&&r.date>=yearStr;}).sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,4);
     sorted.forEach(function(r,ri){
       var rcard=document.createElement('div');
       rcard.style.cssText='margin:0 16px 8px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:14px';
