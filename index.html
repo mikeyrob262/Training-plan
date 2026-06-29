@@ -5821,10 +5821,29 @@ function renderPerf(container){
   ];
   sportsData.forEach(function(s){
     var active = s.count > 0;
-    var col = active ? s.color : 'var(--t3)';
-    html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:12px;padding:10px 4px 8px;border:1px solid '+(active?s.color+'44':'var(--b1)')+'">'
-      +'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
-      +'<div style="font-size:11px;font-weight:700;color:'+col+';margin-top:4px">'+s.val+'</div>'
+    var col = active ? s.color : '#888';
+    var ringPct = active ? Math.min(100, s.count * 25) : 0;
+    var r = 18, circ = 2 * Math.PI * r;
+    var dash = circ * ringPct / 100;
+    html += '<div style="flex:1;text-align:center;padding:4px 2px">'
+      // Ring + icon
+      +'<div style="position:relative;width:52px;height:52px;margin:0 auto 4px">'
+      // SVG ring
+      +'<svg width="52" height="52" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
+      +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'22" stroke-width="4"/>'
+      +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="4"'
+      +' stroke-dasharray="'+dash+' '+circ+'" stroke-dashoffset="'+circ*0.25+'"'
+      +' stroke-linecap="round" transform="rotate(-90 26 26)"/>'
+      +'</svg>'
+      // Sport icon centered
+      +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">'
+      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
+      +'</div>'
+      +'</div>'
+      // Label
+      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">'+s.label+'</div>'
+      // Value
+      +'<div style="font-size:13px;font-weight:800;color:'+col+';margin-top:2px">'+s.val+'</div>'
       +'</div>';
   });
   html += '</div>';
