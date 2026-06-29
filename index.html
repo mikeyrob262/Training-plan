@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782698878 -->
+<!DOCTYPE html><!-- v1782699019 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9627,6 +9627,8 @@ function stravaBackfill() {
   var DEFAULT_TOKEN = 'b21aa88386ea43fe3c0ec3bc2921e79beb6cb303';
   var token = st.stravaToken || DEFAULT_TOKEN;
   if(!st.stravaToken){ st.stravaToken = DEFAULT_TOKEN; sv(); }
+  // Remove existing strava rides so we re-import fresh with GPS
+  if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
   toast('Fetching Strava activities...');
   fetchStravaPage(token, 1, 0);
 }
