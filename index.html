@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782741515 -->
+<!DOCTYPE html><!-- v1782741811 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -257,7 +257,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
               result.lons.push(lon);
             }
           }
-          if (msgData[7]) result.pwrStream.push(msgData[7].val);
+          if (msgData[7] && msgData[7].val < 2000 && msgData[7].val !== 65535) result.pwrStream.push(msgData[7].val);
         }
       }
     }
