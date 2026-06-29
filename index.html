@@ -9950,14 +9950,12 @@ function showAICoach(){
     body.appendChild(statsRow);
     
     // Coach text - split into sections
-    var sections = text.split(/
-(?=\d\.|TODAY|FORM|KEY|NUTRITION)/);
+    var sections = text.split(/(?=TODAY|FORM CHECK|KEY FOCUS|NUTRITION)/);
     sections.forEach(function(sec){
       if(!sec.trim()) return;
       var card=document.createElement('div');
       card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
-      var lines=sec.trim().split('
-');
+      var lines=sec.trim().split('\n');
       var heading=lines[0].replace(/^\d+\.\s*/,'').replace(/[:\s]*$/,'');
       var bodyText=lines.slice(1).join(' ').trim()||lines[0];
       card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+heading+'</div>'
