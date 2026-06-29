@@ -5789,7 +5789,8 @@ function renderPerf(container){
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
   var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todayRunMi = todayRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  function isRun(r){ return r.type==='run'||(r.source==='strava'&&/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'')); }
+  var todayRunMi = todayRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todaySwimMi = todayRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todayStrCt = todayRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length;
 
@@ -5801,7 +5802,7 @@ function renderPerf(container){
   
   // Training log: Today rings + YTD rings
   var ytdCycMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
-  var ytdRunMi = Math.round(yearRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0));
+  var ytdRunMi = Math.round(yearRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0));
   var sportDefs = [
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',color:'#FC4C02',
      todayV:parseFloat(todayCycMi),todayMax:50,todayUnit:'mi',
