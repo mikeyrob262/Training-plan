@@ -321,7 +321,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
   <div class="hdr-nav">
 
     <div class="wi">
-      <button class="wtit" id="btn-wt" onclick="openPk()">Week 1 <span style="font-size:11px;opacity:.35;margin-left:2px">▾</span></button>
+      <button class="wtit" id="btn-wt" onclick="openPk()">Week of... <span style="font-size:11px;opacity:.35;margin-left:2px">▾</span></button>
     </div>
 
   </div>
@@ -3133,7 +3133,7 @@ function updHdr(){
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var weekStart=getWeekStartDate(cw);
   var dateStr=days[weekStart.getDay()]+' '+months[weekStart.getMonth()]+' '+weekStart.getDate();
-  document.getElementById('btn-wt').innerHTML='Week '+cw+' . '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
+  document.getElementById('btn-wt').innerHTML='Week of '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
   var pv=document.getElementById('btn-pv');if(pv)pv.disabled=false;
   var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
