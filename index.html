@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782744740 -->
+<!DOCTYPE html><!-- v1782745114 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7533,9 +7533,10 @@ function openRideDetail(idx){
   var allStats=[
     ['Avg Cadence',r.cadence?r.cadence+' rpm':'-'],
     ['Max HR',r.maxHR?r.maxHR+' bpm':'-'],
+    ['L/R Balance',r.lrBalance||'-'],
     ['Elevation Gain',r.elev?r.elev+' ft':'-'],
     ['Avg Temp',r.avgTemp?r.avgTemp+'°F':'-'],
-    ['Max Temp',r.maxTemp?r.maxTemp+'°F':'-'],
+    ['Max Temp',(r.maxTemp&&r.maxTemp>0)?r.maxTemp+'°F':'-'],
     ['Work',r.workKj?r.workKj+' kJ':'-'],
     ['Relative Effort',r.relEffort||'-'],
     ['Source',r.source||'manual']
