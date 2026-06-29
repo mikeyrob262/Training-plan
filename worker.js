@@ -11068,6 +11068,7 @@ window.onload = function(){
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'X-Version': '38d42b6bb7',
       }
     });
   }
