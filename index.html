@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782742862 -->
+<!DOCTYPE html><!-- v1782743298 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5161,7 +5161,7 @@ function renderNutr(){
       var info=document.createElement('div');
       var iName=document.createElement('div');
       iName.style.cssText='font-size:13px;font-weight:500;color:var(--t1)';
-      iName.textContent=item.n;
+      iName.textContent=item._qty&&item._qty>1 ? item.n+' ×'+item._qty : item.n;
       var iMeta=document.createElement('div');
       iMeta.style.cssText='font-size:11px;color:var(--t3)';
       iMeta.textContent=(item.p||0)+'g P . '+(item.c||0)+'g C . '+(item.f||0)+'g F';
@@ -5187,16 +5187,23 @@ function renderNutr(){
         rmBtn.onclick=function(){rmFood(mn,i);};
         plusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
-          // Add another serving of same food
-          nd.meals[mn].push({n:it.n,cal:it.cal,p:it.p||0,c:it.c||0,f:it.f||0,fiber:it.fiber||0,satFat:it.satFat||0,sodium:it.sodium||0,sugar:it.sugar||0});
+          var cur=nd.meals[mn][i];
+          var curQty=cur._qty||1;
+          var newQty=curQty+1;
+          var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
+          nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           sv();renderNutr();showScreen('NUTR');
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
-          if(nd.meals[mn].length>1){
+          var cur=nd.meals[mn][i];
+          var curQty=cur._qty||1;
+          if(curQty<=1){
             nd.meals[mn].splice(i,1);
           } else {
-            nd.meals[mn].splice(i,1);
+            var newQty=curQty-1;
+            var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
+            nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
           sv();renderNutr();showScreen('NUTR');
         };
@@ -5493,7 +5500,9 @@ function renderFoodRows(container, list){
           var nd = getNDay(nutrDate);
           if(!nd.meals[curMeal]) nd.meals[curMeal] = [];
           nd.meals[curMeal].push({
-            n: q===1 ? f.n : f.n+' x'+q,
+            n: f.n,
+            _baseName: f.n,
+            _qty: q,
             cal: Math.round((f.cal||0)*q),
             p: Math.round((f.p||0)*q*10)/10,
             c: Math.round((f.c||0)*q*10)/10,
