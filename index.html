@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782754211 -->
+<!DOCTYPE html><!-- v1782754324 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -107,8 +107,8 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .swap-cancel{background:transparent;border:1px solid var(--b1);color:var(--t3);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;font-family:inherit}
 .pk-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;display:none}
 .pk-bg.open{display:block}
-.pk-sheet{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-radius:22px 22px 0 0;padding:16px;z-index:200;transform:translateY(100%);transition:transform .3s ease;max-height:70vh;overflow-y:auto;border-top:1px solid var(--b2);box-shadow:0 -4px 24px rgba(0,0,0,.1)}
-.pk-sheet.open{transform:translateY(0)}
+.pk-sheet{position:fixed;top:70px;left:12px;right:12px;background:var(--s1);border-radius:16px;padding:0;z-index:200;transform:scaleY(0);transform-origin:top;transition:transform .2s ease;max-height:50vh;overflow-y:auto;box-shadow:0 4px 24px rgba(0,0,0,.18);border:1px solid var(--b2)}
+.pk-sheet.open{transform:scaleY(1)}
 .pk-grid{display:block;margin-top:0;max-height:60vh;overflow-y:auto}
 .pk-it{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer}
 .pk-n{font-size:18px;font-weight:800;color:var(--t1)}
@@ -2957,8 +2957,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 
 <div class="pk-bg" id="pk-bg"></div>
 <div class="pk-sheet" id="pk-sheet">
-  <div class="mhdl"></div>
-  <div style="font-size:17px;font-weight:800;color:var(--t1);padding:12px 16px 0">Jump to Week</div>
+  <div style="font-size:12px;font-weight:700;color:var(--t3);padding:8px 14px 4px;text-transform:uppercase;letter-spacing:.05em">Jump to Week</div>
   <div class="pk-grid" id="picker-grid"><div class="pk-it" onclick="GW(1);closePk()"><div class="pk-n">1</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(2);closePk()"><div class="pk-n">2</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(3);closePk()"><div class="pk-n">3</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(4);closePk()"><div class="pk-n">4</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(5);closePk()"><div class="pk-n">5</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(6);closePk()"><div class="pk-n">6</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(7);closePk()"><div class="pk-n">7</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(8);closePk()"><div class="pk-n">8</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(9);closePk()"><div class="pk-n">9</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(10);closePk()"><div class="pk-n">10</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(11);closePk()"><div class="pk-n">11</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(12);closePk()"><div class="pk-n">12</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(13);closePk()"><div class="pk-n">13</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(14);closePk()"><div class="pk-n">14</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(15);closePk()"><div class="pk-n">15</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(16);closePk()"><div class="pk-n">16</div><div class="pk-p">Phase 4</div></div><div class="pk-it" onclick="GW(17);closePk()"><div class="pk-n">17</div><div class="pk-p">Phase 4</div></div></div>
 </div>
 
