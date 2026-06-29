@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782700555 -->
+<!DOCTYPE html><!-- v1782700682 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9715,11 +9715,21 @@ function fetchStravaPage(token, page, imported) {
           if(decoded.lats.length > 5){ gpsLats=decoded.lats; gpsLons=decoded.lons; }
         } catch(e){}
       }
+      var IF2 = (np && ftp) ? np/ftp : null;
+      var avgTempF = a.average_temp ? Math.round(a.average_temp*9/5+32) : null;
+      var maxTempF = a.max_temp ? Math.round(a.max_temp*9/5+32) : null;
       st.rides.push({
         name: a.name||'Strava Activity',
         date: dateStr, duration: dur, distance: distMi,
         avgPwr: avgPwr, np: np, hr: a.average_heartrate||null,
-        tss: tss, elev: elev, calories: a.calories||null,
+        maxHR: a.max_heartrate||null,
+        cadence: a.average_cadence ? Math.round(a.average_cadence) : null,
+        tss: tss, elev: elev,
+        calories: a.calories||null,
+        workKj: a.kilojoules ? Math.round(a.kilojoules) : null,
+        relEffort: a.suffer_score||null,
+        ifPct: IF2 ? Math.round(IF2*100) : null,
+        avgTemp: avgTempF, maxTemp: maxTempF,
         gpsLats: gpsLats, gpsLons: gpsLons,
         source: 'strava', stravaId: a.id
       });
