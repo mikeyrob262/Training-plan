@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782696778 -->
+<!DOCTYPE html><!-- v1782696855 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7222,7 +7222,7 @@ function openRideDetail(idx){
   if(r.gpsLats && r.gpsLats.length > 5){
     html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Route</div>';
     html += '<div style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += buildRouteMap(r.gpsLats, r.gpsLons, r.chartPwr||[], FTP);
+    html += buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
     html += '</div>';
   }
 
