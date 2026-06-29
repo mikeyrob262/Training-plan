@@ -8508,6 +8508,14 @@ function renderRun(){
         rcard.appendChild(zb);
       }
 
+      // Mini GPS map
+      if(r.gpsLats && r.gpsLats.length > 5){
+        var mapWrap=document.createElement('div');
+        mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1)';
+        mapWrap.innerHTML=buildRouteMap(r.gpsLats, r.gpsLons, [], 0);
+        rcard.appendChild(mapWrap);
+      }
+
       // HR warning
       if(hrWarn){
         var warn=document.createElement('div');
