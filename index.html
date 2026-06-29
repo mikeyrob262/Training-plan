@@ -5770,6 +5770,97 @@ function renderPerf(container){
 
   // Import buttons moved to More sheet
 
+  // -- TRAINING LOG / STREAK SECTION
+  var now = new Date();
+  var startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - (now.getDay()===0?6:now.getDay()-1));
+  startOfWeek.setHours(0,0,0,0);
+  var startOfYear = new Date(now.getFullYear(),0,1);
+  
+  // Weekly stats
+  var weekRides = rides.filter(function(r){return r&&r.date&&new Date(r.date)>=startOfWeek;});
+  var weekMi = weekRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var weekMiGoal = st.weeklyMileageGoal || 100;
+  var weekMiPct = Math.min(100, Math.round(weekMi/weekMiGoal*100));
+  
+  // Year stats
+  var yearRides = rides.filter(function(r){return r&&r.date&&new Date(r.date)>=startOfYear;});
+  var yearMi = Math.round(yearRides.reduce(function(a,r){return a+(r.distance||0);},0));
+  var yearMiGoal = st.yearlyMileageGoal || 5000;
+  var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
+  
+  // Streak - consecutive weeks with activity
+  var streak = 0;
+  var checkWeek = new Date(startOfWeek);
+  for(var w=0;w<52;w++){
+    var wStart = new Date(checkWeek); wStart.setDate(checkWeek.getDate()-w*7);
+    var wEnd = new Date(wStart); wEnd.setDate(wStart.getDate()+7);
+    var hasActivity = rides.some(function(r){var d=r&&r.date&&new Date(r.date);return d&&d>=wStart&&d<wEnd;});
+    if(hasActivity) streak++; else break;
+  }
+  
+  // Sport breakdown this week
+  var weekCycling = weekRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit';});
+  var weekRun = weekRides.filter(function(r){return r.type==='run';});
+  var weekSwim = weekRides.filter(function(r){return r.type==='swim';});
+  var weekStrength = weekRides.filter(function(r){return r.type==='strength'||r.type==='weight';});
+  
+  // Relative effort (sum of TSS this week)
+  var weekTSS = Math.round(weekRides.reduce(function(a,r){return a+(r.tss||r.relEffort||0);},0));
+  
+  html += '<div style="margin:0 12px 14px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:16px">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Training Log</div>';
+  
+  // Sport icons row
+  html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
+  var sports = [
+    {icon:'🚴',label:'Cycling',count:weekCycling.length,mi:weekCycling.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
+    {icon:'🏃',label:'Running',count:weekRun.length,mi:weekRun.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
+    {icon:'🏊',label:'Swim',count:weekSwim.length,mi:weekSwim.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
+    {icon:'💪',label:'Strength',count:weekStrength.length,mi:weekStrength.length+'x'}
+  ];
+  sports.forEach(function(s){
+    html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:8px 4px;border:1px solid var(--b1)'+(s.count>0?';border-color:rgba(252,76,2,.3)':'')+'">'
+      +'<div style="font-size:20px">'+s.icon+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:'+(s.count>0?'#FC4C02':'var(--t3)')+'">'+s.mi+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+  
+  // Weekly mileage vs goal
+  html += '<div style="margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">'
+    +'<span style="color:var(--t2)">This Week</span>'
+    +'<span style="font-weight:700;color:var(--t1)">'+weekMi+' / '+weekMiGoal+' mi</span></div>';
+  html += '<div style="height:8px;background:var(--b1);border-radius:4px"><div style="height:8px;background:#FC4C02;border-radius:4px;width:'+weekMiPct+'%"></div></div>';
+  html += '</div>';
+  
+  // Year mileage vs goal
+  html += '<div style="margin-bottom:12px">';
+  html += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">'
+    +'<span style="color:var(--t2)">This Year</span>'
+    +'<span style="font-weight:700;color:var(--t1)">'+yearMi.toLocaleString()+' / '+yearMiGoal.toLocaleString()+' mi</span></div>';
+  html += '<div style="height:8px;background:var(--b1);border-radius:4px"><div style="height:8px;background:#4D9FFF;border-radius:4px;width:'+yearMiPct+'%"></div></div>';
+  html += '</div>';
+  
+  // Streak + Relative Effort
+  html += '<div style="display:flex;gap:10px">';
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
+    +'<div style="font-size:24px;font-weight:900;color:#FC4C02">'+streak+'</div>'
+    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Week Streak 🔥</div>'
+    +'</div>';
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
+    +'<div style="font-size:24px;font-weight:900;color:#a855f7">'+weekTSS+'</div>'
+    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Relative Effort</div>'
+    +'</div>';
+  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:10px;border:1px solid var(--b1)">'
+    +'<div style="font-size:24px;font-weight:900;color:#00C896">'+weekRides.length+'</div>'
+    +'<div style="font-size:11px;color:var(--t3);font-weight:600">Activities</div>'
+    +'</div>';
+  html += '</div>';
+  
+  html += '</div>';
+
   // -- W/KG HERO CARD
   // W/kg category labels
   var wkgLabel=wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational';
