@@ -5772,13 +5772,7 @@ function renderPerf(container){
 
   // -- TRAINING LOG / STREAK SECTION
   var now = new Date();
-  // Use local date string for comparison to avoid UTC offset issues
   var todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  var dow = now.getDay(); // 0=Sun
-  var daysFromMon = dow===0?6:dow-1;
-  var monDate = new Date(now); monDate.setDate(now.getDate()-daysFromMon);
-  var monStr = monDate.getFullYear()+'-'+String(monDate.getMonth()+1).padStart(2,'0')+'-'+String(monDate.getDate()).padStart(2,'0');
-  var startOfYear = new Date(now.getFullYear(),0,1);
   var yearStr = now.getFullYear()+'-01-01';
   
   // Normalize date helper
@@ -5788,107 +5782,67 @@ function renderPerf(container){
     if(p.length!==3) return d;
     return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
   }
-  // Weekly stats
-  var weekRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=monStr;});
-  var weekCyclingRides = weekRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals';});
-  var weekMi = weekCyclingRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var weekMiGoal = st.weeklyMileageGoal || 100;
-  var weekMiPct = Math.min(100, Math.round(weekMi/weekMiGoal*100));
-  
-  // Year stats
+  function isCyc(r){ return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals'; }
+
+  // Today stats
+  var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
+  var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var todayRunMi = todayRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var todaySwimMi = todayRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var todayStrCt = todayRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length;
+
+  // YTD stats (cycling only)
   var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
-  var yearCycling = yearRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals';});
-  var yearMi = Math.round(yearCycling.reduce(function(a,r){return a+(r.distance||0);},0));
+  var yearMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
   
-  // Streak - consecutive weeks with activity
-  var streak = 0;
-  for(var w=0;w<52;w++){
-    var wMon = new Date(monDate); wMon.setDate(monDate.getDate()-w*7);
-    var wMonStr = wMon.getFullYear()+'-'+String(wMon.getMonth()+1).padStart(2,'0')+'-'+String(wMon.getDate()).padStart(2,'0');
-    var wSun = new Date(wMon); wSun.setDate(wMon.getDate()+6);
-    var wSunStr = wSun.getFullYear()+'-'+String(wSun.getMonth()+1).padStart(2,'0')+'-'+String(wSun.getDate()).padStart(2,'0');
-    var hasActivity = rides.some(function(r){var nd=normDate(r&&r.date);return nd&&nd>=wMonStr&&nd<=wSunStr;});
-    if(hasActivity) streak++; else break;
-  }
-  
-  // Sport breakdown this week
-  var weekCycling = weekRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit';});
-  var weekRun = weekRides.filter(function(r){return r.type==='run';});
-  var weekSwim = weekRides.filter(function(r){return r.type==='swim';});
-  var weekStrength = weekRides.filter(function(r){return r.type==='strength'||r.type==='weight';});
-  
-  // Relative effort (sum of TSS this week)
-  var weekTSS = Math.round(weekRides.reduce(function(a,r){return a+(r.tss||r.relEffort||0);},0));
-  
-  html += '<div style="margin:0 12px 8px;background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:8px 10px">';
-  html += '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Training Log</div>';
-  
-  // Sport icons row
-  html += '<div style="display:flex;gap:4px;margin-bottom:8px">';
-  var sportsData = [
-    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',count:weekCycling.length,val:weekCycling.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#FC4C02'},
-    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',count:weekRun.length,val:weekRun.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#4D9FFF'},
-    {path:'M2 12s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M2 17s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM8 7l4-2 4 2v5',label:'Swim',count:weekSwim.length,val:weekSwim.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#00C896'},
-    {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',count:weekStrength.length,val:weekStrength.length+'x',color:'#a855f7'}
+  // Sport data for today rings
+  var sportsData2 = [
+    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',v:parseFloat(todayCycMi),max:50,color:'#FC4C02',unit:'mi'},
+    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',v:parseFloat(todayRunMi),max:15,color:'#4D9FFF',unit:'mi'},
+    {path:'M2 12s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M2 17s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM8 7l4-2 4 2v5',label:'Swim',v:parseFloat(todaySwimMi),max:3,color:'#00C896',unit:'mi'},
+    {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',v:todayStrCt,max:2,color:'#a855f7',unit:'x'}
   ];
-  sportsData.forEach(function(s){
-    var active = s.count > 0;
-    var col = active ? s.color : '#888';
-    var ringPct = active ? Math.min(100, s.count * 25) : 0;
-    var r = 11, circ = 2 * Math.PI * r;
-    var dash = circ * ringPct / 100;
-    html += '<div style="flex:1;text-align:center;padding:2px 0">'
-      +'<div style="position:relative;width:30px;height:30px;margin:0 auto 2px">'
-      +'<svg width="30" height="30" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
-      +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'22" stroke-width="4"/>'
-      +'<circle cx="26" cy="26" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="4"'
+
+  html += '<div style="margin:0 12px 8px;background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:8px 10px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Training Log</div>'
+    +'<div style="font-size:9px;color:var(--t3)">Today</div>'
+    +'</div>';
+
+  html += '<div style="display:flex;margin-bottom:8px">';
+  sportsData2.forEach(function(s){
+    var active = s.v > 0;
+    var col = active ? s.color : 'var(--b2)';
+    var pct = active ? Math.min(100, s.v/s.max*100) : 0;
+    var r2 = 11, circ = 2 * Math.PI * r2;
+    var dash = circ * pct / 100;
+    var dispVal = s.unit==='x' ? (s.v+s.unit) : (s.v.toFixed(1)+s.unit);
+    html += '<div style="flex:1;text-align:center">'
+      +'<div style="position:relative;width:32px;height:32px;margin:0 auto 3px">'
+      +'<svg width="32" height="32" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
+      +'<circle cx="26" cy="26" r="'+r2+'" fill="none" stroke="'+col+'" stroke-width="4" opacity=".2"/>'
+      +'<circle cx="26" cy="26" r="'+r2+'" fill="none" stroke="'+col+'" stroke-width="4"'
       +' stroke-dasharray="'+dash+' '+circ+'" stroke-dashoffset="'+circ*0.25+'"'
       +' stroke-linecap="round" transform="rotate(-90 26 26)"/>'
       +'</svg>'
       +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">'
-      +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
       +'</div>'
       +'</div>'
-      +'<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.03em">'+s.label+'</div>'
-      +'<div style="font-size:11px;font-weight:800;color:'+col+';margin-top:1px">'+s.val+'</div>'
+      +'<div style="font-size:9px;color:var(--t3);font-weight:600;text-transform:uppercase">'+s.label+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:'+col+'">'+dispVal+'</div>'
       +'</div>';
   });
   html += '</div>';
-  
-  // Weekly mileage vs goal
-  html += '<div style="margin-bottom:6px">';
+
   html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
-    +'<span style="color:var(--t2)">This Week</span>'
-    +'<span style="font-weight:700;color:var(--t1)">'+weekMi+' / '+weekMiGoal+' mi</span></div>';
-  html += '<div style="height:5px;background:var(--b1);border-radius:3px"><div style="height:5px;background:#FC4C02;border-radius:3px;width:'+weekMiPct+'%"></div></div>';
-  html += '</div>';
-  
-  // Year mileage vs goal
-  html += '<div style="margin-bottom:8px">';
-  html += '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'
-    +'<span style="color:var(--t2)">This Year</span>'
-    +'<span style="font-weight:700;color:var(--t1)">'+yearMi.toLocaleString()+' / '+yearMiGoal.toLocaleString()+' mi</span></div>';
-  html += '<div style="height:5px;background:var(--b1);border-radius:3px"><div style="height:5px;background:#4D9FFF;border-radius:3px;width:'+yearMiPct+'%"></div></div>';
-  html += '</div>';
-  
-  // Streak + Relative Effort
-  html += '<div style="display:flex;gap:6px">';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
-    +'<div style="font-size:16px;font-weight:900;color:#FC4C02;line-height:1">'+streak+'</div>'
-    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Streak 🔥</div>'
+    +'<span style="color:var(--t2)">Cycling YTD</span>'
+    +'<span style="font-weight:700;color:var(--t1)">'+yearMi.toLocaleString()+' / '+yearMiGoal.toLocaleString()+' mi</span>'
     +'</div>';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
-    +'<div style="font-size:16px;font-weight:900;color:#a855f7;line-height:1">'+weekTSS+'</div>'
-    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Rel. Effort</div>'
-    +'</div>';
-  html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:8px;padding:6px 4px;border:1px solid var(--b1)">'
-    +'<div style="font-size:16px;font-weight:900;color:#00C896;line-height:1">'+weekRides.length+'</div>'
-    +'<div style="font-size:9px;color:var(--t3);font-weight:600;margin-top:2px">Activities</div>'
-    +'</div>';
-  html += '</div>';
-  
+  html += '<div style="height:5px;background:var(--b1);border-radius:3px"><div style="height:5px;background:#FC4C02;border-radius:3px;width:'+yearMiPct+'%"></div></div>';
+
   html += '</div>';
 
   // -- W/KG HERO CARD
