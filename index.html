@@ -5782,12 +5782,13 @@ function renderPerf(container){
     if(p.length!==3) return d;
     return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
   }
-  function isCyc(r){ return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals'; }
+  function isCyc(r){ if(r.source==='strava'){ var st2=r.sportType||''; return !st2||/^(Ride|VirtualRide|EBikeRide|GravelRide|MountainBikeRide|Handcycle)$/i.test(st2); } return !r.type||r.type==='ride'||r.source==='fit'||r.source==='intervals'; }
 
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
   var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todayRunMi = todayRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  function isRun(r){ return r.type==='run'||(r.source==='strava'&&/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'')); }
+  var todayRunMi = todayRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todaySwimMi = todayRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var todayStrCt = todayRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length;
 
@@ -5799,7 +5800,7 @@ function renderPerf(container){
   
   // Training log: Today rings + YTD rings
   var ytdCycMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
-  var ytdRunMi = Math.round(yearRides.filter(function(r){return r.type==='run';}).reduce(function(a,r){return a+(r.distance||0);},0));
+  var ytdRunMi = Math.round(yearRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0));
   var sportDefs = [
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',color:'#FC4C02',
      todayV:parseFloat(todayCycMi),todayMax:50,todayUnit:'mi',
@@ -5945,26 +5946,26 @@ function renderPerf(container){
   var tsbC2=tsb2>=20?'#00C896':tsb2>=0?'#4D9FFF':tsb2>=-20?'#FC4C02':'#ef4444';
 
   // Three metric cards
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:6px;margin:0 12px 8px">';
   [
     {lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
     {lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
     {lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL − ATL',barW:null}
   ].forEach(function(card){
-    html+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center;border-left:3px solid '+card.c+';border-top-left-radius:0;border-bottom-left-radius:0">'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+card.lbl+'</div>'
-      +'<div style="font-size:24px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
-      +'<div style="font-size:11px;font-weight:700;color:'+card.c+';margin-top:3px;opacity:.8">'+card.sub+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
-      +(card.barW!==null?'<div style="height:4px;background:var(--s3);border-radius:2px;margin-top:6px"><div style="height:4px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':'')
+    html+='<div style="background:var(--s2);border-radius:10px;padding:8px 6px;text-align:center;border-left:3px solid '+card.c+';border-top-left-radius:0;border-bottom-left-radius:0">'
+      +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:2px">'+card.lbl+'</div>'
+      +'<div style="font-size:18px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
+      +'<div style="font-size:10px;font-weight:700;color:'+card.c+';margin-top:2px;opacity:.8">'+card.sub+'</div>'
+      +'<div style="font-size:9px;color:var(--t3);margin-top:1px">'+card.desc+'</div>'
+      +(card.barW!==null?'<div style="height:3px;background:var(--s3);border-radius:2px;margin-top:4px"><div style="height:3px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':'')
       +'</div>';
   });
   html+='</div>';
 
   // PMC Chart with labeled points
-  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
-  html+='<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:3px">8-week trend</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">8-week performance trend</div>';
+  html+='<div style="margin:0 12px 8px;background:var(--s1);border-radius:12px;border:1px solid var(--b1);padding:10px">';
+  html+='<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:2px">8-week trend</div>';
+  html+='<div style="font-size:10px;color:var(--t3);margin-bottom:6px">8-week performance trend</div>';
   html+=buildPMCChart(pmcData);
   html+='<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--t2)">'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#4D9FFF;display:inline-block;border-radius:2px"></span>Fitness (CTL)</span>'
@@ -10350,7 +10351,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         ifPct: IF2 ? Math.round(IF2*100) : null,
         avgTemp: avgTempF, maxTemp: maxTempF,
         gpsLats: gpsLats, gpsLons: gpsLons,
-        source: 'strava', stravaId: a.id
+        source: 'strava', stravaId: a.id, sportType: a.sport_type||a.type||'Ride'
       });
       newCount++;
     });
