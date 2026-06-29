@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782698474 -->
+<!DOCTYPE html><!-- v1782698656 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,17 +9624,40 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  var token = st.stravaToken;
-  if(!token) {
-    // Prompt for token
-    var t = prompt('Enter your Strava Access Token (get from Settings > Strava API or use stravaauth.com):');
-    if(!t) return;
-    st.stravaToken = t.trim();
-    sv();
-    token = st.stravaToken;
-  }
+  var STRAVA_CLIENT_ID = '260935';
+  var STRAVA_CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  // Use stored token or default
+  if(!st.stravaToken) st.stravaToken = 'b21aa88386ea43fe3c0ec3bc2921e79beb6cb303';
   toast('Fetching Strava activities...');
-  fetchStravaPage(token, 1, 0);
+  // Try current token first; if 401, refresh
+  fetch('https://www.strava.com/api/v3/athlete', {
+    headers: {'Authorization': 'Bearer ' + st.stravaToken}
+  }).then(function(r){
+    if(r.status === 401 && st.stravaRefreshToken) {
+      // Refresh the token
+      return fetch('https://www.strava.com/oauth/token', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          client_id: STRAVA_CLIENT_ID,
+          client_secret: STRAVA_CLIENT_SECRET,
+          grant_type: 'refresh_token',
+          refresh_token: st.stravaRefreshToken
+        })
+      }).then(function(r2){ return r2.json(); })
+        .then(function(d){
+          if(d.access_token){
+            st.stravaToken = d.access_token;
+            st.stravaRefreshToken = d.refresh_token;
+            sv();
+          }
+          fetchStravaPage(st.stravaToken, 1, 0);
+        });
+    }
+    fetchStravaPage(st.stravaToken, 1, 0);
+  }).catch(function(){
+    fetchStravaPage(st.stravaToken, 1, 0);
+  });
 }
 
 function fetchStravaPage(token, page, imported) {
