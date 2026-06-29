@@ -8254,7 +8254,29 @@ var RUN_ZONES = [
 var RUN_TYPES = ['Easy Run','Long Run','Tempo Run','Fartlek Run','Walk/Run','Hill Repeats','Race'];
 
 function showRun(){ renderRun(); }
-function getRuns(){ return st.runs||[]; }
+function getRuns(){
+  var rides = st.rides||[];
+  var stravaRuns = rides.filter(function(r){
+    return r.type==='run'||(r.source==='strava'&&/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||''));
+  }).map(function(r){
+    // Map Strava ride fields to run card fields
+    return {
+      date: r.date,
+      type: r.sportType||'Run',
+      distance: r.distance,
+      time: r.duration,
+      avgHR: r.avgHR,
+      maxHR: r.maxHR,
+      cadence: r.cadence,
+      elevation: r.elev,
+      name: r.name,
+      source: r.source
+    };
+  });
+  // Also include any manually logged runs
+  var manualRuns = st.runs||[];
+  return stravaRuns.concat(manualRuns);
+}
 
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
@@ -8405,12 +8427,7 @@ function renderRun(){
     scr.appendChild(shoeCard);
   }
 
-  // Log button
-  var logBtn=document.createElement('button');
-  logBtn.style.cssText='display:inline-flex;align-items:center;gap:6px;margin:0 16px 14px;padding:8px 16px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
-  logBtn.textContent='+ Log a Run';
-  logBtn.onclick=function(){ openRunLog(); };
-  scr.appendChild(logBtn);
+
 
   // Recent runs
   var histLbl=document.createElement('div');
