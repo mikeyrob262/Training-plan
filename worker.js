@@ -10148,53 +10148,47 @@ function showMoreSheet(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
   var overlay=document.createElement('div');
   overlay.id='more-sheet';
-  overlay.style.cssText='position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5)';
-  var sheet=document.createElement('div');
-  sheet.style.cssText='position:absolute;bottom:0;left:0;right:0;background:var(--s1);border-radius:22px 22px 0 0;padding:20px 16px 80px';
+  overlay.style.cssText='position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
-  var sections = [
-    {label:'Training', items:[
-      {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14', fn:'showProg',    c:'#4D9FFF'},
-      {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', fn:'showRun', c:'#00C896'},
-      {n:'Conditioning',  i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z', fn:'showCond',         c:'#FFB938'},
-      {n:'Core',          i:'M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z', fn:'showCore', c:'#ef4444'},
-      {n:'Mobility',      i:'M12 7v5l-3 5 M12 12l3 5 M9 17h6', fn:'showMob',          c:'#a855f7'},
-    ]},
-    {label:'Data', items:[
-      {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z', fn:'stravaBackfill',  c:'#FC4C02'},
-      {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', fn:'stravaFullResync', c:'#4D9FFF'},
-      {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15', fn:'showDropZone', c:'#00C896'},
-    ]},
-    {label:'AI', items:[
-      {n:'AI Coach',i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',fn:'showAICoach',c:'#a855f7'},
-    ]},
-    {label:'App', items:[
-      {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z', fn:'toggleDark', c:'#FFB938'},
-      {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', fn:'showSet',     c:'#4D9FFF'},
-    ]}
+  var items = [
+    {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
+    {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
+    {n:'Conditioning',  i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'showCond',         c:'#FFB938'},
+    {n:'Core',          i:'M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z',                                                  fn:'showCore',         c:'#ef4444'},
+    {n:'Mobility',      i:'M12 7v5l-3 5 M12 12l3 5 M9 17h6',                                                                       fn:'showMob',          c:'#a855f7'},
+    {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
+    {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
+    {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
+    {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
+    {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
+    {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
   ];
 
-  var h='<div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:16px">More</div>';
+  var card = document.createElement('div');
+  card.style.cssText='background:var(--s1);border-radius:24px;padding:20px 16px 16px;width:calc(100% - 48px);max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
 
-  sections.forEach(function(sec){
-    h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:8px">'+sec.label+'</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">';
-    sec.items.forEach(function(r){
-      var fn = r.fn==='stravaBackfill'
-        ? 'document.getElementById(\\'more-sheet\\').remove();stravaBackfill();'
-        : 'document.getElementById(\\'more-sheet\\').remove();'+r.fn+'();';
-      h+='<button onclick="'+fn+'" style="display:flex;flex-direction:column;align-items:flex-start;gap:10px;background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:14px;cursor:pointer;text-align:left;width:100%">'
-        +'<div style="width:34px;height:34px;border-radius:10px;background:'+r.c+'22;display:flex;align-items:center;justify-content:center">'
-        +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+r.c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+r.i+'"/></svg></div>'
-        +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+r.n+'</span>'
-        +'</button>';
-    });
-    h+='</div>';
+  var h='<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">'
+    +'<button onclick="document.getElementById(\\'more-sheet\\').remove()" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8592;</button>'
+    +'<div style="font-size:17px;font-weight:800;color:var(--t1)">More</div>'
+    +'</div>';
+
+  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
+  items.forEach(function(r){
+    var fn = r.fn==='stravaBackfill'
+      ? 'document.getElementById(\\'more-sheet\\').remove();stravaBackfill();'
+      : 'document.getElementById(\\'more-sheet\\').remove();'+r.fn+'();';
+    h+='<button onclick="'+fn+'" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;cursor:pointer;padding:6px 2px">'
+      +'<div style="width:52px;height:52px;border-radius:16px;background:'+r.c+'22;display:flex;align-items:center;justify-content:center;border:1.5px solid '+r.c+'44">'
+      +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+r.c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+r.i+'"/></svg>'
+      +'</div>'
+      +'<span style="font-size:10px;font-weight:600;color:var(--t2);text-align:center;line-height:1.2">'+r.n+'</span>'
+      +'</button>';
   });
+  h+='</div>';
 
-  sheet.innerHTML=h;
+  card.innerHTML=h;
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.appendChild(sheet);document.body.appendChild(overlay);
+  overlay.appendChild(card);document.body.appendChild(overlay);
 }
 
 
