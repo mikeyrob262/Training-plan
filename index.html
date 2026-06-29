@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699019 -->
+<!DOCTYPE html><!-- v1782699066 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,10 +9624,45 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  var DEFAULT_TOKEN = 'b21aa88386ea43fe3c0ec3bc2921e79beb6cb303';
-  var token = st.stravaToken || DEFAULT_TOKEN;
-  if(!st.stravaToken){ st.stravaToken = DEFAULT_TOKEN; sv(); }
-  // Remove existing strava rides so we re-import fresh with GPS
+  var CLIENT_ID = '260935';
+  var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  var token = st.stravaToken;
+
+  if(!token) {
+    // Launch OAuth
+    var authUrl = 'https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=https://training-plan.mgrobinson07.workers.dev&response_type=code&scope=activity:read_all&approval_prompt=auto';
+    var popup = window.open(authUrl, 'strava', 'width=600,height=700');
+    toast('Authorize Strava in the popup...');
+    var timer = setInterval(function(){
+      try {
+        var href = popup.location.href;
+        if(href.indexOf('code=') > -1) {
+          clearInterval(timer);
+          var code = href.match(/code=([^&]+)/)[1];
+          popup.close();
+          toast('Getting token...');
+          fetch('https://www.strava.com/oauth/token', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({client_id:CLIENT_ID, client_secret:CLIENT_SECRET, code:code, grant_type:'authorization_code'})
+          }).then(function(r){return r.json();}).then(function(d){
+            if(d.access_token){
+              st.stravaToken = d.access_token;
+              st.stravaRefreshToken = d.refresh_token;
+              sv();
+              if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
+              toast('Fetching activities...');
+              fetchStravaPage(d.access_token, 1, 0);
+            } else { toast('Token error: ' + JSON.stringify(d)); }
+          });
+        }
+        if(popup.closed){ clearInterval(timer); }
+      } catch(e){}
+    }, 500);
+    return;
+  }
+
+  // Token exists - use it
   if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
   toast('Fetching Strava activities...');
   fetchStravaPage(token, 1, 0);
@@ -9638,7 +9673,8 @@ function fetchStravaPage(token, page, imported) {
     headers: { 'Authorization': 'Bearer ' + token }
   })
   .then(function(r){
-    if(r.status === 401){ st.stravaToken=null; sv(); toast('Strava token expired — re-enter in Sync Strava'); return null; }
+    if(r.status === 401){ st.stravaToken=null; sv(); toast('Strava token expired — need OAuth'); return null; }
+    if(!r.ok){ toast('Strava HTTP ' + r.status); return null; }
     return r.json();
   })
   .then(function(acts){
