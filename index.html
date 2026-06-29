@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782739581 -->
+<!DOCTYPE html><!-- v1782740144 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6040,6 +6040,20 @@ function renderPerf(container){
   }
 
   container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'</div>';
+  // Wire drag and drop zone immediately after DOM insert
+  (function(){
+    var dz=document.getElementById('ride-drop-zone');
+    if(!dz) return;
+    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';dz.style.color='#FC4C02';});
+    dz.addEventListener('dragleave',function(){dz.style.borderColor='';dz.style.color='';});
+    dz.addEventListener('drop',function(e){
+      e.preventDefault();dz.style.borderColor='';dz.style.color='';
+      var files=e.dataTransfer.files;
+      if(!files.length) return;
+      bulkImportTCX({files:files,value:''});
+    });
+    dz.addEventListener('click',function(){showImportFromMore();});
+  })();
 
   // If no rides, auto-refresh after Firebase syncs
   if((st.rides||[]).length===0){
