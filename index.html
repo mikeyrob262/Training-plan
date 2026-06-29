@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782697348 -->
+<!DOCTYPE html><!-- v1782697922 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6616,13 +6616,42 @@ function bulkImportTCX(input){
       input.value='';
       return;
     }
-    processTCX(files[idx++], function(err, type){
+    var curFile = files[idx++];
+    var curExt = (curFile.name||'').split('.').pop().toLowerCase();
+    if(curExt === 'fit'){
+      var fitReader = new FileReader();
+      fitReader.onload = function(fe){
+        window.parseFitFile(fe.target.result, function(err2, data){
+          if(err2){ failed++; setTimeout(next,10); return; }
+          var name2 = (curFile.name||'').replace(/\.fit$/i,'').replace(/_/g,' ') || 'FIT Activity';
+          if(!data.date) data.date = getTodayKey();
+          var ride2 = {
+            name: name2, date: data.date, duration: data.duration, distance: data.distance,
+            avgPwr: data.avgPwr, np: data.np, hr: data.hr, tss: data.tss, elev: data.elev,
+            calories: data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
+            z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
+            lats: data.lats && data.lats.length>10 ? data.lats : null,
+            lons: data.lons && data.lons.length>10 ? data.lons : null,
+            peak20: data.peak20, lrBalance: data.lrBalance, source:'fit'
+          };
+          if(!st.rides) st.rides=[];
+          var dup=st.rides.find(function(r){return r.date===ride2.date && Math.abs((r.distance||0)-(ride2.distance||0))<0.5;});
+          if(dup){ skipped++; setTimeout(next,10); return; }
+          st.rides.push(ride2);
+          done++;
+          setTimeout(next,10);
+        });
+      };
+      fitReader.readAsArrayBuffer(curFile);
+    } else {
+    processTCX(curFile, function(err, type){
       if(!err && type==='run') doneRuns++;
       else if(!err) done++;
       else if(err==='dup') skipped++;
       else failed++;
       setTimeout(next, 10);
     });
+    }
   }
   next();
 }
