@@ -3298,6 +3298,12 @@ function openPk(){
   html+='<div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;opacity:.6;border-top:1px dashed var(--b2)" onclick="GW('+(maxW+1)+');closePk()">'
     +'<span style="font-size:13px;font-weight:700;color:var(--t2)">+ Add Week '+(maxW+1)+'</span></div>';
   grid.innerHTML=html;
+  // Add transparent overlay to catch outside taps
+  var ol=document.getElementById('pk-overlay');if(ol)ol.remove();
+  var ol2=document.createElement('div');ol2.id='pk-overlay';
+  ol2.style.cssText='position:fixed;inset:0;z-index:199';
+  ol2.onclick=closePk;
+  document.body.appendChild(ol2);
   document.getElementById('pk-sheet').classList.add('open');
   document.getElementById('pk-bg').classList.add('open');
   // Scroll to current week
@@ -3307,7 +3313,11 @@ function openPk(){
   },50);
 }
 
-function closePk(){document.getElementById('pk-sheet').classList.remove('open');document.getElementById('pk-bg').classList.remove('open');}
+function closePk(){
+  var s=document.getElementById('pk-sheet');if(s)s.classList.remove('open');
+  var b=document.getElementById('pk-bg');if(b)b.classList.remove('open');
+  var ol=document.getElementById('pk-overlay');if(ol)ol.remove();
+}
 
 function doSwap(w,idx,btn){
   var existing=document.getElementById('sp'+w+'_'+idx);
