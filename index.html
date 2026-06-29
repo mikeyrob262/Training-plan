@@ -9901,17 +9901,18 @@ function showAICoach(){
       +', CTL:'+(st.iculast&&st.iculast.ctl||57)+', ATL:'+(st.iculast&&st.iculast.atl||75)
       +'. Recent rides: '+rides.map(function(r){return r.name+' ('+r.date+', '+r.distance+'mi, NP:'+r.np+'W, TSS:'+r.tss+')';}).join('; ');
     
-    fetch('https://api.anthropic.com/v1/messages',{
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         model:'claude-sonnet-4-6',
-        max_tokens:400,
-        system:'You are a personal cycling and endurance coach. Be concise, specific, and motivating. Use the athlete data provided.',
+        max_tokens:500,
+        system:'You are a personal cycling and endurance coach. Be concise, specific, and motivating.',
         messages:[{role:'user',content:'Athlete context: '+context+' Question: '+q}]
       })
     }).then(function(r){return r.json();}).then(function(d){
-      thinkBub.innerHTML='<b style="color:#a855f7">Coach</b><br>'+(d.content&&d.content[0]&&d.content[0].text||'Sorry, try again');
+      var text = d.content&&d.content[0]&&d.content[0].text;
+      thinkBub.innerHTML='<b style="color:#a855f7">Coach</b><br>'+(text||JSON.stringify(d.error)||'Sorry, try again');
       msgs.scrollTop=msgs.scrollHeight;
     }).catch(function(){thinkBub.textContent='Error — check connection';});
   }
