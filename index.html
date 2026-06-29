@@ -10365,8 +10365,9 @@ function fetchStravaPage(token, page, imported, forceAll) {
       toast('Strava sync done: ' + imported + ' imported');
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
     } else {
-      toast('Page ' + page + '...');
-      setTimeout(function(){ fetchStravaPage(token, page+1, imported); }, 300);
+      sv(); // save after every page
+      toast('Page ' + page + ': ' + imported + ' imported...');
+      setTimeout(function(){ fetchStravaPage(token, page+1, imported, forceAll); }, 500);
     }
   })
   .catch(function(e){ toast('Strava error: '+e.message); });
