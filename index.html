@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782752215 -->
+<!DOCTYPE html><!-- v1782752947 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -8904,16 +8904,20 @@ function getWeekKey(d){
 }
 
 function getWeekStartDate(w){
-  // Week 1 starts on the Monday of the current week
-  // Each subsequent week adds 7 days
-  var today = new Date();
-  var dow = today.getDay(); // 0=Sun, 1=Mon...
-  var monday = new Date(today);
-  monday.setDate(today.getDate() - (dow===0?6:dow-1)); // go back to Monday
-  monday.setHours(0,0,0,0);
-  // Week w=1 is this week, w=2 is next week, etc.
-  monday.setDate(monday.getDate() + (w-1)*7);
-  return monday;
+  // Plan start date = June 9, 2026 (Week 1 Monday)
+  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  planStart.setHours(0,0,0,0);
+  var d = new Date(planStart);
+  d.setDate(d.getDate() + (w-1)*7);
+  return d;
+}
+
+function getCurrentPlanWeek(){
+  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  planStart.setHours(0,0,0,0);
+  var today = new Date(); today.setHours(0,0,0,0);
+  var diff = Math.floor((today - planStart) / (7*24*60*60*1000));
+  return Math.max(1, Math.min(17, diff + 1));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10034,6 +10038,9 @@ window.onload = function(){
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
+  // Set to current plan week
+  cw = getCurrentPlanWeek();
+  GW(cw);
   document.getElementById('btn-pv').onclick = function(){ GW(cw-1); };
   document.getElementById('btn-nx').onclick = function(){ GW(cw+1); };
   document.getElementById('btn-wt').onclick = openPk;
