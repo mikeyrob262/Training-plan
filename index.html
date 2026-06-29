@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782752975 -->
+<!DOCTYPE html><!-- v1782753112 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3062,6 +3062,7 @@ function fbPull(silent){
       for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
       try{updDots();}catch(e){}
       try{restoreExtraSessions();}catch(e){}
+      try{cw=getCurrentPlanWeek();GW(cw);}catch(e){}
       if(!silent) toast('OK Synced!');
     } else {
       if(!silent) toast('No cloud data yet');
@@ -10038,9 +10039,6 @@ window.onload = function(){
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
-  // Set to current plan week
-  cw = getCurrentPlanWeek();
-  GW(cw);
   document.getElementById('btn-pv').onclick = function(){ GW(cw-1); };
   document.getElementById('btn-nx').onclick = function(){ GW(cw+1); };
   document.getElementById('btn-wt').onclick = openPk;
