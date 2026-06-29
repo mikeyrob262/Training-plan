@@ -5972,7 +5972,7 @@ function renderPerf(container){
   html+='<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:2px">8-week trend</div>';
   html+='<div style="font-size:10px;color:var(--t3);margin-bottom:6px">8-week performance trend</div>';
   html+=buildPMCChart(pmcData);
-  html+='<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:11px;color:var(--t2)">'
+  html+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:10px;color:var(--t2)">'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#4D9FFF;display:inline-block;border-radius:2px"></span>Fitness (CTL)</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#FF7A45;display:inline-block;border-radius:2px"></span>Fatigue (ATL)</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#00C896;display:inline-block;border-radius:2px"></span>Form (TSB)</span>'
@@ -6459,12 +6459,12 @@ function computePMC(rides){
 }
 
 function buildPMCChart(data){
-  var W = 360, H = 200;
+  var W = 360, H = 140;
   var PAD = {top:20, right:40, bottom:30, left:36};
   var pts = data.slice(-52); // last year
   if(pts.length < 2){
     // Not enough data — show placeholder message
-    return '<div style="height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
+    return '<div style="height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
       +'<div style="font-size:28px">📈</div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--t2)">Building your fitness curve</div>'
       +'<div style="font-size:12px;color:var(--t3);text-align:center;padding:0 20px">Log rides to see your Fitness, Fatigue, and Form trend over time</div>'
