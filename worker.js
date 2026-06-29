@@ -8270,7 +8270,9 @@ function getRuns(){
       cadence: r.cadence,
       elevation: r.elev,
       name: r.name,
-      source: r.source
+      source: r.source,
+      gpsLats: r.gpsLats,
+      gpsLons: r.gpsLons
     };
   });
   // Also include any manually logged runs
@@ -8443,7 +8445,7 @@ function renderRun(){
       +'<div style="font-size:12px;color:var(--t3)">Tap Log a Run to get started</div>';
     scr.appendChild(empty);
   } else {
-    var sorted=runs.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    var sorted=runs.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,4);
     sorted.forEach(function(r,ri){
       var rcard=document.createElement('div');
       rcard.style.cssText='margin:0 16px 8px;background:var(--s2);border-radius:16px;border:1px solid var(--b1);padding:14px';
