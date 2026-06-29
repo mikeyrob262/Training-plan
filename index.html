@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782754117 -->
+<!DOCTYPE html><!-- v1782754211 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3275,6 +3275,7 @@ function SC(w,f,v){ws(w).ci[f]=v;sv();}
 function openPk(){
   var maxW=Math.max(17,cw+4);
   var grid=document.getElementById('picker-grid');
+  if(!grid){ var sheet=document.getElementById('pk-sheet'); grid=document.createElement('div'); grid.id='picker-grid'; grid.className='pk-grid'; sheet.appendChild(grid); }
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var html='';
   for(var w=1;w<=maxW;w++){
