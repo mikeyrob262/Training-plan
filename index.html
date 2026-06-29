@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699803 -->
+<!DOCTYPE html><!-- v1782699944 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9626,9 +9626,10 @@ function decodePolyline(str) {
 function stravaBackfill() {
   var CLIENT_ID = '260935';
   var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  // Open popup IMMEDIATELY on user tap — before any async code
   var authUrl = 'https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=http://localhost&response_type=code&scope=activity:read_all&approval_prompt=force';
-  var popup = window.open(authUrl, 'strava_auth', 'width=600,height=700,noopener=0');
-  if(!popup){ toast('Enable popups then tap Sync Strava again'); return; }
+  var popup = window.open(authUrl, 'strava_auth', 'width=600,height=700');
+  if(!popup){ toast('Allow popups for this site then tap Sync Strava'); return; }
   toast('Authorize Strava in the popup...');
   var timer = setInterval(function(){
     try {
