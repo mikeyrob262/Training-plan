@@ -5832,9 +5832,8 @@ function renderPerf(container){
     // Scrollable container
     var showAll=false;
     var visibleRides=sorted.slice(0,4);
-    html+='<div id="ride-history-list" style="margin:0 16px 16px;display:flex;flex-direction:column;gap:10px">';
-    var rideLimit=window._showAllRides?30:4;
-    sorted.slice(0,rideLimit).forEach(function(r,si){
+    html+='<div id="ride-history-list" style="margin:0 16px 16px;max-height:520px;overflow-y:auto;border-radius:14px">';
+    sorted.slice(0,30).forEach(function(r,si){
       var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
       var ifVal=r.np&&FTP?(r.np/FTP*100).toFixed(0):null;
       var rIdx=st.rides.indexOf(r);
@@ -5844,7 +5843,7 @@ function renderPerf(container){
 
       var tssBadgeC=tss>=150?'rgba(239,68,68,.12)':tss>=80?'rgba(252,76,2,.12)':tss>=40?'rgba(55,138,221,.12)':'rgba(0,200,150,.12)';
       var tssTxtC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
-      html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
+      html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden;margin-bottom:10px">'
         +'<div style="padding:12px 12px 10px">';
 
       // Header
@@ -5895,10 +5894,6 @@ function renderPerf(container){
     });
     html+='</div>';
     if(sorted.length>4) html+='<div style="text-align:center;padding:8px 16px 16px"><button onclick="var l=document.getElementById(\'ride-history-list\');l.querySelectorAll(\'div[style*=border-radius]\').forEach(function(el,i){if(i>=4)el.style.display=el.style.display===\'none\'?\'\':\'none\';});this.textContent=this.textContent===\'Show More\'?\'Show Less\':\'Show More\';" style="background:var(--s2);border:1px solid var(--b2);color:var(--t2);font-size:13px;font-weight:600;padding:8px 20px;border-radius:20px;cursor:pointer">Show More</button></div>';
-    if(sorted.length>4){
-      var label=window._showAllRides?'Show Less':'Show More';
-      html+='<div style="text-align:center;padding:8px 16px 16px"><button onclick="window._showAllRides=!window._showAllRides;renderPerf();" style="background:var(--s2);border:1px solid var(--b2);color:var(--t2);font-size:13px;font-weight:600;padding:8px 20px;border-radius:20px;cursor:pointer">'+label+'</button></div>';
-    }
     html+='</div>';
   }
 
