@@ -5784,7 +5784,7 @@ function renderPerf(container){
     if(p.length!==3) return d;
     return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
   }
-  function isCyc(r){ if(r.source==='strava') return r.sportType ? /^(Ride|VirtualRide|EBikeRide|GravelRide|MountainBikeRide|Handcycle)$/i.test(r.sportType) : false; return !r.type||r.type==='ride'||r.source==='fit'||r.source==='intervals'; }
+  function isCyc(r){ if(r.source==='strava'){ var st2=r.sportType||''; return !st2||/^(Ride|VirtualRide|EBikeRide|GravelRide|MountainBikeRide|Handcycle)$/i.test(st2); } return !r.type||r.type==='ride'||r.source==='fit'||r.source==='intervals'; }
 
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
