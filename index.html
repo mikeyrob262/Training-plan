@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782695891 -->
+<!DOCTYPE html><!-- v1782695944 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5832,7 +5832,7 @@ function renderPerf(container){
     // Scrollable container
     var showAll=false;
     var visibleRides=sorted.slice(0,4);
-    html+='<div id="ride-history-list" style="margin:0 16px 16px;height:520px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)">';
+    html+='<div id="ride-history-list" style="margin:0 16px 16px;height:360px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)">';
     sorted.slice(0,30).forEach(function(r,si){
       var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
       var ifVal=r.np&&FTP?(r.np/FTP*100).toFixed(0):null;
