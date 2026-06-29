@@ -5784,7 +5784,7 @@ function renderPerf(container){
     if(p.length!==3) return d;
     return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
   }
-  function isCyc(r){ return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals'; }
+  function isCyc(r){ if(r.source==='strava') return /^(Ride|VirtualRide|EBikeRide|GravelRide|MountainBikeRide|Handcycle)$/i.test(r.sportType||'Ride'); return !r.type||r.type==='ride'||r.source==='fit'||r.source==='intervals'; }
 
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
@@ -10352,7 +10352,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         ifPct: IF2 ? Math.round(IF2*100) : null,
         avgTemp: avgTempF, maxTemp: maxTempF,
         gpsLats: gpsLats, gpsLons: gpsLons,
-        source: 'strava', stravaId: a.id
+        source: 'strava', stravaId: a.id, sportType: a.sport_type||a.type||'Ride'
       });
       newCount++;
     });
