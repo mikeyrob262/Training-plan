@@ -3131,8 +3131,8 @@ function updHdr(){
   var weekStart=getWeekStartDate(cw);
   var dateStr=days[weekStart.getDay()]+' '+months[weekStart.getMonth()]+' '+weekStart.getDate();
   document.getElementById('btn-wt').innerHTML='Week '+cw+' . '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
-  document.getElementById('btn-pv').disabled=false;
-  document.getElementById('btn-nx').disabled=false;
+  var pv=document.getElementById('btn-pv');if(pv)pv.disabled=false;
+  var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
 
 function GW(w){
