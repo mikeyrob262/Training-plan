@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699565 -->
+<!DOCTYPE html><!-- v1782699803 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9624,9 +9624,37 @@ function decodePolyline(str) {
 }
 
 function stravaBackfill() {
-  if(st.rides) st.rides = st.rides.filter(function(r){ return r.source !== 'strava'; });
-  toast('Fetching Strava activities...');
-  fetchStravaPage('b21aa88386ea43fe3c0ec3bc2921e79beb6cb303', 1, 0);
+  var CLIENT_ID = '260935';
+  var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  var authUrl = 'https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=http://localhost&response_type=code&scope=activity:read_all&approval_prompt=force';
+  var popup = window.open(authUrl, 'strava_auth', 'width=600,height=700,noopener=0');
+  if(!popup){ toast('Enable popups then tap Sync Strava again'); return; }
+  toast('Authorize Strava in the popup...');
+  var timer = setInterval(function(){
+    try {
+      var href = popup.location.href;
+      if(href.indexOf('code=') > -1){
+        clearInterval(timer);
+        var code = href.match(/code=([^&]+)/)[1];
+        popup.close();
+        toast('Getting token...');
+        fetch('https://www.strava.com/oauth/token', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,code:code,grant_type:'authorization_code'})
+        }).then(function(r){return r.json();}).then(function(d){
+          if(!d.access_token){toast('Auth failed: '+(d.message||'unknown'));return;}
+          st.stravaToken=d.access_token;
+          st.stravaRefreshToken=d.refresh_token;
+          sv();
+          if(st.rides) st.rides=st.rides.filter(function(r){return r.source!=='strava';});
+          toast('Fetching activities...');
+          fetchStravaPage(d.access_token,1,0);
+        });
+      }
+      if(popup.closed) clearInterval(timer);
+    } catch(e){}
+  },500);
 }
 
 function fetchStravaPage(token, page, imported) {
