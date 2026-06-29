@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782740755 -->
+<!DOCTYPE html><!-- v1782741171 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6684,14 +6684,18 @@ function bulkImportTCX(input){
             // Merge FIT data into existing ride (overwrite with richer fields)
             var existing=st.rides[dupIdx];
             st.rides[dupIdx]=Object.assign({},existing,{
-              peak20:ride2.peak20||existing.peak20,
+              max20:ride2.max20||existing.max20,
+              maxPwr:ride2.maxPwr||existing.maxPwr,
               lrBalance:ride2.lrBalance||existing.lrBalance,
               z1s:ride2.z1s||existing.z1s, z2s:ride2.z2s||existing.z2s,
               z3s:ride2.z3s||existing.z3s, z4s:ride2.z4s||existing.z4s,
               z5s:ride2.z5s||existing.z5s, z6s:ride2.z6s||existing.z6s,
               np:ride2.np||existing.np, avgPwr:ride2.avgPwr||existing.avgPwr,
+              avgHR:ride2.avgHR||existing.avgHR,
+              maxHR:ride2.maxHR||existing.maxHR,
               tss:ride2.tss||existing.tss, elev:ride2.elev||existing.elev,
               calories:ride2.calories||existing.calories,
+              workKj:ride2.workKj||existing.workKj,
               lats:ride2.lats||existing.lats, lons:ride2.lons||existing.lons
             });
             done++; setTimeout(next,10); return;
