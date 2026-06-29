@@ -5790,13 +5790,15 @@ function renderPerf(container){
   }
   // Weekly stats
   var weekRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=monStr;});
-  var weekMi = weekRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var weekCyclingRides = weekRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals';});
+  var weekMi = weekCyclingRides.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
   var weekMiGoal = st.weeklyMileageGoal || 100;
   var weekMiPct = Math.min(100, Math.round(weekMi/weekMiGoal*100));
   
   // Year stats
   var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
-  var yearMi = Math.round(yearRides.reduce(function(a,r){return a+(r.distance||0);},0));
+  var yearCycling = yearRides.filter(function(r){return !r.type||r.type==='ride'||r.source==='strava'||r.source==='fit'||r.source==='intervals';});
+  var yearMi = Math.round(yearCycling.reduce(function(a,r){return a+(r.distance||0);},0));
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
   
