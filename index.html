@@ -5474,9 +5474,16 @@ function openFoodForMeal(meal){
     clearTimeout(timer);
     var q = this.value.trim().toLowerCase();
     timer = setTimeout(function(){
-      var local = q ? CF.filter(function(f){return f.n.toLowerCase().indexOf(q.toLowerCase())>=0;}) : CF;
+      var allLocal = CF.concat(LOCAL_FOODS);
+      var local = [];
+      if(q){
+        var ql = q.toLowerCase();
+        var starts = allLocal.filter(function(f){return f.n.toLowerCase().startsWith(ql);});
+        var contains = allLocal.filter(function(f){return !f.n.toLowerCase().startsWith(ql) && f.n.toLowerCase().indexOf(ql)>=0;});
+        local = starts.concat(contains);
+      } else { local = allLocal; }
       if(local.length || !q){
-        renderFoodRows(foodList, local);
+        renderFoodRows(foodList, local.slice(0,30));
       } else {
         foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
         // Search USDA FoodData Central via Cloudflare Worker
