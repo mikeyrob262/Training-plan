@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782739480 -->
+<!DOCTYPE html><!-- v1782739581 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6647,7 +6647,11 @@ function bulkImportTCX(input){
             z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
             lats: data.lats && data.lats.length>10 ? data.lats : null,
             lons: data.lons && data.lons.length>10 ? data.lons : null,
-            peak20: data.peak20, lrBalance: data.lrBalance, source:'fit'
+            max20: data.peak20||null, maxPwr: data.maxPwr||null,
+            workKj: data.workKj||null,
+            avgHR: data.hr||null, maxHR: data.maxHR||null,
+            ifPct: (data.np&&data.ftp)?Math.round((data.np/data.ftp)*100):null,
+            lrBalance: data.lrBalance, source:'fit'
           };
           if(!st.rides) st.rides=[];
           var dupIdx=-1;
@@ -7192,13 +7196,17 @@ function importRideFile(input){
             if(dupIdx2>=0){
               var ex2=st.rides[dupIdx2];
               st.rides[dupIdx2]=Object.assign({},ex2,{
-                peak20:ride2.peak20||ex2.peak20, lrBalance:ride2.lrBalance||ex2.lrBalance,
+                max20:ride2.max20||ex2.max20, maxPwr:ride2.maxPwr||ex2.maxPwr,
+                lrBalance:ride2.lrBalance||ex2.lrBalance,
                 z1s:ride2.z1s||ex2.z1s, z2s:ride2.z2s||ex2.z2s, z3s:ride2.z3s||ex2.z3s,
                 z4s:ride2.z4s||ex2.z4s, z5s:ride2.z5s||ex2.z5s, z6s:ride2.z6s||ex2.z6s,
                 np:ride2.np||ex2.np, avgPwr:ride2.avgPwr||ex2.avgPwr,
                 tss:ride2.tss||ex2.tss, elev:ride2.elev||ex2.elev,
                 calories:ride2.calories||ex2.calories,
+                workKj:ride2.workKj||ex2.workKj,
+                ifPct:ride2.ifPct||ex2.ifPct,
                 lats:ride2.lats||ex2.lats, lons:ride2.lons||ex2.lons,
+                avgHR:ride2.avgHR||ex2.avgHR,
                 maxHR:ride2.maxHR||ex2.maxHR, cadence:ride2.cadence||ex2.cadence
               });
               sv();
@@ -9779,14 +9787,17 @@ function fetchStravaPage(token, page, imported) {
           if(decoded.lats.length > 5){ gpsLats=decoded.lats; gpsLons=decoded.lons; }
         } catch(e){}
       }
+      var movDur = a.moving_time||a.elapsed_time||0;
       var IF2 = (np && ftp) ? np/ftp : null;
       var avgTempF = a.average_temp ? Math.round(a.average_temp*9/5+32) : null;
       var maxTempF = a.max_temp ? Math.round(a.max_temp*9/5+32) : null;
+      var fmtDur = (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(movDur);
       st.rides.push({
         name: a.name||'Strava Activity',
-        date: dateStr, duration: dur, distance: distMi,
-        avgPwr: avgPwr, np: np, hr: a.average_heartrate||null,
-        maxHR: a.max_heartrate||null,
+        date: dateStr, duration: fmtDur, distance: distMi,
+        avgPwr: avgPwr, np: np,
+        avgHR: a.average_heartrate ? Math.round(a.average_heartrate) : null,
+        maxHR: a.max_heartrate ? Math.round(a.max_heartrate) : null,
         cadence: a.average_cadence ? Math.round(a.average_cadence) : null,
         tss: tss, elev: elev,
         calories: a.calories||null,
