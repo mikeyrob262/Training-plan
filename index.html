@@ -5813,16 +5813,18 @@ function renderPerf(container){
   
   // Sport icons row
   html += '<div style="display:flex;gap:8px;margin-bottom:14px">';
-  var sports = [
-    {icon:'🚴',label:'Cycling',count:weekCycling.length,mi:weekCycling.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
-    {icon:'🏃',label:'Running',count:weekRun.length,mi:weekRun.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
-    {icon:'🏊',label:'Swim',count:weekSwim.length,mi:weekSwim.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi'},
-    {icon:'💪',label:'Strength',count:weekStrength.length,mi:weekStrength.length+'x'}
+  var sportsData = [
+    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',count:weekCycling.length,val:weekCycling.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#FC4C02'},
+    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',count:weekRun.length,val:weekRun.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#4D9FFF'},
+    {path:'M2 12s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M2 17s2-3 5-3 5 3 5 3 2-3 5-3 3 3 5 3M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM8 7l4-2 4 2v5',label:'Swim',count:weekSwim.length,val:weekSwim.reduce(function(a,r){return a+(r.distance||0);},0).toFixed(0)+'mi',color:'#00C896'},
+    {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',count:weekStrength.length,val:weekStrength.length+'x',color:'#a855f7'}
   ];
-  sports.forEach(function(s){
-    html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:10px;padding:8px 4px;border:1px solid var(--b1)'+(s.count>0?';border-color:rgba(252,76,2,.3)':'')+'">'
-      +'<div style="font-size:20px">'+s.icon+'</div>'
-      +'<div style="font-size:10px;font-weight:700;color:'+(s.count>0?'#FC4C02':'var(--t3)')+'">'+s.mi+'</div>'
+  sportsData.forEach(function(s){
+    var active = s.count > 0;
+    var col = active ? s.color : 'var(--t3)';
+    html += '<div style="flex:1;text-align:center;background:var(--s1);border-radius:12px;padding:10px 4px 8px;border:1px solid '+(active?s.color+'44':'var(--b1)')+'">'
+      +'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
+      +'<div style="font-size:11px;font-weight:700;color:'+col+';margin-top:4px">'+s.val+'</div>'
       +'</div>';
   });
   html += '</div>';
