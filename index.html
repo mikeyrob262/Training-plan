@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782743430 -->
+<!DOCTYPE html><!-- v1782743816 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3790,7 +3790,7 @@ function showProg(){
   var raceDays=nextRace?Math.max(0,Math.round((new Date(nextRace.date)-now)/86400000)):null;
 
   // Build HTML
-  var h='<div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)">'    +'<button class="back-btn" onclick="showTrain()">&#8592; Back</button>'    +'<div style="font-size:19px;font-weight:800;color:var(--t1)">Progress</div></div>';
+  var h='<div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)">'    +''    +'<div style="font-size:19px;font-weight:800;color:var(--t1)">Progress</div></div>';
 
   h+='<div style="padding:12px 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Consistency</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px">';
@@ -3889,7 +3889,7 @@ function sCT(i){
 function showSet(){
   var total=0;for(var w=1;w<=17;w++)total+=Object.values(ws(w).wo).filter(Boolean).length;
   var html='<div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)">'
-    +'<button class="back-btn" onclick="showTrain()">&#8592; Back</button>'
+    +''
     +'<div style="font-size:19px;font-weight:800">Settings</div></div>';
   html+='<div style="background:var(--s1);margin:14px 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Profile</div>'
@@ -4844,7 +4844,7 @@ function renderNutr(){
 
   // Header
   h+='<div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--b1)">';
-  h+='<button class="back-btn" id="nutr-back">← Back</button>';
+  // back button removed
   h+='<div style="font-size:19px;font-weight:800">Nutrition</div>';
   h+='<div style="width:60px"></div></div>';
 
@@ -5636,7 +5636,7 @@ function showPerf(){
   var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'
-    +'<button onclick="closePerf()" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">✕ Close</button>';
+    +'';
   var body=document.createElement('div');
   body.id='perf-body';
   body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
@@ -7347,7 +7347,7 @@ function openRideDetail(idx){
     dtStr = r.date;
   }
 
-  hdr.innerHTML = '<button onclick="document.getElementById(&quot;ride-detail-modal&quot;).remove();document.body.style.overflow=&quot;&quot;" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">← Back</button>'
+  hdr.innerHTML = ''
     + '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Ride') + '</div>'
     + '<div style="font-size:11px;color:var(--t3);margin-top:1px">' + dtStr + '</div></div>'
     + '<button onclick="renameRide('+idx+')" style="background:var(--s2);border:1px solid var(--b1);color:var(--orange);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">Rename</button>';
@@ -8041,7 +8041,7 @@ function renderRun(){
   var backBtn2=document.createElement('button');
   backBtn2.className='back-btn';
   backBtn2.style.cssText='margin:16px';
-  backBtn2.textContent='← Back';
+  backBtn2.style.display='none';
   backBtn2.onclick=function(){var s=document.getElementById('RUN-SCREEN');if(s)s.remove();};
   scr.appendChild(backBtn2);
 
@@ -8867,7 +8867,7 @@ function renderCond(){
   var backBtn=document.createElement('button');
   backBtn.className='back-btn';
   backBtn.style.cssText='margin:16px';
-  backBtn.textContent='← Back';
+  backBtn.style.display='none';
   backBtn.onclick=function(){scr.remove();};
   scr.appendChild(backBtn);
 
@@ -9509,7 +9509,7 @@ function renderMob(){
   // Header
   var hdr=document.createElement('div');
   hdr.style.cssText='padding:16px 16px 0;';
-  hdr.innerHTML='<button class="back-btn" id="mob-back">← Back</button>';
+  hdr.innerHTML='';
   container.appendChild(hdr);
   document.getElementById('mob-back').onclick=function(){showScreen('TRAIN');};
 
