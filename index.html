@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782745176 -->
+<!DOCTYPE html><!-- v1782751434 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5628,6 +5628,48 @@ function renderFoodRows(container, list){
 
 // -- PERFORMANCE DASHBOARD --------------------------------------------------
 
+function showAnalytics(){
+  var old=document.getElementById('perf-modal');if(old)old.remove();
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
+  var overlay=document.createElement('div');
+  overlay.id='perf-modal';
+  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  var hdr=document.createElement('div');
+  var isDarkHdr=document.body.classList.contains('dark');
+  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';';
+  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Analytics</div>';
+  var body=document.createElement('div');
+  body.id='perf-body';
+  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
+  overlay.appendChild(hdr);overlay.appendChild(body);
+  document.body.appendChild(overlay);
+  document.body.style.overflow='hidden';
+  renderPerf(body);
+}
+
+function showActivities(){
+  var old=document.getElementById('perf-modal');if(old)old.remove();
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var ab=document.getElementById('bnav-activities');if(ab)ab.classList.add('active');
+  var overlay=document.createElement('div');
+  overlay.id='perf-modal';
+  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  var hdr=document.createElement('div');
+  var isDarkHdr=document.body.classList.contains('dark');
+  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';';
+  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Activities</div>';
+  var body=document.createElement('div');
+  body.id='perf-body';
+  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
+  overlay.appendChild(hdr);overlay.appendChild(body);
+  document.body.appendChild(overlay);
+  document.body.style.overflow='hidden';
+  renderRideList(body);
+}
+
 function showPerf(){
   var old=document.getElementById('perf-modal');
   if(old) old.remove();
@@ -6199,6 +6241,50 @@ function renderPerf(container){
     });
     dz.addEventListener('click',function(){showImportFromMore();});
   }, 200);
+}
+
+function renderRideList(container){
+  if(!container) return;
+  var rides=(st.rides||[]).slice().reverse();
+  var html='';
+  // Drop zone
+  html+='<div id="ride-drop-zone" style="margin:12px 16px 8px;border:2px dashed #FC4C02;border-radius:12px;padding:14px;text-align:center;color:#FC4C02;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">⬆ Drop FIT / TCX files here to import</div>';
+  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualRide()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
+  var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
+  rides.forEach(function(r,idx){
+    var realIdx=st.rides.length-1-idx;
+    var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
+    var hasZones=r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s;
+    var totalZ=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
+    html+='<div onclick="openRideDetail('+realIdx+')" style="margin:6px 10px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;cursor:pointer">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+r.name+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">'+r.date+'</div></div>';
+    if(r.tss) html+='<div style="background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.3);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#2980B9">TSS '+r.tss+'</div>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    if(rwkg) html+='<div style="background:rgba(252,76,2,.1);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;color:#FC4C02">'+rwkg+' W/kg</div>';
+    if(r.duration) html+='<div style="font-size:12px;color:var(--t2)">⏱ '+r.duration+'</div>';
+    if(r.distance) html+='<div style="font-size:12px;color:var(--t2)">'+r.distance+' mi</div>';
+    if(r.np) html+='<div style="font-size:12px;font-weight:600;color:#FC4C02">'+r.np+'W NP</div>';
+    if(r.avgHR) html+='<div style="font-size:12px;color:#ef4444">♥ '+r.avgHR+'</div>';
+    html+='</div>';
+    if(hasZones&&totalZ>0){
+      var zc=['#60a5fa','#34d399','#fbbf24','#f97316','#ef4444','#a855f7'];
+      var zv=[r.z1s||0,r.z2s||0,r.z3s||0,r.z4s||0,r.z5s||0,r.z6s||0];
+      html+='<div style="display:flex;height:4px;border-radius:2px;overflow:hidden;margin-top:8px">';
+      zv.forEach(function(z,i){if(z>0)html+='<div style="flex:'+z+';background:'+zc[i]+'"></div>';});
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+  container.innerHTML=html;
+  // Wire drop zone
+  var dz=document.getElementById('ride-drop-zone');
+  if(dz){
+    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';});
+    dz.addEventListener('dragleave',function(){dz.style.borderColor='';});
+    dz.addEventListener('drop',function(e){e.preventDefault();var f=e.dataTransfer.files;if(f.length)bulkImportTCX({files:f,value:''});});
+    dz.addEventListener('click',function(){showImportFromMore();});
+  }
 }
 
 function buildPMCFromHistory(history){
@@ -9721,9 +9807,9 @@ function bnavGo(tab){
   var btn=document.getElementById('bnav-'+tab);if(btn)btn.classList.add('active');
   var pm=document.getElementById('perf-modal');
   if(tab==='home'){if(pm)pm.remove();showScreen('TRAIN');}
-  else if(tab==='analytics'){showPerf();}
+  else if(tab==='analytics'){showAnalytics();}
   else if(tab==='nutrition'){if(pm)pm.remove();showNutr();}
-  else if(tab==='activities'){showPerf();}
+  else if(tab==='activities'){showActivities();}
   else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
 }
 
