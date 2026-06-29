@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v1782699142 -->
+<!DOCTYPE html><!-- v1782699230 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -9626,7 +9626,7 @@ function decodePolyline(str) {
 function stravaBackfill() {
   var CLIENT_ID = '260935';
   var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
-  var authUrl = 'https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=https://training-plan.mgrobinson07.workers.dev&response_type=code&scope=activity:read_all&approval_prompt=auto';
+  var authUrl = 'https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=http://localhost&response_type=code&scope=activity:read_all&approval_prompt=auto';
   var popup = window.open(authUrl, 'strava', 'width=600,height=700');
   if(!popup){ toast('Allow popups for this site, then tap Sync Strava again'); return; }
   toast('Authorize Strava in the popup...');
