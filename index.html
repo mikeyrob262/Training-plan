@@ -91,7 +91,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .nt-chk.on{background:var(--orange);border-color:var(--orange)}
 .ci-card{background:var(--s1);margin:0 16px 10px;border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}
 .ci-hdr{background:var(--s3);padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
-.ci-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--b1)}
+.ci-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--b1)}
 .ci-f{background:var(--s1);padding:12px 16px}
 .ci-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:5px}
 .ci-in{font-size:18px;border:none;border-bottom:1.5px solid var(--b2);background:transparent;color:var(--t1);width:100%;font-weight:700;padding:0;font-family:inherit}
@@ -3738,7 +3738,7 @@ function showSet(){
     +'<div style="font-size:19px;font-weight:800">Settings</div></div>';
   html+='<div style="background:var(--s1);margin:14px 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Profile</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 16px">'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:14px 16px">'
     +'<div><div class="ci-lbl">Name</div><input class="ci-in" value="'+(st.profileName||'EJ')+'" id="set-name"></div>'
     +'<div><div class="ci-lbl">Weight (lbs)</div><input class="ci-in" type="number" value="'+(st.weight||'')+'" placeholder="162" id="set-wt"></div>'
     +'<div><div class="ci-lbl">FTP (watts)</div><input class="ci-in" type="number" value="'+(st.ftp||'')+'" placeholder="185" id="set-ftp"></div>'
@@ -3752,7 +3752,7 @@ function showSet(){
     +'</div></div>';
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Stats</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--b1)">'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--b1)">'
     +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Workouts Done</div><div style="font-size:22px;font-weight:800;color:var(--green)">'+total+'</div></div>'
     +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Activities</div><div style="font-size:22px;font-weight:800;color:var(--blue)">'+(st.activities?st.activities.length:0)+'</div></div>'
     +'</div></div>';
@@ -3764,13 +3764,13 @@ function showSet(){
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Starting Weights (Baseline)</div>'
     +'<div style="padding:12px 16px"><div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">Enter your current working weights. These show as PREV on your first workout.</div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px">Full Body A</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:14px">';
   fba2.forEach(function(ex){
     var k='A_'+ex[0].replace(/[^a-zA-Z]/g,'');
     html+='<div><div class="ci-lbl">'+ex[0]+'</div><input class="bl-inp" data-key="'+k+'" type="number" placeholder="lbs" value="'+(bl[k]||'')+'" style="font-size:16px;border:none;border-bottom:1.5px solid var(--b2);background:transparent;color:var(--t1);width:100%;padding:2px 0;font-family:inherit"></div>';
   });
   html+='</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px">Full Body B</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">';
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:14px">';
   fbb2.forEach(function(ex){
     var k='B_'+ex[0].replace(/[^a-zA-Z]/g,'');
     html+='<div><div class="ci-lbl">'+ex[0]+'</div><input class="bl-inp" data-key="'+k+'" type="number" placeholder="lbs" value="'+(bl[k]||'')+'" style="font-size:16px;border:none;border-bottom:1.5px solid var(--b2);background:transparent;color:var(--t1);width:100%;padding:2px 0;font-family:inherit"></div>';
@@ -3794,7 +3794,7 @@ function showSet(){
     +'<div id="sync-label" style="font-size:12px;color:var(--t2)">Connecting…</div>'
     +'</div>'
     +'<div style="font-size:12px;color:var(--t2);margin-bottom:14px;line-height:1.5">Real-time sync via Firebase. Changes push automatically after 1.5s and stream to all devices instantly - no manual buttons needed.</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:12px">'
     +'<button onclick="fbPull(false)" style="padding:11px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;color:var(--t1);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Force Pull</button>'
     +'<button onclick="fbPush(false)" style="padding:11px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:10px;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬆️ Force Push</button>'
     +'</div>'
@@ -5374,7 +5374,7 @@ function renderFoodRows(container, list){
   lbl.style.cssText = 'font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px';
   lbl.textContent = '+ Add custom food';
   var grid = document.createElement('div');
-  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px';
+  grid.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;margin-bottom:8px';
   var flds = [{ph:'Food name',type:'text',span:true},{ph:'Calories',type:'number'},{ph:'Protein (g)',type:'number'},{ph:'Carbs (g)',type:'number'},{ph:'Fat (g)',type:'number'},{ph:'Fiber (g)',type:'number'},{ph:'Sat Fat (g)',type:'number'}];
   var inps = [];
   flds.forEach(function(fd){
@@ -5578,7 +5578,7 @@ function renderPerf(container){
   var tsbC2=tsb2>=20?'#00C896':tsb2>=0?'#4D9FFF':tsb2>=-20?'#FC4C02':'#ef4444';
 
   // Three metric cards
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:8px;margin:0 16px 10px">';
   [
     {lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
     {lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
@@ -5606,7 +5606,7 @@ function renderPerf(container){
     +'</div>';
 
   // TSB zone guide
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;border:0.5px solid var(--b1);border-radius:8px;overflow:hidden;font-size:10px;text-align:center;margin-top:10px">';
+  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr 1fr;gap:0;border:0.5px solid var(--b1);border-radius:8px;overflow:hidden;font-size:10px;text-align:center;margin-top:10px">';
   [{z:'< −20',n:'Overreached',c:'rgba(239,68,68,.08)',tc:'#ef4444'},{z:'−20 to 0',n:'Training',c:'transparent',tc:'var(--t2)'},{z:'0 to +20',n:'Fresh',c:'rgba(0,200,150,.06)',tc:'#00C896'},{z:'+20 to +25',n:'Peak',c:'rgba(77,159,255,.06)',tc:'#4D9FFF'}].forEach(function(z,zi){
     html+='<div style="padding:6px 4px;background:'+z.c+(zi<3?';border-right:0.5px solid var(--b1)':'')+'">'
       +'<div style="color:var(--t3);margin-bottom:2px">'+z.z+'</div>'
@@ -5716,7 +5716,7 @@ function renderPerf(container){
   html+='</div>';
 
   // POWER + TSS ROW
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
 
   // Power trend
   html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
@@ -5779,7 +5779,7 @@ function renderPerf(container){
   html+='</div></div>';
 
   // RECORDS + STREAKS ROW
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
   html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Ride Records</div>';
   var records=[
@@ -6251,7 +6251,7 @@ function openManualRide(){
   ];
 
   var grid = document.createElement('div');
-  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px';
+  grid.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:12px';
 
   fields.forEach(function(f){
     var inp = document.createElement('input');
@@ -7074,7 +7074,7 @@ function openRideDetail(idx){
     html += '<div style="border-top:1px solid var(--b1);padding-top:12px">';
     html += '<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Peak Power Curve</div>';
     html += '<div style="border:1px solid var(--b1);border-radius:10px;overflow:hidden">';
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:7px 10px;background:var(--s2)">'
+    html += '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:7px 10px;background:var(--s2)">'
       +'<div style="font-size:10px;font-weight:700;color:var(--t3)">Duration</div>'
       +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:center">Watts</div>'
       +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right">W/kg</div>'
@@ -7086,7 +7086,7 @@ function openRideDetail(idx){
       var zc=w>=FTP*1.21?'#a855f7':w>=FTP*1.06?'#ef4444':w>=FTP*.91?'#f59e0b':w>=FTP*.76?'#22c55e':'#3b82f6';
       var isPR = !globalBest[pd.d] || w >= globalBest[pd.d];
       var bg=i%2===0?'var(--s1)':'var(--s2)';
-      html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;padding:9px 10px;background:'+bg+';border-top:1px solid var(--b1)">'
+      html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:9px 10px;background:'+bg+';border-top:1px solid var(--b1)">'
         +'<div style="font-size:13px;font-weight:600;color:var(--t1)">'+pd.l+'</div>'
         +'<div style="font-size:15px;font-weight:800;color:'+zc+';text-align:center">'+w+'</div>'
         +'<div style="font-size:13px;color:var(--t3);text-align:right">'+wkg2+'</div>'
@@ -7439,7 +7439,7 @@ function openAddSession(w, d){
 
   // Session picker
   var grid = document.createElement('div');
-  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  grid.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:16px;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
   SESSION_OPTIONS.forEach(function(opt){
     var btn = document.createElement('button');
@@ -8006,7 +8006,7 @@ function renderRun(){
       +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+race.date+' · '+(race.goal||'Finish Strong')+'</div></div>'
       +'<div style="text-align:right"><div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1">'+days+'</div>'
       +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">days</div></div></div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
+      +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:8px;margin-bottom:10px">'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+weeks+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">weeks out</div></div>'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+(race.distance||13.1)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">race miles</div></div>'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800;color:#0F6E56">'+ytdMi.toFixed(1)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">run mi YTD</div></div>'
