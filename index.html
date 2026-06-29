@@ -9965,13 +9965,73 @@ function showAICoach(){
     
     // Refresh button
     var refresh=document.createElement('button');
-    refresh.textContent='↻ Refresh';
+    refresh.textContent='↻ Refresh Briefing';
     refresh.style.cssText='margin-top:4px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#a855f7;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
     refresh.onclick=function(){overlay.remove();showAICoach();};
     body.appendChild(refresh);
     
+    // Chat divider
+    var divider=document.createElement('div');
+    divider.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);padding-top:4px';
+    divider.textContent='Ask your coach';
+    body.appendChild(divider);
+    
+    // Chat history
+    var chatLog=document.createElement('div');
+    chatLog.id='ai-chat-log';
+    chatLog.style.cssText='display:flex;flex-direction:column;gap:8px';
+    body.appendChild(chatLog);
+    
+    // Chat input
+    var inputRow=document.createElement('div');
+    inputRow.style.cssText='display:flex;gap:8px;padding-bottom:4px';
+    var inp=document.createElement('input');
+    inp.placeholder='Ask anything about your training...';
+    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
+    var sendBtn=document.createElement('button');
+    sendBtn.textContent='Ask';
+    sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 16px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0';
+    
+    var chatHistory=[{role:'assistant',content:text}];
+    
+    function sendChat(){
+      var q=inp.value.trim();if(!q)return;
+      inp.value='';
+      var userBub=document.createElement('div');
+      userBub.style.cssText='background:var(--s2);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t1);align-self:flex-end;max-width:85%;margin-left:auto';
+      userBub.textContent=q;
+      chatLog.appendChild(userBub);
+      var thinkBub=document.createElement('div');
+      thinkBub.style.cssText='background:rgba(168,85,247,.1);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t3);border:1px solid rgba(168,85,247,.2);max-width:85%';
+      thinkBub.textContent='Thinking...';
+      chatLog.appendChild(thinkBub);
+      body.scrollTop=body.scrollHeight;
+      chatHistory.push({role:'user',content:q});
+      fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-6',
+          max_tokens:400,
+          system:'You are a personal cycling and endurance coach for Mikey. FTP:'+ftp+'W, CTL:'+ctl+', ATL:'+atl+', TSB:'+tsb+'. Be concise and direct.',
+          messages:chatHistory
+        })
+      }).then(function(r){return r.json();}).then(function(d){
+        var reply=d.content&&d.content[0]&&d.content[0].text||'Sorry, try again';
+        thinkBub.style.color='var(--t1)';
+        thinkBub.textContent=reply;
+        chatHistory.push({role:'assistant',content:reply});
+        body.scrollTop=body.scrollHeight;
+      }).catch(function(){thinkBub.textContent='Error — try again';});
+    }
+    
+    sendBtn.onclick=sendChat;
+    inp.onkeydown=function(e){if(e.key==='Enter')sendChat();};
+    inputRow.appendChild(inp);inputRow.appendChild(sendBtn);
+    body.appendChild(inputRow);
+    
   }).catch(function(e){
-    body.innerHTML='<div style="padding:20px;color:var(--t3)">Coach unavailable: '+e.message+'</div>';
+    body.innerHTML='<div style="padding:20px;color:var(--t3)">Error: '+e.message+'. Check that the food proxy worker is running.</div>';
   });
 }
 
