@@ -8512,6 +8512,18 @@ function renderRun(){
         rcard.appendChild(zb);
       }
 
+      // Load Map button if stravaId but no GPS
+      if(r.stravaId && !(r.gpsLats && r.gpsLats.length > 5)){
+        var rideIdx = st.rides.findIndex(function(x){return x.stravaId===r.stravaId;});
+        if(rideIdx >= 0){
+          var loadMapBtn=document.createElement('button');
+          loadMapBtn.style.cssText='margin-bottom:8px;font-size:11px;color:#4D9FFF;background:none;border:1px solid #4D9FFF;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit';
+          loadMapBtn.textContent='Load GPS Map';
+          (function(sid,ri){loadMapBtn.onclick=function(){fetchStravaGPS(sid,ri);};})(r.stravaId,rideIdx);
+          rcard.appendChild(loadMapBtn);
+        }
+      }
+
       // Mini GPS map
       if(r.gpsLats && Array.isArray(r.gpsLats) && r.gpsLats.length > 5 && r.gpsLons && r.gpsLons.length > 5){
         var mapWrap=document.createElement('div');
@@ -10230,6 +10242,38 @@ function decodePolyline(str) {
     lats.push(lat/1e5); lons.push(lng/1e5);
   }
   return {lats:lats, lons:lons};
+}
+
+function fetchStravaGPS(stravaId, rideIndex) {
+  if(!st.stravaToken && !st.stravaRefreshToken){ toast('Connect Strava first'); return; }
+  var doFetch = function(token){
+    fetch('https://www.strava.com/api/v3/activities/'+stravaId, {
+      headers: {'Authorization': 'Bearer '+token}
+    }).then(function(r){return r.json();}).then(function(a){
+      if(!a||!a.map){ toast('No GPS data available'); return; }
+      var poly = a.map.polyline || a.map.summary_polyline;
+      if(!poly){ toast('No polyline for this activity'); return; }
+      try {
+        var decoded = decodePolyline(poly);
+        if(decoded.lats.length > 5){
+          var s=Math.max(1,Math.floor(decoded.lats.length/300));
+          st.rides[rideIndex].gpsLats = decoded.lats.filter(function(_,i){return i%s===0;}).slice(0,300);
+          st.rides[rideIndex].gpsLons = decoded.lons.filter(function(_,i){return i%s===0;}).slice(0,300);
+          sv(); fbPush(true);
+          toast('GPS loaded! Reload Run Training to see map.');
+        } else {
+          toast('GPS data too short to map');
+        }
+      } catch(e){ toast('GPS decode error: '+e.message); }
+    }).catch(function(){ toast('Failed to fetch GPS'); });
+  };
+  if(st.stravaRefreshToken){
+    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
+    });
+  } else { doFetch(st.stravaToken); }
 }
 
 function stravaFullResync() {
