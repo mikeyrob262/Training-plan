@@ -3929,7 +3929,7 @@ function sCT(i){
 function showSet(){
   var total=0;for(var w=1;w<=17;w++)total+=Object.values(ws(w).wo).filter(Boolean).length;
   var html='<div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)">'
-    +'<button onclick="showMore()" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8592;</button>'
+    +''
     +'<div style="font-size:19px;font-weight:800">Settings</div></div>';
   html+='<div style="background:var(--s1);margin:14px 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Profile</div>'
@@ -8289,12 +8289,7 @@ function renderRun(){
   scr.id='RUN-SCREEN';
   scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;padding-bottom:20px';
 
-  var backBtn2=document.createElement('button');
-  backBtn2.className='back-btn';
-  backBtn2.style.cssText='margin:16px';
-  backBtn2.style.display='';
-  backBtn2.onclick=function(){var s=document.getElementById('RUN-SCREEN');if(s)s.remove();};
-  scr.appendChild(backBtn2);
+
 
   var title=document.createElement('div');
   title.style.cssText='padding:0 16px 14px';
@@ -9796,7 +9791,7 @@ function renderMob(){
   // Header
   var hdr=document.createElement('div');
   hdr.style.cssText='padding:16px 16px 0;';
-  hdr.innerHTML='<button id="mob-back" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8592;</button>';
+  hdr.innerHTML='';
   container.appendChild(hdr);
   document.getElementById('mob-back').onclick=function(){showScreen('TRAIN');};
 
