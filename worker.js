@@ -4190,6 +4190,7 @@ function showSet(){
       r.readAsText(f);
     });
   }
+  var wxScr=document.getElementById('WEATHER-SCREEN');if(wxScr)wxScr.style.zIndex='150';
   showScreen('SET');
 }
 
@@ -10895,8 +10896,8 @@ function showWeather(){
           var ri=Math.floor(pct*(lats.length-1));
           var wi=Math.floor(pct*windDir.length);
           var deg=windDir[wi]||0,spd=wind[wi]?Math.round(wind[wi]):'';
-          var html='<div style="background:rgba(0,0,0,0.75);color:#fff;border-radius:10px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:3px;border:1.5px solid rgba(255,255,255,0.3)">'
-            +'<span style="display:inline-block;transform:rotate('+deg+'deg)">➤</span>'+(spd?'<span>'+spd+'</span>':'')+'</div>';
+          var html='<div style="background:#FC4C02;color:#fff;border-radius:10px;padding:4px 8px;font-size:11px;font-weight:800;display:flex;align-items:center;gap:3px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)">'
+            +'<span style="display:inline-block;transform:rotate('+deg+'deg)">➤</span>'+(spd?'<span>'+spd+'mph</span>':'')+'</div>';
           var icon=L.divIcon({className:'',html:html,iconAnchor:[28,14]});
           L.marker([lats[ri],lons[ri]],{icon:icon}).addTo(map);
         });
