@@ -10633,7 +10633,7 @@ function showWeather(){
 
       hero.innerHTML='<div style="font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px">'+temp+'°</div>'
         +'<div style="font-size:14px;font-weight:600;color:var(--t2);margin-top:6px">Feels like: '+feels+'° &nbsp; H:'+hi+'° L:'+lo+'°</div>'
-        +'<div id="wx-hourly" style="display:flex;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none">';
+        +'<div id="wx-hourly" style="display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none;-webkit-overflow-scrolling:touch">';
 
       // Hourly strip
       var now=new Date();
@@ -10649,7 +10649,7 @@ function showWeather(){
           +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+t2+'°</div>'
           +'</div>';
       }
-      hero.innerHTML=hero.innerHTML+hourlyHtml+'</div>';
+      hero.innerHTML=hero.innerHTML+hourlyHtml+'</div>';var hEl=document.getElementById('wx-hourly');if(hEl){hEl.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none;-webkit-overflow-scrolling:touch';}
     }).catch(function(){});
 
     // Ride list
