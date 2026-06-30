@@ -10663,6 +10663,11 @@ function showWeather(){
     var listWrap=document.createElement('div');
     listWrap.style.cssText='padding:16px 16px 4px';
 
+    var sectionLbl=document.createElement('div');
+    sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between';
+    sectionLbl.innerHTML='<span>My Routes</span>';
+    listWrap.appendChild(sectionLbl);
+
     // Compact search bar
     var searchBar=document.createElement('div');
     searchBar.style.cssText='background:var(--s2);border-radius:10px;border:0.5px solid var(--b1);padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;cursor:pointer';
@@ -10670,11 +10675,6 @@ function showWeather(){
       +'<span style="font-size:13px;color:var(--t3)">Search a location...</span>';
     searchBar.onclick=function(){renderLocationSearch();};
     listWrap.appendChild(searchBar);
-
-    var sectionLbl=document.createElement('div');
-    sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
-    sectionLbl.textContent='My Routes';
-    listWrap.appendChild(sectionLbl);
 
     var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
     var rideIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
