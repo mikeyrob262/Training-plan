@@ -9302,7 +9302,7 @@ function renderCond(){
 
       var info=document.createElement('div');
       info.style.cssText='flex:1';
-      info.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:3px">'+ex[0]+'</div>'
+      info.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:3px;display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' exercise tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;display:inline-flex;align-items:center;gap:2px;font-weight:600">▶ watch</a></div>'
         +'<div style="font-size:11px;color:var(--t3);line-height:1.4;margin-bottom:6px">'+ex[4]+'</div>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
         +'<span style="font-size:11px;background:var(--s3);border-radius:6px;padding:2px 8px;color:var(--orange);font-weight:700">'+ex[1]+' sets</span>'
@@ -9659,7 +9659,7 @@ function renderCore(){
       card.style.cssText = 'background:var(--s2);border-radius:12px;padding:12px 14px;margin-bottom:6px;border:1px solid '+(done?'rgba(0,200,150,.3)':'var(--b2)')+';display:flex;align-items:center;gap:10px';
       card.innerHTML = '<div style="width:22px;height:22px;border-radius:50%;background:'+(done?'var(--green)':'var(--s3)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
         +(done?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>'
-        +'<div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--t1)">'+ex[0]+'</div>'
+        +'<div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' exercise tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;font-weight:600">▶</a></div>'
         +'<div style="font-size:11px;color:var(--t3)">'+ex[1]+' sets · '+ex[2]+(ex[4]?' hold':' reps')+'</div></div>';
       sec.appendChild(card);
     });
@@ -9973,7 +9973,7 @@ function renderMob(){
       var info=document.createElement('div');
       info.style.cssText='flex:1;min-width:0';
       var nameStyle='font-size:14px;font-weight:700;color:'+(done?'var(--t3)':'var(--t1)')+';text-decoration:'+(done?'line-through':'none');
-      info.innerHTML='<div style="'+nameStyle+'">'+ex[0]+'</div>'
+      info.innerHTML='<div style="'+nameStyle+';display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' mobility stretch tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;font-weight:600">▶</a></div>'
         +'<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:1px">'+ex[1]+'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-top:2px;line-height:1.4">'+ex[2]+'</div>';
 
