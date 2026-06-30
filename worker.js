@@ -3965,12 +3965,23 @@ function showProg(){
     h+='</div>';
   }
 
-  h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'    +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">Personal records</div>';
+  h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'    +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">🏆 Personal Records</div>';
   var prs=[[longestRide?longestRide.toFixed(1)+' mi':'—','Longest ride','var(--blue)'],[bestNP?bestNP+'W':'—','Best NP','var(--orange)'],[highestTSS||'—','Highest TSS week','#ef4444'],[heavySquat?heavySquat+' lbs':'—','Heaviest squat','var(--t1)'],[heavyBench?heavyBench+' lbs':'—','Heaviest bench','var(--t1)'],[longestRun?longestRun.toFixed(1)+' mi':'—','Longest run','#0F6E56']];
   prs.forEach(function(pr,i){
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;'+(i<prs.length-1?'border-bottom:1px solid var(--b1)':'')+'">'      +'<span style="font-size:12px;color:var(--t3)">'+pr[1]+'</span>'      +'<span style="font-size:13px;font-weight:800;color:'+pr[2]+'">'+pr[0]+'</span></div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;'+(i<prs.length-1?'border-bottom:1px solid var(--b1)':'')+'">'      +'<span style="font-size:12px;color:var(--t3)">🏅 '+pr[1]+'</span>'      +'<span style="font-size:13px;font-weight:800;color:'+pr[2]+'">'+pr[0]+'</span></div>';
   });
   h+='</div>';
+
+  // Power curve PRs
+  var pcurvePRs=computePowerCurve(rides);
+  if(pcurvePRs.length){
+    var durLabels={5:'5 sec',15:'15 sec',30:'30 sec',60:'1 min',120:'2 min',300:'5 min',600:'10 min',1200:'20 min',1800:'30 min',3600:'60 min'};
+    h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'      +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">⚡ Power Curve Bests</div>';
+    pcurvePRs.forEach(function(p,i){
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;'+(i<pcurvePRs.length-1?'border-bottom:1px solid var(--b1)':'')+'">'        +'<span style="font-size:12px;color:var(--t3)">🏅 '+(durLabels[p.dur]||p.dur+'s')+'</span>'        +'<span style="font-size:13px;font-weight:800;color:var(--orange)">'+p.watts+'W</span></div>';
+    });
+    h+='</div>';
+  }
 
   h+='<div style="padding:0 16px 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02">Nutrition</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 10px">';
