@@ -4075,30 +4075,17 @@ function showSet(){
     +'<div style="padding:0 16px 14px;display:flex;gap:8px">'
     +'<button onclick="saveProfile()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Profile</button>'
     +'</div></div>';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
-    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Stats</div>'
-    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--b1)">'
-    +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Workouts Done</div><div style="font-size:22px;font-weight:800;color:var(--green)">'+total+'</div></div>'
-    +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Activities</div><div style="font-size:22px;font-weight:800;color:var(--blue)">'+(st.activities?st.activities.length:0)+'</div></div>'
-    +'</div></div>';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);padding:14px 16px">'
-    +'<div class="ci-lbl" style="margin-bottom:10px">Data &amp; Backup</div>'
-    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
-    +'<button onclick="expData()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer">⬇️ Export</button>'
-    +'<button onclick="impData()" style="background:var(--s2);border:1px solid var(--b2);color:var(--t2);font-size:13px;font-weight:700;padding:10px 18px;border-radius:10px;cursor:pointer">⬆️ Restore</button>'
-    +'</div></div>';
-  // -- Cloud Sync section
+  // -- Cloud Sync section (compact, replaces Stats + duplicate backup)
   var autoSync = st.autoSync || false;
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
-    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Cloud Sync</div>'
-    +'<div style="padding:12px 16px">'
-    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
-    +'<div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#aaa;flex-shrink:0"></div>'
-    +'<div id="sync-label" style="font-size:12px;color:var(--t2)">Connecting…</div>'
+    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;justify-content:space-between">'
+    +'<span>Cloud Sync</span>'
+    +'<span style="display:flex;align-items:center;gap:5px"><span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:#aaa"></span><span id="sync-label" style="font-size:9px;color:var(--t3);text-transform:none;letter-spacing:0">Connecting…</span></span>'
     +'</div>'
+    +'<div style="padding:8px 16px">'
     +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px">'
-    +'<button onclick="fbPull(false)" style="padding:8px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
-    +'<button onclick="fbPush(false)" style="padding:8px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
+    +'<button onclick="fbPull(false)" style="padding:7px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
+    +'<button onclick="fbPush(false)" style="padding:7px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
     +'</div>'
     +'</div></div>';
   // Update the sync dot after render
