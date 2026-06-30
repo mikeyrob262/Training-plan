@@ -10502,11 +10502,12 @@ function showCal(){
   function render(){
     scr.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;gap:12px;padding:12px;flex:1;overflow:hidden;box-sizing:border-box';
+    var scrH = (window.innerHeight - 60) + 'px';
+    wrap.style.cssText='display:flex;gap:12px;padding:12px;overflow:hidden;box-sizing:border-box;height:'+scrH+';width:100%';
 
     // ---- MONTHLY VIEW ----
     var monthly=document.createElement('div');
-    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
+    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;display:flex;flex-direction:column;overflow:hidden;height:100%';
 
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days=['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -10641,7 +10642,7 @@ function showCal(){
 
     // ---- YEAR VIEW ----
     var yearly=document.createElement('div');
-    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;overflow-y:auto';
+    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;overflow-y:auto;height:100%';
 
     var yTitle=document.createElement('div');
     yTitle.style.cssText='font-size:14px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:10px';
