@@ -10499,11 +10499,18 @@ function showWeather(){
   var rideList=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
     return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
-  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,12);
+  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,15);
+
+  // Dedupe by name to get unique routes
+  var routes=[];
+  var seen={};
+  rideList.forEach(function(r){
+    var key=(r.name||r.sportType||'Ride').trim();
+    if(!seen[key]){seen[key]=true;routes.push(r);}
+  });
 
   var wxCharts=[];
   function destroyCharts(){wxCharts.forEach(function(c){try{c.destroy();}catch(e){}});wxCharts=[];}
-
   function getDirStr(deg){return['N','NE','E','SE','S','SW','W','NW'][Math.round(deg/45)%8];}
 
   function getCondition(type,val){
@@ -10562,28 +10569,23 @@ function showWeather(){
     var tc=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)';
     var scales={x:{ticks:{color:tc,font:{size:10},maxTicksLimit:7,maxRotation:0},grid:{color:gc}}};
     scales.y=Object.assign({ticks:{color:tc,font:{size:10},maxTicksLimit:5},grid:{color:gc}},yOpts||{});
-    if(y2Opts){scales.y2=Object.assign({position:'right',ticks:{color:y2Opts.color||tc,font:{size:10}},grid:{drawOnChartArea:false}},y2Opts);}
-    var ch=new Chart(el,{
-      type:'line',
+    if(y2Opts) scales.y2=Object.assign({position:'right',ticks:{color:y2Opts.color||tc,font:{size:10}},grid:{drawOnChartArea:false}},y2Opts);
+    var ch=new Chart(el,{type:'line',
       data:{labels:labels,datasets:datasets.map(function(d){
         return{label:d.label,data:d.data,borderColor:d.color,backgroundColor:d.fill?d.color+'28':'transparent',
           borderWidth:2.5,pointRadius:0,pointHoverRadius:5,fill:!!d.fill,tension:0.4,yAxisID:d.axis||'y'};
       })},
-      options:{responsive:true,maintainAspectRatio:false,
-        interaction:{mode:'index',intersect:false},
+      options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
         plugins:{
           legend:{display:true,position:'bottom',labels:{color:tc,font:{size:11},boxWidth:20,padding:10,usePointStyle:true}},
           tooltip:{backgroundColor:dark?'rgba(30,30,32,0.95)':'rgba(255,255,255,0.95)',
             titleColor:dark?'#fff':'#000',bodyColor:dark?'rgba(255,255,255,0.75)':'rgba(0,0,0,0.7)',
             borderColor:dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.1)',borderWidth:1,padding:10,cornerRadius:10}
-        },
-        scales:scales
-      }
-    });
+        },scales:scales}});
     wxCharts.push(ch);
   }
 
-  // ── LANDING SCREEN ──
+  // ── LANDING ──
   function renderLanding(){
     destroyCharts();
     scr.innerHTML='';
@@ -10598,7 +10600,7 @@ function showWeather(){
 
     // Current conditions hero
     var heroDiv=document.createElement('div');
-    heroDiv.style.cssText='background:var(--s2);padding:20px 16px 14px;text-align:center;border-bottom:1px solid var(--b1)';
+    heroDiv.style.cssText='background:var(--s2);padding:20px 16px 0;text-align:center;border-bottom:1px solid var(--b1)';
 
     var tempEl=document.createElement('div');
     tempEl.style.cssText='font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px';
@@ -10611,15 +10613,15 @@ function showWeather(){
     heroDiv.appendChild(subEl);
 
     var divider=document.createElement('div');
-    divider.style.cssText='border-top:1px solid var(--b1);margin-top:14px;padding-top:14px';
+    divider.style.cssText='border-top:1px solid var(--b1);margin-top:14px;padding-top:14px;padding-bottom:14px';
     heroDiv.appendChild(divider);
 
     var hourlyEl=document.createElement('div');
     hourlyEl.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch';
     divider.appendChild(hourlyEl);
-
     scr.appendChild(heroDiv);
 
+    // Fetch current conditions
     fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
       +'&current=temperature_2m,apparent_temperature,weathercode'
       +'&hourly=temperature_2m,weathercode'
@@ -10639,14 +10641,14 @@ function showWeather(){
       }
       tempEl.textContent=temp+'°';
       subEl.textContent='Feels like: '+feels+'°   H:'+hi+'° L:'+lo+'°';
-      hourlyEl.innerHTML='';
       var now=new Date();
-      for(var i=now.getHours();i<Math.min(now.getHours()+8,24);i++){
+      hourlyEl.innerHTML='';
+      for(var i=now.getHours();i<Math.min(now.getHours()+9,24);i++){
         var t2=Math.round(temps[i]||temp);
         var hr=i>12?i-12:(i===0?12:i);
         var lbl=i===now.getHours()?'Now':hr+(i>=12?'PM':'AM');
         var slot=document.createElement('div');
-        slot.style.cssText='flex:0 0 auto;text-align:center;padding:0 14px;'+(i<Math.min(now.getHours()+7,23)?'border-right:1px solid var(--b1)':'');
+        slot.style.cssText='flex:0 0 auto;text-align:center;padding:0 14px;'+(i<Math.min(now.getHours()+8,23)?'border-right:1px solid var(--b1)':'');
         slot.innerHTML='<div style="font-size:10px;font-weight:700;color:'+(i===now.getHours()?'var(--t1)':'var(--t3)')+'">'+lbl+'</div>'
           +'<div style="font-size:20px;margin:5px 0 3px">'+wxIcon(codes[i]||0)+'</div>'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+t2+'°</div>';
@@ -10654,93 +10656,169 @@ function showWeather(){
       }
     }).catch(function(){});
 
-    // Ride list
+    // Route list
     var listWrap=document.createElement('div');
     listWrap.style.cssText='padding:16px 16px 4px';
 
     var sectionLbl=document.createElement('div');
     sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
-    sectionLbl.textContent='Recent Rides';
+    sectionLbl.textContent='My Routes';
     listWrap.appendChild(sectionLbl);
 
-    var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#FC4C02',Run:'#185FA5',TrailRun:'#185FA5'};
-    var sportIcons={
-      Ride:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>',
-      Run:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>'
-    };
+    var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
+    var rideIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
+    var runIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
 
-    if(!rideList.length){
+    if(!routes.length){
       var empty=document.createElement('div');
       empty.style.cssText='padding:40px 0;text-align:center;color:var(--t3);font-size:14px';
       empty.textContent='No outdoor rides with GPS. Sync Strava first.';
       listWrap.appendChild(empty);
     } else {
-      rideList.forEach(function(r){
+      routes.forEach(function(r){
         var sport=r.sportType||r.type||'Ride';
         var iconColor=sportColors[sport]||'#FC4C02';
-        var iconSvg=sport.toLowerCase().includes('run')?sportIcons.Run:sportIcons.Ride;
-
+        var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var card=document.createElement('div');
-        card.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer';
-        card.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+iconSvg+'</div>'
+        card.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:opacity 0.1s';
+        card.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
-          +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+r.date+(r.distance?' · '+r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+'</div>'
+          +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+(r.distance?r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+(r.date?' · last ridden '+r.date:'')+'</div>'
           +'</div>'
-          +'<div style="text-align:right;flex-shrink:0">'
-          +'<div style="font-size:11px;color:var(--t3)">↗</div>'
-          +'</div>';
-
-        card.onclick=function(){renderDetail(r);};
+          +'<div style="color:var(--t3);font-size:18px">›</div>';
+        card.onclick=function(){renderDatePicker(r);};
         listWrap.appendChild(card);
       });
-
-      var more=document.createElement('div');
-      more.style.cssText='text-align:center;padding:4px 0 8px;font-size:13px;color:var(--t3);font-weight:600';
-      more.textContent='Showing '+rideList.length+' recent rides';
-      listWrap.appendChild(more);
     }
-
     scr.appendChild(listWrap);
   }
 
-  // ── DETAIL SCREEN ──
-  function renderDetail(ride){
+  // ── DATE/TIME PICKER ──
+  function renderDatePicker(route){
     destroyCharts();
     scr.innerHTML='';
     scr.scrollTop=0;
 
-    // Header
     var hdr=document.createElement('div');
     hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
     hdr.innerHTML='<button onclick="showWeather()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(ride.name||ride.sportType||'Ride')+'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+ride.date+(ride.distance?' · '+ride.distance+'mi':'')+(ride.duration?' · '+ride.duration:'')+'</div>'
-      +'</div>';
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(route.name||route.sportType||'Ride')+'</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+(route.distance||'')+'mi route</div></div>';
     scr.appendChild(hdr);
 
-    // Gauges + stats
+    var body=document.createElement('div');
+    body.style.cssText='padding:20px 16px';
+
+    // Date selector
+    var today=new Date();
+    var tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
+    var day2=new Date(today);day2.setDate(today.getDate()+2);
+    var day3=new Date(today);day3.setDate(today.getDate()+3);
+
+    function fmt(d){return d.toISOString().split('T')[0];}
+    function dayLabel(d){
+      var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return days[d.getDay()]+' '+months[d.getMonth()]+' '+d.getDate();
+    }
+
+    var selectedDate=fmt(today);
+    var selectedHour=7;
+
+    body.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px">Ride Date</div>';
+
+    var dateGrid=document.createElement('div');
+    dateGrid.style.cssText='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px';
+
+    var dateBtns=[];
+    [[today,'Today'],[tomorrow,'Tomorrow'],[day2,''],[day3,'']].forEach(function(pair,idx){
+      var d=pair[0],lbl=pair[1]||dayLabel(pair[0]);
+      var btn=document.createElement('div');
+      btn.style.cssText='background:'+(idx===0?'#FC4C02':'var(--s2)')+';border:1px solid '+(idx===0?'#FC4C02':'var(--b1)')+';border-radius:12px;padding:12px 14px;cursor:pointer;text-align:center';
+      btn.innerHTML='<div style="font-size:13px;font-weight:700;color:'+(idx===0?'#fff':'var(--t1)')+'">'+lbl+'</div>'
+        +'<div style="font-size:11px;color:'+(idx===0?'rgba(255,255,255,0.75)':'var(--t3)')+'">'+dayLabel(d)+'</div>';
+      btn.onclick=function(){
+        selectedDate=fmt(d);
+        dateBtns.forEach(function(b,i){
+          b.style.background=i===idx?'#FC4C02':'var(--s2)';
+          b.style.borderColor=i===idx?'#FC4C02':'var(--b1)';
+          b.querySelector('div').style.color=i===idx?'#fff':'var(--t1)';
+        });
+      };
+      dateBtns.push(btn);
+      dateGrid.appendChild(btn);
+    });
+    body.appendChild(dateGrid);
+
+    // Time selector
+    var timeLbl=document.createElement('div');
+    timeLbl.style.cssText='font-size:13px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
+    timeLbl.textContent='Start Time';
+    body.appendChild(timeLbl);
+
+    var timeWrap=document.createElement('div');
+    timeWrap.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:16px';
+
+    var timeInput=document.createElement('input');
+    timeInput.type='time';
+    timeInput.value='07:00';
+    timeInput.style.cssText='flex:1;font-size:28px;font-weight:700;color:var(--t1);background:none;border:none;outline:none;font-family:inherit';
+    timeInput.onchange=function(){selectedHour=parseInt(timeInput.value.split(':')[0])||7;};
+    timeWrap.appendChild(timeInput);
+
+    var durLbl=document.createElement('div');
+    durLbl.style.cssText='font-size:12px;color:var(--t3);text-align:right;line-height:1.4';
+    durLbl.innerHTML='Estimated<br>duration<br><strong style="font-size:14px;color:var(--t1)">'+(route.duration||'4:00')+'</strong>';
+    timeWrap.appendChild(durLbl);
+    body.appendChild(timeWrap);
+
+    // Go button
+    var goBtn=document.createElement('button');
+    goBtn.style.cssText='width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:#fff;font-size:16px;font-weight:800;padding:16px;border-radius:14px;cursor:pointer;font-family:inherit;letter-spacing:0.02em';
+    goBtn.textContent='Check Weather →';
+    goBtn.onclick=function(){
+      selectedHour=parseInt(timeInput.value.split(':')[0])||7;
+      renderDetail(route,selectedDate,selectedHour);
+    };
+    body.appendChild(goBtn);
+
+    scr.appendChild(body);
+  }
+
+  // ── DETAIL SCREEN ──
+  function renderDetail(ride,rideDate,startHour){
+    destroyCharts();
+    scr.innerHTML='';
+    scr.scrollTop=0;
+
+    var hdr=document.createElement('div');
+    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
+    hdr.innerHTML='<button onclick="renderDatePicker_'+ride.stravaId+'()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(ride.name||ride.sportType||'Ride')+'</div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+rideDate+' · '+((startHour>12?startHour-12:startHour||12)+(startHour>=12?'PM':'AM'))+' start</div>'
+      +'</div>';
+    hdr.querySelector('button').onclick=function(){renderDatePicker(ride);};
+    scr.appendChild(hdr);
+
     var gaugeCard=document.createElement('div');
     gaugeCard.id='wx-gauges';
     gaugeCard.style.cssText='background:var(--s2);margin:12px 16px;border-radius:16px;border:1px solid var(--b1);padding:16px 8px 12px';
-    gaugeCard.innerHTML='<div style="text-align:center;color:var(--t3);font-size:13px;padding:16px 0">Loading forecast...</div>';
+    gaugeCard.innerHTML='<div style="text-align:center;color:var(--t3);font-size:13px;padding:16px 0">Fetching forecast...</div>';
     scr.appendChild(gaugeCard);
 
-    // Map
     var mapId='wx-map-'+Date.now();
     var mapCard=document.createElement('div');
     mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
     mapCard.innerHTML='<div id="'+mapId+'" style="height:260px"></div>';
     scr.appendChild(mapCard);
 
-    // Charts area
     var chartsArea=document.createElement('div');
     chartsArea.id='wx-charts';
     chartsArea.style.cssText='padding:0 16px 16px';
     scr.appendChild(chartsArea);
 
-    // Init map
     setTimeout(function(){
       var el=document.getElementById(mapId);
       if(!el||typeof L==='undefined') return;
@@ -10755,33 +10833,36 @@ function showWeather(){
       window['_wxmap_'+mapId]=map;
     },200);
 
-    // Fetch weather
-    var lat=ride.gpsLats[0],lon=ride.gpsLons[0],date=ride.date;
+    var lat=ride.gpsLats[0],lon=ride.gpsLons[0];
+    var durH=ride.duration?parseInt((ride.duration||'4:00').split(':')[0])||4:4;
+    var s0=startHour,s1=Math.min(23,s0+durH);
+
+    // Need 2 days of forecast if ride goes overnight or we want tomorrow
+    var today=new Date().toISOString().split('T')[0];
+    var endDate=rideDate;
+
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
       +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,windgusts_10m,winddirection_10m,relativehumidity_2m,dewpoint_2m,uv_index'
       +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago'
-      +'&start_date='+date+'&end_date='+date)
+      +'&start_date='+rideDate+'&end_date='+endDate)
     .then(function(r){return r.json();}).then(function(data){
       if(!data||!data.hourly) return;
       var h=data.hourly;
-      var durH=ride.duration?parseInt((ride.duration||'4:00').split(':')[0])||4:4;
-      var s0=7,s1=Math.min(23,s0+durH);
       function sl(arr){return(arr||[]).slice(s0,s1+1);}
-      function fmt(arr){return sl(arr).map(function(v){return Math.round(v*10)/10;});}
-      var temps=fmt(h.temperature_2m);
-      var feels=fmt(h.apparent_temperature);
-      var precip=fmt(h.precipitation_probability);
-      var wind=fmt(h.windspeed_10m);
-      var gusts=fmt(h.windgusts_10m);
+      function fmt2(arr){return sl(arr).map(function(v){return Math.round(v*10)/10;});}
+      var temps=fmt2(h.temperature_2m);
+      var feels=fmt2(h.apparent_temperature);
+      var precip=fmt2(h.precipitation_probability);
+      var wind=fmt2(h.windspeed_10m);
+      var gusts=fmt2(h.windgusts_10m);
       var windDir=sl(h.winddirection_10m)||[];
-      var humid=fmt(h.relativehumidity_2m);
-      var dew=fmt(h.dewpoint_2m);
-      var uv=fmt(h.uv_index);
+      var humid=fmt2(h.relativehumidity_2m);
+      var dew=fmt2(h.dewpoint_2m);
+      var uv=fmt2(h.uv_index);
       var times=(h.time||[]).slice(s0,s1+1).map(function(t){
         if(!t.split('T')[1]) return '';
-        var parts=t.split('T')[1].slice(0,5).split(':');
-        var hr=parseInt(parts[0]);
-        return(hr>12?hr-12:hr||12)+(hr>=12?'pm':'am');
+        var hr=parseInt(t.split('T')[1].slice(0,2));
+        return(hr>12?hr-12:(hr===0?12:hr))+(hr>=12?'PM':'AM');
       });
 
       var maxTemp=temps.length?Math.max.apply(null,temps):75;
@@ -10789,7 +10870,6 @@ function showWeather(){
       var maxGust=gusts.length?Math.max.apply(null,gusts):wind.length?Math.max.apply(null,wind):10;
       var midDir=windDir.length?windDir[Math.floor(windDir.length/2)]:270;
 
-      // Gauges
       var gEl=document.getElementById('wx-gauges');
       if(gEl){
         var tc=getCondition('temp',maxTemp);
@@ -10807,7 +10887,6 @@ function showWeather(){
           +'</div>';
       }
 
-      // Wind arrows on map
       setTimeout(function(){
         var map=window['_wxmap_'+mapId];
         if(!map||!windDir.length) return;
@@ -10817,43 +10896,38 @@ function showWeather(){
           var wi=Math.floor(pct*windDir.length);
           var deg=windDir[wi]||0,spd=wind[wi]?Math.round(wind[wi]):'';
           var html='<div style="background:rgba(0,0,0,0.75);color:#fff;border-radius:10px;padding:4px 8px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:3px;border:1.5px solid rgba(255,255,255,0.3)">'
-            +'<span style="display:inline-block;transform:rotate('+deg+'deg)">➤</span>'
-            +(spd?'<span>'+spd+'</span>':'')+'</div>';
+            +'<span style="display:inline-block;transform:rotate('+deg+'deg)">➤</span>'+(spd?'<span>'+spd+'</span>':'')+'</div>';
           var icon=L.divIcon({className:'',html:html,iconAnchor:[28,14]});
           L.marker([lats[ri],lons[ri]],{icon:icon}).addTo(map);
         });
       },600);
 
-      // Charts
       var cEl=document.getElementById('wx-charts');
       if(!cEl||!times.length) return;
 
       if(temps.length>1){
-        var tc2=makeChartEl('wx-temp','Temperature',Math.round(temps[0])+'° → '+Math.round(temps[temps.length-1])+'°');
-        cEl.appendChild(tc2);
+        var t=makeChartEl('wx-temp','Temperature',Math.round(temps[0])+'° → '+Math.round(temps[temps.length-1])+'°');
+        cEl.appendChild(t);
         setTimeout(function(){makeChart('wx-temp',times,
           [{label:'Temp (°F)',data:temps,color:'#E24B4A',fill:true},
            {label:'Feels like (°F)',data:feels,color:'#FC4C02',fill:false}],
           {suggestedMin:Math.min.apply(null,feels)-3,suggestedMax:Math.max.apply(null,temps)+3});},100);
       }
-
       if(wind.length>1){
-        var wc2=makeChartEl('wx-wind','Wind','Max gust '+Math.round(maxGust)+'mph '+getDirStr(midDir));
-        cEl.appendChild(wc2);
+        var w=makeChartEl('wx-wind','Wind','Max '+Math.round(maxGust)+'mph '+getDirStr(midDir));
+        cEl.appendChild(w);
         setTimeout(function(){makeChart('wx-wind',times,
           [{label:'Gusts (mph)',data:gusts,color:'#FC4C02',fill:true},
            {label:'Wind (mph)',data:wind,color:'#185FA5',fill:false}],
           {suggestedMin:0,suggestedMax:Math.max.apply(null,gusts)+3});},150);
       }
-
       if(precip.length>1){
-        var pc2=makeChartEl('wx-precip','Precipitation','Max '+Math.round(maxPrecip)+'%',120);
-        cEl.appendChild(pc2);
+        var p=makeChartEl('wx-precip','Precipitation','Max '+Math.round(maxPrecip)+'%',120);
+        cEl.appendChild(p);
         setTimeout(function(){makeChart('wx-precip',times,
           [{label:'Probability (%)',data:precip,color:'#185FA5',fill:true}],
           {suggestedMin:0,suggestedMax:100});},200);
       }
-
       if(humid.length>1){
         var hc=makeChartEl('wx-humid','Humidity and dew point','');
         cEl.appendChild(hc);
@@ -10862,20 +10936,20 @@ function showWeather(){
           if(!el2||typeof Chart==='undefined') return;
           var dark=document.body.classList.contains('dark');
           var gc=dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
-          var tc3=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)';
+          var tc2=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)';
           var ch=new Chart(el2,{type:'line',data:{labels:times,datasets:[
             {label:'Humidity (%)',data:humid,borderColor:'#185FA5',backgroundColor:'#185FA528',borderWidth:2.5,pointRadius:0,fill:true,tension:0.4,yAxisID:'y'},
             {label:'Dew point (°F)',data:dew,borderColor:'#FC4C02',backgroundColor:'transparent',borderWidth:2,pointRadius:0,fill:false,tension:0.4,yAxisID:'y2'}
           ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-            plugins:{legend:{display:true,position:'bottom',labels:{color:tc3,font:{size:11},boxWidth:20,padding:10,usePointStyle:true}},
-              tooltip:{backgroundColor:dark?'rgba(30,30,32,0.95)':'rgba(255,255,255,0.95)',titleColor:dark?'#fff':'#000',bodyColor:dark?'rgba(255,255,255,0.75)':'rgba(0,0,0,0.7)',borderColor:dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.1)',borderWidth:1,padding:10,cornerRadius:10}},
-            scales:{x:{ticks:{color:tc3,font:{size:10},maxTicksLimit:7,maxRotation:0},grid:{color:gc}},
-              y:{ticks:{color:tc3,font:{size:10}},grid:{color:gc},title:{display:true,text:'%',color:tc3,font:{size:10}}},
+            plugins:{legend:{display:true,position:'bottom',labels:{color:tc2,font:{size:11},boxWidth:20,padding:10,usePointStyle:true}},
+              tooltip:{backgroundColor:dark?'rgba(30,30,32,0.95)':'rgba(255,255,255,0.95)',titleColor:dark?'#fff':'#000',
+                bodyColor:dark?'rgba(255,255,255,0.75)':'rgba(0,0,0,0.7)',borderColor:dark?'rgba(255,255,255,0.12)':'rgba(0,0,0,0.1)',borderWidth:1,padding:10,cornerRadius:10}},
+            scales:{x:{ticks:{color:tc2,font:{size:10},maxTicksLimit:7,maxRotation:0},grid:{color:gc}},
+              y:{ticks:{color:tc2,font:{size:10}},grid:{color:gc},title:{display:true,text:'%',color:tc2,font:{size:10}}},
               y2:{position:'right',ticks:{color:'#FC4C02',font:{size:10}},grid:{drawOnChartArea:false},title:{display:true,text:'°F',color:'#FC4C02',font:{size:10}}}}}});
           wxCharts.push(ch);
         },250);
       }
-
       if(uv.length>1&&Math.max.apply(null,uv)>0){
         var uvc=makeChartEl('wx-uv','UV Index','Max '+Math.max.apply(null,uv).toFixed(1),120);
         cEl.appendChild(uvc);
@@ -10883,10 +10957,9 @@ function showWeather(){
           [{label:'UV Index',data:uv,color:'#BA7517',fill:true}],
           {suggestedMin:0,suggestedMax:Math.max.apply(null,uv)+1});},300);
       }
-
     }).catch(function(){
       var cEl=document.getElementById('wx-charts');
-      if(cEl) cEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Weather data unavailable.</div>';
+      if(cEl) cEl.innerHTML='<div style="padding:30px;text-align:center;color:var(--t3)">Weather data unavailable. Open-Meteo only provides 7-day forecasts.</div>';
     });
   }
 
