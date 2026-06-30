@@ -8272,6 +8272,7 @@ function getRuns(){
       name: r.name,
       source: r.source,
       stravaId: r.stravaId,
+      pace: r.pace,
       gpsLats: r.gpsLats,
       gpsLons: r.gpsLons
     };
@@ -10415,6 +10416,8 @@ function fetchStravaPage(token, page, imported, forceAll) {
         ifPct: IF2 ? Math.round(IF2*100) : null,
         avgTemp: avgTempF, maxTemp: maxTempF,
         gpsLats: gpsLats, gpsLons: gpsLons,
+        avgSpeed: a.average_speed||null,
+        pace: (function(){ if(!a.average_speed||a.average_speed<0.1) return null; var minMi=26.8224/a.average_speed; var m=Math.floor(minMi); var s=Math.round((minMi-m)*60); return m+':'+(s<10?'0':'')+s; })(),
         source: 'strava', stravaId: a.id, sportType: a.sport_type||a.type||'Ride'
       });
       newCount++;
