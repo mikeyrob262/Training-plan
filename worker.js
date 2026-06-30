@@ -3170,6 +3170,7 @@ function logWeightQuick(){
 function renderHomeTSSAndPR(){
   var container = document.getElementById('home-tss-pr');
   if(!container) return;
+  container.innerHTML=''; return; // disabled - duplicated on Progress screen
   var rides = st.rides||[];
 
   // Weight quick-log button (always shown, independent of rides)
