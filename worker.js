@@ -11293,6 +11293,7 @@ window.onload = function(){
   setTimeout(function(){
     var w = getCurrentPlanWeek();
     if(w > 1) GW(w);
+    updHdr();
   }, 1500);
   document.getElementById('btn-wt').onclick = openPk;
   document.getElementById('pk-bg').onclick = closePk;
