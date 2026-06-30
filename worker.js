@@ -10493,7 +10493,7 @@ function showCal(){
   var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
   scr.id='CAL-SCREEN';
-  scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;';
+  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;';
 
   var now=new Date();
   var calYear=now.getFullYear();
@@ -10502,7 +10502,7 @@ function showCal(){
   function render(){
     scr.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;gap:12px;padding:12px;flex:1;height:100%;box-sizing:border-box;overflow:hidden';
+    wrap.style.cssText='display:flex;gap:12px;padding:12px;flex:1;overflow:hidden;box-sizing:border-box';
 
     // ---- MONTHLY VIEW ----
     var monthly=document.createElement('div');
