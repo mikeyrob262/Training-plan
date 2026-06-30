@@ -3752,12 +3752,37 @@ function showProg(){
   var wkg=Math.round(ftp/(bwt/2.20462)*100)/100;
   var vo2=st.vo2max||'—';
 
-  // Personal records from rides
+  // Personal records from rides + weekly TSS
   var longestRide=0,bestNP=0,highestTSS=0;
+  var weekTSSmap2={};
+  var now2=new Date();
   rides.forEach(function(r){
     if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
     if(r.np&&r.np>bestNP) bestNP=r.np;
     if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    if(r.date&&r.tss){
+      var wk=getWeekKey(new Date(r.date));
+      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+(r.tss||0);
+    }
+  });
+  // Last 8 weeks TSS
+  var wTSSLabels2=[],wTSSData2=[];
+  for(var wi2=7;wi2>=0;wi2--){
+    var wd2=new Date(now2); wd2.setDate(now2.getDate()-wi2*7);
+    var wk2=getWeekKey(wd2);
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][wd2.getMonth()];
+    wTSSLabels2.push(mo+' '+wd2.getDate());
+    wTSSData2.push(Math.round(weekTSSmap2[wk2]||0));
+  }
+  var maxTSS2=Math.max.apply(null,wTSSData2)||1;
+  // Detect new PRs from last 7 days
+  var recentPRs=[];
+  var sevenDaysAgo=new Date(now2); sevenDaysAgo.setDate(now2.getDate()-7);
+  var recentRides=rides.filter(function(r){return r.date&&new Date(r.date)>=sevenDaysAgo;});
+  recentRides.forEach(function(r){
+    if(r.distance&&parseFloat(r.distance)===longestRide) recentPRs.push('🏅 Longest ride: '+longestRide.toFixed(1)+' mi');
+    if(r.np&&r.np===bestNP) recentPRs.push('⚡ Best NP: '+bestNP+'W');
+    if(r.tss&&r.tss===highestTSS) recentPRs.push('🔥 Highest TSS: '+highestTSS);
   });
 
   // Personal records from strength
@@ -3846,6 +3871,33 @@ function showProg(){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
+  // Weekly TSS bar chart
+  h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">';
+  h+='<div style="font-size:12px;font-weight:700;color:var(--t1)">Weekly TSS</div>';
+  h+='<div style="font-size:11px;color:var(--t3)">This week: '+wTSSData2[7]+'</div></div>';
+  h+='<div style="display:flex;align-items:flex-end;gap:4px;height:60px">';
+  wTSSData2.forEach(function(v,i){
+    var pct=Math.round((v/maxTSS2)*100);
+    var isThisWeek=i===7;
+    var barColor=isThisWeek?'#FC4C02':'rgba(252,76,2,.35)';
+    h+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">';
+    h+='<div style="width:100%;background:'+barColor+';border-radius:3px 3px 0 0;height:'+pct+'%;min-height:'+(v>0?'3':'0')+'px"></div>';
+    h+='<div style="font-size:8px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:clip">'+wTSSLabels2[i].split(' ')[0]+'</div>';
+    h+='</div>';
+  });
+  h+='</div></div>';
+
+  // PR banner if new PR in last 7 days
+  if(recentPRs.length){
+    h+='<div style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(252,76,2,.15),rgba(252,76,2,.05));border:1px solid rgba(252,76,2,.3);border-radius:14px;padding:12px 14px">';
+    h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02;margin-bottom:6px">🏆 New Personal Record!</div>';
+    recentPRs.forEach(function(pr){
+      h+='<div style="font-size:13px;font-weight:700;color:var(--t1);padding:2px 0">'+pr+'</div>';
+    });
+    h+='</div>';
+  }
+
   h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">'    +'<div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:10px">Personal records</div>';
   var prs=[[longestRide?longestRide.toFixed(1)+' mi':'—','Longest ride','var(--blue)'],[bestNP?bestNP+'W':'—','Best NP','var(--orange)'],[highestTSS||'—','Highest TSS week','#ef4444'],[heavySquat?heavySquat+' lbs':'—','Heaviest squat','var(--t1)'],[heavyBench?heavyBench+' lbs':'—','Heaviest bench','var(--t1)'],[longestRun?longestRun.toFixed(1)+' mi':'—','Longest run','#0F6E56']];
   prs.forEach(function(pr,i){
