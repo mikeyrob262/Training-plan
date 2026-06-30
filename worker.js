@@ -5389,6 +5389,26 @@ function renderNutr(){
     nutrContainer.appendChild(mealDiv);
   });
   t.appendChild(nutrContainer);
+  // Finished Logging toggle
+  var doneWrap=document.createElement('div');
+  doneWrap.style.cssText='margin:14px 16px 0;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;justify-content:space-between';
+  var doneLbl=document.createElement('div');
+  doneLbl.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">Finished Logging</div><div style="font-size:11px;color:var(--t3);margin-top:1px">Mark today\\'s nutrition complete</div>';
+  var doneToggle=document.createElement('div');
+  var isDone=!!nd.finished;
+  doneToggle.id='nutr-done-toggle';
+  doneToggle.style.cssText='width:48px;height:28px;border-radius:14px;background:'+(isDone?'#0F6E56':'var(--s3)')+';position:relative;cursor:pointer;transition:background .2s;flex-shrink:0';
+  doneToggle.innerHTML='<div style="width:22px;height:22px;border-radius:50%;background:#fff;position:absolute;top:3px;left:'+(isDone?'23px':'3px')+';transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></div>';
+  doneToggle.onclick=function(){
+    var day=getNDay(nutrDate);
+    day.finished=!day.finished;
+    sv();
+    renderNutr();
+  };
+  doneWrap.appendChild(doneLbl);
+  doneWrap.appendChild(doneToggle);
+  t.appendChild(doneWrap);
+
   t.appendChild(Object.assign(document.createElement('div'),{style:'height:50px'}));
 
   // Bind water and nav buttons
