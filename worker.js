@@ -10596,60 +10596,62 @@ function showWeather(){
       +'<div style="width:24px"></div>';
     scr.appendChild(hdr);
 
-    // Current conditions hero - fetch for home location (GR area)
+    // Current conditions hero
     var heroDiv=document.createElement('div');
-    heroDiv.id='wx-hero';
     heroDiv.style.cssText='background:var(--s2);padding:20px 16px 14px;text-align:center;border-bottom:1px solid var(--b1)';
-    heroDiv.innerHTML='<div style="font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px">--°</div>'
-      +'<div style="font-size:14px;font-weight:600;color:var(--t2);margin-top:6px">Loading current conditions...</div>'
-      +'<div id="wx-hourly" style="display:flex;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none"></div>';
+
+    var tempEl=document.createElement('div');
+    tempEl.style.cssText='font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px';
+    tempEl.textContent='--°';
+    heroDiv.appendChild(tempEl);
+
+    var subEl=document.createElement('div');
+    subEl.style.cssText='font-size:14px;font-weight:600;color:var(--t2);margin-top:6px';
+    subEl.textContent='Loading...';
+    heroDiv.appendChild(subEl);
+
+    var divider=document.createElement('div');
+    divider.style.cssText='border-top:1px solid var(--b1);margin-top:14px;padding-top:14px';
+    heroDiv.appendChild(divider);
+
+    var hourlyEl=document.createElement('div');
+    hourlyEl.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch';
+    divider.appendChild(hourlyEl);
+
     scr.appendChild(heroDiv);
 
-    // Fetch current conditions for Grand Rapids
     fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
       +'&current=temperature_2m,apparent_temperature,weathercode'
       +'&hourly=temperature_2m,weathercode'
       +'&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=1')
     .then(function(r){return r.json();}).then(function(data){
-      var hero=document.getElementById('wx-hero');
-      if(!hero||!data.current) return;
+      if(!data.current) return;
       var temp=Math.round(data.current.temperature_2m);
       var feels=Math.round(data.current.apparent_temperature);
       var temps=data.hourly.temperature_2m||[];
       var hi=Math.round(Math.max.apply(null,temps));
       var lo=Math.round(Math.min.apply(null,temps));
-
       var codes=data.hourly.weathercode||[];
       function wxIcon(code){
-        if(code===0)return'☀️';
-        if(code<=2)return'🌤';
-        if(code<=3)return'☁️';
-        if(code<=49)return'🌫';
-        if(code<=69)return'🌧';
-        if(code<=79)return'🌨';
-        if(code<=99)return'⛈';
-        return'🌡';
+        if(code===0)return'☀️';if(code<=2)return'🌤';if(code<=3)return'☁️';
+        if(code<=49)return'🌫';if(code<=69)return'🌧';if(code<=79)return'🌨';
+        if(code<=99)return'⛈';return'🌡';
       }
-
-      hero.innerHTML='<div style="font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px">'+temp+'°</div>'
-        +'<div style="font-size:14px;font-weight:600;color:var(--t2);margin-top:6px">Feels like: '+feels+'° &nbsp; H:'+hi+'° L:'+lo+'°</div>'
-        +'<div id="wx-hourly" style="display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none;-webkit-overflow-scrolling:touch">';
-
-      // Hourly strip
+      tempEl.textContent=temp+'°';
+      subEl.textContent='Feels like: '+feels+'°   H:'+hi+'° L:'+lo+'°';
+      hourlyEl.innerHTML='';
       var now=new Date();
-      var hourlyHtml='';
       for(var i=now.getHours();i<Math.min(now.getHours()+8,24);i++){
         var t2=Math.round(temps[i]||temp);
-        var h=i>12?i-12:i; var ampm=i>=12?'PM':'AM';
-        var lbl=i===now.getHours()?'Now':h+(i>=12?'PM':'AM');
-        var isFirst=i===now.getHours();
-        hourlyHtml+='<div style="flex-shrink:0;text-align:center;padding:0 12px;'+(i<23?'border-right:1px solid var(--b1)':'')+'">'
-          +'<div style="font-size:10px;font-weight:700;color:'+(isFirst?'var(--t1)':'var(--t3)')+'">'+lbl+'</div>'
+        var hr=i>12?i-12:(i===0?12:i);
+        var lbl=i===now.getHours()?'Now':hr+(i>=12?'PM':'AM');
+        var slot=document.createElement('div');
+        slot.style.cssText='flex:0 0 auto;text-align:center;padding:0 14px;'+(i<Math.min(now.getHours()+7,23)?'border-right:1px solid var(--b1)':'');
+        slot.innerHTML='<div style="font-size:10px;font-weight:700;color:'+(i===now.getHours()?'var(--t1)':'var(--t3)')+'">'+lbl+'</div>'
           +'<div style="font-size:20px;margin:5px 0 3px">'+wxIcon(codes[i]||0)+'</div>'
-          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+t2+'°</div>'
-          +'</div>';
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+t2+'°</div>';
+        hourlyEl.appendChild(slot);
       }
-      hero.innerHTML=hero.innerHTML+hourlyHtml+'</div>';var hEl=document.getElementById('wx-hourly');if(hEl){hEl.style.cssText='display:flex;flex-direction:row;flex-wrap:nowrap;gap:0;overflow-x:auto;margin-top:14px;padding-top:14px;border-top:1px solid var(--b1);scrollbar-width:none;-webkit-overflow-scrolling:touch';}
     }).catch(function(){});
 
     // Ride list
