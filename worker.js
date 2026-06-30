@@ -10502,8 +10502,7 @@ function showCal(){
   function render(){
     scr.innerHTML='';
     var wrap=document.createElement('div');
-    var scrH = (window.innerHeight - 60) + 'px';
-    wrap.style.cssText='display:flex;gap:12px;padding:12px;overflow:hidden;box-sizing:border-box;height:'+scrH+';width:100%';
+    wrap.style.cssText='display:flex;gap:12px;padding:12px;overflow:hidden;box-sizing:border-box;height:calc(100vh - 84px);width:100%';
 
     // ---- MONTHLY VIEW ----
     var monthly=document.createElement('div');
