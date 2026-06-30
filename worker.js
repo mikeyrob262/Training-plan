@@ -3743,6 +3743,8 @@ function finStr(l){
 }
 
 function showScreen(id){
+  var wxs=document.getElementById('WEATHER-SCREEN');if(wxs)wxs.remove();
+  var cals=document.getElementById('CAL-SCREEN');if(cals)cals.remove();
   // Clean up any fixed overlays that might be blocking
   var coreScr=document.getElementById('CORE-SCREEN');if(coreScr)coreScr.remove();
   var condScr=document.getElementById('COND-SCREEN');if(condScr)condScr.remove();
