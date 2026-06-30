@@ -10561,7 +10561,7 @@ function showCal(){
       cell.style.cssText='height:100%;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
 
       var dNum=document.createElement('div');
-      dNum.style.cssText='font-size:8px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
+      dNum.style.cssText='font-size:10px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
       dNum.textContent=d;
       cell.appendChild(dNum);
 
@@ -10569,14 +10569,14 @@ function showCal(){
         var sport=r.sportType||r.type||'Ride';
         var c=colors[sport]||'#FC4C02';
         var tile=document.createElement('div');
-        tile.style.cssText='background:'+c+';border-radius:2px;padding:1px 3px;margin-bottom:1px;overflow:hidden';
+        tile.style.cssText='background:'+c+';border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
         var nm=document.createElement('div');
-        nm.style.cssText='font-size:7px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
+        nm.style.cssText='font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
         nm.textContent=r.name||sport;
         tile.appendChild(nm);
         if(r.distance){
           var dist=document.createElement('div');
-          dist.style.cssText='font-size:7px;color:rgba(255,255,255,0.8)';
+          dist.style.cssText='font-size:8px;color:rgba(255,255,255,0.8)';
           dist.textContent=r.distance+'mi'+(r.duration?' · '+r.duration:'');
           tile.appendChild(dist);
         }
@@ -10676,14 +10676,14 @@ function showCal(){
       var dots=moActs.slice(0,18).map(function(r){
         var sport=r.sportType||'Ride';
         var c=dotColors[sport]||'#FC4C02';
-        return '<div style="width:6px;height:6px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';
+        return '<div style="width:8px;height:8px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';
       }).join('');
-      row.innerHTML='<div style="font-size:10px;color:'+moColor+';font-weight:'+moWeight+';width:22px;flex-shrink:0">'+mo+'</div>'
-        +'<div style="flex:1;display:flex;flex-direction:column;gap:2px">'
-        +'<div style="height:6px;background:var(--s3);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.5)')+';border-radius:3px"></div></div>'
-        +(dots?'<div style="display:flex;gap:2px;flex-wrap:wrap">'+dots+'</div>':'')
+      row.innerHTML='<div style="font-size:12px;color:'+moColor+';font-weight:'+moWeight+';width:28px;flex-shrink:0">'+mo+'</div>'
+        +'<div style="flex:1;display:flex;flex-direction:column;gap:3px">'
+        +'<div style="height:10px;background:var(--s3);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.5)')+';border-radius:3px"></div></div>'
+        +(dots?'<div style="display:flex;gap:3px;flex-wrap:wrap">'+dots+'</div>':'')
         +'</div>'
-        +'<div style="font-size:9px;color:var(--t3);width:32px;text-align:right;flex-shrink:0">'+(mi?mi+'mi':'')+'</div>';
+        +'<div style="font-size:11px;color:var(--t3);width:38px;text-align:right;flex-shrink:0">'+(mi?mi+'mi':'')+'</div>';
       if(mi){
         (function(mo2){
           row.onclick=function(){calMonth=mo2;render();};
