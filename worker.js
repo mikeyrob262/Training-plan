@@ -10540,7 +10540,7 @@ function showCal(){
 
     // Calendar grid
     var grid=document.createElement('div');
-    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex:1;overflow-y:auto;align-content:start';
+    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:2px;flex:1;overflow:hidden';
 
     var firstDay=new Date(calYear,calMonth,1).getDay();
     var offset=(firstDay+6)%7;
@@ -10558,7 +10558,7 @@ function showCal(){
       var isToday=d===now.getDate()&&calMonth===now.getMonth()&&calYear===now.getFullYear();
 
       var cell=document.createElement('div');
-      cell.style.cssText='min-height:44px;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
+      cell.style.cssText='height:100%;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
 
       var dNum=document.createElement('div');
       dNum.style.cssText='font-size:8px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
