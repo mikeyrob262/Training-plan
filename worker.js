@@ -4075,18 +4075,19 @@ function showSet(){
     +'<div style="padding:0 16px 14px;display:flex;gap:8px">'
     +'<button onclick="saveProfile()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Profile</button>'
     +'</div></div>';
-  // -- Cloud Sync section (compact, replaces Stats + duplicate backup)
+  // -- Cloud Sync + Data Backup combined, compact
   var autoSync = st.autoSync || false;
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;justify-content:space-between">'
-    +'<span>Cloud Sync</span>'
-    +'<span style="display:flex;align-items:center;gap:5px"><span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:#aaa"></span><span id="sync-label" style="font-size:9px;color:var(--t3);text-transform:none;letter-spacing:0">Connecting…</span></span>'
+    +'<span>Sync &amp; Backup</span>'
+    +'<span style="display:flex;align-items:center;gap:4px"><span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:#aaa"></span><span id="sync-label" style="font-size:9px;color:var(--t3);text-transform:none">Connecting…</span></span>'
     +'</div>'
-    +'<div style="padding:8px 16px">'
-    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px">'
-    +'<button onclick="fbPull(false)" style="padding:7px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
-    +'<button onclick="fbPush(false)" style="padding:7px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
-    +'</div>'
+    +'<div style="padding:10px 16px;display:flex;gap:6px">'
+    +'<button onclick="fbPull(false)" style="flex:1;padding:7px 4px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
+    +'<button onclick="fbPush(false)" style="flex:1;padding:7px 4px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
+    +'<button id="export-data-btn" style="flex:1;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;cursor:pointer;font-family:inherit">⬇ Export</button>'
+    +'<button id="import-data-btn" style="flex:1;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;cursor:pointer;font-family:inherit">⬆ Import</button>'
+    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'
     +'</div></div>';
   // Update the sync dot after render
   setTimeout(function(){
@@ -4105,7 +4106,7 @@ function showSet(){
 
   // GitHub Deploy section
   var ghToken = st.ghToken||'';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:10px 16px;display:flex;gap:6px">'    +'<button id="export-data-btn" style="flex:1;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:11px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:inherit">⬇ Export</button>'    +'<button id="import-data-btn" style="flex:1;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:11px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:inherit">⬆ Import</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'</div></div>';
+
 
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
