@@ -10400,6 +10400,7 @@ function showMoreSheet(){
   overlay.style.cssText='position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
+    {n:'Calendar',      i:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',          fn:'showCal',          c:'#FC4C02'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
     {n:'Conditioning',  i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'showCond',         c:'#FFB938'},
@@ -10486,6 +10487,205 @@ function fetchStravaGPS(stravaId, rideIndex) {
       if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
     });
   } else { doFetch(st.stravaToken); }
+}
+
+function showCal(){
+  var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
+  var scr=document.createElement('div');
+  scr.id='CAL-SCREEN';
+  scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;';
+
+  var now=new Date();
+  var calYear=now.getFullYear();
+  var calMonth=now.getMonth();
+
+  function render(){
+    scr.innerHTML='';
+    var wrap=document.createElement('div');
+    wrap.style.cssText='display:flex;gap:12px;padding:16px;min-height:100%';
+
+    // ---- MONTHLY VIEW ----
+    var monthly=document.createElement('div');
+    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0';
+
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var days=['Mo','Tu','We','Th','Fr','Sa','Su'];
+
+    // Header
+    var hd=document.createElement('div');
+    hd.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
+    var prev=document.createElement('button');
+    prev.innerHTML='&#8249;';
+    prev.style.cssText='background:none;border:none;font-size:20px;cursor:pointer;color:var(--t2);padding:0 8px';
+    prev.onclick=function(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}render();};
+    var next=document.createElement('button');
+    next.innerHTML='&#8250;';
+    next.style.cssText='background:none;border:none;font-size:20px;cursor:pointer;color:var(--t2);padding:0 8px';
+    next.onclick=function(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}render();};
+    var title=document.createElement('div');
+    title.style.cssText='font-size:14px;font-weight:700;color:var(--t1)';
+    title.textContent=months[calMonth]+' '+calYear;
+    hd.appendChild(prev);hd.appendChild(title);hd.appendChild(next);
+    monthly.appendChild(hd);
+
+    // Day headers
+    var dRow=document.createElement('div');
+    dRow.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px';
+    days.forEach(function(d){
+      var dd=document.createElement('div');
+      dd.style.cssText='font-size:9px;color:var(--t3);text-align:center';
+      dd.textContent=d;dRow.appendChild(dd);
+    });
+    monthly.appendChild(dRow);
+
+    // Calendar grid
+    var grid=document.createElement('div');
+    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px';
+
+    var firstDay=new Date(calYear,calMonth,1).getDay();
+    var offset=(firstDay+6)%7;
+    var daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+
+    for(var i=0;i<offset;i++){
+      grid.appendChild(document.createElement('div'));
+    }
+
+    var colors={Ride:'#FC4C02',VirtualRide:'#1D9E75',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD'};
+
+    for(var d=1;d<=daysInMonth;d++){
+      var dateStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      var dayRides=(st.rides||[]).filter(function(r){return r.date===dateStr;});
+      var isToday=d===now.getDate()&&calMonth===now.getMonth()&&calYear===now.getFullYear();
+
+      var cell=document.createElement('div');
+      cell.style.cssText='min-height:52px;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
+
+      var dNum=document.createElement('div');
+      dNum.style.cssText='font-size:9px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
+      dNum.textContent=d;
+      cell.appendChild(dNum);
+
+      dayRides.slice(0,2).forEach(function(r){
+        var sport=r.sportType||'Ride';
+        var c=colors[sport]||'#FC4C02';
+        var tile=document.createElement('div');
+        tile.style.cssText='background:'+c+';border-radius:2px;padding:1px 3px;margin-bottom:1px;overflow:hidden';
+        var nm=document.createElement('div');
+        nm.style.cssText='font-size:7px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
+        nm.textContent=r.name||sport;
+        tile.appendChild(nm);
+        if(r.distance){
+          var dist=document.createElement('div');
+          dist.style.cssText='font-size:7px;color:rgba(255,255,255,0.8)';
+          dist.textContent=r.distance+'mi'+(r.duration?' · '+r.duration:'');
+          tile.appendChild(dist);
+        }
+        cell.appendChild(tile);
+      });
+
+      if(dayRides.length>2){
+        var more=document.createElement('div');
+        more.style.cssText='font-size:7px;color:var(--t3)';
+        more.textContent='+'+(dayRides.length-2)+' more';
+        cell.appendChild(more);
+      }
+
+      // Tap to open ride detail or pick list
+      if(dayRides.length===1){
+        (function(ride){
+          cell.onclick=function(){
+            scr.remove();
+            var idx=(st.rides||[]).indexOf(ride);
+            if(idx>=0) openRideDetail(idx);
+          };
+        })(dayRides[0]);
+      } else if(dayRides.length>1){
+        (function(rides,ds){
+          cell.onclick=function(){
+            var pick=document.createElement('div');
+            pick.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center';
+            var box=document.createElement('div');
+            box.style.cssText='background:var(--s1);border-radius:16px;padding:16px;width:280px;max-height:400px;overflow-y:auto';
+            box.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px">'+ds+'</div>';
+            rides.forEach(function(r){
+              var idx=(st.rides||[]).indexOf(r);
+              var btn=document.createElement('button');
+              btn.style.cssText='display:block;width:100%;text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit';
+              btn.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t1)">'+(r.name||r.sportType||'Activity')+'</div>'
+                +'<div style="font-size:11px;color:var(--t3)">'+(r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';
+              btn.onclick=function(){pick.remove();scr.remove();if(idx>=0)openRideDetail(idx);};
+              box.appendChild(btn);
+            });
+            var cancel=document.createElement('button');
+            cancel.style.cssText='display:block;width:100%;text-align:center;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;margin-top:4px;font-family:inherit';
+            cancel.textContent='Cancel';
+            cancel.onclick=function(){pick.remove();};
+            box.appendChild(cancel);
+            pick.appendChild(box);
+            document.body.appendChild(pick);
+          };
+        })(dayRides,dateStr);
+      }
+
+      grid.appendChild(cell);
+    }
+    monthly.appendChild(grid);
+
+    // Legend
+    var leg=document.createElement('div');
+    leg.style.cssText='margin-top:10px;display:flex;gap:10px;flex-wrap:wrap';
+    [{l:'Ride',c:'#FC4C02'},{l:'Virtual',c:'#1D9E75'},{l:'Run',c:'#185FA5'},{l:'Strength',c:'#7F77DD'}].forEach(function(x){
+      leg.innerHTML+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><div style="width:8px;height:8px;border-radius:2px;background:'+x.c+'"></div>'+x.l+'</div>';
+    });
+    monthly.appendChild(leg);
+
+    // ---- YEAR VIEW ----
+    var yearly=document.createElement('div');
+    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0';
+
+    var yTitle=document.createElement('div');
+    yTitle.style.cssText='font-size:14px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:10px';
+    yTitle.textContent=calYear;
+    yearly.appendChild(yTitle);
+
+    var moMiles=[];
+    for(var m=0;m<12;m++){
+      var total=(st.rides||[]).filter(function(r){
+        if(!r.date) return false;
+        var rd=new Date(r.date);
+        return rd.getFullYear()===calYear&&rd.getMonth()===m;
+      }).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
+      moMiles.push(Math.round(total));
+    }
+    var maxMi=Math.max.apply(null,moMiles)||1;
+
+    months.forEach(function(mo,m){
+      var mi=moMiles[m];
+      var pct=Math.round((mi/maxMi)*100);
+      var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;cursor:'+(mi?'pointer':'default');
+      var moColor=isCurrentMo?'var(--t1)':'var(--t3)';
+      var moWeight=isCurrentMo?700:400;
+      row.innerHTML='<div style="font-size:10px;color:'+moColor+';font-weight:'+moWeight+';width:22px;flex-shrink:0">'+mo+'</div>'
+        +'<div style="flex:1;height:10px;background:var(--s3);border-radius:3px;overflow:hidden">'
+        +'<div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.45)')+';border-radius:3px"></div></div>'
+        +'<div style="font-size:9px;color:var(--t3);width:32px;text-align:right;flex-shrink:0">'+(mi?mi+'mi':'')+'</div>';
+      if(mi){
+        (function(mo2){
+          row.onclick=function(){calMonth=mo2;render();};
+        })(m);
+      }
+      yearly.appendChild(row);
+    });
+
+    wrap.appendChild(monthly);
+    wrap.appendChild(yearly);
+    scr.appendChild(wrap);
+  }
+
+  render();
+  document.body.appendChild(scr);
 }
 
 function stravaFullResync() {
