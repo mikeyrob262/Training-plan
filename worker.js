@@ -10501,8 +10501,6 @@ function showCal(){
 
   function render(){
     scr.innerHTML='';
-    var calView = 'month'; // 'month' or 'year'
-
     var wrap=document.createElement('div');
     wrap.style.cssText='display:flex;flex-direction:column;padding:12px;overflow:hidden;box-sizing:border-box;height:calc(100vh - 84px);width:100%';
 
