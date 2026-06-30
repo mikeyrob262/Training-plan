@@ -3697,7 +3697,7 @@ function showProg(){
   var weekStart=new Date(now); weekStart.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1)); weekStart.setHours(0,0,0,0);
 
   // Sessions across all activity types
-  var rides=st.rides||[]; var runs=st.runs||[];
+  var rides=st.rides||[]; var runs=(st.rides||[]).filter(function(r){return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');}).concat(st.runs||[]);
   var allSessions=[]; // {date, type}
   rides.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'ride'});});
   runs.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'run'});});
