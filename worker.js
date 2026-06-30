@@ -5682,7 +5682,7 @@ function showAnalytics(){
   overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';';
+  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Analytics</div>';
   var body=document.createElement('div');
   body.id='perf-body';
@@ -5703,7 +5703,7 @@ function showActivities(){
   overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';';
+  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Activities</div>';
   var body=document.createElement('div');
   body.id='perf-body';
@@ -5725,7 +5725,7 @@ function showPerf(){
   overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:'+(isDarkHdr?'#1C1C1E':'#FFFFFF')+';padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid '+(isDarkHdr?'rgba(255,255,255,.09)':'rgba(0,0,0,.08)')+';box-shadow:0 1px 4px rgba(0,0,0,.06)';
+  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.06)';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'
     +'';
   var body=document.createElement('div');
@@ -6367,7 +6367,7 @@ function renderRideList(container){
   var rides=(st.rides||[]).slice().reverse();
   var html='';
   // Drop zone
-  html+='<div id="ride-drop-zone" style="margin:12px 16px 8px;border:2px dashed #FC4C02;border-radius:12px;padding:14px;text-align:center;color:#FC4C02;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">⬆ Drop FIT / TCX / GPX files here to import</div>';
+
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
   rides.forEach(function(r,idx){
@@ -7565,9 +7565,8 @@ function openRideDetail(idx){
     dtStr = r.date;
   }
 
-  hdr.innerHTML = '<button onclick="closeRideDetail()" style="background:none;border:none;color:#FC4C02;font-size:15px;font-weight:700;padding:6px 8px;cursor:pointer">← Back</button>'
-    + '<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Activity') + '</div>'
-    + '<div style="font-size:11px;color:var(--t3);margin-top:1px">' + dtStr + '</div></div>'
+  hdr.innerHTML = '<div style="font-size:11px;color:var(--t3);padding:4px 8px">'+dtStr+'</div>'
+    + '<div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Activity') + '</div>'
     + '<button onclick="renameRide('+idx+')" style="background:var(--s2);border:1px solid var(--b1);color:var(--orange);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">Rename</button>';
 
   var body = document.createElement('div');
