@@ -10663,24 +10663,24 @@ function showWeather(){
     var listWrap=document.createElement('div');
     listWrap.style.cssText='padding:16px 16px 4px';
 
+    // Search by location card - FIRST
+    var searchCard=document.createElement('div');
+    searchCard.style.cssText='background:rgba(55,138,221,0.08);border-radius:14px;border:1.5px solid #378ADD;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;cursor:pointer';
+    searchCard.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:rgba(55,138,221,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:14px;font-weight:800;color:#378ADD">Search any location</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">Chicago, a city, address...</div>'
+      +'</div>'
+      +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
+    searchCard.onclick=function(){renderLocationSearch();};
+    listWrap.appendChild(searchCard);
+
     var sectionLbl=document.createElement('div');
     sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
     sectionLbl.textContent='My Routes';
     listWrap.appendChild(sectionLbl);
-
-    // Search by location card
-    var searchCard=document.createElement('div');
-    searchCard.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer';
-    searchCard.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:rgba(55,138,221,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
-      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
-      +'</div>'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--t1)">Search any location</div>'
-      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">Chicago, a city, address...</div>'
-      +'</div>'
-      +'<div style="color:var(--t3);font-size:18px">›</div>';
-    searchCard.onclick=function(){renderLocationSearch();};
-    listWrap.appendChild(searchCard);
 
     var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
     var rideIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
