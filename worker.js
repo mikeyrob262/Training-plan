@@ -10713,40 +10713,63 @@ function showWeather(){
     var body=document.createElement('div');
     body.style.cssText='padding:20px 16px';
 
-    // Date selector
     var today=new Date();
     var tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
     var day2=new Date(today);day2.setDate(today.getDate()+2);
     var day3=new Date(today);day3.setDate(today.getDate()+3);
 
     function fmt(d){return d.toISOString().split('T')[0];}
-    function dayLabel(d){
-      var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-      var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      return days[d.getDay()]+' '+months[d.getMonth()]+' '+d.getDate();
-    }
+    var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     var selectedDate=fmt(today);
     var selectedHour=7;
 
-    body.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px">Ride Date</div>';
+    // Section label helper
+    function sectionLbl(icon,text){
+      var d=document.createElement('div');
+      d.style.cssText='font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px';
+      d.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">'+icon+'</svg>'+text;
+      return d;
+    }
+
+    body.appendChild(sectionLbl('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>','When are you riding?'));
 
     var dateGrid=document.createElement('div');
-    dateGrid.style.cssText='display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px';
+    dateGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px';
 
     var dateBtns=[];
-    [[today,'Today'],[tomorrow,'Tomorrow'],[day2,''],[day3,'']].forEach(function(pair,idx){
-      var d=pair[0],lbl=pair[1]||dayLabel(pair[0]);
+    var dateIcons=[
+      '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+      '<path d="M5 12h14M12 5l7 7-7 7"/>',
+      '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/>',
+      '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="16" x2="16" y2="16" stroke-linecap="round" stroke-width="2.5"/>'
+    ];
+    var dateLabels=['Today','Tomorrow',days[day2.getDay()],days[day3.getDay()]];
+    var dateSubs=[months[today.getMonth()]+' '+today.getDate(),months[tomorrow.getMonth()]+' '+tomorrow.getDate(),months[day2.getMonth()]+' '+day2.getDate(),months[day3.getMonth()]+' '+day3.getDate()];
+
+    [today,tomorrow,day2,day3].forEach(function(d,idx){
+      var active=idx===0;
       var btn=document.createElement('div');
-      btn.style.cssText='background:'+(idx===0?'#FC4C02':'var(--s2)')+';border:1px solid '+(idx===0?'#FC4C02':'var(--b1)')+';border-radius:12px;padding:12px 14px;cursor:pointer;text-align:center';
-      btn.innerHTML='<div style="font-size:13px;font-weight:700;color:'+(idx===0?'#fff':'var(--t1)')+'">'+lbl+'</div>'
-        +'<div style="font-size:11px;color:'+(idx===0?'rgba(255,255,255,0.75)':'var(--t3)')+'">'+dayLabel(d)+'</div>';
+      btn.style.cssText='background:var(--s2);border-radius:12px;padding:12px 14px;border:'+(active?'2px solid #FC4C02':'0.5px solid var(--b1)')+';cursor:pointer;display:flex;align-items:center;gap:10px';
+      var iconColor=active?'#FC4C02':'var(--t3)';
+      var iconBg=active?'rgba(252,76,2,0.12)':'var(--s1)';
+      btn.innerHTML='<div style="width:36px;height:36px;border-radius:8px;background:'+iconBg+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+        +'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="'+iconColor+'" stroke-width="2">'+dateIcons[idx]+'</svg>'
+        +'</div>'
+        +'<div><div style="font-size:13px;font-weight:800;color:'+(active?'#FC4C02':'var(--t1)')+'">'+dateLabels[idx]+'</div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+dateSubs[idx]+'</div></div>';
       btn.onclick=function(){
         selectedDate=fmt(d);
         dateBtns.forEach(function(b,i){
-          b.style.background=i===idx?'#FC4C02':'var(--s2)';
-          b.style.borderColor=i===idx?'#FC4C02':'var(--b1)';
-          b.querySelector('div').style.color=i===idx?'#fff':'var(--t1)';
+          var a=i===idx;
+          b.style.border=a?'2px solid #FC4C02':'0.5px solid var(--b1)';
+          var ic=b.querySelector('div');
+          if(ic) ic.style.background=a?'rgba(252,76,2,0.12)':'var(--s1)';
+          var sv=b.querySelector('svg');
+          if(sv) sv.setAttribute('stroke',a?'#FC4C02':'var(--t3)');
+          var lbl=b.querySelectorAll('div div')[1];
+          if(lbl) lbl.style.color=a?'#FC4C02':'var(--t1)';
         });
       };
       dateBtns.push(btn);
@@ -10754,36 +10777,48 @@ function showWeather(){
     });
     body.appendChild(dateGrid);
 
-    // Time selector
-    var timeLbl=document.createElement('div');
-    timeLbl.style.cssText='font-size:13px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
-    timeLbl.textContent='Start Time';
-    body.appendChild(timeLbl);
+    body.appendChild(sectionLbl('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>','Start time'));
 
     var timeWrap=document.createElement('div');
-    timeWrap.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:16px;margin-bottom:24px;display:flex;align-items:center;gap:16px';
+    timeWrap.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between';
 
-    var timeInput=document.createElement('input');
-    timeInput.type='time';
-    timeInput.value='07:00';
-    timeInput.style.cssText='flex:1;font-size:28px;font-weight:700;color:var(--t1);background:none;border:none;outline:none;font-family:inherit';
-    timeInput.onchange=function(){selectedHour=parseInt(timeInput.value.split(':')[0])||7;};
-    timeWrap.appendChild(timeInput);
+    var timeDisp=document.createElement('div');
+    timeDisp.style.cssText='font-size:28px;font-weight:200;color:var(--t1);letter-spacing:-1px';
+    timeDisp.innerHTML='7:00 <span style="font-size:16px;font-weight:500;color:var(--t2)">AM</span>';
 
-    var durLbl=document.createElement('div');
-    durLbl.style.cssText='font-size:12px;color:var(--t3);text-align:right;line-height:1.4';
-    durLbl.innerHTML='Estimated<br>duration<br><strong style="font-size:14px;color:var(--t1)">'+(route.duration||'4:00')+'</strong>';
-    timeWrap.appendChild(durLbl);
+    function updateTimeDisp(){
+      var h=selectedHour,ampm=h>=12?'PM':'AM';
+      var disp=h>12?h-12:(h===0?12:h);
+      timeDisp.innerHTML=disp+':00 <span style="font-size:16px;font-weight:500;color:var(--t2)">'+ampm+'</span>';
+    }
+
+    var btnStyle='background:var(--s1);border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:0.5px solid var(--b1)';
+    var minusBtn=document.createElement('div');minusBtn.style.cssText=btnStyle;
+    minusBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    minusBtn.onclick=function(){selectedHour=Math.max(0,selectedHour-1);updateTimeDisp();};
+
+    var plusBtn=document.createElement('div');plusBtn.style.cssText=btnStyle;
+    plusBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    plusBtn.onclick=function(){selectedHour=Math.min(23,selectedHour+1);updateTimeDisp();};
+
+    var btnRow=document.createElement('div');btnRow.style.cssText='display:flex;gap:6px';
+    btnRow.appendChild(minusBtn);btnRow.appendChild(plusBtn);
+    timeWrap.appendChild(timeDisp);timeWrap.appendChild(btnRow);
     body.appendChild(timeWrap);
 
-    // Go button
-    var goBtn=document.createElement('button');
-    goBtn.style.cssText='width:100%;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:#fff;font-size:16px;font-weight:800;padding:16px;border-radius:14px;cursor:pointer;font-family:inherit;letter-spacing:0.02em';
-    goBtn.textContent='Check Weather →';
-    goBtn.onclick=function(){
-      selectedHour=parseInt(timeInput.value.split(':')[0])||7;
-      renderDetail(route,selectedDate,selectedHour);
-    };
+    var durRow=document.createElement('div');
+    durRow.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:11px 16px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between';
+    durRow.innerHTML='<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--t3)">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0M12 8v4l3 3"/></svg>'
+      +'Estimated duration</div>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--t1)">'+(route.duration||'4:00')+'</span>';
+    body.appendChild(durRow);
+
+    var goBtn=document.createElement('div');
+    goBtn.style.cssText='display:flex;align-items:center;justify-content:center;gap:8px;background:#FC4C02;border-radius:12px;padding:14px;cursor:pointer';
+    goBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>'
+      +'<span style="font-size:14px;font-weight:800;color:#fff;letter-spacing:0.02em">Check weather</span>';
+    goBtn.onclick=function(){renderDetail(route,selectedDate,selectedHour);};
     body.appendChild(goBtn);
 
     scr.appendChild(body);
