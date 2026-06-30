@@ -3138,8 +3138,14 @@ function updDots(){
 function updHdr(){
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var weekStart=getWeekStartDate(cw);
-  var dateStr=days[weekStart.getDay()]+' '+months[weekStart.getMonth()]+' '+weekStart.getDate();
-  document.getElementById('btn-wt').innerHTML='Week of '+dateStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
+  var weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  var rangeStr;
+  if(weekStart.getMonth()===weekEnd.getMonth()){
+    rangeStr=months[weekStart.getMonth()]+' '+weekStart.getDate()+'-'+weekEnd.getDate();
+  } else {
+    rangeStr=months[weekStart.getMonth()]+' '+weekStart.getDate()+' - '+months[weekEnd.getMonth()]+' '+weekEnd.getDate();
+  }
+  document.getElementById('btn-wt').innerHTML=rangeStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
   var pv=document.getElementById('btn-pv');if(pv)pv.disabled=false;
   var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
