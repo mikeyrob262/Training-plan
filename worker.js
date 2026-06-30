@@ -4081,28 +4081,6 @@ function showSet(){
     +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Workouts Done</div><div style="font-size:22px;font-weight:800;color:var(--green)">'+total+'</div></div>'
     +'<div style="background:var(--s1);padding:14px 16px"><div class="ci-lbl">Activities</div><div style="font-size:22px;font-weight:800;color:var(--blue)">'+(st.activities?st.activities.length:0)+'</div></div>'
     +'</div></div>';
-  // Baseline weights
-  var fba2=[["Goblet Squat"],["Romanian Deadlift (RDL)"],["Bench Press"],["Push-up"],["Band Row"],["Dead Bug"]];
-  var fbb2=[["Back Squat"],["Single-Leg RDL"],["Dumbbell Press"],["Pull-up / Lat Pulldown"],["Dumbbell Row"],["Plank"]];
-  var bl=st.baseline||{};
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
-    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Starting Weights (Baseline)</div>'
-    +'<div style="padding:12px 16px"><div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">Enter your current working weights. These show as PREV on your first workout.</div>'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px">Full Body A</div>'
-    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:14px">';
-  fba2.forEach(function(ex){
-    var k='A_'+ex[0].replace(/[^a-zA-Z]/g,'');
-    html+='<div><div class="ci-lbl">'+ex[0]+'</div><input class="bl-inp" data-key="'+k+'" type="number" placeholder="lbs" value="'+(bl[k]||'')+'" style="font-size:16px;border:none;border-bottom:1.5px solid var(--b2);background:transparent;color:var(--t1);width:100%;padding:2px 0;font-family:inherit"></div>';
-  });
-  html+='</div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px">Full Body B</div>'
-    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:14px">';
-  fbb2.forEach(function(ex){
-    var k='B_'+ex[0].replace(/[^a-zA-Z]/g,'');
-    html+='<div><div class="ci-lbl">'+ex[0]+'</div><input class="bl-inp" data-key="'+k+'" type="number" placeholder="lbs" value="'+(bl[k]||'')+'" style="font-size:16px;border:none;border-bottom:1.5px solid var(--b2);background:transparent;color:var(--t1);width:100%;padding:2px 0;font-family:inherit"></div>';
-  });
-  html+='</div><button id="bl-save-btn" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:14px;font-weight:700;padding:11px;border-radius:10px;width:100%;cursor:pointer">Save Baseline Weights</button>'
-    +'</div></div>';
-
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);padding:14px 16px">'
     +'<div class="ci-lbl" style="margin-bottom:10px">Data &amp; Backup</div>'
     +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
@@ -4113,15 +4091,14 @@ function showSet(){
   var autoSync = st.autoSync || false;
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
     +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Cloud Sync</div>'
-    +'<div style="padding:14px 16px">'
+    +'<div style="padding:12px 16px">'
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
     +'<div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#aaa;flex-shrink:0"></div>'
     +'<div id="sync-label" style="font-size:12px;color:var(--t2)">Connecting…</div>'
     +'</div>'
-    +'<div style="font-size:12px;color:var(--t2);margin-bottom:14px;line-height:1.5">Real-time sync via Firebase. Changes push automatically after 1.5s and stream to all devices instantly - no manual buttons needed.</div>'
-    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:12px">'
-    +'<button onclick="fbPull(false)" style="padding:11px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;color:var(--t1);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬇️ Force Pull</button>'
-    +'<button onclick="fbPush(false)" style="padding:11px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:10px;color:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">⬆️ Force Push</button>'
+    +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px">'
+    +'<button onclick="fbPull(false)" style="padding:8px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
+    +'<button onclick="fbPush(false)" style="padding:8px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
     +'</div>'
     +'</div></div>';
   // Update the sync dot after render
@@ -4141,7 +4118,7 @@ function showSet(){
 
   // GitHub Deploy section
   var ghToken = st.ghToken||'';
-  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">'    +'<div style="font-size:12px;color:var(--t2);line-height:1.5">Export your rides, nutrition, and settings as a JSON file. Import to restore from a backup.</div>'    +'<button id="export-data-btn" style="background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬇ Export All Data</button>'    +'<button id="import-data-btn" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:14px;font-weight:700;padding:12px;border-radius:10px;cursor:pointer;font-family:inherit">⬆ Import / Restore Backup</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'</div></div>';  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Deploy to GitHub</div>'    +'<div style="padding:14px 16px">'    +'<div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.5">One-tap deploy pushes the latest app version to your GitHub Pages site. Get a token at github.com → Settings → Developer settings → Personal access tokens → Tokens (classic). Needs <b>repo</b> scope.</div>'    +'<div class="ci-lbl">GitHub Token</div>'    +'<input class="ci-in" id="gh-token-inp" type="password" placeholder="ghp_xxxxxxxxxxxx" value="'+ghToken+'" style="font-family:monospace;letter-spacing:.05em">'    +'<div style="font-size:11px;color:var(--t3);margin:6px 0 12px">Stored locally on your device only.</div>'    +'<button onclick="deployToGitHub()" id="deploy-btn" style="background:linear-gradient(135deg,#24292e,#444d56);border:none;color:white;font-size:14px;font-weight:700;padding:12px;border-radius:10px;width:100%;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">'    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>'    +' Deploy to mikeyrob262.github.io'    +'</button>'    +'<div id="deploy-status" style="margin-top:10px;font-size:13px;text-align:center;color:var(--t3)"></div>'    +'</div></div>';
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Data Backup</div>'    +'<div style="padding:10px 16px;display:flex;gap:6px">'    +'<button id="export-data-btn" style="flex:1;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:11px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:inherit">⬇ Export</button>'    +'<button id="import-data-btn" style="flex:1;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:11px;font-weight:700;padding:9px;border-radius:8px;cursor:pointer;font-family:inherit">⬆ Import</button>'    +'<input id="import-data-file" type="file" accept=".json" style="display:none">'    +'</div></div>';
 
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
@@ -4178,15 +4155,6 @@ function showSet(){
     });
   }
   showScreen('SET');
-  var blb=document.getElementById('bl-save-btn');
-  if(blb)blb.addEventListener('click',function(){
-    if(!st.baseline)st.baseline={};
-    document.querySelectorAll('.bl-inp').forEach(function(inp){
-      var k=inp.getAttribute('data-key');
-      if(k&&inp.value)st.baseline[k]=parseFloat(inp.value);
-    });
-    sv();toast('Baseline saved! 💪');
-  });
 }
 
 function saveProfile(){
