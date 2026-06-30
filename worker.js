@@ -8271,6 +8271,7 @@ function getRuns(){
       elevation: r.elev,
       name: r.name,
       source: r.source,
+      stravaId: r.stravaId,
       gpsLats: r.gpsLats,
       gpsLons: r.gpsLons
     };
