@@ -10933,9 +10933,8 @@ function showWeather(){
           var ri=Math.floor(pct*(lats.length-1));
           var wi=Math.floor(pct*windDir.length);
           var deg=windDir[wi]||0,spd=wind[wi]?Math.round(wind[wi]):'';
-          var dirStr=getDirStr(deg);
-          var html='<div style="background:#1C1C1E;border-radius:20px;padding:4px 10px;display:flex;align-items:center;gap:3px;border:1.5px solid #FC4C02">'
-            +(spd?'<span style="color:#fff;font-size:13px;font-weight:900;letter-spacing:-0.3px">'+spd+'</span><span style="color:#FC4C02;font-size:10px;font-weight:700">mph '+dirStr+'</span>':'')
+          var html='<div style="background:#378ADD;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.3)">'
+            +(spd?'<span style="color:#000;font-size:10px;font-weight:900">'+spd+'</span>':'')
             +'</div>';
           var icon=L.divIcon({className:'',html:html,iconAnchor:[28,14]});
           L.marker([lats[ri],lons[ri]],{icon:icon}).addTo(map);
