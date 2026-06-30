@@ -10493,7 +10493,7 @@ function showCal(){
   var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
   scr.id='CAL-SCREEN';
-  scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;';
+  scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;';
 
   var now=new Date();
   var calYear=now.getFullYear();
@@ -10502,11 +10502,11 @@ function showCal(){
   function render(){
     scr.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;gap:12px;padding:16px;min-height:100%';
+    wrap.style.cssText='display:flex;gap:12px;padding:12px;flex:1;height:100%;box-sizing:border-box;overflow:hidden';
 
     // ---- MONTHLY VIEW ----
     var monthly=document.createElement('div');
-    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0';
+    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;display:flex;flex-direction:column;overflow:hidden';
 
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days=['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -10540,7 +10540,7 @@ function showCal(){
 
     // Calendar grid
     var grid=document.createElement('div');
-    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px';
+    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex:1;overflow-y:auto;align-content:start';
 
     var firstDay=new Date(calYear,calMonth,1).getDay();
     var offset=(firstDay+6)%7;
@@ -10641,7 +10641,7 @@ function showCal(){
 
     // ---- YEAR VIEW ----
     var yearly=document.createElement('div');
-    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0';
+    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;overflow-y:auto';
 
     var yTitle=document.createElement('div');
     yTitle.style.cssText='font-size:14px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:10px';
