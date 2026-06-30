@@ -10699,6 +10699,13 @@ function showCal(){
 
   render();
   document.body.appendChild(scr);
+  // Force full height after DOM insertion
+  requestAnimationFrame(function(){
+    var h = window.innerHeight - 60;
+    scr.style.height = h + 'px';
+    var wrap = scr.querySelector('div');
+    if(wrap) wrap.style.height = (h - 24) + 'px';
+  });
 }
 
 function stravaFullResync() {
