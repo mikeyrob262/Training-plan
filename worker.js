@@ -8331,15 +8331,21 @@ function renderRun(){
   var avgCadence=allCadence.length?Math.round(allCadence.reduce(function(a,b){return a+b;},0)/allCadence.length):0;
   var ytdRuns=runs.filter(function(r){var d=r.date?new Date(r.date):null;return d&&d>=yearStart;});
   // Best pace = fastest (lowest min/mile) from YTD runs
-  var bestPace=null;
-  var bestPaceSec=null;
+  var bestPace=null, bestPaceSec=null, avgPace=null;
+  var paceSecs=[];
   ytdRuns.forEach(function(r){
     if(!r.pace) return;
     var p=r.pace.split(':');
     if(p.length<2) return;
     var sec=parseInt(p[0])*60+parseInt(p[1]);
+    paceSecs.push(sec);
     if(bestPaceSec===null||sec<bestPaceSec){bestPaceSec=sec;bestPace=r.pace;}
   });
+  if(paceSecs.length){
+    var avgSec=Math.round(paceSecs.reduce(function(a,b){return a+b;},0)/paceSecs.length);
+    var am=Math.floor(avgSec/60), as2=avgSec%60;
+    avgPace=am+':'+(as2<10?'0':'')+as2;
+  }
 
   // Stats row 1
   var s1=document.createElement('div');
@@ -8357,7 +8363,7 @@ function renderRun(){
   // Stats row 2
   var s2=document.createElement('div');
   s2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 14px';
-  [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Best pace',v:bestPace||'—',s:'min/mile'},{l:'Avg cadence',v:avgCadence||'—',s:'spm'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
+  [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Best pace',v:bestPace||'—',s:'min/mile'},{l:'Avg pace',v:avgPace||'—',s:'min/mile'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
     var c=document.createElement('div');
     c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
     c.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
