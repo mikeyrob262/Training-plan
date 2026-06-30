@@ -10631,13 +10631,26 @@ function showCal(){
       var pct=Math.round((mi/maxMi)*100);
       var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
       var moActs=(st.rides||[]).filter(function(r){if(!r.date)return false;var rd=new Date(r.date);return rd.getFullYear()===calYear&&rd.getMonth()===m;});
-      var dots=moActs.slice(0,25).map(function(r){var sport=r.sportType||r.type||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:10px;height:10px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';}).join('');
+      var dots=moActs.slice(0,25).map(function(r){var sport=r.sportType||r.type||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:12px;height:12px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';}).join('');
       var row=document.createElement('div');
       row.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;cursor:'+(mi?'pointer':'default');
       row.innerHTML='<div style="font-size:13px;color:'+(isCurrentMo?'var(--t1)':'var(--t3)')+';font-weight:'+(isCurrentMo?700:400)+';width:30px;flex-shrink:0">'+mo+'</div>'
         +'<div style="flex:1;display:flex;flex-direction:column;gap:4px">'
-        +'<div style="height:12px;background:var(--s3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.5)')+';border-radius:4px"></div></div>'
-        +(dots?'<div style="display:flex;gap:3px;flex-wrap:wrap">'+dots+'</div>':'')
+        +(function(){
+        var rideMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /ride/i.test(s)&&!/virtual/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
+        var virtMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /virtualride|ebikeride/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
+        var runMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /run/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
+        var total=rideMi+virtMi+runMi||1;
+        var ridePct=Math.round((rideMi/total)*pct);
+        var virtPct=Math.round((virtMi/total)*pct);
+        var runPct=Math.round((runMi/total)*pct);
+        return '<div style="height:12px;background:var(--s3);border-radius:4px;overflow:hidden;display:flex">'
+          +(ridePct?'<div style="height:100%;width:'+ridePct+'%;background:#FC4C02"></div>':'')
+          +(virtPct?'<div style="height:100%;width:'+virtPct+'%;background:#1D9E75"></div>':'')
+          +(runPct?'<div style="height:100%;width:'+runPct+'%;background:#185FA5"></div>':'')
+          +'</div>';
+      })()
+        +(dots?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px">'+dots+'</div>':'')
         +'</div>'
         +'<div style="font-size:12px;color:var(--t2);width:42px;text-align:right;flex-shrink:0;font-weight:600">'+(mi?mi+'mi':'')+'</div>';
       if(mi){(function(mo2){row.onclick=function(){calMonth=mo2;ybtn.onclick=null;mbtn.onclick();renderMonth();};})(m);}
