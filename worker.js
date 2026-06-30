@@ -8329,6 +8329,16 @@ function renderRun(){
     if(r.pace) allPaces.push(r.pace);
   });
   var avgCadence=allCadence.length?Math.round(allCadence.reduce(function(a,b){return a+b;},0)/allCadence.length):0;
+  // Best pace = fastest (lowest min/mile) from YTD runs
+  var bestPace=null;
+  var bestPaceSec=null;
+  ytdRuns.forEach(function(r){
+    if(!r.pace) return;
+    var p=r.pace.split(':');
+    if(p.length<2) return;
+    var sec=parseInt(p[0])*60+parseInt(p[1]);
+    if(bestPaceSec===null||sec<bestPaceSec){bestPaceSec=sec;bestPace=r.pace;}
+  });
 
   // Stats row 1
   var s1=document.createElement('div');
@@ -8347,7 +8357,7 @@ function renderRun(){
   // Stats row 2
   var s2=document.createElement('div');
   s2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 14px';
-  [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Avg pace',v:allPaces.length?allPaces[0]:'—',s:'easy runs'},{l:'Avg cadence',v:avgCadence||'—',s:'spm'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
+  [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Best pace',v:bestPace||'—',s:'min/mile'},{l:'Avg cadence',v:avgCadence||'—',s:'spm'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
     var c=document.createElement('div');
     c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
     c.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
