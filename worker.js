@@ -10496,41 +10496,145 @@ function showWeather(){
   scr.id='WEATHER-SCREEN';
   scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;';
 
-  // Get recent outdoor rides with GPS
   var rideList=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength|walk/i.test(s) && r.gpsLats && r.gpsLats.length>5;
+    return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
   }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
 
   var selectedRide=rideList[0]||null;
 
+  function getDirStr(deg){
+    var dirs=['N','NE','E','SE','S','SW','W','NW'];
+    return dirs[Math.round(deg/45)%8];
+  }
+
+  function getGaugeEmoji(type,val){
+    if(type==='temp'){
+      if(val>=95) return '😰';
+      if(val>=85) return '😨';
+      if(val>=75) return '😊';
+      if(val>=60) return '😀';
+      return '🥶';
+    }
+    if(type==='precip'){
+      if(val>=70) return '🌧';
+      if(val>=30) return '🌦';
+      return '😀';
+    }
+    if(type==='wind'){
+      if(val>=25) return '💨';
+      if(val>=15) return '😬';
+      return '😀';
+    }
+    return '😊';
+  }
+
+  function getGaugeColor(type,val){
+    if(type==='temp'){
+      if(val>=95) return '#E24B4A';
+      if(val>=85) return '#FC4C02';
+      if(val>=75) return '#BA7517';
+      return '#1D9E75';
+    }
+    if(type==='precip'){
+      if(val>=70) return '#185FA5';
+      if(val>=30) return '#378ADD';
+      return '#1D9E75';
+    }
+    if(type==='wind'){
+      if(val>=25) return '#E24B4A';
+      if(val>=15) return '#BA7517';
+      return '#1D9E75';
+    }
+    return '#1D9E75';
+  }
+
+  function buildGauge(emoji, label, pct, color){
+    var r=28, cx=40, cy=40;
+    var circ=2*Math.PI*r;
+    var arc=circ*0.75;
+    var filled=arc*Math.min(1,Math.max(0,pct));
+    var offset=circ*0.125;
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:4px">'
+      +'<svg width="80" height="80" viewBox="0 0 80 80">'
+      +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--s3)" stroke-width="7" stroke-dasharray="'+arc+' '+(circ-arc)+'" stroke-dashoffset="-'+offset+'" stroke-linecap="round" transform="rotate(135 '+cx+' '+cy+')"/>'
+      +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-dasharray="'+filled+' '+(circ-filled)+'" stroke-dashoffset="-'+offset+'" stroke-linecap="round" transform="rotate(135 '+cx+' '+cy+')" opacity="0.9"/>'
+      +'<text x="'+cx+'" y="'+(cy+6)+'" text-anchor="middle" font-size="22">'+emoji+'</text>'
+      +'</svg>'
+      +'<div style="font-size:11px;color:var(--t2);font-weight:600">'+label+'</div>'
+      +'</div>';
+  }
+
+  function buildChart(label, datasets, height){
+    height=height||80;
+    var allVals=datasets.reduce(function(a,d){return a.concat(d.vals);},[]);
+    var mn=Math.min.apply(null,allVals);
+    var mx=Math.max.apply(null,allVals);
+    var rng=mx-mn||1;
+    var w=600, h=height;
+    var lines='';
+    var areas='';
+    var legends='';
+    datasets.forEach(function(d){
+      var pts=d.vals.map(function(v,i){
+        var x=Math.round(10+(i/(d.vals.length-1||1))*(w-20));
+        var y=Math.round((h-15)-((v-mn)/rng)*(h-30));
+        return x+','+y;
+      }).join(' ');
+      var lastPt=d.vals.map(function(v,i){
+        var x=Math.round(10+(i/(d.vals.length-1||1))*(w-20));
+        var y=Math.round((h-15)-((v-mn)/rng)*(h-30));
+        return [x,y];
+      });
+      var areaPath=pts+' '+lastPt[lastPt.length-1][0]+','+(h-15)+' 10,'+(h-15);
+      if(d.fill!==false) areas+='<polygon points="'+areaPath+'" fill="'+d.color+'" opacity="0.2"/>';
+      lines+='<polyline points="'+pts+'" fill="none" stroke="'+d.color+'" stroke-width="2" stroke-linecap="round"/>';
+      legends+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t3)">'
+        +'<div style="width:12px;height:3px;background:'+d.color+';border-radius:2px"></div>'+d.label+'</div>';
+    });
+    // Y axis labels
+    var yLabels='';
+    [0,0.5,1].forEach(function(pct){
+      var val=Math.round(mn+rng*pct);
+      var y=Math.round((h-15)-pct*(h-30));
+      yLabels+='<text x="8" y="'+y+'" font-size="8" fill="rgba(128,128,128,0.6)" text-anchor="middle">'+val+'</text>';
+    });
+    return '<div style="background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;margin-bottom:10px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:8px">'+label+'</div>'
+      +'<svg width="100%" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="overflow:visible">'
+      +areas+lines+yLabels
+      +'</svg>'
+      +'<div style="display:flex;gap:12px;margin-top:6px;flex-wrap:wrap">'+legends+'</div>'
+      +'</div>';
+  }
+
   function render(){
     scr.innerHTML='';
 
-    // Header
     var hdr=document.createElement('div');
-    hdr.style.cssText='padding:16px 16px 0;display:flex;align-items:center;justify-content:space-between';
-    hdr.innerHTML='<div style="font-size:18px;font-weight:800;color:var(--t1)">Ride Weather</div>';
+    hdr.style.cssText='padding:14px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0';
+    hdr.innerHTML='<div style="font-size:18px;font-weight:800;color:var(--t1)">Ride Weather</div>'
+      +(selectedRide?'<div style="font-size:11px;color:var(--t3)">'+selectedRide.date+'</div>':'');
     scr.appendChild(hdr);
 
     if(!rideList.length){
       var empty=document.createElement('div');
-      empty.style.cssText='padding:40px 16px;text-align:center;color:var(--t3);font-size:14px';
-      empty.textContent='No outdoor rides with GPS data found. Sync Strava to load rides.';
+      empty.style.cssText='padding:60px 16px;text-align:center;color:var(--t3);font-size:14px';
+      empty.textContent='No outdoor rides with GPS found. Sync Strava to load rides.';
       scr.appendChild(empty);
       return;
     }
 
-    // Ride selector pills
+    // Ride pills
     var pillWrap=document.createElement('div');
-    pillWrap.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:12px 16px;scrollbar-width:none';
+    pillWrap.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:0 16px 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch';
     rideList.forEach(function(r){
-      var isSelected=selectedRide&&selectedRide.stravaId===r.stravaId&&selectedRide.date===r.date;
+      var sel=selectedRide&&selectedRide.date===r.date&&selectedRide.name===r.name;
       var pill=document.createElement('div');
-      pill.style.cssText='flex-shrink:0;background:'+(isSelected?'#FC4C02':'var(--s2)')+';border:1px solid '+(isSelected?'#FC4C02':'var(--b1)')+';border-radius:20px;padding:8px 14px;cursor:pointer';
-      pill.innerHTML='<div style="font-size:10px;color:'+(isSelected?'rgba(255,255,255,0.8)':'var(--t3)')+'">'+r.date+'</div>'
-        +'<div style="font-size:12px;font-weight:700;color:'+(isSelected?'#fff':'var(--t1)')+';">'+(r.name||r.sportType||'Ride')+'</div>'
-        +'<div style="font-size:10px;color:'+(isSelected?'rgba(255,255,255,0.7)':'var(--t3)')+'">'+( r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';
+      pill.style.cssText='flex-shrink:0;background:'+(sel?'#FC4C02':'var(--s2)')+';border:1px solid '+(sel?'#FC4C02':'var(--b1)')+';border-radius:20px;padding:7px 14px;cursor:pointer';
+      pill.innerHTML='<div style="font-size:9px;color:'+(sel?'rgba(255,255,255,0.75)':'var(--t3)')+'">'+r.date+'</div>'
+        +'<div style="font-size:12px;font-weight:700;color:'+(sel?'#fff':'var(--t1)')+'">'+( r.name||r.sportType||'Ride')+'</div>'
+        +'<div style="font-size:9px;color:'+(sel?'rgba(255,255,255,0.65)':'var(--t3)')+'">'+( r.distance?r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+'</div>';
       pill.onclick=function(){selectedRide=r;render();};
       pillWrap.appendChild(pill);
     });
@@ -10538,174 +10642,151 @@ function showWeather(){
 
     if(!selectedRide) return;
 
-    // Ride info card
-    var infoCard=document.createElement('div');
-    infoCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 14px';
-    infoCard.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">'+(selectedRide.name||'Ride')+'</div>'
-      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+selectedRide.date+(selectedRide.distance?' · '+selectedRide.distance+'mi':'')+(selectedRide.duration?' · '+selectedRide.duration:'')+'</div>'
-      +'<div id="weather-badges" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><div style="font-size:11px;color:var(--t3)">Loading forecast...</div></div>';
-    scr.appendChild(infoCard);
+    // Gauge row placeholder - populated after weather fetch
+    var gaugeRow=document.createElement('div');
+    gaugeRow.id='wx-gauges';
+    gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 12px;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px';
+    gaugeRow.innerHTML='<div style="grid-column:1/-1;text-align:center;color:var(--t3);font-size:12px">Loading weather...</div>';
+    scr.appendChild(gaugeRow);
 
-    // Map container
+    // Map
+    var mapId='wx-map-'+Date.now();
     var mapWrap=document.createElement('div');
     mapWrap.style.cssText='margin:0 16px 12px;border-radius:14px;overflow:hidden;border:1px solid var(--b1)';
-    var mapId='weather-map-'+Date.now();
-    mapWrap.innerHTML='<div id="'+mapId+'" style="height:240px;width:100%"></div>';
+    mapWrap.innerHTML='<div id="'+mapId+'" style="height:260px"></div>';
     scr.appendChild(mapWrap);
 
-    // Charts container
-    var chartsWrap=document.createElement('div');
-    chartsWrap.id='weather-charts';
-    chartsWrap.style.cssText='margin:0 16px 16px';
-    scr.appendChild(chartsWrap);
+    // Charts placeholder
+    var chartsEl=document.createElement('div');
+    chartsEl.id='wx-charts';
+    chartsEl.style.cssText='margin:0 16px 16px';
+    scr.appendChild(chartsEl);
 
-    // Init map after DOM
+    // Init Leaflet map
     setTimeout(function(){
       var mapEl=document.getElementById(mapId);
       if(!mapEl||typeof L==='undefined') return;
       var lats=selectedRide.gpsLats, lons=selectedRide.gpsLons;
-      var clat=(Math.min.apply(null,lats)+Math.max.apply(null,lats))/2;
-      var clon=(Math.min.apply(null,lons)+Math.max.apply(null,lons))/2;
-      var map=L.map(mapId,{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false});
+      var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      var pts=lats.map(function(lat,i){return [lat,lons[i]];});
+      var pts=lats.map(function(lat,i){return[lat,lons[i]];});
       var line=L.polyline(pts,{color:'#FC4C02',weight:3}).addTo(map);
-      map.fitBounds(line.getBounds(),{padding:[10,10]});
+      map.fitBounds(line.getBounds(),{padding:[20,20]});
+      L.circleMarker(pts[0],{radius:8,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:8,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2}).addTo(map);
+      window['_wxmap_'+mapId]=map;
+    },200);
 
-      // Start/end markers
-      L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
-      L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2}).addTo(map);
-    }, 200);
+    // Elevation chart from GPS (if available)
+    if(selectedRide.elevation||selectedRide.elev){
+      chartsEl.innerHTML+='<div style="background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;margin-bottom:10px">'
+        +'<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px">Elevation</div>'
+        +'<div style="font-size:12px;color:var(--t2)">Gain: '+(selectedRide.elevation||selectedRide.elev||0)+' ft · Distance: '+(selectedRide.distance||0)+' mi</div>'
+        +'</div>';
+    }
 
-    // Fetch weather from Open-Meteo
-    var startLat=selectedRide.gpsLats[0];
-    var startLon=selectedRide.gpsLons[0];
-    var rideDate=selectedRide.date;
+    // Fetch Open-Meteo
+    var lat=selectedRide.gpsLats[0];
+    var lon=selectedRide.gpsLons[0];
+    var date=selectedRide.date;
 
-    var url='https://api.open-meteo.com/v1/forecast?latitude='+startLat+'&longitude='+startLon
-      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m'
+    var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
+      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,windgusts_10m,winddirection_10m,relativehumidity_2m,dewpoint_2m,uv_index,cloudcover'
       +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago'
-      +'&start_date='+rideDate+'&end_date='+rideDate;
+      +'&start_date='+date+'&end_date='+date;
 
     fetch(url).then(function(r){return r.json();}).then(function(data){
       if(!data||!data.hourly) return;
       var h=data.hourly;
-      var temps=h.temperature_2m||[];
-      var feels=h.apparent_temperature||[];
-      var precip=h.precipitation_probability||[];
-      var wind=h.windspeed_10m||[];
-      var windDir=h.winddirection_10m||[];
-      var times=h.time||[];
 
-      // Estimate ride start hour from duration
-      var startHour=7; // default 7am
-      var durHours=selectedRide.duration?parseInt(selectedRide.duration.split(':')[0])||4:4;
-      var endHour=Math.min(23,startHour+durHours);
+      // Figure out ride hours
+      var durH=selectedRide.duration?parseInt((selectedRide.duration||'').split(':')[0])||4:4;
+      var s0=7, s1=Math.min(23,s0+durH);
 
-      var rideTemps=temps.slice(startHour,endHour+1);
-      var rideFeel=feels.slice(startHour,endHour+1);
-      var ridePrecip=precip.slice(startHour,endHour+1);
-      var rideWind=wind.slice(startHour,endHour+1);
-      var rideDir=windDir.slice(startHour,endHour+1);
-      var rideLabels=times.slice(startHour,endHour+1).map(function(t){return t.split('T')[1]?t.split('T')[1].slice(0,5):'';});
+      function sl(arr){return (arr||[]).slice(s0,s1+1);}
 
-      // Badges
-      var maxTemp=Math.max.apply(null,rideTemps);
-      var maxWind=Math.max.apply(null,rideWind);
-      var maxPrecip=Math.max.apply(null,ridePrecip);
-      var avgDir=rideDir.length?rideDir[Math.floor(rideDir.length/2)]:0;
-      var dirs=['N','NE','E','SE','S','SW','W','NW'];
-      var dirStr=dirs[Math.round(avgDir/45)%8];
+      var temps=sl(h.temperature_2m);
+      var feels=sl(h.apparent_temperature);
+      var precip=sl(h.precipitation_probability);
+      var wind=sl(h.windspeed_10m);
+      var gusts=sl(h.windgusts_10m);
+      var windDir=sl(h.winddirection_10m);
+      var humid=sl(h.relativehumidity_2m);
+      var dew=sl(h.dewpoint_2m);
+      var uv=sl(h.uv_index);
 
-      var badges='';
-      if(maxTemp>=90) badges+='<div style="background:rgba(226,75,74,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#A32D2D;font-weight:600">🌡 '+Math.round(maxTemp)+'°F peak — hydrate!</div>';
-      else if(maxTemp>=80) badges+='<div style="background:rgba(186,117,23,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#633806;font-weight:600">🌡 '+Math.round(maxTemp)+'°F warm</div>';
-      else badges+='<div style="background:rgba(29,158,117,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#085041;font-weight:600">🌡 '+Math.round(maxTemp)+'°F</div>';
+      var maxTemp=temps.length?Math.max.apply(null,temps):75;
+      var maxPrecip=precip.length?Math.max.apply(null,precip):0;
+      var maxWind=wind.length?Math.max.apply(null,wind):10;
+      var midDir=windDir.length?windDir[Math.floor(windDir.length/2)]:0;
 
-      if(maxPrecip>=60) badges+='<div style="background:rgba(55,138,221,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#0C447C;font-weight:600">🌧 '+Math.round(maxPrecip)+'% rain</div>';
-      else if(maxPrecip>=30) badges+='<div style="background:rgba(55,138,221,0.10);border-radius:8px;padding:4px 10px;font-size:11px;color:#185FA5;font-weight:600">🌦 '+Math.round(maxPrecip)+'% possible</div>';
-      else badges+='<div style="background:rgba(29,158,117,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#085041;font-weight:600">☀ 0% rain</div>';
+      // Update gauges
+      var gEl=document.getElementById('wx-gauges');
+      if(gEl){
+        var tPct=(maxTemp-40)/(110-40);
+        var pPct=maxPrecip/100;
+        var wPct=maxWind/40;
+        gEl.innerHTML=
+          buildGauge(getGaugeEmoji('temp',maxTemp),'Temperature',tPct,getGaugeColor('temp',maxTemp))
+          +buildGauge(getGaugeEmoji('precip',maxPrecip),'Precipitation',pPct,getGaugeColor('precip',maxPrecip))
+          +buildGauge(getGaugeEmoji('wind',maxWind),'Wind',wPct,getGaugeColor('wind',maxWind));
+      }
 
-      if(maxWind>=20) badges+='<div style="background:rgba(186,117,23,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#633806;font-weight:600">💨 '+Math.round(maxWind)+'mph '+dirStr+'</div>';
-      else badges+='<div style="background:rgba(100,100,100,0.1);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--t2);font-weight:600">💨 '+Math.round(maxWind)+'mph '+dirStr+'</div>';
-
-      var badgesEl=document.getElementById('weather-badges');
-      if(badgesEl) badgesEl.innerHTML=badges;
-
-      // Add weather markers to map
+      // Add wind arrows to map
       setTimeout(function(){
-        var mapEl=document.getElementById(mapId);
-        if(!mapEl) return;
+        var map=window['_wxmap_'+mapId];
+        if(!map||!windDir.length) return;
         var lats=selectedRide.gpsLats, lons=selectedRide.gpsLons;
-        var map2=window['_wmap_'+mapId];
-        if(!map2) return;
-        // Sample 3 points along route for temp markers
-        [0.25,0.5,0.75].forEach(function(pct){
-          var idx2=Math.floor(pct*(lats.length-1));
-          var hour=Math.floor(pct*rideTemps.length);
-          var t=rideTemps[hour];
-          if(!t) return;
-          var col=t>=90?'rgba(226,75,74,0.9)':t>=80?'rgba(186,117,23,0.9)':'rgba(29,158,117,0.9)';
-          var icon=L.divIcon({className:'',html:'<div style="background:'+col+';color:#fff;border-radius:12px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap;border:1.5px solid rgba(255,255,255,0.8)">'+Math.round(t)+'°F</div>',iconAnchor:[20,10]});
-          L.marker([lats[idx2],lons[idx2]],{icon:icon}).addTo(map2);
+        [0.2,0.4,0.6,0.8].forEach(function(pct,pi){
+          var ri=Math.floor(pct*(lats.length-1));
+          var wi=Math.floor(pct*windDir.length);
+          var deg=windDir[wi]||0;
+          var spd=Math.round(wind[wi]||0);
+          var html='<div style="background:rgba(0,0,0,0.65);border-radius:8px;padding:3px 6px;display:flex;align-items:center;gap:3px;border:1px solid rgba(255,255,255,0.3)">'
+            +'<div style="color:white;font-size:11px;font-weight:700;transform:rotate('+deg+'deg)">→</div>'
+            +'<div style="color:white;font-size:9px;font-weight:600">'+spd+'</div>'
+            +'</div>';
+          var icon=L.divIcon({className:'',html:html,iconAnchor:[24,12]});
+          L.marker([lats[ri],lons[ri]],{icon:icon}).addTo(map);
         });
-      },400);
+      },500);
 
       // Build charts
-      function buildChart(label, vals, color, unit, maxVal){
-        var mn=Math.min.apply(null,vals)||0;
-        var mx=maxVal||Math.max.apply(null,vals)||1;
-        var rng=mx-mn||1;
-        var w=600, h=80;
-        var pts2=vals.map(function(v,i){
-          var x=Math.round(10+(i/(vals.length-1))*(w-20));
-          var y=Math.round(h-10-((v-mn)/rng)*(h-25));
-          return x+','+y;
-        }).join(' ');
-        var area=pts2+' '+Math.round(10+(vals.length-1)/(vals.length-1)*(w-20))+','+(h-10)+' 10,'+(h-10);
-        var labHtml=rideLabels.filter(function(_,i){return i%2===0;}).map(function(t,i){
-          var x=Math.round(10+(i*2/(vals.length-1))*(w-20));
-          return '<text x="'+x+'" y="'+(h-2)+'" font-size="9" fill="rgba(128,128,128,0.7)" text-anchor="middle">'+t+'</text>';
-        }).join('');
+      var cEl=document.getElementById('wx-charts');
+      if(!cEl) return;
+      var html='';
 
-        return '<div style="background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:12px;margin-bottom:8px">'
-          +'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
-          +'<div style="font-size:11px;font-weight:700;color:var(--t2)">'+label+'</div>'
-          +'<div style="font-size:12px;font-weight:800;color:'+color+'">'+Math.round(mx)+unit+'</div>'
-          +'</div>'
-          +'<svg width="100%" viewBox="0 0 600 '+h+'" preserveAspectRatio="none">'
-          +'<polygon points="'+area+'" fill="'+color+'" opacity="0.15"/>'
-          +'<polyline points="'+pts2+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linecap="round"/>'
-          +labHtml
-          +'</svg>'
-          +'</div>';
+      if(temps.length>1){
+        html+=buildChart('Temperature',
+          [{vals:temps,color:'#E24B4A',label:'Temp (°F)'},{vals:feels,color:'#FC4C02',label:'Feels like (°F)'}],90);
+      }
+      if(precip.length>1){
+        html+=buildChart('Precipitation',
+          [{vals:precip,color:'#378ADD',label:'Probability (%)'}],70);
+      }
+      if(wind.length>1){
+        html+=buildChart('Wind',
+          [{vals:wind,color:'#185FA5',label:'Wind (mph)'},{vals:gusts,color:'#FC4C02',label:'Gusts (mph)'}],80);
+      }
+      if(humid.length>1){
+        html+=buildChart('Humidity and dew point',
+          [{vals:humid,color:'#378ADD',label:'Humidity (%)'},{vals:dew,color:'#FC4C02',label:'Dew point (°F)'}],80);
+      }
+      if(uv.length>1){
+        html+=buildChart('UV Index',
+          [{vals:uv,color:'#BA7517',label:'UV Index',fill:true}],70);
       }
 
-      var chartsEl=document.getElementById('weather-charts');
-      if(chartsEl){
-        chartsEl.innerHTML=
-          buildChart('Temperature (°F) · feels like',rideTemps,'#E24B4A','°F',null)
-          +buildChart('Precipitation probability',ridePrecip,'#378ADD','%',100)
-          +buildChart('Wind speed (mph)',rideWind,'#1D9E75','mph',null);
-      }
+      cEl.innerHTML=html;
 
-    }).catch(function(e){
-      var chartsEl=document.getElementById('weather-charts');
-      if(chartsEl) chartsEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Weather data unavailable. Check connection.</div>';
+    }).catch(function(){
+      var cEl=document.getElementById('wx-charts');
+      if(cEl) cEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Weather unavailable. Check connection.</div>';
     });
   }
 
   render();
   document.body.appendChild(scr);
-
-  // Store map reference for weather markers
-  setTimeout(function(){
-    var mapId2=scr.querySelector('[id^="weather-map-"]');
-    if(mapId2){
-      var id=mapId2.id;
-      window['_wmap_'+id]=null; // placeholder, Leaflet doesn't expose instance easily
-    }
-  },300);
 }
 
 
