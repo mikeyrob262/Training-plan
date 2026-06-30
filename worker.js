@@ -5200,14 +5200,12 @@ function renderNutr(){
     [myFoodsPanel,myMealsPanel,myProgressPanel].forEach(function(p){p.style.display='none';});
   }
   myFoodsBtn.onclick=function(){
-    var open=myFoodsPanel.style.display==='block';
     resetNutrTabs();
-    if(!open){myFoodsPanel.style.display='block';myFoodsBtn.style.background='rgba(252,76,2,.12)';myFoodsBtn.style.color='var(--orange)';myFoodsBtn.style.borderColor='rgba(252,76,2,.3)';}
+    myFoodsPanel.style.display='block';myFoodsBtn.style.background='rgba(252,76,2,.12)';myFoodsBtn.style.color='var(--orange)';myFoodsBtn.style.borderColor='rgba(252,76,2,.3)';
   };
   myMealsBtn.onclick=function(){
-    var open=myMealsPanel.style.display==='block';
     resetNutrTabs();
-    if(!open){myMealsPanel.style.display='block';myMealsBtn.style.background='rgba(252,76,2,.12)';myMealsBtn.style.color='var(--orange)';myMealsBtn.style.borderColor='rgba(252,76,2,.3)';}
+    myMealsPanel.style.display='block';myMealsBtn.style.background='rgba(252,76,2,.12)';myMealsBtn.style.color='var(--orange)';myMealsBtn.style.borderColor='rgba(252,76,2,.3)';
   };
   myProgressBtn.onclick=function(){
     resetNutrTabs();
