@@ -8349,26 +8349,26 @@ function renderRun(){
 
   // Stats row 1
   var s1=document.createElement('div');
-  s1.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 8px';
+  s1.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 16px 6px';
   [{l:'Miles YTD',v:ytdMi.toFixed(1),s:'running',c:'#0F6E56'},{l:'This month',v:monthMi.toFixed(1),s:'mi'},{l:'YTD runs',v:ytdRuns.length,s:'activities'},{l:'Streak',v:weekStreak,s:'weeks',c:weekStreak>=3?'#0F6E56':'var(--t1)'}].forEach(function(st2){
     var c=document.createElement('div');
-    c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
-    c.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
+    c.style.cssText='background:var(--s2);border-radius:10px;padding:8px 4px;text-align:center';
+    c.innerHTML='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:2px">'+st2.l+'</div>'
+      +'<div style="font-size:16px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'
+      +'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
     s1.appendChild(c);
   });
   scr.appendChild(s1);
 
   // Stats row 2
   var s2=document.createElement('div');
-  s2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 14px';
+  s2.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 16px 10px';
   [{l:'Longest run',v:longestRun?longestRun.toFixed(1):'—',s:'miles'},{l:'Best pace',v:bestPace||'—',s:'min/mile'},{l:'Avg pace',v:avgPace||'—',s:'min/mile'},{l:'Elev YTD',v:Math.round(totalElev),s:'ft gained'}].forEach(function(st2){
     var c=document.createElement('div');
-    c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
-    c.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:var(--t1);line-height:1">'+st2.v+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
+    c.style.cssText='background:var(--s2);border-radius:10px;padding:8px 4px;text-align:center';
+    c.innerHTML='<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:2px">'+st2.l+'</div>'
+      +'<div style="font-size:16px;font-weight:800;color:var(--t1);line-height:1">'+st2.v+'</div>'
+      +'<div style="font-size:9px;color:var(--t3);margin-top:2px">'+st2.s+'</div>';
     s2.appendChild(c);
   });
   scr.appendChild(s2);
