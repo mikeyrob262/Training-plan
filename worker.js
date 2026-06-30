@@ -10501,12 +10501,50 @@ function showCal(){
 
   function render(){
     scr.innerHTML='';
+    var calView = 'month'; // 'month' or 'year'
+
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;gap:12px;padding:12px;overflow:hidden;box-sizing:border-box;height:calc(100vh - 84px);width:100%';
+    wrap.style.cssText='display:flex;flex-direction:column;padding:12px;overflow:hidden;box-sizing:border-box;height:calc(100vh - 84px);width:100%';
+
+    // View toggle bar
+    var toggleBar=document.createElement('div');
+    toggleBar.style.cssText='display:flex;justify-content:center;gap:8px;margin-bottom:10px;flex-shrink:0';
+        var mbtn=document.createElement('button');
+    mbtn.id='cal-month-btn';
+    mbtn.textContent='Month';
+    mbtn.style.cssText='padding:7px 20px;border-radius:20px;border:1px solid var(--b1);background:#FC4C02;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    mbtn.onclick=function(){
+      document.getElementById('cal-monthly').style.display='flex';
+      document.getElementById('cal-yearly').style.display='none';
+      document.getElementById('cal-month-btn').style.background='#FC4C02';
+      document.getElementById('cal-month-btn').style.color='#fff';
+      document.getElementById('cal-year-btn').style.background='var(--s2)';
+      document.getElementById('cal-year-btn').style.color='var(--t2)';
+    };
+    var ybtn=document.createElement('button');
+    ybtn.id='cal-year-btn';
+    ybtn.textContent='Year';
+    ybtn.style.cssText='padding:7px 20px;border-radius:20px;border:1px solid var(--b1);background:var(--s2);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    ybtn.onclick=function(){
+      document.getElementById('cal-monthly').style.display='none';
+      document.getElementById('cal-yearly').style.display='block';
+      document.getElementById('cal-year-btn').style.background='#FC4C02';
+      document.getElementById('cal-year-btn').style.color='#fff';
+      document.getElementById('cal-month-btn').style.background='var(--s2)';
+      document.getElementById('cal-month-btn').style.color='var(--t2)';
+    };
+    toggleBar.appendChild(mbtn);
+    toggleBar.appendChild(ybtn);
+    wrap.appendChild(toggleBar);
+
+    var panels=document.createElement('div');
+    panels.style.cssText='flex:1;overflow:hidden;position:relative';
+    wrap.appendChild(panels);
 
     // ---- MONTHLY VIEW ----
     var monthly=document.createElement('div');
-    monthly.style.cssText='flex:2;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;display:flex;flex-direction:column;overflow:hidden;height:100%';
+    monthly.id='cal-monthly';
+    monthly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;display:flex;flex-direction:column;overflow:hidden;height:100%;box-sizing:border-box';
 
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var days=['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -10641,7 +10679,7 @@ function showCal(){
 
     // ---- YEAR VIEW ----
     var yearly=document.createElement('div');
-    yearly.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;min-width:0;overflow-y:auto;height:100%';
+
 
     var yTitle=document.createElement('div');
     yTitle.style.cssText='font-size:14px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:10px';
@@ -10692,9 +10730,65 @@ function showCal(){
       yearly.appendChild(row);
     });
 
-    wrap.appendChild(monthly);
-    wrap.appendChild(yearly);
-    scr.appendChild(wrap);
+    panels.appendChild(monthly);
+
+    // ---- YEARLY VIEW (full page) ----
+    var yearly=document.createElement('div');
+    yearly.id='cal-yearly';
+    yearly.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:16px;overflow-y:auto;height:100%;box-sizing:border-box;display:none';
+
+    var yTitle2=document.createElement('div');
+    yTitle2.style.cssText='font-size:16px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:14px';
+    yTitle2.textContent=calYear;
+    yearly.appendChild(yTitle2);
+
+    var dotColors2={Ride:'#FC4C02',VirtualRide:'#1D9E75',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD',Workout:'#7F77DD'};
+    var moMiles2=[];
+    for(var m2=0;m2<12;m2++){
+      var total2=(st.rides||[]).filter(function(r){
+        if(!r.date) return false;
+        var rd=new Date(r.date);
+        return rd.getFullYear()===calYear&&rd.getMonth()===m2;
+      }).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
+      moMiles2.push(Math.round(total2));
+    }
+    var maxMi2=Math.max.apply(null,moMiles2)||1;
+    var months2=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    months2.forEach(function(mo,m){
+      var mi=moMiles2[m];
+      var pct=Math.round((mi/maxMi2)*100);
+      var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
+      var moActs2=(st.rides||[]).filter(function(r){
+        if(!r.date) return false;
+        var rd=new Date(r.date);
+        return rd.getFullYear()===calYear&&rd.getMonth()===m;
+      });
+      var moColor2=isCurrentMo?'var(--t1)':'var(--t3)';
+      var moWeight2=isCurrentMo?700:400;
+      var dots2=moActs2.slice(0,25).map(function(r){
+        var sport=r.sportType||r.type||'Ride';
+        var c=dotColors2[sport]||'#FC4C02';
+        return '<div style="width:10px;height:10px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';
+      }).join('');
+
+      var row2=document.createElement('div');
+      row2.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;cursor:'+(mi?'pointer':'default');
+      row2.innerHTML='<div style="font-size:13px;color:'+moColor2+';font-weight:'+moWeight2+';width:30px;flex-shrink:0">'+mo+'</div>'
+        +'<div style="flex:1;display:flex;flex-direction:column;gap:4px">'
+        +'<div style="height:12px;background:var(--s3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.5)')+';border-radius:4px"></div></div>'
+        +(dots2?'<div style="display:flex;gap:3px;flex-wrap:wrap">'+dots2+'</div>':'')
+        +'</div>'
+        +'<div style="font-size:12px;color:var(--t2);width:42px;text-align:right;flex-shrink:0;font-weight:600">'+(mi?mi+'mi':'')+'</div>';
+      if(mi){
+        (function(mo3){
+          row2.onclick=function(){calMonth=mo3;document.getElementById('cal-yearly').style.display='none';document.getElementById('cal-monthly').style.display='flex';document.getElementById('cal-month-btn').style.background='#FC4C02';document.getElementById('cal-month-btn').style.color='#fff';document.getElementById('cal-year-btn').style.background='var(--s2)';document.getElementById('cal-year-btn').style.color='var(--t2)';render();};
+        })(m);
+      }
+      yearly.appendChild(row2);
+    });
+
+    panels.appendChild(yearly);
   }
 
   render();
