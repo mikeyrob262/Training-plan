@@ -10663,19 +10663,13 @@ function showWeather(){
     var listWrap=document.createElement('div');
     listWrap.style.cssText='padding:16px 16px 4px';
 
-    // Search by location card - FIRST
-    var searchCard=document.createElement('div');
-    searchCard.style.cssText='background:rgba(55,138,221,0.08);border-radius:14px;border:1.5px solid #378ADD;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;cursor:pointer';
-    searchCard.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:rgba(55,138,221,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
-      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
-      +'</div>'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:800;color:#378ADD">Search any location</div>'
-      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">Chicago, a city, address...</div>'
-      +'</div>'
-      +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>';
-    searchCard.onclick=function(){renderLocationSearch();};
-    listWrap.appendChild(searchCard);
+    // Compact search bar
+    var searchBar=document.createElement('div');
+    searchBar.style.cssText='background:var(--s2);border-radius:10px;border:0.5px solid var(--b1);padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:8px;cursor:pointer';
+    searchBar.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+      +'<span style="font-size:13px;color:var(--t3)">Search a location...</span>';
+    searchBar.onclick=function(){renderLocationSearch();};
+    listWrap.appendChild(searchBar);
 
     var sectionLbl=document.createElement('div');
     sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:12px';
