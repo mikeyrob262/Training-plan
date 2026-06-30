@@ -8329,6 +8329,7 @@ function renderRun(){
     if(r.pace) allPaces.push(r.pace);
   });
   var avgCadence=allCadence.length?Math.round(allCadence.reduce(function(a,b){return a+b;},0)/allCadence.length):0;
+  var ytdRuns=runs.filter(function(r){var d=r.date?new Date(r.date):null;return d&&d>=yearStart;});
   // Best pace = fastest (lowest min/mile) from YTD runs
   var bestPace=null;
   var bestPaceSec=null;
@@ -8343,7 +8344,6 @@ function renderRun(){
   // Stats row 1
   var s1=document.createElement('div');
   s1.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 8px';
-  var ytdRuns=runs.filter(function(r){var d=r.date?new Date(r.date):null;return d&&d>=yearStart;});
   [{l:'Miles YTD',v:ytdMi.toFixed(1),s:'running',c:'#0F6E56'},{l:'This month',v:monthMi.toFixed(1),s:'mi'},{l:'YTD runs',v:ytdRuns.length,s:'activities'},{l:'Streak',v:weekStreak,s:'weeks',c:weekStreak>=3?'#0F6E56':'var(--t1)'}].forEach(function(st2){
     var c=document.createElement('div');
     c.style.cssText='background:var(--s2);border-radius:12px;padding:12px;text-align:center';
