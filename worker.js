@@ -10558,10 +10558,10 @@ function showCal(){
       var isToday=d===now.getDate()&&calMonth===now.getMonth()&&calYear===now.getFullYear();
 
       var cell=document.createElement('div');
-      cell.style.cssText='min-height:52px;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
+      cell.style.cssText='min-height:44px;background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
 
       var dNum=document.createElement('div');
-      dNum.style.cssText='font-size:9px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
+      dNum.style.cssText='font-size:8px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
       dNum.textContent=d;
       cell.appendChild(dNum);
 
@@ -10659,17 +10659,30 @@ function showCal(){
     }
     var maxMi=Math.max.apply(null,moMiles)||1;
 
+    var dotColors={Ride:'#FC4C02',VirtualRide:'#1D9E75',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD'};
     months.forEach(function(mo,m){
       var mi=moMiles[m];
       var pct=Math.round((mi/maxMi)*100);
       var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
+      var moActs=(st.rides||[]).filter(function(r){
+        if(!r.date) return false;
+        var rd=new Date(r.date);
+        return rd.getFullYear()===calYear&&rd.getMonth()===m;
+      });
       var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 0;cursor:'+(mi?'pointer':'default');
+      row.style.cssText='display:flex;align-items:center;gap:5px;padding:2px 0;cursor:'+(mi?'pointer':'default');
       var moColor=isCurrentMo?'var(--t1)':'var(--t3)';
       var moWeight=isCurrentMo?700:400;
+      var dots=moActs.slice(0,18).map(function(r){
+        var sport=r.sportType||'Ride';
+        var c=dotColors[sport]||'#FC4C02';
+        return '<div style="width:6px;height:6px;border-radius:50%;background:'+c+';flex-shrink:0"></div>';
+      }).join('');
       row.innerHTML='<div style="font-size:10px;color:'+moColor+';font-weight:'+moWeight+';width:22px;flex-shrink:0">'+mo+'</div>'
-        +'<div style="flex:1;height:10px;background:var(--s3);border-radius:3px;overflow:hidden">'
-        +'<div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.45)')+';border-radius:3px"></div></div>'
+        +'<div style="flex:1;display:flex;flex-direction:column;gap:2px">'
+        +'<div style="height:6px;background:var(--s3);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(isCurrentMo?'#FC4C02':'rgba(252,76,2,0.5)')+';border-radius:3px"></div></div>'
+        +(dots?'<div style="display:flex;gap:2px;flex-wrap:wrap">'+dots+'</div>':'')
+        +'</div>'
         +'<div style="font-size:9px;color:var(--t3);width:32px;text-align:right;flex-shrink:0">'+(mi?mi+'mi':'')+'</div>';
       if(mi){
         (function(mo2){
