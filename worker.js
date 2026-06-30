@@ -10631,7 +10631,7 @@ function showCal(){
       var pct=Math.round((mi/maxMi)*100);
       var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
       var moActs=(st.rides||[]).filter(function(r){if(!r.date)return false;var rd=new Date(r.date);return rd.getFullYear()===calYear&&rd.getMonth()===m;});
-      var dots=moActs.slice(0,25).map(function(r){var sport=r.sportType||r.type||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:10px;height:10px;border-radius:50%;background:'+c+'"></div>';}).join('');
+      var dots=moActs.slice(0,25).map(function(r){var sport=r.sportType||r.type||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:10px;height:10px;border-radius:50%;background:'+c+';margin:0 auto"></div>';}).join('');
       var row=document.createElement('div');
       row.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;cursor:'+(mi?'pointer':'default');
       row.innerHTML='<div style="font-size:13px;color:'+(isCurrentMo?'var(--t1)':'var(--t3)')+';font-weight:'+(isCurrentMo?700:400)+';width:30px;flex-shrink:0">'+mo+'</div>'
@@ -10650,7 +10650,7 @@ function showCal(){
           +(runPct?'<div style="height:100%;width:'+runPct+'%;background:#185FA5"></div>':'')
           +'</div>';
       })()
-        +(dots?'<div style="display:flex;justify-content:space-between;margin-top:3px">'+dots+'</div>':'')
+        +(dots?'<div style="display:grid;grid-template-columns:repeat('+moActs.slice(0,25).length+',1fr);margin-top:3px">'+dots+'</div>':'')
         +'</div>'
         +'<div style="font-size:12px;color:var(--t2);width:42px;text-align:right;flex-shrink:0;font-weight:600">'+(mi?mi+'mi':'')+'</div>';
       if(mi){(function(mo2){row.onclick=function(){calMonth=mo2;ybtn.onclick=null;mbtn.onclick();renderMonth();};})(m);}
