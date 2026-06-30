@@ -8460,7 +8460,7 @@ function renderRun(){
       // Header
       var hdr=document.createElement('div');
       hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px';
-      hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.type||'Run')+'</div>'
+      hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.name||r.type||'Run')+'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.weather?' · '+r.weather:'')+'</div></div>'
         +'<div style="display:flex;gap:5px">'
         +(r.type?'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+typeColor.bg+';color:'+typeColor.tc+'">'+r.type.split(' ')[0]+'</span>':'')
