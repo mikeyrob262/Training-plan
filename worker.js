@@ -10749,7 +10749,32 @@ function showWeather(){
     function renderResults(rides){
       resultsList.innerHTML='';
       if(!rides.length){
-        resultsList.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">No matching routes found.</div>';
+        var q2=inp.value.trim();
+        resultsList.innerHTML='<div style="padding:16px 0;text-align:center">'
+          +'<div style="color:var(--t3);font-size:13px;margin-bottom:12px">No saved routes matching "'+q2+'" with GPS data.</div>'
+          +'<div style="background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:left" id="geocode-btn">'
+          +'<div style="width:34px;height:34px;border-radius:8px;background:rgba(55,138,221,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+          +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>'
+          +'</div>'
+          +'<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Get forecast for '+q2+'</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:2px">No GPS route — shows weather charts only</div></div>'
+          +'<div style="color:var(--t3);font-size:16px;margin-left:auto">›</div>'
+          +'</div></div>';
+        var gb=document.getElementById('geocode-btn');
+        if(gb) gb.onclick=function(){
+          // Geocode and create a location-only route
+          fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q2)+'&limit=1',
+            {headers:{'Accept-Language':'en','User-Agent':'AthleteIQ/1.0'}})
+          .then(function(r){return r.json();}).then(function(results){
+            if(!results||!results.length){alert('Location not found. Try a different search.');return;}
+            var r2=results[0];
+            var lat=parseFloat(r2.lat),lon=parseFloat(r2.lon);
+            var name=r2.display_name.split(',').slice(0,2).join(', ');
+            // Fake route with just a center point - no GPS track
+            var fakeRoute={name:name,gpsLats:[lat],gpsLons:[lon],distance:'',duration:'2:00',sportType:'Ride',noGPS:true};
+            renderDatePicker(fakeRoute);
+          }).catch(function(){alert('Search failed. Check connection.');});
+        };
         return;
       }
       var lbl=document.createElement('div');
@@ -10941,10 +10966,12 @@ function showWeather(){
     scr.appendChild(gaugeCard);
 
     var mapId='wx-map-'+Date.now();
-    var mapCard=document.createElement('div');
-    mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
-    mapCard.innerHTML='<div id="'+mapId+'" style="height:260px"></div>';
-    scr.appendChild(mapCard);
+    if(!ride.noGPS){
+      var mapCard=document.createElement('div');
+      mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
+      mapCard.innerHTML='<div id="'+mapId+'" style="height:260px"></div>';
+      scr.appendChild(mapCard);
+    }
 
     var chartsArea=document.createElement('div');
     chartsArea.id='wx-charts';
@@ -10953,7 +10980,7 @@ function showWeather(){
 
     setTimeout(function(){
       var el=document.getElementById(mapId);
-      if(!el||typeof L==='undefined') return;
+      if(!el||typeof L==='undefined'||ride.noGPS) return;
       var lats=ride.gpsLats,lons=ride.gpsLons;
       var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -11021,7 +11048,7 @@ function showWeather(){
 
       setTimeout(function(){
         var map=window['_wxmap_'+mapId];
-        if(!map||!windDir.length) return;
+        if(!map||!windDir.length||ride.noGPS) return;
         var lats=ride.gpsLats,lons=ride.gpsLons;
         [0.2,0.4,0.6,0.8].forEach(function(pct){
           var ri=Math.floor(pct*(lats.length-1));
