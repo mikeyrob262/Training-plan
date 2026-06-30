@@ -4082,11 +4082,12 @@ function showSet(){
     +'<span>Sync &amp; Backup</span>'
     +'<span style="display:flex;align-items:center;gap:4px"><span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:#aaa"></span><span id="sync-label" style="font-size:9px;color:var(--t3);text-transform:none">Connecting…</span></span>'
     +'</div>'
-    +'<div style="padding:10px 16px;display:flex;gap:6px">'
-    +'<button onclick="fbPull(false)" style="flex:1;padding:7px 4px;background:var(--s2);border:1px solid var(--b2);border-radius:8px;color:var(--t1);font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">⬇ Pull</button>'
-    +'<button onclick="fbPush(false)" style="flex:1;padding:7px 4px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:8px;color:white;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit">⬆ Push</button>'
-    +'<button id="export-data-btn" style="flex:1;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;cursor:pointer;font-family:inherit">⬇ Export</button>'
-    +'<button id="import-data-btn" style="flex:1;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:10px;font-weight:700;padding:7px 4px;border-radius:8px;cursor:pointer;font-family:inherit">⬆ Import</button>'
+    +'<div style="padding:10px 16px;display:flex;gap:8px;justify-content:center">'
+    +'<button onclick="fbPull(false)" title="Pull from cloud" style="width:38px;height:38px;background:var(--s2);border:1px solid var(--b2);border-radius:10px;color:var(--t1);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬇</button>'
+    +'<button onclick="fbPush(false)" title="Push to cloud" style="width:38px;height:38px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;border-radius:10px;color:white;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬆</button>'
+    +'<div style="width:1px;background:var(--b1);margin:4px 2px"></div>'
+    +'<button id="export-data-btn" title="Export data" style="width:38px;height:38px;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬇</button>'
+    +'<button id="import-data-btn" title="Import data" style="width:38px;height:38px;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬆</button>'
     +'<input id="import-data-file" type="file" accept=".json" style="display:none">'
     +'</div></div>';
   // Update the sync dot after render
