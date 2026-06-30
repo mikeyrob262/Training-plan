@@ -10550,7 +10550,7 @@ function showCal(){
       grid.appendChild(document.createElement('div'));
     }
 
-    var colors={Ride:'#FC4C02',VirtualRide:'#1D9E75',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD'};
+    var colors={Ride:'#FC4C02',VirtualRide:'#1D9E75',EBikeRide:'#1D9E75',GravelRide:'#FC4C02',MountainBikeRide:'#FC4C02',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD',Workout:'#7F77DD',Crossfit:'#7F77DD'};
 
     for(var d=1;d<=daysInMonth;d++){
       var dateStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
@@ -10566,7 +10566,7 @@ function showCal(){
       cell.appendChild(dNum);
 
       dayRides.slice(0,2).forEach(function(r){
-        var sport=r.sportType||'Ride';
+        var sport=r.sportType||r.type||'Ride';
         var c=colors[sport]||'#FC4C02';
         var tile=document.createElement('div');
         tile.style.cssText='background:'+c+';border-radius:2px;padding:1px 3px;margin-bottom:1px;overflow:hidden';
