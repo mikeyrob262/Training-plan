@@ -10401,6 +10401,7 @@ function showMoreSheet(){
 
   var items = [
     {n:'Calendar',      i:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',          fn:'showCal',          c:'#FC4C02'},
+    {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
     {n:'Conditioning',  i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'showCond',         c:'#FFB938'},
@@ -10488,6 +10489,225 @@ function fetchStravaGPS(stravaId, rideIndex) {
     });
   } else { doFetch(st.stravaToken); }
 }
+
+function showWeather(){
+  var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
+  var scr=document.createElement('div');
+  scr.id='WEATHER-SCREEN';
+  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;';
+
+  // Get recent outdoor rides with GPS
+  var rideList=(st.rides||[]).filter(function(r){
+    var s=r.sportType||r.type||'';
+    return !/virtual|weight|strength|walk/i.test(s) && r.gpsLats && r.gpsLats.length>5;
+  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).slice(0,10);
+
+  var selectedRide=rideList[0]||null;
+
+  function render(){
+    scr.innerHTML='';
+
+    // Header
+    var hdr=document.createElement('div');
+    hdr.style.cssText='padding:16px 16px 0;display:flex;align-items:center;justify-content:space-between';
+    hdr.innerHTML='<div style="font-size:18px;font-weight:800;color:var(--t1)">Ride Weather</div>';
+    scr.appendChild(hdr);
+
+    if(!rideList.length){
+      var empty=document.createElement('div');
+      empty.style.cssText='padding:40px 16px;text-align:center;color:var(--t3);font-size:14px';
+      empty.textContent='No outdoor rides with GPS data found. Sync Strava to load rides.';
+      scr.appendChild(empty);
+      return;
+    }
+
+    // Ride selector pills
+    var pillWrap=document.createElement('div');
+    pillWrap.style.cssText='display:flex;gap:8px;overflow-x:auto;padding:12px 16px;scrollbar-width:none';
+    rideList.forEach(function(r){
+      var isSelected=selectedRide&&selectedRide.stravaId===r.stravaId&&selectedRide.date===r.date;
+      var pill=document.createElement('div');
+      pill.style.cssText='flex-shrink:0;background:'+(isSelected?'#FC4C02':'var(--s2)')+';border:1px solid '+(isSelected?'#FC4C02':'var(--b1)')+';border-radius:20px;padding:8px 14px;cursor:pointer';
+      pill.innerHTML='<div style="font-size:10px;color:'+(isSelected?'rgba(255,255,255,0.8)':'var(--t3)')+'">'+r.date+'</div>'
+        +'<div style="font-size:12px;font-weight:700;color:'+(isSelected?'#fff':'var(--t1)')+';">'+(r.name||r.sportType||'Ride')+'</div>'
+        +'<div style="font-size:10px;color:'+(isSelected?'rgba(255,255,255,0.7)':'var(--t3)')+'">'+( r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';
+      pill.onclick=function(){selectedRide=r;render();};
+      pillWrap.appendChild(pill);
+    });
+    scr.appendChild(pillWrap);
+
+    if(!selectedRide) return;
+
+    // Ride info card
+    var infoCard=document.createElement('div');
+    infoCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 14px';
+    infoCard.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">'+(selectedRide.name||'Ride')+'</div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+selectedRide.date+(selectedRide.distance?' · '+selectedRide.distance+'mi':'')+(selectedRide.duration?' · '+selectedRide.duration:'')+'</div>'
+      +'<div id="weather-badges" style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><div style="font-size:11px;color:var(--t3)">Loading forecast...</div></div>';
+    scr.appendChild(infoCard);
+
+    // Map container
+    var mapWrap=document.createElement('div');
+    mapWrap.style.cssText='margin:0 16px 12px;border-radius:14px;overflow:hidden;border:1px solid var(--b1)';
+    var mapId='weather-map-'+Date.now();
+    mapWrap.innerHTML='<div id="'+mapId+'" style="height:240px;width:100%"></div>';
+    scr.appendChild(mapWrap);
+
+    // Charts container
+    var chartsWrap=document.createElement('div');
+    chartsWrap.id='weather-charts';
+    chartsWrap.style.cssText='margin:0 16px 16px';
+    scr.appendChild(chartsWrap);
+
+    // Init map after DOM
+    setTimeout(function(){
+      var mapEl=document.getElementById(mapId);
+      if(!mapEl||typeof L==='undefined') return;
+      var lats=selectedRide.gpsLats, lons=selectedRide.gpsLons;
+      var clat=(Math.min.apply(null,lats)+Math.max.apply(null,lats))/2;
+      var clon=(Math.min.apply(null,lons)+Math.max.apply(null,lons))/2;
+      var map=L.map(mapId,{zoomControl:false,attributionControl:false,dragging:false,scrollWheelZoom:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      var pts=lats.map(function(lat,i){return [lat,lons[i]];});
+      var line=L.polyline(pts,{color:'#FC4C02',weight:3}).addTo(map);
+      map.fitBounds(line.getBounds(),{padding:[10,10]});
+
+      // Start/end markers
+      L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2}).addTo(map);
+    }, 200);
+
+    // Fetch weather from Open-Meteo
+    var startLat=selectedRide.gpsLats[0];
+    var startLon=selectedRide.gpsLons[0];
+    var rideDate=selectedRide.date;
+
+    var url='https://api.open-meteo.com/v1/forecast?latitude='+startLat+'&longitude='+startLon
+      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m'
+      +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago'
+      +'&start_date='+rideDate+'&end_date='+rideDate;
+
+    fetch(url).then(function(r){return r.json();}).then(function(data){
+      if(!data||!data.hourly) return;
+      var h=data.hourly;
+      var temps=h.temperature_2m||[];
+      var feels=h.apparent_temperature||[];
+      var precip=h.precipitation_probability||[];
+      var wind=h.windspeed_10m||[];
+      var windDir=h.winddirection_10m||[];
+      var times=h.time||[];
+
+      // Estimate ride start hour from duration
+      var startHour=7; // default 7am
+      var durHours=selectedRide.duration?parseInt(selectedRide.duration.split(':')[0])||4:4;
+      var endHour=Math.min(23,startHour+durHours);
+
+      var rideTemps=temps.slice(startHour,endHour+1);
+      var rideFeel=feels.slice(startHour,endHour+1);
+      var ridePrecip=precip.slice(startHour,endHour+1);
+      var rideWind=wind.slice(startHour,endHour+1);
+      var rideDir=windDir.slice(startHour,endHour+1);
+      var rideLabels=times.slice(startHour,endHour+1).map(function(t){return t.split('T')[1]?t.split('T')[1].slice(0,5):'';});
+
+      // Badges
+      var maxTemp=Math.max.apply(null,rideTemps);
+      var maxWind=Math.max.apply(null,rideWind);
+      var maxPrecip=Math.max.apply(null,ridePrecip);
+      var avgDir=rideDir.length?rideDir[Math.floor(rideDir.length/2)]:0;
+      var dirs=['N','NE','E','SE','S','SW','W','NW'];
+      var dirStr=dirs[Math.round(avgDir/45)%8];
+
+      var badges='';
+      if(maxTemp>=90) badges+='<div style="background:rgba(226,75,74,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#A32D2D;font-weight:600">🌡 '+Math.round(maxTemp)+'°F peak — hydrate!</div>';
+      else if(maxTemp>=80) badges+='<div style="background:rgba(186,117,23,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#633806;font-weight:600">🌡 '+Math.round(maxTemp)+'°F warm</div>';
+      else badges+='<div style="background:rgba(29,158,117,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#085041;font-weight:600">🌡 '+Math.round(maxTemp)+'°F</div>';
+
+      if(maxPrecip>=60) badges+='<div style="background:rgba(55,138,221,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#0C447C;font-weight:600">🌧 '+Math.round(maxPrecip)+'% rain</div>';
+      else if(maxPrecip>=30) badges+='<div style="background:rgba(55,138,221,0.10);border-radius:8px;padding:4px 10px;font-size:11px;color:#185FA5;font-weight:600">🌦 '+Math.round(maxPrecip)+'% possible</div>';
+      else badges+='<div style="background:rgba(29,158,117,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#085041;font-weight:600">☀ 0% rain</div>';
+
+      if(maxWind>=20) badges+='<div style="background:rgba(186,117,23,0.15);border-radius:8px;padding:4px 10px;font-size:11px;color:#633806;font-weight:600">💨 '+Math.round(maxWind)+'mph '+dirStr+'</div>';
+      else badges+='<div style="background:rgba(100,100,100,0.1);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--t2);font-weight:600">💨 '+Math.round(maxWind)+'mph '+dirStr+'</div>';
+
+      var badgesEl=document.getElementById('weather-badges');
+      if(badgesEl) badgesEl.innerHTML=badges;
+
+      // Add weather markers to map
+      setTimeout(function(){
+        var mapEl=document.getElementById(mapId);
+        if(!mapEl) return;
+        var lats=selectedRide.gpsLats, lons=selectedRide.gpsLons;
+        var map2=window['_wmap_'+mapId];
+        if(!map2) return;
+        // Sample 3 points along route for temp markers
+        [0.25,0.5,0.75].forEach(function(pct){
+          var idx2=Math.floor(pct*(lats.length-1));
+          var hour=Math.floor(pct*rideTemps.length);
+          var t=rideTemps[hour];
+          if(!t) return;
+          var col=t>=90?'rgba(226,75,74,0.9)':t>=80?'rgba(186,117,23,0.9)':'rgba(29,158,117,0.9)';
+          var icon=L.divIcon({className:'',html:'<div style="background:'+col+';color:#fff;border-radius:12px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap;border:1.5px solid rgba(255,255,255,0.8)">'+Math.round(t)+'°F</div>',iconAnchor:[20,10]});
+          L.marker([lats[idx2],lons[idx2]],{icon:icon}).addTo(map2);
+        });
+      },400);
+
+      // Build charts
+      function buildChart(label, vals, color, unit, maxVal){
+        var mn=Math.min.apply(null,vals)||0;
+        var mx=maxVal||Math.max.apply(null,vals)||1;
+        var rng=mx-mn||1;
+        var w=600, h=80;
+        var pts2=vals.map(function(v,i){
+          var x=Math.round(10+(i/(vals.length-1))*(w-20));
+          var y=Math.round(h-10-((v-mn)/rng)*(h-25));
+          return x+','+y;
+        }).join(' ');
+        var area=pts2+' '+Math.round(10+(vals.length-1)/(vals.length-1)*(w-20))+','+(h-10)+' 10,'+(h-10);
+        var labHtml=rideLabels.filter(function(_,i){return i%2===0;}).map(function(t,i){
+          var x=Math.round(10+(i*2/(vals.length-1))*(w-20));
+          return '<text x="'+x+'" y="'+(h-2)+'" font-size="9" fill="rgba(128,128,128,0.7)" text-anchor="middle">'+t+'</text>';
+        }).join('');
+
+        return '<div style="background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:12px;margin-bottom:8px">'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:6px">'
+          +'<div style="font-size:11px;font-weight:700;color:var(--t2)">'+label+'</div>'
+          +'<div style="font-size:12px;font-weight:800;color:'+color+'">'+Math.round(mx)+unit+'</div>'
+          +'</div>'
+          +'<svg width="100%" viewBox="0 0 600 '+h+'" preserveAspectRatio="none">'
+          +'<polygon points="'+area+'" fill="'+color+'" opacity="0.15"/>'
+          +'<polyline points="'+pts2+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linecap="round"/>'
+          +labHtml
+          +'</svg>'
+          +'</div>';
+      }
+
+      var chartsEl=document.getElementById('weather-charts');
+      if(chartsEl){
+        chartsEl.innerHTML=
+          buildChart('Temperature (°F) · feels like',rideTemps,'#E24B4A','°F',null)
+          +buildChart('Precipitation probability',ridePrecip,'#378ADD','%',100)
+          +buildChart('Wind speed (mph)',rideWind,'#1D9E75','mph',null);
+      }
+
+    }).catch(function(e){
+      var chartsEl=document.getElementById('weather-charts');
+      if(chartsEl) chartsEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Weather data unavailable. Check connection.</div>';
+    });
+  }
+
+  render();
+  document.body.appendChild(scr);
+
+  // Store map reference for weather markers
+  setTimeout(function(){
+    var mapId2=scr.querySelector('[id^="weather-map-"]');
+    if(mapId2){
+      var id=mapId2.id;
+      window['_wmap_'+id]=null; // placeholder, Leaflet doesn't expose instance easily
+    }
+  },300);
+}
+
 
 function showCal(){
   var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
