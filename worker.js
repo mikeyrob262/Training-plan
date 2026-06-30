@@ -1,6 +1,6 @@
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- v2 --><!-- BUST1782754474 v1782754432 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1782754474 v1782754432 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -331,6 +331,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 </div>
 
 <div id="TRAIN">
+<div id="home-tss-pr"></div>
 <div id="W1" class="wk">
 <div class="goal"><div class="goal-lbl">Week Goal</div><div class="goal-txt">Build the habit. Easy stays easy. Hit protein every day.</div></div>
 <div class="sec-title">Training Schedule</div>
@@ -3143,6 +3144,71 @@ function updHdr(){
   var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
 
+function renderHomeTSSAndPR(){
+  var container = document.getElementById('home-tss-pr');
+  if(!container) return;
+  var rides = st.rides||[];
+  if(!rides.length){ container.innerHTML=''; return; }
+
+  var longestRide=0,bestNP=0,highestTSS=0;
+  var weekTSSmap2={};
+  var now2=new Date();
+  rides.forEach(function(r){
+    if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
+    if(r.np&&r.np>bestNP) bestNP=r.np;
+    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    if(r.date&&r.tss){
+      var wk=getWeekKey(new Date(r.date));
+      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+(r.tss||0);
+    }
+  });
+  var wTSSLabels2=[],wTSSData2=[];
+  for(var wi2=7;wi2>=0;wi2--){
+    var wd2=new Date(now2); wd2.setDate(now2.getDate()-wi2*7);
+    var wk2=getWeekKey(wd2);
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][wd2.getMonth()];
+    wTSSLabels2.push(mo+' '+wd2.getDate());
+    wTSSData2.push(Math.round(weekTSSmap2[wk2]||0));
+  }
+  var maxTSS2=Math.max.apply(null,wTSSData2)||1;
+  var recentPRs=[];
+  var sevenDaysAgo=new Date(now2); sevenDaysAgo.setDate(now2.getDate()-7);
+  var recentRides=rides.filter(function(r){return r.date&&new Date(r.date)>=sevenDaysAgo;});
+  recentRides.forEach(function(r){
+    if(r.distance&&parseFloat(r.distance)===longestRide) recentPRs.push('🏅 Longest ride: '+longestRide.toFixed(1)+' mi');
+    if(r.np&&r.np===bestNP) recentPRs.push('⚡ Best NP: '+bestNP+'W');
+    if(r.tss&&r.tss===highestTSS) recentPRs.push('🔥 Highest TSS: '+highestTSS);
+  });
+
+  var h='';
+  h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">';
+  h+='<div style="font-size:12px;font-weight:700;color:var(--t1)">Weekly TSS</div>';
+  h+='<div style="font-size:11px;color:var(--t3)">This week: '+wTSSData2[7]+'</div></div>';
+  h+='<div style="display:flex;align-items:flex-end;gap:4px;height:60px">';
+  wTSSData2.forEach(function(v,i){
+    var pct=Math.round((v/maxTSS2)*100);
+    var isThisWeek=i===7;
+    var barColor=isThisWeek?'#FC4C02':'rgba(252,76,2,.35)';
+    h+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">';
+    h+='<div style="width:100%;background:'+barColor+';border-radius:3px 3px 0 0;height:'+pct+'%;min-height:'+(v>0?'3':'0')+'px"></div>';
+    h+='<div style="font-size:8px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:clip">'+wTSSLabels2[i].split(' ')[0]+'</div>';
+    h+='</div>';
+  });
+  h+='</div></div>';
+
+  if(recentPRs.length){
+    h+='<div style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(252,76,2,.15),rgba(252,76,2,.05));border:1px solid rgba(252,76,2,.3);border-radius:14px;padding:12px 14px">';
+    h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02;margin-bottom:6px">🏆 New Personal Record!</div>';
+    recentPRs.forEach(function(pr){
+      h+='<div style="font-size:13px;font-weight:700;color:var(--t1);padding:2px 0">'+pr+'</div>';
+    });
+    h+='</div>';
+  }
+
+  container.innerHTML = h;
+}
+
 function GW(w){
   if(w<1)return;
   var old=document.getElementById('W'+cw);
@@ -3156,6 +3222,7 @@ function GW(w){
     renderDynWeek(w);
   }
   showTrain();
+  renderHomeTSSAndPR();
   updHdr();
   updDots();
   restoreW(w);
