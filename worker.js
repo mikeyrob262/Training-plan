@@ -8460,8 +8460,11 @@ function renderRun(){
       // Header
       var hdr=document.createElement('div');
       hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px';
+      var stravaLink=r.stravaId?'<a href="https://www.strava.com/activities/'+r.stravaId+'" target="_blank" style="font-size:10px;color:#FC4C02;text-decoration:none;font-weight:600">Open in Strava ↗</a>':'';
       hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.name||r.type||'Run')+'</div>'
-        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.weather?' · '+r.weather:'')+'</div></div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.weather?' · '+r.weather:'')+'</div>'
+        +(stravaLink?'<div style="margin-top:3px">'+stravaLink+'</div>':'')
+        +'</div>'
         +'<div style="display:flex;gap:5px">'
         +(r.type?'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+typeColor.bg+';color:'+typeColor.tc+'">'+r.type.split(' ')[0]+'</span>':'')
         +(r.rpe?'<span style="display:inline-flex;align-items:center;padding:3px 8px;border-radius:100px;font-size:11px;font-weight:700;background:'+rpeColor.bg+';color:'+rpeColor.tc+'">RPE '+r.rpe+'</span>':'')
