@@ -1,6 +1,6 @@
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1782754474 v1782754432 -->
+    return new Response(`<!DOCTYPE html><!-- v2 --><!-- BUST1782754474 v1782754432 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
