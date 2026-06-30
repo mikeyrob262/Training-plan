@@ -3144,11 +3144,51 @@ function updHdr(){
   var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
 
+function logWeightQuick(){
+  var cur = st.weight || '';
+  var val = prompt('Log your weight (lbs):', cur);
+  if(val===null) return;
+  var num = parseFloat(val);
+  if(isNaN(num)||num<=0){ toast('Enter a valid weight'); return; }
+  st.weight = num;
+  if(!st.weightLog) st.weightLog = [];
+  var today = getTodayKey();
+  var existing = st.weightLog.find(function(w){return w.date===today;});
+  if(existing) existing.weight = num;
+  else st.weightLog.push({date:today, weight:num});
+  sv(); fbPush(true);
+  toast('Weight logged: '+num+' lbs');
+  renderHomeTSSAndPR();
+}
+
 function renderHomeTSSAndPR(){
   var container = document.getElementById('home-tss-pr');
   if(!container) return;
   var rides = st.rides||[];
-  if(!rides.length){ container.innerHTML=''; return; }
+
+  // Weight quick-log button (always shown, independent of rides)
+  var wLog = st.weightLog||[];
+  var latestW = wLog.length ? wLog[wLog.length-1] : null;
+  var weightHtml = '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
+    + '<div><div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Weight</div>'
+    + '<div style="font-size:18px;font-weight:800;color:var(--t1);margin-top:2px">'+(st.weight?st.weight+' lbs':'—')+(latestW?' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+latestW.date+')</span>':'')+'</div></div>'
+    + '<button onclick="logWeightQuick()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:12px;font-weight:700;padding:9px 16px;border-radius:10px;cursor:pointer;font-family:inherit">+ Log</button>'
+    + '</div>';
+
+  // Half Marathon countdown (Grand Rapids Half, Oct 18)
+  var raceDate = new Date(new Date().getFullYear(), 9, 18); // Oct 18
+  var todayD = new Date(); todayD.setHours(0,0,0,0);
+  if(raceDate < todayD) raceDate.setFullYear(raceDate.getFullYear()+1);
+  var daysOut = Math.ceil((raceDate-todayD)/(1000*60*60*24));
+  var weeksOut = Math.floor(daysOut/7);
+  weightHtml += '<div style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(15,110,86,.12),rgba(15,110,86,.04));border:1px solid rgba(15,110,86,.25);border-radius:14px;padding:14px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0F6E56;margin-bottom:4px">🏃 Grand Rapids Half Marathon</div>'
+    + '<div style="display:flex;align-items:baseline;gap:8px">'
+    + '<div style="font-size:28px;font-weight:900;color:var(--t1)">'+daysOut+'</div>'
+    + '<div style="font-size:13px;color:var(--t2)">days out · '+weeksOut+' weeks</div>'
+    + '</div></div>';
+
+  if(!rides.length){ container.innerHTML=weightHtml; return; }
 
   var longestRide=0,bestNP=0,highestTSS=0;
   var weekTSSmap2={};
@@ -3206,7 +3246,7 @@ function renderHomeTSSAndPR(){
     h+='</div>';
   }
 
-  container.innerHTML = h;
+  container.innerHTML = weightHtml + h;
 }
 
 function GW(w){
@@ -6465,16 +6505,30 @@ function renderPerf(container){
   }, 200);
 }
 
+var activityYearFilter = activityYearFilter || new Date().getFullYear();
+function setActivityYearFilter(y){ activityYearFilter = y; var body=document.getElementById('perf-body'); renderRideList(body); }
 function renderRideList(container){
   if(!container) return;
-  var rides=(st.rides||[]).slice().reverse();
+  if(typeof activityYearFilter==='undefined') activityYearFilter = new Date().getFullYear();
+  var allRides=(st.rides||[]);
+  var years = Array.from(new Set(allRides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean))).sort(function(a,b){return b-a;});
+  if(years.indexOf(activityYearFilter)===-1 && years.length) activityYearFilter=years[0];
+  var rides=allRides.filter(function(r){return !r.date||new Date(r.date).getFullYear()===activityYearFilter;}).slice().reverse();
   var html='';
   // Drop zone
 
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
+  if(years.length>1){
+    html+='<div style="padding:0 16px 10px;display:flex;gap:6px;flex-wrap:wrap">';
+    years.forEach(function(y){
+      var active=y===activityYearFilter;
+      html+='<button onclick="setActivityYearFilter('+y+')" style="padding:6px 14px;border-radius:16px;border:1px solid '+(active?'#FC4C02':'var(--b1)')+';background:'+(active?'rgba(252,76,2,.12)':'var(--s2)')+';color:'+(active?'#FC4C02':'var(--t2)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">'+y+'</button>';
+    });
+    html+='</div>';
+  }
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
   rides.forEach(function(r,idx){
-    var realIdx=st.rides.length-1-idx;
+    var realIdx=st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
     var hasZones=r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s;
     var totalZ=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
@@ -7709,6 +7763,29 @@ function openRideDetail(idx){
     html += '</div>';
   }
 
+  // -- HR ZONES (cycling, 5-zone based on max HR)
+  if(r.avgHR){
+    var cMaxHR = parseInt(st.maxHR||172);
+    var cZones = [
+      {n:'Z1 Recovery', lo:0, hi:Math.round(cMaxHR*0.6), c:'#8a8a8a'},
+      {n:'Z2 Endurance', lo:Math.round(cMaxHR*0.6)+1, hi:Math.round(cMaxHR*0.7), c:'#0F6E56'},
+      {n:'Z3 Tempo', lo:Math.round(cMaxHR*0.7)+1, hi:Math.round(cMaxHR*0.8), c:'#BA7517'},
+      {n:'Z4 Threshold', lo:Math.round(cMaxHR*0.8)+1, hi:Math.round(cMaxHR*0.9), c:'#FC4C02'},
+      {n:'Z5 VO2 Max', lo:Math.round(cMaxHR*0.9)+1, hi:cMaxHR, c:'#ef4444'}
+    ];
+    var avgZone = cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;}) || cZones[0];
+    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">HR Zone (avg '+r.avgHR+' bpm — '+avgZone.n+')</div>';
+    html += '<div style="margin:0 16px 14px;display:flex;flex-direction:column;gap:6px">';
+    cZones.forEach(function(z){
+      var isActive = z.n===avgZone.n;
+      html += '<div style="display:flex;align-items:center;gap:10px;background:var(--s2);border-radius:10px;padding:8px 12px;border-left:4px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
+      html += '<div style="flex:1;font-size:12px;font-weight:'+(isActive?'800':'600')+';color:var(--t1)">'+z.n+'</div>';
+      html += '<div style="font-size:12px;font-weight:700;color:'+z.c+'">'+z.lo+'–'+z.hi+'</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
   // -- POWER STATS
   html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
   html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
@@ -8674,7 +8751,17 @@ function renderRun(){
       var delBtn=document.createElement('button');
       delBtn.style.cssText='margin-top:8px;font-size:11px;color:#ef4444;background:none;border:none;cursor:pointer;font-family:inherit;padding:0';
       delBtn.textContent='Delete run';
-      (function(idx){delBtn.onclick=function(){if(confirm('Delete this run?')){st.runs.splice(idx,1);sv();renderRun();toast('Run deleted');}}})(runs.indexOf(r));
+      (function(rRef){delBtn.onclick=function(){
+        if(!confirm('Delete this run?')) return;
+        if(rRef.stravaId){
+          var rideIdx=st.rides.findIndex(function(x){return x.stravaId===rRef.stravaId;});
+          if(rideIdx>=0) st.rides.splice(rideIdx,1);
+        } else {
+          var manIdx=(st.runs||[]).findIndex(function(x){return x.date===rRef.date&&x.name===rRef.name&&x.distance===rRef.distance;});
+          if(manIdx>=0) st.runs.splice(manIdx,1);
+        }
+        sv();fbPush(true);renderRun();toast('Run deleted');
+      };})(r);
       rcard.appendChild(delBtn);
 
       runList.appendChild(rcard);
