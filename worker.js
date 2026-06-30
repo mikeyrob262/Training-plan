@@ -323,7 +323,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
   <div class="hdr-nav">
 
     <div class="wi">
-      <button class="wtit" id="btn-wt" onclick="openPk()">Week of... <span style="font-size:11px;opacity:.35;margin-left:2px">▾</span></button>
+      <button class="wtit" id="btn-wt" onclick="openPk()"> <span style="font-size:11px;opacity:.35;margin-left:2px">▾</span></button>
     </div>
 
   </div>
@@ -10650,7 +10650,7 @@ function showCal(){
           +(runPct?'<div style="height:100%;width:'+runPct+'%;background:#185FA5"></div>':'')
           +'</div>';
       })()
-        +(dots?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:2px">'+dots+'</div>':'')
+        +(dots?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:3px">'+dots+'</div>':'')
         +'</div>'
         +'<div style="font-size:12px;color:var(--t2);width:42px;text-align:right;flex-shrink:0;font-weight:600">'+(mi?mi+'mi':'')+'</div>';
       if(mi){(function(mo2){row.onclick=function(){calMonth=mo2;ybtn.onclick=null;mbtn.onclick();renderMonth();};})(m);}
