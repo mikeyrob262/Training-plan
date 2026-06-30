@@ -3070,7 +3070,7 @@ function fbPull(silent){
       for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
       try{updDots();}catch(e){}
       try{restoreExtraSessions();}catch(e){}
-      try{cw=getCurrentPlanWeek();GW(cw);}catch(e){}
+      try{cw=getCurrentPlanWeek();GW(cw);updHdr();}catch(e){}
       if(!silent) toast('OK Synced!');
     } else {
       if(!silent) toast('No cloud data yet');
