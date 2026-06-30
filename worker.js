@@ -5749,12 +5749,10 @@ function showActivities(){
   var ab=document.getElementById('bnav-activities');if(ab)ab.classList.add('active');
   var overlay=document.createElement('div');
   overlay.id='perf-modal';
-  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
-  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:var(--bg);display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
-  var isDarkHdr=document.body.classList.contains('dark');
   hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Activities</div>';
+  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)">Activities</div>';
   var body=document.createElement('div');
   body.id='perf-body';
   body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
@@ -11190,6 +11188,8 @@ window.onload = function(){
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       }
     });
   }
