@@ -10668,6 +10668,20 @@ function showWeather(){
     sectionLbl.textContent='My Routes';
     listWrap.appendChild(sectionLbl);
 
+    // Search by location card
+    var searchCard=document.createElement('div');
+    searchCard.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer';
+    searchCard.innerHTML='<div style="width:40px;height:40px;border-radius:10px;background:rgba(55,138,221,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>'
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--t1)">Search any location</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">Chicago, a city, address...</div>'
+      +'</div>'
+      +'<div style="color:var(--t3);font-size:18px">›</div>';
+    searchCard.onclick=function(){renderLocationSearch();};
+    listWrap.appendChild(searchCard);
+
     var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
     var rideIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
     var runIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
@@ -10695,6 +10709,117 @@ function showWeather(){
       });
     }
     scr.appendChild(listWrap);
+  }
+
+  // ── LOCATION SEARCH ──
+  function renderLocationSearch(){
+    destroyCharts();
+    scr.innerHTML='';
+    scr.scrollTop=0;
+
+    var hdr=document.createElement('div');
+    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
+    hdr.innerHTML='<button onclick="showWeather()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+      +'<div style="font-size:14px;font-weight:800;color:#fff">Search Location</div>';
+    scr.appendChild(hdr);
+
+    var body=document.createElement('div');
+    body.style.cssText='padding:20px 16px';
+
+    // Search input
+    var searchWrap=document.createElement('div');
+    searchWrap.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:16px';
+    var searchIcon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
+    searchWrap.innerHTML=searchIcon;
+
+    var inp=document.createElement('input');
+    inp.type='text';
+    inp.placeholder='Chicago, IL  or  123 Main St...';
+    inp.style.cssText='flex:1;border:none;background:none;font-size:15px;color:var(--t1);outline:none;font-family:inherit';
+    searchWrap.appendChild(inp);
+
+    var clearBtn=document.createElement('div');
+    clearBtn.style.cssText='cursor:pointer;color:var(--t3);font-size:18px;display:none';
+    clearBtn.textContent='×';
+    clearBtn.onclick=function(){inp.value='';clearBtn.style.display='none';resultsList.innerHTML='';};
+    searchWrap.appendChild(clearBtn);
+    body.appendChild(searchWrap);
+
+    // Results list
+    var resultsList=document.createElement('div');
+    body.appendChild(resultsList);
+    scr.appendChild(body);
+
+    // Quick suggestions
+    var suggestions=['Chicago, IL','Milwaukee, WI','Detroit, MI','Indianapolis, IN','Columbus, OH'];
+    var sugWrap=document.createElement('div');
+    sugWrap.style.cssText='margin-bottom:16px';
+    var sugLbl=document.createElement('div');
+    sugLbl.style.cssText='font-size:10px;font-weight:700;color:var(--t3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px';
+    sugLbl.textContent='Quick picks';
+    sugWrap.appendChild(sugLbl);
+    suggestions.forEach(function(s){
+      var chip=document.createElement('div');
+      chip.style.cssText='display:inline-block;background:var(--s2);border:0.5px solid var(--b1);border-radius:20px;padding:7px 14px;margin:0 6px 6px 0;cursor:pointer;font-size:13px;font-weight:600;color:var(--t1)';
+      chip.textContent=s;
+      chip.onclick=function(){inp.value=s;doSearch(s);};
+      sugWrap.appendChild(chip);
+    });
+    resultsList.appendChild(sugWrap);
+
+    function doSearch(q){
+      if(!q.trim()) return;
+      clearBtn.style.display='block';
+      resultsList.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching...</div>';
+      // Use Nominatim geocoding (free, no API key)
+      fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q)+'&limit=5&addressdetails=1',
+        {headers:{'Accept-Language':'en','User-Agent':'AthleteIQ/1.0'}})
+      .then(function(r){return r.json();})
+      .then(function(results){
+        resultsList.innerHTML='';
+        if(!results||!results.length){
+          resultsList.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">No results found. Try a different search.</div>';
+          return;
+        }
+        results.forEach(function(r){
+          var name=r.display_name.split(',').slice(0,3).join(', ');
+          var lat=parseFloat(r.lat);
+          var lon=parseFloat(r.lon);
+          var card=document.createElement('div');
+          card.style.cssText='background:var(--s2);border-radius:14px;border:0.5px solid var(--b1);padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer';
+          card.innerHTML='<div style="width:36px;height:36px;border-radius:10px;background:rgba(55,138,221,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+            +'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>'
+            +'</div>'
+            +'<div style="flex:1;min-width:0">'
+            +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+name+'</div>'
+            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+lat.toFixed(4)+'°, '+lon.toFixed(4)+'°</div>'
+            +'</div>'
+            +'<div style="color:var(--t3);font-size:18px">›</div>';
+          card.onclick=function(){
+            // Create a fake route from this location
+            var fakeRoute={
+              name:name.split(',')[0],
+              gpsLats:[lat],gpsLons:[lon],
+              distance:'',duration:'2:00',
+              sportType:'Ride'
+            };
+            renderDatePicker(fakeRoute);
+          };
+          resultsList.appendChild(card);
+        });
+      }).catch(function(){
+        resultsList.innerHTML='<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Search failed. Check your connection.</div>';
+      });
+    }
+
+    var searchTimer=null;
+    inp.oninput=function(){
+      clearBtn.style.display=inp.value?'block':'none';
+      clearTimeout(searchTimer);
+      if(inp.value.length>2) searchTimer=setTimeout(function(){doSearch(inp.value);},500);
+    };
+    inp.onkeydown=function(e){if(e.key==='Enter') doSearch(inp.value);};
+    setTimeout(function(){inp.focus();},200);
   }
 
   // ── DATE/TIME PICKER ──
