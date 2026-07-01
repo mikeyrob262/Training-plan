@@ -10576,7 +10576,7 @@ function showWeather(){
     var ch=new Chart(el,{type:'line',
       data:{labels:labels,datasets:datasets.map(function(d){
         return{label:d.label,data:d.data,borderColor:d.color,backgroundColor:d.fill?d.color+'28':'transparent',
-          borderWidth:2.5,pointRadius:0,pointHoverRadius:5,fill:!!d.fill,tension:0.4,yAxisID:d.axis||'y'};
+          borderWidth:2.5,pointRadius:0,pointHoverRadius:5,fill:!!d.fill,tension:0,yAxisID:d.axis||'y'};
       })},
       options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
         plugins:{
@@ -11102,8 +11102,8 @@ function showWeather(){
           var gc=dark?'rgba(255,255,255,0.07)':'rgba(0,0,0,0.06)';
           var tc2=dark?'rgba(255,255,255,0.45)':'rgba(0,0,0,0.45)';
           var ch=new Chart(el2,{type:'line',data:{labels:times,datasets:[
-            {label:'Humidity (%)',data:humid,borderColor:'#185FA5',backgroundColor:'#185FA528',borderWidth:2.5,pointRadius:0,fill:true,tension:0.4,yAxisID:'y'},
-            {label:'Dew point (°F)',data:dew,borderColor:'#FC4C02',backgroundColor:'transparent',borderWidth:2,pointRadius:0,fill:false,tension:0.4,yAxisID:'y2'}
+            {label:'Humidity (%)',data:humid,borderColor:'#185FA5',backgroundColor:'#185FA528',borderWidth:2.5,pointRadius:0,fill:true,tension:0,yAxisID:'y'},
+            {label:'Dew point (°F)',data:dew,borderColor:'#FC4C02',backgroundColor:'transparent',borderWidth:2,pointRadius:0,fill:false,tension:0,yAxisID:'y2'}
           ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
             plugins:{legend:{display:true,position:'bottom',labels:{color:tc2,font:{size:11},boxWidth:20,padding:10,usePointStyle:true}},
               tooltip:{backgroundColor:dark?'rgba(30,30,32,0.95)':'rgba(255,255,255,0.95)',titleColor:dark?'#fff':'#000',
