@@ -10499,16 +10499,11 @@ function showWeather(){
   scr.id='WEATHER-SCREEN';
   scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
-  // All GPS rides, deduplicated by name, sorted by most recent
-  var routes=[];
-  var seen={};
-  (st.rides||[]).filter(function(r){
+  // All GPS rides sorted newest first - no dedup so all rides show
+  var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
     return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
-  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);}).forEach(function(r){
-    var key=(r.name||r.sportType||'Ride').trim();
-    if(!seen[key]){seen[key]=true;routes.push(r);}
-  });
+  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
 
   var wxCharts=[];
   function destroyCharts(){wxCharts.forEach(function(c){try{c.destroy();}catch(e){}});wxCharts=[];}
