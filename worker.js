@@ -10684,41 +10684,21 @@ function showWeather(){
       empty.textContent='No outdoor rides with GPS. Sync Strava first.';
       listWrap.appendChild(empty);
     } else {
-      var showCount=5;
-      var routeCards=document.createElement('div');
-      listWrap.appendChild(routeCards);
-
-      function renderRouteCards(){
-        routeCards.innerHTML='';
-        routes.slice(0,showCount).forEach(function(r){
-          var sport=r.sportType||r.type||'Ride';
-          var iconColor=sportColors[sport]||'#FC4C02';
-          var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
-          var card=document.createElement('div');
-          card.style.cssText='background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer';
-          card.innerHTML='<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
-            +'<div style="flex:1;min-width:0">'
-            +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
-            +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+(r.distance?r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+(r.date?' · '+r.date:'')+'</div>'
-            +'</div>'
-            +'<div style="color:var(--t3);font-size:16px">›</div>';
-          card.onclick=function(){renderDatePicker(r);};
-          routeCards.appendChild(card);
-        });
-        // Show more / collapse
-        if(routes.length>5){
-          var moreBtn=document.createElement('div');
-          var showing=showCount>=routes.length;
-          moreBtn.style.cssText='text-align:center;padding:10px 0;font-size:13px;font-weight:700;color:#FC4C02;cursor:pointer';
-          moreBtn.textContent=showing?'Show less ↑':'Show '+(routes.length-showCount)+' more routes ↓';
-          moreBtn.onclick=function(){
-            showCount=showing?5:routes.length;
-            renderRouteCards();
-          };
-          routeCards.appendChild(moreBtn);
-        }
-      }
-      renderRouteCards();
+      routes.forEach(function(r){
+        var sport=r.sportType||r.type||'Ride';
+        var iconColor=sportColors[sport]||'#FC4C02';
+        var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
+        var card=document.createElement('div');
+        card.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer';
+        card.innerHTML='<div style="width:34px;height:34px;border-radius:8px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
+          +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+(r.date?' · '+r.date:'')+'</div>'
+          +'</div>'
+          +'<div style="color:var(--t3);font-size:16px">›</div>';
+        card.onclick=function(){renderDatePicker(r);};
+        listWrap.appendChild(card);
+      });
     }
     scr.appendChild(listWrap);
   }
