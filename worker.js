@@ -10684,12 +10684,9 @@ function showWeather(){
       empty.textContent='No outdoor rides with GPS. Sync Strava first.';
       listWrap.appendChild(empty);
     } else {
-      // Scrollable container showing 5 routes, scroll to see more
+      // Fixed height scrollable list - same pattern as Analytics ride history
       var routeScroll=document.createElement('div');
-      var cardH=68; // approx height per card including margin
-      var maxVisible=5;
-      var scrollH=routes.length>maxVisible?cardH*maxVisible:cardH*routes.length;
-      routeScroll.style.cssText='overflow-y:auto;max-height:'+scrollH+'px;-webkit-overflow-scrolling:touch;scrollbar-width:none';
+      routeScroll.style.cssText='height:360px;overflow-y:scroll;border-radius:14px;border:0.5px solid var(--b1)';
       listWrap.appendChild(routeScroll);
 
       routes.forEach(function(r){
@@ -10697,7 +10694,7 @@ function showWeather(){
         var iconColor=sportColors[sport]||'#FC4C02';
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var card=document.createElement('div');
-        card.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer';
+        card.style.cssText='background:var(--s2);border-bottom:0.5px solid var(--b1);padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer';
         card.innerHTML='<div style="width:34px;height:34px;border-radius:8px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
