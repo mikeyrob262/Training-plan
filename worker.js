@@ -11452,9 +11452,40 @@ function fetchStravaPage(token, page, imported, forceAll) {
     imported += newCount;
     if(acts.length < 50){
       sv();
-      fbPush(true); // force immediate push so Firebase has the latest rides
-      toast('Strava sync done: ' + imported + ' imported');
+      fbPush(true);
+      toast('Strava sync done: ' + imported + ' imported. Fetching missing GPS...');
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
+      // Auto-fetch GPS for rides missing it
+      var missingGPS = st.rides.filter(function(r){
+        return r.stravaId && !(r.gpsLats && r.gpsLats.length>5) && r.date >= '2025-01-01';
+      }).slice(0,20); // max 20 at a time
+      if(missingGPS.length>0){
+        var gIdx=0;
+        function fetchNextGPS(){
+          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS backfill done!');return;}
+          var r=missingGPS[gIdx++];
+          var rideIndex=st.rides.indexOf(r);
+          fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
+          .then(function(res){return res.json();})
+          .then(function(a){
+            if(a&&a.map){
+              var poly=a.map.polyline||a.map.summary_polyline;
+              if(poly){try{
+                var dec=decodePolyline(poly);
+                if(dec.lats.length>5){
+                  var s=Math.max(1,Math.floor(dec.lats.length/300));
+                  st.rides[rideIndex].gpsLats=dec.lats.filter(function(_,i){return i%s===0;}).slice(0,300);
+                  st.rides[rideIndex].gpsLons=dec.lons.filter(function(_,i){return i%s===0;}).slice(0,300);
+                }
+              }catch(e){}}
+            }
+            setTimeout(fetchNextGPS,300);
+          }).catch(function(){setTimeout(fetchNextGPS,300);});
+        }
+        fetchNextGPS();
+      } else {
+        toast('Strava sync done: ' + imported + ' imported');
+      }
     } else {
       sv(); // save after every page
       toast('Page ' + page + ': ' + imported + ' imported...');
