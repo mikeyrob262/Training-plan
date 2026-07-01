@@ -10601,20 +10601,20 @@ function showWeather(){
 
     // Current conditions hero
     var heroDiv=document.createElement('div');
-    heroDiv.style.cssText='background:var(--s2);padding:20px 16px 0;text-align:center;border-bottom:1px solid var(--b1)';
+    heroDiv.style.cssText='background:var(--s2);padding:10px 16px 0;text-align:center;border-bottom:1px solid var(--b1)';
 
     var tempEl=document.createElement('div');
-    tempEl.style.cssText='font-size:64px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-2px';
+    tempEl.style.cssText='font-size:48px;font-weight:200;color:var(--t1);line-height:1;letter-spacing:-1px';
     tempEl.textContent='--°';
     heroDiv.appendChild(tempEl);
 
     var subEl=document.createElement('div');
-    subEl.style.cssText='font-size:14px;font-weight:600;color:var(--t2);margin-top:6px';
+    subEl.style.cssText='font-size:12px;font-weight:600;color:var(--t2);margin-top:3px';
     subEl.textContent='Loading...';
     heroDiv.appendChild(subEl);
 
     var divider=document.createElement('div');
-    divider.style.cssText='border-top:1px solid var(--b1);margin-top:14px;padding-top:14px;padding-bottom:14px';
+    divider.style.cssText='border-top:1px solid var(--b1);margin-top:8px;padding-top:8px;padding-bottom:8px';
     heroDiv.appendChild(divider);
 
     var hourlyEl=document.createElement('div');
