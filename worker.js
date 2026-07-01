@@ -10684,6 +10684,14 @@ function showWeather(){
       empty.textContent='No outdoor rides with GPS. Sync Strava first.';
       listWrap.appendChild(empty);
     } else {
+      // Scrollable container showing 5 routes, scroll to see more
+      var routeScroll=document.createElement('div');
+      var cardH=68; // approx height per card including margin
+      var maxVisible=5;
+      var scrollH=routes.length>maxVisible?cardH*maxVisible:cardH*routes.length;
+      routeScroll.style.cssText='overflow-y:auto;max-height:'+scrollH+'px;-webkit-overflow-scrolling:touch;scrollbar-width:none';
+      listWrap.appendChild(routeScroll);
+
       routes.forEach(function(r){
         var sport=r.sportType||r.type||'Ride';
         var iconColor=sportColors[sport]||'#FC4C02';
@@ -10697,7 +10705,7 @@ function showWeather(){
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">›</div>';
         card.onclick=function(){renderDatePicker(r);};
-        listWrap.appendChild(card);
+        routeScroll.appendChild(card);
       });
     }
     scr.appendChild(listWrap);
