@@ -10499,10 +10499,10 @@ function showWeather(){
   scr.id='WEATHER-SCREEN';
   scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:150;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
-  // All GPS rides sorted newest first by date string (YYYY-MM-DD sorts correctly)
+  // All outdoor rides sorted newest first - include rides without GPS
   var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
+    return !/virtual|weight|strength|walk/i.test(s);
   }).slice().sort(function(a,b){
     var da=(a.date||'').replace(/-/g,'');
     var db=(b.date||'').replace(/-/g,'');
@@ -10695,7 +10695,10 @@ function showWeather(){
           +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+(r.date?' · '+r.date:'')+'</div>'
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">›</div>';
-        card.onclick=function(){renderDatePicker(r);};
+        card.onclick=function(){
+          if(!r.gpsLats||r.gpsLats.length<=5){r.noGPS=true;r.gpsLats=[42.9634];r.gpsLons=[-85.6681];}
+          renderDatePicker(r);
+        };
         listWrap.appendChild(card);
       });
     }
