@@ -10686,7 +10686,7 @@ function showWeather(){
     } else {
       // Fixed height scrollable list - same pattern as Analytics ride history
       var routeScroll=document.createElement('div');
-      routeScroll.style.cssText='height:360px;overflow-y:scroll;border-radius:14px;border:0.5px solid var(--b1)';
+      routeScroll.style.cssText='height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:0.5px solid var(--b1);display:block';
       listWrap.appendChild(routeScroll);
 
       routes.forEach(function(r){
