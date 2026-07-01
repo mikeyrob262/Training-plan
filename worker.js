@@ -11043,6 +11043,7 @@ function showWeather(){
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#E24B4A">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust '+getDirStr(midDir)+'</div></div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(wind.length?Math.max.apply(null,wind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
           +'</div>';
       }
 
@@ -11080,8 +11081,8 @@ function showWeather(){
         var w=makeChartEl('wx-wind','Wind','Max '+Math.round(maxGust)+'mph '+getDirStr(midDir));
         cEl.appendChild(w);
         setTimeout(function(){makeChart('wx-wind',times,
-          [{label:'Gusts (mph)',data:gusts,color:'#FC4C02',fill:true},
-           {label:'Wind (mph)',data:wind,color:'#185FA5',fill:false}],
+          [{label:'Sustained (mph)',data:wind,color:'#185FA5',fill:true},
+           {label:'Gusts (mph)',data:gusts,color:'#FC4C02',fill:false}],
           {suggestedMin:0,suggestedMax:Math.max.apply(null,gusts)+3});},150);
       }
       if(precip.length>1){
