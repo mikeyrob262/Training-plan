@@ -10499,12 +10499,15 @@ function showWeather(){
   scr.id='WEATHER-SCREEN';
   scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
-  // All completed GPS rides sorted newest first
-  var today=new Date().toISOString().split('T')[0];
+  // All GPS rides sorted newest first by date string (YYYY-MM-DD sorts correctly)
   var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5&&r.date<=today;
-  }).slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+    return !/virtual|weight|strength|walk/i.test(s)&&r.gpsLats&&r.gpsLats.length>5;
+  }).slice().sort(function(a,b){
+    var da=(a.date||'').replace(/-/g,'');
+    var db=(b.date||'').replace(/-/g,'');
+    return db>da?1:db<da?-1:0;
+  });
 
   var wxCharts=[];
   function destroyCharts(){wxCharts.forEach(function(c){try{c.destroy();}catch(e){}});wxCharts=[];}
