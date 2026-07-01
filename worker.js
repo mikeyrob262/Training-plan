@@ -10497,7 +10497,7 @@ function showWeather(){
   var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
   scr.id='WEATHER-SCREEN';
-  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;';
+  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;';
 
   // All GPS rides, deduplicated by name, sorted by most recent
   var routes=[];
@@ -10659,7 +10659,7 @@ function showWeather(){
 
     // Route list
     var listWrap=document.createElement('div');
-    listWrap.style.cssText='padding:16px 16px 4px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch';
+    listWrap.style.cssText='padding:16px 16px 16px';
 
     var sectionLbl=document.createElement('div');
     sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between';
