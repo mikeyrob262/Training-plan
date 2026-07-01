@@ -11001,13 +11001,16 @@ function showWeather(){
     var endDate=rideDate;
 
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
-      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,windgusts_10m,winddirection_10m,relativehumidity_2m,dewpoint_2m,uv_index'
+      +'&minutely_15=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,windgusts_10m,winddirection_10m,relativehumidity_2m,dewpoint_2m'
+      +'&hourly=uv_index'
       +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago'
       +'&start_date='+rideDate+'&end_date='+endDate)
     .then(function(r){return r.json();}).then(function(data){
-      if(!data||!data.hourly) return;
-      var h=data.hourly;
-      function sl(arr){return(arr||[]).slice(s0,s1+1);}
+      if(!data||!data.minutely_15) return;
+      var h=data.minutely_15;
+      // 15-min intervals: s0*4 to s1*4
+      var i0=s0*4, i1=s1*4;
+      function sl(arr){return(arr||[]).slice(i0,i1+1);}
       function fmt2(arr){return sl(arr).map(function(v){return Math.round(v*10)/10;});}
       var temps=fmt2(h.temperature_2m);
       var feels=fmt2(h.apparent_temperature);
@@ -11017,11 +11020,13 @@ function showWeather(){
       var windDir=sl(h.winddirection_10m)||[];
       var humid=fmt2(h.relativehumidity_2m);
       var dew=fmt2(h.dewpoint_2m);
-      var uv=fmt2(h.uv_index);
-      var times=(h.time||[]).slice(s0,s1+1).map(function(t){
-        if(!t.split('T')[1]) return '';
-        var hr=parseInt(t.split('T')[1].slice(0,2));
-        return(hr>12?hr-12:(hr===0?12:hr))+(hr>=12?'PM':'AM');
+      var uv=data.hourly?(data.hourly.uv_index||[]).slice(s0,s1+1).map(function(v){return Math.round(v*10)/10;}):[];
+      var times=(h.time||[]).slice(i0,i1+1).map(function(t,i){
+        if(!t||!t.split('T')[1]) return '';
+        var parts=t.split('T')[1].slice(0,5).split(':');
+        var hr=parseInt(parts[0]),min=parts[1];
+        if(min!=='00'&&min!=='30') return '';
+        return(hr>12?hr-12:(hr===0?12:hr))+(min==='30'?':30':'')+(hr>=12?'PM':'AM');
       });
 
       var maxTemp=temps.length?Math.max.apply(null,temps):75;
