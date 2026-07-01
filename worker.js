@@ -3744,11 +3744,14 @@ function finStr(l){
 
 function showScreen(id){
   var wxs=document.getElementById('WEATHER-SCREEN');if(wxs)wxs.remove();
+  var wxd=document.getElementById('WX-DETAIL');if(wxd)wxd.remove();
   var cals=document.getElementById('CAL-SCREEN');if(cals)cals.remove();
   // Clean up any fixed overlays that might be blocking
   var coreScr=document.getElementById('CORE-SCREEN');if(coreScr)coreScr.remove();
   var condScr=document.getElementById('COND-SCREEN');if(condScr)condScr.remove();
   var runScr=document.getElementById('RUN-SCREEN');if(runScr)runScr.remove();
+  // Ensure week header is visible
+  var bwt=document.getElementById('btn-wt');if(bwt)bwt.style.display='';
   document.getElementById('TRAIN').style.display=id==='TRAIN'?'block':'none';
   document.getElementById('PROG').style.display=id==='PROG'?'block':'none';
   document.getElementById('NUTR').style.display=id==='NUTR'?'block':'none';
