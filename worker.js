@@ -10497,7 +10497,7 @@ function showWeather(){
   var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
   scr.id='WEATHER-SCREEN';
-  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;';
+  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;';
 
   // All GPS rides, deduplicated by name, sorted by most recent
   var routes=[];
@@ -10659,7 +10659,7 @@ function showWeather(){
 
     // Route list
     var listWrap=document.createElement('div');
-    listWrap.style.cssText='padding:16px 16px 4px';
+    listWrap.style.cssText='padding:16px 16px 4px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch';
 
     var sectionLbl=document.createElement('div');
     sectionLbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between';
@@ -10684,17 +10684,12 @@ function showWeather(){
       empty.textContent='No outdoor rides with GPS. Sync Strava first.';
       listWrap.appendChild(empty);
     } else {
-      // Fixed height scrollable list - same pattern as Analytics ride history
-      var routeScroll=document.createElement('div');
-      routeScroll.style.cssText='height:340px;overflow-y:auto;-webkit-overflow-scrolling:touch;border-radius:14px;border:0.5px solid var(--b1);display:block';
-      listWrap.appendChild(routeScroll);
-
       routes.forEach(function(r){
         var sport=r.sportType||r.type||'Ride';
         var iconColor=sportColors[sport]||'#FC4C02';
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var card=document.createElement('div');
-        card.style.cssText='background:var(--s2);border-bottom:0.5px solid var(--b1);padding:11px 14px;display:flex;align-items:center;gap:10px;cursor:pointer';
+        card.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:11px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer';
         card.innerHTML='<div style="width:34px;height:34px;border-radius:8px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
@@ -10702,7 +10697,7 @@ function showWeather(){
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">›</div>';
         card.onclick=function(){renderDatePicker(r);};
-        routeScroll.appendChild(card);
+        listWrap.appendChild(card);
       });
     }
     scr.appendChild(listWrap);
