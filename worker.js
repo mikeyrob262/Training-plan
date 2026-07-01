@@ -10986,7 +10986,7 @@ function showWeather(){
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       var pl=L.polyline(pts,{color:'#FC4C02',weight:3.5}).addTo(map);
-      map.fitBounds(pl.getBounds(),{padding:[24,24]});
+      map.fitBounds(pl.getBounds(),{padding:[40,60]});
       L.circleMarker(pts[0],{radius:8,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2.5}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:8,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2.5}).addTo(map);
       window['_wxmap_'+mapId]=map;
