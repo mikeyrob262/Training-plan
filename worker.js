@@ -11357,7 +11357,7 @@ function stravaBackfill() {
   }
 
   // No refresh token — do full OAuth
-  var authUrl='https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=http://localhost&response_type=code&scope=activity:read_all&approval_prompt=force';
+  var authUrl='https://www.strava.com/oauth/authorize?client_id='+CLIENT_ID+'&redirect_uri=https://training-plan.mgrobinson07.workers.dev&response_type=code&scope=activity:read_all&approval_prompt=force';
   var popup=window.open(authUrl,'strava_auth','width=600,height=700');
   if(!popup){toast('Allow popups then tap Sync Strava');return;}
   toast('Authorize Strava in the popup...');
