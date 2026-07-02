@@ -3019,9 +3019,24 @@ function mergeArrays_(a, b){
   });
   return out;
 }
+// Firebase Realtime Database can serialize a JS array that has gaps/gets
+// round-tripped as a plain object with numeric string keys instead of a
+// real array (e.g. {"0":{...},"2":{...}}). Detect and normalize that back
+// to a real array so a type mismatch never causes data to be silently
+// dropped during merge.
+function looksLikeSparseArray_(obj){
+  var keys = Object.keys(obj);
+  if(!keys.length) return false;
+  return keys.every(function(k){ return /^\d+$/.test(k); });
+}
+function objectToArray_(obj){
+  return Object.keys(obj).sort(function(x,y){return parseInt(x,10)-parseInt(y,10);}).map(function(k){ return obj[k]; });
+}
 function mergeState_(a, b){
   if(a == null) return b;
   if(b == null) return a;
+  if(Array.isArray(a) && isPlainObj_(b) && looksLikeSparseArray_(b)) b = objectToArray_(b);
+  if(Array.isArray(b) && isPlainObj_(a) && looksLikeSparseArray_(a)) a = objectToArray_(a);
   if(Array.isArray(a) && Array.isArray(b)) return mergeArrays_(a, b);
   if(isPlainObj_(a) && isPlainObj_(b)){
     var out = {}, keys = {};
@@ -3035,7 +3050,28 @@ function mergeState_(a, b){
   if((a === '' || a === undefined) && b !== undefined && b !== '') return b;
   if((b === '' || b === undefined) && a !== undefined && a !== '') return a;
   if(typeof a === 'number' && typeof b === 'number') return Math.max(a, b);
+  // Type mismatch we can't reconcile (e.g. array vs. genuinely non-array
+  // object) - never silently drop either side; keep whichever side has
+  // more information rather than defaulting to 'a'.
+  if(Array.isArray(a) && !Array.isArray(b)) return a;
+  if(Array.isArray(b) && !Array.isArray(a)) return b;
   return a;
+}
+// Safety net run after every merge: force known array-typed fields back to
+// real arrays no matter what shape Firebase handed back, so the rest of the
+// app's .forEach/.length/.push calls on st.rides/st.cf can never throw and
+// silently halt window.onload partway through (which looks like "buttons
+// stopped working" and "data missing" at the same time).
+function normalizeState_(s){
+  if(!isPlainObj_(s)) return s;
+  ['rides','cf'].forEach(function(k){
+    if(s[k] === undefined) { s[k] = []; return; }
+    if(Array.isArray(s[k])) return;
+    if(isPlainObj_(s[k]) && looksLikeSparseArray_(s[k])) { s[k] = objectToArray_(s[k]); return; }
+    if(isPlainObj_(s[k])) { s[k] = Object.keys(s[k]).map(function(k2){return s[k][k2];}); return; }
+    s[k] = [];
+  });
+  return s;
 }
 
 // Save to localStorage, then debounce-push to Firebase after 1.5s
@@ -3051,7 +3087,7 @@ function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
-  st = mergeState_(st, data);
+  st = normalizeState_(mergeState_(st, data));
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
@@ -3086,7 +3122,7 @@ function fbPush(silent){
   .catch(function(){ return null; })
   .then(function(remote){
     if(remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
-      st = mergeState_(st, remote);
+      st = normalizeState_(mergeState_(st, remote));
     }
     var saveData = JSON.parse(JSON.stringify(st));
     if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
@@ -3117,7 +3153,7 @@ function fbPull(silent){
     if(data && typeof data==='object' && Object.keys(data).length){
       if(Array.isArray(data)) data=Object.assign({},data);
       if(Array.isArray(st)) st=Object.assign({},st);
-      st = mergeState_(st, data);
+      st = normalizeState_(mergeState_(st, data));
       fbWriteTs = 0;
       try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
