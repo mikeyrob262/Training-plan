@@ -1,3 +1,4 @@
+// build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
     return new Response(`<!DOCTYPE html><!-- BUST1782754474 v1782754432 -->
