@@ -7387,6 +7387,94 @@ function importRideFile(input){
         return;
       }
 
+      // -- Garmin BULK Activities CSV (Activities.csv - one row per ride, not per-lap)
+      // Distinguished from the single-ride Lap CSV below by having 'Title' + 'Date' +
+      // 'Number of Laps' columns but no exact 'Laps' column. Must be checked first:
+      // both formats share the 'Normalized Power® (NP®)' header, and without this
+      // check the code below would misread 20 separate rides as 20 "laps" of one
+      // ride and silently keep only the last row, discarding the other 19.
+      var isGarminBulk = headers.indexOf('Title') >= 0 && headers.indexOf('Date') >= 0 &&
+                          headers.indexOf('Number of Laps') >= 0 && headers.indexOf('Laps') < 0;
+      if(isGarminBulk){
+        function parseCSVLineQ(line){
+          var result = [], cur = '', inQuotes = false;
+          for(var qi=0;qi<line.length;qi++){
+            var qc = line[qi];
+            if(qc === '"'){ if(inQuotes && line[qi+1] === '"'){ cur += '"'; qi++; } else inQuotes = !inQuotes; }
+            else if(qc === ',' && !inQuotes){ result.push(cur); cur = ''; }
+            else cur += qc;
+          }
+          result.push(cur);
+          return result;
+        }
+        function numQ(s){ if(s===undefined||s===null||s==='--') return null; var v = parseFloat(String(s).replace(/,/g,'').replace(/[^0-9.\-]/g,'')); return isNaN(v)?null:v; }
+        function colQ(row, key){ var idx = headers.indexOf(key); return idx>=0 ? row[idx] : ''; }
+
+        if(!st.rides) st.rides=[];
+        var bulkMerged=0, bulkCreated=0;
+        for(var bi=1;bi<lines.length;bi++){
+          var brow = parseCSVLineQ(lines[bi]).map(function(c){return c.replace(/\r/g,'').replace(/"/g,'').trim();});
+          if(brow.length < 10) continue;
+          var bDateFull = colQ(brow,'Date');
+          var bDateStr = bDateFull.split(' ')[0];
+          if(!bDateStr) continue;
+          var bDistance = numQ(colQ(brow,'Distance'));
+          var bTitle = colQ(brow,'Title') || 'Activity';
+          var bMaxPwr = numQ(colQ(brow,'Max Power'));
+          var bMax20 = numQ(colQ(brow,'Max Avg Power (20 min)'));
+          var bNp = numQ(colQ(brow,'Normalized Power® (NP®)'));
+          var bAvgPwr = numQ(colQ(brow,'Avg Power'));
+          var bTss = numQ(colQ(brow,'Training Stress Score®'));
+          var bAvgHR = numQ(colQ(brow,'Avg HR'));
+          var bMaxHR = numQ(colQ(brow,'Max HR'));
+          var bCad = numQ(colQ(brow,'Avg Bike Cadence'));
+          var bElev = numQ(colQ(brow,'Total Ascent'));
+          var bCal = numQ(colQ(brow,'Calories'));
+
+          var match = st.rides.find(function(r){
+            return r.date===bDateStr && Math.abs((r.distance||0)-(bDistance||0)) < 0.5;
+          });
+
+          if(match){
+            // Fill in the power-curve data this ride was missing - never overwrite
+            // fields that already have a value from another source.
+            if(!match.powerCurve) match.powerCurve = {};
+            if(bMax20 && !match.powerCurve[1200]) match.powerCurve[1200] = bMax20;
+            if(bMaxPwr && !match.maxPwr) match.maxPwr = bMaxPwr;
+            if(bMax20 && !match.max20) match.max20 = bMax20;
+            if(bNp && !match.np) match.np = bNp;
+            if(bAvgPwr && !match.avgPwr) match.avgPwr = bAvgPwr;
+            if(bTss && !match.tss) match.tss = Math.round(bTss);
+            if(bAvgHR && !match.avgHR) match.avgHR = Math.round(bAvgHR);
+            if(bMaxHR && !match.maxHR) match.maxHR = Math.round(bMaxHR);
+            if(bCad && !match.cadence) match.cadence = Math.round(bCad);
+            if(bElev && !match.elev) match.elev = Math.round(bElev);
+            bulkMerged++;
+          } else {
+            var bDurStr = colQ(brow,'Time')||colQ(brow,'Moving Time')||'';
+            var bDurParts = bDurStr.split(':');
+            var bDurSec = bDurParts.length===3 ? (parseInt(bDurParts[0])*3600+parseInt(bDurParts[1])*60+parseInt(bDurParts[2])) : 0;
+            var bCurve = {};
+            if(bMax20) bCurve[1200] = bMax20;
+            st.rides.push({
+              name: bTitle, date: bDateStr, duration: bDurStr, movingSecs: bDurSec,
+              distance: bDistance||0, avgPwr: bAvgPwr, np: bNp, maxPwr: bMaxPwr,
+              max20: bMax20, powerCurve: bCurve, tss: bTss?Math.round(bTss):null,
+              avgHR: bAvgHR?Math.round(bAvgHR):null, maxHR: bMaxHR?Math.round(bMaxHR):null,
+              cadence: bCad?Math.round(bCad):null, elev: bElev?Math.round(bElev):null,
+              calories: bCal?Math.round(bCal):null, source: 'garmin_csv_bulk'
+            });
+            bulkCreated++;
+          }
+        }
+        sv();
+        fbPush(true);
+        toast('Garmin CSV: '+bulkMerged+' rides enriched, '+bulkCreated+' new rides added');
+        renderPerf(document.getElementById('perf-body'));
+        input.value='';
+        return;
+      }
+
       // -- Garmin Lap CSV (activity_XXXXXXX.csv from Garmin Connect)
       var isGarminLap = headers.indexOf('Normalized Power® (NP®)') >= 0 || headers.indexOf('Laps') >= 0;
       if(isGarminLap){
