@@ -3032,16 +3032,10 @@ function initFirebaseSync(){
 
 // iOS home-screen PWAs freeze setInterval timers when backgrounded and
 // often resume the same suspended page (bfcache) instead of reloading it,
-// so the 5s poll above never restarts on its own. Do a fresh SAFE pull
-// (respecting the staleness guards in applyFirebaseData) whenever the
-// app becomes visible/resumed again. Do NOT use fbPull here - fbPull
-// force-overwrites local data unconditionally and can wipe good local
-// rides if the Firebase copy happens to be older/emptier.
+// so the 5s poll above never restarts on its own. Force a fresh pull
+// whenever the app becomes visible/resumed again.
 function resumeFirebaseSync(){
-  fetch(FB_URL)
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(data){ if(data) applyFirebaseData(data); })
-    .catch(function(){});
+  fbPull(true);
   initFirebaseSync();
 }
 document.addEventListener('visibilitychange', function(){
@@ -12183,10 +12177,7 @@ window.onload = function(){
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
-  // Use fbPull (not the guarded applyFirebaseData) on initial load so a fresh
-  // app launch always reflects the latest cloud data, matching the manual
-  // "Pull from cloud" button's behavior.
-  fbPull(true);
+  fetch(FB_URL).then(function(r){return r.ok?r.json():null;}).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
