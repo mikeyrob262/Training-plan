@@ -3743,13 +3743,12 @@ function finStr(l){
 }
 
 function showScreen(id){
-  var wxs=document.getElementById('WEATHER-SCREEN');if(wxs)wxs.remove();
-  var wxd=document.getElementById('WX-DETAIL');if(wxd)wxd.remove();
-  var cals=document.getElementById('CAL-SCREEN');if(cals)cals.remove();
-  // Clean up any fixed overlays that might be blocking
-  var coreScr=document.getElementById('CORE-SCREEN');if(coreScr)coreScr.remove();
-  var condScr=document.getElementById('COND-SCREEN');if(condScr)condScr.remove();
-  var runScr=document.getElementById('RUN-SCREEN');if(runScr)runScr.remove();
+  // Destroy all Leaflet map instances before removing screens
+  try{Object.keys(window).filter(function(k){return k.indexOf('_wxmap_')===0;}).forEach(function(k){try{window[k].remove();}catch(e){}delete window[k];});}catch(e){}
+  // Remove all fixed overlay screens
+  ['WEATHER-SCREEN','WX-DETAIL','CAL-SCREEN','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
+  // Remove any stray leaflet containers
+  document.querySelectorAll('.leaflet-container').forEach(function(el){el.remove();});
   // Ensure week header is visible
   var bwt=document.getElementById('btn-wt');if(bwt)bwt.style.display='';
   document.getElementById('TRAIN').style.display=id==='TRAIN'?'block':'none';
