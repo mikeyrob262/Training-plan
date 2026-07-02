@@ -12140,18 +12140,6 @@ var LOCAL_FOODS = [
 ];
 
 window.onload = function(){
-  // --- TEMP DEBUG PANEL: visible log for diagnosing iOS home-screen data loss ---
-  var dbg = document.createElement('div');
-  dbg.id = 'debug-panel';
-  dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;max-height:40vh;overflow-y:auto;background:rgba(0,0,0,0.92);color:#0f0;font:10px monospace;padding:8px;z-index:99999;white-space:pre-wrap;word-break:break-all';
-  document.body.appendChild(dbg);
-  function dlog(msg){ try{ dbg.textContent += msg + '\n'; }catch(e){} }
-  window.onerror = function(msg, src, line, col, err){ dlog('ERROR: ' + msg + ' @' + line + ':' + col); return false; };
-  dlog('onload start. localStorage mta2 present: ' + (localStorage.getItem('mta2') ? 'YES (' + localStorage.getItem('mta2').length + ' chars)' : 'NO'));
-  dlog('st.rides length at start: ' + ((st && st.rides) ? st.rides.length : 'st.rides undefined'));
-  dlog('st.lastUpdate at start: ' + (st ? st.lastUpdate : 'st undefined'));
-  // --- END DEBUG PANEL SETUP ---
-
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
@@ -12170,29 +12158,13 @@ window.onload = function(){
   updHdr();
   updDots();
   restoreExtraSessions();
-  try{injectRideStats(cw);}catch(e){console.error('injectRideStats:',e); dlog('injectRideStats threw: ' + e.message);}
-  dlog('reached pre-Firebase point OK');
+  try{injectRideStats(cw);}catch(e){console.error('injectRideStats:',e);}
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
-  try{ initFirebaseSync(); dlog('initFirebaseSync() called OK'); }catch(e){ dlog('initFirebaseSync threw: ' + e.message); }
-  dlog('about to fetch FB_URL: ' + FB_URL);
-  fetch(FB_URL).then(function(r){
-    dlog('fetch response status: ' + r.status + ' ok=' + r.ok);
-    return r.ok?r.json():null;
-  }).then(function(data){
-    dlog('fetch data received: ' + (data ? ('object with keys: ' + Object.keys(data).join(',')) : 'null/empty'));
-    if(data){
-      applyFirebaseData(data);
-      dlog('applyFirebaseData called. st.rides length after: ' + ((st && st.rides) ? st.rides.length : 'undefined'));
-    } else {
-      dlog('applyFirebaseData SKIPPED (no data)');
-    }
-  }).catch(function(e){
-    dlog('fetch/apply CAUGHT ERROR: ' + e);
-  });
+  initFirebaseSync();
+  fetch(FB_URL).then(function(r){return r.ok?r.json():null;}).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-
 
 <div class="bnav" id="bottom-nav">
   <button class="bnav-btn active" id="bnav-home" onclick="bnavGo('home')">
