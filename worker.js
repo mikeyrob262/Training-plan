@@ -6616,7 +6616,11 @@ function renderRideList(container){
   var allRides=(st.rides||[]);
   var years = Array.from(new Set(allRides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean))).sort(function(a,b){return b-a;});
   if(years.indexOf(activityYearFilter)===-1 && years.length) activityYearFilter=years[0];
-  var rides=allRides.filter(function(r){return !r.date||new Date(r.date).getFullYear()===activityYearFilter;}).slice().reverse();
+  var rides=allRides.filter(function(r){return !r.date||new Date(r.date).getFullYear()===activityYearFilter;}).slice().sort(function(a,b){
+    var da = a.date ? new Date(a.date).getTime() : 0;
+    var db = b.date ? new Date(b.date).getTime() : 0;
+    return db - da; // newest first
+  });
   var html='';
   // Drop zone
 
