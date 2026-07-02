@@ -2982,6 +2982,62 @@ var FB_URL     = 'https://mikey-training-app-default-rtdb.firebaseio.com/data.js
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
 
+// Merge-safe sync core. Never destructively drops data: arrays are unioned
+// (matched by id/stravaId when present, else deduped by exact value),
+// objects are merged key-by-key, booleans OR together (a completed set can't
+// be un-done by a stale merge), and numeric conflicts take the higher value
+// (safe for counters like water/calories/mileage). This replaces the old
+// wholesale-overwrite sync that could let one stale/empty device silently
+// erase real data for every device sharing this Firebase project.
+function isPlainObj_(x){ return x && typeof x === 'object' && !Array.isArray(x); }
+function mergeArrays_(a, b){
+  a = a || []; b = b || [];
+  var sample = null, i, j;
+  for(i=0;i<a.length;i++){ if(a[i] && typeof a[i]==='object'){ sample=a[i]; break; } }
+  if(!sample){ for(j=0;j<b.length;j++){ if(b[j] && typeof b[j]==='object'){ sample=b[j]; break; } } }
+  var idKey = null;
+  if(sample){
+    var all = a.concat(b);
+    if(all.some(function(x){ return x && x.stravaId; })) idKey = 'stravaId';
+    else if(all.some(function(x){ return x && x.id; })) idKey = 'id';
+  }
+  if(idKey){
+    var map = {}, order = [];
+    function ingest(item){
+      if(item == null) return;
+      var k = (item[idKey] != null) ? ('K'+item[idKey]) : ('J'+JSON.stringify(item));
+      if(map[k] === undefined){ order.push(k); map[k] = item; }
+      else { map[k] = mergeState_(map[k], item); }
+    }
+    a.forEach(ingest); b.forEach(ingest);
+    return order.map(function(k){ return map[k]; });
+  }
+  var seen = {}, out = [];
+  a.concat(b).forEach(function(item){
+    var k = JSON.stringify(item);
+    if(!seen[k]){ seen[k]=true; out.push(item); }
+  });
+  return out;
+}
+function mergeState_(a, b){
+  if(a == null) return b;
+  if(b == null) return a;
+  if(Array.isArray(a) && Array.isArray(b)) return mergeArrays_(a, b);
+  if(isPlainObj_(a) && isPlainObj_(b)){
+    var out = {}, keys = {};
+    Object.keys(a).forEach(function(k){ keys[k]=true; });
+    Object.keys(b).forEach(function(k){ keys[k]=true; });
+    Object.keys(keys).forEach(function(k){ out[k] = mergeState_(a[k], b[k]); });
+    return out;
+  }
+  if(typeof a === 'boolean' && typeof b === 'boolean') return a || b;
+  if(a === b) return a;
+  if((a === '' || a === undefined) && b !== undefined && b !== '') return b;
+  if((b === '' || b === undefined) && a !== undefined && a !== '') return a;
+  if(typeof a === 'number' && typeof b === 'number') return Math.max(a, b);
+  return a;
+}
+
 // Save to localStorage, then debounce-push to Firebase after 1.5s
 function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
@@ -2990,21 +3046,12 @@ function sv(){
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
 
-// Apply remote snapshot - only if it has a timestamp and is newer than local
+// Merge remote snapshot into local state - never discards data on either side
 function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
-  var remoteTs = data.lastUpdate || 0;
-  if(remoteTs <= fbWriteTs) return;            // our write is newer, skip
-  // Skip if local has more rides (freshly synced) even if timestamps are close
-  var localRides = (st.rides||[]).length;
-  var remoteRides = (data.rides||[]).length;
-  if(localRides > remoteRides + 10) return;   // local has significantly more rides, keep it
-  if(remoteTs > 0 && remoteTs <= (st.lastUpdate||0) && localRides > 0) return;
-  var token = st.ghToken; var as = st.autoSync;
-  st = data;
-  if(token) st.ghToken = token;
-  if(as !== undefined) st.autoSync = as;
+  if(Array.isArray(st)) st=Object.assign({},st);
+  st = mergeState_(st, data);
   try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
   document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
@@ -3030,20 +3077,29 @@ function initFirebaseSync(){
   }, 5000);
 }
 
-// Push local state to Firebase
+// Push local state to Firebase - merges with whatever is currently in the
+// cloud first, so a stale or empty local device can never erase real data.
 function fbPush(silent){
   if(Array.isArray(st)) st=Object.assign({},st);
-  var saveData = JSON.parse(JSON.stringify(st));
-  if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
-  delete saveData.ghToken;
-  saveData.lastUpdate = Date.now();
-  fbWriteTs = saveData.lastUpdate;
-  fetch(FB_URL, {
-    method:'PUT',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(saveData)
+  fetch(FB_URL)
+  .then(function(r){ return r.ok ? r.json() : null; })
+  .catch(function(){ return null; })
+  .then(function(remote){
+    if(remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
+      st = mergeState_(st, remote);
+    }
+    var saveData = JSON.parse(JSON.stringify(st));
+    if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
+    delete saveData.ghToken;
+    saveData.lastUpdate = Date.now();
+    fbWriteTs = saveData.lastUpdate;
+    return fetch(FB_URL, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(saveData)
+    });
   })
-  .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+  .then(function(r){ return r && r.ok ? r.json() : Promise.reject(r?r.status:'no response'); })
   .then(function(){
     st.lastUpdate = fbWriteTs;
     try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
@@ -3052,17 +3108,16 @@ function fbPush(silent){
   .catch(function(e){ if(!silent) toast('! Save failed: '+e); });
 }
 
-// Pull from Firebase (force-apply regardless of timestamp)
+// Pull from Firebase and merge into local state (never discards local-only data)
 function fbPull(silent){
   if(!silent) toast('Pulling...');
   fetch(FB_URL)
   .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
   .then(function(data){
     if(data && typeof data==='object' && Object.keys(data).length){
-      var token = st.ghToken; var as = st.autoSync;
-      st = data;
-      if(token) st.ghToken = token;
-      if(as !== undefined) st.autoSync = as;
+      if(Array.isArray(data)) data=Object.assign({},data);
+      if(Array.isArray(st)) st=Object.assign({},st);
+      st = mergeState_(st, data);
       fbWriteTs = 0;
       try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
