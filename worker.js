@@ -3030,6 +3030,21 @@ function initFirebaseSync(){
   }, 5000);
 }
 
+// iOS home-screen PWAs freeze setInterval timers when backgrounded and
+// often resume the same suspended page (bfcache) instead of reloading it,
+// so the 5s poll above never restarts on its own. Force a fresh pull
+// whenever the app becomes visible/resumed again.
+function resumeFirebaseSync(){
+  fbPull(true);
+  initFirebaseSync();
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState === 'visible') resumeFirebaseSync();
+});
+window.addEventListener('pageshow', function(e){
+  if(e.persisted) resumeFirebaseSync();
+});
+
 // Push local state to Firebase
 function fbPush(silent){
   if(Array.isArray(st)) st=Object.assign({},st);
