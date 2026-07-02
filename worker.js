@@ -12186,10 +12186,7 @@ window.onload = function(){
   // Use fbPull (not the guarded applyFirebaseData) on initial load so a fresh
   // app launch always reflects the latest cloud data, matching the manual
   // "Pull from cloud" button's behavior.
-  // TEMP DIAGNOSTIC: non-silent so we can see on-device whether this runs
-  // and succeeds (esp. on iOS home-screen standalone mode, which has its
-  // own storage partition separate from Safari tabs at the same URL).
-  fbPull(false);
+  fbPull(true);
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
