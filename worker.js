@@ -7413,7 +7413,7 @@ function importRideFile(input){
         if(!st.rides) st.rides=[];
         var bulkMerged=0, bulkCreated=0;
         for(var bi=1;bi<lines.length;bi++){
-          var brow = parseCSVLineQ(lines[bi]).map(function(c){return c.replace(/\r/g,'').replace(/"/g,'').trim();});
+          var brow = parseCSVLineQ(lines[bi]).map(function(c){return c.replace(/\\r/g,'').replace(/"/g,'').trim();});
           if(brow.length < 10) continue;
           var bDateFull = colQ(brow,'Date');
           var bDateStr = bDateFull.split(' ')[0];
