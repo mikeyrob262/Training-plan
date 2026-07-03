@@ -8144,20 +8144,20 @@ function openRideDetail(idx){
   }
 
   var powerColHtml = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">Power</div>';
-  powerColHtml += '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  powerColHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">';
+  powerColHtml += '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.05);flex:1;display:flex;flex-direction:column">';
+  powerColHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:5px;flex:1">';
   [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Pwr'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Pwr',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Fctr'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20m Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Pwr'}]
   .forEach(function(s){
-    powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px;text-align:center">'
+    powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center">'
       +'<div style="font-size:12px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
       +'<div style="font-size:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px">'+s.l+'</div>'
       +'</div>';
   });
   powerColHtml += '</div></div>';
 
-  html += '<div style="display:flex;gap:10px;margin:0 16px 14px;align-items:flex-start">';
-  if(hrColHtml) html += '<div style="flex:1;min-width:0">'+hrColHtml+'</div>';
-  html += '<div style="flex:1;min-width:0">'+powerColHtml+'</div>';
+  html += '<div style="display:flex;gap:10px;margin:0 16px 14px;align-items:stretch">';
+  if(hrColHtml) html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+hrColHtml+'</div>';
+  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+powerColHtml+'</div>';
   html += '</div>';
 
   // Peak power curve
