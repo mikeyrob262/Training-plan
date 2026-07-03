@@ -7902,7 +7902,7 @@ function openRideDetail(idx){
 
   // Header
   var hdr = document.createElement('div');
-  hdr.style.cssText = 'background:#FFFFFF;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.06)';
+  hdr.style.cssText = 'background:var(--s1);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.06)';
 
   // Format date/time
   var dtStr = '';
