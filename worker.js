@@ -11803,7 +11803,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         relEffort: a.suffer_score||null,
         ifPct: IF2 ? Math.round(IF2*100) : null,
         avgTemp: avgTempF, maxTemp: maxTempF,
-        gpsLats: gpsLats, gpsLons: gpsLons,
+        gpsLats: gpsLats, gpsLons: gpsLons, gpsQuality: gpsLats ? 'summary' : null,
         avgSpeed: a.average_speed||null,
         pace: (function(){ if(!a.average_speed||a.average_speed<0.1) return null; var minMi=26.8224/a.average_speed; var m=Math.floor(minMi); var s=Math.round((minMi-m)*60); return m+':'+(s<10?'0':'')+s; })(),
         source: 'strava', stravaId: a.id, sportType: a.sport_type||a.type||'Ride'
@@ -11818,7 +11818,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       // Auto-fetch GPS for rides missing it
       var missingGPS = st.rides.filter(function(r){
-        return r.stravaId && !(r.gpsLats && r.gpsLats.length>5) && r.date >= '2025-01-01';
+        return r.stravaId && r.date >= '2025-01-01' && (!(r.gpsLats && r.gpsLats.length>5) || r.gpsQuality==='summary');
       }).slice(0,20); // max 20 at a time
       if(missingGPS.length>0){
         var gIdx=0;
@@ -11837,6 +11837,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
                   var s=Math.max(1,Math.floor(dec.lats.length/300));
                   st.rides[rideIndex].gpsLats=dec.lats.filter(function(_,i){return i%s===0;}).slice(0,300);
                   st.rides[rideIndex].gpsLons=dec.lons.filter(function(_,i){return i%s===0;}).slice(0,300);
+                  st.rides[rideIndex].gpsQuality = a.map.polyline ? 'detail' : 'summary';
                 }
               }catch(e){}}
             }
