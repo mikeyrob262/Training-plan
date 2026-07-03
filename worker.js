@@ -8130,13 +8130,13 @@ function openRideDetail(idx){
       {n:'Z5 VO2 Max', lo:Math.round(cMaxHR*0.9)+1, hi:cMaxHR, c:'#ef4444'}
     ];
     var avgZone = cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;}) || cZones[0];
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">HR Zone (avg '+r.avgHR+' bpm — '+avgZone.n+')</div>';
-    html += '<div style="margin:0 16px 14px;display:flex;flex-direction:column;gap:6px">';
+    html += '<div style="padding:0 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">HR Zone (avg '+r.avgHR+' bpm — '+avgZone.n+')</div>';
+    html += '<div style="margin:0 16px 12px;display:flex;flex-direction:column;gap:4px">';
     cZones.forEach(function(z){
       var isActive = z.n===avgZone.n;
-      html += '<div style="display:flex;align-items:center;gap:10px;background:var(--s2);border-radius:10px;padding:8px 12px;border-left:4px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
-      html += '<div style="flex:1;font-size:12px;font-weight:'+(isActive?'800':'600')+';color:var(--t1)">'+z.n+'</div>';
-      html += '<div style="font-size:12px;font-weight:700;color:'+z.c+'">'+z.lo+'–'+z.hi+'</div>';
+      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--s2);border-radius:8px;padding:5px 8px;border-left:3px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
+      html += '<div style="flex:1;font-size:11px;font-weight:'+(isActive?'800':'600')+';color:var(--t1)">'+z.n+'</div>';
+      html += '<div style="font-size:10px;font-weight:700;color:'+z.c+';background:var(--s1);border-radius:6px;padding:2px 7px;white-space:nowrap">'+z.lo+'–'+z.hi+'</div>';
       html += '</div>';
     });
     html += '</div>';
