@@ -8119,7 +8119,8 @@ function openRideDetail(idx){
     html += '</div>';
   }
 
-  // -- HR ZONES (cycling, 5-zone based on max HR)
+  // -- HR ZONES + POWER (side by side)
+  var hrColHtml = '';
   if(r.avgHR){
     var cMaxHR = parseInt(st.maxHR||172);
     var cZones = [
@@ -8130,29 +8131,33 @@ function openRideDetail(idx){
       {n:'Z5 VO2 Max', lo:Math.round(cMaxHR*0.9)+1, hi:cMaxHR, c:'#ef4444'}
     ];
     var avgZone = cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;}) || cZones[0];
-    html += '<div style="padding:0 16px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">HR Zone (avg '+r.avgHR+' bpm — '+avgZone.n+')</div>';
-    html += '<div style="margin:0 16px 12px;display:flex;flex-direction:column;gap:4px">';
+    hrColHtml += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">HR Zone (avg '+r.avgHR+' — '+avgZone.n+')</div>';
+    hrColHtml += '<div style="display:flex;flex-direction:column;gap:4px">';
     cZones.forEach(function(z){
       var isActive = z.n===avgZone.n;
-      html += '<div style="display:flex;align-items:center;gap:8px;background:var(--s2);border-radius:8px;padding:5px 8px;border-left:3px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
-      html += '<div style="flex:1;font-size:11px;font-weight:'+(isActive?'800':'600')+';color:var(--t1)">'+z.n+'</div>';
-      html += '<div style="font-size:10px;font-weight:700;color:'+z.c+';background:var(--s1);border-radius:6px;padding:2px 7px;white-space:nowrap">'+z.lo+'–'+z.hi+'</div>';
-      html += '</div>';
+      hrColHtml += '<div style="display:flex;align-items:center;gap:6px;background:var(--s2);border-radius:8px;padding:5px 7px;border-left:3px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
+      hrColHtml += '<div style="flex:1;font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+z.n+'</div>';
+      hrColHtml += '<div style="font-size:9px;font-weight:700;color:'+z.c+';background:var(--s1);border-radius:6px;padding:2px 6px;white-space:nowrap">'+z.lo+'–'+z.hi+'</div>';
+      hrColHtml += '</div>';
     });
-    html += '</div>';
+    hrColHtml += '</div>';
   }
 
-  // -- POWER STATS
-  html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
-  html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
-  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Power'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Power',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Factor'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20min Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Power'}]
+  var powerColHtml = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">Power</div>';
+  powerColHtml += '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  powerColHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">';
+  [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Pwr'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Pwr',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Fctr'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20m Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Pwr'}]
   .forEach(function(s){
-    html+='<div style="background:var(--s2);border-radius:10px;padding:10px;text-align:center">'
-      +'<div style="font-size:17px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
-      +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:3px">'+s.l+'</div>'
+    powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px;text-align:center">'
+      +'<div style="font-size:12px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
+      +'<div style="font-size:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px">'+s.l+'</div>'
       +'</div>';
   });
+  powerColHtml += '</div></div>';
+
+  html += '<div style="display:flex;gap:10px;margin:0 16px 14px;align-items:flex-start">';
+  if(hrColHtml) html += '<div style="flex:1;min-width:0">'+hrColHtml+'</div>';
+  html += '<div style="flex:1;min-width:0">'+powerColHtml+'</div>';
   html += '</div>';
 
   // Peak power curve
