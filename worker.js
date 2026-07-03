@@ -5810,13 +5810,7 @@ function renderFoodRows(container, list){
     row.style.background = baseBg;
     row.onmouseenter = function(){ this.style.background='rgba(252,76,2,.08)'; };
     row.onmouseleave = function(){ this.style.background=baseBg; };
-    row.style.cursor = 'pointer';
-    row.onclick = function(e){
-      // Don't double-fire if they clicked the button or qty input directly
-      if(e.target.tagName==='BUTTON'||e.target.tagName==='INPUT') return;
-      var btn = row.querySelector('button');
-      if(btn && !btn.disabled) btn.click();
-    };
+    row.style.cursor = 'default';
 
     var topRow = document.createElement('div');
     topRow.style.cssText = 'display:flex;align-items:center;gap:8px';
@@ -5914,15 +5908,17 @@ function renderFoodRows(container, list){
   saveBtn.style.cssText = 'background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:14px;font-weight:700;padding:11px;border-radius:10px;width:100%;cursor:pointer';
   saveBtn.textContent = 'Add to ' + curMeal;
   saveBtn.onclick = function(){
+    if(saveBtn.disabled) return;
     var name=inps[0].value.trim(), cal=parseInt(inps[1].value)||0;
     if(!name){alert('Enter food name');return;}
     if(!cal){alert('Enter calories');return;}
+    saveBtn.disabled=true;
     var food={n:name,cal:cal,p:parseFloat(inps[2].value)||0,c:parseFloat(inps[3].value)||0,f:parseFloat(inps[4].value)||0,fiber:parseFloat(inps[5]&&inps[5].value)||0,satFat:parseFloat(inps[6]&&inps[6].value)||0,srv:'custom'};
     CF.push(food);
     if(!st.cf)st.cf=[];
     st.cf.push(food);
     if(!nutrDate) nutrDate=getTodayKey();
-    getNDay(nutrDate).meals[curMeal].push({n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
+    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
     sv();
     document.getElementById('food-modal').remove();
     renderNutr(); showScreen('NUTR');
@@ -10026,6 +10022,8 @@ function renderMyFoods(container){
     addBtn.textContent='Add';
     (function(food){
       addBtn.onclick=function(){
+        if(addBtn.disabled) return;
+        addBtn.disabled=true;
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
@@ -10077,6 +10075,8 @@ function renderMyMeals(container){
     addAllBtn.textContent='Add to '+curMeal.charAt(0).toUpperCase()+curMeal.slice(1);
     (function(m){
       addAllBtn.onclick=function(){
+        if(addAllBtn.disabled) return;
+        addAllBtn.disabled=true;
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
