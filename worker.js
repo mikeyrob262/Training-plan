@@ -2980,6 +2980,56 @@ var _o2={};Object.keys(_p).forEach(function(k){if(/^\\d+$/.test(k))_o2['w'+k]=_p
 
 // -- FIREBASE SYNC ------------------------------------------------------------
 var FB_URL     = 'https://mikey-training-app-default-rtdb.firebaseio.com/data.json';
+var FB_API_KEY = 'AIzaSyAUDSGhUyCeOwrdxOvYJgM0ZC5EOnjkjPA';
+var fbAuthPromise = null; // in-flight auth request, so concurrent calls share one sign-in/refresh instead of racing
+
+// Signs up a new anonymous Firebase user (only happens once per browser -
+// the resulting refresh token is persisted so later visits reuse the same
+// identity instead of creating a new anonymous user every load).
+function fbSignUpAnon_(){
+  return fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key='+FB_API_KEY, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({returnSecureToken:true})
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(!data.idToken) throw new Error('anon sign-up failed: '+JSON.stringify(data));
+    localStorage.setItem('fbIdToken', data.idToken);
+    localStorage.setItem('fbRefreshToken', data.refreshToken);
+    localStorage.setItem('fbTokenExpiry', String(Date.now() + parseInt(data.expiresIn,10)*1000));
+    return data.idToken;
+  });
+}
+// Exchanges a stored refresh token for a fresh ID token (ID tokens expire
+// hourly; this avoids re-signing-up as a brand new anonymous user every hour).
+function fbRefreshToken_(refresh){
+  return fetch('https://securetoken.googleapis.com/v1/token?key='+FB_API_KEY, {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(refresh)
+  }).then(function(r){ return r.json(); }).then(function(data){
+    if(!data.id_token) throw new Error('refresh failed');
+    localStorage.setItem('fbIdToken', data.id_token);
+    localStorage.setItem('fbRefreshToken', data.refresh_token);
+    localStorage.setItem('fbTokenExpiry', String(Date.now() + parseInt(data.expires_in,10)*1000));
+    return data.id_token;
+  });
+}
+// Returns a promise resolving to a currently-valid ID token, refreshing or
+// signing up as needed. Call this before every Firebase RTDB request.
+function ensureFbAuth_(){
+  var tok = localStorage.getItem('fbIdToken');
+  var exp = parseInt(localStorage.getItem('fbTokenExpiry')||'0', 10);
+  if(tok && Date.now() < exp - 60000) return Promise.resolve(tok);
+  if(fbAuthPromise) return fbAuthPromise;
+  var refresh = localStorage.getItem('fbRefreshToken');
+  fbAuthPromise = (refresh ? fbRefreshToken_(refresh) : fbSignUpAnon_())
+    .catch(function(){ return fbSignUpAnon_(); }) // refresh failed for any reason - fall back to a fresh sign-up
+    .then(function(t){ fbAuthPromise=null; return t; })
+    .catch(function(e){ fbAuthPromise=null; throw e; });
+  return fbAuthPromise;
+}
+// Builds an authenticated Firebase RTDB URL for the current request.
+function fbAuthedUrl_(token){ return FB_URL + '?auth=' + encodeURIComponent(token); }
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
 
@@ -3114,10 +3164,11 @@ function initFirebaseSync(){
   if(fbPollTimer) clearInterval(fbPollTimer);
   fbPollTimer = setInterval(function(){
     if(Date.now() - fbWriteTs < 3000) return;
-    fetch(FB_URL)
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(data){ if(data) applyFirebaseData(data); })
-      .catch(function(){});
+    ensureFbAuth_().then(function(tok){
+      return fetch(fbAuthedUrl_(tok))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(data){ if(data) applyFirebaseData(data); });
+    }).catch(function(){});
   }, 5000);
 }
 
@@ -3125,7 +3176,12 @@ function initFirebaseSync(){
 // cloud first, so a stale or empty local device can never erase real data.
 function fbPush(silent){
   if(Array.isArray(st)) st=Object.assign({},st);
-  fetch(FB_URL)
+  var fbTok = null;
+  ensureFbAuth_()
+  .then(function(tok){
+    fbTok = tok;
+    return fetch(fbAuthedUrl_(tok));
+  })
   .then(function(r){ return r.ok ? r.json() : null; })
   .catch(function(){ return null; })
   .then(function(remote){
@@ -3137,7 +3193,7 @@ function fbPush(silent){
     delete saveData.ghToken;
     saveData.lastUpdate = Date.now();
     fbWriteTs = saveData.lastUpdate;
-    return fetch(FB_URL, {
+    return fetch(fbAuthedUrl_(fbTok), {
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(saveData)
@@ -3155,7 +3211,9 @@ function fbPush(silent){
 // Pull from Firebase and merge into local state (never discards local-only data)
 function fbPull(silent){
   if(!silent) toast('Pulling...');
-  fetch(FB_URL)
+  ensureFbAuth_().then(function(tok){
+    return fetch(fbAuthedUrl_(tok));
+  })
   .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
   .then(function(data){
     if(data && typeof data==='object' && Object.keys(data).length){
@@ -12376,7 +12434,9 @@ window.onload = function(){
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
-  fetch(FB_URL).then(function(r){return r.ok?r.json():null;}).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
+  ensureFbAuth_().then(function(tok){
+    return fetch(fbAuthedUrl_(tok)).then(function(r){return r.ok?r.json():null;});
+  }).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
