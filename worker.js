@@ -3120,6 +3120,66 @@ function mergeState_(a, b){
 function genEntryId_(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 }
+// One-time cleanup for rides duplicated by the since-fixed movingSecs dedup
+// bug (Strava-synced rides never set movingSecs, so FIT/TCX imports never
+// recognized them as already existing). Groups rides by date, clusters
+// same-date entries within 0.5mi of each other, and merges each cluster
+// into a single entry (preferring a stravaId-having copy, filling in any
+// fields the winner was missing from the other copies so no data is lost).
+function dedupeRides_(rides){
+  var groups = {};
+  rides.forEach(function(r, i){
+    var k = r.date;
+    if(!groups[k]) groups[k] = [];
+    groups[k].push({idx:i, ride:r});
+  });
+  var toRemove = {};
+  Object.keys(groups).forEach(function(date){
+    var entries = groups[date];
+    if(entries.length < 2) return;
+    var used = new Array(entries.length).fill(false);
+    for(var i=0;i<entries.length;i++){
+      if(used[i]) continue;
+      var cluster = [entries[i]];
+      used[i] = true;
+      for(var j=i+1;j<entries.length;j++){
+        if(used[j]) continue;
+        var d1 = parseFloat(entries[i].ride.distance||0);
+        var d2 = parseFloat(entries[j].ride.distance||0);
+        if(d1>0 && d2>0 && Math.abs(d1-d2) < 0.5){ cluster.push(entries[j]); used[j] = true; }
+      }
+      if(cluster.length > 1){
+        cluster.sort(function(a,b){
+          var aScore = (a.ride.stravaId?1000:0) + Object.keys(a.ride).filter(function(k){return a.ride[k]!=null && a.ride[k]!=='';}).length;
+          var bScore = (b.ride.stravaId?1000:0) + Object.keys(b.ride).filter(function(k){return b.ride[k]!=null && b.ride[k]!=='';}).length;
+          return bScore - aScore;
+        });
+        var winner = cluster[0].ride;
+        for(var m=1;m<cluster.length;m++){
+          var loser = cluster[m].ride;
+          Object.keys(loser).forEach(function(k){
+            if((winner[k]==null || winner[k]==='') && loser[k]!=null && loser[k]!=='') winner[k]=loser[k];
+          });
+          toRemove[cluster[m].idx] = true;
+        }
+      }
+    }
+  });
+  var kept = rides.filter(function(r, i){ return !toRemove[i]; });
+  return { kept: kept, removedCount: Object.keys(toRemove).length };
+}
+function runRideCleanup(){
+  if(!st.rides || !st.rides.length){ toast('No rides to clean up'); return; }
+  var before = st.rides.length;
+  var result = dedupeRides_(st.rides);
+  st.rides = result.kept;
+  if(result.removedCount === 0){ toast('No duplicates found'); return; }
+  sv();
+  fbPush(false);
+  toast('Removed '+result.removedCount+' duplicate rides ('+before+' -> '+result.kept.length+')');
+  try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
+  try{ if(document.getElementById('ANALYTICS')) showAnalytics(); }catch(e){}
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf'].forEach(function(k){
@@ -7217,7 +7277,11 @@ function bulkImportTCX(input){
         } else {
           // Route to rides (existing behavior)
           var isDup = (st.rides||[]).some(function(r){
-            return r.date===dateStr && Math.abs((r.movingSecs||0)-durSec)<60;
+            if(r.date !== dateStr) return false;
+            var rDist = parseFloat(r.distance||0);
+            if(rDist > 0 && distMi > 0 && Math.abs(rDist - distMi) < 0.5) return true;
+            if(r.movingSecs > 0 && Math.abs((r.movingSecs||0)-durSec) < 60) return true;
+            return false;
           });
           if(isDup){ cb('dup'); return; }
 
@@ -10687,6 +10751,7 @@ function showMoreSheet(){
     {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
+    {n:'Clean Duplicates', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
     {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
     {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
@@ -11708,7 +11773,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var fmtDur = (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(movDur);
       st.rides.push({
         name: a.name||'Strava Activity',
-        date: dateStr, duration: fmtDur, distance: distMi,
+        date: dateStr, duration: fmtDur, movingSecs: movDur, distance: distMi,
         avgPwr: avgPwr, np: np,
         avgHR: a.average_heartrate ? Math.round(a.average_heartrate) : null,
         maxHR: a.max_heartrate ? Math.round(a.max_heartrate) : null,
