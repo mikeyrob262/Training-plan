@@ -4026,7 +4026,7 @@ function showProg(){
     var days2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var nd=st.nl&&st.nl[dk];
     var prot=0,cal=0;
-    if(nd&&nd.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(f){prot+=f.p||0;cal+=f.cal||0;});});}
+    if(nd&&nd.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;});});}
     protDays.push(Math.round(prot));
     calDays.push(Math.round(cal));
     if(prot>=165) protHits++;
@@ -4977,7 +4977,7 @@ try{nutrDate=getTodayKey();}catch(e){}
 
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 function getNDay(k){if(!st.nl)st.nl={};if(!st.nl[k])st.nl[k]={meals:{breakfast:[],lunch:[],dinner:[],snacks:[]},water:0};var d=st.nl[k];if(!d.meals)d.meals={breakfast:[],lunch:[],dinner:[],snacks:[]};['breakfast','lunch','dinner','snacks'].forEach(function(m){if(!d.meals[m])d.meals[m]=[];});return d;}
-function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],lunch:[],dinner:[],snacks:[]};['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(i){t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
+function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],lunch:[],dinner:[],snacks:[]};['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(i.deleted)return;t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
 function getDType(k){var d=new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return DTYPE[idx]||'MOD';}
 
 
@@ -4990,7 +4990,19 @@ function openBarcode(){toast("Use search to find foods");}
 function rmFood(meal,idx){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
-  if(nd&&nd.meals&&nd.meals[meal]){nd.meals[meal].splice(idx,1);sv();renderNutr();}
+  if(nd&&nd.meals&&nd.meals[meal]&&nd.meals[meal][idx]){
+    // Tombstone instead of splice: a hard removal can be silently
+    // resurrected by the merge-safe sync pulling in an older cloud
+    // snapshot that still has this entry, since a plain union-merge has
+    // no way to know the item was deleted on purpose. Marking it deleted
+    // (and teaching the merge to respect that) makes deletion actually
+    // stick everywhere the entry has been synced.
+    var item=nd.meals[meal][idx];
+    if(!item.id) item.id=genEntryId_();
+    item.deleted=true;
+    item.deletedAt=Date.now();
+    sv();renderNutr();
+  }
 }
 
 function updWater(delta){
@@ -5271,7 +5283,7 @@ function renderNutr(){
       var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
       var nd2=getNDay(dk);
       var prot=0,cal=0,carb=0,fat=0,fiber=0,satFat=0,sodium=0,sugar=0;
-      if(nd2&&nd2.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd2.meals[m]||[]).forEach(function(f){prot+=f.p||0;cal+=f.cal||0;carb+=f.c||0;fat+=f.f||0;fiber+=f.fiber||0;satFat+=f.satFat||0;sodium+=f.sodium||0;sugar+=f.sugar||0;});});}
+      if(nd2&&nd2.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd2.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;carb+=f.c||0;fat+=f.f||0;fiber+=f.fiber||0;satFat+=f.satFat||0;sodium+=f.sodium||0;sugar+=f.sugar||0;});});}
       var dayType2=getDType(dk);var MTGT3=calcMTGT();var dayTgt2=MTGT3[dayType2]||MTGT3.MOD;
       weekData.push({label:dw[di],prot:Math.round(prot),cal:Math.round(cal),carb:Math.round(carb),fat:Math.round(fat),fiber:Math.round((fiber||0)*10)/10,satFat:Math.round((satFat||0)*10)/10,sodium:Math.round(sodium||0),sugar:Math.round((sugar||0)*10)/10,calGoal:Math.round(dayTgt2.cal),isToday:dk===todayKey,isFuture:d2>now});
     }
@@ -5459,7 +5471,7 @@ function renderNutr(){
   var emojis={breakfast:'',lunch:'',dinner:'',snacks:''};
   meals.forEach(function(meal){
     var items=nd.meals[meal]||[];
-    var mCal=items.reduce(function(a,b){return a+(b.cal||0);},0);
+    var mCal=items.reduce(function(a,b){return a+(b.deleted?0:(b.cal||0));},0);
     var mealDiv=document.createElement('div');
     mealDiv.style.cssText='background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)';
     var mHdr=document.createElement('div');
@@ -5480,6 +5492,7 @@ function renderNutr(){
     mHdr.appendChild(mTitle);mHdr.appendChild(mRight);
     mealDiv.appendChild(mHdr);
     items.forEach(function(item,ii){
+      if(item.deleted) return;
       var row=document.createElement('div');
       row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-top:1px solid var(--b1)';
       var info=document.createElement('div');
@@ -5531,7 +5544,9 @@ function renderNutr(){
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           if(curQty<=1){
-            nd.meals[mn].splice(i,1);
+            if(!cur.id) cur.id=genEntryId_();
+            cur.deleted=true;
+            cur.deletedAt=Date.now();
           } else {
             var newQty=curQty-1;
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
