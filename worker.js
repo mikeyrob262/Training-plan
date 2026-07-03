@@ -10535,14 +10535,29 @@ function renderMob(){
 
 
 function bnavGo(tab){
-  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  var btn=document.getElementById('bnav-'+tab);if(btn)btn.classList.add('active');
-  var pm=document.getElementById('perf-modal');
-  if(tab==='home'){if(pm)pm.remove();showScreen('TRAIN');}
-  else if(tab==='analytics'){showAnalytics();}
-  else if(tab==='nutrition'){if(pm)pm.remove();showNutr();}
-  else if(tab==='activities'){showActivities();}
-  else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
+  try{
+    document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+    var btn=document.getElementById('bnav-'+tab);if(btn)btn.classList.add('active');
+    var pm=document.getElementById('perf-modal');
+    if(tab==='home'){if(pm)pm.remove();showScreen('TRAIN');}
+    else if(tab==='analytics'){showAnalytics();}
+    else if(tab==='nutrition'){if(pm)pm.remove();showNutr();}
+    else if(tab==='activities'){showActivities();}
+    else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
+  }catch(e){
+    console.error('bnavGo error ('+tab+'):', e);
+    // Retry once after clearing any stray overlay that might be blocking re-render
+    try{
+      document.querySelectorAll('#perf-modal,#more-sheet,#food-modal,#ride-modal').forEach(function(el){el.remove();});
+      if(tab==='home'){showScreen('TRAIN');}
+      else if(tab==='analytics'){showAnalytics();}
+      else if(tab==='nutrition'){showNutr();}
+      else if(tab==='activities'){showActivities();}
+      else if(tab==='more'){showMoreSheet();}
+    }catch(e2){
+      console.error('bnavGo retry also failed ('+tab+'):', e2);
+    }
+  }
 }
 
 function showAICoach(){
