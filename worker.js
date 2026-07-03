@@ -3191,6 +3191,61 @@ function runRideCleanup(){
   try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
   try{ if(document.getElementById('ANALYTICS')) showAnalytics(); }catch(e){}
 }
+
+// Nutrition duplicate cleanup - tombstones exact duplicate food entries
+// (same name + same calories) within each date+meal. Genuinely different
+// quantities of the same food (e.g. x1 vs x2 servings, different calories)
+// are correctly left alone - only exact matches are considered duplicates.
+// Tombstones instead of hard-removing, consistent with rmFood(), so the
+// merge-safe sync can't resurrect them from a stale device's old copy.
+function dedupeNutrition_(nl){
+  var totalRemoved = 0;
+  Object.keys(nl||{}).forEach(function(dateKey){
+    var day = nl[dateKey];
+    if(!day || !day.meals) return;
+    Object.keys(day.meals).forEach(function(mealName){
+      var items = day.meals[mealName];
+      if(!items || items.length < 2) return;
+      var used = new Array(items.length).fill(false);
+      for(var i=0;i<items.length;i++){
+        if(used[i] || items[i].deleted) continue;
+        var cluster = [{idx:i, item:items[i]}];
+        used[i] = true;
+        for(var j=i+1;j<items.length;j++){
+          if(used[j] || items[j].deleted) continue;
+          var a = items[i], b = items[j];
+          var nameMatch = (a._baseName||a.n) === (b._baseName||b.n);
+          var calMatch = Math.abs((a.cal||0) - (b.cal||0)) < 1;
+          if(nameMatch && calMatch){ cluster.push({idx:j, item:items[j]}); used[j] = true; }
+        }
+        if(cluster.length > 1){
+          cluster.sort(function(x,y){
+            var xScore = (x.item.id?1000:0) + Object.keys(x.item).filter(function(k){return x.item[k]!=null && x.item[k]!=='';}).length;
+            var yScore = (y.item.id?1000:0) + Object.keys(y.item).filter(function(k){return y.item[k]!=null && y.item[k]!=='';}).length;
+            return yScore - xScore;
+          });
+          for(var m=1;m<cluster.length;m++){
+            var loser = cluster[m].item;
+            if(!loser.id) loser.id = genEntryId_();
+            loser.deleted = true;
+            loser.deletedAt = Date.now();
+            totalRemoved++;
+          }
+        }
+      }
+    });
+  });
+  return { totalRemoved: totalRemoved };
+}
+function runNutritionCleanup(){
+  if(!st.nl || !Object.keys(st.nl).length){ toast('No nutrition data to clean up'); return; }
+  var result = dedupeNutrition_(st.nl);
+  if(result.totalRemoved === 0){ toast('No duplicates found'); return; }
+  sv();
+  fbPush(false, true);
+  toast('Removed '+result.totalRemoved+' duplicate food entries');
+  try{ renderNutr(); }catch(e){}
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf'].forEach(function(k){
@@ -10785,7 +10840,8 @@ function showMoreSheet(){
     {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
-    {n:'Clean Duplicates', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
+    {n:'Clean Ride Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
+    {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
     {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
     {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
