@@ -889,7 +889,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws4_4" data-orig="Rest/Walk">Rest/Walk</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(4,4,this)">Swap</button>
   </div>
 </div>
 </div>
@@ -1819,7 +1819,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws10_4" data-orig="Rest/Walk">Rest/Walk</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(10,4,this)">Swap</button>
   </div>
 </div>
 </div>
@@ -2749,7 +2749,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws16_4" data-orig="Rest">Rest</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(16,4,this)">Swap</button>
   </div>
 </div>
 </div>
@@ -2842,7 +2842,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws17_1" data-orig="Rest">Rest</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(17,1,this)">Swap</button>
   </div>
 </div>
 </div>
@@ -2855,7 +2855,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws17_2" data-orig="Rest">Rest</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(17,2,this)">Swap</button>
   </div>
 </div>
 </div>
@@ -2887,7 +2887,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
     <div class="wo-sess" id="ws17_4" data-orig="Rest">Rest</div>
     
-    
+    <button class="swap-sm" onclick="doSwap(17,4,this)">Swap</button>
   </div>
 </div>
 </div>
