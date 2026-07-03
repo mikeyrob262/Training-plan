@@ -12415,16 +12415,16 @@ window.onload = function(){
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
-  document.getElementById('btn-pv').setAttribute('onclick', 'GW(cw-1)');
-  document.getElementById('btn-nx').setAttribute('onclick', 'GW(cw+1)');
+  var pvBtn=document.getElementById('btn-pv'); if(pvBtn) pvBtn.setAttribute('onclick', 'GW(cw-1)');
+  var nxBtn=document.getElementById('btn-nx'); if(nxBtn) nxBtn.setAttribute('onclick', 'GW(cw+1)');
   // Jump to current plan week after Firebase loads
   setTimeout(function(){
     var w = getCurrentPlanWeek();
     if(w > 1) GW(w);
     updHdr();
   }, 1500);
-  document.getElementById('btn-wt').onclick = openPk;
-  document.getElementById('pk-bg').onclick = closePk;
+  var wtBtn=document.getElementById('btn-wt'); if(wtBtn) wtBtn.onclick = openPk;
+  var pkBg=document.getElementById('pk-bg'); if(pkBg) pkBg.onclick = closePk;
   if(st.cf){ st.cf.forEach(function(f){ if(!CF.find(function(x){return x.n===f.n;})) CF.push(f); }); }
   restoreW(1);
   updHdr();
