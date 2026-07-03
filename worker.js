@@ -3063,6 +3063,13 @@ function mergeState_(a, b){
 // app's .forEach/.length/.push calls on st.rides/st.cf can never throw and
 // silently halt window.onload partway through (which looks like "buttons
 // stopped working" and "data missing" at the same time).
+// Stable unique ID for entries that need identity-based merging (e.g. food
+// log items) instead of the fragile exact-value dedup fallback in
+// mergeArrays_, which let duplicate-looking entries slip through as
+// distinct items whenever any field differed even slightly between devices.
+function genEntryId_(){
+  return Date.now().toString(36) + Math.random().toString(36).slice(2,9);
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf'].forEach(function(k){
@@ -5043,6 +5050,7 @@ function editFoodItem(meal, idx) {
     var newC = parseFloat(document.getElementById('ef-c').value)||0;
     var newF = parseFloat(document.getElementById('ef-f').value)||0;
     nd.meals[meal][idx] = {
+      id: item.id||genEntryId_(),
       n: newName, _baseName: newName, _qty: qty,
       cal: Math.round(newCal*qty), p: Math.round(newP*qty*10)/10,
       c: Math.round(newC*qty*10)/10, f: Math.round(newF*qty*10)/10,
@@ -5489,6 +5497,11 @@ function renderNutr(){
       var calEl=document.createElement('span');
       calEl.style.cssText='font-size:13px;font-weight:700;color:var(--t1)';
       calEl.textContent=item.cal;
+      // Edit button (pencil)
+      var editBtn=document.createElement('button');
+      editBtn.style.cssText='background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0';
+      editBtn.textContent='✎';
+      editBtn.title='Edit';
       // Minus button
       var minusBtn=document.createElement('button');
       minusBtn.style.cssText='background:var(--s2);border:1px solid var(--b2);color:var(--t2);width:26px;height:26px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;flex-shrink:0';
@@ -5503,13 +5516,14 @@ function renderNutr(){
       rmBtn.textContent='×';
       (function(mn,i,it){
         rmBtn.onclick=function(){rmFood(mn,i);};
+        editBtn.onclick=function(){editFoodItem(mn,i);};
         plusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
-          nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
+          nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           sv();renderNutr();showScreen('NUTR');
         };
         minusBtn.onclick=function(){
@@ -5521,12 +5535,12 @@ function renderNutr(){
           } else {
             var newQty=curQty-1;
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
-            nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
+            nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
           sv();renderNutr();showScreen('NUTR');
         };
       })(meal,ii,item);
-      rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
+      rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
       row.appendChild(info);row.appendChild(rDiv);
       mealDiv.appendChild(row);
     });
@@ -5847,6 +5861,7 @@ function renderFoodRows(container, list){
           var nd = getNDay(nutrDate);
           if(!nd.meals[curMeal]) nd.meals[curMeal] = [];
           nd.meals[curMeal].push({
+            id: genEntryId_(),
             n: f.n,
             _baseName: f.n,
             _qty: q,
@@ -10013,7 +10028,7 @@ function renderMyFoods(container){
       addBtn.onclick=function(){
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
-        nd.meals[curMeal].push({n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
+        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
         sv();
         renderNutr();
         showScreen('NUTR');
@@ -10065,7 +10080,7 @@ function renderMyMeals(container){
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
-          nd.meals[curMeal].push({n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0});
+          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0});
         });
         sv();
         renderNutr();
