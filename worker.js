@@ -3508,31 +3508,33 @@ function GW(w){
 }
 
 function renderDynWeek(w){
-  // Use week 17 template as maintenance base, inject into TRAIN area
-  var base=document.getElementById('W17');
+  // Weeks beyond the original 17-week plan use week 1's structure (a normal
+  // training week: Strength/Zwift/Group Ride/Rest) as an ongoing maintenance
+  // template - NOT week 17, which is race week and was being repeated
+  // (including its literal "RACE DAY" session) for every week thereafter.
+  var base=document.getElementById('W1');
   if(!base)return;
   var clone=base.cloneNode(true);
   clone.id='W'+w;
   clone.style.display='none';
   // Update all IDs to use new week number
   var html=clone.outerHTML;
-  html=html.replace(/id="([a-zA-Z]+)17_/g,'id="$1'+w+'_');
-  html=html.replace(/id="([a-zA-Z]+)17"/g,'id="$1'+w+'"');
-  html=html.replace(/TW\\(17,/g,'TW('+w+',');
-  html=html.replace(/TN\\(17,/g,'TN('+w+',');
-  html=html.replace(/SF\\(17,/g,'SF('+w+',');
-  html=html.replace(/SC\\(17,/g,'SC('+w+',');
-  html=html.replace(/openStr\\('([AB])',17\\)/g,"openStr('$1',"+w+')');
-  html=html.replace(/doSwap\\(17,/g,'doSwap('+w+',');
-  html=html.replace(/saveNT\\(17,/g,'saveNT('+w+',');
-  html=html.replace(/Week 17/g,'Week '+w);
-  html=html.replace(/End of Week 17/g,'End of Week '+w);
+  html=html.replace(/id="([a-zA-Z]+)1_/g,'id="$1'+w+'_');
+  html=html.replace(/id="([a-zA-Z]+)1"/g,'id="$1'+w+'"');
+  html=html.replace(/TW\\(1,/g,'TW('+w+',');
+  html=html.replace(/TN\\(1,/g,'TN('+w+',');
+  html=html.replace(/SF\\(1,/g,'SF('+w+',');
+  html=html.replace(/SC\\(1,/g,'SC('+w+',');
+  html=html.replace(/openStr\\('([AB])',1\\)/g,"openStr('$1',"+w+')');
+  html=html.replace(/doSwap\\(1,/g,'doSwap('+w+',');
+  html=html.replace(/saveNT\\(1,/g,'saveNT('+w+',');
+  html=html.replace(/End of Week 1\\b/g,'End of Week '+w);
   // Wrap and insert
   var tmp=document.createElement('div');
   tmp.innerHTML=html;
   var newWeek=tmp.firstChild;
   newWeek.id='W'+w;
-  document.getElementById('W17').parentNode.appendChild(newWeek);
+  document.getElementById('W1').parentNode.appendChild(newWeek);
 }
 
 function showTrain(){
