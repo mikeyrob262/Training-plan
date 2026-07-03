@@ -3127,44 +3127,55 @@ function genEntryId_(){
 // into a single entry (preferring a stravaId-having copy, filling in any
 // fields the winner was missing from the other copies so no data is lost).
 function dedupeRides_(rides){
-  var groups = {};
-  rides.forEach(function(r, i){
-    var k = r.date;
-    if(!groups[k]) groups[k] = [];
-    groups[k].push({idx:i, ride:r});
-  });
+  var indexed = rides.map(function(r,i){ return {idx:i, ride:r}; });
+
+  function datesClose(d1str, d2str){
+    if(d1str === d2str) return true;
+    var d1 = new Date(d1str), d2 = new Date(d2str);
+    if(isNaN(d1) || isNaN(d2)) return false;
+    var diffDays = Math.abs(d1 - d2) / (1000*60*60*24);
+    return diffDays <= 1; // allow adjacent-day for timezone edge cases (FIT UTC vs Strava local date)
+  }
+  function matches(a, b){
+    // Two entries each with their OWN distinct stravaId are, by definition,
+    // two different real Strava activities - never merge them even if
+    // their date/distance happen to be close.
+    if(a.stravaId && b.stravaId && a.stravaId !== b.stravaId) return false;
+    if(!datesClose(a.date, b.date)) return false;
+    var d1 = parseFloat(a.distance||0), d2 = parseFloat(b.distance||0);
+    var distMatch = d1>0 && d2>0 && Math.abs(d1-d2) < 1.0;
+    var t1 = a.movingSecs||0, t2 = b.movingSecs||0;
+    var timeMatch = t1>0 && t2>0 && Math.abs(t1-t2) < 120;
+    return distMatch || timeMatch;
+  }
+
+  var used = new Array(indexed.length).fill(false);
   var toRemove = {};
-  Object.keys(groups).forEach(function(date){
-    var entries = groups[date];
-    if(entries.length < 2) return;
-    var used = new Array(entries.length).fill(false);
-    for(var i=0;i<entries.length;i++){
-      if(used[i]) continue;
-      var cluster = [entries[i]];
-      used[i] = true;
-      for(var j=i+1;j<entries.length;j++){
-        if(used[j]) continue;
-        var d1 = parseFloat(entries[i].ride.distance||0);
-        var d2 = parseFloat(entries[j].ride.distance||0);
-        if(d1>0 && d2>0 && Math.abs(d1-d2) < 0.5){ cluster.push(entries[j]); used[j] = true; }
-      }
-      if(cluster.length > 1){
-        cluster.sort(function(a,b){
-          var aScore = (a.ride.stravaId?1000:0) + Object.keys(a.ride).filter(function(k){return a.ride[k]!=null && a.ride[k]!=='';}).length;
-          var bScore = (b.ride.stravaId?1000:0) + Object.keys(b.ride).filter(function(k){return b.ride[k]!=null && b.ride[k]!=='';}).length;
-          return bScore - aScore;
+  for(var i=0;i<indexed.length;i++){
+    if(used[i]) continue;
+    var cluster = [indexed[i]];
+    used[i] = true;
+    for(var j=i+1;j<indexed.length;j++){
+      if(used[j]) continue;
+      var matchedAny = cluster.some(function(c){ return matches(c.ride, indexed[j].ride); });
+      if(matchedAny){ cluster.push(indexed[j]); used[j] = true; }
+    }
+    if(cluster.length > 1){
+      cluster.sort(function(a,b){
+        var aScore = (a.ride.stravaId?1000:0) + Object.keys(a.ride).filter(function(k){return a.ride[k]!=null && a.ride[k]!=='';}).length;
+        var bScore = (b.ride.stravaId?1000:0) + Object.keys(b.ride).filter(function(k){return b.ride[k]!=null && b.ride[k]!=='';}).length;
+        return bScore - aScore;
+      });
+      var winner = cluster[0].ride;
+      for(var m=1;m<cluster.length;m++){
+        var loser = cluster[m].ride;
+        Object.keys(loser).forEach(function(k){
+          if((winner[k]==null || winner[k]==='') && loser[k]!=null && loser[k]!=='') winner[k]=loser[k];
         });
-        var winner = cluster[0].ride;
-        for(var m=1;m<cluster.length;m++){
-          var loser = cluster[m].ride;
-          Object.keys(loser).forEach(function(k){
-            if((winner[k]==null || winner[k]==='') && loser[k]!=null && loser[k]!=='') winner[k]=loser[k];
-          });
-          toRemove[cluster[m].idx] = true;
-        }
+        toRemove[cluster[m].idx] = true;
       }
     }
-  });
+  }
   var kept = rides.filter(function(r, i){ return !toRemove[i]; });
   return { kept: kept, removedCount: Object.keys(toRemove).length };
 }
