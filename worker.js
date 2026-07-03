@@ -3175,7 +3175,7 @@ function runRideCleanup(){
   st.rides = result.kept;
   if(result.removedCount === 0){ toast('No duplicates found'); return; }
   sv();
-  fbPush(false);
+  fbPush(false, true);
   toast('Removed '+result.removedCount+' duplicate rides ('+before+' -> '+result.kept.length+')');
   try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
   try{ if(document.getElementById('ANALYTICS')) showAnalytics(); }catch(e){}
@@ -3234,18 +3234,19 @@ function initFirebaseSync(){
 
 // Push local state to Firebase - merges with whatever is currently in the
 // cloud first, so a stale or empty local device can never erase real data.
-function fbPush(silent){
+function fbPush(silent, forceOverwrite){
   if(Array.isArray(st)) st=Object.assign({},st);
   var fbTok = null;
   ensureFbAuth_()
   .then(function(tok){
     fbTok = tok;
+    if(forceOverwrite) return null; // skip fetching remote entirely
     return fetch(fbAuthedUrl_(tok));
   })
-  .then(function(r){ return r.ok ? r.json() : null; })
+  .then(function(r){ return (r && r.ok) ? r.json() : null; })
   .catch(function(){ return null; })
   .then(function(remote){
-    if(remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
+    if(!forceOverwrite && remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
       st = normalizeState_(mergeState_(st, remote));
     }
     var saveData = JSON.parse(JSON.stringify(st));
