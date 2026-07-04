@@ -3759,8 +3759,7 @@ function closePk(){
 }
 
 function doSwap(w,idx,btn){
-  var existing=document.getElementById('sp'+w+'_'+idx);
-  if(existing){existing.remove();return;}
+  var old=document.getElementById('swap-overlay');if(old)old.remove();
   // Get session name from element - use data-orig attribute for original name
   var sess=document.getElementById('ws'+w+'_'+idx);
   var sessName=sess?(sess.getAttribute('data-orig')||sess.textContent.trim()):'';
@@ -3789,23 +3788,33 @@ function doSwap(w,idx,btn){
   } else {
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   }
-  var card=document.getElementById('wc'+w+'_'+idx);
-  if(!card)return;
-  var p=document.createElement('div');
-  p.id='sp'+w+'_'+idx;p.className='swap-panel';
 
-  var lbl=document.createElement('div');lbl.className='swap-lbl';lbl.textContent='Swap with:';
-  p.appendChild(lbl);
+  // Fixed-position bottom-sheet overlay, same pattern as the More sheet /
+  // food modal / ride modal - guaranteed visible on screen immediately,
+  // regardless of scroll position, unlike the old inline-appended panel
+  // which could render off-screen at the bottom of a tall card.
+  var overlay=document.createElement('div');
+  overlay.id='swap-overlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.6);display:flex;align-items:flex-end';
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-height:75vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 16px calc(18px + env(safe-area-inset-bottom))';
+
+  var lbl=document.createElement('div');
+  lbl.style.cssText='font-size:15px;font-weight:800;color:var(--t1);margin-bottom:12px';
+  lbl.textContent='Swap with:';
+  sheet.appendChild(lbl);
 
   var wrap=document.createElement('div');wrap.className='swap-opts';
 
   opts.forEach(function(opt){
-    var btn=document.createElement('button');
-    btn.className='swap-opt';btn.textContent=opt;
-    btn.addEventListener('click',(function(o){
+    var obtn=document.createElement('button');
+    obtn.className='swap-opt';obtn.textContent=opt;
+    obtn.addEventListener('click',(function(o){
       return function(){applySwap(w,idx,o);};
     })(opt));
-    wrap.appendChild(btn);
+    wrap.appendChild(obtn);
   });
 
   var customBtn=document.createElement('button');
@@ -3819,20 +3828,22 @@ function doSwap(w,idx,btn){
 
   var cancel=document.createElement('button');
   cancel.className='swap-cancel';cancel.textContent='Cancel';
-  cancel.addEventListener('click',function(){p.remove();});
+  cancel.addEventListener('click',function(){overlay.remove();});
   wrap.appendChild(cancel);
-  p.appendChild(wrap);
-  card.appendChild(p);
+
+  sheet.appendChild(wrap);
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
 }
 
 
-function rmSwap(w,i){var p=document.getElementById('sp'+w+'_'+i);if(p)p.remove();}
+function rmSwap(w,i){var o=document.getElementById('swap-overlay');if(o)o.remove();}
 
 function applySwap(w,idx,val){
   var s=ws(w);if(!s.swaps)s.swaps={};s.swaps[idx]=val;sv();
   var e=document.getElementById('ws'+w+'_'+idx);
   if(e){e.textContent=val;e.style.color='var(--blue)';}
-  var p=document.getElementById('sp'+w+'_'+idx);if(p)p.remove();
+  var o=document.getElementById('swap-overlay');if(o)o.remove();
   // Update log button based on new session type
   var card=document.getElementById('wc'+w+'_'+idx);
   if(card){
