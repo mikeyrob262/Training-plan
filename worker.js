@@ -3490,7 +3490,23 @@ function fbPull(silent){
 function pushDataToGitHub(silent){ fbPush(silent); }
 function getDataFromGitHub(silent){ fbPull(silent); }
 var fbSseSource = null; // kept so settings status check doesn't crash
-function ws(w){var k='w'+w;if(!st[k])st[k]={};var s=st[k];if(!s.wo)s.wo={};if(!s.nu)s.nu={};if(!s.ci)s.ci={};if(!s.fi)s.fi={};if(!s.str)s.str={};return s;}
+function ws(w){
+  var k='w'+w;if(!st[k])st[k]={};var s=st[k];
+  // Repair fields that got corrupted into arrays by the since-fixed
+  // sparse-array merge bug - an array is truthy, so the old plain
+  // "if(!s.field)" initialization never detected or repaired this,
+  // meaning already-corrupted data kept re-corrupting itself forever
+  // even after the root cause was fixed.
+  ['wo','nu','fi','str','swaps'].forEach(function(f){
+    if(Array.isArray(s[f])){
+      var obj={}; s[f].forEach(function(v,i){ if(v!=null) obj[i]=v; }); s[f]=obj;
+    } else if(!s[f]){
+      s[f]={};
+    }
+  });
+  if(!s.ci) s.ci={};
+  return s;
+}
 function getWC(w){return WC[w]||WC[Math.min(w,17)]||6;}
 
 var WC={};
