@@ -6851,7 +6851,7 @@ function renderPerf(container){
         +(rwkg?'<div style="background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.15);border-radius:8px;padding:5px 9px;text-align:center;margin-left:6px">'
           +'<div style="font-size:14px;font-weight:900;color:#FC4C02;line-height:1">'+rwkg+'</div>'
           +'<div style="font-size:9px;font-weight:700;color:rgba(252,76,2,.5)">W/kg</div></div>':'')
-        +'<button onclick="deleteRide('+rIdx+',event)" style="background:none;border:none;color:var(--t3);font-size:16px;cursor:pointer;padding:2px 6px;margin-left:4px">×</button>'
+        +'<button onclick="deleteRide('+rIdx+',event)" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;padding:3px 9px;margin-left:6px;border-radius:8px;line-height:1">×</button>'
         +'</div>';
 
       // Stats grid - flex so no empty cells
