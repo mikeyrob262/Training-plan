@@ -7024,8 +7024,10 @@ function renderRideList(container){
     var totalZ=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
     html+='<div onclick="openRideDetail('+realIdx+')" style="margin:6px 10px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;cursor:pointer">';
     html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+r.name+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">'+r.date+'</div></div>';
+    html+='<div style="display:flex;align-items:center;gap:6px">';
     if(r.tss) html+='<div style="background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.3);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#2980B9">TSS '+r.tss+'</div>';
-    html+='</div>';
+    html+='<button onclick="deleteRide('+realIdx+',event)" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;padding:3px 9px;border-radius:8px;line-height:1">×</button>';
+    html+='</div></div>';
     html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
     if(rwkg) html+='<div style="background:rgba(252,76,2,.1);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;color:#FC4C02">'+rwkg+' W/kg</div>';
     if(r.duration) html+='<div style="font-size:12px;color:var(--t2)">⏱ '+r.duration+'</div>';
