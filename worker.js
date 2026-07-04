@@ -8378,12 +8378,13 @@ function openRideDetail(idx){
     ];
     var avgZone = cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;}) || cZones[0];
     hrColHtml += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">HR Zone (avg '+r.avgHR+' — '+avgZone.n+')</div>';
-    hrColHtml += '<div style="display:flex;flex-direction:column;gap:4px">';
+    hrColHtml += '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:5px">';
     cZones.forEach(function(z){
       var isActive = z.n===avgZone.n;
-      hrColHtml += '<div style="display:flex;align-items:center;gap:6px;background:var(--s2);border-radius:8px;padding:5px 7px;border-left:3px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
-      hrColHtml += '<div style="font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+z.n+'</div>';
-      hrColHtml += '<div style="font-size:9px;font-weight:700;color:'+z.c+';background:var(--s1);border-radius:6px;padding:2px 6px;white-space:nowrap">'+z.lo+'–'+z.hi+'</div>';
+      hrColHtml += '<div style="display:inline-flex;align-items:center;gap:5px;background:var(--s2);border-radius:20px;padding:4px 10px 4px 6px;'+(isActive?'box-shadow:0 0 0 1.5px '+z.c+';':'')+'">';
+      hrColHtml += '<span style="width:7px;height:7px;border-radius:50%;background:'+z.c+';flex-shrink:0"></span>';
+      hrColHtml += '<span style="font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap">'+z.n+'</span>';
+      hrColHtml += '<span style="font-size:9px;font-weight:700;color:'+z.c+';white-space:nowrap">'+z.lo+'–'+z.hi+'</span>';
       hrColHtml += '</div>';
     });
     hrColHtml += '</div>';
@@ -8401,7 +8402,7 @@ function openRideDetail(idx){
   });
   powerColHtml += '</div></div>';
 
-  html += '<div style="display:flex;gap:10px;margin:0 16px 14px;align-items:stretch">';
+  html += '<div style="display:flex;gap:10px;margin:0 12px 14px;align-items:stretch">';
   if(hrColHtml) html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+hrColHtml+'</div>';
   html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+powerColHtml+'</div>';
   html += '</div>';
