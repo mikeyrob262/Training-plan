@@ -3808,6 +3808,15 @@ function doSwap(w,idx,btn){
     wrap.appendChild(btn);
   });
 
+  var customBtn=document.createElement('button');
+  customBtn.className='swap-opt';customBtn.textContent='Custom...';
+  customBtn.style.cssText='border-style:dashed';
+  customBtn.addEventListener('click',function(){
+    var custom=prompt('Enter activity name:');
+    if(custom&&custom.trim()) applySwap(w,idx,custom.trim());
+  });
+  wrap.appendChild(customBtn);
+
   var cancel=document.createElement('button');
   cancel.className='swap-cancel';cancel.textContent='Cancel';
   cancel.addEventListener('click',function(){p.remove();});
@@ -3827,6 +3836,14 @@ function applySwap(w,idx,val){
   // Update log button based on new session type
   var card=document.getElementById('wc'+w+'_'+idx);
   if(card){
+    // Hide the ORIGINAL static log button from the day's pre-swap session
+    // (e.g. "Log Full Body A" baked into the static markup) - it belongs
+    // to whatever the session used to be, not what it's being swapped to.
+    // Both the original and any dynamically-created replacement share the
+    // .str-btn class, so target only the one NOT inside .swap-log-area.
+    card.querySelectorAll('.str-btn').forEach(function(b){
+      if(!b.closest('.swap-log-area')) b.style.display='none';
+    });
     var vl=val.toLowerCase();
     // Find existing log button area or create one
     var btnArea=card.querySelector('.swap-log-area');
