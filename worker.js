@@ -3292,7 +3292,13 @@ function normalizeState_(s){
 // Save to localStorage, then debounce-push to Firebase after 1.5s
 function sv(){
   if(Array.isArray(st)) st=Object.assign({},st);
-  try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
+  // Defer the (potentially expensive, ~6MB+) serialization to the next
+  // event loop tick so it never blocks the current click/tap handler's
+  // synchronous execution - this is what was causing app-wide input lag
+  // once ride history grew into the thousands of entries.
+  setTimeout(function(){
+    try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
+  },0);
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
 }
