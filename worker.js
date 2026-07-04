@@ -12059,7 +12059,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var avgTempF = a.average_temp ? Math.round(a.average_temp*9/5+32) : null;
       var maxTempF = a.max_temp ? Math.round(a.max_temp*9/5+32) : null;
       var fmtDur = (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(movDur);
-      st.rides.push({
+      var newRideData = {
         name: a.name||'Strava Activity',
         date: dateStr, duration: fmtDur, movingSecs: movDur, distance: distMi,
         avgPwr: avgPwr, np: np,
@@ -12076,13 +12076,28 @@ function fetchStravaPage(token, page, imported, forceAll) {
         avgSpeed: a.average_speed||null,
         pace: (function(){ if(!a.average_speed||a.average_speed<0.1) return null; var minMi=26.8224/a.average_speed; var m=Math.floor(minMi); var s=Math.round((minMi-m)*60); return m+':'+(s<10?'0':'')+s; })(),
         source: 'strava', stravaId: a.id, sportType: a.sport_type||a.type||'Ride'
-      });
+      };
+      // If a tombstoned entry with this exact stravaId already exists
+      // (e.g. it was deleted and is now being re-synced), revive it in
+      // place rather than pushing a second object with the same
+      // stravaId - two entries sharing a stravaId will get merged
+      // together on the next sync cycle, and boolean-OR merge semantics
+      // mean the old tombstone's deleted:true would "win" and silently
+      // hide the freshly re-synced ride all over again.
+      var existingDeleted = st.rides.find(function(r){ return r.deleted && r.stravaId===a.id; });
+      if(existingDeleted){
+        Object.keys(newRideData).forEach(function(k){ existingDeleted[k]=newRideData[k]; });
+        existingDeleted.deleted = false;
+        existingDeleted.deletedAt = null;
+      } else {
+        st.rides.push(newRideData);
+      }
       newCount++;
     });
     imported += newCount;
     if(acts.length < 50){
       sv();
-      fbPush(true);
+      fbPush(true, true);
       toast('Strava sync done: ' + imported + ' imported. Fetching missing GPS...');
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       // Auto-fetch GPS for rides missing it
