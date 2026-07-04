@@ -3795,7 +3795,7 @@ function doSwap(w,idx,btn){
   // which could render off-screen at the bottom of a tall card.
   var overlay=document.createElement('div');
   overlay.id='swap-overlay';
-  overlay.style.cssText='position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.6);display:flex;align-items:flex-end';
+  overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;align-items:flex-end';
   overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
 
   var sheet=document.createElement('div');
@@ -10155,7 +10155,7 @@ function renderCore(){
 
   var scr = document.createElement('div');
   scr.id = 'CORE-SCREEN';
-  scr.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:200;overflow-y:auto;padding-bottom:40px';
+  scr.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:300;overflow-y:auto;padding-bottom:40px';
 
   var backBtn = document.createElement('button');
   backBtn.className = 'back-btn';
@@ -10886,7 +10886,7 @@ function showMoreSheet(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
   var overlay=document.createElement('div');
   overlay.id='more-sheet';
-  overlay.style.cssText='position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
+  overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
     {n:'Calendar',      i:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',          fn:'showCal',          c:'#FC4C02'},
