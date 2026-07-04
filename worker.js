@@ -3140,12 +3140,38 @@ function looksLikeSparseArray_(obj){
 function objectToArray_(obj){
   return Object.keys(obj).sort(function(x,y){return parseInt(x,10)-parseInt(y,10);}).map(function(k){ return obj[k]; });
 }
+// Pre-normalize remote data's rides/cf specifically before it ever reaches
+// the generic merge, so mergeState_ never has to guess whether an
+// arbitrary nested plain object is "really an array that Firebase
+// mangled" vs "a genuine dictionary that happens to have numeric keys"
+// (like swaps/wo/nu/fi, all keyed by day-index) - guessing wrong there
+// previously corrupted those dictionaries by reinterpreting them as
+// zero-indexed arrays, silently shifting/crossing values between days.
+function preNormalizeRemoteArrays_(data){
+  if(!isPlainObj_(data)) return data;
+  ['rides','cf'].forEach(function(k){
+    if(isPlainObj_(data[k]) && looksLikeSparseArray_(data[k])) data[k] = objectToArray_(data[k]);
+  });
+  return data;
+}
+// When one side is an array and the other a plain object (e.g. Firebase's
+// own serialization occasionally turns a numeric-keyed dictionary like
+// swaps/wo into a real array on round-trip), convert the ARRAY side into
+// an index-keyed object - preserving each value's original position - so
+// a normal object merge can proceed correctly. Converting the object side
+// into a compacted array instead (the original bug) silently shifts
+// values to the wrong positions whenever keys aren't contiguous from 0.
+function arrayToIndexObject_(arr){
+  var obj = {};
+  arr.forEach(function(v, i){ if(v !== null && v !== undefined) obj[i] = v; });
+  return obj;
+}
 function mergeState_(a, b){
   if(a == null) return b;
   if(b == null) return a;
   if(a === b) return a;
-  if(Array.isArray(a) && isPlainObj_(b) && looksLikeSparseArray_(b)) b = objectToArray_(b);
-  if(Array.isArray(b) && isPlainObj_(a) && looksLikeSparseArray_(a)) a = objectToArray_(a);
+  if(Array.isArray(a) && isPlainObj_(b)) a = arrayToIndexObject_(a);
+  else if(Array.isArray(b) && isPlainObj_(a)) b = arrayToIndexObject_(b);
   if(Array.isArray(a) && Array.isArray(b)) return mergeArrays_(a, b);
   if(isPlainObj_(a) && isPlainObj_(b)){
     var out = {}, keys = {};
@@ -3161,7 +3187,14 @@ function mergeState_(a, b){
   if(typeof a === 'number' && typeof b === 'number') return Math.max(a, b);
   // Type mismatch we can't reconcile (e.g. array vs. genuinely non-array
   // object) - never silently drop either side; keep whichever side has
-  // more information rather than defaulting to 'a'.
+  // more information rather than defaulting to 'a'. Also covers the case
+  // where one side is a Firebase-mangled sparse-array-as-object and the
+  // other is a real array - normalizeState_ handles fixing that up
+  // properly afterward for the specific fields (rides/cf) that are
+  // genuinely meant to be arrays, without this generic merge ever
+  // guessing at it (which was incorrectly corrupting numeric-keyed
+  // dictionaries like swaps/wo/nu/fi that just happen to use small
+  // integer keys for day-of-week, not arrays at all).
   if(Array.isArray(a) && !Array.isArray(b)) return a;
   if(Array.isArray(b) && !Array.isArray(a)) return b;
   return a;
@@ -3364,9 +3397,7 @@ function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
-  st = normalizeState_(mergeState_(st, data));
-  try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
-  document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
+  st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
@@ -3406,7 +3437,7 @@ function fbPush(silent, forceOverwrite){
   .catch(function(){ return null; })
   .then(function(remote){
     if(!forceOverwrite && remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
-      st = normalizeState_(mergeState_(st, remote));
+      st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(remote)));
     }
     var saveData = JSON.parse(JSON.stringify(st));
     if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
@@ -3439,8 +3470,7 @@ function fbPull(silent){
     if(data && typeof data==='object' && Object.keys(data).length){
       if(Array.isArray(data)) data=Object.assign({},data);
       if(Array.isArray(st)) st=Object.assign({},st);
-      st = normalizeState_(mergeState_(st, data));
-      fbWriteTs = 0;
+      st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
       try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
       document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
