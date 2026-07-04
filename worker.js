@@ -10761,6 +10761,7 @@ function bnavGo(tab){
     document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
     var btn=document.getElementById('bnav-'+tab);if(btn)btn.classList.add('active');
     var pm=document.getElementById('perf-modal');
+    var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
     if(tab==='home'){if(pm)pm.remove();showScreen('TRAIN');}
     else if(tab==='analytics'){showAnalytics();}
     else if(tab==='nutrition'){if(pm)pm.remove();showNutr();}
@@ -10770,7 +10771,7 @@ function bnavGo(tab){
     console.error('bnavGo error ('+tab+'):', e);
     // Retry once after clearing any stray overlay that might be blocking re-render
     try{
-      document.querySelectorAll('#perf-modal,#more-sheet,#food-modal,#ride-modal').forEach(function(el){el.remove();});
+      document.querySelectorAll('#perf-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
       if(tab==='home'){showScreen('TRAIN');}
       else if(tab==='analytics'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
