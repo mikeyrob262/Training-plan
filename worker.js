@@ -4268,7 +4268,7 @@ function showProg(){
   var weekStart=new Date(now); weekStart.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1)); weekStart.setHours(0,0,0,0);
 
   // Sessions across all activity types
-  var rides=st.rides||[]; var runs=(st.rides||[]).filter(function(r){return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');}).concat(st.runs||[]);
+  var rides=(st.rides||[]).filter(function(r){return !r.deleted;}); var runs=rides.filter(function(r){return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');}).concat(st.runs||[]);
   var allSessions=[]; // {date, type}
   rides.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'ride'});});
   runs.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'run'});});
@@ -6380,7 +6380,7 @@ function renderPerf(container){
   if(!container) container=document.getElementById('perf-body');
   if(!container) return;
   if(!st.rides) st.rides=[];
-  var rides=st.rides;
+  var rides=st.rides.filter(function(r){return !r.deleted;});
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
   var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
@@ -6996,7 +6996,7 @@ function setActivityYearFilter(y){ activityYearFilter = y; var body=document.get
 function renderRideList(container){
   if(!container) return;
   if(typeof activityYearFilter==='undefined') activityYearFilter = new Date().getFullYear();
-  var allRides=(st.rides||[]);
+  var allRides=(st.rides||[]).filter(function(r){return !r.deleted;});
   var years = Array.from(new Set(allRides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean))).sort(function(a,b){return b-a;});
   if(years.indexOf(activityYearFilter)===-1 && years.length) activityYearFilter=years[0];
   var rides=allRides.filter(function(r){return !r.date||new Date(r.date).getFullYear()===activityYearFilter;}).slice().sort(function(a,b){
@@ -8555,9 +8555,29 @@ function deleteRide(idx, e){
   document.body.appendChild(overlay);
   document.getElementById('confirm-del-btn').onclick = function(){
     overlay.remove();
-    st.rides.splice(idx,1);
+    var ride = st.rides[idx];
+    if(ride){
+      // Tombstone instead of hard-delete (splice) - a plain removal can be
+      // silently resurrected by the merge-safe sync pulling in an older
+      // cloud snapshot that still has this ride, since a union-merge has
+      // no way to know it was deleted on purpose. Same fix already
+      // applied to nutrition entries.
+      if(!ride.id) ride.id = genEntryId_();
+      ride.deleted = true;
+      ride.deletedAt = Date.now();
+    }
     sv();
-    renderPerf(document.getElementById('perf-body'));
+    fbPush(false, true); // push immediately as authoritative, so the deletion sticks right away rather than waiting on the next routine merge
+    // Re-render whichever ride-list screen is actually open - Activities
+    // uses its own activities-body container now, separate from
+    // Analytics' perf-body (they used to share an ID, which caused a
+    // different bug where the two screens overwrote each other).
+    var actBody=document.getElementById('activities-body');
+    if(actBody){ renderRideList(actBody); }
+    else{
+      var perfBody=document.getElementById('perf-body');
+      if(perfBody) renderPerf(perfBody);
+    }
   };
 }
 
