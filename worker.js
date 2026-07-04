@@ -8631,7 +8631,11 @@ function buildRouteMap(lats, lons, pwrData, FTP){
     // Fit map to route
     var coords2 = lats.map(function(lat,i){return [lat,lons[i]];});
     var bounds = L.latLngBounds(coords2);
+    map.invalidateSize();
     map.fitBounds(bounds, {padding:[30,30], maxZoom:14});
+    // Re-invalidate shortly after too, in case the container's layout was
+    // still settling (e.g. modal transition/animation) at the first check
+    setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 300);
 
   }, 100);
 
