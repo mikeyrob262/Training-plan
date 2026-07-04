@@ -66,7 +66,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .sec-title{padding:18px 16px 8px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
 .wo-card{background:var(--s1);margin:0 16px 10px;border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}
 .wo-main{display:flex;align-items:flex-start;padding:14px;gap:12px}
-.wo-chk{width:40px;height:40px;border:2px solid rgba(0,0,0,.15);border-radius:50%;flex-shrink:0;cursor:pointer;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:white;transition:all .15s}
+.wo-chk{width:26px;height:26px;border:2px solid rgba(0,0,0,.15);border-radius:50%;flex-shrink:0;cursor:pointer;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:white;transition:all .15s}
 .wo-chk.on{background:var(--orange);border-color:var(--orange)}
 .wo-day{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.06em}
 .wo-sess{font-size:15px;font-weight:800;color:var(--t1);margin:2px 0}
@@ -93,7 +93,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .nbdg{font-size:9px;font-weight:700;padding:2px 7px;border-radius:10px}
 .nt-v{font-size:10px;color:var(--t2);line-height:1.3}
 .nt-c{font-size:10px;font-weight:700;color:var(--t1)}
-.nt-chk{width:34px;height:34px;border:2px solid var(--b2);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;transition:all .15s;justify-self:center}
+.nt-chk{width:20px;height:20px;border:2px solid var(--b2);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:white;transition:all .15s;justify-self:center}
 .nt-chk.on{background:var(--orange);border-color:var(--orange)}
 .ci-card{background:var(--s1);margin:0 16px 10px;border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)}
 .ci-hdr{background:var(--s3);padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)}
