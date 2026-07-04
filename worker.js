@@ -6303,6 +6303,7 @@ function renderFoodRows(container, list){
 
 function showAnalytics(){
   var old=document.getElementById('perf-modal');if(old)old.remove();
+  var oldA=document.getElementById('activities-modal');if(oldA)oldA.remove();
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
   var overlay=document.createElement('div');
@@ -6324,16 +6325,17 @@ function showAnalytics(){
 
 function showActivities(){
   var old=document.getElementById('perf-modal');if(old)old.remove();
+  var oldA=document.getElementById('activities-modal');if(oldA)oldA.remove();
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var ab=document.getElementById('bnav-activities');if(ab)ab.classList.add('active');
   var overlay=document.createElement('div');
-  overlay.id='perf-modal';
+  overlay.id='activities-modal';
   overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:var(--bg);display:flex;flex-direction:column;';
   var hdr=document.createElement('div');
   hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
   hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)">Activities</div>';
   var body=document.createElement('div');
-  body.id='perf-body';
+  body.id='activities-body';
   body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
   overlay.appendChild(hdr);overlay.appendChild(body);
   document.body.appendChild(overlay);
@@ -10765,17 +10767,18 @@ function bnavGo(tab){
     document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
     var btn=document.getElementById('bnav-'+tab);if(btn)btn.classList.add('active');
     var pm=document.getElementById('perf-modal');
+    var am=document.getElementById('activities-modal');
     var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
-    if(tab==='home'){if(pm)pm.remove();showScreen('TRAIN');}
-    else if(tab==='analytics'){showAnalytics();}
-    else if(tab==='nutrition'){if(pm)pm.remove();showNutr();}
-    else if(tab==='activities'){showActivities();}
-    else if(tab==='more'){if(pm)pm.remove();showMoreSheet();}
+    if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showScreen('TRAIN');}
+    else if(tab==='analytics'){if(am)am.remove();showAnalytics();}
+    else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
+    else if(tab==='activities'){if(pm)pm.remove();showActivities();}
+    else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
   }catch(e){
     console.error('bnavGo error ('+tab+'):', e);
     // Retry once after clearing any stray overlay that might be blocking re-render
     try{
-      document.querySelectorAll('#perf-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
+      document.querySelectorAll('#perf-modal,#activities-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
       if(tab==='home'){showScreen('TRAIN');}
       else if(tab==='analytics'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
