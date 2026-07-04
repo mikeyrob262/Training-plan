@@ -12011,7 +12011,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
   // On first page, find most recent strava ride date to use as after= param
   var afterParam = '';
   if(!forceAll && page===1 && st.rides && st.rides.length){
-    var stravaRides = st.rides.filter(function(r){return r.source==='strava'&&r.date;});
+    var stravaRides = st.rides.filter(function(r){return r.source==='strava'&&r.date&&!r.deleted;});
     if(stravaRides.length){
       var latest = stravaRides.reduce(function(a,b){return a.date>b.date?a:b;});
       var afterTs = Math.floor(new Date(latest.date).getTime()/1000);
