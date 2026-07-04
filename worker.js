@@ -3041,6 +3041,33 @@ var fbPollTimer = null;
 // wholesale-overwrite sync that could let one stale/empty device silently
 // erase real data for every device sharing this Firebase project.
 function isPlainObj_(x){ return x && typeof x === 'object' && !Array.isArray(x); }
+// Stable content fingerprint for matching items that don't share a
+// pre-existing id, ignoring fields that legitimately change without the
+// item becoming "a different entry" (id assigned after the fact, or a
+// deletion tombstone being applied).
+function contentFingerprint_(item){
+  if(!isPlainObj_(item)) return JSON.stringify(item);
+  var keys = Object.keys(item).filter(function(k){
+    return k !== 'id' && k !== 'deleted' && k !== 'deletedAt';
+  }).sort();
+  var obj = {};
+  keys.forEach(function(k){ obj[k] = item[k]; });
+  return JSON.stringify(obj);
+}
+function itemsMatch_(a, b, idKey){
+  if(a == null || b == null) return false;
+  if(idKey === 'stravaId'){
+    if(a.stravaId != null && b.stravaId != null) return a.stravaId === b.stravaId;
+    return contentFingerprint_(a) === contentFingerprint_(b);
+  }
+  // Generic locally-assigned id is only meaningful for matching if BOTH
+  // sides already have it. A freshly-generated id (e.g. assigned to an
+  // old, previously id-less entry at the moment it gets deleted) has no
+  // relationship to an id-less copy of the same entry still sitting in
+  // remote data - content fingerprint is what actually catches that.
+  if(a.id != null && b.id != null && a.id === b.id) return true;
+  return contentFingerprint_(a) === contentFingerprint_(b);
+}
 function mergeArrays_(a, b){
   a = a || []; b = b || [];
   var sample = null, i, j;
@@ -3052,23 +3079,27 @@ function mergeArrays_(a, b){
     if(all.some(function(x){ return x && x.stravaId; })) idKey = 'stravaId';
     else if(all.some(function(x){ return x && x.id; })) idKey = 'id';
   }
-  if(idKey){
-    var map = {}, order = [];
-    function ingest(item){
-      if(item == null) return;
-      var k = (item[idKey] != null) ? ('K'+item[idKey]) : ('J'+JSON.stringify(item));
-      if(map[k] === undefined){ order.push(k); map[k] = item; }
-      else { map[k] = mergeState_(map[k], item); }
-    }
-    a.forEach(ingest); b.forEach(ingest);
-    return order.map(function(k){ return map[k]; });
+  if(!idKey){
+    var seenP = {}, outP = [];
+    a.concat(b).forEach(function(item){
+      var k = JSON.stringify(item);
+      if(!seenP[k]){ seenP[k]=true; outP.push(item); }
+    });
+    return outP;
   }
-  var seen = {}, out = [];
-  a.concat(b).forEach(function(item){
-    var k = JSON.stringify(item);
-    if(!seen[k]){ seen[k]=true; out.push(item); }
-  });
-  return out;
+  var clusters = [];
+  function ingest(item){
+    if(item == null) return;
+    for(var ci=0; ci<clusters.length; ci++){
+      if(itemsMatch_(clusters[ci].rep, item, idKey)){
+        clusters[ci].rep = mergeState_(clusters[ci].rep, item);
+        return;
+      }
+    }
+    clusters.push({ rep: item });
+  }
+  a.forEach(ingest); b.forEach(ingest);
+  return clusters.map(function(c){ return c.rep; });
 }
 // Firebase Realtime Database can serialize a JS array that has gaps/gets
 // round-tripped as a plain object with numeric string keys instead of a
