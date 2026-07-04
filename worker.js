@@ -8382,7 +8382,7 @@ function openRideDetail(idx){
     cZones.forEach(function(z){
       var isActive = z.n===avgZone.n;
       hrColHtml += '<div style="display:flex;align-items:center;gap:6px;background:var(--s2);border-radius:8px;padding:5px 7px;border-left:3px solid '+z.c+(isActive?';box-shadow:0 0 0 1.5px '+z.c:'')+'">';
-      hrColHtml += '<div style="flex:1;font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+z.n+'</div>';
+      hrColHtml += '<div style="font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+z.n+'</div>';
       hrColHtml += '<div style="font-size:9px;font-weight:700;color:'+z.c+';background:var(--s1);border-radius:6px;padding:2px 6px;white-space:nowrap">'+z.lo+'–'+z.hi+'</div>';
       hrColHtml += '</div>';
     });
@@ -8394,7 +8394,7 @@ function openRideDetail(idx){
   powerColHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:5px;flex:1">';
   [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Pwr'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Pwr',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Fctr'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20m Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Pwr'}]
   .forEach(function(s){
-    powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center">'
+    powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px 6px 8px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;justify-content:center">'
       +'<div style="font-size:12px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
       +'<div style="font-size:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px">'+s.l+'</div>'
       +'</div>';
