@@ -3226,7 +3226,24 @@ function mergeItemFast_(a, b){
       return a;
     }
   }catch(e){}
-  return mergeState_(a, b);
+  // Fields differ beyond just GPS - falling through to the generic
+  // field-by-field merge below. gpsLats/gpsLons MUST be resolved as an
+  // atomic pair here first and excluded from that generic merge: treating
+  // them as two independent arrays (which is what the generic merge does
+  // for any array field) can deduplicate each one differently, producing
+  // mismatched lengths - confirmed as a real bug via a live "Invalid
+  // LatLng object: (lat, undefined)" crash, not a hypothetical risk.
+  var gpsWinner = ((b.gpsLats && b.gpsLats.length) || 0) > ((a.gpsLats && a.gpsLats.length) || 0) ? b : a;
+  var aNoGps = {}, bNoGps = {};
+  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') aNoGps[k]=a[k]; });
+  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') bNoGps[k]=b[k]; });
+  var merged = mergeState_(aNoGps, bNoGps);
+  if(gpsWinner.gpsLats !== undefined){
+    merged.gpsLats = gpsWinner.gpsLats;
+    merged.gpsLons = gpsWinner.gpsLons;
+    if(gpsWinner.gpsQuality) merged.gpsQuality = gpsWinner.gpsQuality;
+  }
+  return merged;
 }
 // Safety net run after every merge: force known array-typed fields back to
 // real arrays no matter what shape Firebase handed back, so the rest of the
@@ -8590,6 +8607,16 @@ function closeRideDetail(){
 
 function buildRouteMap(lats, lons, pwrData, FTP){
   if(!lats||!lats.length) return '';
+  // Defensive guard against already-corrupted data (mismatched lat/lon
+  // array lengths from before this was fixed at the merge level) - an
+  // uncaught "Invalid LatLng object" error here would otherwise halt
+  // the entire map render, leaving a blank container.
+  if(lons && lons.length !== lats.length){
+    var minLen = Math.min(lats.length, lons.length);
+    lats = lats.slice(0, minLen);
+    lons = lons.slice(0, minLen);
+  }
+  if(!lats.length) return '';
   // Generate unique map ID
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
   var html = '<div id="'+mapId+'" style="width:100%;height:260px;border-radius:16px;overflow:hidden"></div>';
