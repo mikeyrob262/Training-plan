@@ -7517,6 +7517,7 @@ function bulkImportTCX(input){
         } else {
           // Route to rides (existing behavior)
           var isDup = (st.rides||[]).some(function(r){
+            if(r.deleted) return false;
             if(r.date !== dateStr) return false;
             var rDist = parseFloat(r.distance||0);
             if(rDist > 0 && distMi > 0 && Math.abs(rDist - distMi) < 0.5) return true;
@@ -7820,7 +7821,7 @@ function importRideFile(input){
           var bCal = numQ(colQ(brow,'Calories'));
 
           var match = st.rides.find(function(r){
-            return r.date===bDateStr && Math.abs((r.distance||0)-(bDistance||0)) < 0.5;
+            return !r.deleted && r.date===bDateStr && Math.abs((r.distance||0)-(bDistance||0)) < 0.5;
           });
 
           if(match){
@@ -12038,7 +12039,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
     acts.forEach(function(a){
       var dateStr = (a.start_date||'').split('T')[0];
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
-      var dup = st.rides.find(function(r){ return (r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5); });
+      var dup = st.rides.find(function(r){ return !r.deleted && ((r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5)); });
       if(dup) return;
       var dur = a.moving_time||a.elapsed_time||0;
       var np = a.weighted_average_watts||null;
