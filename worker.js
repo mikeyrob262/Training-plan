@@ -170,152 +170,105 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 // Minimal FIT file parser for Athlete IQ
 window.parseFitFile = function(arrayBuffer, callback) {
   try {
-    var bytes = new Uint8Array(arrayBuffer);
-    var view = new DataView(arrayBuffer);
-    
-    // Verify FIT signature
-    if (bytes[8] !== 0x2E || bytes[9] !== 0x46 || bytes[10] !== 0x49 || bytes[11] !== 0x54) {
-      callback('Not a valid FIT file', null); return;
-    }
-    
-    var result = {
-      name: '', date: '', duration: 0, distance: 0,
-      avgPwr: null, np: null, hr: null, tss: null,
-      calories: null, elev: null,
-      z1s:0, z2s:0, z3s:0, z4s:0, z5s:0, z6s:0,
-      lats: [], lons: [], pwrStream: [],
-      peak20: null, lrBalance: null
-    };
-    
-    var offset = bytes[0]; // header size
-    var localMsgDefs = {};
-    
-    var FIT_EPOCH = new Date('1989-12-31T00:00:00Z').getTime() / 1000;
-    
-    function readStr(bytes, off, len) {
-      var s = '';
-      for (var i = 0; i < len; i++) {
-        if (bytes[off+i] === 0) break;
-        s += String.fromCharCode(bytes[off+i]);
-      }
-      return s;
-    }
-    
-    while (offset < bytes.length - 2) {
-      var recordHeader = bytes[offset];
-      
-      if (recordHeader & 0x40) { // definition message
-        var localMsgType = recordHeader & 0x0F;
-        offset++; // skip reserved byte
-        offset++;
-        var arch = bytes[offset++]; // architecture
-        var globalMsgNum = arch === 0 ? view.getUint16(offset, true) : view.getUint16(offset, false);
-        offset += 2;
-        var numFields = bytes[offset++];
-        var fields = [];
-        for (var f = 0; f < numFields; f++) {
-          fields.push({num: bytes[offset], size: bytes[offset+1], type: bytes[offset+2]});
-          offset += 3;
+    var parser = new window.FitParser({
+      force: true,
+      speedUnit: 'mph',
+      lengthUnit: 'ft',
+      temperatureUnit: 'fahrenheit',
+      elapsedRecordField: true,
+      mode: 'list'
+    });
+    parser.parse(arrayBuffer, function(err, data) {
+      if (err) { callback(err, null); return; }
+      try {
+        var sessions = data.sessions || [];
+        var s = sessions.length ? sessions[0] : {};
+        var records = data.records || [];
+
+        var result = {
+          name: '', date: '', duration: 0, distance: 0,
+          avgPwr: null, np: null, hr: null, tss: null,
+          calories: null, elev: null,
+          z1s:0, z2s:0, z3s:0, z4s:0, z5s:0, z6s:0,
+          lats: [], lons: [], pwrStream: [],
+          peak20: null, lrBalance: null
+        };
+
+        if (s.start_time) {
+          var d = new Date(s.start_time);
+          result.date = d.toISOString().split('T')[0];
         }
-        localMsgDefs[localMsgType] = {globalMsgNum: globalMsgNum, arch: arch, fields: fields};
-        
-      } else { // data message
-        var localMsgType = recordHeader & 0x0F;
-        offset++;
-        var def = localMsgDefs[localMsgType];
-        if (!def) { offset++; continue; }
-        
-        var msgStart = offset;
-        var msgData = {};
-        var le = def.arch === 0;
-        
-        def.fields.forEach(function(f) {
-          var val = null;
-          try {
-            if (f.size === 1) val = bytes[offset];
-            else if (f.size === 2) val = le ? view.getUint16(offset, true) : view.getUint16(offset, false);
-            else if (f.size === 4) val = le ? view.getUint32(offset, true) : view.getUint32(offset, false);
-            else if (f.size === 8) val = le ? Number(view.getBigInt64(offset, true)) : Number(view.getBigInt64(offset, false));
-          } catch(e) {}
-          msgData[f.num] = {val: val, size: f.size};
-          offset += f.size;
-        });
-        
-        var g = def.globalMsgNum;
-        
-        // Session message (18)
-        if (g === 18) {
-          var ts = msgData[253] ? msgData[253].val + FIT_EPOCH : null;
-          if (ts) { var d = new Date(ts * 1000); result.date = d.toISOString().split('T')[0]; }
-          if (msgData[8]) result.duration = Math.round(msgData[8].val / 1000); // total_timer_time (moving)
-          if (msgData[9]) result.distance = parseFloat((msgData[9].val / 1609.344 / 100).toFixed(1));
-          if (msgData[20]) result.avgPwr = msgData[20].val;
-          if (msgData[21]) result.maxPwr = msgData[21].val;
-          if (msgData[34]) result.np = msgData[34].val;
-          if (msgData[35]) result.tss = Math.round(msgData[35].val / 10);
-          if (msgData[36]) result.ifPct = Math.round(msgData[36].val / 10);
-          if (msgData[16]) result.hr = msgData[16].val;
-          if (msgData[17]) result.maxHR = msgData[17].val;
-          if (msgData[18]) result.cadence = msgData[18].val;
-          if (msgData[11]) result.calories = msgData[11].val;
-          if (msgData[22]) result.elev = Math.round(msgData[22].val * 3.28084);
-          if (msgData[48]) result.workKj = Math.round(msgData[48].val / 1000);
-          if (msgData[57]) result.avgTemp = Math.round(msgData[57].val * 9/5 + 32);
-          if (msgData[58]) result.maxTemp = Math.round(msgData[58].val * 9/5 + 32);
-          if (msgData[37]) {
-            var lrRaw = msgData[37].val;
-            var lrLeft = lrRaw & 0x3FFF;
-            if (lrLeft > 0 && lrLeft < 10000) result.lrBalance = Math.round(lrLeft/100) + '/' + (100 - Math.round(lrLeft/100));
+        if (s.total_timer_time != null) result.duration = Math.round(s.total_timer_time);
+        if (s.total_distance != null) result.distance = parseFloat((s.total_distance/5280).toFixed(1)); // ft -> mi (lengthUnit ft above gives feet)
+        if (s.avg_power != null) result.avgPwr = Math.round(s.avg_power);
+        if (s.max_power != null) result.maxPwr = Math.round(s.max_power);
+        if (s.normalized_power != null) result.np = Math.round(s.normalized_power);
+        if (s.training_stress_score != null) result.tss = Math.round(s.training_stress_score);
+        if (s.intensity_factor != null) result.ifPct = Math.round(s.intensity_factor*100);
+        if (s.avg_heart_rate != null) result.hr = Math.round(s.avg_heart_rate);
+        if (s.max_heart_rate != null) result.maxHR = Math.round(s.max_heart_rate);
+        if (s.avg_cadence != null) result.cadence = Math.round(s.avg_cadence);
+        if (s.total_calories != null) result.calories = Math.round(s.total_calories);
+        if (s.total_ascent != null) result.elev = Math.round(s.total_ascent); // already ft per lengthUnit
+        if (s.total_work != null) result.workKj = Math.round(s.total_work/1000);
+        if (s.avg_temperature != null) result.avgTemp = Math.round(s.avg_temperature);
+        if (s.max_temperature != null) result.maxTemp = Math.round(s.max_temperature);
+        if (s.left_right_balance != null) {
+          var lrb = s.left_right_balance;
+          if (typeof lrb === 'object' && lrb.value != null) {
+            var leftPct = Math.round(lrb.value);
+            if (leftPct > 0 && leftPct < 100) result.lrBalance = leftPct + '/' + (100 - leftPct);
           }
         }
-        
-        // Record message (20) - GPS and power stream
-        if (g === 20) {
-          if (msgData[0] && msgData[1]) {
-            // Lat/lon are in semicircles
-            var lat = msgData[0].val * (180 / Math.pow(2, 31));
-            var lon = msgData[1].val * (180 / Math.pow(2, 31));
+
+        // Per-second record stream -> GPS + power curve (same downstream use as before)
+        records.forEach(function(r) {
+          if (r.position_lat != null && r.position_long != null) {
+            var lat = r.position_lat, lon = r.position_long;
             if (lat !== 0 && lon !== 0 && lat > -90 && lat < 90) {
               result.lats.push(lat);
               result.lons.push(lon);
             }
           }
-          if (msgData[7] && msgData[7].val < 2000 && msgData[7].val !== 65535) result.pwrStream.push(msgData[7].val);
+          if (r.power != null && r.power < 2000) result.pwrStream.push(r.power);
+        });
+
+        // Calculate power curve for all durations (identical logic to before)
+        var pwrDurations = [5,15,30,60,120,300,600,1200,1800,3600];
+        result.powerCurve = {};
+        pwrDurations.forEach(function(win) {
+          if (result.pwrStream.length >= win) {
+            var sum = 0;
+            for (var i = 0; i < win; i++) sum += result.pwrStream[i];
+            var best = sum;
+            for (var i = win; i < result.pwrStream.length; i++) {
+              sum += result.pwrStream[i] - result.pwrStream[i-win];
+              if (sum > best) best = sum;
+            }
+            result.powerCurve[win] = Math.round(best / win);
+          }
+        });
+        result.peak20 = result.powerCurve[1200] || null;
+        if (!result.maxPwr) result.maxPwr = result.powerCurve[5] || null;
+
+        // Calculate TSS if missing (identical fallback logic to before)
+        if (!result.tss && result.np && result.duration) {
+          var ftp = parseInt(window.st ? window.st.ftp || 186 : 186);
+          result.tss = Math.round((result.duration * result.np * (result.np/ftp)) / (ftp * 3600) * 100);
         }
-      }
-    }
-    
-    // Calculate power curve for all durations
-    var pwrDurations = [5,15,30,60,120,300,600,1200,1800,3600];
-    result.powerCurve = {};
-    pwrDurations.forEach(function(win) {
-      if (result.pwrStream.length >= win) {
-        var sum = 0;
-        for (var i = 0; i < win; i++) sum += result.pwrStream[i];
-        var best = sum;
-        for (var i = win; i < result.pwrStream.length; i++) {
-          sum += result.pwrStream[i] - result.pwrStream[i-win];
-          if (sum > best) best = sum;
+
+        // Downsample GPS to max 300 points (identical to before)
+        if (result.lats.length > 300) {
+          var step = Math.floor(result.lats.length / 300);
+          result.lats = result.lats.filter(function(_,i){return i%step===0;}).slice(0,300);
+          result.lons = result.lons.filter(function(_,i){return i%step===0;}).slice(0,300);
         }
-        result.powerCurve[win] = Math.round(best / win);
+
+        callback(null, result);
+      } catch(e2) {
+        callback(e2.message, null);
       }
     });
-    result.peak20 = result.powerCurve[1200] || null;
-    result.maxPwr = result.powerCurve[5] || null;
-    
-    // Calculate TSS if missing
-    if (!result.tss && result.np && result.duration) {
-      var ftp = parseInt(window.st ? window.st.ftp || 186 : 186);
-      result.tss = Math.round((result.duration * result.np * (result.np/ftp)) / (ftp * 3600) * 100);
-    }
-    
-    // Downsample GPS to max 300 points
-    if (result.lats.length > 300) {
-      var step = Math.floor(result.lats.length / 300);
-      result.lats = result.lats.filter(function(_,i){return i%step===0;}).slice(0,300);
-      result.lons = result.lons.filter(function(_,i){return i%step===0;}).slice(0,300);
-    }
-    callback(null, result);
   } catch(e) {
     callback(e.message, null);
   }
