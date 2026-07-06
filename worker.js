@@ -3705,16 +3705,82 @@ function eventsCardHTML(){
 }
 
 function openEventEdit(){
-  var name = prompt('Event name:');
-  if(!name) return;
-  var dateStr = prompt('Date (YYYY-MM-DD):');
-  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){ toast('Enter date as YYYY-MM-DD'); return; }
-  var type = (prompt('Type: race or goal', 'race')||'race').toLowerCase();
-  ensureEvents();
-  st.events.push({id:'evt-'+Date.now(), name:name, date:dateStr, type:(type==='race'?'race':'goal')});
-  sv();
-  renderHomeTSSAndPR();
-  toast('Event added');
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Add Event';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type, defaultVal){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    if(defaultVal!=null) input.value = defaultVal;
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var nameInput = makeField('Event name', 'e.g. Grand Rapids Half');
+  var dateInput = makeField('Date', 'YYYY-MM-DD', 'date');
+
+  var typeWrap = document.createElement('div');
+  typeWrap.style.cssText = 'margin-bottom:12px';
+  var typeLbl = document.createElement('div');
+  typeLbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+  typeLbl.textContent = 'Type';
+  var typeSelect = document.createElement('select');
+  typeSelect.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+  ['race','goal'].forEach(function(opt){
+    var o = document.createElement('option'); o.value = opt; o.textContent = opt==='race'?'Race':'Goal'; typeSelect.appendChild(o);
+  });
+  typeWrap.appendChild(typeLbl); typeWrap.appendChild(typeSelect);
+  card.appendChild(typeWrap);
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Add Event';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.addEventListener('click', function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
+    var dateStr = dateInput.value;
+    if(!dateStr || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateStr)){ dateInput.style.borderColor='#E24B4A'; return; }
+    ensureEvents();
+    st.events.push({id:'evt-'+Date.now(), name:name, date:dateStr, type:typeSelect.value});
+    sv();
+    closeServiceModal();
+    renderHomeTSSAndPR();
+    toast('Event added');
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 // Achievements: real PR history instead of only-detects-if-happened-today
@@ -11178,13 +11244,70 @@ function renderPlans(){
 }
 
 function openPlanCreate(){
-  var name = prompt('Plan name (e.g. Base Building, Race Prep):');
-  if(!name) return;
-  var startDate = prompt('Start date (YYYY-MM-DD):', getTodayKey().split('-').map(function(p,i){return i>0&&p.length<2?'0'+p:p;}).join('-'));
-  if(!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)){ toast('Enter date as YYYY-MM-DD'); return; }
-  createPlan(name, startDate);
-  renderPlans();
-  toast('Plan created and active');
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'New Plan';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type, defaultVal){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    if(defaultVal!=null) input.value = defaultVal;
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var today = new Date();
+  var todayISO = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+
+  var nameInput = makeField('Plan name', 'e.g. Base Building, Race Prep');
+  var startInput = makeField('Start date', '', 'date', todayISO);
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Create Plan';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.onclick = function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
+    var startDate = startInput.value;
+    if(!startDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate)){ startInput.style.borderColor='#E24B4A'; return; }
+    createPlan(name, startDate);
+    closeServiceModal();
+    renderPlans();
+    toast('Plan created and active');
+  };
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 
@@ -11230,22 +11353,77 @@ function renderGoals(){
 }
 
 function openGoalEdit(){
-  var label = prompt('Goal (e.g. Weight, FTP, 5K time):');
-  if(!label) return;
-  var target = parseFloat(prompt('Target value:'));
-  if(isNaN(target)){ toast('Enter a number for the target'); return; }
-  var current = parseFloat(prompt('Current value (optional):'));
-  var unit = prompt('Unit (e.g. lbs, watts, min) - optional:') || '';
-  ensureGoals();
-  st.goals.push({
-    id:'goal-'+Date.now(), label:label, target:target,
-    current: isNaN(current)?null:current,
-    startValue: isNaN(current)?null:current,
-    unit: unit
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Add Goal';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var labelInput = makeField('Goal', 'e.g. Weight, FTP, 5K time');
+  var targetInput = makeField('Target value', '0', 'number');
+  var currentInput = makeField('Current value (optional)', '0', 'number');
+  var unitInput = makeField('Unit (optional)', 'e.g. lbs, watts, min');
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Add Goal';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.addEventListener('click', function(){
+    var label = labelInput.value.trim();
+    if(!label){ labelInput.style.borderColor='#E24B4A'; return; }
+    var target = parseFloat(targetInput.value);
+    if(isNaN(target)){ targetInput.style.borderColor='#E24B4A'; return; }
+    var current = parseFloat(currentInput.value);
+    var unit = unitInput.value.trim();
+    ensureGoals();
+    st.goals.push({
+      id:'goal-'+Date.now(), label:label, target:target,
+      current: isNaN(current)?null:current,
+      startValue: isNaN(current)?null:current,
+      unit: unit
+    });
+    sv();
+    closeServiceModal();
+    renderGoals();
+    toast('Goal added');
   });
-  sv();
-  renderGoals();
-  toast('Goal added');
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 // ===== NOTES =====
@@ -11286,13 +11464,53 @@ function renderNotes(){
 }
 
 function openNoteEdit(){
-  var text = prompt('Note:');
-  if(!text) return;
-  ensureNotes();
-  st.userNotes.push({id:'note-'+Date.now(), date:getTodayKey(), text:text});
-  sv();
-  renderNotes();
-  toast('Note saved');
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Add Note';
+  card.appendChild(title);
+
+  var textarea = document.createElement('textarea');
+  textarea.rows = 5;
+  textarea.placeholder = 'What\\'s on your mind?';
+  textarea.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;resize:vertical;margin-bottom:12px;box-sizing:border-box';
+  card.appendChild(textarea);
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save Note';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.addEventListener('click', function(){
+    var text = textarea.value.trim();
+    if(!text){ textarea.style.borderColor='#E24B4A'; return; }
+    ensureNotes();
+    st.userNotes.push({id:'note-'+Date.now(), date:getTodayKey(), text:text});
+    sv();
+    closeServiceModal();
+    renderNotes();
+    toast('Note saved');
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 
