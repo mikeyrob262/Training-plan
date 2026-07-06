@@ -12512,7 +12512,7 @@ function showAICoach(){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
-    +'. Write a concise daily briefing with 5 sections labeled: 1. TODAY (recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 2. FORM CHECK 3. KEY FOCUS 4. NUTRITION TIP (factor in what they have already eaten today) 5. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep each to 2-3 sentences. Be direct and motivating.'
+    +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'
 
 
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
@@ -12529,7 +12529,29 @@ function showAICoach(){
     
     // Parse sections and render nicely
     body.innerHTML='';
-    
+
+    // Coach text - split into sections, pulling DECISION out for a headline
+    var sections = text.split(/(?=\\d+\\.\\s*(?:DECISION|TODAY|FORM CHECK|KEY FOCUS|NUTRITION|WEATHER NOTE))/);
+    var decisionText = '';
+    var otherSections = [];
+    sections.forEach(function(sec){
+      if(!sec.trim()) return;
+      if(/^\\d*\\.?\\s*DECISION/.test(sec.trim())){
+        var dLines = sec.trim().split('\\n');
+        decisionText = dLines.slice(1).join(' ').trim() || dLines[0].replace(/^\\d+\\.\\s*DECISION[:\\s]*/i,'').trim();
+      } else {
+        otherSections.push(sec);
+      }
+    });
+
+    if(decisionText){
+      var decisionCard=document.createElement('div');
+      decisionCard.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(168,85,247,.06));border:1px solid rgba(168,85,247,.4);border-radius:16px;padding:16px 18px;margin-bottom:2px';
+      decisionCard.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c084fc;margin-bottom:6px">Today\\'s Call</div>'
+        +'<div style="font-size:19px;font-weight:800;color:var(--t1);line-height:1.3">'+decisionText+'</div>';
+      body.appendChild(decisionCard);
+    }
+
     // Stats row
     var statsRow=document.createElement('div');
     statsRow.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px';
@@ -12540,16 +12562,16 @@ function showAICoach(){
       statsRow.appendChild(card);
     });
     body.appendChild(statsRow);
-    
-    // Coach text - split into sections
-    var sections = text.split(/(?=TODAY|FORM CHECK|KEY FOCUS|NUTRITION|WEATHER NOTE)/);
-    sections.forEach(function(sec){
+
+    otherSections.forEach(function(sec){
       if(!sec.trim()) return;
       var card=document.createElement('div');
       card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
       var lines=sec.trim().split('\\n');
-      var heading=lines[0].replace(/^\\d+\\.\\s*/,'').replace(/[:\\s]*$/,'');
-      var bodyText=lines.slice(1).join(' ').trim()||lines[0];
+      var headingMatch=lines[0].match(/^\\d+\\.\\s*(TODAY|FORM CHECK|KEY FOCUS|NUTRITION TIP|WEATHER NOTE)/);
+      var heading=headingMatch?headingMatch[1]:lines[0].replace(/^\\d+\\.\\s*/,'').replace(/[:\\s]*$/,'');
+      var firstLineRemainder=lines[0].replace(/^\\d+\\.\\s*[A-Z ]+[:\\s]*/,'').trim();
+      var bodyText=lines.slice(1).join(' ').trim()||firstLineRemainder||lines[0];
       card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+heading+'</div>'
         +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+bodyText+'</div>';
       body.appendChild(card);
