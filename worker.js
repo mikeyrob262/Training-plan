@@ -3670,10 +3670,15 @@ function checkForNewAchievements(){
   if(!st.achievements) st.achievements = [];
 
   var longestRide=0, bestNP=0, highestTSS=0;
+  // Sanity ceilings: values above these are corrupted/malformed data, not
+  // real rides. NP above 600W and TSS above 600 are outside anything a real
+  // human ride produces (even elite pro efforts), so we exclude them rather
+  // than let a bad data point post a bogus PR banner.
+  var NP_CEILING = 600, TSS_CEILING = 600;
   rides.forEach(function(r){
     if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
-    if(r.np&&r.np>bestNP) bestNP=r.np;
-    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    if(r.np && r.np>bestNP && r.np<=NP_CEILING) bestNP=r.np;
+    if(r.tss && r.tss>highestTSS && r.tss<=TSS_CEILING) highestTSS=r.tss;
   });
 
   function recordIfNew(key, label, value){
