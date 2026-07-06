@@ -3618,10 +3618,52 @@ function logWeightQuick(){
   renderHomeTSSAndPR();
 }
 
+function readinessCardHTML(){
+  var rides = (st.rides||[]).filter(function(r){ return !r.deleted && r.tss; });
+  if(rides.length < 5){
+    return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px">'
+      + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">Training load</div>'
+      + '<div style="font-size:14px;color:var(--t2)">Log a few more rides to see your readiness signal</div>'
+      + '</div>';
+  }
+
+  var pmc = computePMC(rides);
+  var today = pmc[pmc.length-1];
+  var fitness = today.ctl, fatigue = today.atl, form = today.tsb;
+
+  var headline, sub, badgeLabel, badgeColor, badgeText;
+  if(form >= 10){
+    headline = 'Good day to push'; sub = 'Form is positive — fatigue is well below fitness';
+    badgeLabel='Fresh'; badgeColor='#5DCAA522'; badgeText='#5DCAA5';
+  } else if(form >= -10){
+    headline = 'Steady state'; sub = 'Fitness and fatigue are close — normal training day';
+    badgeLabel='Balanced'; badgeColor='#4D9FFF22'; badgeText='#4D9FFF';
+  } else if(form >= -25){
+    headline = 'Fatigue is building'; sub = 'Consider an easier day or shorter intervals';
+    badgeLabel='Loaded'; badgeColor='#EF9F2722'; badgeText='#EF9F27';
+  } else {
+    headline = 'Fatigue is high'; sub = 'Recent training load is heavy — prioritize recovery';
+    badgeLabel='Fatigued'; badgeColor='#E24B4A22'; badgeText='#E24B4A';
+  }
+
+  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:16px;padding:16px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Training load</div>'
+    + '<div style="background:'+badgeColor+';color:'+badgeText+';font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">'+badgeLabel+'</div>'
+    + '</div>'
+    + '<div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:4px">'+headline+'</div>'
+    + '<div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+sub+'</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">'
+    + '<div style="background:var(--s3);border-radius:10px;padding:10px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">FITNESS</div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(fitness)+'</div></div>'
+    + '<div style="background:var(--s3);border-radius:10px;padding:10px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">FATIGUE</div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(fatigue)+'</div></div>'
+    + '<div style="background:var(--s3);border-radius:10px;padding:10px"><div style="font-size:10px;color:var(--t3);margin-bottom:2px">FORM</div><div style="font-size:16px;font-weight:800;color:'+badgeText+'">'+(form>=0?'+':'')+Math.round(form)+'</div></div>'
+    + '</div></div>';
+}
+
 function renderHomeTSSAndPR(){
   var container = document.getElementById('home-tss-pr');
   if(!container) return;
-  container.innerHTML=''; return; // disabled - duplicated on Progress screen
+  container.innerHTML = readinessCardHTML(); return; // rest of function disabled - duplicated on Progress screen
   var rides = st.rides||[];
 
   // Weight quick-log button (always shown, independent of rides)
