@@ -2972,6 +2972,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="modal-bg" id="mod-B"></div>
 <div class="modal-bg" id="mod-CORE"></div>
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
+<div id="GARAGE" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
 var cw=1, st={}, curSW=1, svDebounce=null;
@@ -4225,6 +4226,7 @@ function showScreen(id){
   document.getElementById('PROG').style.display=id==='PROG'?'block':'none';
   document.getElementById('NUTR').style.display=id==='NUTR'?'block':'none';
   var mob=document.getElementById('MOB');if(mob)mob.style.display=id==='MOB'?'block':'none';
+  var gar=document.getElementById('GARAGE');if(gar)gar.style.display=id==='GARAGE'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -10592,6 +10594,129 @@ var MOB_PROG = [
 
 function showMob(){ renderMob(); showScreen('MOB'); }
 
+// ===== GARAGE (Gear module v1) =====
+function ensureBikes(){
+  if(!st.bikes || !st.bikes.length){
+    st.bikes = [
+      {id:'dogma-f', name:'Dogma F', type:'Race bike', brand:'Pinarello', groupset:'Shimano Ultegra', wheelset:'Campagnolo Bora WTO 60 C23',
+        miles:2483, elevationFt:124000, longestMi:104, avgSpeed:19.8,
+        components:[
+          {name:'Chain', metric:'Wax', milesSince:132, dueEvery:150},
+          {name:'Rear tire', metric:'Wear', pct:72},
+          {name:'Brake pads', metric:'Wear', pct:84}
+        ]},
+      {id:'roadmachine', name:'Roadmachine', type:'Endurance bike', brand:'BMC', groupset:'', wheelset:'Black Inc Forty Five',
+        miles:741, elevationFt:0, longestMi:0, avgSpeed:0,
+        components:[
+          {name:'Rear tire', metric:'Wear', pct:40},
+          {name:'Chain', metric:'Wax', milesSince:20, dueEvery:150}
+        ]}
+    ];
+    sv();
+  }
+}
+
+function showGarage(){ ensureBikes(); renderGarage(); showScreen('GARAGE'); }
+
+function bikeHealthPct(bike){
+  var worst = 100;
+  (bike.components||[]).forEach(function(c){
+    var pct = c.pct!=null ? c.pct : (c.dueEvery ? Math.max(0,100-Math.round((c.milesSince/c.dueEvery)*100)) : 100);
+    if(pct < worst) worst = pct;
+  });
+  return worst;
+}
+
+function renderGarage(){
+  var scr = document.getElementById('GARAGE');
+  if(!scr) return;
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px">'
+    +'<div style="font-size:20px;font-weight:800;color:var(--t1)">My Garage</div>'
+    +'<button onclick="showMoreSheet();" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer">More</button>'
+    +'</div>';
+
+  (st.bikes||[]).forEach(function(bike, bi){
+    var health = bikeHealthPct(bike);
+    var healthColor = health > 80 ? '#0F6E56' : health > 50 ? '#BA7517' : '#791F1F';
+    h += '<div class="garage-bike-card" data-bike-id="'+bike.id+'" onclick="showBikeDetail(this.getAttribute(&quot;data-bike-id&quot;))" style="margin:0 16px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:16px;padding:14px 16px;cursor:pointer">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+      +'<div><div style="font-size:15px;font-weight:800;color:var(--t1)">'+bike.name+'</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+bike.type+'</div></div>'
+      +'<div style="text-align:right"><div style="font-size:15px;font-weight:800;color:var(--t1)">'+(bike.miles||0)+' mi</div>'
+      +'<div style="font-size:12px;font-weight:700;color:'+healthColor+'">Health '+health+'%</div></div>'
+      +'</div></div>';
+  });
+
+  var needsAttention = [];
+  (st.bikes||[]).forEach(function(bike){
+    (bike.components||[]).forEach(function(c){
+      var pct = c.pct!=null ? c.pct : (c.dueEvery ? Math.max(0,100-Math.round((c.milesSince/c.dueEvery)*100)) : 100);
+      if(pct < 30 || (c.dueEvery && c.milesSince >= c.dueEvery)){
+        needsAttention.push(bike.name+' — '+c.name+' ('+c.metric+' due)');
+      }
+    });
+  });
+  if(needsAttention.length){
+    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Needs attention</div>';
+    h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:12px 14px">';
+    needsAttention.forEach(function(n,i){
+      h += '<div style="font-size:13px;color:var(--t1);padding:'+(i>0?'8px 0 0':'0')+';'+(i>0?'border-top:1px solid var(--b1)':'')+'">'+n+'</div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<button onclick="openBikeEdit()" style="display:block;width:calc(100% - 32px);margin:0 16px 14px;padding:15px;background:#FC4C02;border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">+ Add / Edit Bike</button>';
+
+  scr.innerHTML = h;
+}
+
+function showBikeDetail(bikeId){
+  var bike = (st.bikes||[]).find(function(b){return b.id===bikeId;});
+  if(!bike) return;
+  var scr = document.getElementById('GARAGE');
+  var h = '<div style="display:flex;align-items:center;gap:8px;padding:16px 16px 4px">'
+    +'<button onclick="renderGarage()" style="background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer">&larr; Garage</button></div>';
+  h += '<div style="padding:8px 16px 4px;font-size:20px;font-weight:800;color:var(--t1)">'+bike.name+'</div>';
+  h += '<div style="padding:0 16px 16px;font-size:13px;color:var(--t3)">'+bike.type+(bike.groupset?' · '+bike.groupset:'')+(bike.wheelset?' · '+bike.wheelset:'')+'</div>';
+
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 16px">';
+  var stats = [['Mileage', (bike.miles||0)+' mi'], ['Elevation', Math.round((bike.elevationFt||0)/1000)+'k ft'], ['Longest ride', (bike.longestMi||0)+' mi'], ['Avg speed', (bike.avgSpeed||0)+' mph']];
+  stats.forEach(function(s){
+    h += '<div style="background:var(--s2);border-radius:14px;padding:12px 14px">'
+      +'<div style="font-size:11px;color:var(--t3);margin-bottom:4px">'+s[0]+'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:var(--t1)">'+s[1]+'</div></div>';
+  });
+  h += '</div>';
+
+  h += '<div style="margin:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Components</div>';
+  h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:4px 14px">';
+  (bike.components||[]).forEach(function(c, ci){
+    var pct = c.pct!=null ? c.pct : (c.dueEvery ? Math.max(0,100-Math.round((c.milesSince/c.dueEvery)*100)) : 100);
+    var pctColor = pct>80?'#0F6E56':pct>50?'#BA7517':'#791F1F';
+    h += '<div style="padding:'+(ci>0?'10px 0':'10px 0 10px')+';'+(ci>0?'border-top:1px solid var(--b1)':'')+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+      +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+c.name+'</span>'
+      +'<span style="font-size:13px;font-weight:800;color:'+pctColor+'">'+(c.pct!=null?pct+'%':c.milesSince+' / '+c.dueEvery+' mi')+'</span></div>'
+      +'<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;background:'+pctColor+';border-radius:2px;width:'+pct+'%"></div></div>'
+      +'</div>';
+  });
+  h += '</div>';
+
+  scr.innerHTML = h;
+}
+
+function openBikeEdit(){
+  var name = prompt('Bike name:');
+  if(!name) return;
+  var type = prompt('Type (e.g. Race bike, Endurance bike):') || 'Bike';
+  var miles = parseFloat(prompt('Current mileage:')) || 0;
+  ensureBikes();
+  st.bikes.push({id:'bike-'+Date.now(), name:name, type:type, brand:'', groupset:'', wheelset:'', miles:miles, elevationFt:0, longestMi:0, avgSpeed:0, components:[]});
+  sv();
+  renderGarage();
+  toast('Bike added');
+}
+
 function getMobDay(k){
   if(!st.mob) st.mob={};
   if(!st.mob[k]) st.mob[k]={done:{},notes:''};
@@ -11069,6 +11194,7 @@ function showMoreSheet(){
     {n:'Clean Ride Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
     {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
+    {n:'Garage',        i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'showGarage',       c:'#0F6E56'},
     {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
     {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
   ];
