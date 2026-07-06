@@ -2936,6 +2936,8 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="modal-bg" id="mod-SERVICE"></div>
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 <div id="GARAGE" style="display:none;padding:0 0 80px 0"></div>
+<div id="GOALS" style="display:none;padding:0 0 80px 0"></div>
+<div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
 var cw=1, st={}, curSW=1, svDebounce=null;
@@ -3612,6 +3614,102 @@ function parseDurToMin(durStr){
   return parseFloat(durStr)||0;
 }
 
+// Events: real, editable race/goal-date entries, replacing the old
+// hardcoded "Grand Rapids Half, Oct 18" date with a proper st.events array.
+function ensureEvents(){
+  if(!st.events){
+    st.events = [
+      {id:'evt-'+Date.now(), name:'Grand Rapids Half Marathon', date:'2026-10-18', type:'race'}
+    ];
+    sv();
+  }
+}
+
+function eventsCardHTML(){
+  ensureEvents();
+  var today = new Date(); today.setHours(0,0,0,0);
+  var upcoming = (st.events||[]).map(function(e){
+    var d = new Date(e.date+'T00:00:00');
+    var daysOut = Math.ceil((d-today)/(1000*60*60*24));
+    return {evt:e, daysOut:daysOut};
+  }).filter(function(x){ return x.daysOut >= 0; })
+    .sort(function(a,b){ return a.daysOut - b.daysOut; });
+
+  if(!upcoming.length) return '';
+  var next = upcoming[0];
+  var weeksOut = Math.floor(next.daysOut/7);
+
+  return '<div style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(15,110,86,.12),rgba(15,110,86,.04));border:1px solid rgba(15,110,86,.25);border-radius:14px;padding:14px 16px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0F6E56;margin-bottom:4px">'+(next.evt.type==='race'?'🏁':'📅')+' '+next.evt.name+'</div>'
+    + '<div style="display:flex;align-items:baseline;gap:8px">'
+    + '<div style="font-size:28px;font-weight:900;color:var(--t1)">'+next.daysOut+'</div>'
+    + '<div style="font-size:13px;color:var(--t2)">days out · '+weeksOut+' weeks</div>'
+    + '</div></div>';
+}
+
+function openEventEdit(){
+  var name = prompt('Event name:');
+  if(!name) return;
+  var dateStr = prompt('Date (YYYY-MM-DD):');
+  if(!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)){ toast('Enter date as YYYY-MM-DD'); return; }
+  var type = (prompt('Type: race or goal', 'race')||'race').toLowerCase();
+  ensureEvents();
+  st.events.push({id:'evt-'+Date.now(), name:name, date:dateStr, type:(type==='race'?'race':'goal')});
+  sv();
+  renderHomeTSSAndPR();
+  toast('Event added');
+}
+
+// Achievements: real PR history instead of only-detects-if-happened-today
+// logic, plus a simple streak counter. Existing longest-ride/best-NP/highest-TSS
+// detection logic (from the disabled home function) is reused here, now
+// feeding a persistent st.achievements log instead of a transient banner.
+function checkForNewAchievements(){
+  var rides = (st.rides||[]).filter(function(r){ return !r.deleted; });
+  if(!rides.length) return;
+  if(!st.achievements) st.achievements = [];
+
+  var longestRide=0, bestNP=0, highestTSS=0;
+  rides.forEach(function(r){
+    if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
+    if(r.np&&r.np>bestNP) bestNP=r.np;
+    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+  });
+
+  function recordIfNew(key, label, value){
+    var existing = st.achievements.find(function(a){ return a.key===key; });
+    if(!existing || value > existing.value){
+      st.achievements = st.achievements.filter(function(a){ return a.key!==key; });
+      st.achievements.unshift({key:key, label:label, value:value, date:getTodayKey()});
+      return true;
+    }
+    return false;
+  }
+
+  var changed = false;
+  if(longestRide>0) changed = recordIfNew('longest_ride', 'Longest ride: '+longestRide.toFixed(1)+' mi', longestRide) || changed;
+  if(bestNP>0) changed = recordIfNew('best_np', 'Best NP: '+bestNP+'W', bestNP) || changed;
+  if(highestTSS>0) changed = recordIfNew('highest_tss', 'Highest TSS: '+highestTSS, highestTSS) || changed;
+
+  if(changed) sv();
+}
+
+function achievementsCardHTML(){
+  checkForNewAchievements();
+  if(!st.achievements || !st.achievements.length) return '';
+  var today = getTodayKey();
+  var newToday = st.achievements.filter(function(a){ return a.date===today; });
+  if(!newToday.length) return '';
+
+  var h = '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#FC4C02;margin-bottom:6px">🏆 New Personal Record!</div>';
+  newToday.forEach(function(a){
+    h += '<div style="font-size:13px;font-weight:700;color:var(--t1);padding:2px 0">'+a.label+'</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
 function readinessCardHTML(){
   var activities = (st.rides||[]).filter(function(r){ return !r.deleted; })
     .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
@@ -3661,7 +3759,7 @@ function readinessCardHTML(){
 function renderHomeTSSAndPR(){
   var container = document.getElementById('home-tss-pr');
   if(!container) return;
-  container.innerHTML = readinessCardHTML(); return; // rest of function disabled - duplicated on Progress screen
+  container.innerHTML = readinessCardHTML() + eventsCardHTML() + achievementsCardHTML(); return; // rest of function disabled - duplicated on Progress screen
   var rides = st.rides||[];
 
   // Weight quick-log button (always shown, independent of rides)
@@ -4277,6 +4375,8 @@ function showScreen(id){
   document.getElementById('NUTR').style.display=id==='NUTR'?'block':'none';
   var mob=document.getElementById('MOB');if(mob)mob.style.display=id==='MOB'?'block':'none';
   var gar=document.getElementById('GARAGE');if(gar)gar.style.display=id==='GARAGE'?'block':'none';
+  var goa=document.getElementById('GOALS');if(goa)goa.style.display=id==='GOALS'?'block':'none';
+  var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -10742,6 +10842,121 @@ function ensureBikes(){
 
 function showGarage(){ ensureBikes(); renderGarage(); showScreen('GARAGE'); }
 
+// ===== GOALS =====
+function ensureGoals(){
+  if(!st.goals) st.goals = [];
+}
+
+function showGoals(){ ensureGoals(); renderGoals(); showScreen('GOALS'); }
+
+function renderGoals(){
+  var scr = document.getElementById('GOALS');
+  if(!scr) return;
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px">'
+    + '<div style="font-size:20px;font-weight:800;color:var(--t1)">Goals</div>'
+    + '<button onclick="showMoreSheet();" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer">More</button>'
+    + '</div>';
+
+  if(!st.goals.length){
+    h += '<div style="margin:8px 16px 16px;background:var(--s2);border-radius:14px;padding:20px;text-align:center">'
+      + '<div style="font-size:14px;color:var(--t2)">No goals set yet</div>'
+      + '</div>';
+  } else {
+    h += '<div style="margin:8px 16px 16px;background:var(--s2);border-radius:14px;padding:4px 14px">';
+    st.goals.forEach(function(g, gi){
+      var progress = null;
+      if(g.current!=null && g.target!=null && g.target!==g.current){
+        var range = Math.abs(g.target - g.startValue!=null ? g.target - g.startValue : g.target);
+        progress = Math.min(100, Math.max(0, Math.round((1 - Math.abs(g.target-g.current)/(Math.abs(g.target-(g.startValue!=null?g.startValue:g.current))||1))*100)));
+      }
+      h += '<div style="padding:'+(gi>0?'12px 0':'12px 0')+';'+(gi>0?'border-top:1px solid var(--b1)':'')+'">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+        + '<span style="font-size:14px;font-weight:700;color:var(--t1)">'+g.label+'</span>'
+        + '<span style="font-size:13px;font-weight:800;color:var(--t1)">'+(g.current!=null?g.current:'—')+' → '+g.target+' '+(g.unit||'')+'</span>'
+        + '</div>';
+      if(progress!=null){
+        h += '<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;background:#0F6E56;border-radius:2px;width:'+progress+'%"></div></div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<button onclick="openGoalEdit()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    + 'Add Goal</button>';
+
+  scr.innerHTML = h;
+}
+
+function openGoalEdit(){
+  var label = prompt('Goal (e.g. Weight, FTP, 5K time):');
+  if(!label) return;
+  var target = parseFloat(prompt('Target value:'));
+  if(isNaN(target)){ toast('Enter a number for the target'); return; }
+  var current = parseFloat(prompt('Current value (optional):'));
+  var unit = prompt('Unit (e.g. lbs, watts, min) - optional:') || '';
+  ensureGoals();
+  st.goals.push({
+    id:'goal-'+Date.now(), label:label, target:target,
+    current: isNaN(current)?null:current,
+    startValue: isNaN(current)?null:current,
+    unit: unit
+  });
+  sv();
+  renderGoals();
+  toast('Goal added');
+}
+
+// ===== NOTES =====
+function ensureNotes(){
+  if(!st.userNotes) st.userNotes = [];
+}
+
+function showNotes(){ ensureNotes(); renderNotes(); showScreen('NOTES'); }
+
+function renderNotes(){
+  var scr = document.getElementById('NOTES');
+  if(!scr) return;
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px">'
+    + '<div style="font-size:20px;font-weight:800;color:var(--t1)">Notes</div>'
+    + '<button onclick="showMoreSheet();" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer">More</button>'
+    + '</div>';
+
+  var notes = (st.userNotes||[]).slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); });
+
+  if(!notes.length){
+    h += '<div style="margin:8px 16px 16px;background:var(--s2);border-radius:14px;padding:20px;text-align:center">'
+      + '<div style="font-size:14px;color:var(--t2)">No notes yet</div>'
+      + '</div>';
+  } else {
+    notes.forEach(function(n){
+      h += '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px">'
+        + '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">'+n.date+'</div>'
+        + '<div style="font-size:14px;color:var(--t1);white-space:pre-wrap;line-height:1.4">'+n.text.replace(/</g,'&lt;')+'</div>'
+        + '</div>';
+    });
+  }
+
+  h += '<button onclick="openNoteEdit()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    + 'Add Note</button>';
+
+  scr.innerHTML = h;
+}
+
+function openNoteEdit(){
+  var text = prompt('Note:');
+  if(!text) return;
+  ensureNotes();
+  st.userNotes.push({id:'note-'+Date.now(), date:getTodayKey(), text:text});
+  sv();
+  renderNotes();
+  toast('Note saved');
+}
+
+
+
 function bikeHealthPct(bike){
   var worst = 100;
   (bike.components||[]).forEach(function(c){
@@ -11559,6 +11774,8 @@ function showMoreSheet(){
     {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
     {n:'Garage',        i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'showGarage',       c:'#0F6E56'},
+    {n:'Goals',         i:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', fn:'showGoals',        c:'#4D9FFF'},
+    {n:'Notes',         i:'M4 4h12l4 4v12H4z M16 4v4h4',                                                                        fn:'showNotes',        c:'#a855f7'},
     {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
     {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
   ];
