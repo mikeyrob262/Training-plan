@@ -66,6 +66,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .dot.done{background:var(--orange);width:16px}
 .dot.cur{background:var(--t1);width:22px}
 .wk{padding-bottom:20px}
+#home-tss-pr{padding-bottom:80px}
 .goal{background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border:1px solid rgba(252,76,2,.15);border-radius:14px;padding:13px 16px;margin:14px 16px 0}
 .goal-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--orange);margin-bottom:4px}
 .goal-txt{font-size:14px;color:var(--t1);font-weight:500;line-height:1.5}
