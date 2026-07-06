@@ -10596,30 +10596,50 @@ function showMob(){ renderMob(); showScreen('MOB'); }
 
 // ===== GARAGE (Gear module v1) =====
 function ensureBikes(){
+  var defaults = [
+    {id:'dogma-f', name:'Dogma F', type:'Race bike', brand:'Pinarello', groupset:'Shimano Ultegra', wheelset:'Campagnolo Bora WTO 60 C23',
+      photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/dogma-f.jpg',
+      miles:2483, elevationFt:124000, longestMi:104, avgSpeed:19.8,
+      components:[
+        {name:'Chain', metric:'Wax', milesSince:132, dueEvery:150},
+        {name:'Rear tire', metric:'Wear', pct:72},
+        {name:'Brake pads', metric:'Wear', pct:84}
+      ]},
+    {id:'roadmachine', name:'Roadmachine', type:'Endurance bike', brand:'BMC', groupset:'', wheelset:'Black Inc Forty Five',
+      photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/roadmachine.jpg',
+      miles:741, elevationFt:0, longestMi:0, avgSpeed:0,
+      components:[
+        {name:'Rear tire', metric:'Wear', pct:40},
+        {name:'Chain', metric:'Wax', milesSince:20, dueEvery:150}
+      ]},
+    {id:'zwift-ride', name:'Zwift Ride', type:'Indoor smart trainer', brand:'Zwift', groupset:'', wheelset:'',
+      photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/zwift-ride.jpg',
+      miles:0, elevationFt:0, longestMi:0, avgSpeed:0, indoor:true,
+      components:[]}
+  ];
+
   if(!st.bikes || !st.bikes.length){
-    st.bikes = [
-      {id:'dogma-f', name:'Dogma F', type:'Race bike', brand:'Pinarello', groupset:'Shimano Ultegra', wheelset:'Campagnolo Bora WTO 60 C23',
-        photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/dogma-f.jpg',
-        miles:2483, elevationFt:124000, longestMi:104, avgSpeed:19.8,
-        components:[
-          {name:'Chain', metric:'Wax', milesSince:132, dueEvery:150},
-          {name:'Rear tire', metric:'Wear', pct:72},
-          {name:'Brake pads', metric:'Wear', pct:84}
-        ]},
-      {id:'roadmachine', name:'Roadmachine', type:'Endurance bike', brand:'BMC', groupset:'', wheelset:'Black Inc Forty Five',
-        photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/roadmachine.jpg',
-        miles:741, elevationFt:0, longestMi:0, avgSpeed:0,
-        components:[
-          {name:'Rear tire', metric:'Wear', pct:40},
-          {name:'Chain', metric:'Wax', milesSince:20, dueEvery:150}
-        ]},
-      {id:'zwift-ride', name:'Zwift Ride', type:'Indoor smart trainer', brand:'Zwift', groupset:'', wheelset:'',
-        photo:'https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/assets/zwift-ride.jpg',
-        miles:0, elevationFt:0, longestMi:0, avgSpeed:0, indoor:true,
-        components:[]}
-    ];
+    st.bikes = defaults;
     sv();
+    return;
   }
+
+  var changed = false;
+  defaults.forEach(function(def){
+    var existing = st.bikes.find(function(b){ return b.id === def.id; });
+    if(!existing){
+      // Bike missing entirely (e.g. Zwift Ride added after initial seed) - add it
+      st.bikes.push(def);
+      changed = true;
+    } else if(!existing.photo){
+      // Backfill photo/indoor fields onto bikes saved before this update, preserving mileage/components
+      existing.photo = def.photo;
+      if(def.indoor) existing.indoor = true;
+      changed = true;
+    }
+  });
+
+  if(changed) sv();
 }
 
 function showGarage(){ ensureBikes(); renderGarage(); showScreen('GARAGE'); }
