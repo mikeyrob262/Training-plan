@@ -2938,6 +2938,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 <div id="GARAGE" style="display:none;padding:0 0 80px 0"></div>
 <div id="GOALS" style="display:none;padding:0 0 80px 0"></div>
+<div id="PLANS" style="display:none;padding:0 0 80px 0"></div>
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
@@ -3474,8 +3475,63 @@ function fbPull(silent){
 function pushDataToGitHub(silent){ fbPush(silent); }
 function getDataFromGitHub(silent){ fbPull(silent); }
 var fbSseSource = null; // kept so settings status check doesn't crash
+// ===== Multi-plan support =====
+// Replaces the old single fixed 17-week plan (st.w1...st.w17, one shared
+// st.planStart) with st.plans = {planId: {name, planStart, weeks: {w1:{...}}}}
+// plus st.activePlanId. Existing week data is migrated once into a
+// "default" plan so nothing is lost. All existing callers of ws(w) keep
+// working unchanged - only ws() itself needs to know about plans.
+
+function ensurePlansMigrated(){
+  if(st.plans && st.activePlanId) return; // already migrated
+  if(!st.plans) st.plans = {};
+
+  var hadOldData = false;
+  for(var i=1;i<=17;i++){ if(st['w'+i]) hadOldData = true; }
+
+  var defaultPlan = {
+    name: 'My Training Plan',
+    planStart: st.planStart || '2026-06-09',
+    weeks: {}
+  };
+
+  if(hadOldData){
+    for(var w=1; w<=17; w++){
+      if(st['w'+w]) defaultPlan.weeks['w'+w] = st['w'+w];
+    }
+  }
+
+  st.plans['default'] = defaultPlan;
+  st.activePlanId = 'default';
+  sv();
+}
+
+function getActivePlan(){
+  ensurePlansMigrated();
+  if(!st.plans[st.activePlanId]) st.activePlanId = Object.keys(st.plans)[0] || 'default';
+  if(!st.plans[st.activePlanId]) st.plans[st.activePlanId] = {name:'My Training Plan', planStart:'2026-06-09', weeks:{}};
+  return st.plans[st.activePlanId];
+}
+
+function createPlan(name, startDateStr){
+  ensurePlansMigrated();
+  var id = 'plan-'+Date.now();
+  st.plans[id] = { name: name, planStart: startDateStr, weeks: {} };
+  st.activePlanId = id;
+  sv();
+  return id;
+}
+
+function switchPlan(planId){
+  if(!st.plans || !st.plans[planId]) return false;
+  st.activePlanId = planId;
+  sv();
+  return true;
+}
+
 function ws(w){
-  var k='w'+w;if(!st[k])st[k]={};var s=st[k];
+  var plan = getActivePlan();
+  var k='w'+w;if(!plan.weeks[k])plan.weeks[k]={};var s=plan.weeks[k];
   // Repair fields that got corrupted into arrays by the since-fixed
   // sparse-array merge bug - an array is truthy, so the old plain
   // "if(!s.field)" initialization never detected or repaired this,
@@ -4573,6 +4629,7 @@ function showScreen(id){
   var mob=document.getElementById('MOB');if(mob)mob.style.display=id==='MOB'?'block':'none';
   var gar=document.getElementById('GARAGE');if(gar)gar.style.display=id==='GARAGE'?'block':'none';
   var goa=document.getElementById('GOALS');if(goa)goa.style.display=id==='GOALS'?'block':'none';
+  var pln=document.getElementById('PLANS');if(pln)pln.style.display=id==='PLANS'?'block':'none';
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
@@ -10231,8 +10288,8 @@ function getWeekKey(d){
 }
 
 function getWeekStartDate(w){
-  // Plan start date = June 9, 2026 (Week 1 Monday)
-  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  var plan = getActivePlan();
+  var planStart = new Date(plan.planStart);
   planStart.setHours(0,0,0,0);
   var d = new Date(planStart);
   d.setDate(d.getDate() + (w-1)*7);
@@ -10247,7 +10304,8 @@ function getWeekStartDate(w){
 function getPlannedWorkoutForDate(dateStr){
   var target = new Date(dateStr+'T00:00:00');
   target.setHours(0,0,0,0);
-  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  var plan = getActivePlan();
+  var planStart = new Date(plan.planStart);
   planStart.setHours(0,0,0,0);
   var diffDays = Math.round((target - planStart) / (24*60*60*1000));
   if(diffDays < 0) return null;
@@ -10261,7 +10319,8 @@ function getPlannedWorkoutForDate(dateStr){
 }
 
 function getCurrentPlanWeek(){
-  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  var plan = getActivePlan();
+  var planStart = new Date(plan.planStart);
   planStart.setHours(0,0,0,0);
   var today = new Date(); today.setHours(0,0,0,0);
   var diff = Math.floor((today - planStart) / (7*24*60*60*1000));
@@ -11085,6 +11144,50 @@ function ensureGoals(){
 }
 
 function showGoals(){ ensureGoals(); renderGoals(); showScreen('GOALS'); }
+
+// ===== PLANS =====
+function showPlans(){ ensurePlansMigrated(); renderPlans(); showScreen('PLANS'); }
+
+function renderPlans(){
+  var scr = document.getElementById('PLANS');
+  if(!scr) return;
+  var h = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px">'
+    + '<div style="font-size:20px;font-weight:800;color:var(--t1)">Training Plans</div>'
+    + '<button onclick="showMoreSheet();" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer">More</button>'
+    + '</div>';
+
+  h += '<div style="margin:8px 16px 16px;background:var(--s2);border-radius:14px;padding:4px 14px">';
+  var planIds = Object.keys(st.plans||{});
+  planIds.forEach(function(id, pi){
+    var plan = st.plans[id];
+    var isActive = id === st.activePlanId;
+    var weekCount = Object.keys(plan.weeks||{}).length;
+    h += '<div onclick="switchPlan(\\''+id+'\\');renderPlans();" style="padding:'+(pi>0?'12px 0':'12px 0')+';'+(pi>0?'border-top:1px solid var(--b1)':'')+';cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+      + '<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+plan.name+'</div>'
+      + '<div style="font-size:12px;color:var(--t3);margin-top:2px">Starts '+plan.planStart+' &middot; '+weekCount+' week'+(weekCount===1?'':'s')+' logged</div></div>'
+      + (isActive ? '<div style="background:#0F6E5622;color:#5DCAA5;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">Active</div>' : '')
+      + '</div>';
+  });
+  h += '</div>';
+
+  h += '<button onclick="openPlanCreate()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    + 'New Plan</button>';
+
+  scr.innerHTML = h;
+}
+
+function openPlanCreate(){
+  var name = prompt('Plan name (e.g. Base Building, Race Prep):');
+  if(!name) return;
+  var startDate = prompt('Start date (YYYY-MM-DD):', getTodayKey().split('-').map(function(p,i){return i>0&&p.length<2?'0'+p:p;}).join('-'));
+  if(!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)){ toast('Enter date as YYYY-MM-DD'); return; }
+  createPlan(name, startDate);
+  renderPlans();
+  toast('Plan created and active');
+}
+
+
 
 function renderGoals(){
   var scr = document.getElementById('GOALS');
@@ -12055,6 +12158,7 @@ function showMoreSheet(){
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
     {n:'Garage',        i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'showGarage',       c:'#0F6E56'},
     {n:'Goals',         i:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', fn:'showGoals',        c:'#4D9FFF'},
+    {n:'Plans',         i:'M4 4h16v16H4z M4 9h16 M9 4v16',                                                                       fn:'showPlans',        c:'#0F6E56'},
     {n:'Notes',         i:'M4 4h12l4 4v12H4z M16 4v4h4',                                                                        fn:'showNotes',        c:'#a855f7'},
     {n:'Dark Mode',     i:'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',                                                       fn:'toggleDark',       c:'#FFB938'},
     {n:'Settings',      i:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', fn:'showSet', c:'#94a3b8'},
