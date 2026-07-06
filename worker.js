@@ -129,6 +129,9 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .pk-it.cur .pk-n{color:var(--orange)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;align-items:flex-end;overflow:hidden}
 .modal-bg.open{display:flex}
+@media (min-width:520px){
+  .modal-bg{left:calc(50% - 240px) !important;right:auto !important;width:480px !important}
+}
 .modal-sh{background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-height:90vh;overflow-y:auto;overflow-x:hidden;padding-bottom:30px;border-top:1px solid var(--b2)}
 .mhdl{width:40px;height:4px;background:var(--b2);border-radius:2px;margin:13px auto 0}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:14px 18px 8px}
