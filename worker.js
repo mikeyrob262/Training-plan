@@ -2977,6 +2977,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="modal-bg" id="mod-A"></div>
 <div class="modal-bg" id="mod-B"></div>
 <div class="modal-bg" id="mod-CORE"></div>
+<div class="modal-bg" id="mod-SERVICE"></div>
 <div id="MOB" style="display:none;padding:0 0 80px 0"></div>
 <div id="GARAGE" style="display:none;padding:0 0 80px 0"></div>
 
@@ -10784,20 +10785,62 @@ function serviceComponent(bikeId, componentIndex){
   var c = (bike.components||[])[idx];
   if(!c) return;
 
-  var confirmMsg = 'Mark "'+c.name+'" as serviced today? This resets its wear tracker.';
-  if(!confirm(confirmMsg)) return;
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  var sheet = document.createElement('div');
+  sheet.className = 'modal-sh';
 
-  if(c.dueEvery != null){
-    c.milesSince = 0;
-  }
-  if(c.pct != null){
-    c.pct = 100;
-  }
-  c.lastServiced = new Date().toISOString().slice(0,10);
+  var hdl = document.createElement('div'); hdl.className = 'mhdl'; sheet.appendChild(hdl);
 
-  sv();
-  showBikeDetail(bikeId);
-  toast(c.name+' logged as serviced');
+  var hdr = document.createElement('div'); hdr.className = 'mhdr';
+  var htxt = document.createElement('div');
+  htxt.innerHTML = '<div class="mtit">Log Service</div>';
+  var xbtn = document.createElement('button');
+  xbtn.className = 'mclose'; xbtn.textContent = '✕';
+  xbtn.addEventListener('click', function(){ closeServiceModal(); });
+  hdr.appendChild(htxt); hdr.appendChild(xbtn);
+  sheet.appendChild(hdr);
+
+  var body = document.createElement('div');
+  body.style.cssText = 'padding:8px 20px 4px';
+  body.innerHTML = '<div style="font-size:15px;color:var(--t1);line-height:1.5">Mark <strong>'+c.name+'</strong> as serviced today?</div>'
+    +'<div style="font-size:13px;color:var(--t3);margin-top:6px">This resets its wear tracker back to fresh.</div>';
+  sheet.appendChild(body);
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:10px;padding:20px 20px 4px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:15px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var confirmBtn = document.createElement('button');
+  confirmBtn.textContent = 'Mark Serviced';
+  confirmBtn.style.cssText = 'flex:1;padding:14px;background:#FC4C02;border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer';
+  confirmBtn.addEventListener('click', function(){
+    if(c.dueEvery != null){ c.milesSince = 0; }
+    if(c.pct != null){ c.pct = 100; }
+    c.lastServiced = new Date().toISOString().slice(0,10);
+    sv();
+    closeServiceModal();
+    showBikeDetail(bikeId);
+    toast(c.name+' logged as serviced');
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(confirmBtn);
+  sheet.appendChild(actions);
+
+  modal.appendChild(sheet);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeServiceModal(){
+  var modal = document.getElementById('mod-SERVICE');
+  modal.classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 function openBikeEdit(){
