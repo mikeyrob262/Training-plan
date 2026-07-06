@@ -3721,41 +3721,73 @@ function greetingHTML(){
   var h = new Date().getHours();
   var greeting = h<12 ? 'Good morning' : h<17 ? 'Good afternoon' : 'Good evening';
   var name = st.name || 'Mikey';
-  return '<div style="padding:16px 16px 4px"><div style="font-size:22px;font-weight:800;color:var(--t1)">'+greeting+', '+name+'</div></div>';
+  var dateStr = new Date().toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+  return '<div style="padding:16px 16px 6px">'
+    + '<div style="font-size:13px;color:var(--t3);margin-bottom:2px">'+dateStr+'</div>'
+    + '<div style="font-size:24px;font-weight:800;color:var(--t1)">'+greeting+', '+name+'</div>'
+    + '</div>';
 }
 
-// Compact weather glance for Home - reuses the same Open-Meteo source as the
-// AI Coach and the (separate, still-broken) Weather map screen, but shows
-// only a one-line glance here rather than the full forecast UI.
-function weatherGlanceHTML(){
-  var id = 'wx-glance-'+Date.now();
+// Weather + Form stat row - two-up cards matching the visual weight of
+// "the two numbers that most determine today's ride." Weather tile is
+// clickable and jumps straight to the full Weather screen (showWeather()).
+function weatherFormRowHTML(){
+  var wxId = 'wx-stat-'+Date.now();
+
+  var activitiesForForm = (st.rides||[]).filter(function(r){ return !r.deleted; })
+    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
+  activitiesForForm.forEach(function(a){ a.load = unifiedLoad(a); });
+  var withLoad = activitiesForForm.filter(function(a){ return a.load>0; });
+  var formHTML;
+  if(withLoad.length < 5){
+    formHTML = '<div style="font-size:13px;color:var(--t2);margin-top:2px">Log more rides for a form reading</div>';
+  } else {
+    var pmc = computePMC(withLoad);
+    var tsb = Math.round(pmc[pmc.length-1].ctl - pmc[pmc.length-1].atl);
+    var formColor = tsb >= 10 ? '#5DCAA5' : tsb >= -10 ? '#4D9FFF' : tsb >= -25 ? '#EF9F27' : '#E24B4A';
+    var formLabel = tsb >= 10 ? 'Fresh, good day to push' : tsb >= -10 ? 'Steady state' : tsb >= -25 ? 'Fatigue building' : 'Prioritize recovery';
+    formHTML = '<div style="font-size:20px;font-weight:800;color:'+formColor+'">'+(tsb>=0?'+':'')+tsb+'</div>'
+      + '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+formLabel+'</div>';
+  }
+
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=temperature_2m,apparent_temperature,windspeed_10m,precipitation_probability'
+    +'&current=temperature_2m,windspeed_10m,precipitation_probability'
     +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
   .then(function(r){ return r.json(); })
   .then(function(d){
-    var el = document.getElementById(id);
+    var el = document.getElementById(wxId);
     if(!el || !d.current) return;
     var temp = Math.round(d.current.temperature_2m);
     var wind = Math.round(d.current.windspeed_10m);
     var rain = d.current.precipitation_probability;
-    el.innerHTML = temp+'&deg; &middot; wind '+wind+'mph'+(rain!=null?' &middot; '+rain+'% rain':'');
+    el.innerHTML = '<div style="font-size:20px;font-weight:800;color:var(--t1)">'+temp+'&deg;</div>'
+      + '<div style="font-size:11px;color:var(--t2);margin-top:2px">Wind '+wind+'mph'+(rain!=null?' &middot; '+rain+'% rain':'')+'</div>';
   }).catch(function(){
-    var el = document.getElementById(id);
-    if(el) el.textContent = 'Weather unavailable';
+    var el = document.getElementById(wxId);
+    if(el) el.innerHTML = '<div style="font-size:13px;color:var(--t3)">Weather unavailable</div>';
   });
-  return '<div style="font-size:13px;color:var(--t2)" id="'+id+'">Loading weather&hellip;</div>';
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 14px">'
+    + '<div id="'+wxId+'" onclick="showWeather()" style="background:var(--s2);border-radius:14px;padding:12px 14px;cursor:pointer">'
+    + '<div style="font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Weather</div>'
+    + 'Loading&hellip;</div>'
+    + '<div style="background:var(--s2);border-radius:14px;padding:12px 14px">'
+    + '<div style="font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Form</div>'
+    + formHTML
+    + '</div></div>';
 }
 
-// Live AI-generated coach note for Home - fresh every visit (no caching),
-// same context model as the full AI Coach screen but condensed to 1-2
-// sentences for a glanceable card.
+// Live AI-generated coach note - the hero card on Home. Fresh every visit
+// (no caching), same context model as the full AI Coach screen but
+// condensed to 1-2 sentences. Given hero visual treatment (purple-tinted,
+// largest text on the page) since it's the single most important thing to
+// read at a glance.
 function coachNoteHTML(){
   var id = 'coach-note-'+Date.now();
   setTimeout(function(){ fetchCoachNote(id); }, 0);
-  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px">'
-    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a855f7;margin-bottom:6px">🧠 Coach</div>'
-    + '<div id="'+id+'" style="font-size:14px;color:var(--t1);line-height:1.4">Thinking&hellip;</div>'
+  return '<div style="margin:0 16px 14px;background:linear-gradient(135deg,rgba(168,85,247,.14),rgba(168,85,247,.03));border:1px solid rgba(168,85,247,.28);border-radius:18px;padding:16px 18px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#c084fc;margin-bottom:8px">Coach</div>'
+    + '<div id="'+id+'" style="font-size:17px;font-weight:600;color:var(--t1);line-height:1.35">Thinking&hellip;</div>'
     + '</div>';
 }
 
@@ -3810,57 +3842,56 @@ function fetchCoachNote(elId){
   });
 }
 
-// Nutrition summary for today - reuses the existing getDTots() daily-totals
-// function that already powers the Nutrition tab.
-function nutritionGlanceHTML(){
-  var tots = getDTots(getTodayKey());
-  if(!tots.cal) {
-    return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
-      + '<div style="font-size:13px;color:var(--t2)">No food logged yet today</div>'
-      + '<button onclick="showNutr()" style="background:none;border:none;color:#FC4C02;font-size:13px;font-weight:700;cursor:pointer">Log food</button>'
-      + '</div>';
-  }
-  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px" onclick="showNutr()">'
-    + '<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Nutrition today</div>'
-    + '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(tots.cal)+' cal <span style="font-size:12px;font-weight:600;color:var(--t3)">&middot; '+Math.round(tots.p)+'g P &middot; '+Math.round(tots.c)+'g C &middot; '+Math.round(tots.f)+'g F</span></div>'
-    + '</div>';
-}
-
-// Weight quick-view, reviving the existing logWeightQuick() flow that was
-// present in the disabled home function but never re-surfaced.
-function weightGlanceHTML(){
-  var wLog = st.weightLog||[];
-  var latestW = wLog.length ? wLog[wLog.length-1] : null;
-  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
-    + '<div><div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Weight</div>'
-    + '<div style="font-size:18px;font-weight:800;color:var(--t1);margin-top:2px">'+(st.weight?st.weight+' lbs':'—')+(latestW?' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+latestW.date+')</span>':'')+'</div></div>'
-    + '<button onclick="logWeightQuick()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:12px;font-weight:700;padding:9px 16px;border-radius:10px;cursor:pointer;font-family:inherit">+ Log</button>'
-    + '</div>';
-}
-
 // Today's single workout card - clones today's real wo-card from the full
 // week view (with its live checkbox/swap/log buttons intact) rather than
-// rebuilding workout logic separately, so behavior stays identical.
+// rebuilding workout logic separately, so behavior stays identical. Given a
+// left accent bar to read as "the next action," distinct from the stat cards.
 function todayWorkoutHTML(){
   var today = new Date();
   var todayIdx = today.getDay()===0 ? 6 : today.getDay()-1;
   var sourceCard = document.getElementById('wc'+cw+'_'+todayIdx);
+  var label = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:0 16px 8px">Today</div>';
   if(!sourceCard){
-    return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:20px;text-align:center">'
+    return label + '<div style="margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:20px;text-align:center;border-left:3px solid var(--b1)">'
       + '<div style="font-size:14px;color:var(--t2)">No workout scheduled today</div></div>';
   }
   var clone = sourceCard.cloneNode(true);
   clone.removeAttribute('id');
-  // Re-wire ids inside the clone so its inputs/checkboxes don't collide with
-  // the hidden original (which stays live in the full week view).
   var innerIds = clone.querySelectorAll('[id]');
   innerIds.forEach(function(el){ el.id = 'today-clone-'+el.id; });
+  clone.style.borderLeft = '3px solid #FC4C02';
+  clone.style.borderTopLeftRadius = '4px';
+  clone.style.borderBottomLeftRadius = '4px';
   var wrapper = document.createElement('div');
   wrapper.appendChild(clone);
-  return '<div style="margin:0 16px 12px">'
-    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:6px">Today\\'s Workout</div>'
-    + wrapper.innerHTML
+  return label + wrapper.innerHTML;
+}
+
+// Weight + Nutrition secondary stat row - demoted below Today since these
+// are check-ins, not the day's main decision.
+function weightNutritionRowHTML(){
+  var wLog = st.weightLog||[];
+  var latestW = wLog.length ? wLog[wLog.length-1] : null;
+  var tots = getDTots(getTodayKey());
+
+  var weightTile = '<div style="background:var(--s2);border-radius:14px;padding:12px 14px">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'
+    + '<div style="font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Weight</div>'
+    + '<button onclick="logWeightQuick()" style="background:none;border:none;color:#FC4C02;font-size:11px;font-weight:700;cursor:pointer;padding:0">+ Log</button>'
+    + '</div>'
+    + '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+(st.weight?st.weight+' lbs':'—')+'</div>'
     + '</div>';
+
+  var nutritionTile = tots.cal
+    ? '<div onclick="showNutr()" style="background:var(--s2);border-radius:14px;padding:12px 14px;cursor:pointer">'
+      + '<div style="font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">Nutrition</div>'
+      + '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(tots.cal)+' cal</div>'
+      + '</div>'
+    : '<div onclick="showNutr()" style="background:var(--s2);border-radius:14px;padding:12px 14px;cursor:pointer;display:flex;align-items:center">'
+      + '<div style="font-size:12px;color:#FC4C02;font-weight:700">Log food</div>'
+      + '</div>';
+
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 14px">'+weightTile+nutritionTile+'</div>';
 }
 
 function readinessCardHTML(){
@@ -3914,13 +3945,11 @@ function renderHomeTSSAndPR(){
   if(!container) return;
   container.innerHTML = greetingHTML()
     + coachNoteHTML()
-    + '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px">' + weatherGlanceHTML() + '</div>'
-    + readinessCardHTML()
+    + weatherFormRowHTML()
+    + todayWorkoutHTML()
+    + weightNutritionRowHTML()
     + eventsCardHTML()
-    + achievementsCardHTML()
-    + weightGlanceHTML()
-    + nutritionGlanceHTML()
-    + todayWorkoutHTML();
+    + achievementsCardHTML();
   return; // rest of function disabled - duplicated on Progress screen
   var rides = st.rides||[];
 
