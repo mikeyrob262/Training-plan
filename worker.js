@@ -10233,12 +10233,52 @@ function getWeekStartDate(w){
   return d;
 }
 
+// Reverse lookup: given a real calendar date, find which plan week/day it
+// falls on and return that day's planned workout, if any. Used by the
+// Calendar screen to show upcoming planned workouts (not just completed
+// ride history) - the plan itself is stored by week-index/day-index, not
+// by real date, so this bridges the two.
+function getPlannedWorkoutForDate(dateStr){
+  var target = new Date(dateStr+'T00:00:00');
+  target.setHours(0,0,0,0);
+  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  planStart.setHours(0,0,0,0);
+  var diffDays = Math.round((target - planStart) / (24*60*60*1000));
+  if(diffDays < 0) return null;
+  var w = Math.floor(diffDays / 7) + 1;
+  var dayIdx = diffDays % 7;
+  if(w < 1 || w > 17) return null;
+  var wData = ws(w);
+  var workoutName = wData.wo && wData.wo[dayIdx] ? wData.wo[dayIdx] : null;
+  if(!workoutName) return null;
+  return { week: w, dayIdx: dayIdx, name: workoutName };
+}
+
 function getCurrentPlanWeek(){
   var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
   planStart.setHours(0,0,0,0);
   var today = new Date(); today.setHours(0,0,0,0);
   var diff = Math.floor((today - planStart) / (7*24*60*60*1000));
   return Math.max(1, diff + 1);
+}
+
+// Reverse of getWeekStartDate(): given a real calendar date, find which
+// plan week/day it falls on and return that day's planned workout name,
+// if any. Used by the Calendar screen to show upcoming planned workouts
+// (not just completed ride history) on future days.
+function getPlannedWorkoutForDate(dateStr){
+  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  planStart.setHours(0,0,0,0);
+  var target = new Date(dateStr+'T00:00:00');
+  target.setHours(0,0,0,0);
+  var diffDays = Math.round((target - planStart) / (24*60*60*1000));
+  if(diffDays < 0) return null;
+  var w = Math.floor(diffDays/7) + 1;
+  var dayIdx = diffDays % 7;
+  var wData = ws(w);
+  var name = wData.wo && wData.wo[dayIdx] ? wData.wo[dayIdx] : null;
+  if(!name) return null;
+  return {week:w, dayIdx:dayIdx, name:name};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12844,6 +12884,24 @@ function showCal(){
           var cancel=document.createElement('button');cancel.style.cssText='display:block;width:100%;text-align:center;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;margin-top:4px;font-family:inherit';cancel.textContent='Cancel';cancel.onclick=function(){pick.remove();};box.appendChild(cancel);
           pick.appendChild(box);document.body.appendChild(pick);
         };})(dayRides,ds);
+      } else {
+        // No completed ride logged for this day - show the planned workout
+        // (if any) as an outlined tile, distinct from the filled/solid
+        // tiles used for actual completed activities. Tapping opens the
+        // real Training week view where swap/edit already works, rather
+        // than duplicating that logic here.
+        var planned = getPlannedWorkoutForDate(ds);
+        if(planned && planned.name.toLowerCase().indexOf('rest')<0){
+          var pTile=document.createElement('div');
+          pTile.style.cssText='border:1px dashed var(--b2);border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
+          var pNm=document.createElement('div');
+          pNm.style.cssText='font-size:9px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
+          pNm.textContent=planned.name;
+          pTile.appendChild(pNm);
+          cell.appendChild(pTile);
+          cell.style.cursor='pointer';
+          (function(wk){cell.onclick=function(){scr.remove();GW(wk);};})(planned.week);
+        }
       }
       grid.appendChild(cell);
     }
@@ -12855,6 +12913,7 @@ function showCal(){
     [{l:'Ride',c:'#FC4C02'},{l:'Virtual',c:'#1D9E75'},{l:'Run',c:'#185FA5'},{l:'Strength',c:'#7F77DD'}].forEach(function(x){
       leg.innerHTML+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><div style="width:8px;height:8px;border-radius:2px;background:'+x.c+'"></div>'+x.l+'</div>';
     });
+    leg.innerHTML+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><div style="width:8px;height:8px;border-radius:2px;border:1px dashed var(--b2)"></div>Planned</div>';
     monthPanel.appendChild(leg);
   }
 
