@@ -3715,6 +3715,154 @@ function achievementsCardHTML(){
   return h;
 }
 
+// ===== Dashboard redesign: greeting, weather, nutrition, weight, today's workout =====
+
+function greetingHTML(){
+  var h = new Date().getHours();
+  var greeting = h<12 ? 'Good morning' : h<17 ? 'Good afternoon' : 'Good evening';
+  var name = st.name || 'Mikey';
+  return '<div style="padding:16px 16px 4px"><div style="font-size:22px;font-weight:800;color:var(--t1)">'+greeting+', '+name+'</div></div>';
+}
+
+// Compact weather glance for Home - reuses the same Open-Meteo source as the
+// AI Coach and the (separate, still-broken) Weather map screen, but shows
+// only a one-line glance here rather than the full forecast UI.
+function weatherGlanceHTML(){
+  var id = 'wx-glance-'+Date.now();
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&current=temperature_2m,apparent_temperature,windspeed_10m,precipitation_probability'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    var el = document.getElementById(id);
+    if(!el || !d.current) return;
+    var temp = Math.round(d.current.temperature_2m);
+    var wind = Math.round(d.current.windspeed_10m);
+    var rain = d.current.precipitation_probability;
+    el.innerHTML = temp+'&deg; &middot; wind '+wind+'mph'+(rain!=null?' &middot; '+rain+'% rain':'');
+  }).catch(function(){
+    var el = document.getElementById(id);
+    if(el) el.textContent = 'Weather unavailable';
+  });
+  return '<div style="font-size:13px;color:var(--t2)" id="'+id+'">Loading weather&hellip;</div>';
+}
+
+// Live AI-generated coach note for Home - fresh every visit (no caching),
+// same context model as the full AI Coach screen but condensed to 1-2
+// sentences for a glanceable card.
+function coachNoteHTML(){
+  var id = 'coach-note-'+Date.now();
+  setTimeout(function(){ fetchCoachNote(id); }, 0);
+  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#a855f7;margin-bottom:6px">🧠 Coach</div>'
+    + '<div id="'+id+'" style="font-size:14px;color:var(--t1);line-height:1.4">Thinking&hellip;</div>'
+    + '</div>';
+}
+
+function fetchCoachNote(elId){
+  var el = document.getElementById(elId);
+  if(!el) return;
+
+  var activitiesForNote = (st.rides||[]).filter(function(r){ return !r.deleted; })
+    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
+  activitiesForNote.forEach(function(a){ a.load = unifiedLoad(a); });
+  var withLoad = activitiesForNote.filter(function(a){ return a.load>0; });
+  var pmc = withLoad.length ? computePMC(withLoad) : null;
+  var tsb = pmc ? Math.round(pmc[pmc.length-1].ctl - pmc[pmc.length-1].atl) : 0;
+
+  ensureBikes();
+  var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
+    var badge = bikeStatusBadge(b);
+    return b.name+' ('+badge.label+')';
+  }).join('; ');
+
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&current=temperature_2m,windspeed_10m,winddirection_10m,precipitation_probability'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){ return r.json(); })
+  .then(function(wxData){
+    var wx = wxData && wxData.current;
+    var weatherStr = wx
+      ? Math.round(wx.temperature_2m)+'F, wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% rain':'')
+      : 'unavailable';
+
+    var prompt = 'You are a personal cycling coach. Give ONE short, direct sentence (max 25 words) of advice for today.'
+      +' TSB (form): '+tsb+(tsb<-20?' (tired)':tsb>5?' (fresh)':' (neutral)')
+      +'. Weather: '+weatherStr
+      +'. Available bikes: '+(bikeOptions||'none logged')
+      +'. If weather favors a specific bike (crosswinds, rain), recommend it by name. Be direct, no preamble, just the advice.';
+
+    return fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:100, messages:[{role:'user',content:prompt}] })
+    });
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    var text = d.content && d.content[0] && d.content[0].text;
+    var target = document.getElementById(elId);
+    if(target) target.textContent = text || 'Coach unavailable right now.';
+  })
+  .catch(function(){
+    var target = document.getElementById(elId);
+    if(target) target.textContent = 'Coach unavailable right now.';
+  });
+}
+
+// Nutrition summary for today - reuses the existing getDTots() daily-totals
+// function that already powers the Nutrition tab.
+function nutritionGlanceHTML(){
+  var tots = getDTots(getTodayKey());
+  if(!tots.cal) {
+    return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
+      + '<div style="font-size:13px;color:var(--t2)">No food logged yet today</div>'
+      + '<button onclick="showNutr()" style="background:none;border:none;color:#FC4C02;font-size:13px;font-weight:700;cursor:pointer">Log food</button>'
+      + '</div>';
+  }
+  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px" onclick="showNutr()">'
+    + '<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Nutrition today</div>'
+    + '<div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(tots.cal)+' cal <span style="font-size:12px;font-weight:600;color:var(--t3)">&middot; '+Math.round(tots.p)+'g P &middot; '+Math.round(tots.c)+'g C &middot; '+Math.round(tots.f)+'g F</span></div>'
+    + '</div>';
+}
+
+// Weight quick-view, reviving the existing logWeightQuick() flow that was
+// present in the disabled home function but never re-surfaced.
+function weightGlanceHTML(){
+  var wLog = st.weightLog||[];
+  var latestW = wLog.length ? wLog[wLog.length-1] : null;
+  return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
+    + '<div><div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Weight</div>'
+    + '<div style="font-size:18px;font-weight:800;color:var(--t1);margin-top:2px">'+(st.weight?st.weight+' lbs':'—')+(latestW?' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+latestW.date+')</span>':'')+'</div></div>'
+    + '<button onclick="logWeightQuick()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:12px;font-weight:700;padding:9px 16px;border-radius:10px;cursor:pointer;font-family:inherit">+ Log</button>'
+    + '</div>';
+}
+
+// Today's single workout card - clones today's real wo-card from the full
+// week view (with its live checkbox/swap/log buttons intact) rather than
+// rebuilding workout logic separately, so behavior stays identical.
+function todayWorkoutHTML(){
+  var today = new Date();
+  var todayIdx = today.getDay()===0 ? 6 : today.getDay()-1;
+  var sourceCard = document.getElementById('wc'+cw+'_'+todayIdx);
+  if(!sourceCard){
+    return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:20px;text-align:center">'
+      + '<div style="font-size:14px;color:var(--t2)">No workout scheduled today</div></div>';
+  }
+  var clone = sourceCard.cloneNode(true);
+  clone.removeAttribute('id');
+  // Re-wire ids inside the clone so its inputs/checkboxes don't collide with
+  // the hidden original (which stays live in the full week view).
+  var innerIds = clone.querySelectorAll('[id]');
+  innerIds.forEach(function(el){ el.id = 'today-clone-'+el.id; });
+  var wrapper = document.createElement('div');
+  wrapper.appendChild(clone);
+  return '<div style="margin:0 16px 12px">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:6px">Today\\'s Workout</div>'
+    + wrapper.innerHTML
+    + '</div>';
+}
+
 function readinessCardHTML(){
   var activities = (st.rides||[]).filter(function(r){ return !r.deleted; })
     .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
@@ -3764,7 +3912,16 @@ function readinessCardHTML(){
 function renderHomeTSSAndPR(){
   var container = document.getElementById('home-tss-pr');
   if(!container) return;
-  container.innerHTML = readinessCardHTML() + eventsCardHTML() + achievementsCardHTML(); return; // rest of function disabled - duplicated on Progress screen
+  container.innerHTML = greetingHTML()
+    + coachNoteHTML()
+    + '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px">' + weatherGlanceHTML() + '</div>'
+    + readinessCardHTML()
+    + eventsCardHTML()
+    + achievementsCardHTML()
+    + weightGlanceHTML()
+    + nutritionGlanceHTML()
+    + todayWorkoutHTML();
+  return; // rest of function disabled - duplicated on Progress screen
   var rides = st.rides||[];
 
   // Weight quick-log button (always shown, independent of rides)
