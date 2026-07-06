@@ -3618,16 +3618,61 @@ function logWeightQuick(){
   renderHomeTSSAndPR();
 }
 
+// Computes a comparable training-stress number for any activity type.
+// Cycling activities with power data already have a real TSS (Coggan formula).
+// Everything else (runs, strength, mobility, etc.) falls back to:
+//   1. hrTSS - based on avg HR relative to estimated lactate threshold HR
+//      (LTHR estimated as 88% of max HR when not otherwise known - a standard
+//      approximation, per Friel, when no formal threshold test exists)
+//   2. RPE x duration (Foster's session-RPE method) when no HR data exists
+// This lets one CTL/ATL/TSB model represent total load across every sport,
+// since fatigue from running affects cycling performance and vice versa.
+function unifiedLoad(a){
+  if(a.tss) return a.tss; // already has real power-based TSS (cycling)
+
+  var durMin = (a.movingSecs ? a.movingSecs/60 : (a.duration ? parseDurToMin(a.duration) : 0));
+  var maxHR = parseInt(st.maxHR||172);
+  var lthr = Math.round(maxHR*0.88);
+
+  if(a.avgHR && durMin){
+    // hrTSS: scales duration by intensity relative to threshold HR, using
+    // an exponential weighting similar to TrainingPeaks' hrTSS approach
+    var hrRatio = a.avgHR/lthr;
+    var intensityFactor = Math.min(1.15, hrRatio); // cap runaway values from anomalous HR spikes
+    return Math.round(durMin * intensityFactor * intensityFactor * 100/60);
+  }
+
+  if(a.rpe && durMin){
+    // Foster session-RPE: duration (min) x RPE (1-10), scaled to sit on a
+    // comparable numeric range to cycling TSS (roughly /3)
+    return Math.round((durMin * a.rpe) / 3);
+  }
+
+  return 0;
+}
+
+function parseDurToMin(durStr){
+  if(!durStr) return 0;
+  var parts = String(durStr).split(':').map(Number);
+  if(parts.length===3) return parts[0]*60+parts[1]+parts[2]/60;
+  if(parts.length===2) return parts[0]+parts[1]/60;
+  return parseFloat(durStr)||0;
+}
+
 function readinessCardHTML(){
-  var rides = (st.rides||[]).filter(function(r){ return !r.deleted && r.tss; });
-  if(rides.length < 5){
+  var activities = (st.rides||[]).filter(function(r){ return !r.deleted; })
+    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
+  activities.forEach(function(a){ a.load = unifiedLoad(a); });
+  var withLoad = activities.filter(function(a){ return a.load>0; });
+
+  if(withLoad.length < 5){
     return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px">'
       + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">Training load</div>'
-      + '<div style="font-size:14px;color:var(--t2)">Log a few more rides to see your readiness signal</div>'
+      + '<div style="font-size:14px;color:var(--t2)">Log a few more sessions to see your readiness signal</div>'
       + '</div>';
   }
 
-  var pmc = computePMC(rides);
+  var pmc = computePMC(withLoad);
   var today = pmc[pmc.length-1];
   var fitness = today.ctl, fatigue = today.atl, form = today.tsb;
 
@@ -7160,7 +7205,7 @@ function computePMC(rides){
     var key = dt.getFullYear() + '-' + (dt.getMonth()+1) + '-' + dt.getDate();
     var tss = 0;
     rides.forEach(function(r){
-      if(r.date === key) tss += (r.tss || 0);
+      if(r.date === key) tss += (r.load != null ? r.load : (r.tss || 0));
     });
     ctl = ctl + (tss - ctl) / 42;
     atl = atl + (tss - atl) / 7;
