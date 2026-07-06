@@ -10758,12 +10758,13 @@ function showBikeDetail(bikeId){
   }
 
   if((bike.components||[]).length){
-    h += '<div style="margin:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Components</div>';
+    h += '<div style="margin:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Components <span style="text-transform:none;font-weight:400">· tap to log service</span></div>';
     h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:4px 14px">';
     (bike.components||[]).forEach(function(c, ci){
       var pct = c.pct!=null ? c.pct : (c.dueEvery ? Math.max(0,100-Math.round((c.milesSince/c.dueEvery)*100)) : 100);
       var pctColor = pct>80?'#0F6E56':pct>50?'#BA7517':'#791F1F';
-      h += '<div style="padding:'+(ci>0?'10px 0':'10px 0 10px')+';'+(ci>0?'border-top:1px solid var(--b1)':'')+'">'
+      h += '<div class="garage-component-row" data-bike-id="'+bike.id+'" data-component-index="'+ci+'" onclick="serviceComponent(this.getAttribute(&quot;data-bike-id&quot;),this.getAttribute(&quot;data-component-index&quot;))" '
+        +'style="padding:'+(ci>0?'10px 0':'10px 0 10px')+';'+(ci>0?'border-top:1px solid var(--b1)':'')+';cursor:pointer">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
         +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+c.name+'</span>'
         +'<span style="font-size:13px;font-weight:800;color:'+pctColor+'">'+(c.pct!=null?pct+'%':c.milesSince+' / '+c.dueEvery+' mi')+'</span></div>'
@@ -10774,6 +10775,29 @@ function showBikeDetail(bikeId){
   }
 
   scr.innerHTML = h;
+}
+
+function serviceComponent(bikeId, componentIndex){
+  var bike = (st.bikes||[]).find(function(b){return b.id===bikeId;});
+  if(!bike) return;
+  var idx = parseInt(componentIndex, 10);
+  var c = (bike.components||[])[idx];
+  if(!c) return;
+
+  var confirmMsg = 'Mark "'+c.name+'" as serviced today? This resets its wear tracker.';
+  if(!confirm(confirmMsg)) return;
+
+  if(c.dueEvery != null){
+    c.milesSince = 0;
+  }
+  if(c.pct != null){
+    c.pct = 100;
+  }
+  c.lastServiced = new Date().toISOString().slice(0,10);
+
+  sv();
+  showBikeDetail(bikeId);
+  toast(c.name+' logged as serviced');
 }
 
 function openBikeEdit(){
