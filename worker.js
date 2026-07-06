@@ -11574,43 +11574,85 @@ function showAICoach(){
   var today = new Date();
   var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var todayName = days[today.getDay()];
-  var ctl = st.iculast&&st.iculast.ctl || 57;
-  var atl = st.iculast&&st.iculast.atl || 75;
+
+  // Use the same unified training-load model as the Home readiness card,
+  // instead of the old separate st.iculast CTL/ATL - one source of truth.
+  var activitiesForCoach = (st.rides||[]).filter(function(r){ return !r.deleted; })
+    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
+  activitiesForCoach.forEach(function(a){ a.load = unifiedLoad(a); });
+  var withLoadForCoach = activitiesForCoach.filter(function(a){ return a.load>0; });
+  var pmcForCoach = withLoadForCoach.length ? computePMC(withLoadForCoach) : null;
+  var ctl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].ctl : 0;
+  var atl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].atl : 0;
   var tsb = ctl - atl;
+
   var ftp = parseInt(st.ftp||186);
   var weight = parseFloat(st.weight||162);
   var wkg = (ftp/weight*2.20462).toFixed(2);
-  
+
   // Get this week's plan
   var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
   var dayNames2=['mon','tue','wed','thu','fri','sat','sun'];
   var todayKey = dayNames2[todayIdx];
   var todayWorkout = weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null;
-  
+
   // Get recent rides (last 7 days)
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
   var recentRides = (st.rides||[]).filter(function(r){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
-  
+
   // Get upcoming workouts this week
   var upcoming = [];
   for(var d=todayIdx+1;d<7;d++){
     if(weekData.wo&&weekData.wo[d]) upcoming.push({day:dayNames2[d],name:weekData.wo[d]});
   }
-  
+
+  // Today's nutrition so far (calories/protein/carbs/fat)
+  var todayKeyStr = getTodayKey();
+  var todayNutrition = getDTots(todayKeyStr);
+
+  // Available bikes from Garage, with maintenance status, so the Coach
+  // can actually recommend one by name instead of speaking generically.
+  ensureBikes();
+  var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
+    var badge = bikeStatusBadge(b);
+    return b.name+' ('+b.type+', '+badge.label+')';
+  }).join('; ');
+
+  // Fetch live weather (Open-Meteo, same source used elsewhere in the app),
+  // then build and send the coach prompt once weather is in hand.
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){ return r.json(); })
+  .then(function(wxData){
+    var wx = wxData && wxData.current;
+    var weatherStr = wx
+      ? Math.round(wx.temperature_2m)+'F (feels '+Math.round(wx.apparent_temperature)+'F), wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% chance of rain':'')
+      : 'unavailable';
+
+    runAICoachPrompt(weatherStr);
+  })
+  .catch(function(){ runAICoachPrompt('unavailable'); });
+
+  function runAICoachPrompt(weatherStr){
   var prompt = 'You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
     +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
-    +', CTL (fitness): '+ctl+', ATL (fatigue): '+atl+', TSB (form): '+tsb
+    +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
     +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
+    +'. TODAYS WEATHER: '+weatherStr
+    +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
+    +'. TODAYS NUTRITION SO FAR: '+Math.round(todayNutrition.cal)+' cal, '+Math.round(todayNutrition.p)+'g protein, '+Math.round(todayNutrition.c)+'g carbs, '+Math.round(todayNutrition.f)+'g fat'
     +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
-    +'. Write a concise daily briefing with 4 sections labeled: 1. TODAY 2. FORM CHECK 3. KEY FOCUS 4. NUTRITION TIP. Keep each to 2-3 sentences. Be direct and motivating.'
-  
+    +'. Write a concise daily briefing with 5 sections labeled: 1. TODAY (recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 2. FORM CHECK 3. KEY FOCUS 4. NUTRITION TIP (factor in what they have already eaten today) 5. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep each to 2-3 sentences. Be direct and motivating.'
+
+
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -11638,7 +11680,7 @@ function showAICoach(){
     body.appendChild(statsRow);
     
     // Coach text - split into sections
-    var sections = text.split(/(?=TODAY|FORM CHECK|KEY FOCUS|NUTRITION)/);
+    var sections = text.split(/(?=TODAY|FORM CHECK|KEY FOCUS|NUTRITION|WEATHER NOTE)/);
     sections.forEach(function(sec){
       if(!sec.trim()) return;
       var card=document.createElement('div');
@@ -11721,6 +11763,7 @@ function showAICoach(){
   }).catch(function(e){
     body.innerHTML='<div style="padding:20px;color:var(--t3)">Error: '+e.message+'. Check that the food proxy worker is running.</div>';
   });
+  } // end runAICoachPrompt
 }
 
 function showDropZone(){
