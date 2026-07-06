@@ -11240,6 +11240,10 @@ function renderPlans(){
     + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
     + 'New Plan</button>';
 
+  h += '<button onclick="openRacePlanUpload()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 3v12M12 3l-4 4M12 3l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>'
+    + 'Upload Race Plan</button>';
+
   scr.innerHTML = h;
 }
 
@@ -11355,6 +11359,192 @@ function openPlanDetail(planId){
   modal.appendChild(card);
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
+}
+
+function openRacePlanUpload(){
+  var planIds = Object.keys(st.plans||{});
+  if(!planIds.length){ toast('Create a plan first'); return; }
+
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:6px';
+  title.textContent = 'Upload Race Plan';
+  card.appendChild(title);
+
+  var subtitle = document.createElement('div');
+  subtitle.style.cssText = 'font-size:12px;color:var(--t3);margin-bottom:16px;line-height:1.4';
+  subtitle.textContent = 'Upload a PDF or CSV plan (e.g. Coach Parry, McMillan). It will be read and mapped onto the weeks of the plan you choose below.';
+  card.appendChild(subtitle);
+
+  // Plan selector
+  var planWrap = document.createElement('div');
+  planWrap.style.cssText = 'margin-bottom:12px';
+  var planLbl = document.createElement('div');
+  planLbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+  planLbl.textContent = 'Apply to plan';
+  var planSelect = document.createElement('select');
+  planSelect.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+  planIds.forEach(function(id){
+    var o = document.createElement('option');
+    o.value = id;
+    o.textContent = st.plans[id].name + (id===st.activePlanId?' (Active)':'');
+    planSelect.appendChild(o);
+  });
+  planWrap.appendChild(planLbl);
+  planWrap.appendChild(planSelect);
+  card.appendChild(planWrap);
+
+  // File input
+  var fileWrap = document.createElement('div');
+  fileWrap.style.cssText = 'margin-bottom:12px';
+  var fileLbl = document.createElement('div');
+  fileLbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+  fileLbl.textContent = 'Plan file (PDF or CSV)';
+  var fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.pdf,.csv,application/pdf,text/csv';
+  fileInput.style.cssText = 'width:100%;padding:8px 0;color:var(--t1);font-size:13px;font-family:inherit';
+  fileWrap.appendChild(fileLbl);
+  fileWrap.appendChild(fileInput);
+  card.appendChild(fileWrap);
+
+  var statusLine = document.createElement('div');
+  statusLine.style.cssText = 'font-size:12px;color:var(--t3);margin-bottom:8px;min-height:16px';
+  card.appendChild(statusLine);
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.onclick = function(){ closeServiceModal(); };
+
+  var uploadBtn = document.createElement('button');
+  uploadBtn.textContent = 'Parse & Apply';
+  uploadBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  uploadBtn.onclick = function(){
+    var file = fileInput.files && fileInput.files[0];
+    if(!file){ statusLine.textContent = 'Choose a file first.'; statusLine.style.color = '#E24B4A'; return; }
+    var targetPlanId = planSelect.value;
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Parsing...';
+    statusLine.style.color = 'var(--t3)';
+    statusLine.textContent = 'Reading file...';
+
+    parseRacePlanFile(file, function(err, parsedDays){
+      if(err){
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Parse & Apply';
+        statusLine.style.color = '#E24B4A';
+        statusLine.textContent = err;
+        return;
+      }
+      statusLine.style.color = 'var(--t3)';
+      statusLine.textContent = 'Applying '+parsedDays.length+' workouts to '+st.plans[targetPlanId].name+'...';
+      applyRacePlanToPlan(targetPlanId, parsedDays);
+      closeServiceModal();
+      toast('Race plan applied: '+parsedDays.length+' workouts added');
+      if(document.getElementById('PLANS').style.display!=='none') renderPlans();
+    });
+  };
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(uploadBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+// Reads the uploaded file (PDF as base64 document block, CSV as plain text),
+// sends it to the Claude proxy with instructions to return ONLY a JSON array
+// of {week, day, type, duration, notes}, and returns the parsed array via
+// callback(err, parsedDays). day is 0=Mon...6=Sun to match the app's index.
+function parseRacePlanFile(file, callback){
+  var isPDF = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  var isCSV = file.type === 'text/csv' || /\.csv$/i.test(file.name);
+  if(!isPDF && !isCSV){ callback('Please upload a PDF or CSV file.'); return; }
+
+  var reader = new FileReader();
+  reader.onerror = function(){ callback('Could not read the file.'); };
+  reader.onload = function(){
+    var promptInstructions = 'You are extracting a structured training schedule from an uploaded coaching plan (e.g. Coach Parry or McMillan). '
+      + 'Return ONLY a raw JSON array, no markdown fences, no preamble, no explanation. '
+      + 'Each element must be an object: {"week": <integer, 1-indexed>, "day": <integer, 0=Monday...6=Sunday>, "type": <short workout name like "Tempo Run" or "Zwift Intervals" or "Rest Day">, "duration": <string like "45 min", or "" if not specified>, "notes": <string with pace/effort/detail cues, or "" if none>}. '
+      + 'Include every day of every week present in the plan, using "Rest Day" for explicit rest days. If the plan spans multiple weeks, number them sequentially starting at 1 in the order they appear.';
+
+    var messages;
+    if(isPDF){
+      var base64Data = reader.result.split(',')[1];
+      messages = [{
+        role:'user',
+        content:[
+          { type:'document', source:{ type:'base64', media_type:'application/pdf', data: base64Data } },
+          { type:'text', text: promptInstructions }
+        ]
+      }];
+    } else {
+      var csvText = reader.result;
+      messages = [{
+        role:'user',
+        content: promptInstructions + (String.fromCharCode(10)+String.fromCharCode(10)) + 'Here is the CSV plan:' + (String.fromCharCode(10)+String.fromCharCode(10)) + csvText
+      }];
+    }
+
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:8000, messages: messages })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var text = d.content && d.content[0] && d.content[0].text;
+      if(!text){ callback('No response from parser. Try again.'); return; }
+      var fence = String.fromCharCode(96,96,96);
+      var cleaned = text.split(fence+'json').join('').split(fence).join('').trim();
+      var parsed;
+      try{ parsed = JSON.parse(cleaned); }
+      catch(e){ callback('Could not read the plan structure. Try a clearer file.'); return; }
+      if(!Array.isArray(parsed) || !parsed.length){ callback('No workouts found in that file.'); return; }
+      callback(null, parsed);
+    })
+    .catch(function(){ callback('Could not reach the parser. Check your connection and try again.'); });
+  };
+
+  if(isPDF) reader.readAsDataURL(file);
+  else reader.readAsText(file);
+}
+
+// Writes parsed {week, day, type, duration, notes} entries into the chosen
+// plan's weeks.swaps (the same field doSwap()/applySwap() use for per-day
+// overrides), so they render through the existing Training week UI without
+// needing a separate rendering path. Notes/duration are appended into the
+// swap label itself since swaps only stores a plain string per day.
+function applyRacePlanToPlan(planId, parsedDays){
+  var plan = st.plans[planId];
+  if(!plan) return;
+  parsedDays.forEach(function(d){
+    var week = parseInt(d.week);
+    var day = parseInt(d.day);
+    if(isNaN(week) || week<1 || isNaN(day) || day<0 || day>6) return;
+    var wk = 'w'+week;
+    if(!plan.weeks[wk]) plan.weeks[wk] = {wo:{}, nu:{}, fi:{}, str:{}, swaps:{}, ci:{}};
+    if(!plan.weeks[wk].swaps) plan.weeks[wk].swaps = {};
+    var label = (d.type||'Workout');
+    if(d.duration){ label += ' ('+d.duration+')'; }
+    plan.weeks[wk].swaps[day] = label;
+    if(!plan.weeks[wk].raceplanNotes) plan.weeks[wk].raceplanNotes = {};
+    if(d.notes){ plan.weeks[wk].raceplanNotes[day] = d.notes; }
+  });
+  sv();
 }
 
 function openPlanCreate(){
