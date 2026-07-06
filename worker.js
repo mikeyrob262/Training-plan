@@ -10895,28 +10895,138 @@ function closeServiceModal(){
 }
 
 function openBikeEdit(){
-  var name = prompt('Bike name:');
-  if(!name) return;
-  var type = prompt('Type (e.g. Race bike, Endurance bike):') || 'Bike';
-  var miles = parseFloat(prompt('Current mileage:')) || 0;
-  ensureBikes();
-  st.bikes.push({id:'bike-'+Date.now(), name:name, type:type, brand:'', groupset:'', wheelset:'', miles:miles, elevationFt:0, longestMi:0, avgSpeed:0, components:[]});
-  sv();
-  renderGarage();
-  toast('Bike added');
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Add Bike';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var nameInput = makeField('Bike name', 'e.g. Dogma F');
+  var typeInput = makeField('Type', 'e.g. Race bike, Endurance bike');
+  var milesInput = makeField('Current mileage', '0', 'number');
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Add Bike';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.addEventListener('click', function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
+    var type = typeInput.value.trim() || 'Bike';
+    var miles = parseFloat(milesInput.value) || 0;
+    ensureBikes();
+    st.bikes.push({id:'bike-'+Date.now(), name:name, type:type, brand:'', groupset:'', wheelset:'', miles:miles, elevationFt:0, longestMi:0, avgSpeed:0, components:[]});
+    sv();
+    closeServiceModal();
+    renderGarage();
+    toast('Bike added');
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 function openShoeEdit(){
-  var name = prompt('Shoe name (e.g. Brooks Ghost 15):');
-  if(!name) return;
-  var maxMiles = parseFloat(prompt('Replace after how many miles?', '400')) || 400;
-  var miles = parseFloat(prompt('Current mileage on these shoes:')) || 0;
-  if(!st.shoes) st.shoes = [];
-  st.shoes.push({name:name, miles:miles, maxMiles:maxMiles});
-  sv();
-  renderGarage();
-  toast('Shoe added');
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Add Shoe';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type, defaultVal){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    if(defaultVal!=null) input.value = defaultVal;
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var nameInput = makeField('Shoe name', 'e.g. Brooks Ghost 15');
+  var maxInput = makeField('Replace after (miles)', '400', 'number', '400');
+  var milesInput = makeField('Current mileage', '0', 'number');
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.addEventListener('click', function(){ closeServiceModal(); });
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Add Shoe';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.addEventListener('click', function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
+    var maxMiles = parseFloat(maxInput.value) || 400;
+    var miles = parseFloat(milesInput.value) || 0;
+    if(!st.shoes) st.shoes = [];
+    st.shoes.push({name:name, miles:miles, maxMiles:maxMiles});
+    sv();
+    closeServiceModal();
+    renderGarage();
+    toast('Shoe added');
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
+
 
 function getMobDay(k){
   if(!st.mob) st.mob={};
