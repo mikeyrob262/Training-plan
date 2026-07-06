@@ -7797,6 +7797,7 @@ function importRideFile(input){
             z6s: parseInt(getCol(row,'z6_secs'))||0,
             z7s: parseInt(getCol(row,'z7_secs'))||0,
             trainer: getCol(row,'trainer')==='true',
+            gearName: getCol(row,'gear')||null,
             source: 'intervals'
           };
 
@@ -10631,21 +10632,32 @@ function recomputeGearMileage(){
   if(st.bikes){
     var zwift = st.bikes.find(function(b){ return b.indoor; });
     if(zwift){
+      // Include trainer rides from both direct Strava sync and ICU CSV import -
+      // both paths now capture the trainer flag, so neither source should be
+      // silently excluded from Zwift Ride mileage.
       var indoorMiles = (st.rides||[]).filter(function(r){
-        return !r.deleted && r.trainer && r.source==='strava';
+        return !r.deleted && r.trainer && (r.source==='strava' || r.source==='intervals');
       }).reduce(function(sum,r){ return sum + (r.distance||0); }, 0);
       zwift.miles = Math.round(indoorMiles*10)/10;
     }
   }
 
-  if(st.shoes && st.stravaGearMap){
+  if(st.shoes){
     st.shoes.forEach(function(shoe){
-      var gearId = Object.keys(st.stravaGearMap).find(function(gid){
-        return st.stravaGearMap[gid] === shoe.name;
-      });
-      if(!gearId) return;
+      // Strava-synced rides: match by gear_id via the gear map fetched from Strava's API
+      var gearId = null;
+      if(st.stravaGearMap){
+        gearId = Object.keys(st.stravaGearMap).find(function(gid){
+          return st.stravaGearMap[gid] === shoe.name;
+        });
+      }
+      // ICU CSV-imported rides: ICU doesn't expose Strava's raw gear_id, but
+      // does export the gear's display name directly - match on that instead.
       var shoeMiles = (st.rides||[]).filter(function(r){
-        return !r.deleted && r.gearId === gearId;
+        if(r.deleted) return false;
+        if(gearId && r.gearId === gearId) return true;
+        if(r.gearName && r.gearName === shoe.name) return true;
+        return false;
       }).reduce(function(sum,r){ return sum + (r.distance||0); }, 0);
       if(shoeMiles > 0) shoe.miles = Math.round(shoeMiles*10)/10;
     });
