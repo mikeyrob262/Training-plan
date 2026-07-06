@@ -9251,32 +9251,6 @@ function renderRun(){
   zoneChartCard.appendChild(barWrap2);
   scr.appendChild(zoneChartCard);
 
-  // Shoe tracker
-  if(st.shoes&&st.shoes.length){
-    var shoeLbl=document.createElement('div');
-    shoeLbl.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:0 16px 8px';
-    shoeLbl.textContent='Shoe Tracker';
-    scr.appendChild(shoeLbl);
-    var shoeCard=document.createElement('div');
-    shoeCard.style.cssText='margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:12px 14px';
-    st.shoes.forEach(function(shoe,si){
-      var shoeDiv=document.createElement('div');
-      shoeDiv.style.cssText='padding:'+(si>0?'10px 0 0':'0 0 0');
-      if(si>0) shoeDiv.style.borderTop='1px solid var(--b1)';
-      var pct=Math.min(100,Math.round((shoe.miles||0)/(shoe.maxMiles||400)*100));
-      var remaining=Math.max(0,(shoe.maxMiles||400)-(shoe.miles||0));
-      var pctColor=pct>80?'#ef4444':pct>60?'#BA7517':'#0F6E56';
-      shoeDiv.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
-        +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+shoe.name+'</span>'
-        +'<span style="font-size:13px;font-weight:800;color:'+pctColor+'">'+(shoe.miles||0)+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+(shoe.maxMiles||400)+' mi</span></span></div>'
-        +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:4px"><div style="height:4px;background:'+pctColor+';border-radius:2px;width:'+pct+'%"></div></div>'
-        +'<div style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</div>';
-      shoeCard.appendChild(shoeDiv);
-    });
-    scr.appendChild(shoeCard);
-  }
-
-
 
   // Recent runs
   var histLbl=document.createElement('div');
@@ -10779,9 +10753,31 @@ function renderGarage(){
     h += '</div>';
   }
 
-  h += '<button onclick="openBikeEdit()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+  if(st.shoes && st.shoes.length){
+    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Shoes</div>';
+    h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:12px 14px">';
+    st.shoes.forEach(function(shoe, si){
+      var pct = Math.min(100, Math.round((shoe.miles||0)/(shoe.maxMiles||400)*100));
+      var remaining = Math.max(0, (shoe.maxMiles||400)-(shoe.miles||0));
+      var pctColor = pct>80?'#ef4444':pct>60?'#BA7517':'#0F6E56';
+      h += '<div style="padding:'+(si>0?'10px 0 0':'0 0 0')+';'+(si>0?'border-top:1px solid var(--b1)':'')+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+        +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+shoe.name+'</span>'
+        +'<span style="font-size:13px;font-weight:800;color:'+pctColor+'">'+(shoe.miles||0)+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+(shoe.maxMiles||400)+' mi</span></span></div>'
+        +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:4px"><div style="height:4px;background:'+pctColor+';border-radius:2px;width:'+pct+'%"></div></div>'
+        +'<div style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</div></div>';
+    });
+    h += '</div>';
+  }
+
+  h += '<div style="display:flex;gap:10px;margin:0 16px 14px">'
+    +'<button onclick="openBikeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
-    +'Add / Edit Bike</button>';
+    +'Bike</button>'
+    +'<button onclick="openShoeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    +'Shoe</button>'
+    +'</div>';
 
   scr.innerHTML = h;
 }
@@ -10908,6 +10904,18 @@ function openBikeEdit(){
   sv();
   renderGarage();
   toast('Bike added');
+}
+
+function openShoeEdit(){
+  var name = prompt('Shoe name (e.g. Brooks Ghost 15):');
+  if(!name) return;
+  var maxMiles = parseFloat(prompt('Replace after how many miles?', '400')) || 400;
+  var miles = parseFloat(prompt('Current mileage on these shoes:')) || 0;
+  if(!st.shoes) st.shoes = [];
+  st.shoes.push({name:name, miles:miles, maxMiles:maxMiles});
+  sv();
+  renderGarage();
+  toast('Shoe added');
 }
 
 function getMobDay(k){
