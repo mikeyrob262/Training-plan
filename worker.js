@@ -10675,10 +10675,10 @@ function renderGarage(){
     var badge = bikeStatusBadge(bike);
     var subtitle = bike.indoor ? bike.type : (bike.miles||0)+' mi · '+bike.type;
     var photoStyle = bike.photo
-      ? 'background-image:linear-gradient(0deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,.15) 55%,transparent 100%),url('+bike.photo+');background-size:cover;background-position:center'
+      ? 'background-image:linear-gradient(0deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,.1) 60%,transparent 100%),url('+bike.photo+');background-size:cover;background-position:center 40%'
       : 'background:linear-gradient(160deg,#2a2a2e,#1c1c1f)';
     h += '<div class="garage-bike-card" data-bike-id="'+bike.id+'" onclick="showBikeDetail(this.getAttribute(&quot;data-bike-id&quot;))" '
-      +'style="margin:0 16px 12px;border-radius:16px;overflow:hidden;position:relative;height:150px;cursor:pointer;'+photoStyle+'">'
+      +'style="margin:0 16px 12px;border-radius:16px;overflow:hidden;position:relative;height:190px;cursor:pointer;'+photoStyle+'">'
       +'<div style="position:absolute;bottom:0;left:0;right:0;padding:14px 16px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end">'
       +'<div><div style="color:#fff;font-size:16px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+bike.name+'</div>'
@@ -10698,14 +10698,18 @@ function renderGarage(){
   });
   if(needsAttention.length){
     h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Needs attention</div>';
-    h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:12px 14px">';
+    h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;overflow:hidden">';
     needsAttention.forEach(function(n,i){
-      h += '<div style="font-size:13px;color:var(--t1);padding:'+(i>0?'8px 0 0':'0')+';'+(i>0?'border-top:1px solid var(--b1)':'')+'">'+n+'</div>';
+      h += '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;'+(i>0?'border-top:1px solid var(--b1)':'')+'">'
+        +'<div style="width:3px;height:18px;background:#E24B4A;border-radius:2px;flex-shrink:0"></div>'
+        +'<div style="font-size:13px;color:var(--t1)">'+n+'</div></div>';
     });
     h += '</div>';
   }
 
-  h += '<button onclick="openBikeEdit()" style="display:block;width:calc(100% - 32px);margin:0 16px 14px;padding:15px;background:#FC4C02;border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">+ Add / Edit Bike</button>';
+  h += '<button onclick="openBikeEdit()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:calc(100% - 32px);margin:0 16px 14px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    +'Add / Edit Bike</button>';
 
   scr.innerHTML = h;
 }
@@ -10718,8 +10722,8 @@ function showBikeDetail(bikeId){
     +'<button onclick="renderGarage()" style="background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer">&larr; Garage</button></div>';
 
   if(bike.photo){
-    h += '<div style="margin:8px 16px 16px;border-radius:16px;overflow:hidden;height:180px;'
-      +'background-image:linear-gradient(0deg,rgba(0,0,0,.6) 0%,transparent 40%),url('+bike.photo+');background-size:cover;background-position:center">'
+    h += '<div style="margin:8px 16px 16px;border-radius:16px;overflow:hidden;height:200px;'
+      +'background-image:linear-gradient(0deg,rgba(0,0,0,.55) 0%,transparent 40%),url('+bike.photo+');background-size:cover;background-position:center 40%">'
       +'</div>';
   }
 
