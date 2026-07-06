@@ -290,12 +290,12 @@ window.parseFitFile = function(arrayBuffer, callback) {
     </div>
 
   </div>
-  <div class="dots" id="dots"><div id="pd1" class="dot" onclick="GW(1)"></div><div id="pd2" class="dot" onclick="GW(2)"></div><div id="pd3" class="dot" onclick="GW(3)"></div><div id="pd4" class="dot" onclick="GW(4)"></div><div id="pd5" class="dot" onclick="GW(5)"></div><div id="pd6" class="dot" onclick="GW(6)"></div><div id="pd7" class="dot" onclick="GW(7)"></div><div id="pd8" class="dot" onclick="GW(8)"></div><div id="pd9" class="dot" onclick="GW(9)"></div><div id="pd10" class="dot" onclick="GW(10)"></div><div id="pd11" class="dot" onclick="GW(11)"></div><div id="pd12" class="dot" onclick="GW(12)"></div><div id="pd13" class="dot" onclick="GW(13)"></div><div id="pd14" class="dot" onclick="GW(14)"></div><div id="pd15" class="dot" onclick="GW(15)"></div><div id="pd16" class="dot" onclick="GW(16)"></div><div id="pd17" class="dot" onclick="GW(17)"></div></div>
+
 </div>
 
 <div id="TRAIN">
 <div id="home-tss-pr"></div>
-<div id="W1" class="wk">
+<div id="W1" class="wk" style='display:none'>
 <div class="goal"><div class="goal-lbl">Week Goal</div><div class="goal-txt">Build the habit. Easy stays easy. Hit protein every day.</div></div>
 <div class="sec-title">Training Schedule</div>
 <div class="wo-card" id="wc1_0">
@@ -2927,7 +2927,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="pk-bg" id="pk-bg"></div>
 <div class="pk-sheet" id="pk-sheet">
   <div style="font-size:12px;font-weight:700;color:var(--t3);padding:8px 14px 4px;text-transform:uppercase;letter-spacing:.05em">Jump to Week</div>
-  <div class="pk-grid" id="picker-grid"><div class="pk-it" onclick="GW(1);closePk()"><div class="pk-n">1</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(2);closePk()"><div class="pk-n">2</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(3);closePk()"><div class="pk-n">3</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(4);closePk()"><div class="pk-n">4</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(5);closePk()"><div class="pk-n">5</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(6);closePk()"><div class="pk-n">6</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(7);closePk()"><div class="pk-n">7</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(8);closePk()"><div class="pk-n">8</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(9);closePk()"><div class="pk-n">9</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(10);closePk()"><div class="pk-n">10</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(11);closePk()"><div class="pk-n">11</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(12);closePk()"><div class="pk-n">12</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(13);closePk()"><div class="pk-n">13</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(14);closePk()"><div class="pk-n">14</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(15);closePk()"><div class="pk-n">15</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(16);closePk()"><div class="pk-n">16</div><div class="pk-p">Phase 4</div></div><div class="pk-it" onclick="GW(17);closePk()"><div class="pk-n">17</div><div class="pk-p">Phase 4</div></div></div>
+  <div class="pk-grid" id="picker-grid"><div class="pk-it" onclick="GW(1, true);closePk()"><div class="pk-n">1</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(2, true);closePk()"><div class="pk-n">2</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(3, true);closePk()"><div class="pk-n">3</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(4, true);closePk()"><div class="pk-n">4</div><div class="pk-p">Phase 1</div></div><div class="pk-it" onclick="GW(5, true);closePk()"><div class="pk-n">5</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(6, true);closePk()"><div class="pk-n">6</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(7, true);closePk()"><div class="pk-n">7</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(8, true);closePk()"><div class="pk-n">8</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(9, true);closePk()"><div class="pk-n">9</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(10, true);closePk()"><div class="pk-n">10</div><div class="pk-p">Phase 2</div></div><div class="pk-it" onclick="GW(11, true);closePk()"><div class="pk-n">11</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(12, true);closePk()"><div class="pk-n">12</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(13, true);closePk()"><div class="pk-n">13</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(14, true);closePk()"><div class="pk-n">14</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(15, true);closePk()"><div class="pk-n">15</div><div class="pk-p">Phase 3</div></div><div class="pk-it" onclick="GW(16, true);closePk()"><div class="pk-n">16</div><div class="pk-p">Phase 4</div></div><div class="pk-it" onclick="GW(17, true);closePk()"><div class="pk-n">17</div><div class="pk-p">Phase 4</div></div></div>
 </div>
 
 <div class="modal-bg" id="mod-A"></div>
@@ -3536,7 +3536,7 @@ function updDots(){
     var s=ws(w),d=Object.values(s.wo).filter(Boolean).length;
     var wc=getWC(w)||6;
     var cls='dot'+(w===cw?' cur':(d>=wc&&wc>0?' done':''));
-    html+='<div class="'+cls+'" onclick="GW('+w+')" title="Week '+w+'"></div>';
+    html+='<div class="'+cls+'" onclick="GW('+w+', true)" title="Week '+w+'"></div>';
   }
   row.innerHTML=html;
 }
@@ -4036,17 +4036,22 @@ function renderHomeTSSAndPR(){
   container.innerHTML = weightHtml + h;
 }
 
-function GW(w){
+function GW(w, revealWeek){
   if(w<1)return;
   var old=document.getElementById('W'+cw);
   if(old)old.style.display='none';
   cw=w;
   var nw=document.getElementById('W'+w);
   if(nw){
-    nw.style.display='block';
+    // Only actually show the full week schedule block when explicitly
+    // requested (e.g. tapping a planned day in Calendar). Normal app
+    // loads/syncs call GW() constantly just to keep cw and the dashboard
+    // (renderHomeTSSAndPR) current - showing the week block every time
+    // that happens is what caused the full week to always be visible on
+    // Home, defeating the point of the redesigned single-day dashboard.
+    nw.style.display = revealWeek ? 'block' : 'none';
   } else {
-    // Week beyond 17 - render dynamically using week 17 template
-    renderDynWeek(w);
+    if(revealWeek) renderDynWeek(w);
   }
   showTrain();
   renderHomeTSSAndPR();
@@ -4190,7 +4195,7 @@ function openPk(){
     var dateRange=months[weekMon.getMonth()]+' '+weekMon.getDate()+' – '+
       (weekMon.getMonth()!==weekEnd.getMonth()?months[weekEnd.getMonth()]+' ':'')+weekEnd.getDate();
     var isCurrent=w===getCurrentPlanWeek();
-    html+='<div style="padding:10px 14px;border-bottom:1px solid var(--b1);cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:'+(w===cw?'rgba(252,76,2,.08)':'')+'" onclick="GW('+w+');closePk()">'
+    html+='<div style="padding:10px 14px;border-bottom:1px solid var(--b1);cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:'+(w===cw?'rgba(252,76,2,.08)':'')+'" onclick="GW('+w+', true);closePk()">'
       +'<div>'
       +'<span style="font-size:13px;font-weight:700;color:'+(w===cw?'#FC4C02':'var(--t1)')+'">Week '+w+'</span>'
       +(isCurrent?'<span style="margin-left:6px;font-size:10px;background:#FC4C02;color:white;padding:1px 6px;border-radius:8px">NOW</span>':'')
@@ -4199,7 +4204,7 @@ function openPk(){
       +(hasData?'<span style="font-size:11px;color:#00C896;font-weight:600">'+d+' done</span>':'')
       +'</div>';
   }
-  html+='<div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;opacity:.6;border-top:1px dashed var(--b2)" onclick="GW('+(maxW+1)+');closePk()">'
+  html+='<div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;opacity:.6;border-top:1px dashed var(--b2)" onclick="GW('+(maxW+1)+', true);closePk()">'
     +'<span style="font-size:13px;font-weight:700;color:var(--t2)">+ Add Week '+(maxW+1)+'</span></div>';
   grid.innerHTML=html;
   // Add transparent overlay to catch outside taps
@@ -12900,7 +12905,7 @@ function showCal(){
           pTile.appendChild(pNm);
           cell.appendChild(pTile);
           cell.style.cursor='pointer';
-          (function(wk){cell.onclick=function(){scr.remove();GW(wk);};})(planned.week);
+          (function(wk){cell.onclick=function(){scr.remove();GW(wk, true);};})(planned.week);
         }
       }
       grid.appendChild(cell);
@@ -13814,8 +13819,8 @@ window.onload = function(){
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
-  var pvBtn=document.getElementById('btn-pv'); if(pvBtn) pvBtn.setAttribute('onclick', 'GW(cw-1)');
-  var nxBtn=document.getElementById('btn-nx'); if(nxBtn) nxBtn.setAttribute('onclick', 'GW(cw+1)');
+  var pvBtn=document.getElementById('btn-pv'); if(pvBtn) pvBtn.setAttribute('onclick', 'GW(cw-1, true)');
+  var nxBtn=document.getElementById('btn-nx'); if(nxBtn) nxBtn.setAttribute('onclick', 'GW(cw+1, true)');
   // Jump to current plan week after Firebase loads
   setTimeout(function(){
     var w = getCurrentPlanWeek();
