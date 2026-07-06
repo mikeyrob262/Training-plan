@@ -11228,7 +11228,7 @@ function renderPlans(){
     var plan = st.plans[id];
     var isActive = id === st.activePlanId;
     var weekCount = Object.keys(plan.weeks||{}).length;
-    h += '<div onclick="switchPlan(\\''+id+'\\');renderPlans();" style="padding:'+(pi>0?'12px 0':'12px 0')+';'+(pi>0?'border-top:1px solid var(--b1)':'')+';cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
+    h += '<div onclick="openPlanDetail(\\''+id+'\\');" style="padding:'+(pi>0?'12px 0':'12px 0')+';'+(pi>0?'border-top:1px solid var(--b1)':'')+';cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
       + '<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+plan.name+'</div>'
       + '<div style="font-size:12px;color:var(--t3);margin-top:2px">Starts '+plan.planStart+' &middot; '+weekCount+' week'+(weekCount===1?'':'s')+' logged</div></div>'
       + (isActive ? '<div style="background:#0F6E5622;color:#5DCAA5;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">Active</div>' : '')
@@ -11241,6 +11241,120 @@ function renderPlans(){
     + 'New Plan</button>';
 
   scr.innerHTML = h;
+}
+
+function openPlanDetail(planId){
+  var plan = st.plans && st.plans[planId];
+  if(!plan) return;
+  var isActive = planId === st.activePlanId;
+  var planCount = Object.keys(st.plans||{}).length;
+
+  var modal = document.getElementById('mod-SERVICE');
+  modal.innerHTML = '';
+  modal.style.cssText = 'align-items:center;justify-content:center;padding:20px';
+
+  var card = document.createElement('div');
+  card.style.cssText = 'background:var(--s1);border-radius:16px;width:100%;max-width:320px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.3)';
+
+  var title = document.createElement('div');
+  title.style.cssText = 'font-size:17px;font-weight:800;color:var(--t1);margin-bottom:16px';
+  title.textContent = 'Edit Plan';
+  card.appendChild(title);
+
+  function makeField(labelText, placeholder, type, defaultVal){
+    var wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:12px';
+    var lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px';
+    lbl.textContent = labelText;
+    var input = document.createElement('input');
+    input.type = type||'text';
+    input.placeholder = placeholder||'';
+    if(defaultVal!=null) input.value = defaultVal;
+    input.style.cssText = 'width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit';
+    wrap.appendChild(lbl);
+    wrap.appendChild(input);
+    card.appendChild(wrap);
+    return input;
+  }
+
+  var nameInput = makeField('Plan name', 'e.g. Base Building, Race Prep', 'text', plan.name);
+  var startInput = makeField('Start date', '', 'date', plan.planStart);
+
+  if(isActive){
+    var badge = document.createElement('div');
+    badge.style.cssText = 'display:inline-block;background:#0F6E5622;color:#5DCAA5;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;margin-bottom:12px';
+    badge.textContent = 'Active';
+    card.appendChild(badge);
+  }
+
+  var actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  var cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer';
+  cancelBtn.onclick = function(){ closeServiceModal(); };
+
+  var saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save';
+  saveBtn.style.cssText = 'flex:1;padding:11px;background:#FC4C02;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer';
+  saveBtn.onclick = function(){
+    var name = nameInput.value.trim();
+    if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
+    var startDate = startInput.value;
+    if(!startDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate)){ startInput.style.borderColor='#E24B4A'; return; }
+    plan.name = name;
+    plan.planStart = startDate;
+    sv();
+    closeServiceModal();
+    renderPlans();
+    toast('Plan updated');
+  };
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  card.appendChild(actions);
+
+  var secondaryActions = document.createElement('div');
+  secondaryActions.style.cssText = 'display:flex;gap:8px;margin-top:8px';
+
+  if(!isActive){
+    var switchBtn = document.createElement('button');
+    switchBtn.textContent = 'Switch to Active';
+    switchBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:#5DCAA5;font-size:14px;font-weight:700;cursor:pointer';
+    switchBtn.onclick = function(){
+      switchPlan(planId);
+      closeServiceModal();
+      renderPlans();
+      toast('Switched to '+plan.name);
+    };
+    secondaryActions.appendChild(switchBtn);
+  }
+
+  var deleteBtn = document.createElement('button');
+  deleteBtn.textContent = 'Delete Plan';
+  deleteBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:#E24B4A;font-size:14px;font-weight:700;cursor:pointer';
+  deleteBtn.onclick = function(){
+    if(planCount<=1){ toast('Cannot delete your only plan'); return; }
+    if(isActive){ toast('Switch to another plan before deleting this one'); return; }
+    if(deleteBtn.textContent==='Delete Plan'){
+      deleteBtn.textContent = 'Tap again to confirm';
+      return;
+    }
+    delete st.plans[planId];
+    sv();
+    closeServiceModal();
+    renderPlans();
+    toast('Plan deleted');
+  };
+  secondaryActions.appendChild(deleteBtn);
+
+  card.appendChild(secondaryActions);
+
+  modal.appendChild(card);
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
 function openPlanCreate(){
