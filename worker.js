@@ -11229,8 +11229,7 @@ function renderPlans(){
     var isActive = id === st.activePlanId;
     var weekCount = Object.keys(plan.weeks||{}).length;
     h += '<div onclick="openPlanDetail(\\''+id+'\\');" style="padding:'+(pi>0?'12px 0':'12px 0')+';'+(pi>0?'border-top:1px solid var(--b1)':'')+';cursor:pointer;display:flex;align-items:center;justify-content:space-between">'
-      + '<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+plan.name+'</div>'
-      + '<div style="font-size:12px;color:var(--t3);margin-top:2px">Starts '+plan.planStart+' &middot; '+weekCount+' week'+(weekCount===1?'':'s')+' logged</div></div>'
+      + '<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+plan.name+'</div></div>'
       + (isActive ? '<div style="background:#0F6E5622;color:#5DCAA5;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px">Active</div>' : '')
       + '</div>';
   });
