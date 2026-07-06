@@ -12782,7 +12782,400 @@ function fetchStravaGPS(stravaId, rideIndex) {
   } else { doFetch(st.stravaToken); }
 }
 
+// New tabbed Weather Coach shell. Overview and Map are real; Ride Planner,
+// Alerts are placeholders for a future session. History reuses the
+// existing ride-list/GPS-map feature (showWeatherHistory) unchanged.
+var weatherActiveTab = 'overview';
+
 function showWeather(){
+  var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
+  var scr=document.createElement('div');
+  scr.id='WEATHER-SCREEN';
+  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:150;display:flex;flex-direction:column;overflow:hidden';
+
+  var hdr=document.createElement('div');
+  hdr.style.cssText='background:#378ADD;padding:14px 16px 0;flex-shrink:0';
+  var hdrTop=document.createElement('div');
+  hdrTop.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:12px';
+  var backBtn=document.createElement('button');
+  backBtn.innerHTML='&lsaquo;';
+  backBtn.style.cssText='background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1';
+  backBtn.onclick=function(){ scr.remove(); };
+  var titleEl=document.createElement('div');
+  titleEl.style.cssText='font-size:16px;font-weight:800;color:#fff';
+  titleEl.textContent='Weather Coach';
+  hdrTop.appendChild(backBtn);hdrTop.appendChild(titleEl);
+  hdr.appendChild(hdrTop);
+
+  var tabsRow=document.createElement('div');
+  tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;-webkit-overflow-scrolling:touch';
+  var tabDefs=[
+    {id:'overview',label:'Overview'},
+    {id:'map',label:'Map'},
+    {id:'planner',label:'Ride Planner'},
+    {id:'alerts',label:'Alerts'},
+    {id:'history',label:'History'}
+  ];
+  var tabBtns={};
+  tabDefs.forEach(function(t){
+    var btn=document.createElement('button');
+    btn.textContent=t.label;
+    btn.style.cssText='flex-shrink:0;padding:7px 14px;border-radius:20px;border:none;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap';
+    btn.onclick=function(){ weatherActiveTab=t.id; renderWeatherTabs(); };
+    tabBtns[t.id]=btn;
+    tabsRow.appendChild(btn);
+  });
+  hdr.appendChild(tabsRow);
+
+  var body=document.createElement('div');
+  body.id='wx-tab-body';
+  body.style.cssText='flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  scr.appendChild(hdr);
+  scr.appendChild(body);
+  document.body.appendChild(scr);
+
+  function updateTabStyles(){
+    tabDefs.forEach(function(t){
+      var active=t.id===weatherActiveTab;
+      tabBtns[t.id].style.background=active?'#fff':'rgba(255,255,255,.18)';
+      tabBtns[t.id].style.color=active?'#378ADD':'#fff';
+    });
+  }
+
+  function renderWeatherTabs(){
+    updateTabStyles();
+    body.innerHTML='';
+    if(weatherActiveTab==='overview') renderWeatherOverviewTab(body);
+    else if(weatherActiveTab==='map') renderWeatherMapTab(body);
+    else if(weatherActiveTab==='history') renderWeatherHistoryTab(body);
+    else renderWeatherComingSoonTab(body, weatherActiveTab);
+  }
+
+  renderWeatherTabs();
+}
+
+function renderWeatherComingSoonTab(body, tabId){
+  var labelMap={planner:'Ride Planner', alerts:'Alerts'};
+  var label=labelMap[tabId]||tabId;
+  body.innerHTML='<div style="padding:60px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:15px;font-weight:700;margin-bottom:8px">'+label+' is coming soon</div>'
+    +'<div style="font-size:13px;line-height:1.5">This tab is planned but not built yet.</div>'
+    +'</div>';
+}
+
+// Launches the existing full ride-list/GPS-map feature as its own overlay
+// on top of the tab shell, rather than refactoring ~380 lines of working
+// chart/map code to render inline - zero risk to what already works.
+function renderWeatherHistoryTab(body){
+  body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:28px;margin-bottom:10px">&#128197;</div>'
+    +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Ride weather history</div>'
+    +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Browse past rides with weather conditions, charts, and route maps.</div>'
+    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#378ADD;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Open Ride History</button>'
+    +'</div>';
+}
+
+// AI Ride Score, recommended bike, best departure window, clothing and
+// hydration guidance - all derived from live weather + gear + athlete
+// stats, in one glanceable screen instead of scattered tiles/text.
+function renderWeatherOverviewTab(body){
+  body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:28px;margin-bottom:10px">&#9728;&#65039;</div>'
+    +'<div style="font-size:14px;font-weight:600">Loading conditions&hellip;</div>'
+    +'</div>';
+
+  ensureBikes();
+  var ftp=parseInt(st.ftp||186);
+  var weight=parseFloat(st.weight||162);
+
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m'
+    +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,precipitation_probability,weathercode'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){ return r.json(); })
+  .then(function(wxData){
+    renderOverviewContent(body, wxData, ftp, weight);
+  })
+  .catch(function(){
+    body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather unavailable right now.</div>';
+  });
+}
+
+function renderOverviewContent(body, wxData, ftp, weight){
+  var cur=wxData&&wxData.current;
+  var hourly=wxData&&wxData.hourly;
+  if(!cur){ body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather unavailable right now.</div>'; return; }
+
+  var dirArr=['N','NE','E','SE','S','SW','W','NW'];
+  var windDir=dirArr[Math.round((cur.winddirection_10m||0)/45)%8];
+  var temp=Math.round(cur.temperature_2m);
+  var feelsLike=Math.round(cur.apparent_temperature);
+  var wind=Math.round(cur.windspeed_10m);
+  var gust=Math.round(cur.windgusts_10m||cur.windspeed_10m);
+  var rainPct=cur.precipitation_probability!=null?cur.precipitation_probability:0;
+
+  // Simple 0-100 Ride Score: starts at 100, deducts for wind, gusts, rain
+  // risk, and extreme temps. Not a black box - the deductions are shown
+  // as plain-language reasons underneath the score.
+  var score=100;
+  var reasons=[];
+  if(wind>=20){ score-=25; reasons.push('Sustained winds over 20mph'); }
+  else if(wind>=12){ score-=10; reasons.push('Breezy conditions ('+wind+'mph)'); }
+  if(gust>=30){ score-=15; reasons.push('Gusts up to '+gust+'mph'); }
+  if(rainPct>=60){ score-=30; reasons.push(rainPct+'% chance of rain'); }
+  else if(rainPct>=30){ score-=10; reasons.push(rainPct+'% chance of rain'); }
+  if(temp>=90){ score-=20; reasons.push('Heat risk ('+temp+'F)'); }
+  else if(temp<=35){ score-=20; reasons.push('Cold conditions ('+temp+'F)'); }
+  score=Math.max(0,Math.min(100,score));
+  var scoreColor=score>=75?'#1D9E75':score>=50?'#BA7517':'#E24B4A';
+  var scoreLabel=score>=75?'Great day to ride':score>=50?'Rideable with care':'Tough conditions';
+
+  // Recommend a bike using existing Garage data + maintenance status,
+  // preferring the more stable/aero-neutral bike in higher wind.
+  var bikes=(st.bikes||[]).filter(function(b){ return !b.indoor; });
+  var recommendedBike=null, bikeReason='';
+  if(bikes.length){
+    var windy=wind>=15||gust>=25;
+    var sorted=bikes.slice().sort(function(a,b){
+      var aStable=/roadmachine|endurance/i.test(a.type||a.name||'')?1:0;
+      var bStable=/roadmachine|endurance/i.test(b.type||b.name||'')?1:0;
+      if(windy) return bStable-aStable;
+      return aStable-bStable;
+    });
+    recommendedBike=sorted[0];
+    var badge=bikeStatusBadge(recommendedBike);
+    if(badge.label && /due|overdue|service/i.test(badge.label)){
+      var nextChoice=sorted.find(function(b){ return b.id!==recommendedBike.id && !/due|overdue|service/i.test(bikeStatusBadge(b).label||''); });
+      if(nextChoice){ recommendedBike=nextChoice; bikeReason='(next pick, other bike needs service)'; }
+    }
+    if(!bikeReason) bikeReason=windy?'More stable in crosswinds':'Conditions favor your race bike';
+  }
+
+  // Best departure window - scan hourly data for the best 2-3hr block
+  // in daylight hours (6am-8pm) balancing low wind + low rain.
+  var bestWindow=null;
+  if(hourly && hourly.time){
+    var now=new Date();
+    var candidates=[];
+    for(var i=0;i<hourly.time.length;i++){
+      var hourDate=new Date(hourly.time[i]);
+      if(hourDate<now) continue;
+      var hr=hourDate.getHours();
+      if(hr<6||hr>20) continue;
+      var hWind=hourly.windspeed_10m[i]||0;
+      var hRain=hourly.precipitation_probability[i]||0;
+      var hScore=100-hWind*2-hRain;
+      candidates.push({hour:hr,score:hScore,wind:hWind,rain:hRain});
+    }
+    candidates.sort(function(a,b){ return b.score-a.score; });
+    if(candidates.length) bestWindow=candidates[0];
+  }
+  var departureStr=bestWindow?formatHour12(bestWindow.hour):null;
+
+  // Clothing suggestion from feels-like temp - simple threshold ladder,
+  // consistent with typical cycling kit guidance.
+  var clothing;
+  if(feelsLike>=80) clothing='Light jersey, minimal layers, sunscreen';
+  else if(feelsLike>=65) clothing='Short sleeve jersey and shorts';
+  else if(feelsLike>=50) clothing='Arm warmers or light long sleeve';
+  else if(feelsLike>=35) clothing='Thermal jacket, full finger gloves';
+  else clothing='Heavy thermal layers, shoe covers, thermal gloves';
+
+  var hydrationNote = temp>=80
+    ? 'Bring 2 bottles minimum, add electrolytes.'
+    : temp>=60
+      ? 'One bottle should cover a shorter ride, two for anything over 90 min.'
+      : 'Easy to under-drink in cool weather - set a reminder to sip regularly.';
+
+  body.innerHTML='';
+
+  var scoreCard=document.createElement('div');
+  scoreCard.style.cssText='margin:16px;background:var(--s2);border-radius:18px;padding:20px;border:1px solid var(--b1);text-align:center';
+  scoreCard.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:6px">AI Ride Score</div>'
+    +'<div style="font-size:48px;font-weight:800;color:'+scoreColor+';line-height:1">'+score+'</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--t1);margin-top:4px">'+scoreLabel+'</div>'
+    +(reasons.length?'<div style="font-size:12px;color:var(--t3);margin-top:8px;line-height:1.5">'+reasons.join(' &middot; ')+'</div>':'<div style="font-size:12px;color:var(--t3);margin-top:8px">Clear conditions across the board</div>');
+  body.appendChild(scoreCard);
+
+  var condRow=document.createElement('div');
+  condRow.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 12px';
+  [
+    {l:'TEMP',v:temp+'&deg;F',s:'Feels '+feelsLike+'&deg;'},
+    {l:'WIND',v:wind+'mph',s:windDir+(gust>wind+8?' gust '+gust:'')},
+    {l:'RAIN',v:rainPct+'%',s:rainPct>=30?'Bring a shell':'Low risk'}
+  ].forEach(function(c){
+    var card=document.createElement('div');
+    card.style.cssText='background:var(--s2);border-radius:12px;padding:10px;text-align:center;border:1px solid var(--b1)';
+    card.innerHTML='<div style="font-size:10px;color:var(--t3);font-weight:700">'+c.l+'</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--t1)">'+c.v+'</div>'
+      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+c.s+'</div>';
+    condRow.appendChild(card);
+  });
+  body.appendChild(condRow);
+
+  if(recommendedBike){
+    var bikeCard=document.createElement('div');
+    bikeCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
+    bikeCard.innerHTML='<div style="font-size:24px">&#128692;</div>'
+      +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Recommended Bike</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--t1)">'+recommendedBike.name+'</div>'
+      +'<div style="font-size:12px;color:var(--t3)">'+bikeReason+'</div></div>';
+    body.appendChild(bikeCard);
+  }
+
+  if(departureStr){
+    var depCard=document.createElement('div');
+    depCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
+    depCard.innerHTML='<div style="font-size:24px">&#9200;</div>'
+      +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Best Departure</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--t1)">'+departureStr+'</div>'
+      +'<div style="font-size:12px;color:var(--t3)">Lower wind and rain risk than later today</div></div>';
+    body.appendChild(depCard);
+  }
+
+  var clothingCard=document.createElement('div');
+  clothingCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
+  clothingCard.innerHTML='<div style="font-size:24px">&#129508;</div>'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Clothing</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+clothing+'</div></div>';
+  body.appendChild(clothingCard);
+
+  var hydrationCard=document.createElement('div');
+  hydrationCard.style.cssText='margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
+  hydrationCard.innerHTML='<div style="font-size:24px">&#128167;</div>'
+    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Hydration</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+hydrationNote+'</div></div>';
+  body.appendChild(hydrationCard);
+}
+
+function formatHour12(hr){
+  var period=hr>=12?'PM':'AM';
+  var h12=hr%12; if(h12===0) h12=12;
+  return h12+':00 '+period;
+}
+
+// Map tab: renders the most recent GPS route with wind-direction arrows
+// placed at intervals, colored by whether that leg is a headwind, tailwind,
+// or crosswind relative to current conditions. This is the foundational
+// piece; tap-for-conditions-at-a-point and animated overlay are not yet
+// built and are called out as coming soon below the map.
+var weatherMapInstance=null;
+
+function renderWeatherMapTab(body){
+  body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:28px;margin-bottom:10px">&#128506;&#65039;</div>'
+    +'<div style="font-size:14px;font-weight:600">Loading route and wind data&hellip;</div>'
+    +'</div>';
+
+  var routeRide=(st.rides||[]).filter(function(r){
+    var s=r.sportType||r.type||'';
+    return !/virtual|weight|strength|walk/i.test(s) && r.gpsLats && r.gpsLats.length>1;
+  }).slice().sort(function(a,b){
+    var da=(a.date||'').replace(/-/g,'');
+    var db=(b.date||'').replace(/-/g,'');
+    return db>da?1:db<da?-1:0;
+  })[0];
+
+  if(!routeRide){
+    body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+      +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">No GPS routes yet</div>'
+      +'<div style="font-size:13px;line-height:1.5">Log an outdoor ride with GPS data to see wind conditions mapped along your route.</div>'
+      +'</div>';
+    return;
+  }
+
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&current=windspeed_10m,winddirection_10m,windgusts_10m'
+    +'&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){ return r.json(); })
+  .then(function(wxData){
+    renderMapContent(body, routeRide, wxData&&wxData.current);
+  })
+  .catch(function(){
+    renderMapContent(body, routeRide, null);
+  });
+}
+
+function renderMapContent(body, ride, wind){
+  body.innerHTML='';
+
+  var noteCard=document.createElement('div');
+  noteCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:12px 14px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.5';
+  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with current wind conditions'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Arrows show wind direction at points along the route, colored by how it would hit you at that heading.';
+  body.appendChild(noteCard);
+
+  var mapCard=document.createElement('div');
+  mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
+  var mapId='wxmap-overview';
+  mapCard.innerHTML='<div id="'+mapId+'" style="height:320px"></div>';
+  body.appendChild(mapCard);
+
+  var legend=document.createElement('div');
+  legend.style.cssText='display:flex;gap:14px;justify-content:center;margin:0 16px 16px;flex-wrap:wrap';
+  [
+    {c:'#E24B4A',l:'Headwind'},
+    {c:'#1D9E75',l:'Tailwind'},
+    {c:'#BA7517',l:'Crosswind'}
+  ].forEach(function(item){
+    var pill=document.createElement('div');
+    pill.style.cssText='display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)';
+    pill.innerHTML='<div style="width:10px;height:10px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
+    legend.appendChild(pill);
+  });
+  body.appendChild(legend);
+
+  var comingSoon=document.createElement('div');
+  comingSoon.style.cssText='margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.6';
+  comingSoon.innerHTML='<b style="color:var(--t1)">Coming soon to this tab:</b> tap-anywhere-on-map for conditions at that exact point, animated wind flow overlay, and gust-location markers.';
+  body.appendChild(comingSoon);
+
+  setTimeout(function(){
+    var el=document.getElementById(mapId);
+    if(!el||typeof L==='undefined') return;
+    if(weatherMapInstance){ try{weatherMapInstance.remove();}catch(e){} weatherMapInstance=null; try{delete window['_wxmap_overview'];}catch(e){} }
+
+    var lats=ride.gpsLats, lons=ride.gpsLons;
+    var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    var pts=lats.map(function(la,i){return[la,lons[i]];});
+    var pl=L.polyline(pts,{color:'#378ADD',weight:3.5}).addTo(map);
+    map.fitBounds(pl.getBounds(),{padding:[40,60]});
+    L.circleMarker(pts[0],{radius:8,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2.5}).addTo(map);
+    L.circleMarker(pts[pts.length-1],{radius:8,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2.5}).addTo(map);
+
+    // Place a wind arrow every ~1/8th of the route (roughly matching the
+    // "every 1-2 miles" spec on typical ride lengths, without needing
+    // real distance math for this first pass).
+    if(wind && wind.winddirection_10m!=null){
+      var windFromDeg=wind.winddirection_10m;
+      var step=Math.max(1,Math.floor(pts.length/8));
+      for(var i=step;i<pts.length-step;i+=step){
+        var p1=pts[i-1], p2=pts[Math.min(pts.length-1,i+1)];
+        var bearing=Math.atan2(p2[1]-p1[1], p2[0]-p1[0])*180/Math.PI;
+        var travelBearing=(bearing+360)%360;
+        var windTowardDeg=(windFromDeg+180)%360;
+        var diff=Math.abs(((travelBearing-windTowardDeg+540)%360)-180);
+        var windType, color;
+        if(diff<45){ windType='Tailwind'; color='#1D9E75'; }
+        else if(diff>135){ windType='Headwind'; color='#E24B4A'; }
+        else { windType='Crosswind'; color='#BA7517'; }
+
+        var arrowIcon=L.divIcon({
+          html:'<div style="width:22px;height:22px;border-radius:50%;background:'+color+';border:2px solid #fff;display:flex;align-items:center;justify-content:center;transform:rotate('+windFromDeg+'deg);box-shadow:0 1px 4px rgba(0,0,0,.3)"><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff;margin-top:-2px"></div></div>',
+          className:'', iconSize:[22,22], iconAnchor:[11,11]
+        });
+        var marker=L.marker(pts[i],{icon:arrowIcon}).addTo(map);
+        marker.bindPopup(windType+' at this point ('+Math.round(wind.windspeed_10m)+'mph)');
+      }
+    }
+
+    window['_wxmap_overview']=map;
+    weatherMapInstance=map;
+  },200);
+}
+
+function showWeatherHistory(){
   var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
   scr.id='WEATHER-SCREEN';
@@ -13002,7 +13395,7 @@ function showWeather(){
 
     var hdr=document.createElement('div');
     hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
-    hdr.innerHTML='<button onclick="showWeather()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
       +'<div style="font-size:14px;font-weight:800;color:#fff">Search Routes</div>';
     scr.appendChild(hdr);
 
@@ -13113,7 +13506,7 @@ function showWeather(){
 
     var hdr=document.createElement('div');
     hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
-    hdr.innerHTML='<button onclick="showWeather()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
       +'<div style="flex:1"><div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(route.name||route.sportType||'Ride')+'</div>'
       +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+(route.distance||'')+'mi route</div></div>';
     scr.appendChild(hdr);
