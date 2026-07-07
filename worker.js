@@ -8690,9 +8690,10 @@ function openRideDetail(idx){
   overlay.id = 'ride-detail-modal';
   overlay.style.cssText = 'position:fixed;inset:0;bottom:60px;z-index:200;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
 
-  // Header
+  // Header - Apple Health style: back chevron on its own row, large bold
+  // title below it, subtitle below that. No filled header bar background.
   var hdr = document.createElement('div');
-  hdr.style.cssText = 'background:var(--s1);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1)';
+  hdr.style.cssText = 'padding:8px 16px 16px;flex-shrink:0';
 
   var dtStr = '';
   if(r.startTime){
@@ -8707,28 +8708,32 @@ function openRideDetail(idx){
     dtStr = r.date;
   }
 
+  var topRow=document.createElement('div');
+  topRow.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
   var backBtn=document.createElement('button');
-  backBtn.innerHTML='&lsaquo;';
-  backBtn.style.cssText='background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;width:24px;line-height:1';
+  backBtn.innerHTML='<svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="#FC4C02" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>';
+  backBtn.style.cssText='background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center';
   backBtn.onclick=function(){ closeRideDetail(); };
-  var titleWrap=document.createElement('div');
-  titleWrap.style.cssText='flex:1;min-width:0;padding:0 10px';
-  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:16px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
-    +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+dtStr+'</div>';
   var moreBtn=document.createElement('button');
   moreBtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
-  moreBtn.style.cssText='background:none;border:none;cursor:pointer;padding:6px;flex-shrink:0;display:flex;align-items:center';
+  moreBtn.style.cssText='background:none;border:none;cursor:pointer;padding:6px;display:flex;align-items:center';
   moreBtn.onclick=function(){ openRideDetailMoreMenu(idx); };
-  hdr.appendChild(backBtn);
+  topRow.appendChild(backBtn);
+  topRow.appendChild(moreBtn);
+
+  var titleWrap=document.createElement('div');
+  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:22px;font-weight:800;color:var(--t1);letter-spacing:-.3px">'+(r.name||'Activity')+'</div>'
+    +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+dtStr+'</div>';
+
+  hdr.appendChild(topRow);
   hdr.appendChild(titleWrap);
-  hdr.appendChild(moreBtn);
 
   // Hero stat row - generous 2x3 grid (matching the reference's Time/
   // Distance/Intensity/HR/Power/TSS layout) plus a full-width Calories
   // row, instead of a cramped single 4-cell strip.
   var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
   var heroRow=document.createElement('div');
-  heroRow.style.cssText='background:var(--s1);padding:16px 16px 0;flex-shrink:0';
+  heroRow.style.cssText='padding:0 16px;flex-shrink:0';
   var heroGrid=document.createElement('div');
   heroGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:14px 20px';
   [
@@ -8771,7 +8776,7 @@ function openRideDetail(idx){
   ];
   var activeTab='overview';
   var tabsRow=document.createElement('div');
-  tabsRow.style.cssText='display:flex;gap:18px;overflow-x:auto;padding:12px 16px 0;-webkit-overflow-scrolling:touch;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)';
+  tabsRow.style.cssText='display:flex;gap:18px;overflow-x:auto;padding:8px 16px 0;-webkit-overflow-scrolling:touch;flex-shrink:0;border-bottom:1px solid var(--b1)';
   var tabBtns={};
   tabDefs.forEach(function(t){
     var btn=document.createElement('button');
