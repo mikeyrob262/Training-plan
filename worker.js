@@ -6783,6 +6783,40 @@ function renderFoodRows(container, list){
 // tab, matching the reference design exactly: Readiness ring, Today's
 // Plan, Recent Activity, Upcoming Event, AI Coach. Readiness uses TSB
 // (Form) as a stand-in since this app has no HRV/sleep tracking.
+// Shared circular activity-type icon, used by both Today's Plan and
+// Recent Activity on Home so every activity type gets a consistent,
+// distinct color and icon rather than the old 3-type guess (ride/run/
+// strength only). Covers cycling, running, strength, mobility,
+// conditioning, and swimming - matching the reference's colored circle
+// badges. Returns full HTML for the circle, not just the inner SVG.
+function activityIconHTML(sessionName, size){
+  size = size || 40;
+  var s = (sessionName||'').toLowerCase();
+  var iconSize = Math.round(size*0.45);
+  var type, color, path;
+  if(/swim/.test(s)){
+    type='swim'; color='#0EA5E9';
+    path='<path d="M2 16c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><path d="M2 20c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><circle cx="17" cy="6" r="2"/><path d="m5 14 6.5-1.5c.7-.2 1.2-.8 1.2-1.5v-2c0-1 .8-1.8 1.8-1.8h1"/>';
+  } else if(/mobility|yoga|stretch/.test(s)){
+    type='mobility'; color='#F59E0B';
+    path='<circle cx="12" cy="4" r="2"/><path d="M8 22l2-9-3-3 1-5 4 2 3 4 3-1"/><path d="M10 13l-4 3"/>';
+  } else if(/condition|core|circuit|cardio/.test(s)){
+    type='conditioning'; color='#EF4444';
+    path='<path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/><path d="M12 9v6"/>';
+  } else if(/strength|full body/.test(s)){
+    type='strength'; color='#7C3AED';
+    path='<path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/>';
+  } else if(/run|jog|walk|hill repeat|track|fartlek|tempo/.test(s)){
+    type='run'; color='#FF6B35';
+    path='<circle cx="13" cy="4" r="1.8"/><path d="M10.5 7.5 8 10l2 2.5-1 5.5"/><path d="M12 9l3 1 2.5 4"/><path d="M9 12.5 6 15"/><path d="M9 17.5 7 21"/>';
+  } else {
+    type='ride'; color='#5DCAA5';
+    path='<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/>';
+  }
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;flex-shrink:0" data-activity-type="'+type+'">'
+    +'<svg width="'+iconSize+'" height="'+iconSize+'" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg></div>';
+}
+
 function showHomeDash(){
   showScreen('HOME_DASH');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
@@ -6872,13 +6906,12 @@ function showHomeDash(){
   // since that's where the actual session name/duration genuinely live;
   // the completion-tracking data structure (ws().wo) only stores a
   // done/not-done flag, not the workout details themselves.
+  var todaysPlanCurWeek = (typeof getCurrentPlanWeek==='function') ? getCurrentPlanWeek() : 1;
+  var todaysPlanDayIdx = (new Date().getDay()===0) ? 6 : new Date().getDay()-1;
   var todaysPlanInfo = (function(){
-    var curWeek = (typeof getCurrentPlanWeek==='function') ? getCurrentPlanWeek() : 1;
-    var todayObj = new Date();
-    var dayIdx = todayObj.getDay()===0 ? 6 : todayObj.getDay()-1;
-    var sessEl = document.getElementById('ws'+curWeek+'_'+dayIdx);
-    var cardEl = document.getElementById('wc'+curWeek+'_'+dayIdx);
-    var checkEl = document.getElementById('ck'+curWeek+'_'+dayIdx);
+    var sessEl = document.getElementById('ws'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
+    var cardEl = document.getElementById('wc'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
+    var checkEl = document.getElementById('ck'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
     var sessName = sessEl ? sessEl.textContent.trim() : null;
     var plannedEl = cardEl ? cardEl.querySelector('.wof-pl') : null;
     var plannedDur = plannedEl ? plannedEl.textContent.trim() : null;
@@ -6886,18 +6919,15 @@ function showHomeDash(){
     return {sessName:sessName, plannedDur:plannedDur, isDone:isDone};
   })();
   html+='<div style="margin:0 16px 20px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Today&rsquo;s Plan</div>';
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Today&rsquo;s Plan</span>'
+    +(todaysPlanInfo.sessName?'<span id="home-todays-plan-swap" style="font-size:12px;color:#378ADD;cursor:pointer">Swap</span>':'')
+    +'</div>';
   if(!todaysPlanInfo.sessName){
     html+='<div style="font-size:13px;color:var(--t3)">No workout scheduled for today.</div>';
   } else {
-    var isRide=/zwift|ride|bike/i.test(todaysPlanInfo.sessName);
-    var isStrength=/strength/i.test(todaysPlanInfo.sessName);
-    var todayIconColor=isStrength?'#7C3AED':isRide?'#FC4C02':'#185FA5';
-    var todayIcon=isStrength
-      ?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>'
-      :'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
     html+='<div id="home-todays-plan-row" style="display:flex;align-items:center;gap:12px;cursor:pointer">'
-      +'<div style="width:40px;height:40px;border-radius:10px;background:'+todayIconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+todayIcon+'</div>'
+      +activityIconHTML(todaysPlanInfo.sessName,40)
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:15px;font-weight:700;color:var(--t1)">'+todaysPlanInfo.sessName+'</div>'
       +(todaysPlanInfo.plannedDur?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+todaysPlanInfo.plannedDur+'</div>':'')
@@ -6926,15 +6956,15 @@ function showHomeDash(){
   if(recent.length===0){
     html+='<div style="font-size:13px;color:var(--t3)">No activities yet.</div>';
   } else {
-    var sportColorsH={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56',Strength:'#7C3AED',VirtualRide:'#0EA5E9'};
-    var rideIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
-    var runIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
-    var strengthIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>';
     recent.forEach(function(r,idx){
       var realIdx=st.rides.indexOf(r);
       var sport=r.sportType||r.type||'Ride';
-      var iconColor=sportColorsH[sport]||'#FC4C02';
-      var icon=/strength|weight/i.test(sport)?strengthIconH:/run/i.test(sport)?runIconH:rideIconH;
+      var sportLc=sport.toLowerCase();
+      var nameForIcon=(r.name||'')+' '+sportLc;
+      var iconMatch=/swim/.test(sportLc)?'swim':/run|jog/.test(sportLc)?'run':/strength|weight/.test(sportLc)?'strength':nameForIcon;
+      var iconHTML=activityIconHTML(iconMatch,36);
+      var iconColorMatch=iconHTML.match(/background:(#[0-9A-Fa-f]{6})/);
+      var iconColor=iconColorMatch?iconColorMatch[1]:'#5DCAA5';
       // Mini route thumbnail from real GPS points, matching the reference's
       // small squiggle preview - only shown when this ride actually has
       // recorded GPS data, never fabricated for rides without it.
@@ -6954,7 +6984,7 @@ function showHomeDash(){
         thumb='<svg width="40" height="36" viewBox="0 0 40 36" style="flex-shrink:0"><polyline points="'+pathPts.join(' ')+'" fill="none" stroke="'+iconColor+'" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       }
       html+='<div onclick="openRideDetail('+realIdx+')" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(idx>0?'border-top:1px solid var(--b1);':'')+'cursor:pointer">'
-        +'<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+        +iconHTML
         +'<div style="flex:1;min-width:0">'
         +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div></div>'
@@ -7008,6 +7038,28 @@ function showHomeDash(){
 
   scr.innerHTML=html;
   setTimeout(function(){ fetchCoachNote(coachCardId); }, 0);
+
+  // Wire Today's Plan swap button - reuses the app's existing doSwap
+  // bottom-sheet picker (same one used in the full training plan view),
+  // then re-renders Home afterward so the new session name/icon show up
+  // immediately without a manual refresh.
+  var swapBtn=document.getElementById('home-todays-plan-swap');
+  if(swapBtn){
+    swapBtn.onclick=function(){
+      doSwap(todaysPlanCurWeek, todaysPlanDayIdx, swapBtn);
+      // applySwap() (triggered from inside the swap sheet) writes the new
+      // name into the TRAIN DOM elements immediately; poll briefly for the
+      // overlay closing, then refresh Home to reflect the change.
+      var checkClosed=setInterval(function(){
+        if(!document.getElementById('swap-overlay')){
+          clearInterval(checkClosed);
+          if(document.getElementById('HOME_DASH') && getComputedStyle(document.getElementById('HOME_DASH')).display!=='none'){
+            showHomeDash();
+          }
+        }
+      },300);
+    };
+  }
 }
 
 function showAnalytics(){
