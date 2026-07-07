@@ -13393,7 +13393,15 @@ function renderOverviewContent(body, wxData, ftp, weight){
       windChart=new Chart(windEl,{
         type:'bar',
         data:{labels:labels, datasets:[{data:slice.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false},datalabels:{display:false}},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+          tooltip:{
+            enabled:true,
+            displayColors:false,
+            callbacks:{
+              title:function(){ return ''; }, // suppress the hour/time - keep only the wind value below
+              label:function(ctx){ return ctx.parsed.y+' mph'; }
+            }
+          }},
           scales:{
             x:{display:false, ticks:{display:false}, grid:{display:false}},
             y:{display:false, ticks:{display:false}, grid:{display:false}}
