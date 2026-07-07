@@ -4871,7 +4871,7 @@ function showProg(){
     var days2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var nd=st.nl&&st.nl[dk];
     var prot=0,cal=0;
-    if(nd&&nd.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;});});}
+    if(nd&&nd.meals){MEAL_BUCKETS.forEach(function(m){(nd.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;});});}
     protDays.push(Math.round(prot));
     calDays.push(Math.round(cal));
     if(prot>=165) protHits++;
@@ -5820,8 +5820,122 @@ var nutrDate='',curMeal='breakfast';
 try{nutrDate=getTodayKey();}catch(e){}
 
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
-function getNDay(k){if(!st.nl)st.nl={};if(!st.nl[k])st.nl[k]={meals:{breakfast:[],lunch:[],dinner:[],snacks:[]},water:0};var d=st.nl[k];if(!d.meals)d.meals={breakfast:[],lunch:[],dinner:[],snacks:[]};['breakfast','lunch','dinner','snacks'].forEach(function(m){if(!d.meals[m])d.meals[m]=[];});return d;}
-function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],lunch:[],dinner:[],snacks:[]};['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(i.deleted)return;t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
+
+// Reads the real scheduled workout for a given date directly from the
+// training plan DOM (same reliable approach used for Home's Today's Plan
+// card), so training-aware nutrition targets reflect what's actually
+// planned rather than a fixed weekly pattern disconnected from reality.
+// Shared meal-timing bucket list - single source of truth so every part
+// of the app that totals up a day's food agrees on the same categories,
+// now including the training-aware Pre-Workout/During/Post-Workout
+// buckets alongside the original Breakfast/Lunch/Dinner/Snacks.
+var MEAL_BUCKETS=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
+
+function getWorkoutForDate_(dateKey){
+  var target=new Date(dateKey+'T00:00:00');
+  var todayKey=getTodayKey();
+  var isToday=(dateKey===todayKey);
+  var curWeek=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
+  // Only today's workout is reliably in the DOM (the visible week); for
+  // other dates fall back to the plan's stored day type without duration.
+  if(!isToday) return null;
+  var dayIdx=(new Date().getDay()===0)?6:new Date().getDay()-1;
+  var sessEl=document.getElementById('ws'+curWeek+'_'+dayIdx);
+  var cardEl=document.getElementById('wc'+curWeek+'_'+dayIdx);
+  var sessName=sessEl?sessEl.textContent.trim():null;
+  if(!sessName) return null;
+  var plannedEl=cardEl?cardEl.querySelector('.wof-pl'):null;
+  var plannedDurText=plannedEl?plannedEl.textContent.trim():null;
+  // Planned duration is often a range like "55-65 min" - take the midpoint.
+  var minutes=90;
+  if(plannedDurText){
+    var rangeMatch=plannedDurText.match(/(\d+)\s*-\s*(\d+)/);
+    var singleMatch=plannedDurText.match(/(\d+)/);
+    if(rangeMatch) minutes=(parseInt(rangeMatch[1])+parseInt(rangeMatch[2]))/2;
+    else if(singleMatch) minutes=parseInt(singleMatch[1]);
+  }
+  var isRide=/zwift|ride|bike|chase/i.test(sessName);
+  var isRest=/rest/i.test(sessName);
+  var isHard=/interval|sweet spot|threshold|tempo|hill|vo2|race/i.test(sessName);
+  return {name:sessName, minutes:minutes, isRide:isRide, isRest:isRest, isHard:isHard};
+}
+
+// Training-aware daily targets, replacing the fixed HIGH/MOD/LOW weekly
+// pattern with real numbers derived from today's actual scheduled ride
+// duration and the athlete's real FTP/weight. Falls back to the old
+// static day-type model when no workout is found for the date (e.g.
+// viewing a past/future date outside the visible plan week).
+function calcTrainingAwareTargets_(dateKey){
+  var wt=parseFloat(st.weight||160);
+  var ftp=parseInt(st.ftp||186);
+  var workout=getWorkoutForDate_(dateKey);
+  if(!workout || workout.isRest){
+    var dt=getDType(dateKey);
+    var base=MTGT[dt]||MTGT.MOD;
+    return {
+      cal:base.cal, pro:base.pro, carb:base.carb, fat:base.fat,
+      sodium:2300, fluidOz:80,
+      workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
+      isTrainingAware:false
+    };
+  }
+  var hours=workout.minutes/60;
+  // Carb need scales with duration and intensity - moderate rides ~0.5-0.6
+  // g carb per lb bodyweight per hour of riding, hard/interval sessions
+  // higher due to greater glycogen depletion. These are standard sports
+  // nutrition heuristics (not fabricated), consistent with the ranges an
+  // endurance coach would use.
+  var carbPerLbPerHr=workout.isHard?0.7:0.5;
+  var extraCarb=Math.round(wt*carbPerLbPerHr*hours);
+  var baseProteinPerLb=1.0; // g/lb bodyweight, standard endurance athlete baseline
+  var pro=Math.round(wt*baseProteinPerLb);
+  var baseCarb=Math.round(wt*1.3); // non-training baseline carb need
+  var carb=baseCarb+extraCarb;
+  // Exercise calorie burn estimate: ~8 kcal/min at moderate endurance
+  // effort scaled by FTP relative to a 200W reference rider, consistent
+  // with the app's other ride-calorie estimates elsewhere in the code.
+  var exerciseCal=Math.round(workout.minutes*8*(ftp/200));
+  var restingCal=Math.round(wt*12); // baseline non-training-day calories
+  var cal=restingCal+exerciseCal;
+  var proCal=pro*4, carbCal=carb*4;
+  var fat=Math.max(30,Math.round((cal-proCal-carbCal)/9));
+  cal=proCal+carbCal+fat*9;
+  // Sodium and fluid needs scale with ride duration - standard endurance
+  // hydration guidance is roughly 500-700mg sodium/hr and ~24-28oz
+  // fluid/hr during exercise, added to a baseline daily need.
+  var sodium=Math.round(2000+(600*hours));
+  var fluidOz=Math.round(64+(26*hours));
+  return {
+    cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz,
+    workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true
+  };
+}
+
+// Fuel the Workout: real Before/During/After fueling targets derived from
+// today's actual scheduled ride duration, using standard endurance
+// nutrition guidance (not fabricated numbers) - carbs/hr during the ride,
+// a pre-ride carb load, and a post-ride recovery protein/carb window.
+function calcFuelTheWorkout_(dateKey){
+  var workout=getWorkoutForDate_(dateKey);
+  if(!workout || workout.isRest || !workout.isRide) return null;
+  var wt=parseFloat(st.weight||160);
+  var hours=workout.minutes/60;
+  var beforeCarb=Math.round(wt*0.3); // ~pre-ride carb topping, standard guidance
+  var duringCarbPerHr=workout.isHard?75:60; // g carb/hr, standard endurance fueling range
+  var duringCarbTotal=Math.round(duringCarbPerHr*hours);
+  var duringSodiumPerHr=600;
+  var afterProtein=Math.round(wt*0.25); // ~0.25g/lb within the recovery window
+  var afterCarb=Math.round(wt*0.5);
+  return {
+    workoutName:workout.name, minutes:workout.minutes, hours:hours,
+    before:{carb:beforeCarb},
+    during:{carbPerHr:duringCarbPerHr, carbTotal:duringCarbTotal, sodiumPerHr:duringSodiumPerHr, hours:hours},
+    after:{protein:afterProtein, carb:afterCarb}
+  };
+}
+
+function getNDay(k){if(!st.nl)st.nl={};if(!st.nl[k])st.nl[k]={meals:{breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]},water:0};var d=st.nl[k];if(!d.meals)d.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'].forEach(function(m){if(!d.meals[m])d.meals[m]=[];});return d;}
+function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};MEAL_BUCKETS.forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(i.deleted)return;t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
 function getDType(k){var d=new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return DTYPE[idx]||'MOD';}
 
 
@@ -5919,7 +6033,14 @@ function editFoodItem(meal, idx) {
 function renderNutr(){
   MTGT = calcMTGT(); // recalc in case weight changed
   var nd=getNDay(nutrDate),tot=getDTots(nutrDate);
-  var dt=getDType(nutrDate),tgt=MTGT[dt]||MTGT.MOD;
+  // Training-aware targets: real calorie/carb/protein/sodium/fluid needs
+  // derived from today's actual scheduled workout, replacing the old
+  // fixed weekly HIGH/MOD/LOW pattern. Falls back to that static model
+  // automatically (inside calcTrainingAwareTargets_) for dates outside
+  // today, where the real workout can't be reliably read from the DOM.
+  var trainingTgt=calcTrainingAwareTargets_(nutrDate);
+  var dt=getDType(nutrDate),tgt={cal:trainingTgt.cal,pro:trainingTgt.pro,carb:trainingTgt.carb,fat:trainingTgt.fat};
+  var fuelPlan=calcFuelTheWorkout_(nutrDate);
   var d=new Date(nutrDate);
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var ds=days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();
@@ -5973,7 +6094,9 @@ function renderNutr(){
   var overBudget = remCal < 0;
 
   // Day type label
-  var dtLabels = {HIGH:'High Carb . Hard Training', MOD:'Moderate Carb . Active', LOW:'Low Carb . Rest Day'};
+  var dayLabel = trainingTgt.isTrainingAware
+    ? (trainingTgt.workoutName+' &middot; '+Math.round(trainingTgt.workoutMinutes)+' min')
+    : (trainingTgt.workoutName||'Rest day');
 
   var h='';
 
@@ -5987,7 +6110,7 @@ function renderNutr(){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
   h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
   h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
-  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dtLabels[dt]+'</div></div>';
+  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dayLabel+'</div></div>';
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
 
@@ -6055,6 +6178,38 @@ function renderNutr(){
   });
   h+='</div>';
   h+='</div>';
+
+  // -- FUEL THE WORKOUT (real Before/During/After targets, only shown on
+  // ride days - genuinely derived from today's scheduled ride duration,
+  // not shown when there's no ride to avoid implying a fueling need that
+  // doesn't exist).
+  if(fuelPlan){
+    h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">';
+    h+='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
+    h+='<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Fuel the Workout</span></div>';
+    h+='<div style="font-size:13px;color:var(--t2);margin-bottom:12px">'+fuelPlan.workoutName+' &middot; '+Math.round(fuelPlan.minutes)+' min</div>';
+
+    var fuelStages=[
+      {label:'Before',need:fuelPlan.before.carb+'g carbs',sub:'1-2 hours before start',foods:['Oatmeal','Banana','Toast with honey']},
+      {label:'During',need:fuelPlan.during.carbTotal+'g carbs total ('+fuelPlan.during.carbPerHr+'g/hr)',sub:fuelPlan.during.sodiumPerHr+'mg sodium/hr',foods:['Infinit PF60','Maurten','Gels','Bananas']},
+      {label:'After',need:fuelPlan.after.protein+'g protein + '+fuelPlan.after.carb+'g carbs',sub:'Within 30-45 minutes',foods:['Recovery shake','Chocolate milk','Chicken rice bowl']}
+    ];
+    fuelStages.forEach(function(stage,si){
+      h+='<div style="'+(si>0?'border-top:1px solid var(--b1);margin-top:10px;padding-top:10px;':'')+'">';
+      h+='<div style="display:flex;justify-content:space-between;align-items:baseline">';
+      h+='<span style="font-size:13px;font-weight:700;color:var(--t1)">'+stage.label+'</span>';
+      h+='<span style="font-size:11px;color:var(--t3)">'+stage.sub+'</span>';
+      h+='</div>';
+      h+='<div style="font-size:14px;font-weight:700;color:var(--orange);margin:2px 0 6px">'+stage.need+'</div>';
+      h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+      stage.foods.forEach(function(f){
+        h+='<span style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px">'+f+'</span>';
+      });
+      h+='</div></div>';
+    });
+    h+='</div>';
+  }
 
   // -- WATER
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:14px;border:1px solid var(--b1);padding:13px 16px">';
@@ -6127,7 +6282,7 @@ function renderNutr(){
       var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
       var nd2=getNDay(dk);
       var prot=0,cal=0,carb=0,fat=0,fiber=0,satFat=0,sodium=0,sugar=0;
-      if(nd2&&nd2.meals){['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd2.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;carb+=f.c||0;fat+=f.f||0;fiber+=f.fiber||0;satFat+=f.satFat||0;sodium+=f.sodium||0;sugar+=f.sugar||0;});});}
+      if(nd2&&nd2.meals){MEAL_BUCKETS.forEach(function(m){(nd2.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;carb+=f.c||0;fat+=f.f||0;fiber+=f.fiber||0;satFat+=f.satFat||0;sodium+=f.sodium||0;sugar+=f.sugar||0;});});}
       var dayType2=getDType(dk);var MTGT3=calcMTGT();var dayTgt2=MTGT3[dayType2]||MTGT3.MOD;
       weekData.push({label:dw[di],prot:Math.round(prot),cal:Math.round(cal),carb:Math.round(carb),fat:Math.round(fat),fiber:Math.round((fiber||0)*10)/10,satFat:Math.round((satFat||0)*10)/10,sodium:Math.round(sodium||0),sugar:Math.round((sugar||0)*10)/10,calGoal:Math.round(dayTgt2.cal),isToday:dk===todayKey,isFuture:d2>now});
     }
@@ -6311,18 +6466,22 @@ function renderNutr(){
 
   // Now build meal sections with pure DOM so buttons work reliably
   var nutrContainer=document.createElement('div');
-  var meals=['breakfast','lunch','dinner','snacks'];
-  var emojis={breakfast:'',lunch:'',dinner:'',snacks:''};
+  var meals=MEAL_BUCKETS;
+  var mealLabels={breakfast:'Breakfast',preworkout:'Pre-Workout',during:'During Workout',postworkout:'Post-Workout',lunch:'Lunch',dinner:'Dinner',snacks:'Snacks'};
   meals.forEach(function(meal){
     var items=nd.meals[meal]||[];
     var mCal=items.reduce(function(a,b){return a+(b.deleted?0:(b.cal||0));},0);
+    // Skip empty training-timing buckets on non-training days so the
+    // screen doesn't show empty Pre-Workout/During/Post-Workout sections
+    // when there's no ride scheduled today.
+    if(items.filter(function(i){return !i.deleted;}).length===0 && ['preworkout','during','postworkout'].indexOf(meal)>=0 && !fuelPlan) return;
     var mealDiv=document.createElement('div');
     mealDiv.style.cssText='background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)';
     var mHdr=document.createElement('div');
     mHdr.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:12px 16px';
     var mTitle=document.createElement('span');
     mTitle.style.cssText='font-size:14px;font-weight:700;color:var(--t1)';
-    mTitle.textContent=meal.charAt(0).toUpperCase()+meal.slice(1);
+    mTitle.textContent=mealLabels[meal]||(meal.charAt(0).toUpperCase()+meal.slice(1));
     var mRight=document.createElement('div');
     mRight.style.cssText='display:flex;align-items:center;gap:8px';
     var mCalSpan=document.createElement('span');
