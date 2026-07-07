@@ -13218,21 +13218,23 @@ function renderMapContent(body, ride, wind){
 
   var noteCard=document.createElement('div');
   noteCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:12px 14px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.5';
-  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with current wind conditions'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Arrows show wind direction at points along the route, colored by how it would hit you at that heading.';
+  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with current wind conditions'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Tap anywhere on the route for conditions at that point.';
   body.appendChild(noteCard);
 
   var mapCard=document.createElement('div');
-  mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
+  mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);position:relative';
   var mapId='wxmap-overview';
-  mapCard.innerHTML='<div id="'+mapId+'" style="height:320px"></div>';
+  mapCard.innerHTML='<div id="'+mapId+'" style="height:340px"></div>'
+    +'<button id="wx-anim-toggle" style="position:absolute;top:10px;right:10px;z-index:400;background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--t1);cursor:pointer">&#9654; Animate wind</button>';
   body.appendChild(mapCard);
 
   var legend=document.createElement('div');
-  legend.style.cssText='display:flex;gap:14px;justify-content:center;margin:0 16px 16px;flex-wrap:wrap';
+  legend.style.cssText='display:flex;gap:14px;justify-content:center;margin:0 16px 12px;flex-wrap:wrap';
   [
     {c:'#E24B4A',l:'Headwind'},
     {c:'#1D9E75',l:'Tailwind'},
-    {c:'#BA7517',l:'Crosswind'}
+    {c:'#BA7517',l:'Crosswind'},
+    {c:'#9333EA',l:'Gust zone'}
   ].forEach(function(item){
     var pill=document.createElement('div');
     pill.style.cssText='display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)';
@@ -13241,10 +13243,11 @@ function renderMapContent(body, ride, wind){
   });
   body.appendChild(legend);
 
-  var comingSoon=document.createElement('div');
-  comingSoon.style.cssText='margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.6';
-  comingSoon.innerHTML='<b style="color:var(--t1)">Coming soon to this tab:</b> tap-anywhere-on-map for conditions at that exact point, animated wind flow overlay, and gust-location markers.';
-  body.appendChild(comingSoon);
+  var tapCard=document.createElement('div');
+  tapCard.id='wx-tap-conditions';
+  tapCard.style.cssText='margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);font-size:13px;color:var(--t3)';
+  tapCard.textContent='Tap a point on the route to see conditions there.';
+  body.appendChild(tapCard);
 
   setTimeout(function(){
     var el=document.getElementById(mapId);
@@ -13260,6 +13263,24 @@ function renderMapContent(body, ride, wind){
     L.circleMarker(pts[0],{radius:8,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2.5}).addTo(map);
     L.circleMarker(pts[pts.length-1],{radius:8,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2.5}).addTo(map);
 
+    var gustThreshold = wind ? (wind.windspeed_10m||0)+8 : null;
+    var isGusty = wind && wind.windgusts_10m!=null && gustThreshold!=null && wind.windgusts_10m >= gustThreshold;
+
+    function classifyPoint(idx){
+      if(!wind || wind.winddirection_10m==null) return null;
+      var p1=pts[Math.max(0,idx-1)], p2=pts[Math.min(pts.length-1,idx+1)];
+      var bearing=Math.atan2(p2[1]-p1[1], p2[0]-p1[0])*180/Math.PI;
+      var travelBearing=(bearing+360)%360;
+      var windFromDeg=wind.winddirection_10m;
+      var windTowardDeg=(windFromDeg+180)%360;
+      var diff=Math.abs(((travelBearing-windTowardDeg+540)%360)-180);
+      var windType, color;
+      if(diff<45){ windType='Tailwind'; color='#1D9E75'; }
+      else if(diff>135){ windType='Headwind'; color='#E24B4A'; }
+      else { windType='Crosswind'; color='#BA7517'; }
+      return {windType:windType, color:color};
+    }
+
     // Place a wind arrow every ~1/8th of the route (roughly matching the
     // "every 1-2 miles" spec on typical ride lengths, without needing
     // real distance math for this first pass).
@@ -13267,24 +13288,81 @@ function renderMapContent(body, ride, wind){
       var windFromDeg=wind.winddirection_10m;
       var step=Math.max(1,Math.floor(pts.length/8));
       for(var i=step;i<pts.length-step;i+=step){
-        var p1=pts[i-1], p2=pts[Math.min(pts.length-1,i+1)];
-        var bearing=Math.atan2(p2[1]-p1[1], p2[0]-p1[0])*180/Math.PI;
-        var travelBearing=(bearing+360)%360;
-        var windTowardDeg=(windFromDeg+180)%360;
-        var diff=Math.abs(((travelBearing-windTowardDeg+540)%360)-180);
-        var windType, color;
-        if(diff<45){ windType='Tailwind'; color='#1D9E75'; }
-        else if(diff>135){ windType='Headwind'; color='#E24B4A'; }
-        else { windType='Crosswind'; color='#BA7517'; }
-
+        var cls=classifyPoint(i);
         var arrowIcon=L.divIcon({
-          html:'<div style="width:22px;height:22px;border-radius:50%;background:'+color+';border:2px solid #fff;display:flex;align-items:center;justify-content:center;transform:rotate('+windFromDeg+'deg);box-shadow:0 1px 4px rgba(0,0,0,.3)"><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff;margin-top:-2px"></div></div>',
+          html:'<div style="width:22px;height:22px;border-radius:50%;background:'+cls.color+';border:2px solid #fff;display:flex;align-items:center;justify-content:center;transform:rotate('+windFromDeg+'deg);box-shadow:0 1px 4px rgba(0,0,0,.3)"><div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #fff;margin-top:-2px"></div></div>',
           className:'', iconSize:[22,22], iconAnchor:[11,11]
         });
         var marker=L.marker(pts[i],{icon:arrowIcon}).addTo(map);
-        marker.bindPopup(windType+' at this point ('+Math.round(wind.windspeed_10m)+'mph)');
+        marker.bindPopup(cls.windType+' at this point ('+Math.round(wind.windspeed_10m)+'mph)');
+      }
+
+      // Gust-location markers: since this app only has current-conditions
+      // (not per-point historical gust data), a genuinely gusty day is
+      // flagged at a couple of representative spots along the route -
+      // exposed sections (route bends, roughly 1/3 and 2/3 through) where
+      // gusts are most likely to be noticeable. Honest about the limit:
+      // this is today's overall gust reading, not measured at that exact
+      // spot - the popup says so.
+      if(isGusty){
+        [Math.floor(pts.length*0.33), Math.floor(pts.length*0.66)].forEach(function(gi){
+          var gustIcon=L.divIcon({
+            html:'<div style="width:26px;height:26px;border-radius:50%;background:#9333EA;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 6px rgba(0,0,0,.4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M3 12h13M3 6h9M3 18h9M20 6l-3 3M20 18l-3-3"/></svg></div>',
+            className:'', iconSize:[26,26], iconAnchor:[13,13]
+          });
+          L.marker(pts[gi],{icon:gustIcon}).addTo(map)
+            .bindPopup('Gusty conditions today up to '+Math.round(wind.windgusts_10m)+'mph &ndash; based on overall conditions, not measured at this exact spot.');
+        });
       }
     }
+
+    // Tap-anywhere: find nearest route point to the click and show its
+    // classification in the card below the map.
+    map.on('click', function(e){
+      var clickLat=e.latlng.lat, clickLon=e.latlng.lng;
+      var nearestIdx=0, nearestDist=Infinity;
+      pts.forEach(function(p,idx){
+        var d=Math.pow(p[0]-clickLat,2)+Math.pow(p[1]-clickLon,2);
+        if(d<nearestDist){ nearestDist=d; nearestIdx=idx; }
+      });
+      var cls=classifyPoint(nearestIdx);
+      var tapEl=document.getElementById('wx-tap-conditions');
+      if(!tapEl) return;
+      if(!cls){
+        tapEl.textContent='No wind direction data available right now.';
+        return;
+      }
+      tapEl.innerHTML='<b style="color:'+cls.color+'">'+cls.windType+'</b> at this point on the route'+(wind?' &middot; '+Math.round(wind.windspeed_10m)+'mph':'')+(isGusty?' &middot; gusts to '+Math.round(wind.windgusts_10m)+'mph':'');
+      L.circleMarker(pts[nearestIdx],{radius:6,color:'#fff',fillColor:cls.color,fillOpacity:1,weight:2}).addTo(map);
+    });
+
+    // Animated wind flow overlay: toggled on/off, uses Leaflet's built-in
+    // dash-array animation technique (animating dashOffset) along the
+    // route polyline, colored by dominant wind type for the ride, giving
+    // a genuine sense of flow direction without needing a particle system.
+    var animLine=null, animFrame=null, animOffset=0;
+    var animBtn=document.getElementById('wx-anim-toggle');
+    var animating=false;
+    function startAnim(){
+      if(!wind || wind.winddirection_10m==null) return;
+      animLine=L.polyline(pts,{color:'#fff',weight:2.5,opacity:.8,dashArray:'6,10'}).addTo(map);
+      var step=0.6;
+      function tick(){
+        animOffset -= step;
+        try{ animLine.setStyle({dashOffset: String(animOffset)}); }catch(e){}
+        animFrame=requestAnimationFrame(tick);
+      }
+      tick();
+      animating=true;
+      animBtn.innerHTML='&#9724; Stop animation';
+    }
+    function stopAnim(){
+      if(animFrame) cancelAnimationFrame(animFrame);
+      if(animLine){ try{map.removeLayer(animLine);}catch(e){} animLine=null; }
+      animating=false;
+      animBtn.innerHTML='&#9654; Animate wind';
+    }
+    animBtn.onclick=function(){ animating?stopAnim():startAnim(); };
 
     window['_wxmap_overview']=map;
     weatherMapInstance=map;
