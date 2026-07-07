@@ -13178,22 +13178,24 @@ function formatHour12(hr){
 // built and are called out as coming soon below the map.
 var weatherMapInstance=null;
 
+var weatherMapSelectedRouteId=null;
+var weatherMapSelectedOffset=0; // hours from now
+
 function renderWeatherMapTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
-    +'<div style="font-size:28px;margin-bottom:10px">&#128506;&#65039;</div>'
-    +'<div style="font-size:14px;font-weight:600">Loading route and wind data&hellip;</div>'
+    +'<div style="font-size:14px;font-weight:600">Loading routes and forecast&hellip;</div>'
     +'</div>';
 
-  var routeRide=(st.rides||[]).filter(function(r){
+  var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
     return !/virtual|weight|strength|walk/i.test(s) && r.gpsLats && r.gpsLats.length>1;
   }).slice().sort(function(a,b){
     var da=(a.date||'').replace(/-/g,'');
     var db=(b.date||'').replace(/-/g,'');
     return db>da?1:db<da?-1:0;
-  })[0];
+  });
 
-  if(!routeRide){
+  if(!routes.length){
     body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
       +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">No GPS routes yet</div>'
       +'<div style="font-size:13px;line-height:1.5">Log an outdoor ride with GPS data to see wind conditions mapped along your route.</div>'
@@ -13201,24 +13203,109 @@ function renderWeatherMapTab(body){
     return;
   }
 
+  if(!weatherMapSelectedRouteId || !routes.find(function(r){return r.id===weatherMapSelectedRouteId;})){
+    weatherMapSelectedRouteId = routes[0].id;
+  }
+
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=windspeed_10m,winddirection_10m,windgusts_10m'
-    +'&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+    +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m,temperature_2m,precipitation_probability'
+    +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=7')
   .then(function(r){ return r.json(); })
   .then(function(wxData){
-    renderMapContent(body, routeRide, wxData&&wxData.current);
+    renderMapSelectors(body, routes, wxData&&wxData.hourly);
   })
   .catch(function(){
-    renderMapContent(body, routeRide, null);
+    renderMapSelectors(body, routes, null);
   });
 }
 
-function renderMapContent(body, ride, wind){
+// Renders the route + time selector bar, then delegates to renderMapContent
+// for the actual map, re-rendering the map (not re-fetching weather) each
+// time the selection changes.
+function renderMapSelectors(body, routes, hourlyData){
+  body.innerHTML='';
+
+  var selectorCard=document.createElement('div');
+  selectorCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:14px 16px;border:1px solid var(--b1)';
+
+  var routeLbl=document.createElement('div');
+  routeLbl.style.cssText='font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px';
+  routeLbl.textContent='Route';
+  selectorCard.appendChild(routeLbl);
+
+  var routeSelect=document.createElement('select');
+  routeSelect.style.cssText='width:100%;padding:9px 10px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:13px;font-family:inherit;margin-bottom:12px';
+  routes.forEach(function(r){
+    var o=document.createElement('option');
+    o.value=r.id;
+    o.textContent=(r.name||'Ride')+' &middot; '+(r.date||'');
+    o.selected = r.id===weatherMapSelectedRouteId;
+    routeSelect.appendChild(o);
+  });
+  selectorCard.appendChild(routeSelect);
+
+  var timeLbl=document.createElement('div');
+  timeLbl.style.cssText='font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px';
+  timeLbl.textContent='Check conditions for';
+  selectorCard.appendChild(timeLbl);
+
+  var timeSelect=document.createElement('select');
+  timeSelect.style.cssText='width:100%;padding:9px 10px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:13px;font-family:inherit';
+  var timeOptions=[];
+  if(hourlyData && hourlyData.time){
+    var now=new Date();
+    hourlyData.time.forEach(function(tstr,idx){
+      var d=new Date(tstr);
+      if(d<now) return;
+      timeOptions.push({idx:idx, date:d});
+    });
+  }
+  timeOptions.forEach(function(opt, i){
+    var o=document.createElement('option');
+    o.value=opt.idx;
+    var dayLabel = i===0 ? 'Now' : (opt.date.toDateString()===new Date().toDateString() ? 'Today' : opt.date.toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'}));
+    o.textContent = dayLabel+' '+formatHour12(opt.date.getHours());
+    o.selected = opt.idx===weatherMapSelectedOffset || (i===0 && weatherMapSelectedOffset===0);
+    timeSelect.appendChild(o);
+  });
+  selectorCard.appendChild(timeSelect);
+
+  body.appendChild(selectorCard);
+
+  var mapContainer=document.createElement('div');
+  mapContainer.id='wx-map-container';
+  body.appendChild(mapContainer);
+
+  function rerender(){
+    weatherMapSelectedRouteId = routeSelect.value;
+    var selectedIdx = parseInt(timeSelect.value)||0;
+    var ride = routes.find(function(r){ return r.id===weatherMapSelectedRouteId; });
+    var windAtTime = null;
+    if(hourlyData && hourlyData.windspeed_10m){
+      windAtTime = {
+        windspeed_10m: hourlyData.windspeed_10m[selectedIdx],
+        winddirection_10m: hourlyData.winddirection_10m[selectedIdx],
+        windgusts_10m: hourlyData.windgusts_10m[selectedIdx]
+      };
+    }
+    var timeLabel = (hourlyData && hourlyData.time && hourlyData.time[selectedIdx])
+      ? new Date(hourlyData.time[selectedIdx])
+      : new Date();
+    renderMapContent(mapContainer, ride, windAtTime, timeLabel);
+  }
+
+  routeSelect.onchange=rerender;
+  timeSelect.onchange=rerender;
+  rerender();
+}
+
+function renderMapContent(body, ride, wind, forTime){
   body.innerHTML='';
 
   var noteCard=document.createElement('div');
   noteCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:12px 14px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.5';
-  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with current wind conditions'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Tap anywhere on the route for conditions at that point.';
+  var timeLabel = forTime ? (forTime.toDateString()===new Date().toDateString() ? 'today' : forTime.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric'}))+' at '+formatHour12(forTime.getHours()) : 'right now';
+  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with forecast wind conditions for <b style="color:var(--t1)">'+timeLabel+'</b>'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Tap anywhere on the route for conditions at that point.';
   body.appendChild(noteCard);
 
   var mapCard=document.createElement('div');
@@ -13311,7 +13398,7 @@ function renderMapContent(body, ride, wind){
             className:'', iconSize:[26,26], iconAnchor:[13,13]
           });
           L.marker(pts[gi],{icon:gustIcon}).addTo(map)
-            .bindPopup('Gusty conditions today up to '+Math.round(wind.windgusts_10m)+'mph &ndash; based on overall conditions, not measured at this exact spot.');
+            .bindPopup('Gusty conditions at that time, up to '+Math.round(wind.windgusts_10m)+'mph &ndash; based on overall forecast, not measured at this exact spot.');
         });
       }
     }
