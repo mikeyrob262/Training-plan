@@ -12881,7 +12881,6 @@ function renderWeatherHistoryTab(body){
 // stats, in one glanceable screen instead of scattered tiles/text.
 function renderWeatherOverviewTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
-    +'<div style="font-size:28px;margin-bottom:10px">&#9728;&#65039;</div>'
     +'<div style="font-size:14px;font-weight:600">Loading conditions&hellip;</div>'
     +'</div>';
 
@@ -12890,9 +12889,10 @@ function renderWeatherOverviewTab(body){
   var weight=parseFloat(st.weight||162);
 
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m'
+    +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m,weathercode'
     +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,precipitation_probability,weathercode'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+    +'&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7')
   .then(function(r){ return r.json(); })
   .then(function(wxData){
     renderOverviewContent(body, wxData, ftp, weight);
@@ -12902,9 +12902,24 @@ function renderWeatherOverviewTab(body){
   });
 }
 
+// Simple weather-code -> SVG icon mapping (Open-Meteo WMO codes). Small
+// inline SVGs matching the app's existing icon style (no emoji).
+function weatherIconSVG(code, size){
+  size = size||18;
+  var s = 'width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  if(code===0 || code===1) return '<svg '+s+' stroke="#EF9F27"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>';
+  if(code===2) return '<svg '+s+' stroke="#8a8a90"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.4 2.1A4 4 0 0 0 6.5 19h11z" fill="none"/><circle cx="7" cy="8" r="2.4" fill="#EF9F27" stroke="none"/></svg>';
+  if(code===3) return '<svg '+s+' stroke="#8a8a90"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.4 2.1A4 4 0 0 0 6.5 19h11z"/></svg>';
+  if(code>=51&&code<=67) return '<svg '+s+' stroke="#378ADD"><path d="M16.5 15.5a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.9A3.6 3.6 0 0 0 6.5 16.5h10z" stroke="#8a8a90"/><path d="M8 18l-1 2M12 18l-1 2M16 18l-1 2"/></svg>';
+  if(code>=71&&code<=86) return '<svg '+s+' stroke="#B5D4F4"><path d="M16.5 14.5a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.9A3.6 3.6 0 0 0 6.5 15.5h10z" stroke="#8a8a90"/><path d="M8 18v2M12 18v2M16 18v2"/></svg>';
+  if(code>=95) return '<svg '+s+' stroke="#8a8a90"><path d="M16.5 13.5a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.9A3.6 3.6 0 0 0 6.5 14.5h10z"/><path d="M11 16l-2 4h3l-1 3" stroke="#EF9F27"/></svg>';
+  return '<svg '+s+' stroke="#8a8a90"><path d="M17.5 19a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.4 2.1A4 4 0 0 0 6.5 19h11z"/></svg>';
+}
+
 function renderOverviewContent(body, wxData, ftp, weight){
   var cur=wxData&&wxData.current;
   var hourly=wxData&&wxData.hourly;
+  var daily=wxData&&wxData.daily;
   if(!cur){ body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather unavailable right now.</div>'; return; }
 
   var dirArr=['N','NE','E','SE','S','SW','W','NW'];
@@ -12915,9 +12930,6 @@ function renderOverviewContent(body, wxData, ftp, weight){
   var gust=Math.round(cur.windgusts_10m||cur.windspeed_10m);
   var rainPct=cur.precipitation_probability!=null?cur.precipitation_probability:0;
 
-  // Simple 0-100 Ride Score: starts at 100, deducts for wind, gusts, rain
-  // risk, and extreme temps. Not a black box - the deductions are shown
-  // as plain-language reasons underneath the score.
   var score=100;
   var reasons=[];
   if(wind>=20){ score-=25; reasons.push('Sustained winds over 20mph'); }
@@ -12931,8 +12943,6 @@ function renderOverviewContent(body, wxData, ftp, weight){
   var scoreColor=score>=75?'#1D9E75':score>=50?'#BA7517':'#E24B4A';
   var scoreLabel=score>=75?'Great day to ride':score>=50?'Rideable with care':'Tough conditions';
 
-  // Recommend a bike using existing Garage data + maintenance status,
-  // preferring the more stable/aero-neutral bike in higher wind.
   var bikes=(st.bikes||[]).filter(function(b){ return !b.indoor; });
   var recommendedBike=null, bikeReason='';
   if(bikes.length){
@@ -12949,12 +12959,11 @@ function renderOverviewContent(body, wxData, ftp, weight){
       var nextChoice=sorted.find(function(b){ return b.id!==recommendedBike.id && !/due|overdue|service/i.test(bikeStatusBadge(b).label||''); });
       if(nextChoice){ recommendedBike=nextChoice; bikeReason='(next pick, other bike needs service)'; }
     }
-    if(!bikeReason) bikeReason=windy?'More stable in crosswinds':'Conditions favor your race bike';
+    if(!bikeReason) bikeReason=windy?'More stable in crosswinds':'Favors your race bike';
   }
 
-  // Best departure window - scan hourly data for the best 2-3hr block
-  // in daylight hours (6am-8pm) balancing low wind + low rain.
   var bestWindow=null;
+  var hourlyPoints=[];
   if(hourly && hourly.time){
     var now=new Date();
     var candidates=[];
@@ -12962,19 +12971,23 @@ function renderOverviewContent(body, wxData, ftp, weight){
       var hourDate=new Date(hourly.time[i]);
       if(hourDate<now) continue;
       var hr=hourDate.getHours();
-      if(hr<6||hr>20) continue;
-      var hWind=hourly.windspeed_10m[i]||0;
-      var hRain=hourly.precipitation_probability[i]||0;
-      var hScore=100-hWind*2-hRain;
-      candidates.push({hour:hr,score:hScore,wind:hWind,rain:hRain});
+      hourlyPoints.push({
+        hour:hr, temp:Math.round(hourly.temperature_2m[i]),
+        wind:Math.round(hourly.windspeed_10m[i]||0),
+        code:hourly.weathercode?hourly.weathercode[i]:0
+      });
+      if(hr>=6&&hr<=20){
+        var hWind=hourly.windspeed_10m[i]||0;
+        var hRain=hourly.precipitation_probability[i]||0;
+        candidates.push({hour:hr,score:100-hWind*2-hRain});
+      }
+      if(hourlyPoints.length>=12) break;
     }
     candidates.sort(function(a,b){ return b.score-a.score; });
     if(candidates.length) bestWindow=candidates[0];
   }
   var departureStr=bestWindow?formatHour12(bestWindow.hour):null;
 
-  // Clothing suggestion from feels-like temp - simple threshold ladder,
-  // consistent with typical cycling kit guidance.
   var clothing;
   if(feelsLike>=80) clothing='Light jersey, minimal layers, sunscreen';
   else if(feelsLike>=65) clothing='Short sleeve jersey and shorts';
@@ -12985,68 +12998,142 @@ function renderOverviewContent(body, wxData, ftp, weight){
   var hydrationNote = temp>=80
     ? 'Bring 2 bottles minimum, add electrolytes.'
     : temp>=60
-      ? 'One bottle should cover a shorter ride, two for anything over 90 min.'
-      : 'Easy to under-drink in cool weather - set a reminder to sip regularly.';
+      ? 'One bottle covers a shorter ride, two for anything over 90 min.'
+      : 'Easy to under-drink in cool weather - set a reminder to sip.';
 
   body.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px 24px';
 
-  var scoreCard=document.createElement('div');
-  scoreCard.style.cssText='margin:16px;background:var(--s2);border-radius:18px;padding:20px;border:1px solid var(--b1);text-align:center';
-  scoreCard.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:6px">AI Ride Score</div>'
-    +'<div style="font-size:48px;font-weight:800;color:'+scoreColor+';line-height:1">'+score+'</div>'
-    +'<div style="font-size:14px;font-weight:700;color:var(--t1);margin-top:4px">'+scoreLabel+'</div>'
-    +(reasons.length?'<div style="font-size:12px;color:var(--t3);margin-top:8px;line-height:1.5">'+reasons.join(' &middot; ')+'</div>':'<div style="font-size:12px;color:var(--t3);margin-top:8px">Clear conditions across the board</div>');
-  body.appendChild(scoreCard);
+  // Current conditions
+  var curCard=document.createElement('div');
+  curCard.style.cssText='background:var(--s2);border-radius:12px;padding:18px;margin-bottom:8px;border:1px solid var(--b1);display:flex;justify-content:space-between;align-items:flex-start';
+  curCard.innerHTML='<div><div style="font-size:38px;font-weight:600;color:var(--t1);line-height:1;letter-spacing:-.02em">'+temp+'&deg;</div>'
+    +'<div style="font-size:13px;color:var(--t3);margin-top:4px">Feels '+feelsLike+'&deg;</div></div>'
+    +'<div style="text-align:right;padding-top:2px">'
+    +'<div style="font-size:12px;color:var(--t3)">'+windDir+' '+wind+' mph</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-top:3px">'+rainPct+'% rain</div></div>';
+  wrap.appendChild(curCard);
 
-  var condRow=document.createElement('div');
-  condRow.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 12px';
-  [
-    {l:'TEMP',v:temp+'&deg;F',s:'Feels '+feelsLike+'&deg;'},
-    {l:'WIND',v:wind+'mph',s:windDir+(gust>wind+8?' gust '+gust:'')},
-    {l:'RAIN',v:rainPct+'%',s:rainPct>=30?'Bring a shell':'Low risk'}
-  ].forEach(function(c){
-    var card=document.createElement('div');
-    card.style.cssText='background:var(--s2);border-radius:12px;padding:10px;text-align:center;border:1px solid var(--b1)';
-    card.innerHTML='<div style="font-size:10px;color:var(--t3);font-weight:700">'+c.l+'</div>'
-      +'<div style="font-size:17px;font-weight:800;color:var(--t1)">'+c.v+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+c.s+'</div>';
-    condRow.appendChild(card);
-  });
-  body.appendChild(condRow);
-
+  // Ride recommendation
+  var recCard=document.createElement('div');
+  recCard.style.cssText='background:var(--s2);border-radius:12px;padding:18px;margin-bottom:8px;border:1px solid var(--b1);border-left:2px solid '+scoreColor;
+  var recHTML='<div style="font-size:11px;color:'+scoreColor+';font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Ride recommendation</div>'
+    +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-bottom:4px">'+scoreLabel+'</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:14px">'+(reasons.length?reasons.join(', '):'Clear conditions across the board')+'</div>'
+    +'<div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--b1);flex-wrap:wrap;gap:10px">';
   if(recommendedBike){
-    var bikeCard=document.createElement('div');
-    bikeCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
-    bikeCard.innerHTML='<div style="font-size:24px">&#128692;</div>'
-      +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Recommended Bike</div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--t1)">'+recommendedBike.name+'</div>'
-      +'<div style="font-size:12px;color:var(--t3)">'+bikeReason+'</div></div>';
-    body.appendChild(bikeCard);
+    recHTML+='<div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">Bike</div><div style="font-size:13px;color:var(--t1);margin-top:2px">'+recommendedBike.name+'</div></div>';
   }
-
   if(departureStr){
-    var depCard=document.createElement('div');
-    depCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
-    depCard.innerHTML='<div style="font-size:24px">&#9200;</div>'
-      +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Best Departure</div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--t1)">'+departureStr+'</div>'
-      +'<div style="font-size:12px;color:var(--t3)">Lower wind and rain risk than later today</div></div>';
-    body.appendChild(depCard);
+    recHTML+='<div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">Best window</div><div style="font-size:13px;color:var(--t1);margin-top:2px">'+departureStr+'</div></div>';
+  }
+  recHTML+='<div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">Wind impact</div><div style="font-size:13px;color:'+scoreColor+';margin-top:2px">'+(wind>=15?'High':wind>=8?'Moderate':'Low')+'</div></div>'
+    +'</div>';
+  recCard.innerHTML=recHTML;
+  wrap.appendChild(recCard);
+
+  // Hourly forecast strip
+  if(hourlyPoints.length){
+    var hourCard=document.createElement('div');
+    hourCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;margin-bottom:8px;border:1px solid var(--b1)';
+    var hourHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px">Hourly</div>'
+      +'<div style="display:flex;gap:16px;overflow-x:auto;padding-bottom:2px">';
+    hourlyPoints.forEach(function(p){
+      hourHTML+='<div style="text-align:center;flex-shrink:0;min-width:34px">'
+        +'<div style="font-size:11px;color:var(--t3);margin-bottom:6px">'+formatHour12(p.hour).replace(':00 ','').replace(' ','')+'</div>'
+        +'<div style="display:flex;justify-content:center;margin-bottom:6px">'+weatherIconSVG(p.code,18)+'</div>'
+        +'<div style="font-size:13px;font-weight:600;color:var(--t1)">'+p.temp+'&deg;</div>'
+        +'</div>';
+    });
+    hourHTML+='</div>';
+    hourCard.innerHTML=hourHTML;
+    wrap.appendChild(hourCard);
   }
 
-  var clothingCard=document.createElement('div');
-  clothingCard.style.cssText='margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
-  clothingCard.innerHTML='<div style="font-size:24px">&#129508;</div>'
-    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Clothing</div>'
-    +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+clothing+'</div></div>';
-  body.appendChild(clothingCard);
+  // Wind + temp trend charts side by side
+  var chartsRow=document.createElement('div');
+  chartsRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px';
 
+  var windCard=document.createElement('div');
+  windCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
+  windCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Wind</div>'
+    +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+windDir+' '+wind+' mph</div>'
+    +'<div style="position:relative;height:40px;margin-top:8px"><canvas id="wx-wind-chart" role="img" aria-label="Wind speed forecast over the next several hours"></canvas></div>';
+  chartsRow.appendChild(windCard);
+
+  var tempCard=document.createElement('div');
+  var dayHi=daily&&daily.temperature_2m_max?Math.round(daily.temperature_2m_max[0]):temp;
+  var dayLo=daily&&daily.temperature_2m_min?Math.round(daily.temperature_2m_min[0]):temp;
+  tempCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
+  tempCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Range</div>'
+    +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+dayHi+'&deg; / '+dayLo+'&deg;</div>'
+    +'<div style="position:relative;height:40px;margin-top:8px"><canvas id="wx-temp-chart" role="img" aria-label="Temperature trend over the next several hours"></canvas></div>';
+  chartsRow.appendChild(tempCard);
+
+  wrap.appendChild(chartsRow);
+
+  // 7-day outlook
+  if(daily && daily.time){
+    var dayCard=document.createElement('div');
+    dayCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;margin-bottom:8px;border:1px solid var(--b1)';
+    var dayHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:12px">7-day outlook</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(7,1fr)">';
+    var dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    daily.time.forEach(function(dstr,idx){
+      var d=new Date(dstr+'T12:00:00');
+      var label=idx===0?'Today':dayNames[d.getDay()];
+      var hi=Math.round(daily.temperature_2m_max[idx]);
+      var lo=Math.round(daily.temperature_2m_min[idx]);
+      dayHTML+='<div style="text-align:center">'
+        +'<div style="font-size:11px;color:var(--t3)">'+label+'</div>'
+        +'<div style="display:flex;justify-content:center;margin:8px 0 4px">'+weatherIconSVG(daily.weathercode[idx],16)+'</div>'
+        +'<div style="font-size:12px;color:var(--t1);font-weight:600">'+hi+'&deg;</div>'
+        +'<div style="font-size:11px;color:var(--t3)">'+lo+'&deg;</div>'
+        +'</div>';
+    });
+    dayHTML+='</div>';
+    dayCard.innerHTML=dayHTML;
+    wrap.appendChild(dayCard);
+  }
+
+  // Clothing + hydration
+  var infoRow=document.createElement('div');
+  infoRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
+  var clothingCard=document.createElement('div');
+  clothingCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
+  clothingCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Clothing</div>'
+    +'<div style="font-size:13px;color:var(--t1);margin-top:8px;line-height:1.4">'+clothing+'</div>';
+  infoRow.appendChild(clothingCard);
   var hydrationCard=document.createElement('div');
-  hydrationCard.style.cssText='margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1);display:flex;align-items:center;gap:12px';
-  hydrationCard.innerHTML='<div style="font-size:24px">&#128167;</div>'
-    +'<div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3)">Hydration</div>'
-    +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+hydrationNote+'</div></div>';
-  body.appendChild(hydrationCard);
+  hydrationCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
+  hydrationCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Hydration</div>'
+    +'<div style="font-size:13px;color:var(--t1);margin-top:8px;line-height:1.4">'+hydrationNote+'</div>';
+  infoRow.appendChild(hydrationCard);
+  wrap.appendChild(infoRow);
+
+  body.appendChild(wrap);
+
+  // Draw charts after DOM insertion so the canvases exist
+  setTimeout(function(){
+    var windEl=document.getElementById('wx-wind-chart');
+    var tempEl=document.getElementById('wx-temp-chart');
+    var labels=hourlyPoints.map(function(p){ return formatHour12(p.hour).split(':')[0]; });
+    if(windEl && typeof Chart!=='undefined'){
+      new Chart(windEl,{
+        type:'bar',
+        data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+      });
+    }
+    if(tempEl && typeof Chart!=='undefined'){
+      new Chart(tempEl,{
+        type:'line',
+        data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.temp;}), borderColor:'#8a8a90', backgroundColor:'rgba(138,138,144,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:1.5}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+      });
+    }
+  },50);
 }
 
 function formatHour12(hr){
