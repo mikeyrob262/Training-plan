@@ -13393,7 +13393,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
       windChart=new Chart(windEl,{
         type:'bar',
         data:{labels:labels, datasets:[{data:slice.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},scales:{x:{display:false},y:{display:false}}}
       });
     }
     if(tempEl && typeof Chart!=='undefined'){
