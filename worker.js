@@ -13157,13 +13157,22 @@ function renderOverviewContent(body, wxData, ftp, weight){
 
   var bestWindow=null;
   var hourlyPoints=[];
+  var fullDayPoints=[]; // midnight-to-midnight today, for the scrollable Wind/Range charts
   if(hourly && hourly.time){
     var now=new Date();
+    var todayStr=now.toISOString().slice(0,10);
     var candidates=[];
     for(var i=0;i<hourly.time.length;i++){
       var hourDate=new Date(hourly.time[i]);
-      if(hourDate<now) continue;
       var hr=hourDate.getHours();
+      if(hourly.time[i].slice(0,10)===todayStr){
+        fullDayPoints.push({
+          hour:hr, temp:Math.round(hourly.temperature_2m[i]),
+          wind:Math.round(hourly.windspeed_10m[i]||0),
+          code:hourly.weathercode?hourly.weathercode[i]:0
+        });
+      }
+      if(hourDate<now) continue;
       hourlyPoints.push({
         hour:hr, temp:Math.round(hourly.temperature_2m[i]),
         wind:Math.round(hourly.windspeed_10m[i]||0),
@@ -13244,15 +13253,38 @@ function renderOverviewContent(body, wxData, ftp, weight){
     wrap.appendChild(hourCard);
   }
 
-  // Wind + temp trend charts side by side
+  // Wind + temp trend charts, each with prev/next arrows to step through
+  // the full day (midnight-to-midnight) in 6-hour windows, rather than
+  // compressing 24 hours into one tiny chart or requiring touch-scroll.
   var chartsRow=document.createElement('div');
   chartsRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px';
+
+  var windowSize=6;
+  var maxWindowStart=Math.max(0, fullDayPoints.length-windowSize);
+  var nowHourIdx=fullDayPoints.findIndex(function(p){ return p.hour===new Date().getHours(); });
+  var windowStart=Math.max(0, Math.min(maxWindowStart, nowHourIdx>=0?nowHourIdx:0));
+
+  function windowLabel(){
+    if(!fullDayPoints.length) return '';
+    var endIdx=Math.min(fullDayPoints.length-1, windowStart+windowSize-1);
+    return formatHour12(fullDayPoints[windowStart].hour)+'&ndash;'+formatHour12(fullDayPoints[endIdx].hour);
+  }
+
+  function arrowBtn(dir){
+    var btn=document.createElement('button');
+    btn.style.cssText='background:var(--s1);border:1px solid var(--b1);border-radius:6px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0';
+    btn.innerHTML=dir==='left'
+      ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>'
+      : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>';
+    return btn;
+  }
 
   var windCard=document.createElement('div');
   windCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   windCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Wind</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+windDir+' '+wind+' mph</div>'
-    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-wind-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Wind speed forecast over the next several hours"></canvas></div>';
+    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-wind-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Wind speed forecast, stepped through the day in 6 hour windows"></canvas></div>'
+    +'<div id="wx-wind-nav" style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"></div>';
   chartsRow.appendChild(windCard);
 
   var tempCard=document.createElement('div');
@@ -13261,7 +13293,8 @@ function renderOverviewContent(body, wxData, ftp, weight){
   tempCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   tempCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Range</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+dayHi+'&deg; / '+dayLo+'&deg;</div>'
-    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-temp-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Temperature trend over the next several hours"></canvas></div>';
+    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-temp-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Temperature trend, stepped through the day in 6 hour windows"></canvas></div>'
+    +'<div id="wx-temp-nav" style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"></div>';
   chartsRow.appendChild(tempCard);
 
   wrap.appendChild(chartsRow);
@@ -13307,30 +13340,72 @@ function renderOverviewContent(body, wxData, ftp, weight){
 
   body.appendChild(wrap);
 
-  // Draw charts after DOM insertion so the canvases exist. A longer delay
-  // plus an explicit resize() call fixes a real bug where Chart.js can
-  // measure its container's width before the CSS grid layout has fully
-  // settled, locking in an undersized canvas that never grows to fill
-  // the card (visible as bars/line bunched on one side with dead space).
+  // Draw charts from the current 6-hour window of the full day, with
+  // prev/next arrows to step through 12a-12p and beyond. A short delay
+  // plus resize() fixes Chart.js measuring its container before the CSS
+  // grid layout has settled (undersized canvas otherwise).
+  var windChart=null, tempChart=null;
+
+  function currentWindowSlice(){
+    return fullDayPoints.slice(windowStart, windowStart+windowSize);
+  }
+
+  function updateNavRow(navEl, atStart, atEnd){
+    navEl.innerHTML='';
+    var prev=arrowBtn('left');
+    prev.disabled=atStart;
+    prev.style.opacity=atStart?'.35':'1';
+    prev.style.cursor=atStart?'default':'pointer';
+    prev.onclick=function(){ if(windowStart>0){ windowStart=Math.max(0,windowStart-windowSize); redrawWindow(); } };
+    var label=document.createElement('div');
+    label.style.cssText='font-size:11px;color:var(--t3);font-weight:600';
+    label.innerHTML=windowLabel();
+    var next=arrowBtn('right');
+    next.disabled=atEnd;
+    next.style.opacity=atEnd?'.35':'1';
+    next.style.cursor=atEnd?'default':'pointer';
+    next.onclick=function(){ if(windowStart<maxWindowStart){ windowStart=Math.min(maxWindowStart,windowStart+windowSize); redrawWindow(); } };
+    navEl.appendChild(prev);
+    navEl.appendChild(label);
+    navEl.appendChild(next);
+  }
+
+  function redrawWindow(){
+    var slice=currentWindowSlice();
+    var labels=slice.map(function(p){ return formatHour12(p.hour).split(':')[0]; });
+    if(windChart){ windChart.data.labels=labels; windChart.data.datasets[0].data=slice.map(function(p){return p.wind;}); windChart.update(); }
+    if(tempChart){ tempChart.data.labels=labels; tempChart.data.datasets[0].data=slice.map(function(p){return p.temp;}); tempChart.update(); }
+    var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
+    var windNavEl=document.getElementById('wx-wind-nav');
+    var tempNavEl=document.getElementById('wx-temp-nav');
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
+    if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
+  }
+
   setTimeout(function(){
     var windEl=document.getElementById('wx-wind-chart');
     var tempEl=document.getElementById('wx-temp-chart');
-    var labels=hourlyPoints.map(function(p){ return formatHour12(p.hour).split(':')[0]; });
-    var windChart=null, tempChart=null;
+    var slice=currentWindowSlice();
+    var labels=slice.map(function(p){ return formatHour12(p.hour).split(':')[0]; });
     if(windEl && typeof Chart!=='undefined'){
       windChart=new Chart(windEl,{
         type:'bar',
-        data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
+        data:{labels:labels, datasets:[{data:slice.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
         options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
       });
     }
     if(tempEl && typeof Chart!=='undefined'){
       tempChart=new Chart(tempEl,{
         type:'line',
-        data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.temp;}), borderColor:'#8a8a90', backgroundColor:'rgba(138,138,144,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:1.5}]},
+        data:{labels:labels, datasets:[{data:slice.map(function(p){return p.temp;}), borderColor:'#8a8a90', backgroundColor:'rgba(138,138,144,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:1.5}]},
         options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
       });
     }
+    var windNavEl=document.getElementById('wx-wind-nav');
+    var tempNavEl=document.getElementById('wx-temp-nav');
+    var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
+    if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
     setTimeout(function(){
       try{ if(windChart) windChart.resize(); }catch(e){}
       try{ if(tempChart) tempChart.resize(); }catch(e){}
