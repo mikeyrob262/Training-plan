@@ -6241,6 +6241,56 @@ function renderNutr(){
   });
   h+='</div></div>';
 
+  // -- AI NUTRITION INSIGHT (real bullets computed from actual eaten vs.
+  // target numbers - never generic praise. Each bullet only appears when
+  // the underlying real data actually supports it.)
+  var insightBullets=[];
+  var proGap=tgt.pro-Math.round(tot.p);
+  var carbGap=tgt.carb-Math.round(tot.c);
+  var netCalGap=(tot.cal-exCal)-tgt.cal;
+  if(proGap<=0){
+    insightBullets.push({ok:true,text:'Protein target hit ('+Math.round(tot.p)+'g of '+tgt.pro+'g).'});
+  } else if(proGap<=20){
+    insightBullets.push({ok:null,text:'Close on protein - '+proGap+'g short of today\\u2019s '+tgt.pro+'g target.'});
+  } else {
+    insightBullets.push({ok:false,text:proGap+'g short of today\\u2019s '+tgt.pro+'g protein target.'});
+  }
+  if(fuelPlan){
+    if(carbGap<=0){
+      insightBullets.push({ok:true,text:'Carb target met - good fueling for '+fuelPlan.workoutName+'.'});
+    } else {
+      insightBullets.push({ok:false,text:carbGap+'g short of today\\u2019s carb target for '+fuelPlan.workoutName+'.'});
+    }
+  }
+  if(exCal>0 && tot.cal>0){
+    if(netCalGap<-300){
+      insightBullets.push({ok:false,text:'Burned '+exCal+' cal but only replaced '+Math.round(tot.cal)+' - recovery may suffer without more food today.'});
+    } else if(netCalGap>=-300 && netCalGap<=300){
+      insightBullets.push({ok:true,text:'Calories in vs. burned are well matched today.'});
+    }
+  }
+  var waterPct=Math.round((nd.water||0)/8*100);
+  if(waterPct>=75){
+    insightBullets.push({ok:true,text:'Hydration is on track ('+(nd.water||0)+'/8 today).'});
+  } else if(waterPct>0){
+    insightBullets.push({ok:null,text:'Hydration at '+(nd.water||0)+'/8 - keep drinking through the day.'});
+  }
+  if(insightBullets.length){
+    h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
+    h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">';
+    h+='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><path d="M12 2l1.5 5L19 8l-5.5 1L12 14l-1.5-5L5 8l5.5-1z"/></svg>';
+    h+='<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">AI Nutrition Insight</span></div>';
+    insightBullets.forEach(function(b){
+      var iconColor=b.ok===true?'#639922':b.ok===false?'#E24B4A':'#EF9F27';
+      var iconPath=b.ok===true?'<path d="M20 6L9 17l-5-5"/>':b.ok===false?'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>':'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>';
+      h+='<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">';
+      h+='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+iconColor+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px">'+iconPath+'</svg>';
+      h+='<span style="font-size:13px;color:var(--t2);line-height:1.4">'+b.text+'</span>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
   // -- WATER
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:14px;border:1px solid var(--b1);padding:13px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center">';
