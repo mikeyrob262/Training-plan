@@ -13053,7 +13053,7 @@ function renderAlertsContent(body, hourly, aqiHourly){
 
   if(!alerts.length){
     var clearCard=document.createElement('div');
-    clearCard.style.cssText='background:var(--s2);border-radius:12px;padding:20px;border:1px solid var(--b1);text-align:center';
+    clearCard.style.cssText='background:var(--s2);border-radius:14px;padding:20px;text-align:center';
     clearCard.innerHTML='<div style="font-size:28px;margin-bottom:8px">&#9989;</div>'
       +'<div style="font-size:14px;font-weight:600;color:var(--t1)">No alerts this week</div>'
       +'<div style="font-size:12px;color:var(--t3);margin-top:4px">Clear conditions across the next 7 days &mdash; no thunderstorms, heavy rain, dangerous gusts, heat risk, or air quality concerns detected.</div>';
@@ -13063,15 +13063,21 @@ function renderAlertsContent(body, hourly, aqiHourly){
       if(a.severity!==b.severity) return a.severity==='high'?-1:1;
       return 0;
     });
-    alerts.forEach(function(a){
+    // Single grouped list container - rows separated by a thin top border,
+    // matching Plans/Garage's list pattern instead of individually-boxed
+    // pill cards with gaps between them.
+    var listGroup=document.createElement('div');
+    listGroup.style.cssText='background:var(--s2);border-radius:14px;overflow:hidden';
+    alerts.forEach(function(a,idx){
       var color=a.severity==='high'?'#E24B4A':'#BA7517';
-      var card=document.createElement('div');
-      card.style.cssText='background:var(--s2);border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--b1);border-left:3px solid '+color+';display:flex;align-items:center;gap:12px';
-      card.innerHTML='<div style="font-size:22px;flex-shrink:0">'+a.icon+'</div>'
-        +'<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+a.title+'</div>'
-        +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+a.detail+'</div></div>';
-      wrap.appendChild(card);
+      var row=document.createElement('div');
+      row.style.cssText='padding:12px 16px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:12px';
+      row.innerHTML='<div style="width:32px;height:32px;border-radius:8px;background:'+color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px">'+a.icon+'</div>'
+        +'<div><div style="font-size:13px;font-weight:700;color:var(--t1)">'+a.title+'</div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+a.detail+'</div></div>';
+      listGroup.appendChild(row);
     });
+    wrap.appendChild(listGroup);
   }
 
   var noteCard=document.createElement('div');
