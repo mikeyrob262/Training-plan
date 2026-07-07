@@ -294,7 +294,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 
 </div>
 
-<div id="TRAIN">
+<div id="TRAIN" style="display:none">
 <div id="home-tss-pr"></div>
 <div id="W1" class="wk" style='display:none'>
 <div class="goal"><div class="goal-lbl">Week Goal</div><div class="goal-txt">Build the habit. Easy stays easy. Hit protein every day.</div></div>
@@ -2942,6 +2942,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 <div id="WEATHER" style="display:none;padding:0 0 80px 0"></div>
 <div id="ANALYTICS" style="display:none;padding:0 0 80px 0"></div>
+<div id="HOME_DASH" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
 var cw=1, st={}, curSW=1, svDebounce=null;
@@ -4197,6 +4198,12 @@ function renderDynWeek(w){
 }
 
 function showTrain(){
+  // Only force TRAIN visible if it's already the active screen - this
+  // function is called routinely by GW()/restoreW() just to keep the
+  // week state in sync, and must not silently override whatever screen
+  // (e.g. the new Home dashboard) is actually being shown right now.
+  var trainEl=document.getElementById('TRAIN');
+  if(!trainEl || getComputedStyle(trainEl).display==='none') return;
   var ids=['TRAIN','PROG','NUTR','ACT','SET'];
   ids.forEach(function(id){
     var el=document.getElementById(id);
@@ -4679,6 +4686,7 @@ function showScreen(id){
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
   var anl=document.getElementById('ANALYTICS');if(anl)anl.style.display=id==='ANALYTICS'?'block':'none';
+  var hd=document.getElementById('HOME_DASH');if(hd)hd.style.display=id==='HOME_DASH'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -6770,6 +6778,133 @@ function renderFoodRows(container, list){
 
 
 // -- PERFORMANCE DASHBOARD --------------------------------------------------
+
+// -- NEW HOME DASHBOARD - replaces the old 17-week plan view on the Home
+// tab, matching the reference design exactly: Readiness ring, Today's
+// Plan, Recent Activity, Upcoming Event, AI Coach. Readiness uses TSB
+// (Form) as a stand-in since this app has no HRV/sleep tracking.
+function showHomeDash(){
+  showScreen('HOME_DASH');
+  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
+  var hb=document.getElementById('bnav-home');if(hb)hb.classList.add('active');
+  var scr=document.getElementById('HOME_DASH');
+  if(!scr) return;
+
+  var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
+  var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
+  var tsb=Math.round(last.tsb||0);
+  var ctl=Math.round(last.ctl||0);
+  var atl=Math.round(last.atl||0);
+
+  // Readiness score: map TSB (typically -30 to +25) onto a 0-10 scale,
+  // matching the reference's "8.2 / Good" format. This is a rough
+  // stand-in, not a real physiological readiness score.
+  var readinessRaw = 5 + (tsb/6);
+  var readiness = Math.max(0, Math.min(10, readinessRaw));
+  var readinessLabel = readiness>=7.5?'Good':readiness>=5?'Fair':readiness>=3?'Low':'Poor';
+  var readinessColor = readiness>=7.5?'#5DCAA5':readiness>=5?'#FFB938':'#E24B4A';
+  var readinessPct = readiness/10;
+
+  var greeting=(function(){
+    var h=new Date().getHours();
+    return h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  })();
+  var firstName=(st.userName||'Mikey').split(' ')[0];
+
+  var html='';
+
+  // Header
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px">'
+    +'<div style="display:flex;align-items:center;gap:8px">'
+    +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    +'<span style="font-size:15px;font-weight:800;letter-spacing:-.2px;color:var(--t1)">ATHLETE IQ</span></div>'
+    +'<div style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden">'
+    +(st.profilePhoto?'<img src="'+st.profilePhoto+'" style="width:100%;height:100%;object-fit:cover">':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>')
+    +'</div></div>';
+
+  // Greeting
+  html+='<div style="padding:0 16px 20px">'
+    +'<div style="font-size:22px;font-weight:800;color:var(--t1);letter-spacing:-.3px">'+greeting+', '+firstName+'!</div>'
+    +'<div style="font-size:14px;color:var(--t3);margin-top:2px">'+(tsb>=0?'On track for a strong week.':'Recovery matters right now.')+'</div>'
+    +'</div>';
+
+  // Today's Readiness
+  var r2=40, circ=2*Math.PI*r2;
+  var dash=circ*readinessPct;
+  html+='<div style="margin:0 16px 20px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Today&rsquo;s Readiness</div>'
+    +'<div style="display:flex;align-items:center;gap:20px">'
+    +'<div style="position:relative;width:100px;height:100px;flex-shrink:0">'
+    +'<svg width="100" height="100" viewBox="0 0 100 100" style="transform:rotate(-90deg)">'
+    +'<circle cx="50" cy="50" r="'+r2+'" fill="none" stroke="var(--s2)" stroke-width="8"/>'
+    +'<circle cx="50" cy="50" r="'+r2+'" fill="none" stroke="'+readinessColor+'" stroke-width="8" stroke-dasharray="'+dash+' '+circ+'" stroke-linecap="round"/>'
+    +'</svg>'
+    +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
+    +'<div style="font-size:24px;font-weight:800;color:var(--t1)">'+readiness.toFixed(1)+'</div>'
+    +'<div style="font-size:11px;font-weight:700;color:'+readinessColor+'">'+readinessLabel+'</div>'
+    +'</div></div>'
+    +'<div style="flex:1;display:flex;flex-direction:column;gap:10px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Form (TSB)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+(tsb>=0?'+':'')+tsb+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fitness (CTL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+ctl+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fatigue (ATL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+atl+'</span></div>'
+    +'</div></div></div>';
+
+  // Recent Activity (real data)
+  var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
+  var recent=sorted.slice(0,3);
+  html+='<div style="margin:0 16px 20px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Recent Activity</span>'
+    +'<span style="font-size:12px;color:#378ADD;cursor:pointer" onclick="showAnalytics()">View all</span></div>';
+  if(recent.length===0){
+    html+='<div style="font-size:13px;color:var(--t3)">No activities yet.</div>';
+  } else {
+    var sportColorsH={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56',Strength:'#7C3AED',VirtualRide:'#0EA5E9'};
+    var rideIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
+    var runIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
+    var strengthIconH='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>';
+    recent.forEach(function(r,idx){
+      var realIdx=st.rides.indexOf(r);
+      var sport=r.sportType||r.type||'Ride';
+      var iconColor=sportColorsH[sport]||'#FC4C02';
+      var icon=/strength|weight/i.test(sport)?strengthIconH:/run/i.test(sport)?runIconH:rideIconH;
+      html+='<div onclick="openRideDetail('+realIdx+')" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(idx>0?'border-top:1px solid var(--b1);':'')+'cursor:pointer">'
+        +'<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+        +(r.distance?'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+r.distance+' mi</div>':'')
+        +(r.avgPwr?'<div style="font-size:11px;color:var(--t3)">'+r.avgPwr+'W</div>':'')
+        +'</div></div>';
+    });
+  }
+  html+='</div>';
+
+  // Upcoming Event (real race data)
+  var races=(st.races||[]).filter(function(r){return new Date(r.date)>=new Date();}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  var nextRace=races.length?races[0]:null;
+  if(nextRace){
+    var raceDate=new Date(nextRace.date);
+    var daysOut=Math.max(0,Math.round((raceDate-new Date())/86400000));
+    var monthAbbr=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][raceDate.getMonth()];
+    html+='<div style="margin:0 16px 20px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming Event</div>'
+      +'<div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="showCalendar()">'
+      +'<div style="border:1px solid var(--b1);border-radius:10px;padding:6px 10px;text-align:center;flex-shrink:0">'
+      +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
+      +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+nextRace.name+'</div>'
+      +(nextRace.location?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+nextRace.location+'</div>':'')
+      +'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:#5DCAA5;flex-shrink:0">'+daysOut+' days</div>'
+      +'</div></div>';
+  }
+
+  scr.innerHTML=html;
+}
 
 function showAnalytics(){
   showScreen('ANALYTICS');
@@ -12961,7 +13096,7 @@ function bnavGo(tab){
     var pm=document.getElementById('perf-modal');
     var am=document.getElementById('activities-modal');
     var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
-    if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showScreen('TRAIN');}
+    if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showHomeDash();}
     else if(tab==='analytics'||tab==='activities'){if(am)am.remove();showAnalytics();}
     else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
     else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
@@ -12970,7 +13105,7 @@ function bnavGo(tab){
     // Retry once after clearing any stray overlay that might be blocking re-render
     try{
       document.querySelectorAll('#perf-modal,#activities-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
-      if(tab==='home'){showScreen('TRAIN');}
+      if(tab==='home'){showHomeDash();}
       else if(tab==='analytics'||tab==='activities'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
       else if(tab==='more'){showMoreSheet();}
@@ -16045,6 +16180,10 @@ window.onload = function(){
   updDots();
   restoreExtraSessions();
   try{injectRideStats(cw);}catch(e){console.error('injectRideStats:',e);}
+  // New Home dashboard replaces the old 17-week plan as the landing
+  // screen; the plan itself is untouched and still reachable via TRAIN,
+  // just no longer shown by default.
+  try{ showHomeDash(); }catch(e){ console.error('showHomeDash on load:', e); }
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
