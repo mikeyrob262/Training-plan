@@ -6918,8 +6918,8 @@ function renderPerf(container){
     return h;
   }
 
-  html += '<div style="margin:0 12px 8px;background:var(--s2);border-radius:12px;border:1px solid var(--b1);padding:8px 10px">';
-  html += '<div style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Training Log</div>';
+  html += '<div style="margin:0 16px 20px">';
+  html += '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Training Log</div>';
   html += '<div style="display:flex;gap:10px;margin-bottom:6px">';
   html += makeRings(sportDefs, false, 'Today');
   html += '<div style="width:1px;background:var(--b1);margin:0 2px"></div>';
@@ -6931,22 +6931,22 @@ function renderPerf(container){
   // W/kg category labels
   var wkgLabel=wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational';
   var wkgColor=wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b';
-  html+='<div style="margin:0 12px 8px;background:linear-gradient(135deg,rgba(252,76,2,.06),rgba(255,112,67,.04));border-radius:12px;border:1px solid rgba(252,76,2,.15);padding:8px 10px">'
+  html+='<div style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
     +'<div>'
-    +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Current W/kg</div>'
-    +'<div style="font-size:20px;font-weight:900;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkg.toFixed(2)+'</div>'
-    +'<div style="font-size:9px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' · '+FTP+'W · '+BWT+'lbs</div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Current W/kg</div>'
+    +'<div style="font-size:24px;font-weight:800;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkg.toFixed(2)+'</div>'
+    +'<div style="font-size:11px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' &middot; '+FTP+'W &middot; '+BWT+'lbs</div>'
     +'</div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3)">Target</div>'
-    +'<div style="font-size:20px;font-weight:900;color:#FFB938;line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
-    +'<div style="font-size:9px;color:#FFB938;font-weight:700">Chase 1 · '+targetFTP+'W · '+targetBW+'lbs</div>'
+    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Target</div>'
+    +'<div style="font-size:24px;font-weight:800;color:#FFB938;line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
+    +'<div style="font-size:11px;color:#FFB938;font-weight:700">Chase 1 &middot; '+targetFTP+'W &middot; '+targetBW+'lbs</div>'
     +'</div>'
     +'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:3px"><span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
-    +'<div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px"><div style="height:5px;background:linear-gradient(90deg,#00C896,#FFB938);border-radius:3px;width:'+wkgPct+'%;transition:width .5s ease"></div></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--t3);margin-top:3px">'
+    +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:4px"><span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+    +'<div style="height:6px;background:var(--s2);border-radius:3px"><div style="height:6px;background:linear-gradient(90deg,#00C896,#FFB938);border-radius:3px;width:'+wkgPct+'%;transition:width .5s ease"></div></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-top:4px">'
     +'<span>2.0</span><span>2.5 Chase 2</span><span>3.0 Cat 3</span><span>3.5 Cat 2</span><span>4.0</span>'
     +'</div>'
     +'</div>';
@@ -6973,7 +6973,7 @@ function renderPerf(container){
   });
 
   html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Peak Power</div>';
-  html+='<div style="margin:0 16px 12px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
     +'<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Best efforts</div>'
     +'<div style="font-size:11px;color:var(--t3)">All time · FTP '+FTP+'W</div></div>'
@@ -7049,25 +7049,26 @@ function renderPerf(container){
     +'<div style="font-size:13px;color:var(--t1);line-height:1.4">'+interpText+'</div>'
     +'</div>';
 
-  // Three metric cards
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:6px;margin:0 12px 8px">';
+  // Three metric cards - flat, no box background, matching the reference's
+  // plain Fitness/Fatigue/Form number layout
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 16px 20px">';
   [
     {lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
     {lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
-    {lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL − ATL',barW:null}
+    {lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null}
   ].forEach(function(card){
-    html+='<div style="background:var(--s2);border-radius:10px;padding:8px 6px;text-align:center;border-left:3px solid '+card.c+';border-top-left-radius:0;border-bottom-left-radius:0">'
-      +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:2px">'+card.lbl+'</div>'
-      +'<div style="font-size:18px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
-      +'<div style="font-size:10px;font-weight:700;color:'+card.c+';margin-top:2px;opacity:.8">'+card.sub+'</div>'
-      +'<div style="font-size:9px;color:var(--t3);margin-top:1px">'+card.desc+'</div>'
-      +(card.barW!==null?'<div style="height:3px;background:var(--s3);border-radius:2px;margin-top:4px"><div style="height:3px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':'')
+    html+='<div>'
+      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:4px">'+card.lbl+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:'+card.c+';margin-top:3px">'+card.sub+'</div>'
+      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
+      +(card.barW!==null?'<div style="height:4px;background:var(--s2);border-radius:2px;margin-top:6px"><div style="height:4px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':'')
       +'</div>';
   });
   html+='</div>';
 
   // PMC Chart with labeled points
-  html+='<div style="margin:0 12px 8px;background:var(--s1);border-radius:12px;border:1px solid var(--b1);padding:10px">';
+  html+='<div style="margin:0 16px 20px">';
   html+='<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:2px">8-week trend</div>';
   html+='<div style="font-size:10px;color:var(--t3);margin-bottom:6px">8-week performance trend</div>';
   html+=buildPMCChart(pmcData);
@@ -7155,7 +7156,7 @@ function renderPerf(container){
   html+='<div style="padding:12px 16px 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Season Dashboard</div>';
 
   // HERO ROW - 4 stat cards
-  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;margin:0 16px 20px">';
   var heroStats=[
     {l:'Miles YTD',v:Math.round(totalMiles),s:Math.round(weekMiles)+' this week',c:'var(--blue)'},
     {l:'Hours YTD',v:totalHours.toFixed(1),s:totalRides+' rides',c:'var(--t1)'},
@@ -7163,16 +7164,16 @@ function renderPerf(container){
     {l:'VO2 Max',v:st.vo2max||'—',s:'ml/kg/min',c:st.vo2max>=50?'#00C896':st.vo2max>=45?'var(--orange)':'var(--t1)'}
   ];
   heroStats.forEach(function(s){
-    html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px">'
+    html+='<div>'
       +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">'+s.l+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:'+s.c+';line-height:1">'+s.v+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+s.c+';line-height:1">'+s.v+'</div>'
       +'<div style="font-size:11px;color:var(--t3);margin-top:3px">'+s.s+'</div>'
       +'</div>';
   });
   html+='</div>';
 
   // MONTHLY MILES CHART
-  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Monthly Mileage</div>';
   html+='<div style="font-size:11px;color:var(--t3)">Last 12 months</div></div>';
@@ -7180,26 +7181,26 @@ function renderPerf(container){
   html+='</div>';
 
   // POWER + TSS ROW
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 16px 20px">';
 
   // Power trend
-  html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
+  html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Power Trend</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">8-week avg NP</div>';
   html+='<div id="perf-np-wrap" style="position:relative;height:60px"><canvas id="perf-np-chart" role="img" aria-label="8 week NP trend">NP trend</canvas></div>';
   html+='<div style="border-top:1px solid var(--b1);margin-top:10px;padding-top:8px">';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Best NP</span><span style="font-weight:700;color:var(--orange)">'+(highestNP||'—')+(highestNP?'W':'')+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Best NP</span><span style="font-weight:700;color:var(--orange)">'+(highestNP||'&mdash;')+(highestNP?'W':'')+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">FTP</span><span style="font-weight:700">'+FTP+'W</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">W/kg</span><span style="font-weight:700;color:var(--blue)">'+wkg.toFixed(2)+'</span></div>';
   html+='</div></div>';
 
   // TSS trend
-  html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
+  html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Weekly Load</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">TSS per week</div>';
   html+='<div id="perf-tss-wrap" style="position:relative;height:80px"><canvas id="perf-tss-chart" role="img" aria-label="Weekly TSS bar chart">Weekly TSS: '+wTSSData.join(', ')+'</canvas></div>';
   html+='<div style="border-top:1px solid var(--b1);margin-top:10px;padding-top:8px">';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:#ef4444">'+(highestTSS||'—')+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:#ef4444">'+(highestTSS||'&mdash;')+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">This week</span><span style="font-weight:700;color:var(--blue)">'+(wTSSData[wTSSData.length-1]||0)+'</span></div>';
   var avgTSS=wTSSData.length?Math.round(wTSSData.reduce(function(s,v){return s+v;},0)/wTSSData.filter(function(v){return v>0;}).length):0;
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">8-week avg</span><span style="font-weight:700">'+avgTSS+'</span></div>';
@@ -7207,10 +7208,10 @@ function renderPerf(container){
   html+='</div>';
 
   // CTL PROJECTION
-  html+='<div style="margin:0 16px 10px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px">';
+  html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
-  html+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Fitness Projection → Race Day</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load → projected CTL on Oct 18: <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
+  html+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Fitness Projection &rarr; Race Day</div>';
+  html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load &rarr; projected CTL on Oct 18: <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
   html+='<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">'+daysToRace+' days out</div>';
   html+='<div style="font-size:12px;font-weight:700;color:#ef4444">Oct 18, 2026</div></div></div>';
   // Build CTL projection chart data
@@ -7243,14 +7244,14 @@ function renderPerf(container){
   html+='</div></div>';
 
   // RECORDS + STREAKS ROW
-  html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:0 16px 10px">';
-  html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 16px 20px">';
+  html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Ride Records</div>';
   var records=[
-    ['Longest ride',longestRide?longestRide.toFixed(1)+' mi':'—','var(--blue)'],
-    ['Highest TSS',highestTSS||'—','#ef4444'],
-    ['Best NP',highestNP?(highestNP+'W'):'—','var(--orange)'],
-    ['Avg distance',totalRides?(Math.round(totalMiles/totalRides)+' mi'):'—','var(--t1)'],
+    ['Longest ride',longestRide?longestRide.toFixed(1)+' mi':'&mdash;','var(--blue)'],
+    ['Highest TSS',highestTSS||'&mdash;','#ef4444'],
+    ['Best NP',highestNP?(highestNP+'W'):'&mdash;','var(--orange)'],
+    ['Avg distance',totalRides?(Math.round(totalMiles/totalRides)+' mi'):'&mdash;','var(--t1)'],
     ['Month miles',Math.round(monthMiles)+' mi','var(--t1)']
   ];
   records.forEach(function(r){
@@ -7259,7 +7260,7 @@ function renderPerf(container){
     html+='<span style="font-size:12px;font-weight:700;color:'+r[2]+'">'+r[1]+'</span></div>';
   });
   html+='</div>';
-  html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:14px">';
+  html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Countdown</div>';
   var raceStats=[
     ['Days to race',daysToRace,'#ef4444'],
@@ -7283,83 +7284,6 @@ function renderPerf(container){
     ctlLabels2:ctlLabels2,ctlActual:ctlActual,ctlProj:ctlProj
   };
 
-  // -- RIDE HISTORY (redesigned with accent stripes and zone bars)
-  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div>'
-    +'<button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button>'
-    +'</div>';
-
-
-  if(rides.length===0){
-    html+='<div id="perf-empty-state" style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:32px 16px;text-align:center">'+'<div style="font-size:36px;margin-bottom:10px;opacity:.3">🚴</div>'+'<div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px">No activities yet</div>'+'<div id="perf-sync-msg" style="font-size:13px;color:var(--t3)">Syncing from Firebase...</div>'+'</div>';
-  } else {
-    var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
-    // Scrollable container
-    var showAll=false;
-    var visibleRides=sorted.slice(0,4);
-    html+='<div id="ride-history-list" style="margin:0 16px 16px;height:360px;overflow-y:scroll;border-radius:14px;border:1px solid var(--b1)">';
-    sorted.slice(0,30).forEach(function(r,si){
-      var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
-      var ifVal=r.np&&FTP?(r.np/FTP*100).toFixed(0):null;
-      var rIdx=st.rides.indexOf(r);
-      // Accent color based on TSS
-      var tss=r.tss||0;
-      var accentC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
-
-      var tssBadgeC=tss>=150?'rgba(239,68,68,.12)':tss>=80?'rgba(252,76,2,.12)':tss>=40?'rgba(55,138,221,.12)':'rgba(0,200,150,.12)';
-      var tssTxtC=tss>=150?'#ef4444':tss>=80?'#FC4C02':tss>=40?'#378ADD':'#00C896';
-      html+='<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);overflow:hidden;margin-bottom:10px">'
-        +'<div style="padding:12px 12px 10px">';
-
-      // Header
-      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px">'
-        +'<div style="flex:1;cursor:pointer" onclick="openRideDetail('+rIdx+')">'
-        +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-bottom:1px">'+(r.name||'Activity')+'</div>'
-        +'<div style="font-size:11px;color:var(--t3)">'+(r.date||'')+'</div></div>'
-        +(tss?'<div style="display:flex;align-items:center;gap:6px">'
-          +'<span style="background:'+tssBadgeC+';color:'+tssTxtC+';font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">TSS '+tss+'</span>':'<div>')
-        +(rwkg?'<div style="background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.15);border-radius:8px;padding:5px 9px;text-align:center;margin-left:6px">'
-          +'<div style="font-size:14px;font-weight:900;color:#FC4C02;line-height:1">'+rwkg+'</div>'
-          +'<div style="font-size:9px;font-weight:700;color:rgba(252,76,2,.5)">W/kg</div></div>':'')
-        +'<button onclick="deleteRide('+rIdx+',event)" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;padding:3px 9px;margin-left:6px;border-radius:8px;line-height:1">×</button>'
-        +'</div>';
-
-      // Stats grid - flex so no empty cells
-      var _durDisp=r.duration?(typeof r.duration==='number'?(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(r.duration):r.duration):null;var statItems2=[{v:_durDisp,l:'Time'},{v:r.distance?(r.distance+' mi'):null,l:'Miles'},{v:r.np?(r.np+'W'):r.avgPwr?(r.avgPwr+'W'):null,l:r.np?'NP':'Pwr',c:'#FC4C02'},{v:r.avgHR?(r.avgHR+' bpm'):null,l:'HR',c:'#ef4444'}].filter(function(s){return s.v;});
-      if(statItems2.length){
-        html+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
-        statItems2.forEach(function(s){
-          html+='<div style="background:var(--s2);border-radius:8px;padding:6px 10px;text-align:center;flex:1;min-width:55px">'            +'<div style="font-size:13px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'            +'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:1px">'+s.l+'</div>'            +'</div>';
-        });
-        html+='</div>';
-      }
-
-      // Zone mini bar
-      if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s){
-        var zTotal2=((r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0)+(r.z7s||0))||1;
-        var zData2=[{s:r.z1s||0,c:'#64748b',l:'Z1'},{s:r.z2s||0,c:'#3b82f6',l:'Z2'},{s:r.z3s||0,c:'#22c55e',l:'Z3'},{s:r.z4s||0,c:'#f59e0b',l:'Z4'},{s:r.z5s||0,c:'#ef4444',l:'Z5'},{s:r.z6s||0,c:'#a855f7',l:'Z6'}];
-        html+='<div style="margin-top:8px;overflow:hidden;max-width:100%">';
-        html+='<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px;margin-bottom:5px;max-width:100%;width:100%">';
-        zData2.forEach(function(z){if(z.s>0)html+='<div style="background:'+z.c+';width:'+Math.round(z.s/zTotal2*100)+'%;min-width:2px"></div>';});
-        html+='</div>';
-        html+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
-        zData2.forEach(function(z){
-          if(z.s>0){
-            var pct=Math.round(z.s/zTotal2*100);
-            var mins=Math.floor(z.s/60);
-            html+='<span style="display:flex;align-items:center;gap:3px;font-size:10px;color:var(--t3)">'
-              +'<span style="width:7px;height:7px;border-radius:2px;background:'+z.c+';display:inline-block"></span>'
-              +z.l+' '+pct+'% ('+mins+'m)</span>';
-          }
-        });
-        html+='</div></div>';
-      }
-
-      html+='</div></div>';
-    });
-    html+='</div>';
-    html+='</div>';
-  }
 
   container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'<div id="analytics-ride-list"></div></div>';
 
