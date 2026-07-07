@@ -12889,6 +12889,7 @@ function showWeather(){
     if(weatherActiveTab==='overview') renderWeatherOverviewTab(body);
     else if(weatherActiveTab==='map') renderWeatherMapTab(body);
     else if(weatherActiveTab==='history') renderWeatherHistoryTab(body);
+    else if(weatherActiveTab==='planner') renderWeatherPlannerTab(body);
     else renderWeatherComingSoonTab(body, weatherActiveTab);
   }
 
@@ -12913,6 +12914,18 @@ function renderWeatherHistoryTab(body){
     +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Ride weather history</div>'
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Browse past rides with weather conditions, charts, and route maps.</div>'
     +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Open Ride History</button>'
+    +'</div>';
+}
+
+// Ride Planner reuses the same route -> date/time -> weather-check flow as
+// History (showWeatherHistory), since that flow already does exactly what
+// Ride Planner needs: pick a route, pick a departure time, see conditions.
+function renderWeatherPlannerTab(body){
+  body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:28px;margin-bottom:10px">&#128197;</div>'
+    +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Plan your ride</div>'
+    +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that ride.</div>'
+    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
     +'</div>';
 }
 
@@ -13578,14 +13591,14 @@ function showWeatherHistory(){
 
     // Header
     var hdr=document.createElement('div');
-    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;justify-content:space-between';
+    hdr.style.cssText='background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;justify-content:space-between';
     var backBtn=document.createElement('button');
     backBtn.innerHTML='&lsaquo;';
-    backBtn.style.cssText='background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;width:24px;text-align:left;line-height:1';
+    backBtn.style.cssText='background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;width:24px;text-align:left;line-height:1';
     backBtn.onclick=function(){ showWeather(); };
     hdr.appendChild(backBtn);
     var titleSpan=document.createElement('div');
-    titleSpan.style.cssText='font-size:14px;font-weight:800;color:#fff;letter-spacing:0.04em';
+    titleSpan.style.cssText='font-size:14px;font-weight:800;color:var(--t1);letter-spacing:0.04em';
     titleSpan.textContent='RIDE WEATHER';
     hdr.appendChild(titleSpan);
     var spacer=document.createElement('div');
@@ -13707,9 +13720,9 @@ function showWeatherHistory(){
     scr.scrollTop=0;
 
     var hdr=document.createElement('div');
-    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
-    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
-      +'<div style="font-size:14px;font-weight:800;color:#fff">Search Routes</div>';
+    hdr.style.cssText='background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
+    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+      +'<div style="font-size:14px;font-weight:800;color:var(--t1)">Search Routes</div>';
     scr.appendChild(hdr);
 
     var body=document.createElement('div');
@@ -13818,10 +13831,10 @@ function showWeatherHistory(){
     scr.scrollTop=0;
 
     var hdr=document.createElement('div');
-    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
-    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
-      +'<div style="flex:1"><div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(route.name||route.sportType||'Ride')+'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+(route.distance||'')+'mi route</div></div>';
+    hdr.style.cssText='background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
+    hdr.innerHTML='<button onclick="showWeatherHistory()" style="background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+      +'<div style="flex:1"><div style="font-size:13px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(route.name||route.sportType||'Ride')+'</div>'
+      +'<div style="font-size:11px;color:var(--t3)">'+(route.distance||'')+'mi route</div></div>';
     scr.appendChild(hdr);
 
     var body=document.createElement('div');
@@ -13945,11 +13958,11 @@ function showWeatherHistory(){
     scr.scrollTop=0;
 
     var hdr=document.createElement('div');
-    hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
-    hdr.innerHTML='<button onclick="renderDatePicker_'+ride.stravaId+'()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
+    hdr.style.cssText='background:var(--s1);border-bottom:1px solid var(--b1);padding:14px 16px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10';
+    hdr.innerHTML='<button style="background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;line-height:1">‹</button>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(ride.name||ride.sportType||'Ride')+'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,0.75)">'+rideDate+' · '+((startHour>12?startHour-12:startHour||12)+(startHour>=12?'PM':'AM'))+' start</div>'
+      +'<div style="font-size:13px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(ride.name||ride.sportType||'Ride')+'</div>'
+      +'<div style="font-size:11px;color:var(--t3)">'+rideDate+' &middot; '+((startHour>12?startHour-12:startHour||12)+(startHour>=12?'PM':'AM'))+' start</div>'
       +'</div>';
     hdr.querySelector('button').onclick=function(){renderDatePicker(ride);};
     scr.appendChild(hdr);
