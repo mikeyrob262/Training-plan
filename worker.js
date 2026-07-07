@@ -5783,6 +5783,42 @@ var CF=[...RESTAURANT_FOODS,
   {n:"Taco Bell Chalupa",cal:350,p:14,c:32,f:18,srv:"1 chalupa"}
 ];
 // Dynamic macro targets based on weight + training intensity
+// Colored circular food-category icon for logged meal items, matching
+// the same real-icon/dark-circle pattern used for Home's activity icons
+// tonight. Uses real Tabler icon paths keyed by keyword match on the
+// food name - not a fabricated icon set.
+function foodCategoryIconHTML_(foodName){
+  var s=(foodName||'').toLowerCase();
+  var color, path;
+  if(/egg/.test(s)){
+    color='#FAC775';
+    path='<path d="M19 14.083c0 4.154 -2.966 6.74 -7 6.917c-4.2 0 -7 -2.763 -7 -6.917c0 -5.538 3.5 -11.09 7 -11.083c3.5 .007 7 5.545 7 11.083" />';
+  } else if(/chicken|beef|turkey|pork|meat|sausage|steak|bacon/.test(s)){
+    color='#E24B4A';
+    path='<path d="M13.62 8.382l1.966 -1.967a2 2 0 1 1 3.414 -1.415a2 2 0 1 1 -1.413 3.414l-1.82 1.821" /><path d="M5.904 18.596c2.733 2.734 5.9 4 7.07 2.829c1.172 -1.172 -.094 -4.338 -2.828 -7.071c-2.733 -2.734 -5.9 -4 -7.07 -2.829c-1.172 1.172 .094 4.338 2.828 7.071" /><path d="M7.5 16l1 1" /><path d="M12.975 21.425c3.905 -3.906 4.855 -9.288 2.121 -12.021c-2.733 -2.734 -8.115 -1.784 -12.02 2.121" />';
+  } else if(/banana|apple|berry|berries|fruit|orange|grape/.test(s)){
+    color='#639922';
+    path='<path d="M4 11.319c0 3.102 .444 5.319 2.222 7.978c1.351 1.797 3.156 2.247 5.08 .988c.426 -.268 .97 -.268 1.397 0c1.923 1.26 3.728 .809 5.079 -.988c1.778 -2.66 2.222 -4.876 2.222 -7.977c0 -2.661 -1.99 -5.32 -4.444 -5.32c-1.267 0 -2.41 .693 -3.22 1.44a.5 .5 0 0 1 -.672 0c-.809 -.746 -1.953 -1.44 -3.22 -1.44c-2.454 0 -4.444 2.66 -4.444 5.319" /><path d="M7 12c0 -1.47 .454 -2.34 1.5 -3" /><path d="M12 7c0 -1.2 .867 -4 3 -4" />';
+  } else if(/bread|toast|bagel|oat|rice|potato|pasta|cereal/.test(s)){
+    color='#EF9F27';
+    path='<path d="M18 4a3 3 0 0 1 2 5.235v8.765a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-8.764a3 3 0 0 1 1.824 -5.231h12.176v-.005" />';
+  } else if(/milk|yogurt|cheese|whey|protein shake|owyn/.test(s)){
+    color='#378ADD';
+    path='<path d="M8 6h8v-2a1 1 0 0 0 -1 -1h-6a1 1 0 0 0 -1 1v2" /><path d="M16 6l1.094 1.759a6 6 0 0 1 .906 3.17v8.071a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-8.071a6 6 0 0 1 .906 -3.17l1.094 -1.759" /><path d="M10 16a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M10 10h4" />';
+  } else if(/salad|vegetable|broccoli|spinach|lettuce/.test(s)){
+    color='#639922';
+    path='<path d="M4 11h16a1 1 0 0 1 1 1v.5c0 1.5 -2.517 5.573 -4 6.5v1a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-1c-1.687 -1.054 -4 -5 -4 -6.5v-.5a1 1 0 0 1 1 -1" /><path d="M18.5 11c.351 -1.017 .426 -2.236 .5 -3.714v-1.286h-2.256c-2.83 0 -4.616 .804 -5.64 2.076" /><path d="M5.255 11.008a12.204 12.204 0 0 1 -.255 -2.008v-1h1.755c.98 0 1.801 .124 2.479 .35" /><path d="M8 8l1 -4l4 2.5" /><path d="M13 11v-.5a2.5 2.5 0 1 0 -5 0v.5" />';
+  } else if(/coffee|espresso/.test(s)){
+    color='#7C3AED';
+    path='<path d="M3 14c.83 .642 2.077 1.017 3.5 1c1.423 .017 2.67 -.358 3.5 -1c.83 -.642 2.077 -1.017 3.5 -1c1.423 -.017 2.67 .358 3.5 1" /><path d="M8 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /><path d="M12 3a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /><path d="M3 10h14v5a6 6 0 0 1 -6 6h-2a6 6 0 0 1 -6 -6v-5" /><path d="M16.746 16.726a3 3 0 1 0 .252 -5.555" />';
+  } else {
+    color='#888780';
+    path='<path d="M4 11h16a1 1 0 0 1 1 1v.5c0 1.5 -2.517 5.573 -4 6.5v1a1 1 0 0 1 -1 1h-8a1 1 0 0 1 -1 -1v-1c-1.687 -1.054 -4 -5 -4 -6.5v-.5a1 1 0 0 1 1 -1" /><path d="M12 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /><path d="M16 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" /><path d="M8 4a2.4 2.4 0 0 0 -1 2a2.4 2.4 0 0 0 1 2" />';
+  }
+  return '<div style="width:32px;height:32px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg></div>';
+}
+
 function calcMTGT(){
   var wt = parseFloat(st.weight||160); // lbs
   var targets = {
@@ -6654,8 +6690,12 @@ function renderNutr(){
     items.forEach(function(item,ii){
       if(item.deleted) return;
       var row=document.createElement('div');
-      row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-top:1px solid var(--b1)';
+      row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:9px 16px;border-top:1px solid var(--b1);gap:10px';
+      var iconWrap=document.createElement('div');
+      iconWrap.innerHTML=foodCategoryIconHTML_(item.n);
+      iconWrap.firstChild.style.flexShrink='0';
       var info=document.createElement('div');
+      info.style.flex='1';info.style.minWidth='0';
       var iName=document.createElement('div');
       iName.style.cssText='font-size:13px;font-weight:500;color:var(--t1)';
       iName.textContent=item._qty&&item._qty>1 ? item.n+' ×'+item._qty : item.n;
@@ -6716,7 +6756,7 @@ function renderNutr(){
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
-      row.appendChild(info);row.appendChild(rDiv);
+      row.appendChild(iconWrap);row.appendChild(info);row.appendChild(rDiv);
       mealDiv.appendChild(row);
     });
     nutrContainer.appendChild(mealDiv);
