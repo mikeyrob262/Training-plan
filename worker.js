@@ -7493,35 +7493,35 @@ function renderRideList(container){
     html+='</div>';
   }
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
+  var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56',Strength:'#7C3AED',VirtualRide:'#0EA5E9'};
+  var rideIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
+  var runIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
+  var strengthIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>';
+  var listGroup=document.createElement('div');
+  listGroup.style.cssText='margin:0 16px';
   rides.forEach(function(r,idx){
     var realIdx=st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
-    var hasZones=r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s;
-    var totalZ=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
-    html+='<div onclick="openRideDetail('+realIdx+')" style="margin:6px 16px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;cursor:pointer">';
-    html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+r.name+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">'+r.date+'</div></div>';
-    html+='<div style="display:flex;align-items:center;gap:6px">';
-    if(r.tss) html+='<div style="background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.3);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#2980B9">TSS '+r.tss+'</div>';
-    html+='<button onclick="deleteRide('+realIdx+',event)" style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;padding:3px 9px;border-radius:8px;line-height:1">×</button>';
-    html+='</div></div>';
-    html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
-    if(rwkg) html+='<div style="background:rgba(252,76,2,.1);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;color:#FC4C02">'+rwkg+' W/kg</div>';
-    if(r.duration) html+='<div style="font-size:12px;color:var(--t2)">⏱ '+r.duration+'</div>';
-    if(r.distance) html+='<div style="font-size:12px;color:var(--t2)">'+r.distance+' mi</div>';
-    if(r.np) html+='<div style="font-size:12px;font-weight:600;color:#FC4C02">'+r.np+'W NP</div>';
-    if(r.avgHR) html+='<div style="font-size:12px;color:#ef4444">♥ '+r.avgHR+'</div>';
-    html+='</div>';
-    if(hasZones&&totalZ>0){
-      var zc=['#60a5fa','#34d399','#fbbf24','#f97316','#ef4444','#a855f7'];
-      var zv=[r.z1s||0,r.z2s||0,r.z3s||0,r.z4s||0,r.z5s||0,r.z6s||0];
-      html+='<div style="display:flex;height:4px;border-radius:2px;overflow:hidden;margin-top:8px">';
-      zv.forEach(function(z,i){if(z>0)html+='<div style="flex:'+z+';background:'+zc[i]+'"></div>';});
-      html+='</div>';
-    }
-    html+='</div>';
+    var sport=r.sportType||r.type||'Ride';
+    var iconColor=sportColors[sport]||'#FC4C02';
+    var icon=/strength|weight/i.test(sport)?strengthIcon:/run/i.test(sport)?runIcon:rideIcon;
+    var row=document.createElement('div');
+    row.style.cssText='padding:11px 4px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
+    row.innerHTML='<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+' mi &middot; ':'')+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div>'
+      +'</div>'
+      +(rwkg?'<div style="font-size:12px;font-weight:700;color:'+iconColor+';flex-shrink:0">'+rwkg+' W/kg</div>':'')
+      +'<div style="color:var(--t3);font-size:16px;flex-shrink:0">&rsaquo;</div>';
+    row.onclick=function(){ openRideDetail(realIdx); };
+    listGroup.appendChild(row);
   });
-  container.innerHTML=html;
-  // Wire drop zone
+  container.innerHTML='';
+  var htmlWrap=document.createElement('div');
+  htmlWrap.innerHTML=html;
+  container.appendChild(htmlWrap);
+  container.appendChild(listGroup);
   var dz=document.getElementById('ride-drop-zone');
   if(dz){
     dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';});
@@ -8791,13 +8791,13 @@ function openRideDetail(idx){
   titleWrap.style.cssText='flex:1;min-width:0;padding:0 10px';
   titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:16px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
     +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+dtStr+'</div>';
-  var renameBtn=document.createElement('button');
-  renameBtn.textContent='Rename';
-  renameBtn.style.cssText='background:var(--s2);border:1px solid var(--b1);color:#FC4C02;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer;flex-shrink:0';
-  renameBtn.onclick=function(){ renameRide(idx); };
+  var moreBtn=document.createElement('button');
+  moreBtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
+  moreBtn.style.cssText='background:none;border:none;cursor:pointer;padding:6px;flex-shrink:0;display:flex;align-items:center';
+  moreBtn.onclick=function(){ openRideDetailMoreMenu(idx); };
   hdr.appendChild(backBtn);
   hdr.appendChild(titleWrap);
-  hdr.appendChild(renameBtn);
+  hdr.appendChild(moreBtn);
 
   // Hero stat row - generous 2x3 grid (matching the reference's Time/
   // Distance/Intensity/HR/Power/TSS layout) plus a full-width Calories
@@ -9697,6 +9697,11 @@ function deleteRide(idx, e){
     }
     sv();
     fbPush(false, true); // push immediately as authoritative, so the deletion sticks right away rather than waiting on the next routine merge
+    // If this delete was triggered from inside the ride detail view
+    // itself (via the More menu), close it - the ride it was showing
+    // no longer exists.
+    var rideDetailModal=document.getElementById('ride-detail-modal');
+    if(rideDetailModal) closeRideDetail();
     // Activities was folded into Analytics - the ride list lives in
     // analytics-ride-list now, a sub-container inside perf-body.
     var rlc=document.getElementById('analytics-ride-list');
@@ -9712,6 +9717,38 @@ function closeRideDetail(){
   var m = document.getElementById('ride-detail-modal');
   if(m) m.remove();
   document.body.style.overflow = '';
+}
+
+// Small bottom-sheet action menu reached via the ride detail header's
+// (...) button - the list rows no longer show a quick-delete X (to
+// match the reference design), so Rename and Delete live here instead.
+function openRideDetailMoreMenu(idx){
+  var old=document.getElementById('ride-more-menu');
+  if(old) old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='ride-more-menu';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:10px 0 max(10px,env(safe-area-inset-bottom))';
+  function makeRow(label, color, onClick){
+    var row=document.createElement('div');
+    row.style.cssText='padding:15px 20px;font-size:15px;font-weight:600;color:'+color+';cursor:pointer;text-align:center';
+    row.textContent=label;
+    row.onclick=function(){ overlay.remove(); onClick(); };
+    return row;
+  }
+  sheet.appendChild(makeRow('Rename', 'var(--t1)', function(){ renameRide(idx); }));
+  var divider=document.createElement('div');
+  divider.style.cssText='height:1px;background:var(--b1);margin:2px 16px';
+  sheet.appendChild(divider);
+  sheet.appendChild(makeRow('Delete Ride', '#ef4444', function(){ deleteRide(idx); }));
+  var divider2=document.createElement('div');
+  divider2.style.cssText='height:6px';
+  sheet.appendChild(divider2);
+  sheet.appendChild(makeRow('Cancel', 'var(--t3)', function(){}));
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
 }
 
 function buildRouteMap(lats, lons, pwrData, FTP){
