@@ -13350,23 +13350,25 @@ function renderOverviewContent(body, wxData, ftp, weight){
     return fullDayPoints.slice(windowStart, windowStart+windowSize);
   }
 
-  function updateNavRow(navEl, atStart, atEnd){
+  function updateNavRow(navEl, atStart, atEnd, showLabel){
     navEl.innerHTML='';
     var prev=arrowBtn('left');
     prev.disabled=atStart;
     prev.style.opacity=atStart?'.35':'1';
     prev.style.cursor=atStart?'default':'pointer';
     prev.onclick=function(){ if(windowStart>0){ windowStart=Math.max(0,windowStart-windowSize); redrawWindow(); } };
-    var label=document.createElement('div');
-    label.style.cssText='font-size:11px;color:var(--t3);font-weight:600';
-    label.innerHTML=windowLabel();
     var next=arrowBtn('right');
     next.disabled=atEnd;
     next.style.opacity=atEnd?'.35':'1';
     next.style.cursor=atEnd?'default':'pointer';
     next.onclick=function(){ if(windowStart<maxWindowStart){ windowStart=Math.min(maxWindowStart,windowStart+windowSize); redrawWindow(); } };
     navEl.appendChild(prev);
-    navEl.appendChild(label);
+    if(showLabel!==false){
+      var label=document.createElement('div');
+      label.style.cssText='font-size:11px;color:var(--t3);font-weight:600';
+      label.innerHTML=windowLabel();
+      navEl.appendChild(label);
+    }
     navEl.appendChild(next);
   }
 
@@ -13378,7 +13380,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
     var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
     var windNavEl=document.getElementById('wx-wind-nav');
     var tempNavEl=document.getElementById('wx-temp-nav');
-    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd, false);
     if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
   }
 
@@ -13409,7 +13411,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
     var windNavEl=document.getElementById('wx-wind-nav');
     var tempNavEl=document.getElementById('wx-temp-nav');
     var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
-    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd, false);
     if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
     setTimeout(function(){
       try{ if(windChart) windChart.resize(); }catch(e){}
