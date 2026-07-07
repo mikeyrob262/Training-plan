@@ -8799,18 +8799,38 @@ function openRideDetail(idx){
   hdr.appendChild(titleWrap);
   hdr.appendChild(renameBtn);
 
-  // Hero stat row
+  // Hero stat row - generous 2x3 grid (matching the reference's Time/
+  // Distance/Intensity/HR/Power/TSS layout) plus a full-width Calories
+  // row, instead of a cramped single 4-cell strip.
   var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
   var heroRow=document.createElement('div');
-  heroRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b1);flex-shrink:0';
-  [{v:r.duration||'-',l:'Time'},{v:(r.distance||'-')+(r.distance?'mi':''),l:'Distance'},{v:rwkg?rwkg+' W/kg':'-',l:'W/kg',c:'#FC4C02'},{v:r.tss||'-',l:'TSS',c:'#2980B9'}]
-  .forEach(function(s){
+  heroRow.style.cssText='background:var(--s1);padding:16px 16px 0;flex-shrink:0';
+  var heroGrid=document.createElement('div');
+  heroGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:14px 20px';
+  [
+    {v:r.duration||'-',l:'Time'},
+    {v:(r.distance||'-')+(r.distance?' mi':''),l:'Distance'},
+    {v:rwkg?rwkg+' W/kg':'-',l:'Intensity',c:'#FC4C02'},
+    {v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg HR',c:'#ef4444'},
+    {v:(r.avgPwr||'-')+(r.avgPwr?' w':''),l:'Avg Power'},
+    {v:r.tss||'-',l:'Training Stress',c:'#2980B9'}
+  ].forEach(function(s){
     var cell=document.createElement('div');
-    cell.style.cssText='background:var(--s1);padding:10px 8px;text-align:center';
-    cell.innerHTML='<div style="font-size:16px;font-weight:900;color:'+(s.c||'var(--t1)')+';letter-spacing:-.3px">'+s.v+'</div>'
-      +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:2px">'+s.l+'</div>';
-    heroRow.appendChild(cell);
+    cell.innerHTML='<div style="font-size:24px;font-weight:800;color:'+(s.c||'var(--t1)')+';letter-spacing:-.5px;line-height:1.1">'+s.v+'</div>'
+      +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:4px">'+s.l+'</div>';
+    heroGrid.appendChild(cell);
   });
+  heroRow.appendChild(heroGrid);
+  if(r.calories){
+    var calRow=document.createElement('div');
+    calRow.style.cssText='margin-top:14px;padding-top:14px;border-top:1px solid var(--b1)';
+    calRow.innerHTML='<div style="font-size:24px;font-weight:800;color:var(--t1);letter-spacing:-.5px">'+r.calories+' Cal</div>'
+      +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:4px">Calories</div>';
+    heroRow.appendChild(calRow);
+  }
+  var heroSpacer=document.createElement('div');
+  heroSpacer.style.cssText='height:16px';
+  heroRow.appendChild(heroSpacer);
 
   // Tab bar
   var tabDefs=[
@@ -8872,12 +8892,16 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:14px 16px';
 
-  // AI Coach Insight card - loading state, filled by a real API call below
+  // AI Coach Insight card - loading state, filled in by parsing the real
+  // API response into a headline + icon bullets + recommendation, once
+  // fetchRideCoachInsight resolves below.
   var coachCard=document.createElement('div');
   coachCard.id='ride-coach-card';
-  coachCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px;border-left:3px solid #a855f7';
-  coachCard.innerHTML='<div style="font-size:11px;color:#c084fc;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">AI Coach Insight</div>'
-    +'<div id="ride-coach-text" style="font-size:13px;color:var(--t2);line-height:1.5">Analyzing this ride&hellip;</div>';
+  coachCard.style.cssText='background:var(--s2);border-radius:14px;padding:18px;margin-bottom:14px';
+  coachCard.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">'
+    +'<span style="font-size:11px;color:#c084fc;font-weight:700;text-transform:uppercase;letter-spacing:.04em">AI Coach Insight</span>'
+    +'<span style="font-size:9px;font-weight:700;color:var(--t3);background:var(--s3);padding:2px 6px;border-radius:6px">Beta</span></div>'
+    +'<div id="ride-coach-body" style="font-size:14px;color:var(--t2);line-height:1.6">Analyzing this ride&hellip;</div>';
   wrap.appendChild(coachCard);
 
   // Compact route preview (if GPS available) - full map lives on the Route tab
@@ -8886,6 +8910,59 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     mapPreview.style.cssText='border-radius:14px;overflow:hidden;margin-bottom:14px;border:1px solid var(--b1)';
     mapPreview.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
     wrap.appendChild(mapPreview);
+  }
+
+  // Weather Conditions summary (today's live conditions - the ride's
+  // actual historical weather lives on the Weather tab; this is a quick
+  // glance, matching the reference's compact card)
+  var wxCard=document.createElement('div');
+  wxCard.id='ride-overview-weather';
+  wxCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px';
+  var wxHdrRow=document.createElement('div');
+  wxHdrRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
+  wxHdrRow.innerHTML='<span style="font-size:13px;font-weight:700;color:var(--t1)">Weather Conditions</span>';
+  var wxViewBtn=document.createElement('span');
+  wxViewBtn.textContent='View';
+  wxViewBtn.style.cssText='font-size:12px;color:#FC4C02;cursor:pointer';
+  wxViewBtn.onclick=function(){
+    var tabButtons=document.querySelectorAll('#ride-detail-modal button');
+    for(var i=0;i<tabButtons.length;i++){ if(tabButtons[i].textContent==='Weather'){ tabButtons[i].click(); break; } }
+  };
+  wxHdrRow.appendChild(wxViewBtn);
+  wxCard.appendChild(wxHdrRow);
+  var wxBodyEl=document.createElement('div');
+  wxBodyEl.id='ride-overview-weather-body';
+  wxBodyEl.style.cssText='font-size:12px;color:var(--t3)';
+  wxBodyEl.textContent='Loading\u2026';
+  wxCard.appendChild(wxBodyEl);
+  wrap.appendChild(wxCard);
+
+  // Equipment summary
+  ensureBikes();
+  var ovBike = null;
+  if(r.gearId){ ovBike = (st.bikes||[]).find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; }); }
+  if(!ovBike && r.gearName){ ovBike = (st.bikes||[]).find(function(b){ return b.name===r.gearName; }); }
+  if(ovBike){
+    var eqCard=document.createElement('div');
+    eqCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px';
+    var eqBadge=bikeStatusBadge(ovBike);
+    var eqHdrRow=document.createElement('div');
+    eqHdrRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
+    eqHdrRow.innerHTML='<span style="font-size:13px;font-weight:700;color:var(--t1)">Equipment</span>';
+    var eqViewBtn=document.createElement('span');
+    eqViewBtn.textContent='View';
+    eqViewBtn.style.cssText='font-size:12px;color:#FC4C02;cursor:pointer';
+    eqViewBtn.onclick=function(){
+      var tabButtons=document.querySelectorAll('#ride-detail-modal button');
+      for(var i=0;i<tabButtons.length;i++){ if(tabButtons[i].textContent==='Equipment'){ tabButtons[i].click(); break; } }
+    };
+    eqHdrRow.appendChild(eqViewBtn);
+    eqCard.appendChild(eqHdrRow);
+    var eqBodyEl=document.createElement('div');
+    eqBodyEl.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">'+ovBike.name+'</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+(ovBike.miles||0)+' mi total'+(eqBadge.label?' &middot; '+eqBadge.label:'')+'</div>';
+    eqCard.appendChild(eqBodyEl);
+    wrap.appendChild(eqCard);
   }
 
   // Key stats row
@@ -8903,14 +8980,70 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
 
   body.appendChild(wrap);
 
+  // Fill in the quick weather glance using current conditions
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+    +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relative_humidity_2m,visibility'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+  .then(function(res){ return res.json(); })
+  .then(function(d){
+    var wxEl=document.getElementById('ride-overview-weather-body');
+    if(!wxEl || !d.current) return;
+    var dirArr=['N','NE','E','SE','S','SW','W','NW'];
+    var dir=dirArr[Math.round((d.current.winddirection_10m||0)/45)%8];
+    wxEl.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +'<div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(d.current.temperature_2m)+'&deg;F</div><div style="font-size:11px;color:var(--t3)">Feels '+Math.round(d.current.apparent_temperature)+'&deg;</div></div>'
+      +'<div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+dir+' '+Math.round(d.current.windspeed_10m)+' mph</div><div style="font-size:11px;color:var(--t3)">Wind</div></div>'
+      +'</div>';
+  })
+  .catch(function(){
+    var wxEl=document.getElementById('ride-overview-weather-body');
+    if(wxEl) wxEl.textContent='Weather unavailable right now.';
+  });
+
   // Fetch a real, ride-specific coach insight using the same shared
   // fetchTodaysDecision-style API call, but with a prompt built from
   // this specific ride's numbers rather than "today."
   fetchRideCoachInsight(r, function(err, text){
-    var el=document.getElementById('ride-coach-text');
+    var el=document.getElementById('ride-coach-body');
     if(!el) return;
-    el.textContent = (err || !text) ? 'Coach insight unavailable right now.' : text;
+    if(err || !text){ el.textContent='Coach insight unavailable right now.'; return; }
+    renderCoachInsightContent(el, text);
   });
+}
+
+// Parses the coach response (headline line, "- " bullet observations,
+// "Recommendation: " line) into styled HTML matching the reference:
+// green bold headline, checkmark/lightning/heart-style icon bullets,
+// a distinct Recommendation block, and an Ask Coach button.
+function renderCoachInsightContent(el, text){
+  var lines=text.split(String.fromCharCode(10)).map(function(l){ return l.trim(); }).filter(Boolean);
+  var headline='', bullets=[], recommendation='';
+  lines.forEach(function(line){
+    if(line.toLowerCase().indexOf('recommendation:')===0){ recommendation=line.replace(/^recommendation:\s*/i,''); }
+    else if(line.indexOf('- ')===0){ bullets.push(line.replace(/^-\s*/,'')); }
+    else if(!headline){ headline=line; }
+  });
+
+  var icons=['&#9989;','&#9889;','&#10084;&#65039;','&#128077;'];
+  var html='<div style="font-size:15px;font-weight:700;color:#5DCAA5;line-height:1.4;margin-bottom:14px">'+headline+'</div>';
+  if(bullets.length){
+    html+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">';
+    bullets.forEach(function(b, i){
+      html+='<div style="display:flex;gap:8px;align-items:flex-start">'
+        +'<span style="flex-shrink:0;margin-top:1px">'+icons[i%icons.length]+'</span>'
+        +'<span style="font-size:13px;color:var(--t1);line-height:1.5">'+b+'</span></div>';
+    });
+    html+='</div>';
+  }
+  if(recommendation){
+    html+='<div style="border-top:1px solid var(--b1);padding-top:12px;margin-top:2px">'
+      +'<div style="font-size:11px;font-weight:700;color:#5DCAA5;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Recommendation</div>'
+      +'<div style="font-size:13px;color:var(--t2);line-height:1.5;margin-bottom:14px">'+recommendation+'</div></div>';
+  }
+  html+='<button id="ride-ask-coach-btn" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;color:var(--t1);cursor:pointer">Ask Coach</button>';
+  el.innerHTML=html;
+  var askBtn=document.getElementById('ride-ask-coach-btn');
+  if(askBtn) askBtn.onclick=function(){ toast('Ask Coach is coming soon'); };
 }
 
 // Builds a ride-specific prompt (distinct from fetchTodaysDecision, which
@@ -9127,6 +9260,36 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
   wrap.style.cssText='padding:14px 16px';
   var html='';
 
+  // Dedicated metric cards with big Avg/Max above a sparkline, matching
+  // the reference's Charts tab layout. Only Power and Heart Rate have
+  // real per-point chart data in this app (no cadence/speed time-series
+  // exist yet) - built honestly for what is actually available rather
+  // than inventing placeholder charts for the other two.
+  if(r.chartPwr && r.chartPwr.length){
+    html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:10px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Power (W)</div>'
+      +'<div style="display:flex;gap:20px;align-items:baseline;margin-bottom:10px">'
+      +'<div><span style="font-size:22px;font-weight:800;color:var(--t1)">'+(r.avgPwr||'-')+'</span><span style="font-size:11px;color:var(--t3)"> Avg</span></div>'
+      +'<div><span style="font-size:22px;font-weight:800;color:var(--t1)">'+(r.maxPwr||'-')+'</span><span style="font-size:11px;color:var(--t3)"> Max</span></div>'
+      +'</div>'
+      +buildLineChart(r.chartPwr,'#FC4C02','W','')+'</div>';
+  }
+  if(r.chartHR && r.chartHR.length){
+    html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:10px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Heart Rate (bpm)</div>'
+      +'<div style="display:flex;gap:20px;align-items:baseline;margin-bottom:10px">'
+      +'<div><span style="font-size:22px;font-weight:800;color:var(--t1)">'+(r.avgHR||'-')+'</span><span style="font-size:11px;color:var(--t3)"> Avg</span></div>'
+      +'<div><span style="font-size:22px;font-weight:800;color:var(--t1)">'+(r.maxHR||'-')+'</span><span style="font-size:11px;color:var(--t3)"> Max</span></div>'
+      +'</div>'
+      +buildLineChart(r.chartHR,'#ef4444','bpm','')+'</div>';
+  }
+  if(r.cadence){
+    html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:10px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Cadence (rpm)</div>'
+      +'<div style="font-size:22px;font-weight:800;color:var(--t1)">'+r.cadence+'<span style="font-size:11px;color:var(--t3);font-weight:600"> Avg</span></div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:6px">Per-second cadence not recorded for this ride - only the ride average is available.</div></div>';
+  }
+
   var hrColHtml='';
   if(r.avgHR){
     var cMaxHR=parseInt(st.maxHR||172);
@@ -9166,39 +9329,27 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
   html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+powerColHtml+'</div>';
   html+='</div>';
 
-  if(r.chartPwr && r.chartPwr.length){
-    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px">Power</div>';
-    html+='<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">'
-      +buildLineChart(r.chartPwr,'#FC4C02','W','NP '+(r.np||'-')+'W &middot; Avg '+(r.avgPwr||'-')+'W',FTP)+'</div>';
-  }
-
-  if(r.chartHR && r.chartHR.length){
-    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px">Heart Rate</div>';
-    html+='<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">'
-      +buildLineChart(r.chartHR,'#ef4444','bpm','Avg '+(r.avgHR||'-')+' bpm &middot; Max '+(r.maxHR||'-')+' bpm');
-    if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s){
-      var maxHRset=r.maxHR||180;
-      var hrZones=[
-        {n:'Zone 1',range:'< '+(Math.round(maxHRset*.6))+'bpm',s:r.z1s||0,c:'#64748b'},
-        {n:'Zone 2',range:(Math.round(maxHRset*.6))+'-'+(Math.round(maxHRset*.7))+'bpm',s:r.z2s||0,c:'#3b82f6'},
-        {n:'Zone 3',range:(Math.round(maxHRset*.7))+'-'+(Math.round(maxHRset*.8))+'bpm',s:r.z3s||0,c:'#22c55e'},
-        {n:'Zone 4',range:(Math.round(maxHRset*.8))+'-'+(Math.round(maxHRset*.9))+'bpm',s:r.z4s||0,c:'#f59e0b'},
-        {n:'Zone 5',range:'> '+(Math.round(maxHRset*.9))+'bpm',s:r.z5s||0,c:'#ef4444'}
-      ];
-      var totalHR=hrZones.reduce(function(a,b){return a+b.s;},0)||1;
-      html+='<div style="margin-top:14px;border-top:1px solid var(--b1);padding-top:12px">'
-        +'<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">HR Zones</div>';
-      hrZones.forEach(function(z){
-        var pct=Math.round(z.s/totalHR*100);
-        var mins=Math.floor(z.s/60);
-        html+='<div style="margin-bottom:8px">'
-          +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
-          +'<span style="font-weight:600;color:var(--t1)">'+z.n+' <span style="font-weight:400;color:var(--t3)">'+z.range+'</span></span>'
-          +'<span style="color:var(--t3)">'+mins+'min <span style="font-weight:700;color:'+z.c+'">'+pct+'%</span></span></div>'
-          +'<div style="height:6px;background:var(--s3);border-radius:3px"><div style="height:6px;background:'+z.c+';border-radius:3px;width:'+pct+'%"></div></div></div>';
-      });
-      html+='</div>';
-    }
+  if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s){
+    var maxHRset=r.maxHR||180;
+    var hrZones=[
+      {n:'Zone 1',range:'< '+(Math.round(maxHRset*.6))+'bpm',s:r.z1s||0,c:'#64748b'},
+      {n:'Zone 2',range:(Math.round(maxHRset*.6))+'-'+(Math.round(maxHRset*.7))+'bpm',s:r.z2s||0,c:'#3b82f6'},
+      {n:'Zone 3',range:(Math.round(maxHRset*.7))+'-'+(Math.round(maxHRset*.8))+'bpm',s:r.z3s||0,c:'#22c55e'},
+      {n:'Zone 4',range:(Math.round(maxHRset*.8))+'-'+(Math.round(maxHRset*.9))+'bpm',s:r.z4s||0,c:'#f59e0b'},
+      {n:'Zone 5',range:'> '+(Math.round(maxHRset*.9))+'bpm',s:r.z5s||0,c:'#ef4444'}
+    ];
+    var totalHR=hrZones.reduce(function(a,b){return a+b.s;},0)||1;
+    html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">Time in HR Zone</div>';
+    hrZones.forEach(function(z){
+      var pct=Math.round(z.s/totalHR*100);
+      var mins=Math.floor(z.s/60);
+      html+='<div style="margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
+        +'<span style="font-weight:600;color:var(--t1)">'+z.n+' <span style="font-weight:400;color:var(--t3)">'+z.range+'</span></span>'
+        +'<span style="color:var(--t3)">'+mins+'min <span style="font-weight:700;color:'+z.c+'">'+pct+'%</span></span></div>'
+        +'<div style="height:6px;background:var(--s3);border-radius:3px"><div style="height:6px;background:'+z.c+';border-radius:3px;width:'+pct+'%"></div></div></div>';
+    });
     html+='</div>';
   }
 
