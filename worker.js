@@ -7522,7 +7522,7 @@ function renderRideList(container){
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
     var hasZones=r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s;
     var totalZ=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
-    html+='<div onclick="openRideDetail('+realIdx+')" style="margin:6px 10px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;cursor:pointer">';
+    html+='<div onclick="openRideDetail('+realIdx+')" style="margin:6px 16px;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px 14px;cursor:pointer">';
     html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+r.name+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">'+r.date+'</div></div>';
     html+='<div style="display:flex;align-items:center;gap:6px">';
     if(r.tss) html+='<div style="background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.3);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:700;color:#2980B9">TSS '+r.tss+'</div>';
@@ -8792,9 +8792,8 @@ function openRideDetail(idx){
 
   // Header
   var hdr = document.createElement('div');
-  hdr.style.cssText = 'background:var(--s1);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.06)';
+  hdr.style.cssText = 'background:var(--s1);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1)';
 
-  // Format date/time
   var dtStr = '';
   if(r.startTime){
     var dt = new Date(r.startTime);
@@ -8803,156 +8802,406 @@ function openRideDetail(idx){
     var hrs12 = dt.getHours()%12||12;
     var mins = ('0'+dt.getMinutes()).slice(-2);
     var ampm = dt.getHours()>=12?'PM':'AM';
-    dtStr = days[dt.getDay()]+', '+months[dt.getMonth()]+' '+dt.getDate()+' . '+hrs12+':'+mins+' '+ampm;
+    dtStr = days[dt.getDay()]+', '+months[dt.getMonth()]+' '+dt.getDate()+' &middot; '+hrs12+':'+mins+' '+ampm;
   } else if(r.date){
     dtStr = r.date;
   }
 
-  hdr.innerHTML = '<div style="font-size:11px;color:var(--t3);padding:4px 8px">'+dtStr+'</div>'
-    + '<div style="font-size:16px;font-weight:800;color:var(--t1)" id="ride-detail-name">' + (r.name||'Activity') + '</div>'
-    + '<button onclick="renameRide('+idx+')" style="background:var(--s2);border:1px solid var(--b1);color:var(--orange);font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">Rename</button>';
+  var backBtn=document.createElement('button');
+  backBtn.innerHTML='&lsaquo;';
+  backBtn.style.cssText='background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;width:24px;line-height:1';
+  backBtn.onclick=function(){ closeRideDetail(); };
+  var titleWrap=document.createElement('div');
+  titleWrap.style.cssText='flex:1;min-width:0;padding:0 10px';
+  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:16px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+dtStr+'</div>';
+  var renameBtn=document.createElement('button');
+  renameBtn.textContent='Rename';
+  renameBtn.style.cssText='background:var(--s2);border:1px solid var(--b1);color:#FC4C02;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer;flex-shrink:0';
+  renameBtn.onclick=function(){ renameRide(idx); };
+  hdr.appendChild(backBtn);
+  hdr.appendChild(titleWrap);
+  hdr.appendChild(renameBtn);
 
-  var body = document.createElement('div');
-  body.style.cssText = 'flex:1;overflow-y:scroll;-webkit-overflow-scrolling:touch;padding-bottom:60px';
-  document.body.style.overflow = 'hidden';
-
-  var html = '';
-
-  // -- HERO STATS
+  // Hero stat row
   var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
-  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b1)">';
+  var heroRow=document.createElement('div');
+  heroRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--b1);flex-shrink:0';
   [{v:r.duration||'-',l:'Time'},{v:(r.distance||'-')+(r.distance?'mi':''),l:'Distance'},{v:rwkg?rwkg+' W/kg':'-',l:'W/kg',c:'#FC4C02'},{v:r.tss||'-',l:'TSS',c:'#2980B9'}]
   .forEach(function(s){
-    html+='<div style="background:var(--s1);padding:14px 8px;text-align:center">'
-      +'<div style="font-size:20px;font-weight:900;color:'+(s.c||'var(--t1)')+';letter-spacing:-.5px">'+s.v+'</div>'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:3px">'+s.l+'</div>'
-      +'</div>';
+    var cell=document.createElement('div');
+    cell.style.cssText='background:var(--s1);padding:10px 8px;text-align:center';
+    cell.innerHTML='<div style="font-size:16px;font-weight:900;color:'+(s.c||'var(--t1)')+';letter-spacing:-.3px">'+s.v+'</div>'
+      +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:2px">'+s.l+'</div>';
+    heroRow.appendChild(cell);
   });
-  html += '</div>';
 
-  // -- RELATIVE EFFORT + KEY METRICS ROW
-  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--b1);margin-bottom:14px">';
+  // Tab bar
+  var tabDefs=[
+    {id:'overview',label:'Overview'},
+    {id:'route',label:'Route'},
+    {id:'performance',label:'Performance'},
+    {id:'weather',label:'Weather'},
+    {id:'equipment',label:'Equipment'},
+    {id:'analysis',label:'AI Analysis'}
+  ];
+  var activeTab='overview';
+  var tabsRow=document.createElement('div');
+  tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding:10px 16px;-webkit-overflow-scrolling:touch;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)';
+  var tabBtns={};
+  tabDefs.forEach(function(t){
+    var btn=document.createElement('button');
+    btn.textContent=t.label;
+    btn.style.cssText='flex-shrink:0;padding:7px 14px;border-radius:20px;border:none;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap';
+    btn.onclick=function(){ activeTab=t.id; renderTabs(); };
+    tabBtns[t.id]=btn;
+    tabsRow.appendChild(btn);
+  });
+
+  var body = document.createElement('div');
+  body.id = 'ride-detail-body';
+  body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px';
+  document.body.style.overflow = 'hidden';
+
+  overlay.appendChild(hdr);
+  overlay.appendChild(heroRow);
+  overlay.appendChild(tabsRow);
+  overlay.appendChild(body);
+  document.body.appendChild(overlay);
+
+  function updateTabStyles(){
+    tabDefs.forEach(function(t){
+      var active=t.id===activeTab;
+      tabBtns[t.id].style.background=active?'var(--t1)':'var(--s2)';
+      tabBtns[t.id].style.color=active?'var(--bg)':'var(--t2)';
+    });
+  }
+
+  function renderTabs(){
+    updateTabStyles();
+    body.innerHTML='';
+    if(activeTab==='overview') renderRideOverviewTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='route') renderRideRouteTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='performance') renderRidePerformanceTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='weather') renderRideWeatherTab(body, r, idx);
+    else if(activeTab==='equipment') renderRideEquipmentTab(body, r, idx);
+    else if(activeTab==='analysis') renderRideAnalysisTab(body, r, idx, FTP, BWT);
+  }
+
+  renderTabs();
+}
+
+// -- OVERVIEW TAB: AI Coach insight card + compact route preview + key stats
+function renderRideOverviewTab(body, r, idx, FTP, BWT){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+
+  // AI Coach Insight card - loading state, filled by a real API call below
+  var coachCard=document.createElement('div');
+  coachCard.id='ride-coach-card';
+  coachCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px;border-left:3px solid #a855f7';
+  coachCard.innerHTML='<div style="font-size:11px;color:#c084fc;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">AI Coach Insight</div>'
+    +'<div id="ride-coach-text" style="font-size:13px;color:var(--t2);line-height:1.5">Analyzing this ride&hellip;</div>';
+  wrap.appendChild(coachCard);
+
+  // Compact route preview (if GPS available) - full map lives on the Route tab
+  if(r.gpsLats && r.gpsLats.length>5){
+    var mapPreview=document.createElement('div');
+    mapPreview.style.cssText='border-radius:14px;overflow:hidden;margin-bottom:14px;border:1px solid var(--b1)';
+    mapPreview.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+    wrap.appendChild(mapPreview);
+  }
+
+  // Key stats row
+  var statsRow=document.createElement('div');
+  statsRow.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:8px';
   [{v:r.relEffort||'-',l:'Relative Effort',c:'#FC4C02'},{v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg Heart Rate',c:'#ef4444'},{v:r.calories?r.calories+' kcal':'-',l:'Calories'}]
   .forEach(function(s){
-    html+='<div style="background:var(--s1);padding:12px 8px;text-align:center">'
-      +'<div style="font-size:22px;font-weight:900;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
-      +'<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">'+s.l+'</div>'
-      +'</div>';
+    var cell=document.createElement('div');
+    cell.style.cssText='background:var(--s2);border-radius:12px;padding:12px 8px;text-align:center';
+    cell.innerHTML='<div style="font-size:18px;font-weight:900;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
+      +'<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:3px">'+s.l+'</div>';
+    statsRow.appendChild(cell);
   });
-  html += '</div>';
+  wrap.appendChild(statsRow);
 
-  // -- ROUTE MAP
-  if(r.gpsLats && r.gpsLats.length > 5){
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Route</div>';
-    html += '<div style="margin:0 16px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
-    html += '</div>';
+  body.appendChild(wrap);
+
+  // Fetch a real, ride-specific coach insight using the same shared
+  // fetchTodaysDecision-style API call, but with a prompt built from
+  // this specific ride's numbers rather than "today."
+  fetchRideCoachInsight(r, function(err, text){
+    var el=document.getElementById('ride-coach-text');
+    if(!el) return;
+    el.textContent = (err || !text) ? 'Coach insight unavailable right now.' : text;
+  });
+}
+
+// Builds a ride-specific prompt (distinct from fetchTodaysDecision, which
+// is about "today," not a specific past ride) and asks for a short
+// multi-line coaching read: one headline + 2-3 bullet observations +
+// one recommendation, matching the reference design's "Coach" card.
+function fetchRideCoachInsight(r, callback){
+  var FTP=parseInt(st.ftp||186);
+  var maxHR=parseInt(st.maxHR||172);
+  var zonePct = r.avgHR ? Math.round((r.avgHR/maxHR)*100) : null;
+  var prompt = 'You are a personal cycling coach reviewing a completed ride. '
+    +'Ride: '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. '
+    +'Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. '
+    +'Avg HR: '+(r.avgHR||'unknown')+'bpm ('+(zonePct?zonePct+'% of max HR':'unknown zone')+'). '
+    +'TSS: '+(r.tss||'unknown')+'. Elevation gain: '+(r.elev||0)+'ft. '
+    +'Respond in this exact format, no markdown, no extra preamble: '
+    +'first line is one short punchy headline describing the ride (max 8 words). '
+    +'Then 2-3 short bullet-style observations, each starting with "- ", covering things like time in zone, power/HR steadiness, or fueling if relevant. '
+    +'Then a final line starting with "Recommendation: " giving one concrete suggestion for the next session.';
+
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:250, messages:[{role:'user',content:prompt}] })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(d){
+    var text = d.content && d.content[0] && d.content[0].text;
+    callback(null, (text||'').trim());
+  })
+  .catch(function(){ callback('Could not reach the coach right now.', null); });
+}
+
+// -- ROUTE TAB: hero map (larger), toggle buttons to recolor by
+// Power / Heart Rate / Wind, elevation profile underneath as a linked timeline
+function renderRideRouteTab(body, r, idx, FTP, BWT){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+
+  if(!r.gpsLats || r.gpsLats.length<=5){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No GPS route recorded for this ride.</div>';
+    body.appendChild(wrap);
+    return;
   }
 
-  // -- HR ZONES + POWER (side by side)
-  var hrColHtml = '';
-  if(r.avgHR){
-    var cMaxHR = parseInt(st.maxHR||172);
-    var cZones = [
-      {n:'Z1 Recovery', lo:0, hi:Math.round(cMaxHR*0.6), c:'#8a8a8a'},
-      {n:'Z2 Endurance', lo:Math.round(cMaxHR*0.6)+1, hi:Math.round(cMaxHR*0.7), c:'#0F6E56'},
-      {n:'Z3 Tempo', lo:Math.round(cMaxHR*0.7)+1, hi:Math.round(cMaxHR*0.8), c:'#BA7517'},
-      {n:'Z4 Threshold', lo:Math.round(cMaxHR*0.8)+1, hi:Math.round(cMaxHR*0.9), c:'#FC4C02'},
-      {n:'Z5 VO2 Max', lo:Math.round(cMaxHR*0.9)+1, hi:cMaxHR, c:'#ef4444'}
-    ];
-    var avgZone = cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;}) || cZones[0];
-    hrColHtml += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">HR Zone (avg '+r.avgHR+' — '+avgZone.n+')</div>';
-    hrColHtml += '<div style="display:flex;flex-direction:column;align-items:flex-start;gap:5px">';
-    cZones.forEach(function(z){
-      var isActive = z.n===avgZone.n;
-      hrColHtml += '<div style="display:inline-flex;align-items:center;gap:5px;background:var(--s2);border-radius:20px;padding:4px 10px 4px 6px;'+(isActive?'box-shadow:0 0 0 1.5px '+z.c+';':'')+'">';
-      hrColHtml += '<span style="width:7px;height:7px;border-radius:50%;background:'+z.c+';flex-shrink:0"></span>';
-      hrColHtml += '<span style="font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap">'+z.n+'</span>';
-      hrColHtml += '<span style="font-size:9px;font-weight:700;color:'+z.c+';white-space:nowrap">'+z.lo+'–'+z.hi+'</span>';
-      hrColHtml += '</div>';
+  // Recolor toggle row
+  var toggleRow=document.createElement('div');
+  toggleRow.style.cssText='display:flex;gap:8px;margin-bottom:10px';
+  var modes=[{id:'power',label:'Power'},{id:'hr',label:'Heart Rate'},{id:'wind',label:'Wind'}];
+  var routeColorMode='power';
+  var modeBtns={};
+  modes.forEach(function(m){
+    var btn=document.createElement('button');
+    btn.textContent=m.label;
+    btn.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid var(--b1);font-size:12px;font-weight:700;cursor:pointer';
+    btn.onclick=function(){ routeColorMode=m.id; updateModeStyles(); redrawRouteMap(); };
+    modeBtns[m.id]=btn;
+    toggleRow.appendChild(btn);
+  });
+  wrap.appendChild(toggleRow);
+
+  function updateModeStyles(){
+    modes.forEach(function(m){
+      var active=m.id===routeColorMode;
+      modeBtns[m.id].style.background=active?'#FC4C02':'var(--s2)';
+      modeBtns[m.id].style.color=active?'#fff':'var(--t2)';
     });
-    hrColHtml += '</div>';
+  }
+  updateModeStyles();
+
+  // Hero map container - taller than the Overview preview, per the
+  // reference design's "make the route the hero" direction (roughly
+  // 20-30% taller than the app's standard 260px map height).
+  var mapCard=document.createElement('div');
+  mapCard.id='ride-hero-map-wrap';
+  mapCard.style.cssText='border-radius:16px;overflow:hidden;margin-bottom:10px;border:1px solid var(--b1)';
+  wrap.appendChild(mapCard);
+
+  var legendRow=document.createElement('div');
+  legendRow.id='ride-map-legend';
+  legendRow.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;justify-content:center';
+  wrap.appendChild(legendRow);
+
+  // Elevation profile underneath, as a linked timeline
+  if(r.chartEle && r.chartEle.length){
+    var eleCard=document.createElement('div');
+    eleCard.style.cssText='background:var(--s2);border-radius:14px;padding:14px;border:1px solid var(--b1)';
+    eleCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Elevation</div>'
+      +buildLineChart(r.chartEle,'#27AE60','ft',r.elev?('+'+r.elev+' ft gain'):'');
+    wrap.appendChild(eleCard);
   }
 
-  var powerColHtml = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">Power</div>';
-  powerColHtml += '<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:8px;box-shadow:0 1px 4px rgba(0,0,0,.05);flex:1;display:flex;flex-direction:column">';
-  powerColHtml += '<div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:5px;flex:1">';
+  body.appendChild(wrap);
+
+  function buildWindColoredMap(){
+    // Retroactive wind classification: uses today's live wind reading as
+    // a stand-in bearing/speed reference for coloring, same honest
+    // limitation noted on the Weather Map tab - true point-in-time
+    // historical wind requires the archive API call made on the Weather
+    // tab; this toggle gives a quick visual read using current direction
+    // as an approximation when historical data has not loaded yet.
+    var windDeg = window._rideWindDirCache;
+    var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
+    var mapId='ride-route-map-'+idx;
+    var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
+    mapCard.innerHTML=html;
+    setTimeout(function(){
+      var mapEl=document.getElementById(mapId);
+      if(!mapEl||typeof L==='undefined') return;
+      var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      var pts=lats.map(function(la,i){return[la,lons[i]];});
+      if(windDeg==null){
+        L.polyline(pts,{color:'#94a3b8',weight:4,opacity:.85}).addTo(map);
+      } else {
+        var step=Math.max(1,Math.floor(pts.length/40));
+        for(var i=0;i<pts.length-step;i+=step){
+          var p1=pts[i], p2=pts[Math.min(pts.length-1,i+step)];
+          var bearing=(Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI+360)%360;
+          var windToward=(windDeg+180)%360;
+          var diff=Math.abs(((bearing-windToward+540)%360)-180);
+          var col = diff<45 ? '#1D9E75' : diff>135 ? '#E24B4A' : '#BA7517';
+          L.polyline([p1,p2],{color:col,weight:4,opacity:.85}).addTo(map);
+        }
+      }
+      L.circleMarker(pts[0],{radius:7,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+      map.fitBounds(L.latLngBounds(pts),{padding:[30,30]});
+      setTimeout(function(){ try{map.invalidateSize();}catch(e){} },300);
+      window['_wxmap_ridedetail']=map;
+    },100);
+  }
+
+  function redrawRouteMap(){
+    if(routeColorMode==='power'){
+      mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#94a3b8"></span>Z1-2</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z3</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z4</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z5</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444"></span>Z6+</span>'].join('');
+    } else if(routeColorMode==='hr'){
+      mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], parseInt(st.maxHR||172));
+      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#64748b"></span>Z1</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z2</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z3</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z4</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444"></span>Z5</span>'].join('');
+    } else {
+      buildWindColoredMap();
+      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#1D9E75"></span>Tailwind</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#E24B4A"></span>Headwind</span>',
+        '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#BA7517"></span>Crosswind</span>'].join('');
+      if(window._rideWindDirCache==null){
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=winddirection_10m')
+          .then(function(res){ return res.json(); })
+          .then(function(d){ window._rideWindDirCache = d && d.current ? d.current.winddirection_10m : null; if(routeColorMode==='wind') buildWindColoredMap(); })
+          .catch(function(){});
+      }
+    }
+  }
+
+  redrawRouteMap();
+}
+
+// HR-zone equivalent of buildRouteMap - colors route segments by heart
+// rate zone instead of power zone, same rendering approach.
+function buildRouteMapHR(lats, lons, hrData, maxHR){
+  if(!lats||!lats.length) return '';
+  if(lons && lons.length!==lats.length){
+    var minLen=Math.min(lats.length,lons.length);
+    lats=lats.slice(0,minLen); lons=lons.slice(0,minLen);
+  }
+  if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId='leaflet-map-hr-'+window._mapCount;
+  var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
+  setTimeout(function(){
+    var mapEl=document.getElementById(mapId);
+    if(!mapEl||typeof L==='undefined') return;
+    var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    if(hrData && hrData.length>5){
+      var step=Math.max(1,Math.floor(lats.length/hrData.length));
+      var currentColor='#64748b';
+      var segPoints=[[lats[0],lons[0]]];
+      for(var i=1;i<lats.length;i++){
+        var pIdx=Math.floor(i/step);
+        var hr=hrData[Math.min(pIdx,hrData.length-1)]||0;
+        var pct=hr/maxHR;
+        var col=pct>=.9?'#ef4444':pct>=.8?'#f59e0b':pct>=.7?'#22c55e':pct>=.6?'#3b82f6':'#64748b';
+        if(col!==currentColor && segPoints.length>1){
+          L.polyline(segPoints,{color:currentColor,weight:4,opacity:.85}).addTo(map);
+          segPoints=[segPoints[segPoints.length-1]];
+          currentColor=col;
+        }
+        segPoints.push([lats[i],lons[i]]);
+      }
+      if(segPoints.length>1) L.polyline(segPoints,{color:currentColor,weight:4,opacity:.85}).addTo(map);
+    } else {
+      var coords=lats.map(function(lat,i){return[lat,lons[i]];});
+      L.polyline(coords,{color:'#ef4444',weight:4,opacity:.9}).addTo(map);
+    }
+    var coords2=lats.map(function(lat,i){return[lat,lons[i]];});
+    L.circleMarker(coords2[0],{radius:7,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+    L.circleMarker(coords2[coords2.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+    map.fitBounds(L.latLngBounds(coords2),{padding:[30,30]});
+    setTimeout(function(){ try{map.invalidateSize();}catch(e){} },300);
+  },100);
+  return html;
+}
+
+// -- PERFORMANCE TAB: power/HR line charts, zone breakdowns, peak power curve
+function renderRidePerformanceTab(body, r, idx, FTP, BWT){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+  var html='';
+
+  var hrColHtml='';
+  if(r.avgHR){
+    var cMaxHR=parseInt(st.maxHR||172);
+    var cZones=[
+      {n:'Z1 Recovery',lo:0,hi:Math.round(cMaxHR*0.6),c:'#8a8a8a'},
+      {n:'Z2 Endurance',lo:Math.round(cMaxHR*0.6)+1,hi:Math.round(cMaxHR*0.7),c:'#0F6E56'},
+      {n:'Z3 Tempo',lo:Math.round(cMaxHR*0.7)+1,hi:Math.round(cMaxHR*0.8),c:'#BA7517'},
+      {n:'Z4 Threshold',lo:Math.round(cMaxHR*0.8)+1,hi:Math.round(cMaxHR*0.9),c:'#FC4C02'},
+      {n:'Z5 VO2 Max',lo:Math.round(cMaxHR*0.9)+1,hi:cMaxHR,c:'#ef4444'}
+    ];
+    var avgZone=cZones.find(function(z){return r.avgHR>=z.lo&&r.avgHR<=z.hi;})||cZones[0];
+    hrColHtml+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">HR Zone (avg '+r.avgHR+' &mdash; '+avgZone.n+')</div>';
+    hrColHtml+='<div style="display:flex;flex-direction:column;align-items:flex-start;gap:5px">';
+    cZones.forEach(function(z){
+      var isActive=z.n===avgZone.n;
+      hrColHtml+='<div style="display:inline-flex;align-items:center;gap:5px;background:var(--s2);border-radius:20px;padding:4px 10px 4px 6px;'+(isActive?'box-shadow:0 0 0 1.5px '+z.c+';':'')+'">'
+        +'<span style="width:7px;height:7px;border-radius:50%;background:'+z.c+';flex-shrink:0"></span>'
+        +'<span style="font-size:10px;font-weight:'+(isActive?'800':'600')+';color:var(--t1);white-space:nowrap">'+z.n+'</span>'
+        +'<span style="font-size:9px;font-weight:700;color:'+z.c+';white-space:nowrap">'+z.lo+'&ndash;'+z.hi+'</span></div>';
+    });
+    hrColHtml+='</div>';
+  }
+
+  var powerColHtml='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:6px">Power</div>'
+    +'<div style="background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:8px;flex:1;display:flex;flex-direction:column">'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:5px;flex:1">';
   [{v:(r.avgPwr||'-')+(r.avgPwr?'W':''),l:'Avg Pwr'},{v:(r.np||'-')+(r.np?'W':''),l:'Norm Pwr',c:'#FC4C02'},{v:r.ifPct?(r.ifPct+'%'):'-',l:'Int. Fctr'},{v:r.workKj?(r.workKj+' kJ'):'-',l:'Work'},{v:r.max20?(r.max20+'W'):'-',l:'20m Max'},{v:r.maxPwr?(r.maxPwr+'W'):'-',l:'Peak Pwr'}]
   .forEach(function(s){
     powerColHtml+='<div style="background:var(--s2);border-radius:8px;padding:6px 4px 6px 8px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;justify-content:center">'
       +'<div style="font-size:12px;font-weight:800;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
-      +'<div style="font-size:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px">'+s.l+'</div>'
-      +'</div>';
+      +'<div style="font-size:7px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-top:2px">'+s.l+'</div></div>';
   });
-  powerColHtml += '</div></div>';
+  powerColHtml+='</div></div>';
 
-  html += '<div style="display:flex;gap:10px;margin:0 12px 14px;align-items:stretch">';
-  if(hrColHtml) html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+hrColHtml+'</div>';
-  html += '<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+powerColHtml+'</div>';
-  html += '</div>';
+  html+='<div style="display:flex;gap:10px;margin-bottom:14px;align-items:stretch">';
+  if(hrColHtml) html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+hrColHtml+'</div>';
+  html+='<div style="flex:1;min-width:0;display:flex;flex-direction:column">'+powerColHtml+'</div>';
+  html+='</div>';
 
-  // Peak power curve
-  if(r.powerCurve && Object.keys(r.powerCurve).length){
-    var peakDurs=[{d:5,l:'5s'},{d:15,l:'15s'},{d:30,l:'30s'},{d:60,l:'1min'},{d:120,l:'2min'},{d:300,l:'5min'},{d:600,l:'10min'},{d:1200,l:'20min'},{d:1800,l:'30min'},{d:3600,l:'60min'}];
-    // Check for PRs
-    var globalBest={};
-    st.rides.forEach(function(ride,ri){
-      if(ri===idx) return;
-      if(ride.powerCurve) Object.keys(ride.powerCurve).forEach(function(d){
-        if(!globalBest[d]||ride.powerCurve[d]>globalBest[d]) globalBest[d]=ride.powerCurve[d];
-      });
-    });
-    html += '<div style="border-top:1px solid var(--b1);padding-top:12px">';
-    html += '<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Peak Power Curve</div>';
-    html += '<div style="border:1px solid var(--b1);border-radius:10px;overflow:hidden">';
-    html += '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:7px 10px;background:var(--s2)">'
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3)">Duration</div>'
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:center">Watts</div>'
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right">W/kg</div>'
-      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right;padding-left:8px">PR</div>'
-      +'</div>';
-    peakDurs.forEach(function(pd,i){
-      var w = r.powerCurve[pd.d]; if(!w) return;
-      var wkg2=(w/BWT*2.20462).toFixed(1);
-      var zc=w>=FTP*1.21?'#a855f7':w>=FTP*1.06?'#ef4444':w>=FTP*.91?'#f59e0b':w>=FTP*.76?'#22c55e':'#3b82f6';
-      var isPR = !globalBest[pd.d] || w >= globalBest[pd.d];
-      var bg=i%2===0?'var(--s1)':'var(--s2)';
-      html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:9px 10px;background:'+bg+';border-top:1px solid var(--b1)">'
-        +'<div style="font-size:13px;font-weight:600;color:var(--t1)">'+pd.l+'</div>'
-        +'<div style="font-size:15px;font-weight:800;color:'+zc+';text-align:center">'+w+'</div>'
-        +'<div style="font-size:13px;color:var(--t3);text-align:right">'+wkg2+'</div>'
-        +'<div style="text-align:right;padding-left:8px">'+(isPR?'<span style="background:#FFD700;color:#7A5800;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px">PR</span>':'')+'</div>'
-        +'</div>';
-    });
-    html += '</div></div>';
-  }
-  html += '</div>';
-
-  // -- ELEVATION CHART
-  if(r.chartEle&&r.chartEle.length){
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Elevation</div>';
-    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += buildLineChart(r.chartEle,'#27AE60','ft',r.elev?('+'+r.elev+' ft gain'):'');
-    html += '</div>';
+  if(r.chartPwr && r.chartPwr.length){
+    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px">Power</div>';
+    html+='<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">'
+      +buildLineChart(r.chartPwr,'#FC4C02','W','NP '+(r.np||'-')+'W &middot; Avg '+(r.avgPwr||'-')+'W',FTP)+'</div>';
   }
 
-  // -- POWER CHART
-  if(r.chartPwr&&r.chartPwr.length){
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power</div>';
-    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += buildLineChart(r.chartPwr,'#FC4C02','W','NP '+(r.np||'-')+'W . Avg '+(r.avgPwr||'-')+'W',FTP);
-    html += '</div>';
-  }
-
-  // -- HEART RATE
-  if(r.chartHR&&r.chartHR.length){
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Heart Rate</div>';
-    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-    html += buildLineChart(r.chartHR,'#ef4444','bpm','Avg '+(r.avgHR||'-')+' bpm . Max '+(r.maxHR||'-')+' bpm');
-
-    // HR zones
+  if(r.chartHR && r.chartHR.length){
+    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px">Heart Rate</div>';
+    html+='<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">'
+      +buildLineChart(r.chartHR,'#ef4444','bpm','Avg '+(r.avgHR||'-')+' bpm &middot; Max '+(r.maxHR||'-')+' bpm');
     if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s){
-      var maxHRset = r.maxHR||180;
+      var maxHRset=r.maxHR||180;
       var hrZones=[
         {n:'Zone 1',range:'< '+(Math.round(maxHRset*.6))+'bpm',s:r.z1s||0,c:'#64748b'},
         {n:'Zone 2',range:(Math.round(maxHRset*.6))+'-'+(Math.round(maxHRset*.7))+'bpm',s:r.z2s||0,c:'#3b82f6'},
@@ -8961,43 +9210,38 @@ function openRideDetail(idx){
         {n:'Zone 5',range:'> '+(Math.round(maxHRset*.9))+'bpm',s:r.z5s||0,c:'#ef4444'}
       ];
       var totalHR=hrZones.reduce(function(a,b){return a+b.s;},0)||1;
-      html += '<div style="margin-top:14px;border-top:1px solid var(--b1);padding-top:12px">';
-      html += '<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">HR Zones</div>';
+      html+='<div style="margin-top:14px;border-top:1px solid var(--b1);padding-top:12px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.08em">HR Zones</div>';
       hrZones.forEach(function(z){
         var pct=Math.round(z.s/totalHR*100);
         var mins=Math.floor(z.s/60);
         html+='<div style="margin-bottom:8px">'
           +'<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">'
           +'<span style="font-weight:600;color:var(--t1)">'+z.n+' <span style="font-weight:400;color:var(--t3)">'+z.range+'</span></span>'
-          +'<span style="color:var(--t3)">'+mins+'min <span style="font-weight:700;color:'+z.c+'">'+pct+'%</span></span>'
-          +'</div>'
-          +'<div style="height:6px;background:var(--s3);border-radius:3px">'
-          +'<div style="height:6px;background:'+z.c+';border-radius:3px;width:'+pct+'%"></div>'
-          +'</div></div>';
+          +'<span style="color:var(--t3)">'+mins+'min <span style="font-weight:700;color:'+z.c+'">'+pct+'%</span></span></div>'
+          +'<div style="height:6px;background:var(--s3);border-radius:3px"><div style="height:6px;background:'+z.c+';border-radius:3px;width:'+pct+'%"></div></div></div>';
       });
-      html += '</div>';
+      html+='</div>';
     }
-    html += '</div>';
+    html+='</div>';
   }
 
-  // -- POWER ZONES
   if(r.z1s||r.z2s||r.z3s||r.z4s||r.z5s||r.z6s){
-    html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Power Zones</div>';
-    html += '<div style="margin:0 16px 14px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+    html+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3);margin-bottom:8px">Power Zones</div>';
+    html+='<div style="background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">';
     var pZones=[
       {n:'Z1 Recovery',s:r.z1s||0,c:'#64748b'},{n:'Z2 Endurance',s:r.z2s||0,c:'#3b82f6'},
       {n:'Z3 Tempo',s:r.z3s||0,c:'#22c55e'},{n:'Z4 Threshold',s:r.z4s||0,c:'#f59e0b'},
       {n:'Z5 VO2max',s:r.z5s||0,c:'#ef4444'},{n:'Z6 Anaerobic',s:r.z6s||0,c:'#a855f7'}
     ];
     var totalPZ=pZones.reduce(function(a,b){return a+b.s;},0)||1;
-    // Stacked bar
-    html += '<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:12px">';
+    html+='<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:12px">';
     pZones.forEach(function(z){
       var pct=Math.round(z.s/totalPZ*100);
-      if(pct>0) html+='<div style="background:'+z.c+';width:'+pct+'%;opacity:.85" title="'+z.n+'"></div>';
+      if(pct>0) html+='<div style="background:'+z.c+';width:'+pct+'%;opacity:.85"></div>';
     });
-    html += '</div>';
-    pZones.forEach(function(z,i){
+    html+='</div>';
+    pZones.forEach(function(z){
       var pct=Math.round(z.s/totalPZ*100);
       var mins=Math.floor(z.s/60);
       if(!mins&&!pct) return;
@@ -9005,38 +9249,288 @@ function openRideDetail(idx){
         +'<div style="width:10px;height:10px;border-radius:3px;background:'+z.c+';flex-shrink:0"></div>'
         +'<div style="flex:1;font-size:13px;color:var(--t1);font-weight:600">'+z.n+'</div>'
         +'<div style="font-size:12px;color:var(--t3)">'+mins+'min</div>'
-        +'<div style="font-size:12px;font-weight:700;color:'+z.c+';min-width:32px;text-align:right">'+pct+'%</div>'
-        +'</div>';
+        +'<div style="font-size:12px;font-weight:700;color:'+z.c+';min-width:32px;text-align:right">'+pct+'%</div></div>';
     });
-    html += '</div>';
+    html+='</div>';
   }
 
-  // -- STATS TABLE
-  html += '<div style="padding:0 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">All Stats</div>';
-  html += '<div style="margin:0 16px 16px;background:var(--s1);border-radius:16px;border:1px solid var(--b1);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  var allStats=[
-    ['Avg Cadence',r.cadence?r.cadence+' rpm':'-'],
-    ['Max HR',r.maxHR?r.maxHR+' bpm':'-'],
-    ['L/R Balance',r.lrBalance||'-'],
-    ['Elevation Gain',r.elev?r.elev+' ft':'-'],
-    ['Avg Temp',r.avgTemp?r.avgTemp+'°F':'-'],
-    ['Max Temp',(r.maxTemp&&r.maxTemp>0)?r.maxTemp+'°F':'-'],
-    ['Work',r.workKj?r.workKj+' kJ':'-'],
-    ['Relative Effort',r.relEffort||'-'],
-    ['Source',r.source||'manual']
-  ];
-  allStats.forEach(function(s,i){
-    html+='<div style="display:flex;justify-content:space-between;padding:11px 16px;border-bottom:'+(i<allStats.length-1?'1px solid var(--b1)':'none')+'">'
-      +'<span style="font-size:13px;color:var(--t2)">'+s[0]+'</span>'
-      +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+s[1]+'</span>'
-      +'</div>';
-  });
-  html += '</div>';
+  if(r.powerCurve && Object.keys(r.powerCurve).length){
+    var peakDurs=[{d:5,l:'5s'},{d:15,l:'15s'},{d:30,l:'30s'},{d:60,l:'1min'},{d:120,l:'2min'},{d:300,l:'5min'},{d:600,l:'10min'},{d:1200,l:'20min'},{d:1800,l:'30min'},{d:3600,l:'60min'}];
+    var globalBest={};
+    st.rides.forEach(function(ride,ri){
+      if(ri===idx) return;
+      if(ride.powerCurve) Object.keys(ride.powerCurve).forEach(function(d){
+        if(!globalBest[d]||ride.powerCurve[d]>globalBest[d]) globalBest[d]=ride.powerCurve[d];
+      });
+    });
+    html+='<div style="font-size:11px;font-weight:700;color:var(--t3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Peak Power Curve</div>';
+    html+='<div style="border:1px solid var(--b1);border-radius:14px;overflow:hidden">';
+    html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:7px 10px;background:var(--s2)">'
+      +'<div style="font-size:10px;font-weight:700;color:var(--t3)">Duration</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:center">Watts</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right">W/kg</div>'
+      +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right;padding-left:8px">PR</div></div>';
+    peakDurs.forEach(function(pd,i){
+      var w=r.powerCurve[pd.d]; if(!w) return;
+      var wkg2=(w/BWT*2.20462).toFixed(1);
+      var zc=w>=FTP*1.21?'#a855f7':w>=FTP*1.06?'#ef4444':w>=FTP*.91?'#f59e0b':w>=FTP*.76?'#22c55e':'#3b82f6';
+      var isPR=!globalBest[pd.d]||w>=globalBest[pd.d];
+      var bg=i%2===0?'var(--s1)':'var(--s2)';
+      html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr auto;padding:9px 10px;background:'+bg+';border-top:1px solid var(--b1)">'
+        +'<div style="font-size:13px;font-weight:600;color:var(--t1)">'+pd.l+'</div>'
+        +'<div style="font-size:15px;font-weight:800;color:'+zc+';text-align:center">'+w+'</div>'
+        +'<div style="font-size:13px;color:var(--t3);text-align:right">'+wkg2+'</div>'
+        +'<div style="text-align:right;padding-left:8px">'+(isPR?'<span style="background:#FFD700;color:#7A5800;font-size:9px;font-weight:800;padding:2px 6px;border-radius:8px">PR</span>':'')+'</div></div>';
+    });
+    html+='</div>';
+  }
 
-  body.innerHTML = html;
-  overlay.appendChild(hdr);
-  overlay.appendChild(body);
-  document.body.appendChild(overlay);
+  wrap.innerHTML=html;
+  body.appendChild(wrap);
+}
+
+// -- WEATHER TAB: retroactive conditions during this specific ride, using
+// Open-Meteo's historical archive API rather than current/forecast data.
+function renderRideWeatherTab(body, r, idx){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+
+  if(!r.date){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No date recorded for this ride, cannot look up historical weather.</div>';
+    body.appendChild(wrap);
+    return;
+  }
+
+  wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Looking up conditions for this ride&hellip;</div>';
+  body.appendChild(wrap);
+
+  fetch('https://archive-api.open-meteo.com/v1/archive?latitude=42.9634&longitude=-85.6681'
+    +'&start_date='+r.date+'&end_date='+r.date
+    +'&hourly=temperature_2m,windspeed_10m,winddirection_10m,windgusts_10m,precipitation'
+    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+  .then(function(res){ if(!res.ok) throw new Error('Weather history returned '+res.status); return res.json(); })
+  .then(function(data){
+    renderRideWeatherContent(wrap, r, data && data.hourly);
+  })
+  .catch(function(err){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Could not load historical weather for this ride.<br>'+(err&&err.message?err.message:'')+'</div>';
+  });
+}
+
+function renderRideWeatherContent(wrap, r, hourly){
+  if(!hourly || !hourly.time || !hourly.time.length){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No historical weather available for this date.</div>';
+    return;
+  }
+
+  // Narrow to the ride's actual start/end hours if we have a start time,
+  // otherwise use the whole day as a reasonable fallback.
+  var startHour=0, endHour=hourly.time.length-1;
+  if(r.startTime){
+    var startDt=new Date(r.startTime);
+    startHour=startDt.getHours();
+    var durMinutes = r.duration ? parseDurationToMinutes_(r.duration) : 90;
+    endHour = Math.min(hourly.time.length-1, startHour + Math.ceil(durMinutes/60));
+  }
+
+  var temps=hourly.temperature_2m.slice(startHour,endHour+1);
+  var winds=hourly.windspeed_10m.slice(startHour,endHour+1);
+  var dirs=hourly.winddirection_10m.slice(startHour,endHour+1);
+  var gusts=hourly.windgusts_10m.slice(startHour,endHour+1);
+
+  var avgTemp=Math.round(temps.reduce(function(a,b){return a+b;},0)/temps.length);
+  var startTemp=Math.round(temps[0]);
+  var endTemp=Math.round(temps[temps.length-1]);
+  var avgWind=Math.round(winds.reduce(function(a,b){return a+b;},0)/winds.length);
+  var maxGust=Math.round(Math.max.apply(null,gusts));
+  var maxGustIdx=gusts.indexOf(Math.max.apply(null,gusts));
+
+  // Tailwind/headwind/crosswind % using the ride's overall bearing (start
+  // to end point) as a simple stand-in for per-segment direction, since
+  // full per-point correlation with historical hourly wind needs the
+  // route timing lined up minute-by-minute - a reasonable first pass,
+  // not pretending to be more precise than the data actually supports.
+  var windPct = {tail:0, head:0, cross:0};
+  if(r.gpsLats && r.gpsLats.length>5){
+    var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
+    var overallBearing=(Math.atan2(lons[lons.length-1]-lons[0], lats[lats.length-1]-lats[0])*180/Math.PI+360)%360;
+    var avgDir=dirs.reduce(function(a,b){return a+b;},0)/dirs.length;
+    var windToward=(avgDir+180)%360;
+    var diff=Math.abs(((overallBearing-windToward+540)%360)-180);
+    if(diff<45){ windPct.tail=100; }
+    else if(diff>135){ windPct.head=100; }
+    else { windPct.cross=100; }
+  }
+
+  var dirArr=['N','NE','E','SE','S','SW','W','NW'];
+  var avgDirLabel=dirArr[Math.round((dirs.reduce(function(a,b){return a+b;},0)/dirs.length)/45)%8];
+
+  wrap.innerHTML='';
+
+  var summaryCard=document.createElement('div');
+  summaryCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:12px';
+  summaryCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Conditions During This Ride</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+    +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+avgTemp+'&deg;F</div><div style="font-size:11px;color:var(--t3)">Avg temp ('+startTemp+'&deg;&rarr;'+endTemp+'&deg;)</div></div>'
+    +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+avgWind+'mph '+avgDirLabel+'</div><div style="font-size:11px;color:var(--t3)">Avg wind, gusts to '+maxGust+'mph</div></div>'
+    +'</div>';
+  wrap.appendChild(summaryCard);
+
+  var windBreakdown=document.createElement('div');
+  windBreakdown.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:12px';
+  windBreakdown.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Wind Breakdown</div>'
+    +'<div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:10px">'
+    +(windPct.tail>0?'<div style="background:#1D9E75;width:'+windPct.tail+'%"></div>':'')
+    +(windPct.head>0?'<div style="background:#E24B4A;width:'+windPct.head+'%"></div>':'')
+    +(windPct.cross>0?'<div style="background:#BA7517;width:'+windPct.cross+'%"></div>':'')
+    +'</div>'
+    +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2)">'
+    +'<span><span style="color:#1D9E75;font-weight:700">'+windPct.tail+'%</span> tailwind</span>'
+    +'<span><span style="color:#E24B4A;font-weight:700">'+windPct.head+'%</span> headwind</span>'
+    +'<span><span style="color:#BA7517;font-weight:700">'+windPct.cross+'%</span> crosswind</span>'
+    +'</div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.5">Based on overall route direction vs. average wind during the ride window. Strongest gust: '+maxGust+'mph around '+formatHour12(hourly.time[startHour+maxGustIdx]?new Date(hourly.time[startHour+maxGustIdx]).getHours():startHour)+'.</div>';
+  wrap.appendChild(windBreakdown);
+
+  // Temperature progression chart
+  if(temps.length>1){
+    var tempCard=document.createElement('div');
+    tempCard.style.cssText='background:var(--s2);border-radius:14px;padding:14px';
+    tempCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Temperature During Ride</div>'
+      +buildLineChart(temps,'#FC4C02','&deg;F','');
+    wrap.appendChild(tempCard);
+  }
+}
+
+// Rough duration string ("1:30:07" or "1h 30m") to minutes, for narrowing
+// the historical weather window to roughly when the ride happened.
+function parseDurationToMinutes_(dur){
+  if(!dur) return 90;
+  var parts = String(dur).split(':');
+  if(parts.length>=2){
+    var h=parseInt(parts[0])||0, m=parseInt(parts[1])||0;
+    return h*60+m;
+  }
+  var hMatch=String(dur).match(/(\d+)h/);
+  var mMatch=String(dur).match(/(\d+)m/);
+  return (hMatch?parseInt(hMatch[1])*60:0)+(mMatch?parseInt(mMatch[1]):0)||90;
+}
+
+// -- EQUIPMENT TAB: which bike was used, its mileage, and maintenance
+// status/next-service estimate, tying this ride into Garage's real data.
+function renderRideEquipmentTab(body, r, idx){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+
+  ensureBikes();
+  var bike = null;
+  if(r.gearId){
+    bike = (st.bikes||[]).find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
+  }
+  if(!bike && r.gearName){
+    bike = (st.bikes||[]).find(function(b){ return b.name===r.gearName; });
+  }
+
+  if(!bike){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No bike logged for this ride.</div>';
+    body.appendChild(wrap);
+    return;
+  }
+
+  var badge = bikeStatusBadge(bike);
+  var photoStyle = bike.photo
+    ? 'background-image:linear-gradient(0deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,.1) 60%,transparent 100%),url('+bike.photo+');background-size:cover;background-position:center 40%'
+    : 'background:linear-gradient(160deg,#2a2a2e,#1c1c1f)';
+
+  var card=document.createElement('div');
+  card.style.cssText='border-radius:16px;overflow:hidden;position:relative;height:160px;margin-bottom:14px;'+photoStyle;
+  card.innerHTML='<div style="position:absolute;bottom:0;left:0;right:0;padding:14px 16px">'
+    +'<div style="font-size:17px;font-weight:800;color:#fff">'+bike.name+'</div>'
+    +'<div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:2px">'+(bike.miles||0)+' mi total &middot; '+bike.type+'</div>'
+    +'</div>';
+  wrap.appendChild(card);
+
+  var maintCard=document.createElement('div');
+  maintCard.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px';
+  var componentsHtml='';
+  (bike.components||[]).forEach(function(c, i){
+    var statusColor = c.pct!=null ? (c.pct>=85?'#ef4444':c.pct>=60?'#f59e0b':'#22c55e') : (c.milesSince && c.dueEvery && c.milesSince/c.dueEvery>=0.85 ? '#ef4444' : '#22c55e');
+    var detail = c.pct!=null ? c.pct+'% worn' : (c.milesSince!=null && c.dueEvery ? c.milesSince+' / '+c.dueEvery+' mi' : '');
+    componentsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;'+(i>0?'border-top:1px solid var(--b1);':'')+'">'
+      +'<span style="font-size:13px;color:var(--t1);font-weight:600">'+c.name+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+statusColor+'">'+detail+'</span></div>';
+  });
+  maintCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Maintenance</div>'
+    +componentsHtml
+    +(badge.label?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--b1);font-size:12px;color:'+(badge.color||'var(--t2)')+';font-weight:700">'+badge.label+'</div>':'');
+  wrap.appendChild(maintCard);
+
+  body.appendChild(wrap);
+}
+
+// -- AI ANALYSIS TAB: cross-signal insights correlating wind, power,
+// nutrition, and historical comparisons - the differentiated analysis
+// layer the reference design calls for, not just reporting raw numbers.
+function renderRideAnalysisTab(body, r, idx, FTP, BWT){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+  wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Analyzing this ride against your history&hellip;</div>';
+  body.appendChild(wrap);
+
+  // Compare this ride to past rides on similar distance, and gather bike
+  // context, so the prompt can produce genuine cross-signal comparisons
+  // rather than restating this ride's own numbers back.
+  var similarRides = (st.rides||[]).filter(function(ride, i){
+    return i!==idx && !ride.deleted && ride.distance && r.distance && Math.abs(ride.distance-r.distance)<5 && ride.avgPwr;
+  }).slice(0,5);
+
+  var prompt = 'You are a cycling data analyst. Analyze this ride and produce genuine cross-signal insights, not just a restatement of the numbers. '
+    +'THIS RIDE: '+(r.distance||'?')+'mi, avg power '+(r.avgPwr||'?')+'W, NP '+(r.np||'?')+'W, avg HR '+(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elevation '+(r.elev||0)+'ft. '
+    +'SIMILAR PAST RIDES (same rider, similar distance): '+similarRides.map(function(sr){
+      return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm';
+    }).join('; ')+'. '
+    +'Give 3-4 short bullet-style insights (each starting with "- "), each one connecting two different signals '
+    +'(e.g. comparing this ride to a similar past one, noting if power was higher despite similar effort, or any other genuine pattern in the data provided). '
+    +'Be specific and use the actual numbers given. If there is not enough data for a genuine comparison, say so plainly rather than inventing detail.';
+
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:350, messages:[{role:'user',content:prompt}] })
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(d){
+    var text = d.content && d.content[0] && d.content[0].text;
+    renderAnalysisContent(wrap, text);
+  })
+  .catch(function(){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">Could not reach the analysis right now.</div>';
+  });
+}
+
+function renderAnalysisContent(wrap, text){
+  wrap.innerHTML='';
+  if(!text){
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No analysis available for this ride.</div>';
+    return;
+  }
+  var lines = text.split(String.fromCharCode(10)).map(function(l){ return l.trim(); }).filter(Boolean);
+  var listGroup=document.createElement('div');
+  listGroup.style.cssText='background:var(--s2);border-radius:14px;overflow:hidden';
+  var any=false;
+  lines.forEach(function(line, i){
+    if(line.indexOf('- ')!==0) return;
+    any=true;
+    var row=document.createElement('div');
+    row.style.cssText='padding:12px 16px;'+(i>0?'border-top:1px solid var(--b1);':'')+'font-size:13px;color:var(--t1);line-height:1.5';
+    row.textContent=line.replace(/^-\s*/,'');
+    listGroup.appendChild(row);
+  });
+  if(!any){
+    wrap.innerHTML='<div style="background:var(--s2);border-radius:14px;padding:16px;font-size:13px;color:var(--t1);line-height:1.5">'+text+'</div>';
+  } else {
+    wrap.appendChild(listGroup);
+  }
 }
 
 function deleteRide(idx, e){
