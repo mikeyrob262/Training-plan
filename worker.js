@@ -13493,10 +13493,10 @@ function renderMapContent(body, ride, wind, forTime){
 }
 
 function showWeatherHistory(){
-  var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
+  var old=document.getElementById('WX-RIDE-FLOW');if(old)old.remove();
   var scr=document.createElement('div');
-  scr.id='WEATHER-SCREEN';
-  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:150;overflow-y:auto;-webkit-overflow-scrolling:touch;';
+  scr.id='WX-RIDE-FLOW';
+  scr.style.cssText='background:var(--bg);min-height:100%;';
 
   // All outdoor rides sorted newest first - include rides without GPS
   var routes=(st.rides||[]).filter(function(r){
@@ -14123,7 +14123,9 @@ function showWeatherHistory(){
   }
 
   renderLanding();
-  document.body.appendChild(scr);
+  var tabBody=document.getElementById('wx-tab-body');
+  if(tabBody){ tabBody.innerHTML=''; tabBody.appendChild(scr); }
+  else document.body.appendChild(scr);
 }
 
 
