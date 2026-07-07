@@ -8823,7 +8823,7 @@ function openRideDetail(idx){
   heroRow.appendChild(heroGrid);
   if(r.calories){
     var calRow=document.createElement('div');
-    calRow.style.cssText='margin-top:14px;padding-top:14px;border-top:1px solid var(--b1)';
+    calRow.style.cssText='margin-top:14px';
     calRow.innerHTML='<div style="font-size:24px;font-weight:800;color:var(--t1);letter-spacing:-.5px">'+r.calories+' Cal</div>'
       +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:4px">Calories</div>';
     heroRow.appendChild(calRow);
@@ -8832,24 +8832,31 @@ function openRideDetail(idx){
   heroSpacer.style.cssText='height:16px';
   heroRow.appendChild(heroSpacer);
 
-  // Tab bar
+  // Tab bar - exact match to the reference: Overview/Map/Charts/Laps/More,
+  // plain underline style (bold + orange underline on active, plain gray
+  // text otherwise), not filled pills. Map/Charts route to the existing
+  // Route/Performance tab content under the hood; Weather/Equipment/AI
+  // Analysis live behind "More" since the reference itself only shows
+  // 5 tabs and doesn't have those three sections at all.
   var tabDefs=[
     {id:'overview',label:'Overview'},
-    {id:'route',label:'Route'},
-    {id:'performance',label:'Performance'},
-    {id:'weather',label:'Weather'},
-    {id:'equipment',label:'Equipment'},
-    {id:'analysis',label:'AI Analysis'}
+    {id:'map',label:'Map'},
+    {id:'charts',label:'Charts'},
+    {id:'laps',label:'Laps'},
+    {id:'more',label:'More'}
   ];
   var activeTab='overview';
   var tabsRow=document.createElement('div');
-  tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding:10px 16px;-webkit-overflow-scrolling:touch;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)';
+  tabsRow.style.cssText='display:flex;gap:18px;overflow-x:auto;padding:12px 16px 0;-webkit-overflow-scrolling:touch;flex-shrink:0;background:var(--s1);border-bottom:1px solid var(--b1)';
   var tabBtns={};
   tabDefs.forEach(function(t){
     var btn=document.createElement('button');
     btn.textContent=t.label;
-    btn.style.cssText='flex-shrink:0;padding:7px 14px;border-radius:20px;border:none;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap';
-    btn.onclick=function(){ activeTab=t.id; renderTabs(); };
+    btn.style.cssText='flex-shrink:0;padding:0 0 10px;background:none;border:none;border-bottom:2px solid transparent;font-size:14px;cursor:pointer;white-space:nowrap';
+    btn.onclick=function(){
+      if(t.id==='more'){ openRideDetailMoreSheet(r, idx, FTP, BWT); return; }
+      activeTab=t.id; renderTabs();
+    };
     tabBtns[t.id]=btn;
     tabsRow.appendChild(btn);
   });
@@ -8868,8 +8875,9 @@ function openRideDetail(idx){
   function updateTabStyles(){
     tabDefs.forEach(function(t){
       var active=t.id===activeTab;
-      tabBtns[t.id].style.background=active?'var(--t1)':'var(--s2)';
-      tabBtns[t.id].style.color=active?'var(--bg)':'var(--t2)';
+      tabBtns[t.id].style.fontWeight=active?'700':'400';
+      tabBtns[t.id].style.color=active?'var(--t1)':'var(--t3)';
+      tabBtns[t.id].style.borderBottomColor=active?'#FC4C02':'transparent';
     });
   }
 
@@ -8877,128 +8885,96 @@ function openRideDetail(idx){
     updateTabStyles();
     body.innerHTML='';
     if(activeTab==='overview') renderRideOverviewTab(body, r, idx, FTP, BWT);
-    else if(activeTab==='route') renderRideRouteTab(body, r, idx, FTP, BWT);
-    else if(activeTab==='performance') renderRidePerformanceTab(body, r, idx, FTP, BWT);
-    else if(activeTab==='weather') renderRideWeatherTab(body, r, idx);
-    else if(activeTab==='equipment') renderRideEquipmentTab(body, r, idx);
-    else if(activeTab==='analysis') renderRideAnalysisTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='map') renderRideRouteTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='charts') renderRidePerformanceTab(body, r, idx, FTP, BWT);
+    else if(activeTab==='laps') renderRideLapsTab(body, r, idx);
   }
 
   renderTabs();
 }
 
+// "More" bottom sheet - Weather/Equipment/AI Analysis live here since the
+// reference's tab row only shows Overview/Map/Charts/Laps/More, and these
+// three sections don't correspond to anything in the reference itself.
+function openRideDetailMoreSheet(r, idx, FTP, BWT){
+  var old=document.getElementById('ride-more-sheet');
+  if(old) old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='ride-more-sheet';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:10px 0 max(10px,env(safe-area-inset-bottom))';
+  function makeRow(label, onClick){
+    var row=document.createElement('div');
+    row.style.cssText='padding:15px 20px;font-size:15px;font-weight:600;color:var(--t1);cursor:pointer;text-align:center';
+    row.textContent=label;
+    row.onclick=function(){ overlay.remove(); onClick(); };
+    return row;
+  }
+  var detailBody=document.getElementById('ride-detail-body');
+  sheet.appendChild(makeRow('Weather', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideWeatherTab(detailBody, r, idx); } }));
+  var d1=document.createElement('div'); d1.style.cssText='height:1px;background:var(--b1);margin:2px 16px'; sheet.appendChild(d1);
+  sheet.appendChild(makeRow('Equipment', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideEquipmentTab(detailBody, r, idx); } }));
+  var d2=document.createElement('div'); d2.style.cssText='height:1px;background:var(--b1);margin:2px 16px'; sheet.appendChild(d2);
+  sheet.appendChild(makeRow('AI Analysis', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideAnalysisTab(detailBody, r, idx, FTP, BWT); } }));
+  var d3=document.createElement('div'); d3.style.cssText='height:6px'; sheet.appendChild(d3);
+  sheet.appendChild(makeRow('Cancel', function(){}));
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
+// -- LAPS TAB: genuinely blocked on real data - lap records are not
+// currently parsed/stored anywhere in this app (confirmed earlier this
+// session). Shown honestly as not-yet-available rather than faked.
+function renderRideLapsTab(body, r, idx){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:40px 20px;text-align:center;color:var(--t3)';
+  wrap.innerHTML='<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Lap data not available yet</div>'
+    +'<div style="font-size:13px;line-height:1.5">This ride was not recorded with lap markers, or lap data has not been imported for it.</div>';
+  body.appendChild(wrap);
+}
+
 // -- OVERVIEW TAB: AI Coach insight card + compact route preview + key stats
 function renderRideOverviewTab(body, r, idx, FTP, BWT){
   var wrap=document.createElement('div');
-  wrap.style.cssText='padding:14px 16px';
+  wrap.style.cssText='padding:16px';
 
-  // AI Coach Insight card - loading state, filled in by parsing the real
-  // API response into a headline + icon bullets + recommendation, once
-  // fetchRideCoachInsight resolves below.
-  var coachCard=document.createElement('div');
-  coachCard.id='ride-coach-card';
-  coachCard.style.cssText='background:var(--s2);border-radius:14px;padding:18px;margin-bottom:14px';
-  coachCard.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px">'
-    +'<span style="font-size:11px;color:#c084fc;font-weight:700;text-transform:uppercase;letter-spacing:.04em">AI Coach Insight</span>'
-    +'<span style="font-size:9px;font-weight:700;color:var(--t3);background:var(--s3);padding:2px 6px;border-radius:6px">Beta</span></div>'
+  // AI Coach Insight - flat, no card background, matching the reference
+  // exactly: lightning icon + label + Beta pill, green bold headline,
+  // icon+text rows, RECOMMENDATION caps label, Ask Coach outline button.
+  var coachSection=document.createElement('div');
+  coachSection.id='ride-coach-card';
+  coachSection.style.cssText='margin-bottom:24px';
+  coachSection.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:14px">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    +'<span style="font-size:13px;color:var(--t1);font-weight:700">AI Coach Insight</span>'
+    +'<span style="font-size:9px;font-weight:700;color:var(--t3);border:1px solid var(--b1);padding:2px 6px;border-radius:6px">Beta</span></div>'
     +'<div id="ride-coach-body" style="font-size:14px;color:var(--t2);line-height:1.6">Analyzing this ride&hellip;</div>';
-  wrap.appendChild(coachCard);
+  wrap.appendChild(coachSection);
 
-  // Compact route preview (if GPS available) - full map lives on the Route tab
+  // Route map preview - if GPS available, shown here on Overview like the
+  // reference (full map tools live on the Route tab)
   if(r.gpsLats && r.gpsLats.length>5){
-    var mapPreview=document.createElement('div');
-    mapPreview.style.cssText='border-radius:14px;overflow:hidden;margin-bottom:14px;border:1px solid var(--b1)';
-    mapPreview.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
-    wrap.appendChild(mapPreview);
+    var mapWrap=document.createElement('div');
+    mapWrap.style.cssText='position:relative;border-radius:16px;overflow:hidden;margin-bottom:14px';
+    mapWrap.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+    var mapTools=document.createElement('div');
+    mapTools.style.cssText='position:absolute;top:10px;right:10px;z-index:400;display:flex;flex-direction:column;gap:6px';
+    mapTools.innerHTML='<div style="background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>'
+      +'<div style="background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div>';
+    mapWrap.appendChild(mapTools);
+    wrap.appendChild(mapWrap);
+
+    // Elev Gain / Max Elev - flat two-column row below the map, no card
+    var elevRow=document.createElement('div');
+    elevRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px';
+    elevRow.innerHTML='<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(r.elev||'-')+(r.elev?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Elev Gain</div></div>'
+      +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(r.maxElev||'-')+(r.maxElev?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Max Elevation</div></div>';
+    wrap.appendChild(elevRow);
   }
-
-  // Weather Conditions summary (today's live conditions - the ride's
-  // actual historical weather lives on the Weather tab; this is a quick
-  // glance, matching the reference's compact card)
-  var wxCard=document.createElement('div');
-  wxCard.id='ride-overview-weather';
-  wxCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px';
-  var wxHdrRow=document.createElement('div');
-  wxHdrRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
-  wxHdrRow.innerHTML='<span style="font-size:13px;font-weight:700;color:var(--t1)">Weather Conditions</span>';
-  var wxViewBtn=document.createElement('span');
-  wxViewBtn.textContent='View';
-  wxViewBtn.style.cssText='font-size:12px;color:#FC4C02;cursor:pointer';
-  wxViewBtn.onclick=function(){
-    var tabButtons=document.querySelectorAll('#ride-detail-modal button');
-    for(var i=0;i<tabButtons.length;i++){ if(tabButtons[i].textContent==='Weather'){ tabButtons[i].click(); break; } }
-  };
-  wxHdrRow.appendChild(wxViewBtn);
-  wxCard.appendChild(wxHdrRow);
-  var wxBodyEl=document.createElement('div');
-  wxBodyEl.id='ride-overview-weather-body';
-  wxBodyEl.style.cssText='font-size:12px;color:var(--t3)';
-  wxBodyEl.textContent='Loading\u2026';
-  wxCard.appendChild(wxBodyEl);
-  wrap.appendChild(wxCard);
-
-  // Equipment summary
-  ensureBikes();
-  var ovBike = null;
-  if(r.gearId){ ovBike = (st.bikes||[]).find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; }); }
-  if(!ovBike && r.gearName){ ovBike = (st.bikes||[]).find(function(b){ return b.name===r.gearName; }); }
-  if(ovBike){
-    var eqCard=document.createElement('div');
-    eqCard.style.cssText='background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px';
-    var eqBadge=bikeStatusBadge(ovBike);
-    var eqHdrRow=document.createElement('div');
-    eqHdrRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px';
-    eqHdrRow.innerHTML='<span style="font-size:13px;font-weight:700;color:var(--t1)">Equipment</span>';
-    var eqViewBtn=document.createElement('span');
-    eqViewBtn.textContent='View';
-    eqViewBtn.style.cssText='font-size:12px;color:#FC4C02;cursor:pointer';
-    eqViewBtn.onclick=function(){
-      var tabButtons=document.querySelectorAll('#ride-detail-modal button');
-      for(var i=0;i<tabButtons.length;i++){ if(tabButtons[i].textContent==='Equipment'){ tabButtons[i].click(); break; } }
-    };
-    eqHdrRow.appendChild(eqViewBtn);
-    eqCard.appendChild(eqHdrRow);
-    var eqBodyEl=document.createElement('div');
-    eqBodyEl.innerHTML='<div style="font-size:14px;font-weight:700;color:var(--t1)">'+ovBike.name+'</div>'
-      +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+(ovBike.miles||0)+' mi total'+(eqBadge.label?' &middot; '+eqBadge.label:'')+'</div>';
-    eqCard.appendChild(eqBodyEl);
-    wrap.appendChild(eqCard);
-  }
-
-  // Key stats row
-  var statsRow=document.createElement('div');
-  statsRow.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:8px';
-  [{v:r.relEffort||'-',l:'Relative Effort',c:'#FC4C02'},{v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg Heart Rate',c:'#ef4444'},{v:r.calories?r.calories+' kcal':'-',l:'Calories'}]
-  .forEach(function(s){
-    var cell=document.createElement('div');
-    cell.style.cssText='background:var(--s2);border-radius:12px;padding:12px 8px;text-align:center';
-    cell.innerHTML='<div style="font-size:18px;font-weight:900;color:'+(s.c||'var(--t1)')+'">'+s.v+'</div>'
-      +'<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:3px">'+s.l+'</div>';
-    statsRow.appendChild(cell);
-  });
-  wrap.appendChild(statsRow);
 
   body.appendChild(wrap);
-
-  // Fill in the quick weather glance using current conditions
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relative_humidity_2m,visibility'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
-  .then(function(res){ return res.json(); })
-  .then(function(d){
-    var wxEl=document.getElementById('ride-overview-weather-body');
-    if(!wxEl || !d.current) return;
-    var dirArr=['N','NE','E','SE','S','SW','W','NW'];
-    var dir=dirArr[Math.round((d.current.winddirection_10m||0)/45)%8];
-    wxEl.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-      +'<div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+Math.round(d.current.temperature_2m)+'&deg;F</div><div style="font-size:11px;color:var(--t3)">Feels '+Math.round(d.current.apparent_temperature)+'&deg;</div></div>'
-      +'<div><div style="font-size:16px;font-weight:800;color:var(--t1)">'+dir+' '+Math.round(d.current.windspeed_10m)+' mph</div><div style="font-size:11px;color:var(--t3)">Wind</div></div>'
-      +'</div>';
-  })
-  .catch(function(){
-    var wxEl=document.getElementById('ride-overview-weather-body');
-    if(wxEl) wxEl.textContent='Weather unavailable right now.';
-  });
 
   // Fetch a real, ride-specific coach insight using the same shared
   // fetchTodaysDecision-style API call, but with a prompt built from
