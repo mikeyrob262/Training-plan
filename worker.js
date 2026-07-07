@@ -2941,7 +2941,6 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div id="PLANS" style="display:none;padding:0 0 80px 0"></div>
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 <div id="WEATHER" style="display:none;padding:0 0 80px 0"></div>
-<div id="ACTIVITIES" style="display:none;padding:0 0 80px 0"></div>
 <div id="ANALYTICS" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
@@ -4679,7 +4678,6 @@ function showScreen(id){
   var pln=document.getElementById('PLANS');if(pln)pln.style.display=id==='PLANS'?'block':'none';
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
-  var acts=document.getElementById('ACTIVITIES');if(acts)acts.style.display=id==='ACTIVITIES'?'block':'none';
   var anl=document.getElementById('ANALYTICS');if(anl)anl.style.display=id==='ANALYTICS'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
@@ -6790,23 +6788,6 @@ function showAnalytics(){
   renderPerf(body);
 }
 
-function showActivities(){
-  showScreen('ACTIVITIES');
-  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  var ab=document.getElementById('bnav-activities');if(ab)ab.classList.add('active');
-  var scr=document.getElementById('ACTIVITIES');
-  if(!scr) return;
-  scr.innerHTML='';
-  var hdr=document.createElement('div');
-  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
-  hdr.textContent='Activities';
-  var body=document.createElement('div');
-  body.id='activities-body';
-  scr.appendChild(hdr);
-  scr.appendChild(body);
-  renderRideList(body);
-}
-
 function showPerf(){
   showScreen('ANALYTICS');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
@@ -7380,7 +7361,13 @@ function renderPerf(container){
     html+='</div>';
   }
 
-  container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'</div>';
+  container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'<div id="analytics-ride-list"></div></div>';
+
+  // Activities was folded into Analytics rather than kept as its own
+  // bottom-nav destination - the ride list renders right after the
+  // performance dashboard in the same screen instead of a separate tab.
+  var rideListContainer=document.getElementById('analytics-ride-list');
+  if(rideListContainer) renderRideList(rideListContainer);
 
 
   // If no rides, auto-refresh after Firebase syncs
@@ -7481,7 +7468,7 @@ function renderPerf(container){
 }
 
 var activityYearFilter = activityYearFilter || new Date().getFullYear();
-function setActivityYearFilter(y){ activityYearFilter = y; var body=document.getElementById('perf-body'); renderRideList(body); }
+function setActivityYearFilter(y){ activityYearFilter = y; var body=document.getElementById('analytics-ride-list'); renderRideList(body); }
 function renderRideList(container){
   if(!container) return;
   if(typeof activityYearFilter==='undefined') activityYearFilter = new Date().getFullYear();
@@ -9554,12 +9541,10 @@ function deleteRide(idx, e){
     }
     sv();
     fbPush(false, true); // push immediately as authoritative, so the deletion sticks right away rather than waiting on the next routine merge
-    // Re-render whichever ride-list screen is actually open - Activities
-    // uses its own activities-body container now, separate from
-    // Analytics' perf-body (they used to share an ID, which caused a
-    // different bug where the two screens overwrote each other).
-    var actBody=document.getElementById('activities-body');
-    if(actBody){ renderRideList(actBody); }
+    // Activities was folded into Analytics - the ride list lives in
+    // analytics-ride-list now, a sub-container inside perf-body.
+    var rlc=document.getElementById('analytics-ride-list');
+    if(rlc){ renderRideList(rlc); }
     else{
       var perfBody=document.getElementById('perf-body');
       if(perfBody) renderPerf(perfBody);
@@ -12879,9 +12864,8 @@ function bnavGo(tab){
     var am=document.getElementById('activities-modal');
     var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
     if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showScreen('TRAIN');}
-    else if(tab==='analytics'){if(am)am.remove();showAnalytics();}
+    else if(tab==='analytics'||tab==='activities'){if(am)am.remove();showAnalytics();}
     else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
-    else if(tab==='activities'){if(pm)pm.remove();showActivities();}
     else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
   }catch(e){
     console.error('bnavGo error ('+tab+'):', e);
@@ -12889,9 +12873,8 @@ function bnavGo(tab){
     try{
       document.querySelectorAll('#perf-modal,#activities-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
       if(tab==='home'){showScreen('TRAIN');}
-      else if(tab==='analytics'){showAnalytics();}
+      else if(tab==='analytics'||tab==='activities'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
-      else if(tab==='activities'){showActivities();}
       else if(tab==='more'){showMoreSheet();}
     }catch(e2){
       console.error('bnavGo retry also failed ('+tab+'):', e2);
@@ -15985,10 +15968,6 @@ window.onload = function(){
   <button class="bnav-btn" id="bnav-nutrition" onclick="bnavGo('nutrition')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
     Nutrition
-  </button>
-  <button class="bnav-btn" id="bnav-activities" onclick="bnavGo('activities')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    Activities
   </button>
   <button class="bnav-btn" id="bnav-more" onclick="bnavGo('more')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
