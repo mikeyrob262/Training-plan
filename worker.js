@@ -12886,6 +12886,7 @@ function showWeather(){
     else if(weatherActiveTab==='map') renderWeatherMapTab(body);
     else if(weatherActiveTab==='history') renderWeatherHistoryTab(body);
     else if(weatherActiveTab==='planner') renderWeatherPlannerTab(body);
+    else if(weatherActiveTab==='alerts') renderWeatherAlertsTab(body);
     else renderWeatherComingSoonTab(body, weatherActiveTab);
   }
 
@@ -12923,6 +12924,162 @@ function renderWeatherPlannerTab(body){
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that ride.</div>'
     +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
     +'</div>';
+}
+
+// Alerts tab: scans the same 7-day hourly forecast window as Map/Ride
+// Planner for thunderstorm risk, heavy rain, dangerous gusts, and heat -
+// plus a real US AQI check via Open-Meteo's separate Air Quality API.
+// Each alert is a genuine window found in the data (day + hour range),
+// not a static warning - if conditions are clear, it says so plainly.
+function renderWeatherAlertsTab(body){
+  body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+    +'<div style="font-size:14px;font-weight:600">Scanning the week ahead&hellip;</div>'
+    +'</div>';
+
+  Promise.all([
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
+      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windgusts_10m,weathercode'
+      +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7')
+      .then(function(r){ if(!r.ok) throw new Error('Weather API returned '+r.status); return r.json(); }),
+    fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681'
+      +'&hourly=us_aqi&timezone=America%2FChicago&forecast_days=7')
+      .then(function(r){ if(!r.ok) throw new Error('AQI API returned '+r.status); return r.json(); })
+      .catch(function(){ return null; }) // AQI is a bonus - do not fail the whole tab if it is unavailable
+  ]).then(function(results){
+    renderAlertsContent(body, results[0]&&results[0].hourly, results[1]&&results[1].hourly);
+  }).catch(function(err){
+    body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+      +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Could not load alerts</div>'
+      +'<div style="font-size:13px;line-height:1.5">'+(err&&err.message?err.message:'Unknown error')+'</div>'
+      +'</div>';
+  });
+}
+
+function renderAlertsContent(body, hourly, aqiHourly){
+  body.innerHTML='';
+  if(!hourly){
+    body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather data unavailable right now.</div>';
+    return;
+  }
+
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px 24px';
+
+  var now=new Date();
+  var alerts=[]; // {severity:'high'|'med', icon, title, detail}
+
+  // Group consecutive future hours matching a condition into single
+  // windows (e.g. "Thu 2-6 PM") instead of one alert per hour.
+  function findWindows(matchFn){
+    var windows=[];
+    var current=null;
+    for(var i=0;i<hourly.time.length;i++){
+      var d=new Date(hourly.time[i]);
+      if(d<now) continue;
+      var match=matchFn(i);
+      if(match){
+        if(!current) current={startIdx:i, endIdx:i};
+        else current.endIdx=i;
+      } else if(current){
+        windows.push(current);
+        current=null;
+      }
+    }
+    if(current) windows.push(current);
+    return windows;
+  }
+
+  function fmtWindow(w){
+    var startD=new Date(hourly.time[w.startIdx]);
+    var endD=new Date(hourly.time[w.endIdx]);
+    var dayLabel=startD.toDateString()===now.toDateString() ? 'Today' : startD.toLocaleDateString(undefined,{weekday:'short'});
+    if(w.startIdx===w.endIdx) return dayLabel+' '+formatHour12(startD.getHours());
+    return dayLabel+' '+formatHour12(startD.getHours())+'&ndash;'+formatHour12(endD.getHours());
+  }
+
+  // Thunderstorm risk (WMO weather codes 95-99)
+  var stormWindows=findWindows(function(i){ return hourly.weathercode[i]>=95; });
+  stormWindows.forEach(function(w){
+    alerts.push({severity:'high', icon:'&#9889;', title:'Thunderstorm risk', detail:fmtWindow(w)});
+  });
+
+  // Heavy rain (70%+ chance)
+  var rainWindows=findWindows(function(i){ return (hourly.precipitation_probability[i]||0)>=70; });
+  rainWindows.forEach(function(w){
+    alerts.push({severity:'med', icon:'&#127783;&#65039;', title:'Heavy rain likely', detail:fmtWindow(w)});
+  });
+
+  // Dangerous gusts (25mph+)
+  var gustWindows=findWindows(function(i){ return (hourly.windgusts_10m[i]||0)>=25; });
+  gustWindows.forEach(function(w){
+    var maxGust=0;
+    for(var i=w.startIdx;i<=w.endIdx;i++){ maxGust=Math.max(maxGust, hourly.windgusts_10m[i]||0); }
+    alerts.push({severity:'med', icon:'&#128168;', title:'Dangerous gusts up to '+Math.round(maxGust)+'mph', detail:fmtWindow(w)});
+  });
+
+  // Heat warning (95F+ apparent temperature)
+  var heatWindows=findWindows(function(i){ return (hourly.apparent_temperature[i]||0)>=95; });
+  heatWindows.forEach(function(w){
+    var maxTemp=0;
+    for(var i=w.startIdx;i<=w.endIdx;i++){ maxTemp=Math.max(maxTemp, hourly.apparent_temperature[i]||0); }
+    alerts.push({severity:'high', icon:'&#128293;', title:'Heat risk, feels like '+Math.round(maxTemp)+'&deg;', detail:fmtWindow(w)});
+  });
+
+  // AQI - flag anything Unhealthy for Sensitive Groups or worse (US AQI 101+)
+  if(aqiHourly && aqiHourly.us_aqi){
+    var aqiWindows=[];
+    var current=null;
+    for(var i=0;i<aqiHourly.time.length;i++){
+      var d=new Date(aqiHourly.time[i]);
+      if(d<now) continue;
+      var val=aqiHourly.us_aqi[i];
+      if(val>=101){
+        if(!current) current={startIdx:i,endIdx:i,maxAqi:val};
+        else { current.endIdx=i; current.maxAqi=Math.max(current.maxAqi,val); }
+      } else if(current){
+        aqiWindows.push(current);
+        current=null;
+      }
+    }
+    if(current) aqiWindows.push(current);
+    aqiWindows.forEach(function(w){
+      var startD=new Date(aqiHourly.time[w.startIdx]);
+      var endD=new Date(aqiHourly.time[w.endIdx]);
+      var dayLabel=startD.toDateString()===now.toDateString() ? 'Today' : startD.toLocaleDateString(undefined,{weekday:'short'});
+      var range=w.startIdx===w.endIdx ? formatHour12(startD.getHours()) : formatHour12(startD.getHours())+'&ndash;'+formatHour12(endD.getHours());
+      alerts.push({severity: w.maxAqi>=151?'high':'med', icon:'&#128173;', title:'Air quality: AQI '+Math.round(w.maxAqi), detail:dayLabel+' '+range});
+    });
+  }
+
+  if(!alerts.length){
+    var clearCard=document.createElement('div');
+    clearCard.style.cssText='background:var(--s2);border-radius:12px;padding:20px;border:1px solid var(--b1);text-align:center';
+    clearCard.innerHTML='<div style="font-size:28px;margin-bottom:8px">&#9989;</div>'
+      +'<div style="font-size:14px;font-weight:600;color:var(--t1)">No alerts this week</div>'
+      +'<div style="font-size:12px;color:var(--t3);margin-top:4px">Clear conditions across the next 7 days &mdash; no thunderstorms, heavy rain, dangerous gusts, heat risk, or air quality concerns detected.</div>';
+    wrap.appendChild(clearCard);
+  } else {
+    alerts.sort(function(a,b){
+      if(a.severity!==b.severity) return a.severity==='high'?-1:1;
+      return 0;
+    });
+    alerts.forEach(function(a){
+      var color=a.severity==='high'?'#E24B4A':'#BA7517';
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--s2);border-radius:12px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--b1);border-left:3px solid '+color+';display:flex;align-items:center;gap:12px';
+      card.innerHTML='<div style="font-size:22px;flex-shrink:0">'+a.icon+'</div>'
+        +'<div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+a.title+'</div>'
+        +'<div style="font-size:12px;color:var(--t3);margin-top:2px">'+a.detail+'</div></div>';
+      wrap.appendChild(card);
+    });
+  }
+
+  var noteCard=document.createElement('div');
+  noteCard.style.cssText='margin-top:8px;font-size:11px;color:var(--t3);line-height:1.5;padding:0 4px';
+  noteCard.textContent='Based on the 7-day forecast. Conditions can change - check back closer to ride time.';
+  wrap.appendChild(noteCard);
+
+  body.appendChild(wrap);
 }
 
 // AI Ride Score, recommended bike, best departure window, clothing and
