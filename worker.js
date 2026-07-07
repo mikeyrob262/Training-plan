@@ -13210,12 +13210,19 @@ function renderWeatherMapTab(body){
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
     +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m,temperature_2m,precipitation_probability'
     +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=7')
-  .then(function(r){ return r.json(); })
-  .then(function(wxData){
-    renderMapSelectors(body, routes, wxData&&wxData.hourly);
+  .then(function(r){
+    if(!r.ok) throw new Error('Weather API returned '+r.status);
+    return r.json();
   })
-  .catch(function(){
-    renderMapSelectors(body, routes, null);
+  .then(function(wxData){
+    if(!wxData || !wxData.hourly){ throw new Error('Weather response missing hourly data'); }
+    renderMapSelectors(body, routes, wxData.hourly);
+  })
+  .catch(function(err){
+    body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
+      +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Could not load forecast</div>'
+      +'<div style="font-size:13px;line-height:1.5;margin-bottom:4px">'+(err&&err.message?err.message:'Unknown error')+'</div>'
+      +'</div>';
   });
 }
 
@@ -13268,6 +13275,12 @@ function renderMapSelectors(body, routes, hourlyData){
     o.selected = opt.idx===weatherMapSelectedOffset || (i===0 && weatherMapSelectedOffset===0);
     timeSelect.appendChild(o);
   });
+  if(!timeOptions.length){
+    var o=document.createElement('option');
+    o.textContent='No forecast times available';
+    o.disabled=true;
+    timeSelect.appendChild(o);
+  }
   selectorCard.appendChild(timeSelect);
 
   body.appendChild(selectorCard);
