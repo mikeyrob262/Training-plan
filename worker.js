@@ -4368,53 +4368,65 @@ function doSwap(w,idx,btn){
   } else {
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   }
+  opts.push('Custom...');
 
-  // Fixed-position bottom-sheet overlay, same pattern as the More sheet /
-  // food modal / ride modal - guaranteed visible on screen immediately,
-  // regardless of scroll position, unlike the old inline-appended panel
-  // which could render off-screen at the bottom of a tall card.
+  // Compact dropdown sheet - replaces the old scrolling pill grid (which
+  // could fill most of the screen on mobile with ~20 options and buried
+  // Cancel at the bottom). A native <select> is far more compact, uses
+  // the OS's own picker UI on mobile, and applies the swap immediately
+  // on change - no separate Confirm step needed.
   var overlay=document.createElement('div');
   overlay.id='swap-overlay';
-  overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;align-items:flex-end';
+  overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
 
   var sheet=document.createElement('div');
-  sheet.style.cssText='background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-height:75vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px 16px calc(18px + env(safe-area-inset-bottom))';
+  sheet.style.cssText='background:#111;border-radius:16px;padding:18px;width:100%;max-width:340px';
 
-  var lbl=document.createElement('div');
-  lbl.style.cssText='font-size:15px;font-weight:800;color:var(--t1);margin-bottom:12px';
-  lbl.textContent='Swap with:';
-  sheet.appendChild(lbl);
+  var headerRow=document.createElement('div');
+  headerRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
 
-  var wrap=document.createElement('div');wrap.className='swap-opts';
+  var lbl=document.createElement('span');
+  lbl.style.cssText='font-size:14px;font-weight:700;color:#ffffff';
+  lbl.textContent='Swap With';
+  headerRow.appendChild(lbl);
+
+  var closeBtn=document.createElement('span');
+  closeBtn.style.cssText='width:22px;height:22px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;cursor:pointer;flex-shrink:0';
+  closeBtn.textContent='\u00d7';
+  closeBtn.onclick=function(){overlay.remove();};
+  headerRow.appendChild(closeBtn);
+
+  sheet.appendChild(headerRow);
+
+  var select=document.createElement('select');
+  select.style.cssText='width:100%;background:#1a1a1a;border:1px solid #333;color:#f0f0f0;font-size:14px;font-weight:600;padding:12px 14px;border-radius:8px';
 
   opts.forEach(function(opt){
-    var obtn=document.createElement('button');
-    obtn.className='swap-opt';obtn.textContent=opt;
-    obtn.addEventListener('click',(function(o){
-      return function(){applySwap(w,idx,o);};
-    })(opt));
-    wrap.appendChild(obtn);
+    var optEl=document.createElement('option');
+    optEl.value=opt;optEl.textContent=opt;
+    optEl.style.cssText='color:#f0f0f0;background:#1a1a1a';
+    select.appendChild(optEl);
+  });
+  select.selectedIndex=-1;
+
+  select.addEventListener('change',function(){
+    var val=select.value;
+    if(val==='Custom...'){
+      var custom=prompt('Enter activity name:');
+      overlay.remove();
+      if(custom&&custom.trim()) applySwap(w,idx,custom.trim());
+      return;
+    }
+    overlay.remove();
+    applySwap(w,idx,val);
   });
 
-  var customBtn=document.createElement('button');
-  customBtn.className='swap-opt';customBtn.textContent='Custom...';
-  customBtn.style.cssText='border-style:dashed';
-  customBtn.addEventListener('click',function(){
-    var custom=prompt('Enter activity name:');
-    if(custom&&custom.trim()) applySwap(w,idx,custom.trim());
-  });
-  wrap.appendChild(customBtn);
-
-  var cancel=document.createElement('button');
-  cancel.className='swap-cancel';cancel.textContent='Cancel';
-  cancel.addEventListener('click',function(){overlay.remove();});
-  wrap.appendChild(cancel);
-
-  sheet.appendChild(wrap);
+  sheet.appendChild(select);
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
 }
+
 
 
 function rmSwap(w,i){var o=document.getElementById('swap-overlay');if(o)o.remove();}
