@@ -2940,6 +2940,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div id="GOALS" style="display:none;padding:0 0 80px 0"></div>
 <div id="PLANS" style="display:none;padding:0 0 80px 0"></div>
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
+<div id="WEATHER" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
 var cw=1, st={}, curSW=1, svDebounce=null;
@@ -4662,7 +4663,7 @@ function showScreen(id){
   // Destroy all Leaflet map instances before removing screens
   try{Object.keys(window).filter(function(k){return k.indexOf('_wxmap_')===0;}).forEach(function(k){try{window[k].remove();}catch(e){}delete window[k];});}catch(e){}
   // Remove all fixed overlay screens
-  ['WEATHER-SCREEN','WX-DETAIL','CAL-SCREEN','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
+  ['WX-DETAIL','CAL-SCREEN','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
   // Remove any stray leaflet containers
   document.querySelectorAll('.leaflet-container').forEach(function(el){el.remove();});
   // Ensure week header is visible
@@ -4675,6 +4676,7 @@ function showScreen(id){
   var goa=document.getElementById('GOALS');if(goa)goa.style.display=id==='GOALS'?'block':'none';
   var pln=document.getElementById('PLANS');if(pln)pln.style.display=id==='PLANS'?'block':'none';
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
+  var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -5114,7 +5116,6 @@ function showSet(){
       r.readAsText(f);
     });
   }
-  var wxScr=document.getElementById('WEATHER-SCREEN');if(wxScr)wxScr.style.zIndex='150';
   showScreen('SET');
 }
 
@@ -12828,27 +12829,26 @@ function fetchStravaGPS(stravaId, rideIndex) {
 var weatherActiveTab = 'overview';
 
 function showWeather(){
-  var old=document.getElementById('WEATHER-SCREEN');if(old)old.remove();
-  var scr=document.createElement('div');
-  scr.id='WEATHER-SCREEN';
-  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:150;display:flex;flex-direction:column;overflow:hidden';
+  showScreen('WEATHER');
+  var scr=document.getElementById('WEATHER');
+  if(!scr) return;
+  scr.innerHTML='';
 
-  var hdr=document.createElement('div');
-  hdr.style.cssText='background:var(--s1);padding:14px 16px 0;flex-shrink:0;border-bottom:1px solid var(--b1)';
   var hdrTop=document.createElement('div');
-  hdrTop.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:12px';
-  var backBtn=document.createElement('button');
-  backBtn.innerHTML='&lsaquo;';
-  backBtn.style.cssText='background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;line-height:1';
-  backBtn.onclick=function(){ scr.remove(); };
+  hdrTop.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px';
   var titleEl=document.createElement('div');
-  titleEl.style.cssText='font-size:16px;font-weight:800;color:var(--t1)';
+  titleEl.style.cssText='font-size:20px;font-weight:800;color:var(--t1)';
   titleEl.textContent='Weather Coach';
-  hdrTop.appendChild(backBtn);hdrTop.appendChild(titleEl);
-  hdr.appendChild(hdrTop);
+  var moreBtn=document.createElement('button');
+  moreBtn.textContent='More';
+  moreBtn.style.cssText='background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer';
+  moreBtn.onclick=function(){ showMoreSheet(); };
+  hdrTop.appendChild(titleEl);
+  hdrTop.appendChild(moreBtn);
+  scr.appendChild(hdrTop);
 
   var tabsRow=document.createElement('div');
-  tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding-bottom:10px;-webkit-overflow-scrolling:touch';
+  tabsRow.style.cssText='display:flex;gap:4px;overflow-x:auto;padding:4px 16px 12px;-webkit-overflow-scrolling:touch';
   var tabDefs=[
     {id:'overview',label:'Overview'},
     {id:'map',label:'Map'},
@@ -12865,15 +12865,11 @@ function showWeather(){
     tabBtns[t.id]=btn;
     tabsRow.appendChild(btn);
   });
-  hdr.appendChild(tabsRow);
+  scr.appendChild(tabsRow);
 
   var body=document.createElement('div');
   body.id='wx-tab-body';
-  body.style.cssText='flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch';
-
-  scr.appendChild(hdr);
   scr.appendChild(body);
-  document.body.appendChild(scr);
 
   function updateTabStyles(){
     tabDefs.forEach(function(t){
