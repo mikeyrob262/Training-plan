@@ -7047,6 +7047,38 @@ function renderPerf(container){
   var tsbStatus2=tsb2>=20?'Peak':tsb2>=0?'Fresh':tsb2>=-20?'Training':'Overreached';
   var tsbC2=tsb2>=20?'#00C896':tsb2>=0?'#4D9FFF':tsb2>=-20?'#FC4C02':'#ef4444';
 
+  // Plain-language read: translates the three raw numbers into one direct,
+  // actionable sentence instead of leaving it to the reader to interpret
+  // TSB/ATL/CTL jargon themselves. Deterministic (rule-based on the same
+  // thresholds used for the status labels above), not an API call, so it
+  // is instant and never contradicts the numbers sitting right next to it.
+  var interpText, interpColor;
+  if(tsb2 < -20){
+    interpText='Fatigue is elevated. Consider an easy day or full rest before your next hard session.';
+    interpColor='#ef4444';
+  } else if(atlDiff2>15){
+    interpText='You are in a heavy training block. Watch for signs of overreaching over the next few days.';
+    interpColor='#FF7A45';
+  } else if(tsb2 >= 20 && ctl2 < 40){
+    interpText='You are fresh, but fitness is still building. A good day to add quality work.';
+    interpColor='#4D9FFF';
+  } else if(tsb2 >= 20){
+    interpText='Form is strong and you are well rested. Good day to push a hard session or race.';
+    interpColor='#00C896';
+  } else if(tsb2 >= 0){
+    interpText='You are fresh and absorbing training well. On track for your next build.';
+    interpColor='#4D9FFF';
+  } else if(atlDiff2 < -5 && ctl2 >= 20){
+    interpText='Training load has dropped off. Consider adding volume to keep building fitness.';
+    interpColor='#4D9FFF';
+  } else {
+    interpText='Fatigue is building from recent training. A moderate day will help you keep absorbing the load.';
+    interpColor='#FC4C02';
+  }
+  html+='<div style="margin:0 16px 10px;background:var(--s2);border-radius:12px;padding:12px 14px;border-left:3px solid '+interpColor+'">'
+    +'<div style="font-size:13px;color:var(--t1);line-height:1.4">'+interpText+'</div>'
+    +'</div>';
+
   // Three metric cards
   html+='<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:6px;margin:0 12px 8px">';
   [
