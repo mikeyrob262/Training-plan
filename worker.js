@@ -6815,13 +6815,27 @@ function showHomeDash(){
   var html='';
 
   // Header
+  var bellCount=(function(){
+    var curWeek=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
+    var s=(typeof ws==='function')?ws(curWeek):{wo:{}};
+    var wo=s.wo||{};
+    var todayIdx=(new Date().getDay()===0?6:new Date().getDay()-1);
+    var count=0;
+    for(var di=0;di<todayIdx;di++){ if(!wo[di]) count++; }
+    return count;
+  })();
   html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px">'
     +'<div style="display:flex;align-items:center;gap:8px">'
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
     +'<span style="font-size:15px;font-weight:800;letter-spacing:-.2px;color:var(--t1)">ATHLETE IQ</span></div>'
+    +'<div style="display:flex;align-items:center;gap:14px">'
+    +'<div style="position:relative">'
+    +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
+    +(bellCount>0?'<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#E24B4A;color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">'+bellCount+'</div>':'')
+    +'</div>'
     +'<div style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden">'
     +(st.profilePhoto?'<img src="'+st.profilePhoto+'" style="width:100%;height:100%;object-fit:cover">':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>')
-    +'</div></div>';
+    +'</div></div></div>';
 
   // Greeting
   html+='<div style="padding:0 16px 20px">'
@@ -6833,7 +6847,10 @@ function showHomeDash(){
   var r2=40, circ=2*Math.PI*r2;
   var dash=circ*readinessPct;
   html+='<div style="margin:0 16px 20px">'
-    +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Today&rsquo;s Readiness</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Today&rsquo;s Readiness</span>'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
+    +'</div>'
     +'<div style="display:flex;align-items:center;gap:20px">'
     +'<div style="position:relative;width:100px;height:100px;flex-shrink:0">'
     +'<svg width="100" height="100" viewBox="0 0 100 100" style="transform:rotate(-90deg)">'
@@ -6849,6 +6866,55 @@ function showHomeDash(){
     +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fitness (CTL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+ctl+'</span></div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fatigue (ATL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+atl+'</span></div>'
     +'</div></div></div>';
+
+  // Today's Plan - reads the real scheduled workout for today directly
+  // from the training plan's rendered DOM (week/day workout cards),
+  // since that's where the actual session name/duration genuinely live;
+  // the completion-tracking data structure (ws().wo) only stores a
+  // done/not-done flag, not the workout details themselves.
+  var todaysPlanInfo = (function(){
+    var curWeek = (typeof getCurrentPlanWeek==='function') ? getCurrentPlanWeek() : 1;
+    var todayObj = new Date();
+    var dayIdx = todayObj.getDay()===0 ? 6 : todayObj.getDay()-1;
+    var sessEl = document.getElementById('ws'+curWeek+'_'+dayIdx);
+    var cardEl = document.getElementById('wc'+curWeek+'_'+dayIdx);
+    var checkEl = document.getElementById('ck'+curWeek+'_'+dayIdx);
+    var sessName = sessEl ? sessEl.textContent.trim() : null;
+    var plannedEl = cardEl ? cardEl.querySelector('.wof-pl') : null;
+    var plannedDur = plannedEl ? plannedEl.textContent.trim() : null;
+    var isDone = checkEl ? checkEl.className.indexOf('on')>=0 : false;
+    return {sessName:sessName, plannedDur:plannedDur, isDone:isDone};
+  })();
+  html+='<div style="margin:0 16px 20px">'
+    +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Today&rsquo;s Plan</div>';
+  if(!todaysPlanInfo.sessName){
+    html+='<div style="font-size:13px;color:var(--t3)">No workout scheduled for today.</div>';
+  } else {
+    var isRide=/zwift|ride|bike/i.test(todaysPlanInfo.sessName);
+    var isStrength=/strength/i.test(todaysPlanInfo.sessName);
+    var todayIconColor=isStrength?'#7C3AED':isRide?'#FC4C02':'#185FA5';
+    var todayIcon=isStrength
+      ?'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>'
+      :'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
+    html+='<div id="home-todays-plan-row" style="display:flex;align-items:center;gap:12px;cursor:pointer">'
+      +'<div style="width:40px;height:40px;border-radius:10px;background:'+todayIconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+todayIcon+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:15px;font-weight:700;color:var(--t1)">'+todaysPlanInfo.sessName+'</div>'
+      +(todaysPlanInfo.plannedDur?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+todaysPlanInfo.plannedDur+'</div>':'')
+      +'</div>'
+      +(todaysPlanInfo.isDone
+        ?'<div style="font-size:12px;font-weight:700;color:#5DCAA5;flex-shrink:0">Done</div>'
+        :'<button id="home-todays-plan-start" style="background:none;border:1px solid #5DCAA5;color:#5DCAA5;font-size:13px;font-weight:700;padding:8px 18px;border-radius:20px;cursor:pointer;flex-shrink:0">Start</button>')
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding-left:52px">'
+      +'<div style="flex:1;height:4px;background:var(--s2);border-radius:2px"><div style="height:4px;width:'+(todaysPlanInfo.isDone?'100':'0')+'%;background:#5DCAA5;border-radius:2px"></div></div>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:5px;margin-top:8px;padding-left:52px">'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><path d="M12 2l1.5 5L19 8l-5.5 1L12 14l-1.5-5L5 8l5.5-1z"/></svg>'
+      +'<span style="font-size:11px;color:#a855f7;font-weight:600">Recommended by AI Coach</span>'
+      +'</div>';
+  }
+  html+='</div>';
 
   // Recent Activity (real data)
   var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
@@ -6869,6 +6935,24 @@ function showHomeDash(){
       var sport=r.sportType||r.type||'Ride';
       var iconColor=sportColorsH[sport]||'#FC4C02';
       var icon=/strength|weight/i.test(sport)?strengthIconH:/run/i.test(sport)?runIconH:rideIconH;
+      // Mini route thumbnail from real GPS points, matching the reference's
+      // small squiggle preview - only shown when this ride actually has
+      // recorded GPS data, never fabricated for rides without it.
+      var thumb='';
+      if(r.gpsLats && r.gpsLats.length>3){
+        var tLats=r.lats||r.gpsLats, tLons=r.lons||r.gpsLons;
+        var minLa=Math.min.apply(null,tLats), maxLa=Math.max.apply(null,tLats);
+        var minLo=Math.min.apply(null,tLons), maxLo=Math.max.apply(null,tLons);
+        var laRange=(maxLa-minLa)||1, loRange=(maxLo-minLo)||1;
+        var step=Math.max(1,Math.floor(tLats.length/40));
+        var pathPts=[];
+        for(var ti=0;ti<tLats.length;ti+=step){
+          var px=((tLons[ti]-minLo)/loRange*36+2).toFixed(1);
+          var py=(34-((tLats[ti]-minLa)/laRange*30+2)).toFixed(1);
+          pathPts.push(px+','+py);
+        }
+        thumb='<svg width="40" height="36" viewBox="0 0 40 36" style="flex-shrink:0"><polyline points="'+pathPts.join(' ')+'" fill="none" stroke="'+iconColor+'" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      }
       html+='<div onclick="openRideDetail('+realIdx+')" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(idx>0?'border-top:1px solid var(--b1);':'')+'cursor:pointer">'
         +'<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
         +'<div style="flex:1;min-width:0">'
@@ -6877,33 +6961,53 @@ function showHomeDash(){
         +'<div style="text-align:right;flex-shrink:0">'
         +(r.distance?'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+r.distance+' mi</div>':'')
         +(r.avgPwr?'<div style="font-size:11px;color:var(--t3)">'+r.avgPwr+'W</div>':'')
-        +'</div></div>';
+        +'</div>'
+        +thumb
+        +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m9 18 6-6-6-6"/></svg>'
+        +'</div>';
     });
   }
   html+='</div>';
 
-  // Upcoming Event (real race data)
-  var races=(st.races||[]).filter(function(r){return new Date(r.date)>=new Date();}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-  var nextRace=races.length?races[0]:null;
-  if(nextRace){
-    var raceDate=new Date(nextRace.date);
-    var daysOut=Math.max(0,Math.round((raceDate-new Date())/86400000));
-    var monthAbbr=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][raceDate.getMonth()];
+  // Upcoming Events (real race data) - showing up to 3, not just the
+  // next one, per request to keep motivation front and center.
+  var upcomingRaces=(st.races||[]).filter(function(r){return new Date(r.date)>=new Date();}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(upcomingRaces.length){
     html+='<div style="margin:0 16px 20px">'
-      +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming Event</div>'
-      +'<div style="display:flex;align-items:center;gap:12px;cursor:pointer" onclick="showCalendar()">'
-      +'<div style="border:1px solid var(--b1);border-radius:10px;padding:6px 10px;text-align:center;flex-shrink:0">'
-      +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
-      +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+nextRace.name+'</div>'
-      +(nextRace.location?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+nextRace.location+'</div>':'')
-      +'</div>'
-      +'<div style="font-size:13px;font-weight:700;color:#5DCAA5;flex-shrink:0">'+daysOut+' days</div>'
-      +'</div></div>';
+      +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming Events</div>';
+    upcomingRaces.slice(0,3).forEach(function(race,ridx){
+      var raceDate=new Date(race.date);
+      var daysOut=Math.max(0,Math.round((raceDate-new Date())/86400000));
+      var monthAbbr=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][raceDate.getMonth()];
+      html+='<div onclick="showCalendar()" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:'+(ridx>0?'10px 0 0':'0')+';'+(ridx>0?'border-top:1px solid var(--b1);margin-top:10px;':'')+'">'
+        +'<div style="border:1px solid var(--b1);border-radius:10px;padding:6px 10px;text-align:center;flex-shrink:0">'
+        +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
+        +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+race.name+'</div>'
+        +(race.location?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+race.location+'</div>':'')
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:#5DCAA5;flex-shrink:0">'+daysOut+' days</div>'
+        +'</div>';
+    });
+    html+='</div>';
   }
 
+  // AI Coach card - reuses the app's existing coachNoteHTML/fetchCoachNote
+  // mechanism (same one used elsewhere), which includes real weather
+  // context, rather than a simplified duplicate.
+  var coachCardId='home-coach-note-'+Date.now();
+  html+='<div style="margin:0 16px 20px">'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><path d="M12 2l1.5 5L19 8l-5.5 1L12 14l-1.5-5L5 8l5.5-1z"/></svg>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">AI Coach</span>'
+    +'</div>'
+    +'<div id="'+coachCardId+'" style="font-size:14px;color:var(--t1);line-height:1.4">Thinking&hellip;</div>'
+    +'<span style="font-size:12px;color:#378ADD;cursor:pointer;display:inline-block;margin-top:6px" onclick="showWeather()">View full recommendation</span>'
+    +'</div>';
+
   scr.innerHTML=html;
+  setTimeout(function(){ fetchCoachNote(coachCardId); }, 0);
 }
 
 function showAnalytics(){
