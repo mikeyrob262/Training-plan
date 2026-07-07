@@ -7130,6 +7130,11 @@ function fetchLiveIntervalsWellness(){
       if(ctlEl) ctlEl.textContent=ctl;
       if(atlEl) atlEl.textContent=atl;
       if(freshEl) freshEl.textContent='Live from Intervals.icu';
+
+      // Cache for other consumers (e.g. the AI Coach prompt) so every part
+      // of the app agrees on the same current fitness numbers instead of
+      // each recomputing its own, inconsistent version.
+      window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, fetchedAt:Date.now()};
     })
     .catch(function(){
       // Silent fallback - the CSV-based numbers are already showing from
@@ -13359,14 +13364,23 @@ function fetchTodaysDecision(weatherStr, callback){
   var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var todayName = days[today.getDay()];
 
-  var activitiesForCoach = (st.rides||[]).filter(function(r){ return !r.deleted; })
-    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
-  activitiesForCoach.forEach(function(a){ a.load = unifiedLoad(a); });
-  var withLoadForCoach = activitiesForCoach.filter(function(a){ return a.load>0; });
-  var pmcForCoach = withLoadForCoach.length ? computePMC(withLoadForCoach) : null;
-  var ctl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].ctl : 0;
-  var atl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].atl : 0;
-  var tsb = ctl - atl;
+  // Use the same authoritative fitness numbers as the Home Readiness card:
+  // prefer the live Intervals.icu pull if it's resolved recently (within
+  // 10 minutes), otherwise fall back to the CSV-imported pmcHistory. This
+  // keeps the AI Coach's message in agreement with whatever Readiness is
+  // actually showing right now, instead of recomputing its own separate
+  // (and previously wildly inconsistent) CTL/ATL/TSB from local rides.
+  var ctl, atl, tsb;
+  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
+    ctl=window.__liveWellness.ctl; atl=window.__liveWellness.atl; tsb=window.__liveWellness.tsb;
+  } else {
+    var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
+    var pmcForCoach=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+    var coachLast=pmcForCoach.length?pmcForCoach[pmcForCoach.length-1]:{ctl:0,atl:0,tsb:0};
+    ctl = coachLast.ctl||0;
+    atl = coachLast.atl||0;
+    tsb = coachLast.tsb!=null ? coachLast.tsb : (ctl-atl);
+  }
 
   var ftp = parseInt(st.ftp||186);
   var weight = parseFloat(st.weight||162);
