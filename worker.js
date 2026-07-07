@@ -13380,7 +13380,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
     var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
     var windNavEl=document.getElementById('wx-wind-nav');
     var tempNavEl=document.getElementById('wx-temp-nav');
-    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd, false);
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
     if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
   }
 
@@ -13424,7 +13424,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
     var windNavEl=document.getElementById('wx-wind-nav');
     var tempNavEl=document.getElementById('wx-temp-nav');
     var atStart=windowStart<=0, atEnd=windowStart>=maxWindowStart;
-    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd, false);
+    if(windNavEl) updateNavRow(windNavEl, atStart, atEnd);
     if(tempNavEl) updateNavRow(tempNavEl, atStart, atEnd);
     setTimeout(function(){
       try{ if(windChart) windChart.resize(); }catch(e){}
