@@ -13194,6 +13194,12 @@ function renderWeatherMapTab(body){
     var db=(b.date||'').replace(/-/g,'');
     return db>da?1:db<da?-1:0;
   });
+  // Real ride objects don't have a plain .id field (Strava-synced rides use
+  // .stravaId, CSV-imported ones may have neither) - build a stable
+  // synthetic id here rather than assuming .id exists.
+  routes.forEach(function(r,idx){
+    r._mapRouteId = r.stravaId ? ('strava-'+r.stravaId) : ((r.date||'nodate')+'-'+(r.name||'unnamed')+'-'+idx);
+  });
 
   if(!routes.length){
     body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
@@ -13203,8 +13209,8 @@ function renderWeatherMapTab(body){
     return;
   }
 
-  if(!weatherMapSelectedRouteId || !routes.find(function(r){return r.id===weatherMapSelectedRouteId;})){
-    weatherMapSelectedRouteId = routes[0].id;
+  if(!weatherMapSelectedRouteId || !routes.find(function(r){return r._mapRouteId===weatherMapSelectedRouteId;})){
+    weatherMapSelectedRouteId = routes[0]._mapRouteId;
   }
 
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
@@ -13244,9 +13250,9 @@ function renderMapSelectors(body, routes, hourlyData){
   routeSelect.style.cssText='width:100%;padding:9px 10px;background:var(--s1);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:13px;font-family:inherit;margin-bottom:12px';
   routes.forEach(function(r){
     var o=document.createElement('option');
-    o.value=r.id;
+    o.value=r._mapRouteId;
     o.textContent=(r.name||'Ride')+' &middot; '+(r.date||'');
-    o.selected = r.id===weatherMapSelectedRouteId;
+    o.selected = r._mapRouteId===weatherMapSelectedRouteId;
     routeSelect.appendChild(o);
   });
   selectorCard.appendChild(routeSelect);
@@ -13292,7 +13298,11 @@ function renderMapSelectors(body, routes, hourlyData){
   function rerender(){
     weatherMapSelectedRouteId = routeSelect.value;
     var selectedIdx = parseInt(timeSelect.value)||0;
-    var ride = routes.find(function(r){ return r.id===weatherMapSelectedRouteId; });
+    var ride = routes.find(function(r){ return r._mapRouteId===weatherMapSelectedRouteId; });
+    if(!ride){
+      mapContainer.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Could not find that route. Try selecting a different one.</div>';
+      return;
+    }
     var windAtTime = null;
     if(hourlyData && hourlyData.windspeed_10m){
       windAtTime = {
