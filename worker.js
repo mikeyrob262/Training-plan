@@ -3918,19 +3918,6 @@ function fetchCoachNote(elId){
   var el = document.getElementById(elId);
   if(!el) return;
 
-  var activitiesForNote = (st.rides||[]).filter(function(r){ return !r.deleted; })
-    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
-  activitiesForNote.forEach(function(a){ a.load = unifiedLoad(a); });
-  var withLoad = activitiesForNote.filter(function(a){ return a.load>0; });
-  var pmc = withLoad.length ? computePMC(withLoad) : null;
-  var tsb = pmc ? Math.round(pmc[pmc.length-1].ctl - pmc[pmc.length-1].atl) : 0;
-
-  ensureBikes();
-  var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
-    var badge = bikeStatusBadge(b);
-    return b.name+' ('+badge.label+')';
-  }).join('; ');
-
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
     +'&current=temperature_2m,windspeed_10m,winddirection_10m,precipitation_probability'
     +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
@@ -3941,27 +3928,18 @@ function fetchCoachNote(elId){
       ? Math.round(wx.temperature_2m)+'F, wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% rain':'')
       : 'unavailable';
 
-    var prompt = 'You are a personal cycling coach. Give ONE short, direct sentence (max 25 words) of advice for today.'
-      +' TSB (form): '+tsb+(tsb<-20?' (tired)':tsb>5?' (fresh)':' (neutral)')
-      +'. Weather: '+weatherStr
-      +'. Available bikes: '+(bikeOptions||'none logged')
-      +'. If weather favors a specific bike (crosswinds, rain), recommend it by name. Be direct, no preamble, just the advice.';
-
-    return fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:100, messages:[{role:'user',content:prompt}] })
+    fetchTodaysDecision(weatherStr, function(err, decisionText){
+      var target = document.getElementById(elId);
+      if(!target) return;
+      target.textContent = (err || !decisionText) ? 'Coach unavailable right now.' : decisionText;
     });
   })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    var text = d.content && d.content[0] && d.content[0].text;
-    var target = document.getElementById(elId);
-    if(target) target.textContent = text || 'Coach unavailable right now.';
-  })
   .catch(function(){
-    var target = document.getElementById(elId);
-    if(target) target.textContent = 'Coach unavailable right now.';
+    fetchTodaysDecision('unavailable', function(err, decisionText){
+      var target = document.getElementById(elId);
+      if(!target) return;
+      target.textContent = (err || !decisionText) ? 'Coach unavailable right now.' : decisionText;
+    });
   });
 }
 
@@ -12405,6 +12383,68 @@ function bnavGo(tab){
   }
 }
 
+// Shared source of truth for "what should I do today" - builds the exact
+// same rich context (FTP, CTL/ATL/TSB, bikes+maintenance, weather, recent
+// rides, upcoming week) as the full AI Coach screen, and asks for just the
+// one-line DECISION. Both AI Coach and Weather Overview call this so they
+// never give contradictory advice from two different prompts.
+function fetchTodaysDecision(weatherStr, callback){
+  var today = new Date();
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var todayName = days[today.getDay()];
+
+  var activitiesForCoach = (st.rides||[]).filter(function(r){ return !r.deleted; })
+    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
+  activitiesForCoach.forEach(function(a){ a.load = unifiedLoad(a); });
+  var withLoadForCoach = activitiesForCoach.filter(function(a){ return a.load>0; });
+  var pmcForCoach = withLoadForCoach.length ? computePMC(withLoadForCoach) : null;
+  var ctl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].ctl : 0;
+  var atl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].atl : 0;
+  var tsb = ctl - atl;
+
+  var ftp = parseInt(st.ftp||186);
+  var weight = parseFloat(st.weight||162);
+
+  var weekData = ws(cw);
+  var todayIdx = today.getDay()===0?6:today.getDay()-1;
+  var todayWorkout = weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null;
+
+  var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
+  var recentRides = (st.rides||[]).filter(function(r){
+    return r && r.date && new Date(r.date) >= sevenDaysAgo;
+  });
+
+  ensureBikes();
+  var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
+    var badge = bikeStatusBadge(b);
+    return b.name+' ('+b.type+', '+badge.label+')';
+  }).join('; ');
+
+  var prompt = 'You are a personal cycling coach. Today is '+todayName+'.'
+    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs'
+    +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
+    +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
+    +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
+    +'. TODAYS WEATHER: '+(weatherStr||'unavailable')
+    +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
+    +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
+      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0);
+    }).join('; ')
+    +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.';
+
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:100, messages:[{role:'user',content:prompt}] })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    var text = d.content && d.content[0] && d.content[0].text;
+    callback(null, (text||'').trim());
+  })
+  .catch(function(){ callback('Could not reach the coach right now.', null); });
+}
+
 function showAICoach(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
   var overlay=document.createElement('div');
@@ -12872,7 +12912,7 @@ function renderWeatherHistoryTab(body){
     +'<div style="font-size:28px;margin-bottom:10px">&#128197;</div>'
     +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Ride weather history</div>'
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Browse past rides with weather conditions, charts, and route maps.</div>'
-    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#378ADD;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Open Ride History</button>'
+    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Open Ride History</button>'
     +'</div>';
 }
 
@@ -12943,25 +12983,6 @@ function renderOverviewContent(body, wxData, ftp, weight){
   var scoreColor=score>=75?'#1D9E75':score>=50?'#BA7517':'#E24B4A';
   var scoreLabel=score>=75?'Great day to ride':score>=50?'Rideable with care':'Tough conditions';
 
-  var bikes=(st.bikes||[]).filter(function(b){ return !b.indoor; });
-  var recommendedBike=null, bikeReason='';
-  if(bikes.length){
-    var windy=wind>=15||gust>=25;
-    var sorted=bikes.slice().sort(function(a,b){
-      var aStable=/roadmachine|endurance/i.test(a.type||a.name||'')?1:0;
-      var bStable=/roadmachine|endurance/i.test(b.type||b.name||'')?1:0;
-      if(windy) return bStable-aStable;
-      return aStable-bStable;
-    });
-    recommendedBike=sorted[0];
-    var badge=bikeStatusBadge(recommendedBike);
-    if(badge.label && /due|overdue|service/i.test(badge.label)){
-      var nextChoice=sorted.find(function(b){ return b.id!==recommendedBike.id && !/due|overdue|service/i.test(bikeStatusBadge(b).label||''); });
-      if(nextChoice){ recommendedBike=nextChoice; bikeReason='(next pick, other bike needs service)'; }
-    }
-    if(!bikeReason) bikeReason=windy?'More stable in crosswinds':'Favors your race bike';
-  }
-
   var bestWindow=null;
   var hourlyPoints=[];
   if(hourly && hourly.time){
@@ -13015,16 +13036,16 @@ function renderOverviewContent(body, wxData, ftp, weight){
     +'<div style="font-size:12px;color:var(--t3);margin-top:3px">'+rainPct+'% rain</div></div>';
   wrap.appendChild(curCard);
 
-  // Ride recommendation
+  // Ride recommendation - the headline sentence comes from the same
+  // shared AI decision AI Coach uses (fetchTodaysDecision), so this never
+  // contradicts what AI Coach says elsewhere in the app.
   var recCard=document.createElement('div');
+  recCard.id='wx-rec-card';
   recCard.style.cssText='background:var(--s2);border-radius:12px;padding:18px;margin-bottom:8px;border:1px solid var(--b1);border-left:2px solid '+scoreColor;
   var recHTML='<div style="font-size:11px;color:'+scoreColor+';font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Ride recommendation</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-bottom:4px">'+scoreLabel+'</div>'
-    +'<div style="font-size:12px;color:var(--t3);margin-bottom:14px">'+(reasons.length?reasons.join(', '):'Clear conditions across the board')+'</div>'
+    +'<div id="wx-rec-decision" style="font-size:13px;color:var(--t2);margin-bottom:14px;line-height:1.4">Asking your coach&hellip;</div>'
     +'<div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--b1);flex-wrap:wrap;gap:10px">';
-  if(recommendedBike){
-    recHTML+='<div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">Bike</div><div style="font-size:13px;color:var(--t1);margin-top:2px">'+recommendedBike.name+'</div></div>';
-  }
   if(departureStr){
     recHTML+='<div><div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.04em">Best window</div><div style="font-size:13px;color:var(--t1);margin-top:2px">'+departureStr+'</div></div>';
   }
@@ -13134,6 +13155,14 @@ function renderOverviewContent(body, wxData, ftp, weight){
       });
     }
   },50);
+
+  var weatherStrForDecision = windDir+' '+wind+'mph, '+temp+'F, '+rainPct+'% rain'+(gust>wind+8?', gusts to '+gust+'mph':'');
+  fetchTodaysDecision(weatherStrForDecision, function(err, decisionText){
+    var decisionEl=document.getElementById('wx-rec-decision');
+    if(!decisionEl) return;
+    if(err || !decisionText){ decisionEl.textContent='Coach unavailable right now.'; return; }
+    decisionEl.textContent=decisionText;
+  });
 }
 
 function formatHour12(hr){
@@ -13362,9 +13391,18 @@ function showWeatherHistory(){
     // Header
     var hdr=document.createElement('div');
     hdr.style.cssText='background:#FC4C02;padding:14px 16px;display:flex;align-items:center;justify-content:space-between';
-    hdr.innerHTML='<div style="width:24px"></div>'
-      +'<div style="font-size:14px;font-weight:800;color:#fff;letter-spacing:0.04em">RIDE WEATHER</div>'
-      +'<div style="width:24px"></div>';
+    var backBtn=document.createElement('button');
+    backBtn.innerHTML='&lsaquo;';
+    backBtn.style.cssText='background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;width:24px;text-align:left;line-height:1';
+    backBtn.onclick=function(){ showWeather(); };
+    hdr.appendChild(backBtn);
+    var titleSpan=document.createElement('div');
+    titleSpan.style.cssText='font-size:14px;font-weight:800;color:#fff;letter-spacing:0.04em';
+    titleSpan.textContent='RIDE WEATHER';
+    hdr.appendChild(titleSpan);
+    var spacer=document.createElement('div');
+    spacer.style.cssText='width:24px';
+    hdr.appendChild(spacer);
     scr.appendChild(hdr);
 
     // Current conditions hero
