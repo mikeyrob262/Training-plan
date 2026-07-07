@@ -6782,6 +6782,102 @@ function renderNutr(){
   doneWrap.appendChild(doneToggle);
   t.appendChild(doneWrap);
 
+  // -- DAILY CALORIE TREND (real 7-day history from actual logged food,
+  // reusing the same week-data computation as the Progress tab).
+  var trendWrap=document.createElement('div');
+  trendWrap.style.cssText='margin:14px 16px 0;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:16px';
+  (function(){
+    var now=new Date();
+    var days7=[];
+    for(var di=6;di>=0;di--){
+      var d2=new Date(now); d2.setDate(now.getDate()-di);
+      var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+      var tot2=getDTots(dk);
+      var lbl=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d2.getDay()];
+      days7.push({label:lbl,date:d2.getDate()+'/'+(d2.getMonth()+1),cal:Math.round(tot2.cal),isToday:dk===nutrDate});
+    }
+    var loggedDays=days7.filter(function(d){return d.cal>0;});
+    var avgCal=loggedDays.length?Math.round(loggedDays.reduce(function(s,d){return s+d.cal;},0)/loggedDays.length):0;
+    var maxCal=Math.max.apply(null,days7.map(function(d){return d.cal;}).concat([tgt.cal,1]));
+
+    var hdrRow=document.createElement('div');
+    hdrRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
+    hdrRow.innerHTML='<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Daily Calorie Trend</span>'
+      +'<span style="font-size:11px;color:var(--t3)">7 Day Avg: '+avgCal+'</span>';
+    trendWrap.appendChild(hdrRow);
+
+    var barsRow=document.createElement('div');
+    barsRow.style.cssText='display:flex;gap:6px;align-items:flex-end;height:110px';
+    days7.forEach(function(d){
+      var col=document.createElement('div');
+      col.style.cssText='flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end';
+      var valLbl=document.createElement('div');
+      valLbl.style.cssText='font-size:9px;color:var(--t3);margin-bottom:3px';
+      valLbl.textContent=d.cal>0?d.cal:'';
+      var barOut=document.createElement('div');
+      var pct=d.cal>0?Math.max(4,Math.round(d.cal/maxCal*100)):0;
+      barOut.style.cssText='width:100%;height:'+pct+'%;background:'+(d.isToday?'var(--orange)':'var(--s3)')+';border-radius:3px 3px 0 0;min-height:2px';
+      var dayLbl=document.createElement('div');
+      dayLbl.style.cssText='font-size:9px;color:var(--t3);margin-top:4px';
+      dayLbl.textContent=d.label;
+      col.appendChild(valLbl);col.appendChild(barOut);col.appendChild(dayLbl);
+      barsRow.appendChild(col);
+    });
+    trendWrap.appendChild(barsRow);
+  })();
+  t.appendChild(trendWrap);
+
+  // -- RECENTLY LOGGED FOODS (real, most recent distinct entries across
+  // the last 14 days, deduplicated by food name, newest first).
+  var recentWrap=document.createElement('div');
+  recentWrap.style.cssText='margin:14px 16px 0;background:var(--s1);border-radius:16px;border:1px solid var(--b1);padding:16px';
+  (function(){
+    var hdrRow=document.createElement('div');
+    hdrRow.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px';
+    hdrRow.textContent='Recently Logged Foods';
+    recentWrap.appendChild(hdrRow);
+
+    var seen={}, recentItems=[];
+    var now=new Date();
+    for(var di=0;di<14 && recentItems.length<8;di++){
+      var d2=new Date(now); d2.setDate(now.getDate()-di);
+      var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+      var dayLog=st.nl&&st.nl[dk];
+      if(!dayLog||!dayLog.meals) continue;
+      MEAL_BUCKETS.forEach(function(m){
+        (dayLog.meals[m]||[]).forEach(function(item){
+          if(item.deleted||!item.n) return;
+          var key=item._baseName||item.n;
+          if(seen[key]) return;
+          seen[key]=true;
+          recentItems.push(item);
+        });
+      });
+    }
+    if(recentItems.length===0){
+      var none=document.createElement('div');
+      none.style.cssText='font-size:12px;color:var(--t3)';
+      none.textContent='No foods logged yet.';
+      recentWrap.appendChild(none);
+    } else {
+      recentItems.slice(0,6).forEach(function(item,ri){
+        var row=document.createElement('div');
+        row.style.cssText='display:flex;align-items:center;gap:10px;padding:'+(ri>0?'8px 0':'0 0 8px')+';'+(ri>0?'border-top:1px solid var(--b1);':'');
+        var icon=document.createElement('div');
+        icon.innerHTML=foodCategoryIconHTML_(item.n);
+        var info=document.createElement('div');
+        info.style.cssText='flex:1;min-width:0';
+        info.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+item.n+'</div>';
+        var calLbl=document.createElement('div');
+        calLbl.style.cssText='font-size:12px;color:var(--t3);flex-shrink:0';
+        calLbl.textContent=(item.cal||0)+' cal';
+        row.appendChild(icon);row.appendChild(info);row.appendChild(calLbl);
+        recentWrap.appendChild(row);
+      });
+    }
+  })();
+  t.appendChild(recentWrap);
+
   t.appendChild(Object.assign(document.createElement('div'),{style:'height:50px'}));
 
   // Bind water and nav buttons
