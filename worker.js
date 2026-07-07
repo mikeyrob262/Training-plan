@@ -6211,10 +6211,42 @@ function renderNutr(){
     h+='</div>';
   }
 
+  // -- KEY NUTRIENTS (real fiber/sodium totals from today's logged foods -
+  // potassium/iron/calcium/magnesium aren't tracked in the food database
+  // yet, so they're intentionally omitted rather than shown as fabricated
+  // zeros or guessed values).
+  var fiberTot=0, sodiumTot=0;
+  MEAL_BUCKETS.forEach(function(m){
+    (nd.meals[m]||[]).forEach(function(i){
+      if(i.deleted) return;
+      fiberTot+=i.fiber||0;
+      sodiumTot+=i.sodium||0;
+    });
+  });
+  var fiberTgt=38, sodiumTgt=trainingTgt.sodium||2300;
+  var fiberPct=Math.min(100,Math.round(fiberTot/fiberTgt*100));
+  var sodiumPct=Math.min(100,Math.round(sodiumTot/sodiumTgt*100));
+  h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
+  h+='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Key Nutrients</div>';
+  h+='<div style="display:flex;gap:16px">';
+  [
+    {lbl:'Fiber',val:Math.round(fiberTot*10)/10+'g',pct:fiberPct,col:'#639922'},
+    {lbl:'Sodium',val:Math.round(sodiumTot)+'mg',pct:sodiumPct,col: sodiumPct>100?'#E24B4A':'#EF9F27'}
+  ].forEach(function(n){
+    h+='<div style="flex:1">';
+    h+='<div style="font-size:12px;color:var(--t2);margin-bottom:4px">'+n.lbl+'</div>';
+    h+='<div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:6px">'+n.val+'</div>';
+    h+='<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;width:'+n.pct+'%;background:'+n.col+';border-radius:2px"></div></div>';
+    h+='</div>';
+  });
+  h+='</div></div>';
+
   // -- WATER
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:14px;border:1px solid var(--b1);padding:13px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center">';
-  h+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Water</div>';
+  h+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Water</div>';
+  if(trainingTgt.fluidOz) h+='<div style="font-size:10px;color:var(--t3);margin-top:1px">Target: '+trainingTgt.fluidOz+'oz today</div>';
+  h+='</div>';
   h+='<div style="display:flex;align-items:center;gap:10px">';
   h+='<button id="water-minus" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>';
   h+='<span style="font-size:16px;font-weight:800;min-width:50px;text-align:center">'+(nd.water||0)+'/8</span>';
