@@ -6247,29 +6247,44 @@ function renderNutr(){
     h+='</div>';
   }
 
-  // -- KEY NUTRIENTS (real fiber/sodium totals from today's logged foods -
-  // potassium/iron/calcium/magnesium aren't tracked in the food database
-  // yet, so they're intentionally omitted rather than shown as fabricated
-  // zeros or guessed values).
-  var fiberTot=0, sodiumTot=0;
+  // -- KEY NUTRIENTS (real totals from today's logged foods. Fiber and
+  // sodium have been tracked since the food database was built. Potassium,
+  // calcium, and iron are now captured for foods logged via barcode scan
+  // (Open Food Facts provides real values for these), so they'll show
+  // real numbers once you've scanned in today's foods - they won't
+  // reflect items logged by search/manual entry until those paths are
+  // wired to a nutrient source too. Magnesium is intentionally omitted -
+  // Open Food Facts doesn't reliably report it, so showing a number here
+  // would mean guessing rather than measuring.)
+  var fiberTot=0, sodiumTot=0, potassiumTot=0, calciumTot=0, ironTot=0;
   MEAL_BUCKETS.forEach(function(m){
     (nd.meals[m]||[]).forEach(function(i){
       if(i.deleted) return;
       fiberTot+=i.fiber||0;
       sodiumTot+=i.sodium||0;
+      potassiumTot+=i.potassium||0;
+      calciumTot+=i.calcium||0;
+      ironTot+=i.iron||0;
     });
   });
-  var fiberTgt=38, sodiumTgt=trainingTgt.sodium||2300;
+  var fiberTgt=38, sodiumTgt=trainingTgt.sodium||2300, potassiumTgt=3400, calciumTgt=1000, ironTgt=18;
   var fiberPct=Math.min(100,Math.round(fiberTot/fiberTgt*100));
   var sodiumPct=Math.min(100,Math.round(sodiumTot/sodiumTgt*100));
+  var potassiumPct=Math.min(100,Math.round(potassiumTot/potassiumTgt*100));
+  var calciumPct=Math.min(100,Math.round(calciumTot/calciumTgt*100));
+  var ironPct=Math.min(100,Math.round(ironTot/ironTgt*100));
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
   h+='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Key Nutrients</div>';
-  h+='<div style="display:flex;gap:16px">';
-  [
-    {lbl:'Fiber',val:Math.round(fiberTot*10)/10+'g',pct:fiberPct,col:'#639922'},
-    {lbl:'Sodium',val:Math.round(sodiumTot)+'mg',pct:sodiumPct,col: sodiumPct>100?'#E24B4A':'#EF9F27'}
-  ].forEach(function(n){
-    h+='<div style="flex:1">';
+  var nutrientTiles=[
+    {lbl:'Fiber',val:Math.round(fiberTot*10)/10+'g',pct:fiberPct,col:'#639922',show:true},
+    {lbl:'Sodium',val:Math.round(sodiumTot)+'mg',pct:sodiumPct,col: sodiumPct>100?'#E24B4A':'#EF9F27',show:true},
+    {lbl:'Potassium',val:Math.round(potassiumTot)+'mg',pct:potassiumPct,col:'#639922',show:potassiumTot>0},
+    {lbl:'Calcium',val:Math.round(calciumTot)+'mg',pct:calciumPct,col:'#378ADD',show:calciumTot>0},
+    {lbl:'Iron',val:Math.round(ironTot*10)/10+'mg',pct:ironPct,col:'#E24B4A',show:ironTot>0}
+  ].filter(function(n){return n.show;});
+  h+='<div style="display:flex;flex-wrap:wrap;gap:16px 12px">';
+  nutrientTiles.forEach(function(n){
+    h+='<div style="flex:1;min-width:80px">';
     h+='<div style="font-size:12px;color:var(--t2);margin-bottom:4px">'+n.lbl+'</div>';
     h+='<div style="font-size:15px;font-weight:800;color:var(--t1);margin-bottom:6px">'+n.val+'</div>';
     h+='<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;width:'+n.pct+'%;background:'+n.col+';border-radius:2px"></div></div>';
@@ -7002,6 +7017,10 @@ function openFoodForMeal(meal){
                         if(d2.status===1&&d2.product){
                           var p=d2.product;
                           var nu=p.nutriments||{};
+                          // Open Food Facts returns sodium/potassium/calcium/iron in
+                          // grams (not mg) for both the *_100g and *_serving keys -
+                          // multiply by 1000 to match this app's existing mg display
+                          // convention (see Key Nutrients on the Nutrition screen).
                           var item={
                             n:(p.product_name||'Unknown')+(p.brands?' - '+p.brands.split(',')[0]:''),
                             cal:Math.round(nu['energy-kcal_serving']||nu['energy-kcal_100g']||0),
@@ -7010,6 +7029,10 @@ function openFoodForMeal(meal){
                             f:Math.round((nu['fat_serving']||nu['fat_100g']||0)*10)/10,
                             fiber:Math.round((nu['fiber_serving']||nu['fiber_100g']||0)*10)/10,
                             satFat:Math.round((nu['saturated-fat_serving']||nu['saturated-fat_100g']||0)*10)/10,
+                            sodium:Math.round((nu['sodium_serving']||nu['sodium_100g']||0)*1000),
+                            potassium:Math.round((nu['potassium_serving']||nu['potassium_100g']||0)*1000),
+                            calcium:Math.round((nu['calcium_serving']||nu['calcium_100g']||0)*1000),
+                            iron:Math.round((nu['iron_serving']||nu['iron_100g']||0)*1000),
                             srv:p.serving_size||'1 serving'
                           };
                           renderFoodRows(foodList,[item]);
@@ -7229,7 +7252,7 @@ function renderFoodRows(container, list){
     if(!st.cf)st.cf=[];
     st.cf.push(food);
     if(!nutrDate) nutrDate=getTodayKey();
-    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
+    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0});
     sv();
     document.getElementById('food-modal').remove();
     renderNutr(); showScreen('NUTR');
@@ -12353,7 +12376,7 @@ function renderMyFoods(container){
         addBtn.disabled=true;
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
-        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0});
+        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0});
         sv();
         renderNutr();
         showScreen('NUTR');
@@ -12407,7 +12430,7 @@ function renderMyMeals(container){
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
-          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0});
+          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0});
         });
         sv();
         renderNutr();
