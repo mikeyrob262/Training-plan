@@ -6779,7 +6779,7 @@ function showAnalytics(){
   if(!scr) return;
   scr.innerHTML='';
   var hdr=document.createElement('div');
-  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
+  hdr.style.cssText='padding:12px 16px 16px;font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
   hdr.textContent='Analytics';
   var body=document.createElement('div');
   body.id='perf-body';
