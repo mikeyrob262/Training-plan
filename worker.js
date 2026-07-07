@@ -6894,7 +6894,7 @@ function showHomeDash(){
   // Today's Readiness
   var r2=40, circ=2*Math.PI*r2;
   var dash=circ*readinessPct;
-  html+='<div style="margin:0 16px 20px">'
+  html+='<div id="home-readiness-card" style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Today&rsquo;s Readiness</span>'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
@@ -6903,17 +6903,19 @@ function showHomeDash(){
     +'<div style="position:relative;width:100px;height:100px;flex-shrink:0">'
     +'<svg width="100" height="100" viewBox="0 0 100 100" style="transform:rotate(-90deg)">'
     +'<circle cx="50" cy="50" r="'+r2+'" fill="none" stroke="var(--s2)" stroke-width="8"/>'
-    +'<circle cx="50" cy="50" r="'+r2+'" fill="none" stroke="'+readinessColor+'" stroke-width="8" stroke-dasharray="'+dash+' '+circ+'" stroke-linecap="round"/>'
+    +'<circle id="home-readiness-ring" cx="50" cy="50" r="'+r2+'" fill="none" stroke="'+readinessColor+'" stroke-width="8" stroke-dasharray="'+dash+' '+circ+'" stroke-linecap="round"/>'
     +'</svg>'
     +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
-    +'<div style="font-size:24px;font-weight:800;color:var(--t1)">'+readiness.toFixed(1)+'</div>'
-    +'<div style="font-size:11px;font-weight:700;color:'+readinessColor+'">'+readinessLabel+'</div>'
+    +'<div id="home-readiness-score" style="font-size:24px;font-weight:800;color:var(--t1)">'+readiness.toFixed(1)+'</div>'
+    +'<div id="home-readiness-label" style="font-size:11px;font-weight:700;color:'+readinessColor+'">'+readinessLabel+'</div>'
     +'</div></div>'
     +'<div style="flex:1;display:flex;flex-direction:column;gap:10px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Form (TSB)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+(tsb>=0?'+':'')+tsb+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fitness (CTL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+ctl+'</span></div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fatigue (ATL)</span><span style="font-size:13px;font-weight:700;color:var(--t1)">'+atl+'</span></div>'
-    +'</div></div></div>';
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Form (TSB)</span><span id="home-readiness-tsb" style="font-size:13px;font-weight:700;color:var(--t1)">'+(tsb>=0?'+':'')+tsb+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fitness (CTL)</span><span id="home-readiness-ctl" style="font-size:13px;font-weight:700;color:var(--t1)">'+ctl+'</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:13px;color:var(--t2)">Fatigue (ATL)</span><span id="home-readiness-atl" style="font-size:13px;font-weight:700;color:var(--t1)">'+atl+'</span></div>'
+    +'</div></div>'
+    +'<div id="home-readiness-freshness" style="font-size:10px;color:var(--t3);margin-top:8px;text-align:right"></div>'
+    +'</div>';
 
   // Today's Plan - reads the real scheduled workout for today directly
   // from the training plan's rendered DOM (week/day workout cards),
@@ -7074,6 +7076,68 @@ function showHomeDash(){
       },300);
     };
   }
+
+  // Kick off a live pull of today's real CTL/ATL/Form from Intervals.icu
+  // so Readiness reflects actual current fatigue rather than whatever was
+  // last manually imported via CSV (which could be stale by days/weeks).
+  // Falls back silently to the CSV-based numbers already rendered above
+  // if the live call fails for any reason (offline, API down, etc).
+  setTimeout(function(){ fetchLiveIntervalsWellness(); }, 0);
+}
+
+// Live Intervals.icu wellness pull - fetches today's actual CTL (fitness),
+// ATL (fatigue), and form directly from the Intervals.icu API and updates
+// the already-rendered Readiness card in place. This replaces relying
+// solely on the manually-imported CSV snapshot (st.pmcHistory), which can
+// go stale between imports. Uses Basic auth per Intervals.icu's documented
+// API convention (username "API_KEY", password is the actual key).
+function fetchLiveIntervalsWellness(){
+  var athleteId='i544205';
+  var apiKey='4iacdcck2cllnwssbdilq6jhw';
+  var today=new Date();
+  var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var url='https://intervals.icu/api/v1/athlete/'+athleteId+'/wellness/'+todayStr;
+  var authHeader='Basic '+btoa('API_KEY:'+apiKey);
+
+  fetch(url,{headers:{'Authorization':authHeader}})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+    .then(function(data){
+      if(!data) return;
+      var ctl=Math.round(data.ctl||data.fitness||0);
+      var atl=Math.round(data.atl||data.fatigue||0);
+      var tsb=Math.round((data.ctl!=null&&data.atl!=null)?(data.ctl-data.atl):(data.form||0));
+
+      var readinessRaw=5+(tsb/6);
+      var readiness=Math.max(0,Math.min(10,readinessRaw));
+      var readinessLabel=readiness>=7.5?'Good':readiness>=5?'Fair':readiness>=3?'Low':'Poor';
+      var readinessColor=readiness>=7.5?'#5DCAA5':readiness>=5?'#FFB938':'#E24B4A';
+      var r2=40, circ=2*Math.PI*r2;
+      var dash=circ*(readiness/10);
+
+      var scoreEl=document.getElementById('home-readiness-score');
+      var labelEl=document.getElementById('home-readiness-label');
+      var ringEl=document.getElementById('home-readiness-ring');
+      var tsbEl=document.getElementById('home-readiness-tsb');
+      var ctlEl=document.getElementById('home-readiness-ctl');
+      var atlEl=document.getElementById('home-readiness-atl');
+      var freshEl=document.getElementById('home-readiness-freshness');
+      if(!scoreEl) return;
+
+      scoreEl.textContent=readiness.toFixed(1);
+      if(labelEl){ labelEl.textContent=readinessLabel; labelEl.style.color=readinessColor; }
+      if(ringEl){ ringEl.setAttribute('stroke',readinessColor); ringEl.setAttribute('stroke-dasharray',dash+' '+circ); }
+      if(tsbEl) tsbEl.textContent=(tsb>=0?'+':'')+tsb;
+      if(ctlEl) ctlEl.textContent=ctl;
+      if(atlEl) atlEl.textContent=atl;
+      if(freshEl) freshEl.textContent='Live from Intervals.icu';
+    })
+    .catch(function(){
+      // Silent fallback - the CSV-based numbers are already showing from
+      // the initial render, so there's nothing broken to show the user,
+      // just no live update this time.
+      var freshEl=document.getElementById('home-readiness-freshness');
+      if(freshEl) freshEl.textContent='';
+    });
 }
 
 function showAnalytics(){
