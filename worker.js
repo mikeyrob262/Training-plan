@@ -3610,7 +3610,7 @@ function updHdr(){
   } else {
     rangeStr=months[weekStart.getMonth()]+' '+weekStart.getDate()+' - '+months[weekEnd.getMonth()]+' '+weekEnd.getDate();
   }
-  document.getElementById('btn-wt').innerHTML=rangeStr+' <span style="font-size:12px;opacity:.4">&#9660;</span>';
+  document.getElementById('btn-wt').innerHTML=rangeStr+' <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="opacity:.4;vertical-align:middle"><path d="m6 9 6 6 6-6"/></svg>';
   var pv=document.getElementById('btn-pv');if(pv)pv.disabled=false;
   var nx=document.getElementById('btn-nx');if(nx)nx.disabled=false;
 }
@@ -9024,7 +9024,12 @@ function renderCoachInsightContent(el, text){
     else if(!headline){ headline=line; }
   });
 
-  var icons=['&#9989;','&#9889;','&#10084;&#65039;','&#128077;'];
+  var icons=[
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5DCAA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3zm0 0 4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.1 22H9a2 2 0 0 1-2-2v-9z"/></svg>'
+  ];
   var html='<div style="font-size:15px;font-weight:700;color:#5DCAA5;line-height:1.4;margin-bottom:14px">'+headline+'</div>';
   if(bullets.length){
     html+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">';
@@ -13556,7 +13561,7 @@ function renderWeatherComingSoonTab(body, tabId){
 // chart/map code to render inline - zero risk to what already works.
 function renderWeatherHistoryTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
-    +'<div style="font-size:28px;margin-bottom:10px">&#128197;</div>'
+    +'<div style="margin-bottom:10px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>'
     +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Ride weather history</div>'
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Browse past rides with weather conditions, charts, and route maps.</div>'
     +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Open Ride History</button>'
@@ -13568,7 +13573,7 @@ function renderWeatherHistoryTab(body){
 // Ride Planner needs: pick a route, pick a departure time, see conditions.
 function renderWeatherPlannerTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
-    +'<div style="font-size:28px;margin-bottom:10px">&#128197;</div>'
+    +'<div style="margin-bottom:10px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>'
     +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Plan your ride</div>'
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that ride.</div>'
     +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
@@ -13649,13 +13654,13 @@ function renderAlertsContent(body, hourly, aqiHourly){
   // Thunderstorm risk (WMO weather codes 95-99)
   var stormWindows=findWindows(function(i){ return hourly.weathercode[i]>=95; });
   stormWindows.forEach(function(w){
-    alerts.push({severity:'high', icon:'&#9889;', title:'Thunderstorm risk', detail:fmtWindow(w)});
+    alerts.push({severity:'high', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>', title:'Thunderstorm risk', detail:fmtWindow(w)});
   });
 
   // Heavy rain (70%+ chance)
   var rainWindows=findWindows(function(i){ return (hourly.precipitation_probability[i]||0)>=70; });
   rainWindows.forEach(function(w){
-    alerts.push({severity:'med', icon:'&#127783;&#65039;', title:'Heavy rain likely', detail:fmtWindow(w)});
+    alerts.push({severity:'med', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#378ADD" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2s6 7 6 11a6 6 0 0 1-12 0c0-4 6-11 6-11z"/></svg>', title:'Heavy rain likely', detail:fmtWindow(w)});
   });
 
   // Dangerous gusts (25mph+)
@@ -13663,7 +13668,7 @@ function renderAlertsContent(body, hourly, aqiHourly){
   gustWindows.forEach(function(w){
     var maxGust=0;
     for(var i=w.startIdx;i<=w.endIdx;i++){ maxGust=Math.max(maxGust, hourly.windgusts_10m[i]||0); }
-    alerts.push({severity:'med', icon:'&#128168;', title:'Dangerous gusts up to '+Math.round(maxGust)+'mph', detail:fmtWindow(w)});
+    alerts.push({severity:'med', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#BA7517" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h11a2.5 2.5 0 1 0-2-4M3 16h15a2.5 2.5 0 1 1-2 4M3 12h9"/></svg>', title:'Dangerous gusts up to '+Math.round(maxGust)+'mph', detail:fmtWindow(w)});
   });
 
   // Heat warning (95F+ apparent temperature)
@@ -13671,7 +13676,7 @@ function renderAlertsContent(body, hourly, aqiHourly){
   heatWindows.forEach(function(w){
     var maxTemp=0;
     for(var i=w.startIdx;i<=w.endIdx;i++){ maxTemp=Math.max(maxTemp, hourly.apparent_temperature[i]||0); }
-    alerts.push({severity:'high', icon:'&#128293;', title:'Heat risk, feels like '+Math.round(maxTemp)+'&deg;', detail:fmtWindow(w)});
+    alerts.push({severity:'high', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg>', title:'Heat risk, feels like '+Math.round(maxTemp)+'&deg;', detail:fmtWindow(w)});
   });
 
   // AQI - flag anything Unhealthy for Sensitive Groups or worse (US AQI 101+)
@@ -13696,14 +13701,14 @@ function renderAlertsContent(body, hourly, aqiHourly){
       var endD=new Date(aqiHourly.time[w.endIdx]);
       var dayLabel=startD.toDateString()===now.toDateString() ? 'Today' : startD.toLocaleDateString(undefined,{weekday:'short'});
       var range=w.startIdx===w.endIdx ? formatHour12(startD.getHours()) : formatHour12(startD.getHours())+'&ndash;'+formatHour12(endD.getHours());
-      alerts.push({severity: w.maxAqi>=151?'high':'med', icon:'&#128173;', title:'Air quality: AQI '+Math.round(w.maxAqi), detail:dayLabel+' '+range});
+      alerts.push({severity: w.maxAqi>=151?'high':'med', icon:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9333EA" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01"/></svg>', title:'Air quality: AQI '+Math.round(w.maxAqi), detail:dayLabel+' '+range});
     });
   }
 
   if(!alerts.length){
     var clearCard=document.createElement('div');
     clearCard.style.cssText='background:var(--s2);border-radius:14px;padding:20px;text-align:center';
-    clearCard.innerHTML='<div style="font-size:28px;margin-bottom:8px">&#9989;</div>'
+    clearCard.innerHTML='<div style="margin-bottom:8px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#5DCAA5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 5-5"/></svg></div>'
       +'<div style="font-size:14px;font-weight:600;color:var(--t1)">No alerts this week</div>'
       +'<div style="font-size:12px;color:var(--t3);margin-top:4px">Clear conditions across the next 7 days &mdash; no thunderstorms, heavy rain, dangerous gusts, heat risk, or air quality concerns detected.</div>';
     wrap.appendChild(clearCard);
@@ -14260,7 +14265,7 @@ function renderMapContent(body, ride, wind, forTime){
   mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);position:relative';
   var mapId='wxmap-overview';
   mapCard.innerHTML='<div id="'+mapId+'" style="height:340px"></div>'
-    +'<button id="wx-anim-toggle" style="position:absolute;top:10px;right:10px;z-index:400;background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--t1);cursor:pointer">&#9654; Animate wind</button>';
+    +'<button id="wx-anim-toggle" style="position:absolute;top:10px;right:10px;z-index:400;background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:6px 12px;font-size:11px;font-weight:700;color:var(--t1);cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="10" height="10" viewBox="0 0 24 24" fill="var(--t1)"><path d="M8 5v14l11-7z"/></svg>Animate wind</button>';
   body.appendChild(mapCard);
 
   var legend=document.createElement('div');
@@ -14389,13 +14394,13 @@ function renderMapContent(body, ride, wind, forTime){
       }
       tick();
       animating=true;
-      animBtn.innerHTML='&#9724; Stop animation';
+      animBtn.innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="var(--t1)"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>Stop animation';
     }
     function stopAnim(){
       if(animFrame) cancelAnimationFrame(animFrame);
       if(animLine){ try{map.removeLayer(animLine);}catch(e){} animLine=null; }
       animating=false;
-      animBtn.innerHTML='&#9654; Animate wind';
+      animBtn.innerHTML='<svg width="10" height="10" viewBox="0 0 24 24" fill="var(--t1)"><path d="M8 5v14l11-7z"/></svg>Animate wind';
     }
     animBtn.onclick=function(){ animating?stopAnim():startAnim(); };
 
