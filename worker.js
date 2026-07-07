@@ -12794,15 +12794,15 @@ function showWeather(){
   scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:150;display:flex;flex-direction:column;overflow:hidden';
 
   var hdr=document.createElement('div');
-  hdr.style.cssText='background:#378ADD;padding:14px 16px 0;flex-shrink:0';
+  hdr.style.cssText='background:var(--s1);padding:14px 16px 0;flex-shrink:0;border-bottom:1px solid var(--b1)';
   var hdrTop=document.createElement('div');
   hdrTop.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:12px';
   var backBtn=document.createElement('button');
   backBtn.innerHTML='&lsaquo;';
-  backBtn.style.cssText='background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:0;line-height:1';
+  backBtn.style.cssText='background:none;border:none;color:var(--t1);font-size:22px;cursor:pointer;padding:0;line-height:1';
   backBtn.onclick=function(){ scr.remove(); };
   var titleEl=document.createElement('div');
-  titleEl.style.cssText='font-size:16px;font-weight:800;color:#fff';
+  titleEl.style.cssText='font-size:16px;font-weight:800;color:var(--t1)';
   titleEl.textContent='Weather Coach';
   hdrTop.appendChild(backBtn);hdrTop.appendChild(titleEl);
   hdr.appendChild(hdrTop);
@@ -12838,8 +12838,8 @@ function showWeather(){
   function updateTabStyles(){
     tabDefs.forEach(function(t){
       var active=t.id===weatherActiveTab;
-      tabBtns[t.id].style.background=active?'#fff':'rgba(255,255,255,.18)';
-      tabBtns[t.id].style.color=active?'#378ADD':'#fff';
+      tabBtns[t.id].style.background=active?'var(--t1)':'var(--s2)';
+      tabBtns[t.id].style.color=active?'var(--bg)':'var(--t2)';
     });
   }
 
