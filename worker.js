@@ -2941,6 +2941,8 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div id="PLANS" style="display:none;padding:0 0 80px 0"></div>
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 <div id="WEATHER" style="display:none;padding:0 0 80px 0"></div>
+<div id="ACTIVITIES" style="display:none;padding:0 0 80px 0"></div>
+<div id="ANALYTICS" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
 var cw=1, st={}, curSW=1, svDebounce=null;
@@ -4677,6 +4679,8 @@ function showScreen(id){
   var pln=document.getElementById('PLANS');if(pln)pln.style.display=id==='PLANS'?'block':'none';
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
+  var acts=document.getElementById('ACTIVITIES');if(acts)acts.style.display=id==='ACTIVITIES'?'block':'none';
+  var anl=document.getElementById('ANALYTICS');if(anl)anl.style.display=id==='ANALYTICS'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -6770,68 +6774,53 @@ function renderFoodRows(container, list){
 // -- PERFORMANCE DASHBOARD --------------------------------------------------
 
 function showAnalytics(){
-  var old=document.getElementById('perf-modal');if(old)old.remove();
-  var oldA=document.getElementById('activities-modal');if(oldA)oldA.remove();
+  showScreen('ANALYTICS');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
-  var overlay=document.createElement('div');
-  overlay.id='perf-modal';
-  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
-  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  var scr=document.getElementById('ANALYTICS');
+  if(!scr) return;
+  scr.innerHTML='';
   var hdr=document.createElement('div');
-  var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Analytics</div>';
+  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
+  hdr.textContent='Analytics';
   var body=document.createElement('div');
   body.id='perf-body';
-  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
-  overlay.appendChild(hdr);overlay.appendChild(body);
-  document.body.appendChild(overlay);
-  document.body.style.overflow='hidden';
+  scr.appendChild(hdr);
+  scr.appendChild(body);
   renderPerf(body);
 }
 
 function showActivities(){
-  var old=document.getElementById('perf-modal');if(old)old.remove();
-  var oldA=document.getElementById('activities-modal');if(oldA)oldA.remove();
+  showScreen('ACTIVITIES');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var ab=document.getElementById('bnav-activities');if(ab)ab.classList.add('active');
-  var overlay=document.createElement('div');
-  overlay.id='activities-modal';
-  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:var(--bg);display:flex;flex-direction:column;';
+  var scr=document.getElementById('ACTIVITIES');
+  if(!scr) return;
+  scr.innerHTML='';
   var hdr=document.createElement('div');
-  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)">Activities</div>';
+  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
+  hdr.textContent='Activities';
   var body=document.createElement('div');
   body.id='activities-body';
-  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
-  overlay.appendChild(hdr);overlay.appendChild(body);
-  document.body.appendChild(overlay);
-  document.body.style.overflow='hidden';
+  scr.appendChild(hdr);
+  scr.appendChild(body);
   renderRideList(body);
 }
 
 function showPerf(){
-  var old=document.getElementById('perf-modal');
-  if(old) old.remove();
+  showScreen('ANALYTICS');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
-  var overlay=document.createElement('div');
-  overlay.id='perf-modal';
-  var bgCol=document.body.classList.contains('dark')?'#111111':'#FAFAFA';
-  overlay.style.cssText='position:fixed;top:0;left:0;width:100vw;height:calc(100vh - 62px);z-index:150;background:'+bgCol+';display:flex;flex-direction:column;';
+  var scr=document.getElementById('ANALYTICS');
+  if(!scr) return;
+  scr.innerHTML='';
   var hdr=document.createElement('div');
-  var isDarkHdr=document.body.classList.contains('dark');
-  hdr.style.cssText='background:var(--s1);padding:14px 16px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;border-bottom:1px solid var(--b1);box-shadow:0 1px 4px rgba(0,0,0,.06)';
-  hdr.innerHTML='<div style="font-size:20px;font-weight:800;letter-spacing:-.3px">Performance</div>'
-    +'';
+  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
+  hdr.textContent='Analytics';
   var body=document.createElement('div');
   body.id='perf-body';
-  body.style.cssText='flex:1;overflow-y:auto;overflow-x:hidden;padding-bottom:80px;max-width:100vw;box-sizing:border-box';
-  overlay.appendChild(hdr);
-  overlay.appendChild(body);
-  document.body.appendChild(overlay);
-  document.body.style.overflow='hidden';
+  scr.appendChild(hdr);
+  scr.appendChild(body);
   renderPerf(body);
 }
 
