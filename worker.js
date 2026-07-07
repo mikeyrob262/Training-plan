@@ -13089,7 +13089,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
   windCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   windCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Wind</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+windDir+' '+wind+' mph</div>'
-    +'<div style="position:relative;height:40px;margin-top:8px"><canvas id="wx-wind-chart" role="img" aria-label="Wind speed forecast over the next several hours"></canvas></div>';
+    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-wind-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Wind speed forecast over the next several hours"></canvas></div>';
   chartsRow.appendChild(windCard);
 
   var tempCard=document.createElement('div');
@@ -13098,7 +13098,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
   tempCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   tempCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Range</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+dayHi+'&deg; / '+dayLo+'&deg;</div>'
-    +'<div style="position:relative;height:40px;margin-top:8px"><canvas id="wx-temp-chart" role="img" aria-label="Temperature trend over the next several hours"></canvas></div>';
+    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-temp-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Temperature trend over the next several hours"></canvas></div>';
   chartsRow.appendChild(tempCard);
 
   wrap.appendChild(chartsRow);
@@ -13144,25 +13144,34 @@ function renderOverviewContent(body, wxData, ftp, weight){
 
   body.appendChild(wrap);
 
-  // Draw charts after DOM insertion so the canvases exist
+  // Draw charts after DOM insertion so the canvases exist. A longer delay
+  // plus an explicit resize() call fixes a real bug where Chart.js can
+  // measure its container's width before the CSS grid layout has fully
+  // settled, locking in an undersized canvas that never grows to fill
+  // the card (visible as bars/line bunched on one side with dead space).
   setTimeout(function(){
     var windEl=document.getElementById('wx-wind-chart');
     var tempEl=document.getElementById('wx-temp-chart');
     var labels=hourlyPoints.map(function(p){ return formatHour12(p.hour).split(':')[0]; });
+    var windChart=null, tempChart=null;
     if(windEl && typeof Chart!=='undefined'){
-      new Chart(windEl,{
+      windChart=new Chart(windEl,{
         type:'bar',
         data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.wind;}), backgroundColor:'#3a3a3e', borderRadius:2}]},
         options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
       });
     }
     if(tempEl && typeof Chart!=='undefined'){
-      new Chart(tempEl,{
+      tempChart=new Chart(tempEl,{
         type:'line',
         data:{labels:labels, datasets:[{data:hourlyPoints.map(function(p){return p.temp;}), borderColor:'#8a8a90', backgroundColor:'rgba(138,138,144,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:1.5}]},
         options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
       });
     }
+    setTimeout(function(){
+      try{ if(windChart) windChart.resize(); }catch(e){}
+      try{ if(tempChart) tempChart.resize(); }catch(e){}
+    },100);
   },50);
 
   var weatherStrForDecision = windDir+' '+wind+'mph, '+temp+'F, '+rainPct+'% rain'+(gust>wind+8?', gusts to '+gust+'mph':'');
