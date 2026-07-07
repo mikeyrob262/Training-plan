@@ -13283,7 +13283,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
   windCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   windCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Wind</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+windDir+' '+wind+' mph</div>'
-    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-wind-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Wind speed forecast, stepped through the day in 6 hour windows"></canvas></div>'
+    +'<div style="position:relative;width:100%;height:60px;margin-top:8px"><canvas id="wx-wind-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Wind speed forecast, stepped through the day in 6 hour windows"></canvas></div>'
     +'<div id="wx-wind-nav" style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"></div>';
   chartsRow.appendChild(windCard);
 
