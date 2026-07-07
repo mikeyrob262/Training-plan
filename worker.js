@@ -6291,6 +6291,81 @@ function renderNutr(){
     h+='</div>';
   }
 
+  // -- MACRO TIMING (real calorie split across Pre-Workout/During/
+  // Post-Workout/Rest of Day buckets, only meaningful on ride days).
+  if(fuelPlan){
+    var timingCal={pre:0,during:0,post:0,rest:0};
+    (nd.meals.preworkout||[]).forEach(function(i){if(!i.deleted)timingCal.pre+=i.cal||0;});
+    (nd.meals.during||[]).forEach(function(i){if(!i.deleted)timingCal.during+=i.cal||0;});
+    (nd.meals.postworkout||[]).forEach(function(i){if(!i.deleted)timingCal.post+=i.cal||0;});
+    ['breakfast','lunch','dinner','snacks'].forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(!i.deleted)timingCal.rest+=i.cal||0;});});
+    var timingTotal=timingCal.pre+timingCal.during+timingCal.post+timingCal.rest;
+    if(timingTotal>0){
+      var timingSegs=[
+        {lbl:'Pre-Workout',val:timingCal.pre,col:'#E24B4A'},
+        {lbl:'During Workout',val:timingCal.during,col:'#378ADD'},
+        {lbl:'Post-Workout',val:timingCal.post,col:'#7F77DD'},
+        {lbl:'Rest of Day',val:timingCal.rest,col:'#639922'}
+      ];
+      var donR=32,donC=2*Math.PI*donR,donCum=0;
+      h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
+      h+='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Macro Timing</div>';
+      h+='<div style="display:flex;align-items:center;gap:16px">';
+      h+='<svg width="88" height="88" viewBox="0 0 88 88" style="flex-shrink:0;transform:rotate(-90deg)">';
+      timingSegs.forEach(function(seg){
+        var segPct=seg.val/timingTotal;
+        var segLen=donC*segPct;
+        h+='<circle cx="44" cy="44" r="'+donR+'" fill="none" stroke="'+seg.col+'" stroke-width="14" stroke-dasharray="'+segLen+' '+donC+'" stroke-dashoffset="'+(-donCum)+'"/>';
+        donCum+=segLen;
+      });
+      h+='</svg>';
+      h+='<div style="flex:1;display:flex;flex-direction:column;gap:6px">';
+      timingSegs.forEach(function(seg){
+        var segPct=Math.round(seg.val/timingTotal*100);
+        h+='<div style="display:flex;align-items:center;gap:6px;font-size:11px">';
+        h+='<div style="width:8px;height:8px;border-radius:50%;background:'+seg.col+';flex-shrink:0"></div>';
+        h+='<span style="color:var(--t2);flex:1">'+seg.lbl+'</span>';
+        h+='<span style="color:var(--t1);font-weight:700">'+Math.round(seg.val)+' cal / '+segPct+'%</span>';
+        h+='</div>';
+      });
+      h+='</div></div>';
+
+      var carbTotalTgt=tgt.carb;
+      var carbConsumed=Math.round(tot.c);
+      var carbPct=Math.min(100,carbTotalTgt>0?Math.round(carbConsumed/carbTotalTgt*100):0);
+      h+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--b1)">';
+      h+='<div style="display:flex;justify-content:space-between;margin-bottom:6px">';
+      h+='<div><div style="font-size:15px;font-weight:800;color:var(--t1)">'+carbTotalTgt+'g</div><div style="font-size:10px;color:var(--t3)">Daily Target</div></div>';
+      h+='<div style="text-align:right"><div style="font-size:15px;font-weight:800;color:var(--t1)">'+carbConsumed+'g</div><div style="font-size:10px;color:var(--t3)">Consumed</div></div>';
+      h+='</div>';
+      h+='<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;width:'+carbPct+'%;background:var(--orange);border-radius:2px"></div></div>';
+      h+='</div>';
+      h+='</div>';
+    }
+  }
+
+  // -- MEAL PLAN TARGETS (real target vs. actual across all macros)
+  h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
+  h+='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Meal Plan Targets</div>';
+  var targetRows=[
+    {lbl:'Calories',tgt:tgt.cal,act:Math.round(tot.cal),unit:''},
+    {lbl:'Protein',tgt:tgt.pro,act:Math.round(tot.p),unit:'g'},
+    {lbl:'Carbs',tgt:tgt.carb,act:Math.round(tot.c),unit:'g'},
+    {lbl:'Fat',tgt:tgt.fat,act:Math.round(tot.f),unit:'g'}
+  ];
+  targetRows.forEach(function(row,ri){
+    var pct=row.tgt>0?Math.round(row.act/row.tgt*100):0;
+    var status=pct>=90&&pct<=110?'On Target':pct<90?'Under':'Over';
+    var statusColor=status==='On Target'?'#639922':status==='Under'?'#378ADD':'#E24B4A';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;'+(ri>0?'border-top:1px solid var(--b1);':'')+'padding:'+(ri>0?'8px 0':'0 0 8px')+'">';
+    h+='<span style="font-size:12px;color:var(--t2);flex:1">'+row.lbl+'</span>';
+    h+='<span style="font-size:12px;color:var(--t3);width:70px;text-align:right">'+row.tgt+row.unit+'</span>';
+    h+='<span style="font-size:12px;color:var(--t1);font-weight:700;width:70px;text-align:right">'+row.act+row.unit+'</span>';
+    h+='<span style="font-size:10px;color:'+statusColor+';font-weight:700;width:60px;text-align:right">'+status+'</span>';
+    h+='</div>';
+  });
+  h+='</div>';
+
   // -- WATER
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:14px;border:1px solid var(--b1);padding:13px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center">';
