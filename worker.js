@@ -13293,7 +13293,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
   tempCard.style.cssText='background:var(--s2);border-radius:12px;padding:16px;border:1px solid var(--b1)';
   tempCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Range</div>'
     +'<div style="font-size:16px;font-weight:600;color:var(--t1);margin-top:6px">'+dayHi+'&deg; / '+dayLo+'&deg;</div>'
-    +'<div style="position:relative;width:100%;height:40px;margin-top:8px"><canvas id="wx-temp-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Temperature trend, stepped through the day in 6 hour windows"></canvas></div>'
+    +'<div style="position:relative;width:100%;height:60px;margin-top:8px"><canvas id="wx-temp-chart" style="width:100%!important;height:100%!important;display:block" role="img" aria-label="Temperature trend, stepped through the day in 6 hour windows"></canvas></div>'
     +'<div id="wx-temp-nav" style="display:flex;align-items:center;justify-content:space-between;margin-top:6px"></div>';
   chartsRow.appendChild(tempCard);
 
@@ -13398,7 +13398,12 @@ function renderOverviewContent(body, wxData, ftp, weight){
       tempChart=new Chart(tempEl,{
         type:'line',
         data:{labels:labels, datasets:[{data:slice.map(function(p){return p.temp;}), borderColor:'#8a8a90', backgroundColor:'rgba(138,138,144,.08)', fill:true, tension:.4, pointRadius:0, borderWidth:1.5}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{display:false},y:{display:false}}}
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+          scales:{
+            x:{display:false},
+            y:{display:true, ticks:{maxTicksLimit:3, font:{size:9}, color:'rgba(138,138,144,.7)', callback:function(v){return Math.round(v)+'\u00b0';}}, grid:{display:false}, border:{display:false}}
+          }
+        }
       });
     }
     var windNavEl=document.getElementById('wx-wind-nav');
