@@ -6787,34 +6787,36 @@ function renderFoodRows(container, list){
 // Recent Activity on Home so every activity type gets a consistent,
 // distinct color and icon rather than the old 3-type guess (ride/run/
 // strength only). Covers cycling, running, strength, mobility,
-// conditioning, and swimming - matching the reference's colored circle
-// badges. Returns full HTML for the circle, not just the inner SVG.
+// conditioning, and swimming. Uses real Tabler icon SVG paths (bike,
+// run, barbell, yoga, heartbeat, swimming) rather than hand-drawn line
+// art, on dark circle badges with colored icon strokes, matching the
+// approved reference look.
 function activityIconHTML(sessionName, size){
   size = size || 40;
   var s = (sessionName||'').toLowerCase();
-  var iconSize = Math.round(size*0.45);
+  var iconSize = Math.round(size*0.5);
   var type, color, path;
   if(/swim/.test(s)){
     type='swim'; color='#0EA5E9';
-    path='<path d="M2 16c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><path d="M2 20c1.5 1.5 3 1.5 4.5 0s3-1.5 4.5 0 3 1.5 4.5 0 3-1.5 4.5 0 3 1.5 4.5 0"/><circle cx="17" cy="6" r="2"/><path d="m5 14 6.5-1.5c.7-.2 1.2-.8 1.2-1.5v-2c0-1 .8-1.8 1.8-1.8h1"/>';
+    path='<path d="M15 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M6 11l4 -2l3.5 3l-1.5 2" /><path d="M3 16.75a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25" />';
   } else if(/mobility|yoga|stretch/.test(s)){
     type='mobility'; color='#F59E0B';
-    path='<circle cx="12" cy="4" r="2"/><path d="M8 22l2-9-3-3 1-5 4 2 3 4 3-1"/><path d="M10 13l-4 3"/>';
+    path='<path d="M4 20h4l1.5 -3" /><path d="M17 20l-1 -5h-5l1 -7" /><path d="M4 10l4 -1l4 -1l4 1.5l4 1.5" /><path d="M10.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />';
   } else if(/condition|core|circuit|cardio/.test(s)){
     type='conditioning'; color='#EF4444';
-    path='<path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/><path d="M12 9v6"/>';
+    path='<path d="M19.5 13.572l-7.5 7.428l-2.896 -2.868m-6.117 -8.104a5 5 0 0 1 9.013 -3.022a5 5 0 1 1 7.5 6.572" /><path d="M3 13h2l2 3l2 -6l1 3h3" />';
   } else if(/strength|full body/.test(s)){
     type='strength'; color='#7C3AED';
-    path='<path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/>';
+    path='<path d="M2 12h1" /><path d="M6 8h-2a1 1 0 0 0 -1 1v6a1 1 0 0 0 1 1h2" /><path d="M6 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1" /><path d="M9 12h6" /><path d="M15 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1" /><path d="M18 8h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2" /><path d="M22 12h-1" />';
   } else if(/run|jog|walk|hill repeat|track|fartlek|tempo/.test(s)){
     type='run'; color='#FF6B35';
-    path='<circle cx="13" cy="4" r="1.8"/><path d="M10.5 7.5 8 10l2 2.5-1 5.5"/><path d="M12 9l3 1 2.5 4"/><path d="M9 12.5 6 15"/><path d="M9 17.5 7 21"/>';
+    path='<path d="M11.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21v-4l-4 -3l1 -6" /><path d="M7 12v-3l5 -1l3 3l3 1" />';
   } else {
     type='ride'; color='#5DCAA5';
-    path='<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/>';
+    path='<path d="M2 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M16 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M12 19v-4l-3 -3l5 -4l2 3h3" /><path d="M13.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />';
   }
-  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+color+';display:flex;align-items:center;justify-content:center;flex-shrink:0" data-activity-type="'+type+'">'
-    +'<svg width="'+iconSize+'" height="'+iconSize+'" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg></div>';
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0" data-activity-type="'+type+'">'
+    +'<svg width="'+iconSize+'" height="'+iconSize+'" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg></div>';
 }
 
 function showHomeDash(){
@@ -6963,7 +6965,7 @@ function showHomeDash(){
       var nameForIcon=(r.name||'')+' '+sportLc;
       var iconMatch=/swim/.test(sportLc)?'swim':/run|jog/.test(sportLc)?'run':/strength|weight/.test(sportLc)?'strength':nameForIcon;
       var iconHTML=activityIconHTML(iconMatch,36);
-      var iconColorMatch=iconHTML.match(/background:(#[0-9A-Fa-f]{6})/);
+      var iconColorMatch=iconHTML.match(/stroke="(#[0-9A-Fa-f]{6})"/);
       var iconColor=iconColorMatch?iconColorMatch[1]:'#5DCAA5';
       // Mini route thumbnail from real GPS points, matching the reference's
       // small squiggle preview - only shown when this ride actually has
