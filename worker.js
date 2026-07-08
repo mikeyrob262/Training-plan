@@ -10156,6 +10156,88 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
     html+='</div>';
   }
 
+  // -- ACHIEVEMENT STRIP: honest, data-backed highlights for THIS ride.
+  // Two rows. (1) PRs: genuine records this ride set - power-duration bests
+  // measured against every OTHER ride's power curve, plus all-time distance/
+  // NP/TSS bests. Gold chips, only when a real record was set. (2) Notable
+  // efforts: this ride's standout raw numbers, shown as neutral chips
+  // regardless of record status. No fabricated segments/climbs/kudos -
+  // that data does not exist in this app, so it is not invented here.
+  (function(){
+    var achHtml='';
+
+    // (1) Power-duration PRs vs all other rides (mirrors the Peak Power
+    // Curve table's globalBest logic for consistency).
+    var prChips=[];
+    if(r.powerCurve && Object.keys(r.powerCurve).length){
+      var durLabels={5:'5s',15:'15s',30:'30s',60:'1min',120:'2min',300:'5min',600:'10min',1200:'20min',1800:'30min',3600:'60min'};
+      var gBest={};
+      (st.rides||[]).forEach(function(ride,ri){
+        if(ri===idx || ride.deleted) return;
+        if(ride.powerCurve) Object.keys(ride.powerCurve).forEach(function(d){
+          if(!gBest[d]||ride.powerCurve[d]>gBest[d]) gBest[d]=ride.powerCurve[d];
+        });
+      });
+      // Only surface the most meaningful PR durations to avoid a wall of chips.
+      [1200,600,300,60,5].forEach(function(d){
+        var w=r.powerCurve[d];
+        if(w && (!gBest[d] || w>gBest[d])){
+          prChips.push((durLabels[d]||d+'s')+' power '+w+'W');
+        }
+      });
+    }
+
+    // (2) All-time bests set by this ride (distance / NP / TSS), computed
+    // against every other ride with the same sanity ceilings used elsewhere.
+    var NP_CEILING=600, TSS_CEILING=600;
+    var otherMaxDist=0, otherMaxNP=0, otherMaxTSS=0;
+    (st.rides||[]).forEach(function(ride,ri){
+      if(ri===idx || ride.deleted) return;
+      var dd=parseFloat(ride.distance||0); if(dd>otherMaxDist) otherMaxDist=dd;
+      if(ride.np && ride.np>otherMaxNP && ride.np<=NP_CEILING) otherMaxNP=ride.np;
+      if(ride.tss && ride.tss>otherMaxTSS && ride.tss<=TSS_CEILING) otherMaxTSS=ride.tss;
+    });
+    var thisDist=parseFloat(r.distance||0);
+    if(thisDist>0 && thisDist>otherMaxDist) prChips.push('Longest ride '+thisDist.toFixed(1)+' mi');
+    if(r.np && r.np<=NP_CEILING && r.np>otherMaxNP) prChips.push('Best NP '+r.np+'W');
+    if(r.tss && r.tss<=TSS_CEILING && r.tss>otherMaxTSS) prChips.push('Highest TSS '+Math.round(r.tss));
+
+    // (3) Notable-effort highlights - this ride's standout numbers.
+    var effChips=[];
+    if(r.max20) effChips.push({v:r.max20+'W',l:'20-min peak'});
+    if(r.maxPwr) effChips.push({v:r.maxPwr+'W',l:'Peak power'});
+    if(r.workKj) effChips.push({v:r.workKj+' kJ',l:'Work'});
+    if(r.elev) effChips.push({v:'+'+r.elev+' ft',l:'Climbing'});
+    if(thisDist>0) effChips.push({v:thisDist.toFixed(1)+' mi',l:'Distance'});
+
+    if(prChips.length || effChips.length){
+      achHtml+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:14px">'
+        +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Achievements</div>';
+
+      if(prChips.length){
+        achHtml+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:'+(effChips.length?'12px':'0')+'">';
+        prChips.forEach(function(t){
+          achHtml+='<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(255,215,0,.14);border:1px solid rgba(255,215,0,.35);border-radius:20px;padding:5px 11px;font-size:12px;font-weight:700;color:var(--t1)">'
+            +'<span style="font-size:11px">🏆</span>'+t+'</span>';
+        });
+        achHtml+='</div>';
+      }
+
+      if(effChips.length){
+        achHtml+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        effChips.forEach(function(c){
+          achHtml+='<span style="display:inline-flex;align-items:baseline;gap:5px;background:var(--s1);border:1px solid var(--b1);border-radius:20px;padding:5px 11px;font-size:12px;color:var(--t2)">'
+            +'<span style="font-weight:800;color:var(--t1)">'+c.v+'</span>'
+            +'<span style="font-size:10px;color:var(--t3)">'+c.l+'</span></span>';
+        });
+        achHtml+='</div>';
+      }
+
+      achHtml+='</div>';
+    }
+    html+=achHtml;
+  })();
+
   wrap.innerHTML=html;
   body.appendChild(wrap);
 }
