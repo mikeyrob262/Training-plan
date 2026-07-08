@@ -8143,7 +8143,7 @@ function renderPerf(container){
   // bottom-nav destination - the ride list renders right after the
   // performance dashboard in the same screen instead of a separate tab.
   var rideListContainer=document.getElementById('analytics-ride-list');
-  if(rideListContainer) renderRideList(rideListContainer);
+  if(rideListContainer) renderRideList(rideListContainer, 4);
 
 
   // If no rides, auto-refresh after Firebase syncs
@@ -8218,7 +8218,7 @@ function renderPerf(container){
 
 var activityYearFilter = activityYearFilter || new Date().getFullYear();
 function setActivityYearFilter(y){ activityYearFilter = y; var body=document.getElementById('analytics-ride-list'); renderRideList(body); }
-function renderRideList(container){
+function renderRideList(container, limit){
   if(!container) return;
   if(typeof activityYearFilter==='undefined') activityYearFilter = new Date().getFullYear();
   var allRides=(st.rides||[]).filter(function(r){return !r.deleted;});
@@ -8232,12 +8232,12 @@ function renderRideList(container){
   var html='';
   // Drop zone
 
-  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
+  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
   if(years.length>1){
     html+='<div style="padding:0 16px 10px;display:flex;gap:6px;flex-wrap:wrap">';
     years.forEach(function(y){
       var active=y===activityYearFilter;
-      html+='<button onclick="setActivityYearFilter('+y+')" style="padding:6px 14px;border-radius:16px;border:1px solid '+(active?'#FC4C02':'var(--b1)')+';background:'+(active?'rgba(252,76,2,.12)':'var(--s2)')+';color:'+(active?'#FC4C02':'var(--t2)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">'+y+'</button>';
+      html+='<button onclick="setActivityYearFilter('+y+')" style="padding:6px 14px;border-radius:16px;border:1px solid '+(active?'var(--t1)':'var(--b1)')+';background:'+(active?'var(--s2)':'var(--s2)')+';color:'+(active?'var(--t1)':'var(--t2)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">'+y+'</button>';
     });
     html+='</div>';
   }
@@ -8258,10 +8258,10 @@ function renderRideList(container){
     row.style.cssText='padding:11px 4px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
     row.innerHTML='<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+      +'<div style="font-size:14px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
       +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+' mi &middot; ':'')+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div>'
       +'</div>'
-      +(rwkg?'<div style="font-size:12px;font-weight:700;color:'+iconColor+';flex-shrink:0">'+rwkg+' W/kg</div>':'')
+      +(rwkg?'<div style="font-size:12px;font-weight:500;color:'+iconColor+';flex-shrink:0">'+rwkg+' W/kg</div>':'')
       +'<div style="color:var(--t3);font-size:16px;flex-shrink:0">&rsaquo;</div>';
     row.onclick=function(){ openRideDetail(realIdx); };
     listGroup.appendChild(row);
@@ -8270,7 +8270,22 @@ function renderRideList(container){
   var htmlWrap=document.createElement('div');
   htmlWrap.innerHTML=html;
   container.appendChild(htmlWrap);
-  container.appendChild(listGroup);
+  if(limit){
+    // Cap visible height to roughly N rows (each row ~58px including
+    // border) and let the rest scroll inside this list rather than
+    // being cut off or requiring a separate page - matches the request
+    // to see a handful of activities with the remainder scrollable.
+    var scrollWrap=document.createElement('div');
+    scrollWrap.style.cssText='max-height:'+(limit*58)+'px;overflow-y:auto;-webkit-overflow-scrolling:touch';
+    scrollWrap.appendChild(listGroup);
+    var outer=document.createElement('div');
+    outer.style.cssText='margin:0 16px;border:1px solid var(--b1);border-radius:14px;overflow:hidden';
+    listGroup.style.margin='0 12px';
+    outer.appendChild(scrollWrap);
+    container.appendChild(outer);
+  } else {
+    container.appendChild(listGroup);
+  }
   var dz=document.getElementById('ride-drop-zone');
   if(dz){
     dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';});
@@ -9547,7 +9562,7 @@ function openRideDetail(idx){
   topRow.appendChild(moreBtn);
 
   var titleWrap=document.createElement('div');
-  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:22px;font-weight:800;color:var(--t1);letter-spacing:-.3px">'+(r.name||'Activity')+'</div>'
+  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:19px;font-weight:600;color:var(--t1)">'+(r.name||'Activity')+'</div>'
     +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+dtStr+'</div>';
 
   hdr.appendChild(topRow);
@@ -9574,7 +9589,7 @@ function openRideDetail(idx){
     {v:r.tss||'-',l:'Training Stress'}
   ].forEach(function(s){
     var cell=document.createElement('div');
-    cell.innerHTML='<div style="font-size:22px;font-weight:600;color:'+(s.c||'var(--t1)')+';letter-spacing:-.2px;line-height:1.1">'+s.v+'</div>'
+    cell.innerHTML='<div style="font-size:19px;font-weight:500;color:'+(s.c||'var(--t1)')+';line-height:1.2">'+s.v+'</div>'
       +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">'+s.l+'</div>';
     heroGrid.appendChild(cell);
   });
@@ -9582,7 +9597,7 @@ function openRideDetail(idx){
   if(r.calories){
     var calRow=document.createElement('div');
     calRow.style.cssText='margin-top:20px';
-    calRow.innerHTML='<div style="font-size:22px;font-weight:600;color:var(--t1);letter-spacing:-.2px">'+r.calories+' Cal</div>'
+    calRow.innerHTML='<div style="font-size:19px;font-weight:500;color:var(--t1)">'+r.calories+' Cal</div>'
       +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories</div>';
     heroRow.appendChild(calRow);
   }
