@@ -9513,7 +9513,7 @@ function openRideDetail(idx){
 
   var overlay = document.createElement('div');
   overlay.id = 'ride-detail-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;bottom:60px;z-index:200;background:var(--bg);display:flex;flex-direction:column;overflow:hidden';
+  overlay.style.cssText = 'position:fixed;inset:0;bottom:60px;z-index:200;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;max-width:480px;margin:0 auto;left:50%;transform:translateX(-50%);right:auto;width:100%;box-shadow:0 0 40px rgba(0,0,0,.25)';
 
   // Header - Apple Health style: back chevron on its own row, large bold
   // title below it, subtitle below that. No filled header bar background.
