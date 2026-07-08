@@ -17191,7 +17191,9 @@ function stravaFullResync() {
       body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(!d.access_token){toast('Token refresh failed');return;}
-      st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv();
+      st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token;
+      if(d.athlete&&d.athlete.id) st.stravaAthleteId=d.athlete.id;
+      sv();
       fetchStravaPage(d.access_token,1,0,true); // pass forceAll=true
     });
   } else {
@@ -17214,6 +17216,7 @@ function stravaBackfill() {
       if(!d.access_token){toast('Token refresh failed — re-authorizing...');st.stravaRefreshToken=null;stravaBackfill();return;}
       st.stravaToken=d.access_token;
       st.stravaRefreshToken=d.refresh_token;
+      if(d.athlete&&d.athlete.id) st.stravaAthleteId=d.athlete.id;
       sv();
       toast('Fetching new activities...');
       fetchStravaPage(d.access_token,1,0);
@@ -17237,7 +17240,9 @@ function stravaBackfill() {
         fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,code:code,grant_type:'authorization_code'})
         }).then(function(r){return r.json();}).then(function(d){
           if(!d.access_token){toast('Auth failed: '+(d.message||'unknown'));return;}
-          st.stravaToken=d.access_token;st.stravaRefreshToken=d.refresh_token;sv();
+          st.stravaToken=d.access_token;st.stravaRefreshToken=d.refresh_token;
+          if(d.athlete&&d.athlete.id) st.stravaAthleteId=d.athlete.id;
+          sv();
           toast('Fetching new activities...');
           fetchStravaPage(d.access_token,1,0);
         });
