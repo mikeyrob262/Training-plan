@@ -7546,7 +7546,7 @@ function showHomeDash(){
 // solely on the manually-imported CSV snapshot (st.pmcHistory), which can
 // go stale between imports. Uses Basic auth per Intervals.icu's documented
 // API convention (username "API_KEY", password is the actual key).
-function fetchLiveIntervalsWellness(){
+function fetchLiveIntervalsWellness(callback){
   var athleteId='i544205';
   var apiKey='4iacdcck2cllnwssbdilq6jhw';
   var today=new Date();
@@ -7576,20 +7576,22 @@ function fetchLiveIntervalsWellness(){
       var ctlEl=document.getElementById('home-readiness-ctl');
       var atlEl=document.getElementById('home-readiness-atl');
       var freshEl=document.getElementById('home-readiness-freshness');
-      if(!scoreEl) return;
+      if(scoreEl){
+        scoreEl.textContent=readiness.toFixed(1);
+        if(labelEl){ labelEl.textContent=readinessLabel; labelEl.style.color=readinessColor; }
+        if(ringEl){ ringEl.setAttribute('stroke',readinessColor); ringEl.setAttribute('stroke-dasharray',dash+' '+circ); }
+        if(tsbEl) tsbEl.textContent=(tsb>=0?'+':'')+tsb;
+        if(ctlEl) ctlEl.textContent=ctl;
+        if(atlEl) atlEl.textContent=atl;
+        if(freshEl) freshEl.textContent='Live from Intervals.icu';
+      }
 
-      scoreEl.textContent=readiness.toFixed(1);
-      if(labelEl){ labelEl.textContent=readinessLabel; labelEl.style.color=readinessColor; }
-      if(ringEl){ ringEl.setAttribute('stroke',readinessColor); ringEl.setAttribute('stroke-dasharray',dash+' '+circ); }
-      if(tsbEl) tsbEl.textContent=(tsb>=0?'+':'')+tsb;
-      if(ctlEl) ctlEl.textContent=ctl;
-      if(atlEl) atlEl.textContent=atl;
-      if(freshEl) freshEl.textContent='Live from Intervals.icu';
-
-      // Cache for other consumers (e.g. the AI Coach prompt) so every part
-      // of the app agrees on the same current fitness numbers instead of
-      // each recomputing its own, inconsistent version.
+      // Cache for other consumers (e.g. the AI Coach prompt, Analytics'
+      // Fitness/Fatigue/Form) so every part of the app agrees on the same
+      // current fitness numbers instead of each recomputing its own,
+      // inconsistent version.
       window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, fetchedAt:Date.now()};
+      if(callback) callback();
     })
     .catch(function(){
       // Silent fallback - the CSV-based numbers are already showing from
@@ -7597,6 +7599,7 @@ function fetchLiveIntervalsWellness(){
       // just no live update this time.
       var freshEl=document.getElementById('home-readiness-freshness');
       if(freshEl) freshEl.textContent='';
+      if(callback) callback();
     });
 }
 
@@ -7615,6 +7618,19 @@ function showAnalytics(){
   scr.appendChild(hdr);
   scr.appendChild(body);
   renderPerf(body);
+  // Fitness/Fatigue/Form renders from window.__liveWellness if it's fresh,
+  // but that cache is only populated when Home has run its live fetch -
+  // if someone opens Analytics directly (deep link, bookmark, or just
+  // navigates here first) without ever visiting Home, the cache is empty
+  // and FFF falls back to potentially stale CSV numbers. Trigger the same
+  // live fetch here too, and re-render FFF alone (not the whole page) if
+  // it resolves after the fact, so Analytics is correct on its own.
+  if(!window.__liveWellness || (Date.now()-window.__liveWellness.fetchedAt)>=10*60*1000){
+    fetchLiveIntervalsWellness(function(){
+      var b=document.getElementById('perf-body');
+      if(b) renderPerf(b);
+    });
+  }
 }
 
 function showPerf(){
@@ -7834,7 +7850,17 @@ function renderPerf(container){
   // -- FITNESS FATIGUE FORM (redesigned)
   html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Fitness · Fatigue · Form</div>';
 
-  var pmcLast2=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
+  // Prefer live Intervals.icu wellness (same cache Home's Readiness card
+  // and the AI Coach prompt already use) over the CSV-derived pmcData,
+  // which can be stale relative to today's actual fitness state - this
+  // was previously the one place still showing old CSV numbers while
+  // Home had already been fixed to use live data.
+  var pmcLast2;
+  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
+    pmcLast2={ctl:window.__liveWellness.ctl, atl:window.__liveWellness.atl, tsb:window.__liveWellness.tsb};
+  } else {
+    pmcLast2=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
+  }
   var ctl2=Math.round(pmcLast2.ctl||0);
   var atl2=Math.round(pmcLast2.atl||0);
   var tsb2=Math.round(pmcLast2.tsb||0);
