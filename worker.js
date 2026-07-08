@@ -13230,19 +13230,19 @@ function bikeHealthPct(bike){
 
 function bikeStatusBadge(bike){
   if(bike.indoor){
-    return {label: (bike.miles||0) > 0 ? 'Logged' : 'Add mileage', color:'#3a3a3e', textColor:'#c9c9cc'};
+    return {label: (bike.miles||0) > 0 ? 'Logged' : 'Add mileage', color:'rgba(255,255,255,.1)', textColor:'rgba(255,255,255,.75)'};
   }
   var health = bikeHealthPct(bike);
-  if(health < 30) return {label:'Needs attention', color:'#E24B4A', textColor:'#fff'};
-  if(health < 60) return {label:'Check soon', color:'#EF9F27', textColor:'#3a2400'};
-  return {label:'All good', color:'#5DCAA5', textColor:'#04342C'};
+  if(health < 30) return {label:'Needs attention', color:'rgba(226,75,74,.18)', textColor:'#F09595'};
+  if(health < 60) return {label:'Check soon', color:'rgba(255,255,255,.1)', textColor:'rgba(255,255,255,.85)'};
+  return {label:'All good', color:'rgba(255,255,255,.1)', textColor:'rgba(255,255,255,.75)'};
 }
 
 function renderGarage(){
   var scr = document.getElementById('GARAGE');
   if(!scr) return;
   var h = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 16px 4px">'
-    +'<div style="font-size:20px;font-weight:800;color:var(--t1)">My Garage</div>'
+    +'<div style="font-size:20px;font-weight:600;color:var(--t1)">My Garage</div>'
     +'<button onclick="showMoreSheet();" style="background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer">More</button>'
     +'</div>';
 
@@ -13256,9 +13256,9 @@ function renderGarage(){
       +'style="margin:0 16px 12px;border-radius:16px;overflow:hidden;position:relative;height:190px;cursor:pointer;'+photoStyle+'">'
       +'<div style="position:absolute;bottom:0;left:0;right:0;padding:14px 16px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end">'
-      +'<div><div style="color:#fff;font-size:16px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+bike.name+'</div>'
+      +'<div><div style="color:#fff;font-size:16px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+bike.name+'</div>'
       +'<div style="color:#d8d8dc;font-size:12px;margin-top:2px;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+subtitle+'</div></div>'
-      +'<div style="background:'+badge.color+';color:'+badge.textColor+';font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-left:8px">'+badge.label+'</div>'
+      +'<div style="background:'+badge.color+';color:'+badge.textColor+';font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-left:8px">'+badge.label+'</div>'
       +'</div></div></div>';
   });
 
@@ -13272,18 +13272,18 @@ function renderGarage(){
     });
   });
   if(needsAttention.length){
-    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Needs attention</div>';
+    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Needs attention</div>';
     h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;overflow:hidden">';
     needsAttention.forEach(function(n,i){
       h += '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;'+(i>0?'border-top:1px solid var(--b1)':'')+'">'
-        +'<div style="width:3px;height:18px;background:#E24B4A;border-radius:2px;flex-shrink:0"></div>'
+        +'<div style="width:3px;height:18px;background:var(--t3);border-radius:2px;flex-shrink:0"></div>'
         +'<div style="font-size:13px;color:var(--t1)">'+n+'</div></div>';
     });
     h += '</div>';
   }
 
   if(st.shoes && st.shoes.length){
-    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Shoes</div>';
+    h += '<div style="margin:4px 16px 8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Shoes</div>';
     h += '<div style="margin:0 16px 16px;background:var(--s2);border-radius:14px;padding:12px 14px">';
     st.shoes.forEach(function(shoe, si){
       var pct = Math.min(100, Math.round((shoe.miles||0)/(shoe.maxMiles||400)*100));
@@ -13291,8 +13291,8 @@ function renderGarage(){
       var pctColor = pct>80?'#ef4444':pct>60?'#BA7517':'#0F6E56';
       h += '<div style="padding:'+(si>0?'10px 0 0':'0 0 0')+';'+(si>0?'border-top:1px solid var(--b1)':'')+'">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
-        +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+shoe.name+'</span>'
-        +'<span style="font-size:13px;font-weight:800;color:'+pctColor+'">'+(shoe.miles||0)+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+(shoe.maxMiles||400)+' mi</span></span></div>'
+        +'<span style="font-size:13px;font-weight:600;color:var(--t1)">'+shoe.name+'</span>'
+        +'<span style="font-size:13px;font-weight:600;color:'+pctColor+'">'+(shoe.miles||0)+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+(shoe.maxMiles||400)+' mi</span></span></div>'
         +'<div style="height:4px;background:var(--s3);border-radius:2px;margin-bottom:4px"><div style="height:4px;background:'+pctColor+';border-radius:2px;width:'+pct+'%"></div></div>'
         +'<div style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</div></div>';
     });
@@ -13300,11 +13300,11 @@ function renderGarage(){
   }
 
   h += '<div style="display:flex;gap:10px;margin:0 16px 14px">'
-    +'<button onclick="openBikeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    +'<button onclick="openBikeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:500;cursor:pointer">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
     +'Bike</button>'
-    +'<button onclick="openShoeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>'
+    +'<button onclick="openShoeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:500;cursor:pointer">'
+    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
     +'Shoe</button>'
     +'</div>';
 
