@@ -11984,7 +11984,7 @@ function getPlannedWorkoutForDate(dateStr){
   var plan = getActivePlan();
   var planStart = new Date((plan.planStart||'2026-06-08')+'T00:00:00');
   planStart.setHours(0,0,0,0);
-  var target = new Date(dateStr+'T00:00:00');
+  var target = (typeof parseDayKey==='function') ? parseDayKey(dateStr) : new Date(dateStr+'T00:00:00');
   target.setHours(0,0,0,0);
   var diffDays = Math.round((target - planStart) / (24*60*60*1000));
   if(diffDays < 0) return null;
@@ -16334,6 +16334,14 @@ function showCalendarTab(){
 
 
 // ── CALENDAR INTERACTIVITY: completion, day editor, month view ──────────────
+// Parse a 'Y-M-D' key (padded OR unpadded, e.g. 2026-7-8) into a local Date.
+// new Date('2026-7-8T00:00:00') is INVALID (ISO needs zero-padding), which was
+// producing "undefined, undefined NaN" in the editor title — parse manually.
+function parseDayKey(dateKey){
+  var p=String(dateKey||'').split('-');
+  if(p.length!==3) return new Date(NaN);
+  return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+}
 // Completion is stored locally (like the avatar) so it never bloats sync.
 function getCompletions(){
   try{ return JSON.parse(localStorage.getItem('aiq_completions')||'{}'); }catch(e){ return {}; }
@@ -16352,7 +16360,7 @@ function toggleDayComplete(dateKey){
 
 // Find a completed activity (ride or run) for a given date key (Y-M-D).
 function findActivityForDate(dateKey){
-  var target=new Date(dateKey+'T00:00:00');
+  var target=parseDayKey(dateKey);
   function sameDay(ds){
     if(!ds) return false;
     var d=new Date(ds);
@@ -16374,7 +16382,7 @@ function openDayEditor(dateKey){
 
   var act=findActivityForDate(dateKey);
   var plan=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
-  var dObj=new Date(dateKey+'T00:00:00');
+  var dObj=parseDayKey(dateKey);
   var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var titleDate=days[dObj.getDay()]+', '+months[dObj.getMonth()]+' '+dObj.getDate();
