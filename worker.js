@@ -6146,7 +6146,7 @@ function renderNutr(){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
   h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
   h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
-  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dayLabel+'</div></div>';
+  h+='<div style="font-size:11px;color:var(--t3);font-weight:500;margin-top:2px">'+dayLabel+'</div></div>';
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
 
@@ -6155,12 +6155,12 @@ function renderNutr(){
   // oversized rings - everything sized down to fit compactly).
   var ringR=34,ringC=Math.PI*2*ringR;
   var calDash=Math.max(0,Math.min(ringC,ringC*(1-calPct/100)));
-  var remColor=overBudget?'#E24B4A':'var(--orange)';
+  var remColor=overBudget?'#E24B4A':calPct>=85?'#EF9F27':'#639922';
 
   var macroRows=[
-    {lbl:'Protein',logged:Math.round(tot.p),tgt:tgt.pro,col:'#E24B4A'},
+    {lbl:'Protein',logged:Math.round(tot.p),tgt:tgt.pro,col:'#639922'},
     {lbl:'Carbs',  logged:Math.round(tot.c),tgt:tgt.carb,col:'#378ADD'},
-    {lbl:'Fat',    logged:Math.round(tot.f),tgt:tgt.fat, col:'#7F77DD'}
+    {lbl:'Fat',    logged:Math.round(tot.f),tgt:tgt.fat, col:'#EF9F27'}
   ];
 
   h+='<div style="margin:12px 16px 0;display:flex;gap:10px;align-items:stretch">';
