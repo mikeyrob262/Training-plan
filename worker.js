@@ -6150,69 +6150,49 @@ function renderNutr(){
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
 
-  // -- CALORIE BUDGET (Lose It style big number)
-  // -- CALORIE RING (SVG)
-  var ringR=58,ringC=Math.PI*2*ringR;
+  // -- CALORIE SUMMARY + MACRONUTRIENTS (condensed, side by side, matching
+  // the reference's two-card row instead of one large stacked block with
+  // oversized rings - everything sized down to fit compactly).
+  var ringR=34,ringC=Math.PI*2*ringR;
   var calDash=Math.max(0,Math.min(ringC,ringC*(1-calPct/100)));
-  var remColor=overBudget?'#E74C3C':'#FC4C02';
+  var remColor=overBudget?'#E24B4A':'var(--orange)';
 
-  // Macro rings
-  var mRings=[
-    {lbl:'Protein',logged:Math.round(tot.p),tgt:tgt.pro,col:'#FC4C02'},
-    {lbl:'Carbs',  logged:Math.round(tot.c),tgt:tgt.carb,col:'#2980B9'},
-    {lbl:'Fat',    logged:Math.round(tot.f),tgt:tgt.fat, col:'#8E44AD'}
+  var macroRows=[
+    {lbl:'Protein',logged:Math.round(tot.p),tgt:tgt.pro,col:'#E24B4A'},
+    {lbl:'Carbs',  logged:Math.round(tot.c),tgt:tgt.carb,col:'#378ADD'},
+    {lbl:'Fat',    logged:Math.round(tot.f),tgt:tgt.fat, col:'#7F77DD'}
   ];
-  var mrR=22,mrC=Math.PI*2*mrR;
 
-  h+='<div style="margin:12px 16px 0;background:var(--s1);border-radius:18px;border:1px solid var(--b1);padding:16px">';
-  // Budget label
-  h+='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);text-align:center;margin-bottom:2px">Budget: '+budgetCal+' cals</div>';
+  h+='<div style="margin:12px 16px 0;display:flex;gap:10px;align-items:stretch">';
 
-  // Main calorie ring + macro rings row
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0">';
-
-  // Food eaten (left)
-  h+='<div style="text-align:center;min-width:60px">';
-  h+='<div style="font-size:11px;color:var(--t3);margin-bottom:3px">Food</div>';
-  h+='<div style="font-size:22px;font-weight:800;color:var(--t1)">'+tot.cal+'</div>';
-  if(exCal>0) h+='<div style="font-size:10px;color:#27AE60;font-weight:700;margin-top:2px">Exercise</div><div style="font-size:16px;font-weight:800;color:#27AE60">-'+exCal+'</div>';
-  h+='</div>';
-
-  // Center calorie ring
-  h+='<svg width="140" height="140" viewBox="0 0 140 140" style="overflow:visible">';
-  h+='<circle cx="70" cy="70" r="'+ringR+'" fill="none" stroke="var(--s3)" stroke-width="10"/>';
-  h+='<circle cx="70" cy="70" r="'+ringR+'" fill="none" stroke="'+remColor+'" stroke-width="10" stroke-dasharray="'+ringC+'" stroke-dashoffset="'+calDash+'" stroke-linecap="round" transform="rotate(-90 70 70)" style="transition:stroke-dashoffset .5s ease"/>';
-  h+='<text x="70" y="62" text-anchor="middle" font-size="28" font-weight="900" fill="'+remColor+'" font-family="-apple-system,sans-serif">'+(overBudget?'-':'')+Math.abs(remCal)+'</text>';
-  h+='<text x="70" y="78" text-anchor="middle" font-size="11" fill="var(--t3)" font-family="-apple-system,sans-serif">'+(overBudget?'over':'remaining')+'</text>';
+  // Calorie Summary card
+  h+='<div style="flex:1;min-width:0;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px">';
+  h+='<div style="font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Calorie Summary</div>';
+  h+='<div style="display:flex;align-items:center;gap:10px">';
+  h+='<svg width="76" height="76" viewBox="0 0 76 76" style="flex-shrink:0">';
+  h+='<circle cx="38" cy="38" r="'+ringR+'" fill="none" stroke="var(--s3)" stroke-width="7"/>';
+  h+='<circle cx="38" cy="38" r="'+ringR+'" fill="none" stroke="'+remColor+'" stroke-width="7" stroke-dasharray="'+ringC+'" stroke-dashoffset="'+calDash+'" stroke-linecap="round" transform="rotate(-90 38 38)"/>';
+  h+='<text x="38" y="35" text-anchor="middle" font-size="15" font-weight="600" fill="'+remColor+'" font-family="-apple-system,sans-serif">'+(overBudget?'-':'')+Math.abs(remCal)+'</text>';
+  h+='<text x="38" y="47" text-anchor="middle" font-size="8" fill="var(--t3)" font-family="-apple-system,sans-serif">'+(overBudget?'over':'left')+'</text>';
   h+='</svg>';
+  h+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">';
+  h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Food</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+tot.cal+'</span></div>';
+  if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Exercise</span><span style="font-size:12px;font-weight:600;color:#639922">-'+exCal+'</span></div>';
+  h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Budget</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+budgetCal+'</span></div>';
+  h+='</div></div></div>';
 
-  // Remaining (right)
-  h+='<div style="text-align:right;min-width:60px">';
-  if(exCal>0){
-    h+='<div style="font-size:10px;color:#27AE60;font-weight:700;margin-bottom:2px">+'+exCal+' burned</div>';
-  }
-  h+='<div style="font-size:11px;color:var(--t3);margin-bottom:3px">Budget</div>';
-  h+='<div style="font-size:22px;font-weight:800;color:var(--t1)">'+budgetCal+'</div>';
-  h+='</div>';
-  h+='</div>';
-
-  // Macro rings row
-  h+='<div style="display:flex;justify-content:space-around;margin-top:8px;padding-top:12px;border-top:1px solid var(--b1)">';
-  mRings.forEach(function(m){
+  // Macronutrients card
+  h+='<div style="flex:1;min-width:0;background:var(--s1);border-radius:14px;border:1px solid var(--b1);padding:12px">';
+  h+='<div style="font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Macronutrients</div>';
+  macroRows.forEach(function(m,mi){
     var pct=Math.min(100,m.tgt>0?Math.round(m.logged/m.tgt*100):0);
-    var dash=Math.max(0,Math.min(mrC,mrC*(1-pct/100)));
-    var rem=Math.max(0,m.tgt-m.logged);
-    h+='<div style="text-align:center">';
-    h+='<svg width="60" height="60" viewBox="0 0 60 60">';
-    h+='<circle cx="30" cy="30" r="'+mrR+'" fill="none" stroke="var(--s3)" stroke-width="5"/>';
-    h+='<circle cx="30" cy="30" r="'+mrR+'" fill="none" stroke="'+m.col+'" stroke-width="5" stroke-dasharray="'+mrC+'" stroke-dashoffset="'+dash+'" stroke-linecap="round" transform="rotate(-90 30 30)" style="transition:stroke-dashoffset .5s ease"/>';
-    h+='<text x="30" y="34" text-anchor="middle" font-size="11" font-weight="800" fill="'+m.col+'" font-family="-apple-system,sans-serif">'+m.logged+'</text>';
-    h+='</svg>';
-    h+='<div style="font-size:11px;font-weight:700;color:var(--t2)">'+m.lbl+'</div>';
-    h+='<div style="font-size:10px;color:var(--t3)">'+rem+'g left</div>';
+    h+='<div style="'+(mi>0?'margin-top:7px':'')+'">';
+    h+='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t2);margin-bottom:3px"><span>'+m.lbl+'</span><span>'+m.logged+'/'+m.tgt+'g</span></div>';
+    h+='<div style="height:3px;background:var(--s3);border-radius:2px"><div style="height:3px;width:'+pct+'%;background:'+m.col+';border-radius:2px"></div></div>';
     h+='</div>';
   });
   h+='</div>';
+
   h+='</div>';
 
   // -- FUEL THE WORKOUT (real Before/During/After targets, only shown on
