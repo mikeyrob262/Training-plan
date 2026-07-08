@@ -282,7 +282,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="hdr">
   <div class="hdr-top">
     <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Athlete IQ</span></div>
-    <div class="hdr-btns"></div>
+    <div class="hdr-btns"><div class="aiq-avatar" onclick="uploadAvatar()" title="Change photo" style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div></div>
   </div>
   <div class="hdr-nav">
 
@@ -5858,6 +5858,55 @@ try{nutrDate=getTodayKey();}catch(e){}
 
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 
+// ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
+// Photo is stored in localStorage as a downscaled 200x200 JPEG data URL so it
+// stays small and never touches the synced st object / Firebase. getAvatar()
+// is the single read source used by every header that shows the avatar.
+function getAvatar(){
+  try{ return localStorage.getItem('aiq_avatar') || ''; }catch(e){ return ''; }
+}
+function uploadAvatar(){
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='image/*';
+  inp.onchange=function(){
+    var file=inp.files && inp.files[0];
+    if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        try{
+          var S=200;
+          var canvas=document.createElement('canvas');
+          canvas.width=S; canvas.height=S;
+          var ctx=canvas.getContext('2d');
+          // Center-crop to square, then scale to SxS.
+          var side=Math.min(img.width, img.height);
+          var sx=(img.width-side)/2, sy=(img.height-side)/2;
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+          var dataUrl=canvas.toDataURL('image/jpeg', 0.85);
+          localStorage.setItem('aiq_avatar', dataUrl);
+          renderAllAvatars();
+        }catch(e){ try{ alert('Could not save photo: '+e.message); }catch(_){}}
+      };
+      img.onerror=function(){ try{ alert('That file could not be read as an image.'); }catch(_){}}
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  inp.click();
+}
+// Update every avatar slot currently on screen without a full re-render.
+function renderAllAvatars(){
+  var av=getAvatar();
+  var inner = av
+    ? '<img src="'+av+'" style="width:100%;height:100%;object-fit:cover">'
+    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>';
+  var slots=document.querySelectorAll('.aiq-avatar');
+  for(var i=0;i<slots.length;i++){ slots[i].innerHTML=inner; }
+}
+
+
 // Reads the real scheduled workout for a given date directly from the
 // training plan DOM (same reliable approach used for Home's Today's Plan
 // card), so training-aware nutrition targets reflect what's actually
@@ -7337,8 +7386,8 @@ function showHomeDash(){
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
     +(bellCount>0?'<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#E24B4A;color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">'+bellCount+'</div>':'')
     +'</div>'
-    +'<div style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden">'
-    +(st.profilePhoto?'<img src="'+st.profilePhoto+'" style="width:100%;height:100%;object-fit:cover">':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>')
+    +'<div class="aiq-avatar" onclick="uploadAvatar()" title="Change photo" style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer">'
+    +(getAvatar()?'<img src="'+getAvatar()+'" style="width:100%;height:100%;object-fit:cover">':'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>')
     +'</div></div></div>';
 
   // Greeting
@@ -17301,6 +17350,7 @@ window.onload = function(){
   // screen; the plan itself is untouched and still reachable via TRAIN,
   // just no longer shown by default.
   try{ showHomeDash(); }catch(e){ console.error('showHomeDash on load:', e); }
+  try{ renderAllAvatars(); }catch(e){}
   // Auto-pull from GitHub on load if token exists
   // Start Firebase SSE real-time sync
   initFirebaseSync();
