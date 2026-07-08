@@ -8416,6 +8416,61 @@ function renderRideList(container, limit){
   var html='';
   // Drop zone
 
+
+  // ── Elevation by year (outdoor vs indoor) ─────────────────────────────
+  // Aggregate total feet climbed per calendar year, split into outdoor and
+  // indoor/virtual. Indoor = VirtualRide sportType OR the Strava trainer
+  // flag (covers Zwift climbs like Alpe du Zwift + climb portals). Only
+  // real recorded gain is summed; nothing is estimated.
+  (function(){
+    var byYear={};
+    (rides||[]).forEach(function(r){
+      if(!r.date) return;
+      var yr=new Date(r.date).getFullYear();
+      if(!yr) return;
+      var el=parseFloat(r.elev||r.elevation)||0;
+      if(!el) return;
+      var sp=(r.sportType||'')+'';
+      var indoor = /virtual/i.test(sp) || r.trainer===true;
+      if(!byYear[yr]) byYear[yr]={out:0,ind:0};
+      if(indoor) byYear[yr].ind+=el; else byYear[yr].out+=el;
+    });
+    var yrs=Object.keys(byYear).map(Number).sort(function(a,b){return b-a;});
+    if(!yrs.length) return;
+    var maxTotal=0;
+    yrs.forEach(function(y){ var t=byYear[y].out+byYear[y].ind; if(t>maxTotal) maxTotal=t; });
+    if(maxTotal<=0) return;
+
+    var nowYr=new Date().getFullYear();
+    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation by Year</div>';
+    html+='<div style="margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:16px;border:1px solid var(--b1)">';
+    html+='<div style="display:flex;gap:14px;margin-bottom:14px;font-size:12px;color:var(--t2)">'
+      +'<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#27AE60"></span>Outdoor</span>'
+      +'<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#4D9FFF"></span>Indoor / virtual</span></div>';
+    yrs.forEach(function(y){
+      var o=Math.round(byYear[y].out), i=Math.round(byYear[y].ind), tot=o+i;
+      var oPct=maxTotal>0?(o/maxTotal*100):0;
+      var iPct=maxTotal>0?(i/maxTotal*100):0;
+      var label=(y===nowYr)?(y+' (YTD)'):(''+y);
+      html+='<div style="margin-bottom:14px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'
+          +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+label+'</span>'
+          +'<span style="font-size:13px;font-weight:800;color:var(--t1)">'+tot.toLocaleString()+' ft</span>'
+        +'</div>'
+        +'<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--s3)">'
+          +(oPct>0?'<div style="width:'+oPct+'%;background:#27AE60"></div>':'')
+          +(iPct>0?'<div style="width:'+iPct+'%;background:#4D9FFF"></div>':'')
+        +'</div>'
+        +'<div style="display:flex;gap:14px;margin-top:5px;font-size:11px;color:var(--t3)">'
+          +'<span>'+o.toLocaleString()+' ft outdoor</span>'
+          +'<span>'+i.toLocaleString()+' ft indoor</span>'
+        +'</div>'
+      +'</div>';
+    });
+    html+='</div>';
+  })();
+
+
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
   if(years.length>1){
     html+='<div class="aiq-hscroll" style="padding:0 16px 10px">';
