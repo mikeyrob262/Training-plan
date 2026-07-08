@@ -9854,6 +9854,86 @@ function renderRideLapsTab(body, r, idx){
 }
 
 // -- OVERVIEW TAB: AI Coach insight card + compact route preview + key stats
+
+// Achievement strip for a ride's Overview: surfaces genuine bests computed
+// against the rider's own history. Only shows a badge when this ride actually
+// holds the all-time max for that metric (or ties it), so nothing here is
+// decorative or invented. If nothing qualifies, the strip is omitted entirely.
+function renderAchievementStrip(wrap, r, idx){
+  var rides=(st.rides||[]).filter(function(x){ return !x.deleted; });
+  if(rides.length<2) return; // need history to compare against
+
+  var badges=[];
+
+  // Helper: is this ride's value the strict max (or tie for max) across all rides?
+  function isBestBy(getter){
+    var mine=getter(r);
+    if(mine==null || !(mine>0)) return false;
+    var max=0;
+    rides.forEach(function(x){ var v=getter(x); if(v!=null && v>max) max=v; });
+    return mine>=max && max>0;
+  }
+
+  if(isBestBy(function(x){return x.distance;})){
+    badges.push({icon:'route', label:'Longest ride', val:r.distance+' mi'});
+  }
+  if(isBestBy(function(x){return x.elev;})){
+    badges.push({icon:'mountain', label:'Most climbing', val:r.elev+' ft'});
+  }
+  if(isBestBy(function(x){return x.tss;})){
+    badges.push({icon:'flame', label:'Highest TSS', val:''+r.tss});
+  }
+  if(isBestBy(function(x){return (x.peak20 || (x.powerCurve && x.powerCurve[1200])) || null;})){
+    var p20=r.peak20 || (r.powerCurve && r.powerCurve[1200]);
+    if(p20) badges.push({icon:'bolt', label:'Best 20-min power', val:p20+' W'});
+  }
+  if(isBestBy(function(x){return x.np;})){
+    badges.push({icon:'bolt', label:'Highest NP', val:r.np+' W'});
+  }
+
+  if(!badges.length) return;
+
+  function ico(name){
+    var o='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8B22E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+    if(name==='route') return o+'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>';
+    if(name==='mountain') return o+'<path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>';
+    if(name==='flame') return o+'<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>';
+    // bolt
+    return o+'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
+  }
+
+  var card=document.createElement('div');
+  card.style.cssText='margin:4px 0 14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:14px';
+  var head=document.createElement('div');
+  head.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;display:flex;align-items:center;gap:6px';
+  head.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E8B22E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>Achievements';
+  card.appendChild(head);
+
+  var strip=document.createElement('div');
+  strip.className='aiq-hscroll';
+  strip.style.cssText='display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px';
+  badges.forEach(function(b){
+    var chip=document.createElement('div');
+    chip.style.cssText='flex:0 0 auto;background:rgba(232,178,46,.10);border:1px solid rgba(232,178,46,.30);border-radius:12px;padding:10px 12px;min-width:120px';
+    chip.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+ico(b.icon)
+      +'<span style="font-size:11px;font-weight:700;color:#E8B22E">'+b.label+'</span></div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--t1)">'+b.val+'</div>';
+    strip.appendChild(chip);
+  });
+  card.appendChild(strip);
+
+  // Equipment used line (real, from the resolved gear) — small footer tie-in.
+  var gearName = r.gearName || (r.gearId && st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
+  if(gearName){
+    var foot=document.createElement('div');
+    foot.style.cssText='font-size:11px;color:var(--t3);margin-top:10px';
+    foot.textContent='Equipment: '+gearName;
+    card.appendChild(foot);
+  }
+
+  wrap.appendChild(card);
+}
+
 function renderRideOverviewTab(body, r, idx, FTP, BWT){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:16px';
@@ -9891,6 +9971,8 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
       +'<div><div style="font-size:20px;font-weight:800;color:var(--t1)">'+(r.maxElev||'-')+(r.maxElev?' ft':'')+'</div><div style="font-size:11px;color:var(--t3);margin-top:2px">Max Elevation</div></div>';
     wrap.appendChild(elevRow);
   }
+
+  try{ if(typeof renderAchievementStrip==='function') renderAchievementStrip(wrap, r, idx); }catch(e){}
 
   body.appendChild(wrap);
 
@@ -10082,7 +10164,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
 
   function redrawRouteMap(){
     if(routeColorMode==='power'){
-      mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+      mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP).replace('height:260px','height:340px');
       legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#94a3b8"></span>Z1-2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z3</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z4</span>',
