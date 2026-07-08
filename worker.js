@@ -8423,7 +8423,7 @@ function renderRideList(container, limit){
   // ascending to its all-time total. Indoor = VirtualRide sportType or the
   // Strava trainer flag (Zwift climbs). Only real recorded gain summed.
   (function(){
-    var START_YR=2023;
+    var START_YR=2025;
     var now=new Date();
     var nowYr=now.getFullYear();
     // Monthly buckets from Jan START_YR through the current month.
@@ -8516,14 +8516,23 @@ function renderRideList(container, limit){
     svg+='<path d="'+smooth(outXY)+'" fill="none" stroke="#27AE60" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
     svg+='</svg>';
 
+    // Prefer live Strava stats for the headline; fall back to summing
+    // imported rides which may be incomplete.
+    var ses=st.stravaElevStats||{};
+    var dispYTD  = ses.ytd     || Math.round(cumOut[cumOut.length-1]+cumInd[cumInd.length-1]);
+    var dispAll  = ses.allTime || null;
+
     html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation Climbed</div>';
     html+='<div style="margin:0 16px 20px;background:var(--bg);border-radius:14px;padding:16px 14px 10px;border:1px solid var(--b1)">';
     html+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px">'
-      +'<div><div style="font-size:26px;font-weight:800;color:var(--t1);line-height:1">'+grand.toLocaleString()+'<span style="font-size:14px;font-weight:600;color:var(--t3)"> ft</span></div>'
-      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">climbed since '+START_YR+'</div></div>'
+      +'<div>'
+        +'<div style="font-size:26px;font-weight:800;color:var(--t1);line-height:1">'+dispYTD.toLocaleString()+'<span style="font-size:14px;font-weight:600;color:var(--t3)"> ft</span></div>'
+        +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+nowYr+' YTD'+(ses.ytd?' (Strava)':' (imported)')+'</div>'
+        +(dispAll?'<div style="font-size:13px;font-weight:700;color:var(--t2);margin-top:6px">'+dispAll.toLocaleString()+' ft all-time</div>':'')
+      +'</div>'
       +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--t2);text-align:right">'
-        +'<span style="display:flex;align-items:center;gap:5px;justify-content:flex-end"><span style="width:9px;height:9px;border-radius:2px;background:#27AE60"></span>Outdoor '+totOut.toLocaleString()+' ft</span>'
-        +'<span style="display:flex;align-items:center;gap:5px;justify-content:flex-end"><span style="width:9px;height:9px;border-radius:2px;background:#4D9FFF"></span>Indoor '+totInd.toLocaleString()+' ft</span>'
+        +'<span style="display:flex;align-items:center;gap:5px;justify-content:flex-end"><span style="width:9px;height:9px;border-radius:2px;background:#27AE60"></span>Outdoor</span>'
+        +'<span style="display:flex;align-items:center;gap:5px;justify-content:flex-end"><span style="width:9px;height:9px;border-radius:2px;background:#4D9FFF"></span>Indoor</span>'
       +'</div>'
     +'</div>';
     html+=svg;
@@ -13185,6 +13194,26 @@ function recomputeGearMileage(){
 // Fetches the athlete's registered gear (bikes + shoes) from Strava,
 // so we can map gear_id -> real name and attribute mileage correctly.
 // Requires an existing valid Strava token (from stravaBackfill()).
+function fetchStravaElevStats(){
+  if(!st.stravaToken) return;
+  function doFetch(athleteId){
+    fetch('https://www.strava.com/api/v3/athletes/'+athleteId+'/stats',{
+      headers:{'Authorization':'Bearer '+st.stravaToken}
+    }).then(function(r){return r.ok?r.json():null;})
+    .then(function(s){
+      if(!s) return;
+      var ytd = s.ytd_ride_totals&&s.ytd_ride_totals.elevation_gain ? Math.round(s.ytd_ride_totals.elevation_gain*3.28084) : null;
+      var all = s.all_ride_totals&&s.all_ride_totals.elevation_gain ? Math.round(s.all_ride_totals.elevation_gain*3.28084) : null;
+      if(ytd||all){ st.stravaElevStats={ytd:ytd, allTime:all, fetchedAt:Date.now()}; sv(); }
+    }).catch(function(){});
+  }
+  if(st.stravaAthleteId){ doFetch(st.stravaAthleteId); return; }
+  fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+st.stravaToken}})
+  .then(function(r){return r.ok?r.json():null;})
+  .then(function(a){ if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id); } })
+  .catch(function(){});
+}
+
 function syncStravaGear(){
   if(!st.stravaToken){ toast('Sync Strava first to get a token'); return; }
   toast('Fetching your Strava gear...');
@@ -17221,7 +17250,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
   .then(function(acts){
     if(!acts || !acts.length){
       sv();
-      toast('Strava sync done: ' + imported + ' imported');
+      toast('Strava sync done: ' + imported + ' imported'); fetchStravaElevStats();
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       return;
     }
@@ -17301,7 +17330,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       if(missingGPS.length>0){
         var gIdx=0;
         function fetchNextGPS(){
-          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!');return;}
+          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!'); fetchStravaElevStats();return;}
           var r=missingGPS[gIdx++];
           var rideIndex=st.rides.indexOf(r);
           fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
@@ -17342,7 +17371,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         }
         fetchNextGPS();
       } else {
-        toast('Strava sync done: ' + imported + ' imported');
+        toast('Strava sync done: ' + imported + ' imported'); fetchStravaElevStats();
       }
     } else {
       sv(); // save after every page
