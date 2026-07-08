@@ -5968,6 +5968,17 @@ function showNotifications(){
   (document.getElementById('app-shell')||document.body).appendChild(overlay);
 }
 
+function downsampleG(arr, n){
+  if(!arr || !arr.length) return [];
+  var step=Math.max(1,Math.floor(arr.length/n));
+  var out=[];
+  for(var i=0;i<arr.length;i+=step){
+    var slice=arr.slice(i,i+step).filter(function(x){return x||x===0;});
+    if(slice.length) out.push(Math.round(slice.reduce(function(a,b){return a+b;})/slice.length));
+  }
+  return out.slice(0,n);
+}
+
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 
 // ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
@@ -8943,7 +8954,10 @@ function bulkImportTCX(input){
             name:rideName, date:dateStr, duration:durStr, movingSecs:durSec,
             distance:distMi, avgPwr:avgPwr, np:np2, tss:tss2,
             ifPct:Math.round(IF2*100), avgHR:avgHR, cadence:avgCad,
-            elev:elevGain, source:'tcx'
+            elev:elevGain, source:'tcx',
+            chartEle: (eleVals.length>1) ? downsampleG(eleVals.map(function(m){return Math.round(m*3.28084);}),200) : null,
+            chartPwr: (pwrVals.length>1) ? downsampleG(pwrVals,200) : null,
+            chartHR: (hrVals.length>1) ? downsampleG(hrVals,200) : null
           };
           if(!st.rides) st.rides=[];
           st.rides.push(ride);
@@ -17167,12 +17181,12 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       // Auto-fetch GPS for rides missing it
       var missingGPS = st.rides.filter(function(r){
-        return r.stravaId && r.date >= '2025-01-01' && (!(r.gpsLats && r.gpsLats.length>5) || r.gpsQuality==='summary');
+        return r.stravaId && r.date >= '2025-01-01' && (!(r.gpsLats && r.gpsLats.length>5) || r.gpsQuality==='summary' || !(r.chartEle && r.chartEle.length));
       }).slice(0,20); // max 20 at a time
       if(missingGPS.length>0){
         var gIdx=0;
         function fetchNextGPS(){
-          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS backfill done!');return;}
+          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!');return;}
           var r=missingGPS[gIdx++];
           var rideIndex=st.rides.indexOf(r);
           fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
@@ -17190,7 +17204,25 @@ function fetchStravaPage(token, page, imported, forceAll) {
                 }
               }catch(e){}}
             }
-            setTimeout(fetchNextGPS,300);
+            // Also pull the altitude stream so the elevation profile graph
+            // works - the summary sync only gives total gain, not the
+            // per-point profile. Strava returns altitude in meters; convert
+            // to feet and downsample to match FIT/TCX-imported rides.
+            if(!(st.rides[rideIndex].chartEle && st.rides[rideIndex].chartEle.length)){
+              fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=altitude&key_by_type=true',{headers:{'Authorization':'Bearer '+token}})
+              .then(function(res){return res.json();})
+              .then(function(streams){
+                try{
+                  if(streams && streams.altitude && streams.altitude.data && streams.altitude.data.length>1){
+                    var ft=streams.altitude.data.map(function(m){return Math.round(m*3.28084);});
+                    st.rides[rideIndex].chartEle = (typeof downsampleG==='function') ? downsampleG(ft,200) : ft.slice(0,200);
+                  }
+                }catch(e){}
+                setTimeout(fetchNextGPS,300);
+              }).catch(function(){setTimeout(fetchNextGPS,300);});
+            } else {
+              setTimeout(fetchNextGPS,300);
+            }
           }).catch(function(){setTimeout(fetchNextGPS,300);});
         }
         fetchNextGPS();
