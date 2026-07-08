@@ -9629,7 +9629,9 @@ function openRideDetail(idx){
     {id:'map',label:'Map'},
     {id:'charts',label:'Charts'},
     {id:'laps',label:'Laps'},
-    {id:'more',label:'More'}
+    {id:'weather',label:'Weather'},
+    {id:'equipment',label:'Equipment'},
+    {id:'analysis',label:'AI Analysis'}
   ];
   var activeTab='overview';
   var tabsRow=document.createElement('div');
@@ -9640,7 +9642,6 @@ function openRideDetail(idx){
     btn.textContent=t.label;
     btn.style.cssText='flex-shrink:0;padding:0 0 10px;background:none;border:none;border-bottom:2px solid transparent;font-size:14px;cursor:pointer;white-space:nowrap';
     btn.onclick=function(){
-      if(t.id==='more'){ openRideDetailMoreSheet(r, idx, FTP, BWT); return; }
       activeTab=t.id; renderTabs();
     };
     tabBtns[t.id]=btn;
@@ -9674,40 +9675,12 @@ function openRideDetail(idx){
     else if(activeTab==='map') renderRideRouteTab(body, r, idx, FTP, BWT);
     else if(activeTab==='charts') renderRidePerformanceTab(body, r, idx, FTP, BWT);
     else if(activeTab==='laps') renderRideLapsTab(body, r, idx);
+    else if(activeTab==='weather') renderRideWeatherTab(body, r, idx);
+    else if(activeTab==='equipment') renderRideEquipmentTab(body, r, idx);
+    else if(activeTab==='analysis') renderRideAnalysisTab(body, r, idx, FTP, BWT);
   }
 
   renderTabs();
-}
-
-// "More" bottom sheet - Weather/Equipment/AI Analysis live here since the
-// reference's tab row only shows Overview/Map/Charts/Laps/More, and these
-// three sections don't correspond to anything in the reference itself.
-function openRideDetailMoreSheet(r, idx, FTP, BWT){
-  var old=document.getElementById('ride-more-sheet');
-  if(old) old.remove();
-  var overlay=document.createElement('div');
-  overlay.id='ride-more-sheet';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:flex-end;justify-content:center';
-  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
-  var sheet=document.createElement('div');
-  sheet.style.cssText='background:var(--s1);border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:10px 0 max(10px,env(safe-area-inset-bottom))';
-  function makeRow(label, onClick){
-    var row=document.createElement('div');
-    row.style.cssText='padding:15px 20px;font-size:15px;font-weight:600;color:var(--t1);cursor:pointer;text-align:center';
-    row.textContent=label;
-    row.onclick=function(){ overlay.remove(); onClick(); };
-    return row;
-  }
-  var detailBody=document.getElementById('ride-detail-body');
-  sheet.appendChild(makeRow('Weather', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideWeatherTab(detailBody, r, idx); } }));
-  var d1=document.createElement('div'); d1.style.cssText='height:1px;background:var(--b1);margin:2px 16px'; sheet.appendChild(d1);
-  sheet.appendChild(makeRow('Equipment', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideEquipmentTab(detailBody, r, idx); } }));
-  var d2=document.createElement('div'); d2.style.cssText='height:1px;background:var(--b1);margin:2px 16px'; sheet.appendChild(d2);
-  sheet.appendChild(makeRow('AI Analysis', function(){ if(detailBody){ detailBody.innerHTML=''; renderRideAnalysisTab(detailBody, r, idx, FTP, BWT); } }));
-  var d3=document.createElement('div'); d3.style.cssText='height:6px'; sheet.appendChild(d3);
-  sheet.appendChild(makeRow('Cancel', function(){}));
-  overlay.appendChild(sheet);
-  document.body.appendChild(overlay);
 }
 
 // -- LAPS TAB: genuinely blocked on real data - lap records are not
