@@ -7988,7 +7988,7 @@ function renderPerf(container){
   // a chart - same underlying data, no canvas. Capped to a scrollable
   // ~4-row window (each row ~37px incl. border) to save vertical space,
   // matching the same pattern used for Activity History.
-  html+='<div style="max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--b1);border-radius:14px;padding:0 14px">';
+  html+='<div class="aiq-vscroll" style="max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--b1);border-radius:14px;padding:0 14px">';
   var peakRowCount=0;
   peakDursList.forEach(function(d,i){
     var watts=peakWattsArr[i];
