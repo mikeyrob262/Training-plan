@@ -16009,7 +16009,7 @@ function showCalendarTab(){
     if(/virtual|zwift/.test(t)) return '#4D9FFF';
     if(/strength|core|gym|lift/.test(t)) return '#A855F7';
     if(/recovery|rest|easy/.test(t)) return '#8E8E93';
-    return '#FC4C02'; // ride (default)
+    return '#2FA8E0'; // ride (default)
   }
 
   // Per-activity SVG glyph using the app's real icon set (same Lucide-style
