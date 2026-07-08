@@ -9560,31 +9560,36 @@ function openRideDetail(idx){
   var heroRow=document.createElement('div');
   heroRow.style.cssText='padding:0 16px;flex-shrink:0';
   var heroGrid=document.createElement('div');
-  heroGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:14px 20px';
+  heroGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:20px 24px';
+  // Restrained palette: everything neutral except intensity (the one
+  // number that actually signals effort), avoiding the "three colors
+  // firing at once" look. Lighter weight and looser letter-spacing,
+  // matching real Apple Health's quieter, more spacious feel.
   [
     {v:r.duration||'-',l:'Time'},
     {v:(r.distance||'-')+(r.distance?' mi':''),l:'Distance'},
-    {v:rwkg?rwkg+' W/kg':'-',l:'Intensity',c:'#FC4C02'},
-    {v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg HR',c:'#ef4444'},
+    {v:rwkg?rwkg+' W/kg':'-',l:'Intensity',c:'var(--orange)'},
+    {v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg HR'},
     {v:(r.avgPwr||'-')+(r.avgPwr?' w':''),l:'Avg Power'},
-    {v:r.tss||'-',l:'Training Stress',c:'#2980B9'}
+    {v:r.tss||'-',l:'Training Stress'}
   ].forEach(function(s){
     var cell=document.createElement('div');
-    cell.innerHTML='<div style="font-size:24px;font-weight:800;color:'+(s.c||'var(--t1)')+';letter-spacing:-.5px;line-height:1.1">'+s.v+'</div>'
-      +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:4px">'+s.l+'</div>';
+    cell.innerHTML='<div style="font-size:22px;font-weight:600;color:'+(s.c||'var(--t1)')+';letter-spacing:-.2px;line-height:1.1">'+s.v+'</div>'
+      +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">'+s.l+'</div>';
     heroGrid.appendChild(cell);
   });
   heroRow.appendChild(heroGrid);
   if(r.calories){
     var calRow=document.createElement('div');
-    calRow.style.cssText='margin-top:14px';
-    calRow.innerHTML='<div style="font-size:24px;font-weight:800;color:var(--t1);letter-spacing:-.5px">'+r.calories+' Cal</div>'
-      +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-top:4px">Calories</div>';
+    calRow.style.cssText='margin-top:20px';
+    calRow.innerHTML='<div style="font-size:22px;font-weight:600;color:var(--t1);letter-spacing:-.2px">'+r.calories+' Cal</div>'
+      +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories</div>';
     heroRow.appendChild(calRow);
   }
   var heroSpacer=document.createElement('div');
-  heroSpacer.style.cssText='height:16px';
+  heroSpacer.style.cssText='height:20px';
   heroRow.appendChild(heroSpacer);
+
 
   // Tab bar - exact match to the reference: Overview/Map/Charts/Laps/More,
   // plain underline style (bold + orange underline on active, plain gray
@@ -9701,9 +9706,9 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
   coachSection.id='ride-coach-card';
   coachSection.style.cssText='margin-bottom:24px';
   coachSection.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:14px">'
-    +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
-    +'<span style="font-size:13px;color:var(--t1);font-weight:700">AI Coach Insight</span>'
-    +'<span style="font-size:9px;font-weight:700;color:var(--t3);border:1px solid var(--b1);padding:2px 6px;border-radius:6px">Beta</span></div>'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    +'<span style="font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">AI Coach Insight</span>'
+    +'<span style="font-size:9px;font-weight:600;color:var(--t3);border:1px solid var(--b1);padding:2px 6px;border-radius:6px">Beta</span></div>'
     +'<div id="ride-coach-body" style="font-size:14px;color:var(--t2);line-height:1.6">Analyzing this ride&hellip;</div>';
   wrap.appendChild(coachSection);
 
@@ -9754,28 +9759,22 @@ function renderCoachInsightContent(el, text){
     else if(!headline){ headline=line; }
   });
 
-  var icons=[
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5DCAA5" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3zm0 0 4-8a2 2 0 0 1 2 2v5h5.5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.1 22H9a2 2 0 0 1-2-2v-9z"/></svg>'
-  ];
-  var html='<div style="font-size:15px;font-weight:700;color:#5DCAA5;line-height:1.4;margin-bottom:14px">'+headline+'</div>';
+  var html='<div style="font-size:15px;font-weight:600;color:var(--t1);line-height:1.4;margin-bottom:14px">'+headline+'</div>';
   if(bullets.length){
     html+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">';
-    bullets.forEach(function(b, i){
+    bullets.forEach(function(b){
       html+='<div style="display:flex;gap:8px;align-items:flex-start">'
-        +'<span style="flex-shrink:0;margin-top:1px">'+icons[i%icons.length]+'</span>'
-        +'<span style="font-size:13px;color:var(--t1);line-height:1.5">'+b+'</span></div>';
+        +'<span style="flex-shrink:0;margin-top:5px;width:4px;height:4px;border-radius:50%;background:var(--t3)"></span>'
+        +'<span style="font-size:13px;color:var(--t2);line-height:1.5">'+b+'</span></div>';
     });
     html+='</div>';
   }
   if(recommendation){
     html+='<div style="border-top:1px solid var(--b1);padding-top:12px;margin-top:2px">'
-      +'<div style="font-size:11px;font-weight:700;color:#5DCAA5;text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Recommendation</div>'
+      +'<div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Recommendation</div>'
       +'<div style="font-size:13px;color:var(--t2);line-height:1.5;margin-bottom:14px">'+recommendation+'</div></div>';
   }
-  html+='<button id="ride-ask-coach-btn" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;color:var(--t1);cursor:pointer">Ask Coach</button>';
+  html+='<button id="ride-ask-coach-btn" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;color:var(--t1);cursor:pointer">Ask Coach</button>';
   el.innerHTML=html;
   var askBtn=document.getElementById('ride-ask-coach-btn');
   if(askBtn) askBtn.onclick=function(){ toast('Ask Coach is coming soon'); };
