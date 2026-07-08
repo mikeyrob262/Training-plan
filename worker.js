@@ -10640,6 +10640,78 @@ function closeRideDetail(){
 // Small bottom-sheet action menu reached via the ride detail header's
 // (...) button - the list rows no longer show a quick-delete X (to
 // match the reference design), so Rename and Delete live here instead.
+
+// Edit a recorded ride's data (distance/duration/TSS/NP/avg power) after the
+// fact - e.g. when the Garmin kept recording during the drive home and baked
+// extra miles into the activity. Reached from the ride-detail "more" menu.
+function editRideData(idx){
+  var r=st.rides[idx]; if(!r) return;
+  var old=document.getElementById('ride-edit-modal');
+  if(old) old.remove();
+
+  var overlay=document.createElement('div');
+  overlay.id='ride-edit-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:flex-end;justify-content:center';
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  function field(labelText, value, ph, type){
+    var w=document.createElement('div'); w.style.cssText='margin-bottom:12px';
+    var l=document.createElement('div'); l.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; l.textContent=labelText;
+    var inp=document.createElement('input'); inp.type=type||'text'; if(ph) inp.placeholder=ph; if(value!=null) inp.value=value;
+    inp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+    w.appendChild(l); w.appendChild(inp); sheet.appendChild(w);
+    return inp;
+  }
+
+  var hdr=document.createElement('div'); hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px';
+  var ttl=document.createElement('div'); ttl.style.cssText='font-size:18px;font-weight:800;color:var(--t1)'; ttl.textContent='Edit ride data';
+  var x=document.createElement('button'); x.innerHTML='&times;'; x.style.cssText='background:none;border:none;color:var(--t3);font-size:28px;line-height:1;cursor:pointer;padding:0 4px';
+  x.onclick=function(){ overlay.remove(); };
+  hdr.appendChild(ttl); hdr.appendChild(x); sheet.appendChild(hdr);
+
+  var nameI=field('Name', r.name||'', 'Activity name');
+  var distI=field('Distance (mi)', (r.distance!=null?r.distance:''), '0', 'number');
+  var durI=field('Duration (min)', (r.duration!=null?r.duration:''), '0', 'number');
+  var tssI=field('TSS', (r.tss!=null?r.tss:''), '0', 'number');
+  var npI=field('Normalized Power (W)', (r.np!=null?r.np:''), '0', 'number');
+  var apI=field('Avg Power (W)', (r.avgPwr!=null?r.avgPwr:''), '0', 'number');
+  var elevI=field('Elevation (ft)', (r.elev!=null?r.elev:''), '0', 'number');
+
+  var save=document.createElement('button');
+  save.textContent='Save changes';
+  save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
+  save.onclick=function(){
+    if(nameI.value.trim()) r.name=nameI.value.trim();
+    if(distI.value!=='') r.distance=parseFloat(distI.value);
+    if(durI.value!=='') r.duration=parseFloat(durI.value);
+    if(tssI.value!=='') r.tss=parseFloat(tssI.value);
+    if(npI.value!=='') r.np=parseFloat(npI.value);
+    if(apI.value!=='') r.avgPwr=parseFloat(apI.value);
+    if(elevI.value!=='') r.elev=parseFloat(elevI.value);
+    // Recompute avg speed from the corrected distance + duration if both present.
+    if(r.distance && r.duration){ r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10; }
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Ride updated'); }catch(e){}
+    overlay.remove();
+    // Refresh the ride detail view so the corrected numbers show.
+    var rdm=document.getElementById('ride-detail-modal'); if(rdm) rdm.remove();
+    try{ openRideDetail(idx); }catch(e){}
+  };
+  sheet.appendChild(save);
+
+  var cancel=document.createElement('button');
+  cancel.textContent='Cancel';
+  cancel.style.cssText='width:100%;padding:12px;background:transparent;border:1px solid var(--b1);border-radius:12px;color:var(--t2);font-size:14px;font-weight:700;cursor:pointer;margin-top:8px';
+  cancel.onclick=function(){ overlay.remove(); };
+  sheet.appendChild(cancel);
+
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+}
+
 function openRideDetailMoreMenu(idx){
   var old=document.getElementById('ride-more-menu');
   if(old) old.remove();
@@ -10656,6 +10728,10 @@ function openRideDetailMoreMenu(idx){
     row.onclick=function(){ overlay.remove(); onClick(); };
     return row;
   }
+  sheet.appendChild(makeRow('Edit ride data', '#2FA8E0', function(){ editRideData(idx); }));
+  var divEdit=document.createElement('div');
+  divEdit.style.cssText='height:1px;background:var(--b1);margin:2px 16px';
+  sheet.appendChild(divEdit);
   sheet.appendChild(makeRow('Rename', 'var(--t1)', function(){ renameRide(idx); }));
   var divider=document.createElement('div');
   divider.style.cssText='height:1px;background:var(--b1);margin:2px 16px';
