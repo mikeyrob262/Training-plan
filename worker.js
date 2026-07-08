@@ -4699,6 +4699,7 @@ function showScreen(id){
   var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
   var anl=document.getElementById('ANALYTICS');if(anl)anl.style.display=id==='ANALYTICS'?'block':'none';
   var hd=document.getElementById('HOME_DASH');if(hd)hd.style.display=id==='HOME_DASH'?'block':'none';
+  var cal=document.getElementById('CALENDAR');if(cal)cal.style.display=id==='CALENDAR'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
   var perf=document.getElementById('PERF');if(perf)perf.style.display=id==='PERF'?'block':'none';
   // Hide week nav on non-training screens
@@ -15967,7 +15968,6 @@ function showWeatherHistory(){
 // and are marked TODO: wire next session.
 // ============================================================================
 function showCalendarTab(){
-  showScreen('CALENDAR');
   var scr=document.getElementById('CALENDAR');
   if(!scr){
     scr=document.createElement('div');
@@ -15976,6 +15976,8 @@ function showCalendarTab(){
     var shell=document.getElementById('app-shell')||document.body;
     shell.appendChild(scr);
   }
+  showScreen('CALENDAR');
+  scr.style.display='block';
 
   // ---- Real data pulls -----------------------------------------------------
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
