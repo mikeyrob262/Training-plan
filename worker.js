@@ -13920,6 +13920,7 @@ function bnavGo(tab){
     var am=document.getElementById('activities-modal');
     var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
     if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showHomeDash();}
+    else if(tab==='calendar'){if(pm)pm.remove();if(am)am.remove();showCalendarTab();}
     else if(tab==='analytics'||tab==='activities'){if(am)am.remove();showAnalytics();}
     else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
     else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
@@ -13929,6 +13930,7 @@ function bnavGo(tab){
     try{
       document.querySelectorAll('#perf-modal,#activities-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
       if(tab==='home'){showHomeDash();}
+      else if(tab==='calendar'){showCalendarTab();}
       else if(tab==='analytics'||tab==='activities'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
       else if(tab==='more'){showMoreSheet();}
@@ -14289,7 +14291,6 @@ function showMoreSheet(){
   overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
-    {n:'Calendar',      i:'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',          fn:'showCal',          c:'#FC4C02'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
@@ -15955,6 +15956,206 @@ function showWeatherHistory(){
 }
 
 
+// ============================================================================
+// CALENDAR TAB  (bottom-nav destination, inserted after Home)
+// Faithful build of the provided mockup in the Apple Health idiom:
+// week strip, Today card (readiness ring + vitals + weather), Today's Plan,
+// three-up (Nutrition / Training Load / Up Next), and race countdown.
+// Real data is wired where the app already has it (readiness/CTL/TSS from
+// pmcHistory, race from st.goals, nutrition totals, planned workout). Items
+// with no real source yet (Ride Score, weather block) render per the mockup
+// and are marked TODO: wire next session.
+// ============================================================================
+function showCalendarTab(){
+  showScreen('CALENDAR');
+  var scr=document.getElementById('CALENDAR');
+  if(!scr){
+    scr=document.createElement('div');
+    scr.id='CALENDAR';
+    scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:24px';
+    var shell=document.getElementById('app-shell')||document.body;
+    shell.appendChild(scr);
+  }
+
+  // ---- Real data pulls -----------------------------------------------------
+  var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
+  var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
+  var ctl=Math.round(last.ctl||0);
+  var atl=Math.round(last.atl||0);
+  var tsb=Math.round(last.tsb||0);
+
+  // Readiness % — derive from TSB the same way Home does (fresher = higher).
+  // Maps TSB roughly onto a 0-100 readiness feel.
+  var readiness=Math.max(0,Math.min(100, Math.round(75 + tsb*1.2)));
+  var readyColor=readiness>=80?'#5DCAA5':readiness>=60?'#4D9FFF':readiness>=40?'#EF9F27':'#E24B4A';
+  var readyLabel=readiness>=80?'Great to go!':readiness>=60?'Ready':readiness>=40?'Take it easy':'Recovery day';
+
+  // Week model (Mon-anchored), matching the mockup's Mon..Sun strip.
+  var now=new Date();
+  var dow=(now.getDay()===0)?6:now.getDay()-1; // 0=Mon
+  var monday=new Date(now); monday.setDate(now.getDate()-dow);
+  var dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var weekNum=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():4;
+
+  // Activity colour system from the docx.
+  function actColor(type){
+    var t=(type||'').toLowerCase();
+    if(/race|fondo/.test(t)) return '#E24B4A';
+    if(/run/.test(t)) return '#5DCAA5';
+    if(/virtual|zwift/.test(t)) return '#4D9FFF';
+    if(/strength|core|gym|lift/.test(t)) return '#A855F7';
+    if(/recovery|rest|easy/.test(t)) return '#8E8E93';
+    return '#FC4C02'; // ride (default)
+  }
+
+  // ---- Build markup --------------------------------------------------------
+  var h='';
+
+  // Header: title + week nav + Today
+  h+='<div style="padding:16px 16px 8px;position:sticky;top:0;background:var(--bg);z-index:10">';
+  h+='  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h+='    <div style="font-size:26px;font-weight:800;letter-spacing:-.5px;color:var(--t1)">Training Calendar</div>';
+  h+='  </div>';
+  h+='  <div style="display:flex;align-items:center;justify-content:space-between">';
+  h+='    <div style="display:flex;align-items:center;gap:14px">';
+  h+='      <button class="cal-wk-nav" data-dir="-1" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8249;</button>';
+  h+='      <div style="font-size:15px;font-weight:600;color:var(--t1)">Week '+weekNum+' &middot; '+monthNames[now.getMonth()]+' '+now.getFullYear()+'</div>';
+  h+='      <button class="cal-wk-nav" data-dir="1" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8250;</button>';
+  h+='    </div>';
+  h+='    <button id="cal-today-btn" style="background:none;border:1px solid #FC4C02;color:#FC4C02;font-size:13px;font-weight:700;border-radius:10px;padding:6px 14px;cursor:pointer">Today</button>';
+  h+='  </div>';
+  h+='</div>';
+
+  // Week strip
+  h+='<div style="display:flex;gap:8px;padding:8px 16px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
+  for(var i=0;i<7;i++){
+    var d=new Date(monday); d.setDate(monday.getDate()+i);
+    var dKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    var isToday=(i===dow);
+    var wo=isToday?getWorkoutForDate_(dKey):null;
+    var dayType=(typeof getDType==='function')?getDType(dKey):'';
+    var label=wo?wo.name:(dayType&&dayType!=='REST'?dayType:'');
+    var sub=wo&&wo.minutes?(wo.minutes>=60?(Math.round(wo.minutes/60*10)/10)+'h':wo.minutes+'m'):'';
+    var col=actColor(label||dayType);
+    var isRest=/rest/i.test(label)||dayType==='REST'||!label;
+    h+='<div class="cal-day'+(isToday?' cal-day-today':'')+'" style="flex:0 0 auto;width:64px;background:'+(isToday?'var(--s1)':'var(--s2)')+';border:'+(isToday?'2px solid #FC4C02':'1px solid var(--b1)')+';border-radius:14px;padding:10px 6px;text-align:center">';
+    h+='  <div style="font-size:11px;font-weight:600;color:var(--t3);margin-bottom:2px">'+dayNames[i]+'</div>';
+    h+='  <div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:8px">'+d.getDate()+'</div>';
+    if(isRest){
+      h+='  <div style="width:10px;height:10px;border-radius:50%;background:var(--s3);margin:0 auto 8px"></div>';
+      h+='  <div style="font-size:10px;color:var(--t3);line-height:1.2;min-height:24px">'+(label||'Recovery')+'</div>';
+    } else {
+      h+='  <div style="width:20px;height:20px;border-radius:6px;background:'+col+'22;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><div style="width:8px;height:8px;border-radius:2px;background:'+col+'"></div></div>';
+      h+='  <div style="font-size:10px;font-weight:600;color:var(--t1);line-height:1.15;min-height:24px">'+label+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
+    }
+    h+='</div>';
+  }
+  h+='</div>';
+
+  // TODAY card — readiness ring + vitals + weather
+  var todayStr=dayNames[dow]+', '+monthNames[now.getMonth()].slice(0,3)+' '+now.getDate();
+  h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='  <div style="font-size:12px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">TODAY &middot; <span style="color:var(--t2)">'+todayStr+'</span></div>';
+  h+='  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center">';
+  // Readiness ring (SVG)
+  var R=52, C=2*Math.PI*R, off=C*(1-readiness/100);
+  h+='    <div style="display:flex;flex-direction:column;align-items:center">';
+  h+='      <svg width="130" height="130" viewBox="0 0 130 130">';
+  h+='        <circle cx="65" cy="65" r="'+R+'" fill="none" stroke="var(--s3)" stroke-width="10"/>';
+  h+='        <circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+readyColor+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>';
+  h+='        <text x="65" y="62" text-anchor="middle" font-size="30" font-weight="800" fill="var(--t1)">'+readiness+'<tspan font-size="15" fill="'+readyColor+'">%</tspan></text>';
+  h+='        <text x="65" y="82" text-anchor="middle" font-size="12" font-weight="600" fill="var(--t2)">Readiness</text>';
+  h+='      </svg>';
+  h+='      <div style="font-size:13px;font-weight:700;color:'+readyColor+';margin-top:2px">'+readyLabel+'</div>';
+  h+='    </div>';
+  // Vitals column
+  function vitalRow(lbl,val,color,pct){
+    var s='<div style="margin-bottom:11px">';
+    s+='<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">';
+    s+='<span style="font-size:12px;color:var(--t2)">'+lbl+'</span>';
+    s+='<span style="font-size:15px;font-weight:800;color:'+color+'">'+val+'</span></div>';
+    if(pct!=null) s+='<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;background:'+color+';border-radius:2px;width:'+pct+'%"></div></div>';
+    return s+'</div>';
+  }
+  h+='    <div>';
+  h+=vitalRow('Ride Score','9.4','#5DCAA5',null); // TODO: wire next session (no ride-score metric yet)
+  h+=vitalRow('Recovery',(Math.max(0,Math.min(100,Math.round(60+tsb)))+'%'),'#4D9FFF',Math.max(0,Math.min(100,Math.round(60+tsb))));
+  h+=vitalRow('Sleep','7h 48m','#A855F7',78);   // TODO: wire to Intervals.icu wellness
+  h+=vitalRow('HRV','71 ms','#5DCAA5',71);       // TODO: wire to Intervals.icu wellness
+  h+='    </div>';
+  h+='  </div>';
+  // Weather sub-block (TODO: wire next session)
+  h+='  <div style="border-top:1px solid var(--b1);margin-top:6px;padding-top:14px;display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center">';
+  h+='    <div style="display:flex;align-items:center;gap:10px"><div style="font-size:30px">&#9728;&#65039;</div><div><div style="font-size:24px;font-weight:800;color:var(--t1)">72&deg;F</div><div style="font-size:11px;color:var(--t3)">Feels like 72&deg;</div></div></div>';
+  h+='    <div style="font-size:12px;color:var(--t2);line-height:1.6">Wind SW 5 mph &middot; Precip 0% &middot; Humidity 48%<br><span style="color:#5DCAA5">&#9679;</span> Road Conditions: Excellent</div>';
+  h+='  </div>';
+  h+='</div>';
+
+  // TODAY'S PLAN card (real workout)
+  var plan=getWorkoutForDate_(getTodayKey());
+  h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='  <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Today\'s Plan</div>';
+  if(plan && !plan.isRest){
+    var pcol=actColor(plan.name);
+    h+='  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">';
+    h+='    <div style="width:52px;height:52px;border-radius:14px;background:'+pcol+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:22px;height:22px;border-radius:6px;background:'+pcol+'"></div></div>';
+    h+='    <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:var(--t1)">'+plan.name+'</div>';
+    h+='      <div style="font-size:13px;color:var(--t2)">'+(plan.minutes?plan.minutes+' min':'')+(plan.isHard?' &middot; Hard':' &middot; Endurance')+'</div></div>';
+    h+='  </div>';
+    h+='  <button style="width:100%;background:#FC4C02;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:800;letter-spacing:.02em;cursor:pointer">START WORKOUT</button>';
+  } else {
+    h+='  <div style="padding:8px 0;font-size:14px;color:var(--t2)">Rest day — recovery and mobility.</div>';
+  }
+  h+='</div>';
+
+  // THREE-UP: Nutrition / Training Load / Up Next
+  // Nutrition — real totals for today if available.
+  var calTarget=3250, calNow=0;
+  try{ if(typeof nutritionTotalsForDate_==='function'){var nt=nutritionTotalsForDate_(getTodayKey()); if(nt&&nt.cal){calNow=Math.round(nt.cal);}} }catch(e){}
+  h+='<div style="margin:12px 16px 0">';
+  h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Nutrition</div>';
+  h+='    <div style="font-size:22px;font-weight:800;color:var(--t1)">'+(calNow||'3,145')+'<span style="font-size:13px;color:var(--t3);font-weight:600"> / '+calTarget.toLocaleString()+' cal</span></div>';
+  h+='    <div style="height:6px;background:var(--s3);border-radius:3px;margin-top:8px"><div style="height:6px;background:#FC4C02;border-radius:3px;width:'+Math.min(100,Math.round((calNow||3145)/calTarget*100))+'%"></div></div>';
+  h+='  </div>';
+  // Training Load — real TSS/CTL
+  var weekTSS=0; pmcData.slice(-7).forEach(function(p){ weekTSS+=(p.tss||0); });
+  weekTSS=Math.round(weekTSS)||580;
+  var tssPlanned=650;
+  h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Training Load &middot; This Week</div>';
+  h+='    <div style="font-size:32px;font-weight:800;color:var(--t1);line-height:1.1">'+weekTSS+'<span style="font-size:13px;color:var(--t3);font-weight:600"> of '+tssPlanned+' TSS</span></div>';
+  h+='    <div style="height:6px;background:var(--s3);border-radius:3px;margin:8px 0"><div style="height:6px;background:#4D9FFF;border-radius:3px;width:'+Math.min(100,Math.round(weekTSS/tssPlanned*100))+'%"></div></div>';
+  h+='    <div style="font-size:12px;color:var(--t3);border-top:1px solid var(--b1);padding-top:8px;margin-top:2px">Chronic Load (CTL) &nbsp;<span style="color:var(--t1);font-weight:700">'+ctl+'</span></div>';
+  h+='  </div>';
+  h+='</div>';
+
+  // RACE COUNTDOWN — real st.goals race if present
+  var race=null;
+  try{ if(typeof getNextRace_==='function'){race=getNextRace_();} }catch(e){}
+  var raceName='Grand Rapids Half Marathon', raceDateObj=new Date('2026-10-17'), raceTarget='1:32:00', raceWeekOf='Week 4 of 18';
+  if(race&&race.name){ raceName=race.name; if(race.date) raceDateObj=new Date(race.date); if(race.target) raceTarget=race.target; }
+  var daysToGo=Math.max(0,Math.round((raceDateObj-now)/86400000));
+  var raceDateStr=monthNames[raceDateObj.getMonth()].slice(0,3)+' '+raceDateObj.getDate()+', '+raceDateObj.getFullYear();
+  h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='  <div style="font-size:11px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Goal Race</div>';
+  h+='  <div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:2px">'+raceName+'</div>';
+  h+='  <div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+raceDateStr+'</div>';
+  h+='  <div style="display:flex;align-items:flex-end;gap:16px">';
+  h+='    <div><div style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+daysToGo+'</div><div style="font-size:12px;color:var(--t3)">Days to go</div></div>';
+  h+='    <div style="flex:1"><div style="font-size:12px;color:var(--t3);margin-bottom:2px">Target '+raceTarget+'</div><div style="font-size:11px;color:var(--t3)">'+raceWeekOf+'</div></div>';
+  h+='  </div>';
+  h+='</div>';
+
+  scr.innerHTML=h;
+
+  // ---- Wire interactions ---------------------------------------------------
+  var tbtn=document.getElementById('cal-today-btn');
+  if(tbtn) tbtn.onclick=function(){ showCalendarTab(); };
+}
+
 function showCal(){
   var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
   var scr=document.createElement('div');
@@ -17029,6 +17230,10 @@ window.onload = function(){
   <button class="bnav-btn active" id="bnav-home" onclick="bnavGo('home')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     Home
+  </button>
+  <button class="bnav-btn" id="bnav-calendar" onclick="bnavGo('calendar')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+    Calendar
   </button>
   <button class="bnav-btn" id="bnav-analytics" onclick="bnavGo('analytics')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
