@@ -3494,7 +3494,7 @@ function ensurePlansMigrated(){
 
   var defaultPlan = {
     name: 'My Training Plan',
-    planStart: st.planStart || '2026-06-09',
+    planStart: st.planStart || '2026-06-08',
     weeks: {}
   };
 
@@ -3512,7 +3512,7 @@ function ensurePlansMigrated(){
 function getActivePlan(){
   ensurePlansMigrated();
   if(!st.plans[st.activePlanId]) st.activePlanId = Object.keys(st.plans)[0] || 'default';
-  if(!st.plans[st.activePlanId]) st.plans[st.activePlanId] = {name:'My Training Plan', planStart:'2026-06-09', weeks:{}};
+  if(!st.plans[st.activePlanId]) st.plans[st.activePlanId] = {name:'My Training Plan', planStart:'2026-06-08', weeks:{}};
   return st.plans[st.activePlanId];
 }
 
@@ -11793,24 +11793,9 @@ function getWeekStartDate(w){
 // Reverse lookup: given a real calendar date, find which plan week/day it
 // falls on and return that day's planned workout, if any. Used by the
 // Calendar screen to show upcoming planned workouts (not just completed
-// ride history) - the plan itself is stored by week-index/day-index, not
-// by real date, so this bridges the two.
-function getPlannedWorkoutForDate(dateStr){
-  var target = new Date(dateStr+'T00:00:00');
-  target.setHours(0,0,0,0);
-  var plan = getActivePlan();
-  var planStart = new Date(plan.planStart);
-  planStart.setHours(0,0,0,0);
-  var diffDays = Math.round((target - planStart) / (24*60*60*1000));
-  if(diffDays < 0) return null;
-  var w = Math.floor(diffDays / 7) + 1;
-  var dayIdx = diffDays % 7;
-  if(w < 1 || w > 17) return null;
-  var wData = ws(w);
-  var workoutName = wData.wo && wData.wo[dayIdx] ? wData.wo[dayIdx] : null;
-  if(!workoutName) return null;
-  return { week: w, dayIdx: dayIdx, name: workoutName };
-}
+// ride history) - see the real implementation further below, which reads
+// from the actual weekly template rather than the (usually empty)
+// plan.weeks[k].wo data.
 
 function getCurrentPlanWeek(){
   var plan = getActivePlan();
@@ -11825,8 +11810,17 @@ function getCurrentPlanWeek(){
 // plan week/day it falls on and return that day's planned workout name,
 // if any. Used by the Calendar screen to show upcoming planned workouts
 // (not just completed ride history) on future days.
+//
+// The weekly template (Strength A/B, rides, etc.) is hardcoded static
+// HTML per week/day rather than stored data - each session name lives in
+// a DOM element with id "ws{week}_{dayIdx}" (see the TRAIN screen markup).
+// Reading plan.weeks[k].wo here would almost always return nothing, since
+// that field is only populated if the user explicitly renamed a session -
+// this reads the real displayed name instead, respecting any swaps/edits
+// the user has made along the way.
 function getPlannedWorkoutForDate(dateStr){
-  var planStart = st.planStart ? new Date(st.planStart) : new Date('2026-06-09');
+  var plan = getActivePlan();
+  var planStart = new Date((plan.planStart||'2026-06-08')+'T00:00:00');
   planStart.setHours(0,0,0,0);
   var target = new Date(dateStr+'T00:00:00');
   target.setHours(0,0,0,0);
@@ -11834,8 +11828,9 @@ function getPlannedWorkoutForDate(dateStr){
   if(diffDays < 0) return null;
   var w = Math.floor(diffDays/7) + 1;
   var dayIdx = diffDays % 7;
-  var wData = ws(w);
-  var name = wData.wo && wData.wo[dayIdx] ? wData.wo[dayIdx] : null;
+  if(w < 1 || w > 17) return null;
+  var el = document.getElementById('ws'+w+'_'+dayIdx);
+  var name = el ? el.textContent.trim() : null;
   if(!name) return null;
   return {week:w, dayIdx:dayIdx, name:name};
 }
