@@ -9823,16 +9823,26 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
     return;
   }
 
-  // Recolor toggle row
+  // Recolor stat cards - each card shows the metric's value and doubles
+  // as the recolor trigger (click to color the route by that metric),
+  // collapsing the old display-value + separate-toggle-button pattern into
+  // one control. Active card gets an orange ring + tinted background.
   var toggleRow=document.createElement('div');
-  toggleRow.style.cssText='display:flex;gap:8px;margin-bottom:10px';
-  var modes=[{id:'power',label:'Power'},{id:'hr',label:'Heart Rate'},{id:'wind',label:'Wind'}];
+  toggleRow.style.cssText='display:flex;gap:8px;margin-bottom:12px';
+  var windVal = (r.avgWindDir!=null||window._rideWindDirCache!=null) ? 'Direction' : 'Tap to color';
+  var modes=[
+    {id:'power',label:'Power',val:(r.avgPwr?r.avgPwr+'W':'—'),sub:'Avg'},
+    {id:'hr',label:'Heart Rate',val:(r.avgHR?r.avgHR+'':'—'),sub:(r.avgHR?'Avg bpm':'')},
+    {id:'wind',label:'Wind',val:'',sub:windVal}
+  ];
   var routeColorMode='power';
   var modeBtns={};
   modes.forEach(function(m){
     var btn=document.createElement('button');
-    btn.textContent=m.label;
-    btn.style.cssText='flex:1;padding:8px;border-radius:10px;border:1px solid var(--b1);font-size:12px;font-weight:700;cursor:pointer';
+    btn.style.cssText='flex:1;min-width:0;padding:10px 8px;border-radius:12px;border:1px solid var(--b1);background:var(--s2);cursor:pointer;text-align:left;transition:box-shadow .12s,background .12s';
+    btn.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--t3);margin-bottom:3px">'+m.label+'</div>'
+      +'<div style="font-size:'+(m.val?'17px':'13px')+';font-weight:800;color:var(--t1);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(m.val||m.sub)+'</div>'
+      +(m.val&&m.sub?'<div style="font-size:9px;color:var(--t3);margin-top:1px">'+m.sub+'</div>':'');
     btn.onclick=function(){ routeColorMode=m.id; updateModeStyles(); redrawRouteMap(); };
     modeBtns[m.id]=btn;
     toggleRow.appendChild(btn);
@@ -9842,8 +9852,8 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
   function updateModeStyles(){
     modes.forEach(function(m){
       var active=m.id===routeColorMode;
-      modeBtns[m.id].style.background=active?'#FC4C02':'var(--s2)';
-      modeBtns[m.id].style.color=active?'#fff':'var(--t2)';
+      modeBtns[m.id].style.boxShadow=active?'0 0 0 1.5px #FC4C02':'none';
+      modeBtns[m.id].style.background=active?'rgba(252,76,2,.08)':'var(--s2)';
     });
   }
   updateModeStyles();
