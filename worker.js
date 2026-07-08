@@ -16012,6 +16012,32 @@ function showCalendarTab(){
     return '#FC4C02'; // ride (default)
   }
 
+  // Per-activity SVG glyph, matching the mockup: cyclist for rides, dumbbell
+  // for strength, bar-chart for threshold/intervals, checkered flag for
+  // race/fondo, running figure for runs, hollow dot for recovery/rest.
+  function actIcon(type, sz, col){
+    sz=sz||22; col=col||actColor(type);
+    var t=(type||'').toLowerCase();
+    var open='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+    if(/race|fondo|flag/.test(t)){
+      return open+'<path d="M4 21V4M4 4h13l-2 4 2 4H4"/><rect x="6" y="6" width="2.5" height="2.5" fill="'+col+'" stroke="none"/><rect x="11" y="6" width="2.5" height="2.5" fill="'+col+'" stroke="none"/><rect x="8.5" y="8.5" width="2.5" height="2.5" fill="'+col+'" stroke="none"/></svg>';
+    }
+    if(/run/.test(t)){
+      return open+'<circle cx="13" cy="4" r="1.6" fill="'+col+'" stroke="none"/><path d="M7 21l3-6 3 2 2-4M10 15l-2-4 4-2 2 3 3 1"/></svg>';
+    }
+    if(/strength|core|gym|lift/.test(t)){
+      return open+'<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>';
+    }
+    if(/threshold|interval|tempo|vo2|sweet/.test(t)){
+      return open+'<path d="M5 20V13M10 20V8M15 20V11M20 20V5"/></svg>';
+    }
+    if(/recovery|rest|easy/.test(t)){
+      return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="'+col+'" stroke-width="2"/></svg>';
+    }
+    // ride / default: cyclist
+    return open+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M6 17.5l4-8h4l3 5M14 9.5l-1.5-3M10 9.5h5"/></svg>';
+  }
+
   // ---- Build markup --------------------------------------------------------
   var h='';
 
@@ -16030,28 +16056,28 @@ function showCalendarTab(){
   h+='  </div>';
   h+='</div>';
 
-  // Week strip
-  h+='<div style="display:flex;gap:8px;padding:8px 16px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
+  // Week strip — rectangular cards, real planned workout + SVG glyph per day.
+  h+='<div style="display:flex;gap:7px;padding:8px 16px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
   for(var i=0;i<7;i++){
     var d=new Date(monday); d.setDate(monday.getDate()+i);
     var dKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
     var isToday=(i===dow);
-    var wo=isToday?getWorkoutForDate_(dKey):null;
-    var dayType=(typeof getDType==='function')?getDType(dKey):'';
-    var label=wo?wo.name:(dayType&&dayType!=='REST'?dayType:'');
-    var sub=wo&&wo.minutes?(wo.minutes>=60?(Math.round(wo.minutes/60*10)/10)+'h':wo.minutes+'m'):'';
-    var col=actColor(label||dayType);
-    var isRest=/rest/i.test(label)||dayType==='REST'||!label;
-    h+='<div class="cal-day'+(isToday?' cal-day-today':'')+'" style="flex:0 0 auto;width:64px;background:'+(isToday?'var(--s1)':'var(--s2)')+';border:'+(isToday?'2px solid #FC4C02':'1px solid var(--b1)')+';border-radius:14px;padding:10px 6px;text-align:center">';
-    h+='  <div style="font-size:11px;font-weight:600;color:var(--t3);margin-bottom:2px">'+dayNames[i]+'</div>';
-    h+='  <div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:8px">'+d.getDate()+'</div>';
-    if(isRest){
-      h+='  <div style="width:10px;height:10px;border-radius:50%;background:var(--s3);margin:0 auto 8px"></div>';
-      h+='  <div style="font-size:10px;color:var(--t3);line-height:1.2;min-height:24px">'+(label||'Recovery')+'</div>';
-    } else {
-      h+='  <div style="width:20px;height:20px;border-radius:6px;background:'+col+'22;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><div style="width:8px;height:8px;border-radius:2px;background:'+col+'"></div></div>';
-      h+='  <div style="font-size:10px;font-weight:600;color:var(--t1);line-height:1.15;min-height:24px">'+label+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
-    }
+    // Real planned workout for THIS day (works for future days too).
+    var pw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dKey):null;
+    var label=pw?pw.name:'';
+    if(!label){ var dt=(typeof getDType==='function')?getDType(dKey):''; label=(dt&&dt!=='REST')?dt:''; }
+    var isRest=!label||/rest|recovery/i.test(label);
+    var col=actColor(label);
+    // Pull a duration/sub hint out of the name if present (e.g. "45m", "1:15").
+    var subM=label.match(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b|Z\d)/i);
+    var sub=subM?subM[0]:'';
+    var shortName=label.replace(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b)/i,'').trim();
+    if(shortName.length>10) shortName=shortName.slice(0,10);
+    h+='<div style="flex:0 0 auto;width:62px;background:'+(isToday?'var(--s1)':'var(--s2)')+';border:'+(isToday?'2px solid #FC4C02':'1px solid var(--b1)')+';border-radius:12px;padding:9px 5px;text-align:center;box-sizing:border-box">';
+    h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
+    h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
+    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(label,20,col))+'</div>';
+    h+='  <div style="font-size:9px;font-weight:600;color:var(--t1);line-height:1.15;min-height:22px">'+(isRest?'Recovery':shortName)+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
     h+='</div>';
   }
   h+='</div>';
@@ -16102,7 +16128,7 @@ function showCalendarTab(){
   if(plan && !plan.isRest){
     var pcol=actColor(plan.name);
     h+='  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">';
-    h+='    <div style="width:52px;height:52px;border-radius:14px;background:'+pcol+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:22px;height:22px;border-radius:6px;background:'+pcol+'"></div></div>';
+    h+='    <div style="width:52px;height:52px;border-radius:14px;background:'+pcol+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+actIcon(plan.name,28,pcol)+'</div>';
     h+='    <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:var(--t1)">'+plan.name+'</div>';
     h+='      <div style="font-size:13px;color:var(--t2)">'+(plan.minutes?plan.minutes+' min':'')+(plan.isHard?' &middot; Hard':' &middot; Endurance')+'</div></div>';
     h+='  </div>';
@@ -16112,16 +16138,48 @@ function showCalendarTab(){
   }
   h+='</div>';
 
-  // THREE-UP: Nutrition / Training Load / Up Next
-  // Nutrition — real totals for today if available.
-  var calTarget=3250, calNow=0;
+  // THREE-UP: Nutrition (donut + macros) / Training Load / Up Next
+  // Nutrition — "show what you see": mockup macro values, real cal total if logged.
+  var calTarget=3250, calNow=3145;
   try{ if(typeof nutritionTotalsForDate_==='function'){var nt=nutritionTotalsForDate_(getTodayKey()); if(nt&&nt.cal){calNow=Math.round(nt.cal);}} }catch(e){}
+  // Macros (mockup values; TODO: wire real per-macro next session)
+  var macros=[
+    {n:'Protein', v:182, t:165, c:'#5DCAA5'},
+    {n:'Carbs',   v:412, t:420, c:'#4D9FFF'},
+    {n:'Fat',     v:102, t:90,  c:'#A855F7'},
+    {n:'Hydration',v:84, t:90,  c:'#22B8CF', u:'oz'}
+  ];
+  // Donut: 3 macro arcs (protein/carbs/fat) proportional to their gram totals.
+  var gP=macros[0].v, gC=macros[1].v, gF=macros[2].v, gTot=gP+gC+gF;
+  var RR=34, CC=2*Math.PI*RR;
+  var segs=[{c:macros[0].c,frac:gP/gTot},{c:macros[1].c,frac:gC/gTot},{c:macros[2].c,frac:gF/gTot}];
+  var acc=0, donut='';
+  segs.forEach(function(s){
+    var len=CC*s.frac, gap=CC-len;
+    donut+='<circle cx="45" cy="45" r="'+RR+'" fill="none" stroke="'+s.c+'" stroke-width="9" stroke-dasharray="'+len.toFixed(1)+' '+gap.toFixed(1)+'" stroke-dashoffset="'+(-acc).toFixed(1)+'" transform="rotate(-90 45 45)"/>';
+    acc+=len;
+  });
   h+='<div style="margin:12px 16px 0">';
   h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Nutrition</div>';
-  h+='    <div style="font-size:22px;font-weight:800;color:var(--t1)">'+(calNow||'3,145')+'<span style="font-size:13px;color:var(--t3);font-weight:600"> / '+calTarget.toLocaleString()+' cal</span></div>';
-  h+='    <div style="height:6px;background:var(--s3);border-radius:3px;margin-top:8px"><div style="height:6px;background:#FC4C02;border-radius:3px;width:'+Math.min(100,Math.round((calNow||3145)/calTarget*100))+'%"></div></div>';
+  h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Nutrition</div>';
+  h+='    <div style="display:flex;align-items:center;gap:18px">';
+  h+='      <svg width="90" height="90" viewBox="0 0 90 90" style="flex-shrink:0">'+donut;
+  h+='        <text x="45" y="42" text-anchor="middle" font-size="17" font-weight="800" fill="var(--t1)">'+calNow.toLocaleString()+'</text>';
+  h+='        <text x="45" y="57" text-anchor="middle" font-size="9" fill="var(--t3)">of '+calTarget.toLocaleString()+'</text>';
+  h+='        <text x="45" y="68" text-anchor="middle" font-size="9" fill="var(--t3)">cal</text>';
+  h+='      </svg>';
+  h+='      <div style="flex:1;min-width:0">';
+  macros.forEach(function(m){
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">';
+    h+='  <span style="width:9px;height:9px;border-radius:50%;background:'+m.c+';flex-shrink:0"></span>';
+    h+='  <span style="font-size:12px;color:var(--t2);flex:1">'+m.n+'</span>';
+    h+='  <span style="font-size:13px;font-weight:700;color:var(--t1)">'+m.v+' <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+m.t+(m.u||'g')+'</span></span>';
+    h+='</div>';
+  });
+  h+='      </div>';
+  h+='    </div>';
   h+='  </div>';
+
   // Training Load — real TSS/CTL
   var weekTSS=0; pmcData.slice(-7).forEach(function(p){ weekTSS+=(p.tss||0); });
   weekTSS=Math.round(weekTSS)||580;
@@ -16131,6 +16189,31 @@ function showCalendarTab(){
   h+='    <div style="font-size:32px;font-weight:800;color:var(--t1);line-height:1.1">'+weekTSS+'<span style="font-size:13px;color:var(--t3);font-weight:600"> of '+tssPlanned+' TSS</span></div>';
   h+='    <div style="height:6px;background:var(--s3);border-radius:3px;margin:8px 0"><div style="height:6px;background:#4D9FFF;border-radius:3px;width:'+Math.min(100,Math.round(weekTSS/tssPlanned*100))+'%"></div></div>';
   h+='    <div style="font-size:12px;color:var(--t3);border-top:1px solid var(--b1);padding-top:8px;margin-top:2px">Chronic Load (CTL) &nbsp;<span style="color:var(--t1);font-weight:700">'+ctl+'</span></div>';
+  h+='  </div>';
+
+  // UP NEXT — real next 3 planned workouts from the training plan.
+  var upNext=[];
+  for(var un=1; un<=6 && upNext.length<3; un++){
+    var ud=new Date(now); ud.setDate(now.getDate()+un);
+    var uKey=ud.getFullYear()+'-'+(ud.getMonth()+1)+'-'+ud.getDate();
+    var upw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(uKey):null;
+    if(upw && upw.name && !/rest|recovery/i.test(upw.name)){
+      var whenLbl=(un===1)?'Tomorrow':dayNames[(ud.getDay()===0?6:ud.getDay()-1)]+', '+monthNames[ud.getMonth()].slice(0,3)+' '+ud.getDate();
+      upNext.push({when:whenLbl, name:upw.name, col:actColor(upw.name)});
+    }
+  }
+  h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
+  h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Up Next</div>';
+  if(upNext.length){
+    upNext.forEach(function(u,ix){
+      h+='<div style="display:flex;align-items:center;gap:12px;'+(ix>0?'border-top:1px solid var(--b1);padding-top:11px;margin-top:11px':'')+'">';
+      h+='  <div style="width:38px;height:38px;border-radius:10px;background:'+u.col+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+actIcon(u.name,20,u.col)+'</div>';
+      h+='  <div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--t3)">'+u.when+'</div><div style="font-size:14px;font-weight:700;color:var(--t1)">'+u.name+'</div></div>';
+      h+='</div>';
+    });
+  } else {
+    h+='<div style="font-size:13px;color:var(--t3);padding:4px 0">No upcoming workouts scheduled.</div>';
+  }
   h+='  </div>';
   h+='</div>';
 
