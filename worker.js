@@ -16463,6 +16463,16 @@ function openDayEditor(dateKey){
   var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var titleDate=days[dObj.getDay()]+', '+months[dObj.getMonth()]+' '+dObj.getDate();
 
+  // Read the planned duration text (e.g. "45-55 min") from the plan card, if any.
+  var plannedDurText='';
+  if(plan){
+    var card=document.getElementById('wc'+plan.week+'_'+plan.dayIdx);
+    var plEl=card?card.querySelector('.wof-pl'):null;
+    if(plEl) plannedDurText=plEl.textContent.trim();
+  }
+
+  var o=act?act.obj:null;
+
   var modal=document.createElement('div');
   modal.id='day-editor-modal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:flex;align-items:flex-end;justify-content:center';
@@ -16471,82 +16481,84 @@ function openDayEditor(dateKey){
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--s1);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
 
-  function field(labelText, value, ph, type){
-    var w=document.createElement('div'); w.style.cssText='margin-bottom:12px';
-    var l=document.createElement('div'); l.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; l.textContent=labelText;
-    var inp=document.createElement('input'); inp.type=type||'text'; if(ph) inp.placeholder=ph; if(value!=null) inp.value=value;
-    inp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
-    w.appendChild(l); w.appendChild(inp); sheet.appendChild(w);
-    return inp;
-  }
-
   // Header
-  var hdr=document.createElement('div'); hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
+  var hdr=document.createElement('div'); hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:2px';
   var ttl=document.createElement('div'); ttl.style.cssText='font-size:18px;font-weight:800;color:var(--t1)'; ttl.textContent=titleDate;
   var closeBtn=document.createElement('button'); closeBtn.innerHTML='&times;'; closeBtn.style.cssText='background:none;border:none;color:var(--t3);font-size:28px;line-height:1;cursor:pointer;padding:0 4px';
   closeBtn.onclick=function(){ modal.remove(); };
   hdr.appendChild(ttl); hdr.appendChild(closeBtn); sheet.appendChild(hdr);
 
-  var sub=document.createElement('div'); sub.style.cssText='font-size:12px;color:var(--t3);margin-bottom:16px';
-  sub.textContent = act ? ('Completed '+act.kind+' — edit recorded data') : (plan ? 'Planned workout — edit the plan' : 'No workout scheduled');
-  sheet.appendChild(sub);
+  // Workout name (spans both, editable — saves to plan session name)
+  var nameWrap=document.createElement('div'); nameWrap.style.cssText='margin:8px 0 16px';
+  var nameLbl=document.createElement('div'); nameLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; nameLbl.textContent='Workout';
+  var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='e.g. Threshold Intervals';
+  nameInp.value=(o&&o.name)?o.name:(plan?plan.name:'');
+  nameInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameInp); sheet.appendChild(nameWrap);
 
-  if(act){
-    // EDIT COMPLETED ACTIVITY (fix bad recorded data, e.g. Garmin left running)
-    var o=act.obj;
-    var nameI=field('Name', o.name||'', 'Activity name');
-    var distI=field('Distance (mi)', (o.distance!=null?o.distance:''), '0', 'number');
-    var durI=field('Duration (min)', (o.duration!=null?o.duration:''), '0', 'number');
-    var tssI=field('TSS', (o.tss!=null?o.tss:''), '0', 'number');
-    var npI=field('Normalized Power (W)', (o.np!=null?o.np:''), '0', 'number');
-    var notesI=field('Notes', (o.notes||''), 'Optional');
+  // Column headers
+  var colH=document.createElement('div'); colH.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px';
+  colH.innerHTML='<div></div><div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center">Planned</div><div style="font-size:11px;font-weight:700;color:#2FA8E0;text-transform:uppercase;letter-spacing:.05em;text-align:center">Completed</div>';
+  sheet.appendChild(colH);
 
-    var saveBtn=document.createElement('button');
-    saveBtn.textContent='Save changes';
-    saveBtn.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
-    saveBtn.onclick=function(){
-      o.name=nameI.value.trim()||o.name;
-      if(distI.value!=='') o.distance=parseFloat(distI.value);
-      if(durI.value!=='') o.duration=parseFloat(durI.value);
-      if(tssI.value!=='') o.tss=parseFloat(tssI.value);
-      if(npI.value!=='') o.np=parseFloat(npI.value);
-      o.notes=notesI.value;
-      try{ if(typeof sv==='function') sv(); }catch(e){}
-      try{ if(typeof toast==='function') toast('Activity updated'); }catch(e){}
-      modal.remove();
-      try{ showCalendarTab(); }catch(e){}
-    };
-    sheet.appendChild(saveBtn);
-  } else {
-    // EDIT PLANNED WORKOUT (rename the session for this date)
-    var planName = plan ? plan.name : '';
-    var pNameI=field('Planned workout', planName, 'e.g. Threshold Intervals');
-    var noteEl=document.createElement('div');
-    noteEl.style.cssText='font-size:11px;color:var(--t3);margin:-4px 0 14px';
-    noteEl.textContent = plan ? 'Renames this session in your plan.' : 'Add a workout name to schedule this day.';
-    sheet.appendChild(noteEl);
-
-    var saveBtn2=document.createElement('button');
-    saveBtn2.textContent = plan ? 'Save workout' : 'Add workout';
-    saveBtn2.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
-    saveBtn2.onclick=function(){
-      var newName=pNameI.value.trim();
-      if(plan){
-        // Update the plan DOM element the plan reader reads from.
-        var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
-        if(el){ el.textContent=newName; }
-        try{ if(typeof sv==='function') sv(); }catch(e){}
-        try{ if(typeof toast==='function') toast('Workout updated'); }catch(e){}
-      } else {
-        try{ if(typeof toast==='function') toast('This day is outside your current plan window'); }catch(e){}
-      }
-      modal.remove();
-      try{ showCalendarTab(); }catch(e){}
-    };
-    sheet.appendChild(saveBtn2);
+  // Build a Planned|Completed row: returns {planned, completed} inputs.
+  function row(label, plannedVal, completedVal, ph){
+    var r=document.createElement('div'); r.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:9px';
+    var l=document.createElement('div'); l.style.cssText='font-size:12px;color:var(--t2);font-weight:600'; l.textContent=label;
+    function inp(v){
+      var i=document.createElement('input'); i.type='text'; i.placeholder=ph||'-'; if(v!=null&&v!=='') i.value=v;
+      i.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box;text-align:center';
+      return i;
+    }
+    var pI=inp(plannedVal), cI=inp(completedVal);
+    r.appendChild(l); r.appendChild(pI); r.appendChild(cI);
+    sheet.appendChild(r);
+    return {planned:pI, completed:cI};
   }
 
-  // Mark complete toggle inside the editor too (convenient)
+  var distR=row('Distance', '', (o&&o.distance!=null?o.distance:''), 'mi');
+  var durR =row('Duration', plannedDurText, (o&&o.duration!=null?o.duration:''), 'min');
+  var paceR=row('Pace/Spd', '', (o&&o.avgSpeed!=null?o.avgSpeed:''), 'mph');
+  var tssR =row('TSS', '', (o&&o.tss!=null?o.tss:''), '-');
+  var pwrR =row('Power', '', (o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:'')), 'W');
+  var elevR=row('Elevation', '', (o&&o.elev!=null?o.elev:''), 'ft');
+
+  var hint=document.createElement('div'); hint.style.cssText='font-size:11px;color:var(--t3);margin:6px 0 14px';
+  hint.textContent=o?'Editing your recorded activity. Fix any bad values (e.g. extra miles) and save.':(plan?'No recorded activity yet — Completed side saves once you log this day.':'This day is outside your current plan window.');
+  sheet.appendChild(hint);
+
+  var save=document.createElement('button');
+  save.textContent='Save';
+  save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
+  save.onclick=function(){
+    function num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
+    // Completed side -> recorded activity (create-on-save is out of scope; edit if exists)
+    if(o){
+      if(nameInp.value.trim()) o.name=nameInp.value.trim();
+      var dv=num(distR.completed.value); if(dv!=null) o.distance=dv;
+      var uv=num(durR.completed.value);  if(uv!=null) o.duration=uv;
+      var sv2=num(paceR.completed.value);if(sv2!=null) o.avgSpeed=sv2;
+      var tv=num(tssR.completed.value);  if(tv!=null) o.tss=tv;
+      var pv=num(pwrR.completed.value);  if(pv!=null) o.np=pv;
+      var ev=num(elevR.completed.value); if(ev!=null) o.elev=ev;
+      if(o.distance&&o.duration&&!paceR.completed.value){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
+    }
+    // Planned side -> plan session name + duration text back into the plan DOM
+    if(plan){
+      var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
+      if(el && nameInp.value.trim()) el.textContent=nameInp.value.trim();
+      var card2=document.getElementById('wc'+plan.week+'_'+plan.dayIdx);
+      var plEl2=card2?card2.querySelector('.wof-pl'):null;
+      if(plEl2 && durR.planned.value.trim()) plEl2.textContent=durR.planned.value.trim();
+    }
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
+    modal.remove();
+    try{ showCalendarTab(); }catch(e){}
+  };
+  sheet.appendChild(save);
+
+  // Mark complete toggle
   var mc=document.createElement('button');
   var done=isDayComplete(dateKey);
   mc.textContent = done ? '\u2713 Completed (tap to undo)' : 'Mark day complete';
@@ -16558,7 +16570,7 @@ function openDayEditor(dateKey){
   (document.getElementById('app-shell')||document.body).appendChild(modal);
 }
 
-// Toggle between week and month view (stored so re-render keeps the choice).
+
 function calSetView(v){
   try{ localStorage.setItem('aiq_cal_view', v); }catch(e){}
   try{ showCalendarTab(); }catch(e){}
