@@ -7825,27 +7825,21 @@ function renderPerf(container){
   html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
     +'<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Best efforts</div>'
-    +'<div style="font-size:11px;color:var(--t3)">All time · FTP '+FTP+'W</div></div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:10px;color:var(--t3)">'
-    +'<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#a855f7;margin-right:3px"></span>Anaerobic</span>'
-    +'<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#ef4444;margin-right:3px"></span>VO2max</span>'
-    +'<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#f59e0b;margin-right:3px"></span>Thresh</span>'
-    +'<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#22c55e;margin-right:3px"></span>Tempo</span>'
-    +'<span><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:#3b82f6;margin-right:3px"></span>End</span>'
-    +'</div></div>';
-  html+='<div style="position:relative;height:160px;margin-bottom:10px"><canvas id="perf-peak-chart" role="img" aria-label="Peak power vertical bar chart">'+peakLabelsArr.join(', ')+'</canvas></div>';
-  // Key effort cards
-  if(keyPeaksList.length){
-    html+='<div style="display:grid;grid-template-columns:repeat('+Math.min(keyPeaksList.length,5)+',1fr);gap:6px">';
-    keyPeaksList.forEach(function(k){
-      html+='<div style="background:var(--s2);border-radius:10px;padding:9px 6px;text-align:center;border-top:2px solid '+k.c+'">'
-        +'<div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:3px">'+k.label+'</div>'
-        +'<div style="font-size:16px;font-weight:800;color:'+k.c+';line-height:1">'+k.watts+'W</div>'
-        +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+k.pct+'% FTP</div>'
-        +'</div>';
-    });
-    html+='</div>';
-  }
+    +'<div style="font-size:11px;color:var(--t3)">All time &middot; FTP '+FTP+'W</div></div></div>';
+  // Flat row list (duration, watts, %FTP) replacing the vertical bar
+  // chart, matching the reference's Best Efforts list style rather than
+  // a chart - same underlying data, no canvas.
+  peakDursList.forEach(function(d,i){
+    var watts=peakWattsArr[i];
+    if(!watts) return;
+    var pct=Math.round(watts/FTP*100);
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:'+(i>0?'10px 0':'0 0 10px')+';'+(i>0?'border-top:1px solid var(--b1);':'')+'">'
+      +'<span style="font-size:13px;color:var(--t2)">'+d.label+' Power</span>'
+      +'<span style="display:flex;align-items:baseline;gap:8px">'
+      +'<span style="font-size:14px;font-weight:700;color:'+d.c+'">'+watts+'W</span>'
+      +'<span style="font-size:11px;color:var(--t3)">'+pct+'% FTP</span>'
+      +'</span></div>';
+  });
   html+='</div>';
 
   // Store peak chart data
@@ -8021,12 +8015,21 @@ function renderPerf(container){
   });
   html+='</div>';
 
-  // MONTHLY MILES CHART
+  // MONTHLY MILEAGE - flat list replacing the vertical bar chart
   html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Monthly Mileage</div>';
   html+='<div style="font-size:11px;color:var(--t3)">Last 12 months</div></div>';
-  html+='<div id="perf-miles-chart-wrap" style="position:relative;height:120px"><canvas id="perf-miles-chart" role="img" aria-label="Monthly mileage bar chart">Monthly miles: '+mMiles.join(', ')+'</canvas></div>';
+  var maxMiles=Math.max.apply(null,mMiles.concat([1]));
+  mLabels.forEach(function(lbl,i){
+    var mi=mMiles[i];
+    var pct=maxMiles>0?Math.round(mi/maxMiles*100):0;
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:'+(i>0?'6px 0':'0 0 6px')+'">'
+      +'<span style="font-size:11px;color:var(--t3);width:28px;flex-shrink:0">'+lbl+'</span>'
+      +'<div style="flex:1;height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;width:'+pct+'%;background:var(--blue);border-radius:2px"></div></div>'
+      +'<span style="font-size:12px;font-weight:700;color:var(--t1);width:44px;text-align:right;flex-shrink:0">'+mi+'mi</span>'
+      +'</div>';
+  });
   html+='</div>';
 
   // POWER + TSS ROW
@@ -8043,17 +8046,17 @@ function renderPerf(container){
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">W/kg</span><span style="font-weight:700;color:var(--blue)">'+wkg.toFixed(2)+'</span></div>';
   html+='</div></div>';
 
-  // TSS trend
+  // Weekly Load (TSS) - flat stat rows replacing the bar chart, since the
+  // key numbers (highest week/this week/8-week avg) already summarize
+  // the trend without needing a duplicate visual.
   html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Weekly Load</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">TSS per week</div>';
-  html+='<div id="perf-tss-wrap" style="position:relative;height:80px"><canvas id="perf-tss-chart" role="img" aria-label="Weekly TSS bar chart">Weekly TSS: '+wTSSData.join(', ')+'</canvas></div>';
-  html+='<div style="border-top:1px solid var(--b1);margin-top:10px;padding-top:8px">';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:#ef4444">'+(highestTSS||'&mdash;')+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">This week</span><span style="font-weight:700;color:var(--blue)">'+(wTSSData[wTSSData.length-1]||0)+'</span></div>';
   var avgTSS=wTSSData.length?Math.round(wTSSData.reduce(function(s,v){return s+v;},0)/wTSSData.filter(function(v){return v>0;}).length):0;
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">8-week avg</span><span style="font-weight:700">'+avgTSS+'</span></div>';
-  html+='</div></div>';
+  html+='</div>';
   html+='</div>';
 
   // CTL PROJECTION
@@ -8178,42 +8181,15 @@ function renderPerf(container){
     var isDarkMode=document.body.classList.contains('dark');
     var gridC=isDarkMode?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)';
     var textC=isDarkMode?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.5)';
-    // Peak power vertical bar chart
-    var pkc=document.getElementById('perf-peak-chart');
-    if(pkc){
-      var pd=window._peakChartData||{labels:[],watts:[],colors:[]};
-      if(pd.watts.some(function(w){return w>0;})){
-        new Chart(pkc,{type:'bar',data:{labels:pd.labels,datasets:[{
-          data:pd.watts,
-          backgroundColor:pd.colors.map(function(c){return c+'99';}),
-          borderColor:pd.colors,
-          borderWidth:2,borderRadius:4,borderSkipped:false
-        }]},options:{responsive:true,maintainAspectRatio:false,animation:false,
-          plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){return ' '+ctx.raw+'W ('+(ctx.raw?Math.round(ctx.raw/parseInt(st.ftp||186)*100)+'% FTP':'')+')';}}}},
-          scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return v+'W';}},min:0}}}});
-      } else {
-        pkc.parentElement.innerHTML='<div style="text-align:center;padding:20px;color:'+textC+';font-size:12px">Import rides with power data to see peak power chart</div>';
-      }
-    }
     var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,
       plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
       scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},
               y:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}}}};
 
-    var mc=document.getElementById('perf-miles-chart');
-    if(mc) new Chart(mc,{type:'bar',data:{labels:cd.mLabels,
-      datasets:[{data:cd.mMiles,backgroundColor:cd.mMiles.map(function(v,i){return i===cd.mMiles.length-1?'#185FA5':'rgba(24,95,165,0.4)';}),borderRadius:4}]},
-      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9},maxRotation:0}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}}}})});
-
     var nc=document.getElementById('perf-np-chart');
     if(nc) new Chart(nc,{type:'line',data:{labels:cd.npWLabels,
       datasets:[{data:cd.npWeekly,borderColor:'#BA7517',backgroundColor:'rgba(186,117,23,0.08)',borderWidth:2,fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#BA7517',spanGaps:true}]},
       options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return v+'W';}}}}})});
-
-    var tc=document.getElementById('perf-tss-chart');
-    if(tc) new Chart(tc,{type:'bar',data:{labels:cd.wTSSLabels,
-      datasets:[{data:cd.wTSSData,backgroundColor:cd.wTSSData.map(function(v){return v>=400?'rgba(239,68,68,0.7)':'rgba(24,95,165,0.6)';}),borderRadius:4}]},
-      options:Object.assign({},baseOpts)});
 
     var cc=document.getElementById('perf-ctl-chart');
     if(cc) new Chart(cc,{type:'line',data:{labels:cd.ctlLabels2,
