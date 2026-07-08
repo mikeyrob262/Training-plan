@@ -9985,10 +9985,27 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     expandBtn.title='Open full map';
     expandBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
     expandBtn.onclick=function(){
-      var bodyEl=document.getElementById('ride-detail-body');
-      if(!bodyEl || !bodyEl.parentNode) return;
-      var btns=bodyEl.parentNode.querySelectorAll('button');
-      for(var i=0;i<btns.length;i++){ if(btns[i].textContent.trim()==='Map'){ btns[i].click(); return; } }
+      var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
+      if(!lats || lats.length<2) return;
+      var ov=document.createElement('div');
+      ov.id='ride-map-fullscreen';
+      ov.style.cssText='position:fixed;inset:0;z-index:9000;background:var(--bg);display:flex;flex-direction:column';
+      var fsMapId='ride-fs-map-'+Date.now();
+      ov.innerHTML='<div style="flex:1;position:relative"><div id="'+fsMapId+'" style="position:absolute;inset:0"></div>'
+        +'<button id="ride-fs-close" style="position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;z-index:50;width:40px;height:40px;border-radius:50%;background:rgba(20,20,22,.9);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center">&times;</button></div>';
+      document.body.appendChild(ov);
+      document.getElementById('ride-fs-close').onclick=function(){ ov.remove(); };
+      setTimeout(function(){
+        if(typeof L==='undefined') return;
+        var m=L.map(fsMapId,{zoomControl:true,scrollWheelZoom:true});
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(m);
+        var pts=lats.map(function(la,i){return[la,lons[i]];});
+        L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(m);
+        L.circleMarker(pts[0],{radius:7,fillColor:'#1D9E75',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
+        L.circleMarker(pts[pts.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
+        m.fitBounds(L.latLngBounds(pts),{padding:[40,40]});
+        setTimeout(function(){ try{m.invalidateSize();}catch(e){} },250);
+      },80);
     };
     mapTools.appendChild(layersBtn);
     mapTools.appendChild(expandBtn);
