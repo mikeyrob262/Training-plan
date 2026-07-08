@@ -16104,6 +16104,16 @@ function showCalendarTab(){
   h+='  </div>';
   h+='</div>';
 
+  var calView=(typeof calGetView==='function')?calGetView():'week';
+  // Segmented control (Apple Health idiom), left-aligned under the header.
+  h+='<div style="padding:4px 16px 0">';
+  h+='  <div style="display:inline-flex;background:var(--s2);border-radius:9px;padding:2px">';
+  h+='    <button onclick="calSetView(\\'week\\')" style="border:none;border-radius:7px;padding:5px 16px;font-size:13px;font-weight:700;cursor:pointer;background:'+(calView==='week'?'var(--s1)':'transparent')+';color:'+(calView==='week'?'var(--t1)':'var(--t3)')+'">Week</button>';
+  h+='    <button onclick="calSetView(\\'month\\')" style="border:none;border-radius:7px;padding:5px 16px;font-size:13px;font-weight:700;cursor:pointer;background:'+(calView==='month'?'var(--s1)':'transparent')+';color:'+(calView==='month'?'var(--t1)':'var(--t3)')+'">Month</button>';
+  h+='  </div>';
+  h+='</div>';
+
+  if(calView==='week'){
   // Week strip — rectangular cards, real planned workout + SVG glyph per day.
   h+='<div style="display:flex;gap:7px;padding:8px 16px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch">';
   for(var i=0;i<7;i++){
@@ -16121,7 +16131,9 @@ function showCalendarTab(){
     var sub=subM?subM[0]:'';
     var shortName=label.replace(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b)/i,'').trim();
     if(shortName.length>10) shortName=shortName.slice(0,10);
-    h+='<div style="flex:0 0 auto;width:62px;background:'+(isToday?'rgba(252,76,2,.08)':'transparent')+';border:'+(isToday?'1.5px solid #FC4C02':'1px solid transparent')+';border-radius:10px;padding:9px 5px;text-align:center;box-sizing:border-box">';
+    var dayDone=(typeof isDayComplete==='function')&&isDayComplete(dKey);
+    h+='<div onclick="openDayEditor(\\''+dKey+'\\')" style="position:relative;flex:0 0 auto;width:62px;background:'+(isToday?'rgba(252,76,2,.08)':'transparent')+';border:'+(isToday?'1.5px solid #FC4C02':'1px solid transparent')+';border-radius:10px;padding:9px 5px;text-align:center;box-sizing:border-box;cursor:pointer">';
+    if(dayDone){ h+='<div style="position:absolute;top:4px;right:5px;width:13px;height:13px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:900">&#10003;</div>'; }
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
     h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(label,20,col))+'</div>';
@@ -16129,8 +16141,38 @@ function showCalendarTab(){
     h+='</div>';
   }
   h+='</div>';
-
-  // TODAY card — readiness ring + vitals + weather
+  } else {
+    // MONTH VIEW — color-coded dot grid, tap any day to open the editor.
+    var mNow=new Date();
+    var mMonth=mNow.getMonth(), mYear=mNow.getFullYear();
+    var monthNamesFull=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var firstDay=new Date(mYear, mMonth, 1);
+    var startPad=(firstDay.getDay()===0)?6:firstDay.getDay()-1; // Mon-anchored
+    var daysInMonth=new Date(mYear, mMonth+1, 0).getDate();
+    var todayD=mNow.getDate();
+    h+='<div style="padding:12px 16px 4px">';
+    h+='  <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:10px">'+monthNamesFull[mMonth]+' '+mYear+'</div>';
+    h+='  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px 4px">';
+    var wd=['M','T','W','T','F','S','S'];
+    for(var wi=0; wi<7; wi++){ h+='<div style="text-align:center;font-size:10px;font-weight:600;color:var(--t3)">'+wd[wi]+'</div>'; }
+    for(var pi=0; pi<startPad; pi++){ h+='<div></div>'; }
+    for(var dn=1; dn<=daysInMonth; dn++){
+      var mKey=mYear+'-'+(mMonth+1)+'-'+dn;
+      var mpw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(mKey):null;
+      var mLabel=mpw?mpw.name:'';
+      var mRest=!mLabel||/rest|recovery/i.test(mLabel);
+      var mCol=actColor(mLabel);
+      var mToday=(dn===todayD);
+      var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
+      h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
+      h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
+      if(!mRest){ h+='<div style="width:6px;height:6px;border-radius:50%;background:'+mCol+';margin-top:3px"></div>'; }
+      if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
+      h+='</div>';
+    }
+    h+='  </div>';
+    h+='</div>';
+  }
   var todayStr=dayNames[dow]+', '+monthNames[now.getMonth()].slice(0,3)+' '+now.getDate();
   h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   h+='  <div style="font-size:12px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px">TODAY &middot; <span style="color:var(--t2)">'+todayStr+'</span></div>';
@@ -16180,7 +16222,8 @@ function showCalendarTab(){
     h+='    <div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:var(--t1)">'+plan.name+'</div>';
     h+='      <div style="font-size:13px;color:var(--t2)">'+(plan.minutes?plan.minutes+' min':'')+(plan.isHard?' &middot; Hard':' &middot; Endurance')+'</div></div>';
     h+='  </div>';
-    h+='  <button style="width:100%;background:#FC4C02;color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-weight:800;letter-spacing:.02em;cursor:pointer">START WORKOUT</button>';
+    var todayDone=(typeof isDayComplete==='function')&&isDayComplete(getTodayKey());
+    h+='  <button onclick="toggleDayComplete(getTodayKey())" style="display:inline-flex;align-items:center;gap:6px;background:transparent;color:'+(todayDone?'#5DCAA5':'var(--t2)')+';border:1.5px solid '+(todayDone?'#5DCAA5':'var(--b1)')+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">'+(todayDone?'&#10003; Completed':'Mark complete')+'</button>';
   } else {
     h+='  <div style="padding:8px 0;font-size:14px;color:var(--t2)">Rest day — recovery and mobility.</div>';
   }
@@ -16287,6 +16330,157 @@ function showCalendarTab(){
   // ---- Wire interactions ---------------------------------------------------
   var tbtn=document.getElementById('cal-today-btn');
   if(tbtn) tbtn.onclick=function(){ showCalendarTab(); };
+}
+
+
+// ── CALENDAR INTERACTIVITY: completion, day editor, month view ──────────────
+// Completion is stored locally (like the avatar) so it never bloats sync.
+function getCompletions(){
+  try{ return JSON.parse(localStorage.getItem('aiq_completions')||'{}'); }catch(e){ return {}; }
+}
+function isDayComplete(dateKey){
+  var c=getCompletions(); return !!c[dateKey];
+}
+function toggleDayComplete(dateKey){
+  var c=getCompletions();
+  if(c[dateKey]) delete c[dateKey]; else c[dateKey]=Date.now();
+  try{ localStorage.setItem('aiq_completions', JSON.stringify(c)); }catch(e){}
+  try{ if(typeof toast==='function') toast(c[dateKey]?'Marked complete':'Marked incomplete'); }catch(e){}
+  // Re-render whichever calendar view is active.
+  try{ if(typeof showCalendarTab==='function') showCalendarTab(); }catch(e){}
+}
+
+// Find a completed activity (ride or run) for a given date key (Y-M-D).
+function findActivityForDate(dateKey){
+  var target=new Date(dateKey+'T00:00:00');
+  function sameDay(ds){
+    if(!ds) return false;
+    var d=new Date(ds);
+    return d.getFullYear()===target.getFullYear() && d.getMonth()===target.getMonth() && d.getDate()===target.getDate();
+  }
+  var rides=(st.rides||[]);
+  for(var i=0;i<rides.length;i++){ if(!rides[i].deleted && sameDay(rides[i].date)){ return {kind:'ride', obj:rides[i], idx:i}; } }
+  var runs=(st.runs||[]);
+  for(var j=0;j<runs.length;j++){ if(!runs[j].deleted && sameDay(runs[j].date)){ return {kind:'run', obj:runs[j], idx:j}; } }
+  return null;
+}
+
+// Tap a day -> open the day-detail editor. Dual-mode:
+//  - if a completed activity exists for that date, edit that activity
+//  - otherwise edit the planned workout name for that date
+function openDayEditor(dateKey){
+  var existing=document.getElementById('day-editor-modal');
+  if(existing) existing.remove();
+
+  var act=findActivityForDate(dateKey);
+  var plan=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
+  var dObj=new Date(dateKey+'T00:00:00');
+  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var titleDate=days[dObj.getDay()]+', '+months[dObj.getMonth()]+' '+dObj.getDate();
+
+  var modal=document.createElement('div');
+  modal.id='day-editor-modal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  function field(labelText, value, ph, type){
+    var w=document.createElement('div'); w.style.cssText='margin-bottom:12px';
+    var l=document.createElement('div'); l.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; l.textContent=labelText;
+    var inp=document.createElement('input'); inp.type=type||'text'; if(ph) inp.placeholder=ph; if(value!=null) inp.value=value;
+    inp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+    w.appendChild(l); w.appendChild(inp); sheet.appendChild(w);
+    return inp;
+  }
+
+  // Header
+  var hdr=document.createElement('div'); hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px';
+  var ttl=document.createElement('div'); ttl.style.cssText='font-size:18px;font-weight:800;color:var(--t1)'; ttl.textContent=titleDate;
+  var closeBtn=document.createElement('button'); closeBtn.innerHTML='&times;'; closeBtn.style.cssText='background:none;border:none;color:var(--t3);font-size:28px;line-height:1;cursor:pointer;padding:0 4px';
+  closeBtn.onclick=function(){ modal.remove(); };
+  hdr.appendChild(ttl); hdr.appendChild(closeBtn); sheet.appendChild(hdr);
+
+  var sub=document.createElement('div'); sub.style.cssText='font-size:12px;color:var(--t3);margin-bottom:16px';
+  sub.textContent = act ? ('Completed '+act.kind+' — edit recorded data') : (plan ? 'Planned workout — edit the plan' : 'No workout scheduled');
+  sheet.appendChild(sub);
+
+  if(act){
+    // EDIT COMPLETED ACTIVITY (fix bad recorded data, e.g. Garmin left running)
+    var o=act.obj;
+    var nameI=field('Name', o.name||'', 'Activity name');
+    var distI=field('Distance (mi)', (o.distance!=null?o.distance:''), '0', 'number');
+    var durI=field('Duration (min)', (o.duration!=null?o.duration:''), '0', 'number');
+    var tssI=field('TSS', (o.tss!=null?o.tss:''), '0', 'number');
+    var npI=field('Normalized Power (W)', (o.np!=null?o.np:''), '0', 'number');
+    var notesI=field('Notes', (o.notes||''), 'Optional');
+
+    var saveBtn=document.createElement('button');
+    saveBtn.textContent='Save changes';
+    saveBtn.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
+    saveBtn.onclick=function(){
+      o.name=nameI.value.trim()||o.name;
+      if(distI.value!=='') o.distance=parseFloat(distI.value);
+      if(durI.value!=='') o.duration=parseFloat(durI.value);
+      if(tssI.value!=='') o.tss=parseFloat(tssI.value);
+      if(npI.value!=='') o.np=parseFloat(npI.value);
+      o.notes=notesI.value;
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      try{ if(typeof toast==='function') toast('Activity updated'); }catch(e){}
+      modal.remove();
+      try{ showCalendarTab(); }catch(e){}
+    };
+    sheet.appendChild(saveBtn);
+  } else {
+    // EDIT PLANNED WORKOUT (rename the session for this date)
+    var planName = plan ? plan.name : '';
+    var pNameI=field('Planned workout', planName, 'e.g. Threshold Intervals');
+    var noteEl=document.createElement('div');
+    noteEl.style.cssText='font-size:11px;color:var(--t3);margin:-4px 0 14px';
+    noteEl.textContent = plan ? 'Renames this session in your plan.' : 'Add a workout name to schedule this day.';
+    sheet.appendChild(noteEl);
+
+    var saveBtn2=document.createElement('button');
+    saveBtn2.textContent = plan ? 'Save workout' : 'Add workout';
+    saveBtn2.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
+    saveBtn2.onclick=function(){
+      var newName=pNameI.value.trim();
+      if(plan){
+        // Update the plan DOM element the plan reader reads from.
+        var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
+        if(el){ el.textContent=newName; }
+        try{ if(typeof sv==='function') sv(); }catch(e){}
+        try{ if(typeof toast==='function') toast('Workout updated'); }catch(e){}
+      } else {
+        try{ if(typeof toast==='function') toast('This day is outside your current plan window'); }catch(e){}
+      }
+      modal.remove();
+      try{ showCalendarTab(); }catch(e){}
+    };
+    sheet.appendChild(saveBtn2);
+  }
+
+  // Mark complete toggle inside the editor too (convenient)
+  var mc=document.createElement('button');
+  var done=isDayComplete(dateKey);
+  mc.textContent = done ? '\u2713 Completed (tap to undo)' : 'Mark day complete';
+  mc.style.cssText='width:100%;padding:12px;background:transparent;border:1.5px solid '+(done?'#5DCAA5':'var(--b1)')+';border-radius:12px;color:'+(done?'#5DCAA5':'var(--t2)')+';font-size:14px;font-weight:700;cursor:pointer;margin-top:10px';
+  mc.onclick=function(){ toggleDayComplete(dateKey); modal.remove(); };
+  sheet.appendChild(mc);
+
+  modal.appendChild(sheet);
+  (document.getElementById('app-shell')||document.body).appendChild(modal);
+}
+
+// Toggle between week and month view (stored so re-render keeps the choice).
+function calSetView(v){
+  try{ localStorage.setItem('aiq_cal_view', v); }catch(e){}
+  try{ showCalendarTab(); }catch(e){}
+}
+function calGetView(){
+  try{ return localStorage.getItem('aiq_cal_view')||'week'; }catch(e){ return 'week'; }
 }
 
 function showCal(){
