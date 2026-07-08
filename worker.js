@@ -16098,7 +16098,7 @@ function showCalendarTab(){
   // TODAY'S PLAN card (real workout)
   var plan=getWorkoutForDate_(getTodayKey());
   h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  h+='  <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Today\'s Plan</div>';
+  h+='  <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Today&#39;s Plan</div>';
   if(plan && !plan.isRest){
     var pcol=actColor(plan.name);
     h+='  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">';
