@@ -13194,24 +13194,37 @@ function recomputeGearMileage(){
 // Fetches the athlete's registered gear (bikes + shoes) from Strava,
 // so we can map gear_id -> real name and attribute mileage correctly.
 // Requires an existing valid Strava token (from stravaBackfill()).
-function fetchStravaElevStats(){
-  if(!st.stravaToken) return;
+function fetchStravaElevStats(silent){
+  if(!st.stravaToken){ if(!silent) toast('Sync Strava first to get a token'); return; }
+  if(!silent) toast('Fetching elevation stats from Strava...');
   function doFetch(athleteId){
     fetch('https://www.strava.com/api/v3/athletes/'+athleteId+'/stats',{
       headers:{'Authorization':'Bearer '+st.stravaToken}
-    }).then(function(r){return r.ok?r.json():null;})
+    }).then(function(r){
+      if(r.status===401){ if(!silent) toast('Strava token expired — tap Sync Strava first'); return null; }
+      return r.ok?r.json():null;
+    })
     .then(function(s){
-      if(!s) return;
+      if(!s){ if(!silent) toast('Could not read elevation stats from Strava'); return; }
       var ytd = s.ytd_ride_totals&&s.ytd_ride_totals.elevation_gain ? Math.round(s.ytd_ride_totals.elevation_gain*3.28084) : null;
       var all = s.all_ride_totals&&s.all_ride_totals.elevation_gain ? Math.round(s.all_ride_totals.elevation_gain*3.28084) : null;
-      if(ytd||all){ st.stravaElevStats={ytd:ytd, allTime:all, fetchedAt:Date.now()}; sv(); }
-    }).catch(function(){});
+      if(ytd||all){
+        st.stravaElevStats={ytd:ytd, allTime:all, fetchedAt:Date.now()};
+        sv();
+        if(!silent) toast('Updated: '+(ytd?ytd.toLocaleString()+' ft YTD':'')+(all?' / '+all.toLocaleString()+' ft all-time':''));
+      } else {
+        if(!silent) toast('No elevation data returned from Strava');
+      }
+    }).catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
   }
   if(st.stravaAthleteId){ doFetch(st.stravaAthleteId); return; }
   fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+st.stravaToken}})
-  .then(function(r){return r.ok?r.json():null;})
-  .then(function(a){ if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id); } })
-  .catch(function(){});
+  .then(function(r){ return r.ok?r.json():null; })
+  .then(function(a){
+    if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id); }
+    else { if(!silent) toast('Could not get Strava athlete ID'); }
+  })
+  .catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
 }
 
 function syncStravaGear(){
@@ -14848,6 +14861,7 @@ function showMoreSheet(){
     {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
     {n:'Sync Gear',     i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'syncStravaGear',   c:'#0F6E56'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
+    {n:'Elev Stats',    i:'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M3 17l4-4',                                           fn:'fetchStravaElevStats', c:'#27AE60'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
     {n:'Clean Ride Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
     {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
@@ -17250,7 +17264,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
   .then(function(acts){
     if(!acts || !acts.length){
       sv();
-      toast('Strava sync done: ' + imported + ' imported'); fetchStravaElevStats();
+      toast('Strava sync done: ' + imported + ' imported'); setTimeout(function(){ fetchStravaElevStats(true); }, 2000);
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       return;
     }
@@ -17330,7 +17344,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       if(missingGPS.length>0){
         var gIdx=0;
         function fetchNextGPS(){
-          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!'); fetchStravaElevStats();return;}
+          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!'); setTimeout(function(){ fetchStravaElevStats(true); }, 2000);return;}
           var r=missingGPS[gIdx++];
           var rideIndex=st.rides.indexOf(r);
           fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
@@ -17371,7 +17385,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         }
         fetchNextGPS();
       } else {
-        toast('Strava sync done: ' + imported + ' imported'); fetchStravaElevStats();
+        toast('Strava sync done: ' + imported + ' imported'); setTimeout(function(){ fetchStravaElevStats(true); }, 2000);
       }
     } else {
       sv(); // save after every page
