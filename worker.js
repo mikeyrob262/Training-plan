@@ -5890,6 +5890,84 @@ function actIconG(type, sz, col){
   return o+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
 }
 
+
+// Compute which days earlier THIS WEEK (Mon..yesterday) had a PLANNED workout
+// that was neither marked complete nor has a recorded activity. A rest day
+// (no planned workout) never counts as missed. Returns array of
+// {dateKey, label, name}.
+function getMissedWorkouts(){
+  var out=[];
+  var now=new Date();
+  var todayIdx=(now.getDay()===0?6:now.getDay()-1); // Mon=0..Sun=6
+  // Monday of the current week
+  var monday=new Date(now); monday.setHours(0,0,0,0);
+  monday.setDate(now.getDate()-todayIdx);
+  var dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  for(var di=0; di<todayIdx; di++){
+    var d=new Date(monday); d.setDate(monday.getDate()+di);
+    var key=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    var plan=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(key):null;
+    if(!plan || !plan.name) continue;            // rest / no plan -> not a miss
+    if(/rest|off\b|recovery day/i.test(plan.name)) continue; // explicit rest
+    var done=(typeof isDayComplete==='function') && isDayComplete(key);
+    var act=(typeof findActivityForDate==='function') ? findActivityForDate(key) : null;
+    if(done || act) continue;                    // completed or has a recorded activity
+    out.push({dateKey:key, label:dayNames[di]+' '+(d.getMonth()+1)+'/'+d.getDate(), name:plan.name});
+  }
+  return out;
+}
+
+// Notifications panel opened from the bell. Currently surfaces missed planned
+// workouts from earlier this week, each tappable to open that day's editor.
+function showNotifications(){
+  var old=document.getElementById('notif-panel');
+  if(old) old.remove();
+  var missed=(typeof getMissedWorkouts==='function')?getMissedWorkouts():[];
+
+  var overlay=document.createElement('div');
+  overlay.id='notif-panel';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:flex-start;justify-content:center';
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);width:100%;max-width:480px;margin-top:calc(52px + env(safe-area-inset-top));border-radius:0 0 20px 20px;padding:16px 16px calc(16px + env(safe-area-inset-bottom));max-height:80vh;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+
+  var hdr=document.createElement('div'); hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px';
+  var ttl=document.createElement('div'); ttl.style.cssText='font-size:17px;font-weight:800;color:var(--t1)'; ttl.textContent='Notifications';
+  var x=document.createElement('button'); x.innerHTML='&times;'; x.style.cssText='background:none;border:none;color:var(--t3);font-size:26px;line-height:1;cursor:pointer;padding:0 4px';
+  x.onclick=function(){ overlay.remove(); };
+  hdr.appendChild(ttl); hdr.appendChild(x); sheet.appendChild(hdr);
+
+  if(!missed.length){
+    var empty=document.createElement('div');
+    empty.style.cssText='padding:26px 8px;text-align:center;color:var(--t3);font-size:14px';
+    empty.innerHTML='<div style="font-size:30px;margin-bottom:8px">&#127881;</div>All caught up &mdash; no missed workouts this week.';
+    sheet.appendChild(empty);
+  } else {
+    var sub=document.createElement('div');
+    sub.style.cssText='font-size:12px;color:var(--t3);margin-bottom:10px';
+    sub.textContent=missed.length+(missed.length===1?' missed workout':' missed workouts')+' earlier this week';
+    sheet.appendChild(sub);
+
+    missed.forEach(function(m){
+      var row=document.createElement('button');
+      row.style.cssText='display:flex;width:100%;align-items:center;gap:12px;text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;font-family:inherit';
+      row.innerHTML='<div style="width:34px;height:34px;border-radius:9px;background:rgba(226,75,74,.15);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:var(--t1)">'+m.label+'</div>'
+        +'<div style="font-size:12px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+m.name+'</div></div>'
+        +'<div style="color:var(--t3);font-size:16px;flex-shrink:0">&rsaquo;</div>';
+      row.onclick=function(){
+        overlay.remove();
+        if(typeof openDayEditor==='function') openDayEditor(m.dateKey);
+      };
+      sheet.appendChild(row);
+    });
+  }
+
+  overlay.appendChild(sheet);
+  (document.getElementById('app-shell')||document.body).appendChild(overlay);
+}
+
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 
 // ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
@@ -7407,20 +7485,15 @@ function showHomeDash(){
 
   // Header
   var bellCount=(function(){
-    var curWeek=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
-    var s=(typeof ws==='function')?ws(curWeek):{wo:{}};
-    var wo=s.wo||{};
-    var todayIdx=(new Date().getDay()===0?6:new Date().getDay()-1);
-    var count=0;
-    for(var di=0;di<todayIdx;di++){ if(!wo[di]) count++; }
-    return count;
+    try{ return (typeof getMissedWorkouts==='function') ? getMissedWorkouts().length : 0; }
+    catch(e){ return 0; }
   })();
   html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px">'
     +'<div style="display:flex;align-items:center;gap:8px">'
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
     +'<span style="font-size:15px;font-weight:800;letter-spacing:-.2px;color:var(--t1)">ATHLETE IQ</span></div>'
     +'<div style="display:flex;align-items:center;gap:14px">'
-    +'<div style="position:relative">'
+    +'<div style="position:relative;cursor:pointer" onclick="showNotifications()">'
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
     +(bellCount>0?'<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#E24B4A;color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">'+bellCount+'</div>':'')
     +'</div>'
