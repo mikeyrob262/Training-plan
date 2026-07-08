@@ -10157,6 +10157,19 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
       L.circleMarker(pts[0],{radius:7,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       map.fitBounds(L.latLngBounds(pts),{padding:[30,30]});
+      // Wind-direction compass overlay in the top-right corner of the map.
+      // winddirection is the "from" bearing; the arrow points the way the
+      // wind is blowing TO (from + 180), which is what a rider feels.
+      if(windDeg!=null){
+        var dirArr=['N','NE','E','SE','S','SW','W','NW'];
+        var fromLabel=dirArr[Math.round(windDeg/45)%8];
+        var blowTo=(windDeg+180)%360;
+        var ov=document.createElement('div');
+        ov.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(20,20,22,.82);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(4px)';
+        ov.innerHTML='<div style="transform:rotate('+blowTo+'deg);display:flex"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></div>'
+          +'<div style="line-height:1.1"><div style="font-size:12px;font-weight:800;color:#fff">'+fromLabel+' wind</div><div style="font-size:10px;color:rgba(255,255,255,.65)">from '+Math.round(windDeg)+'&deg;</div></div>';
+        mapEl.appendChild(ov);
+      }
       setTimeout(function(){ try{map.invalidateSize();}catch(e){} },300);
       window['_wxmap_ridedetail']=map;
     },100);
