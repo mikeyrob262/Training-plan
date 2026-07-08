@@ -16012,30 +16012,29 @@ function showCalendarTab(){
     return '#FC4C02'; // ride (default)
   }
 
-  // Per-activity SVG glyph, matching the mockup: cyclist for rides, dumbbell
-  // for strength, bar-chart for threshold/intervals, checkered flag for
-  // race/fondo, running figure for runs, hollow dot for recovery/rest.
+  // Per-activity SVG glyph using the app's real icon set (same Lucide-style
+  // family as the nav bar and More sheet), not hand-approximated shapes.
   function actIcon(type, sz, col){
     sz=sz||22; col=col||actColor(type);
     var t=(type||'').toLowerCase();
-    var open='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
-    if(/race|fondo|flag/.test(t)){
-      return open+'<path d="M4 21V4M4 4h13l-2 4 2 4H4"/><rect x="6" y="6" width="2.5" height="2.5" fill="'+col+'" stroke="none"/><rect x="11" y="6" width="2.5" height="2.5" fill="'+col+'" stroke="none"/><rect x="8.5" y="8.5" width="2.5" height="2.5" fill="'+col+'" stroke="none"/></svg>';
+    var o='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+    if(/race|fondo|flag/.test(t)){ // checkered flag
+      return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
     }
-    if(/run/.test(t)){
-      return open+'<circle cx="13" cy="4" r="1.6" fill="'+col+'" stroke="none"/><path d="M7 21l3-6 3 2 2-4M10 15l-2-4 4-2 2 3 3 1"/></svg>';
+    if(/run/.test(t)){ // app's run icon
+      return o+'<circle cx="13" cy="4" r="1"/><path d="M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5"/></svg>';
     }
-    if(/strength|core|gym|lift/.test(t)){
-      return open+'<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>';
+    if(/strength|core|gym|lift/.test(t)){ // dumbbell (lucide)
+      return o+'<path d="M14.4 14.4 9.6 9.6M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4M3.9 3.9 2.5 2.5M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>';
     }
-    if(/threshold|interval|tempo|vo2|sweet/.test(t)){
-      return open+'<path d="M5 20V13M10 20V8M15 20V11M20 20V5"/></svg>';
+    if(/threshold|interval|tempo|vo2|sweet/.test(t)){ // bar chart (lucide)
+      return o+'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
     }
-    if(/recovery|rest|easy/.test(t)){
+    if(/recovery|rest|easy/.test(t)){ // hollow ring
       return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="'+col+'" stroke-width="2"/></svg>';
     }
-    // ride / default: cyclist
-    return open+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M6 17.5l4-8h4l3 5M14 9.5l-1.5-3M10 9.5h5"/></svg>';
+    // ride / default: app's bike icon (lucide bike)
+    return o+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
   }
 
   // ---- Build markup --------------------------------------------------------
@@ -16073,7 +16072,7 @@ function showCalendarTab(){
     var sub=subM?subM[0]:'';
     var shortName=label.replace(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b)/i,'').trim();
     if(shortName.length>10) shortName=shortName.slice(0,10);
-    h+='<div style="flex:0 0 auto;width:62px;background:'+(isToday?'var(--s1)':'var(--s2)')+';border:'+(isToday?'2px solid #FC4C02':'1px solid var(--b1)')+';border-radius:12px;padding:9px 5px;text-align:center;box-sizing:border-box">';
+    h+='<div style="flex:0 0 auto;width:62px;background:'+(isToday?'rgba(252,76,2,.08)':'transparent')+';border:'+(isToday?'1.5px solid #FC4C02':'1px solid transparent')+';border-radius:10px;padding:9px 5px;text-align:center;box-sizing:border-box">';
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
     h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(label,20,col))+'</div>';
