@@ -7808,18 +7808,24 @@ function renderPerf(container){
     +'<div style="font-size:11px;color:var(--t3)">All time &middot; FTP '+FTP+'W</div></div></div>';
   // Flat row list (duration, watts, %FTP) replacing the vertical bar
   // chart, matching the reference's Best Efforts list style rather than
-  // a chart - same underlying data, no canvas.
+  // a chart - same underlying data, no canvas. Capped to a scrollable
+  // ~4-row window (each row ~37px incl. border) to save vertical space,
+  // matching the same pattern used for Activity History.
+  html+='<div style="max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--b1);border-radius:14px;padding:0 14px">';
+  var peakRowCount=0;
   peakDursList.forEach(function(d,i){
     var watts=peakWattsArr[i];
     if(!watts) return;
     var pct=Math.round(watts/FTP*100);
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:'+(i>0?'10px 0':'0 0 10px')+';'+(i>0?'border-top:1px solid var(--b1);':'')+'">'
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:'+(peakRowCount>0?'10px 0':'10px 0')+';'+(peakRowCount>0?'border-top:1px solid var(--b1);':'')+'">'
       +'<span style="font-size:13px;color:var(--t2)">'+d.label+' Power</span>'
       +'<span style="display:flex;align-items:baseline;gap:8px">'
       +'<span style="font-size:14px;font-weight:700;color:'+d.c+'">'+watts+'W</span>'
       +'<span style="font-size:11px;color:var(--t3)">'+pct+'% FTP</span>'
       +'</span></div>';
+    peakRowCount++;
   });
+  html+='</div>';
   html+='</div>';
 
   // Store peak chart data
