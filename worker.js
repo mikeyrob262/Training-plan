@@ -8418,10 +8418,11 @@ function renderRideList(container, limit){
 
 
   // ── Elevation by year (outdoor vs indoor) ─────────────────────────────
-  // Aggregate total feet climbed per calendar year, split into outdoor and
-  // indoor/virtual. Indoor = VirtualRide sportType OR the Strava trainer
-  // flag (covers Zwift climbs like Alpe du Zwift + climb portals). Only
-  // real recorded gain is summed; nothing is estimated.
+  // Apple Health-style stacked mountain (area) chart. Aggregate total feet
+  // climbed per calendar year, split into outdoor and indoor/virtual.
+  // Indoor = VirtualRide sportType OR the Strava trainer flag (covers Zwift
+  // climbs like Alpe du Zwift + climb portals). Only real recorded gain is
+  // summed; nothing is estimated.
   (function(){
     var byYear={};
     (rides||[]).forEach(function(r){
@@ -8435,38 +8436,82 @@ function renderRideList(container, limit){
       if(!byYear[yr]) byYear[yr]={out:0,ind:0};
       if(indoor) byYear[yr].ind+=el; else byYear[yr].out+=el;
     });
-    var yrs=Object.keys(byYear).map(Number).sort(function(a,b){return b-a;});
+    var yrs=Object.keys(byYear).map(Number).sort(function(a,b){return a-b;}); // chronological
     if(!yrs.length) return;
-    var maxTotal=0;
-    yrs.forEach(function(y){ var t=byYear[y].out+byYear[y].ind; if(t>maxTotal) maxTotal=t; });
+    var nowYr=new Date().getFullYear();
+    var maxTotal=0, grandTotal=0;
+    yrs.forEach(function(y){ var t=byYear[y].out+byYear[y].ind; if(t>maxTotal) maxTotal=t; grandTotal+=t; });
     if(maxTotal<=0) return;
 
-    var nowYr=new Date().getFullYear();
-    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation by Year</div>';
-    html+='<div style="margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:16px;border:1px solid var(--b1)">';
-    html+='<div style="display:flex;gap:14px;margin-bottom:14px;font-size:12px;color:var(--t2)">'
-      +'<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#27AE60"></span>Outdoor</span>'
-      +'<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:2px;background:#4D9FFF"></span>Indoor / virtual</span></div>';
-    yrs.forEach(function(y){
-      var o=Math.round(byYear[y].out), i=Math.round(byYear[y].ind), tot=o+i;
-      var oPct=maxTotal>0?(o/maxTotal*100):0;
-      var iPct=maxTotal>0?(i/maxTotal*100):0;
-      var label=(y===nowYr)?(y+' (YTD)'):(''+y);
-      html+='<div style="margin-bottom:14px">'
-        +'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">'
-          +'<span style="font-size:13px;font-weight:700;color:var(--t1)">'+label+'</span>'
-          +'<span style="font-size:13px;font-weight:800;color:var(--t1)">'+tot.toLocaleString()+' ft</span>'
-        +'</div>'
-        +'<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--s3)">'
-          +(oPct>0?'<div style="width:'+oPct+'%;background:#27AE60"></div>':'')
-          +(iPct>0?'<div style="width:'+iPct+'%;background:#4D9FFF"></div>':'')
-        +'</div>'
-        +'<div style="display:flex;gap:14px;margin-top:5px;font-size:11px;color:var(--t3)">'
-          +'<span>'+o.toLocaleString()+' ft outdoor</span>'
-          +'<span>'+i.toLocaleString()+' ft indoor</span>'
-        +'</div>'
-      +'</div>';
+    // Build point series. With a single year, duplicate the point so the
+    // area still renders as a filled shape rather than a zero-width sliver.
+    var pts=yrs.map(function(y){ return {y:y, out:byYear[y].out, tot:byYear[y].out+byYear[y].ind}; });
+    if(pts.length===1){ pts=[{y:pts[0].y, out:pts[0].out, tot:pts[0].tot}, {y:pts[0].y, out:pts[0].out, tot:pts[0].tot}]; }
+
+    var W=600, H=180, padT=16, padB=28, padX=6;
+    var innerH=H-padT-padB;
+    function sx(i){ return padX + (i/(pts.length-1))*(W-2*padX); }
+    function syTot(v){ return padT + innerH - (v/maxTotal)*innerH; }
+    function syOut(v){ return padT + innerH - (v/maxTotal)*innerH; }
+
+    // Smooth path helper (Catmull-Rom -> cubic bezier) over an array of [x,y]
+    function smooth(pointsXY){
+      if(pointsXY.length<2) return '';
+      var d='M'+pointsXY[0][0]+','+pointsXY[0][1];
+      for(var k=0;k<pointsXY.length-1;k++){
+        var p0=pointsXY[k===0?0:k-1], p1=pointsXY[k], p2=pointsXY[k+1], p3=pointsXY[k+2>pointsXY.length-1?pointsXY.length-1:k+2];
+        var c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+        var c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+        d+='C'+c1x+','+c1y+' '+c2x+','+c2y+' '+p2[0]+','+p2[1];
+      }
+      return d;
+    }
+
+    var totXY=pts.map(function(p,i){ return [sx(i), syTot(p.tot)]; });
+    var outXY=pts.map(function(p,i){ return [sx(i), syOut(p.out)]; });
+    var baseY=padT+innerH;
+
+    // Total (blue) mountain: fills from its curve down to the baseline.
+    var totLine=smooth(totXY);
+    var totArea=totLine+' L'+sx(pts.length-1)+','+baseY+' L'+sx(0)+','+baseY+' Z';
+    // Outdoor (green) mountain: sits on top of the baseline, under the total.
+    var outLine=smooth(outXY);
+    var outArea=outLine+' L'+sx(pts.length-1)+','+baseY+' L'+sx(0)+','+baseY+' Z';
+
+    var uid='elevmtn'+Math.floor(Math.random()*1e6);
+    var svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px;display:block">';
+    svg+='<defs>'
+      +'<linearGradient id="'+uid+'i" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4D9FFF" stop-opacity=".55"/><stop offset="1" stop-color="#4D9FFF" stop-opacity=".04"/></linearGradient>'
+      +'<linearGradient id="'+uid+'o" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#27AE60" stop-opacity=".65"/><stop offset="1" stop-color="#27AE60" stop-opacity=".06"/></linearGradient>'
+      +'</defs>';
+    // Indoor is the band between the total curve and the outdoor curve, so
+    // paint the full total mountain in blue first, then the outdoor mountain
+    // in green on top - the visible blue above green reads as the indoor share.
+    svg+='<path d="'+totArea+'" fill="url(#'+uid+'i)"/>';
+    svg+='<path d="'+totLine+'" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    svg+='<path d="'+outArea+'" fill="url(#'+uid+'o)"/>';
+    svg+='<path d="'+outLine+'" fill="none" stroke="#27AE60" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+    // Year labels along the bottom
+    yrs.forEach(function(y,i){
+      var lx=sx(i);
+      var anchor=(i===0)?'start':(i===yrs.length-1?'end':'middle');
+      svg+='<text x="'+lx+'" y="'+(H-8)+'" text-anchor="'+anchor+'" font-size="11" fill="#8E8E93" font-family="-apple-system,sans-serif">'+(y===nowYr?y+"'":(''+y))+'</text>';
     });
+    svg+='</svg>';
+
+    html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Elevation by Year</div>';
+    html+='<div style="margin:0 16px 20px;background:var(--s2);border-radius:14px;padding:16px 14px 10px;border:1px solid var(--b1)">';
+    // Headline: this year's total (or grand total if no current-year data)
+    var thisYr = byYear[nowYr] ? Math.round(byYear[nowYr].out+byYear[nowYr].ind) : null;
+    html+='<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:2px">'
+      +'<div><div style="font-size:26px;font-weight:800;color:var(--t1);line-height:1">'+(thisYr!=null?thisYr.toLocaleString():Math.round(grandTotal).toLocaleString())+'<span style="font-size:14px;font-weight:600;color:var(--t3)"> ft</span></div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+(thisYr!=null?(nowYr+' climbed (YTD)'):'total climbed')+'</div></div>'
+      +'<div style="display:flex;gap:12px;font-size:11px;color:var(--t2)">'
+        +'<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:#27AE60"></span>Outdoor</span>'
+        +'<span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:2px;background:#4D9FFF"></span>Indoor</span>'
+      +'</div>'
+    +'</div>';
+    html+=svg;
     html+='</div>';
   })();
 
