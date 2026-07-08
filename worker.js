@@ -6202,8 +6202,8 @@ function renderNutr(){
   if(fuelPlan){
     h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
     h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">';
-    h+='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
-    h+='<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Fuel the Workout</span></div>';
+    h+='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
+    h+='<span style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Fuel the Workout</span></div>';
     h+='<div style="font-size:13px;color:var(--t2);margin-bottom:12px">'+fuelPlan.workoutName+' &middot; '+Math.round(fuelPlan.minutes)+' min</div>';
 
     var fuelStages=[
@@ -6214,13 +6214,13 @@ function renderNutr(){
     fuelStages.forEach(function(stage,si){
       h+='<div style="'+(si>0?'border-top:1px solid var(--b1);margin-top:10px;padding-top:10px;':'')+'">';
       h+='<div style="display:flex;justify-content:space-between;align-items:baseline">';
-      h+='<span style="font-size:13px;font-weight:700;color:var(--t1)">'+stage.label+'</span>';
+      h+='<span style="font-size:13px;font-weight:600;color:var(--t1)">'+stage.label+'</span>';
       h+='<span style="font-size:11px;color:var(--t3)">'+stage.sub+'</span>';
       h+='</div>';
-      h+='<div style="font-size:14px;font-weight:700;color:var(--orange);margin:2px 0 6px">'+stage.need+'</div>';
+      h+='<div style="font-size:14px;font-weight:600;color:#BA7517;margin:2px 0 6px">'+stage.need+'</div>';
       h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
       stage.foods.forEach(function(f){
-        h+='<span style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px">'+f+'</span>';
+        h+='<span style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px">'+f+'</span>';
       });
       h+='</div></div>';
     });
