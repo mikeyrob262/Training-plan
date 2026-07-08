@@ -10292,8 +10292,55 @@ function renderRideEquipmentTab(body, r, idx){
     bike = (st.bikes||[]).find(function(b){ return b.name===r.gearName; });
   }
 
+  // Shoes: resolved by the same gear fields as bikes. Strava rides carry a
+  // gear_id (mapped to a name via st.stravaGearMap); ICU CSV imports carry
+  // the gear display name directly on r.gearName. Runs resolve to a shoe
+  // here rather than a bike.
   if(!bike){
-    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No bike logged for this ride.</div>';
+    var shoe = null;
+    if(r.gearId){
+      // gearId -> shoe name via the Strava gear map, then match st.shoes by name
+      var mappedName = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
+      if(mappedName){
+        shoe = (st.shoes||[]).find(function(s){ return s.name===mappedName || s.id===r.gearId; });
+      }
+      if(!shoe){
+        shoe = (st.shoes||[]).find(function(s){ return s.id===r.gearId; });
+      }
+    }
+    if(!shoe && r.gearName){
+      shoe = (st.shoes||[]).find(function(s){ return s.name===r.gearName; });
+    }
+
+    if(shoe){
+      var maxMi = shoe.maxMiles||400;
+      var mi = shoe.miles||0;
+      var pct = Math.min(100, Math.round(mi/maxMi*100));
+      var remaining = Math.max(0, maxMi - mi);
+      var pctColor = pct>80?'#ef4444':pct>60?'#BA7517':'#0F6E56';
+      var statusLabel = pct>80?'Replace soon':pct>60?'Wearing in':'Good';
+
+      var shoeCard=document.createElement('div');
+      shoeCard.style.cssText='border-radius:16px;overflow:hidden;position:relative;padding:16px;margin-bottom:14px;background:linear-gradient(160deg,#2a2a2e,#1c1c1f)';
+      shoeCard.innerHTML='<div style="font-size:17px;font-weight:800;color:#fff">'+shoe.name+'</div>'
+        +'<div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:2px">'+mi+' mi total &middot; Running shoes</div>';
+      wrap.appendChild(shoeCard);
+
+      var wearCard=document.createElement('div');
+      wearCard.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px';
+      wearCard.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Wear</div>'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+        +'<span style="font-size:13px;color:var(--t1);font-weight:600">'+mi+' mi <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+maxMi+' mi</span></span>'
+        +'<span style="font-size:12px;font-weight:700;color:'+pctColor+'">'+statusLabel+'</span></div>'
+        +'<div style="height:5px;background:var(--s3);border-radius:3px;margin-bottom:6px"><div style="height:5px;background:'+pctColor+';border-radius:3px;width:'+pct+'%"></div></div>'
+        +'<div style="font-size:11px;color:var(--t3)">'+remaining+' mi remaining before replacement</div>';
+      wrap.appendChild(wearCard);
+
+      body.appendChild(wrap);
+      return;
+    }
+
+    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No equipment logged for this activity.</div>';
     body.appendChild(wrap);
     return;
   }
