@@ -85,6 +85,16 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .wof-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:3px}
 .wof-pl{font-size:12px;color:var(--t2);font-weight:500}
 .wof-in{font-size:13px;border:none;border-bottom:1px solid var(--b2);background:transparent;color:var(--t1);width:100%;padding:2px 0;font-family:inherit}
+.aiq-hscroll{display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#5A5A5E #1C1C1E;padding-bottom:6px}
+.aiq-hscroll::-webkit-scrollbar{height:8px}
+.aiq-hscroll::-webkit-scrollbar-track{background:#1C1C1E;border-radius:4px}
+.aiq-hscroll::-webkit-scrollbar-thumb{background:#5A5A5E;border-radius:4px}
+.aiq-hscroll::-webkit-scrollbar-thumb:hover{background:#6E6E73}
+.aiq-vscroll{scrollbar-width:thin;scrollbar-color:#5A5A5E #1C1C1E}
+.aiq-vscroll::-webkit-scrollbar{width:8px}
+.aiq-vscroll::-webkit-scrollbar-track{background:#1C1C1E;border-radius:4px}
+.aiq-vscroll::-webkit-scrollbar-thumb{background:#5A5A5E;border-radius:4px}
+.aiq-vscroll::-webkit-scrollbar-thumb:hover{background:#6E6E73}
 .wof-in::placeholder{color:var(--t3)}
 .badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
 .bh{background:rgba(252,76,2,.1);color:#FC4C02;border:1px solid rgba(252,76,2,.2)}
@@ -282,7 +292,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 <div class="hdr">
   <div class="hdr-top">
     <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Athlete IQ</span></div>
-    <div class="hdr-btns"><div class="aiq-avatar" onclick="uploadAvatar()" title="Change photo" style="width:32px;height:32px;border-radius:50%;background:var(--s2);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg></div></div>
+    <div class="hdr-btns"></div>
   </div>
   <div class="hdr-nav">
 
@@ -5856,6 +5866,30 @@ var DTYPE=["LOW","HIGH","MOD","HIGH","MOD","HIGH","LOW"];
 var nutrDate='',curMeal='breakfast';
 try{nutrDate=getTodayKey();}catch(e){}
 
+
+// Shared activity icon + color, matching the Calendar screen's icon family,
+// usable anywhere (lists, detail views). White stroke variant for colored
+// icon chips in the Activities list.
+function actIconG(type, sz, col){
+  sz=sz||16; col=col||'#fff';
+  var t=(type||'').toLowerCase();
+  var o='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+  if(/race|fondo|flag/.test(t)){
+    return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
+  }
+  if(/run|jog|walk/.test(t)){
+    return o+'<circle cx="13" cy="4" r="1"/><path d="M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5"/></svg>';
+  }
+  if(/strength|core|gym|lift|weight/.test(t)){
+    return o+'<path d="M14.4 14.4 9.6 9.6M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4M3.9 3.9 2.5 2.5M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>';
+  }
+  if(/threshold|interval|tempo|vo2|sweet/.test(t)){
+    return o+'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
+  }
+  // ride / default: bike
+  return o+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
+}
+
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 
 // ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
@@ -6186,11 +6220,15 @@ function renderNutr(){
 
   var h='';
 
-  // Header
-  h+='<div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--b1)">';
-  // back button removed
-  h+='<div style="font-size:19px;font-weight:800">Nutrition</div>';
-  h+='<div style="width:60px"></div></div>';
+  // Hero banner — colored gradient with fuel/nutrition motif
+  h+='<div style="position:relative;overflow:hidden;padding:20px 16px 18px;background:linear-gradient(135deg,#0F7A54 0%,#1AA06B 45%,#2FA8E0 120%)">';
+  h+='  <div style="position:absolute;right:-20px;top:-10px;opacity:.18"><svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.2"><path d="M12 2c-1 4-4 5-4 9a4 4 0 0 0 8 0c0-4-3-5-4-9z"/><path d="M6 14c0 4 2 7 6 7s6-3 6-7"/></svg></div>';
+  h+='  <div style="position:relative">';
+  h+='    <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.08em">Fuel</div>';
+  h+='    <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.3px;margin-top:2px">Nutrition</div>';
+  h+='    <div style="font-size:12px;color:rgba(255,255,255,.8);margin-top:3px">Dial in today&#39;s fueling to match your training.</div>';
+  h+='  </div>';
+  h+='</div>';
 
   // Date nav
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
@@ -8296,26 +8334,23 @@ function renderRideList(container, limit){
 
   html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
   if(years.length>1){
-    html+='<div style="padding:0 16px 10px;display:flex;gap:6px;flex-wrap:wrap">';
+    html+='<div class="aiq-hscroll" style="padding:0 16px 10px">';
     years.forEach(function(y){
       var active=y===activityYearFilter;
-      html+='<button onclick="setActivityYearFilter('+y+')" style="padding:6px 14px;border-radius:16px;border:1px solid '+(active?'var(--t1)':'var(--b1)')+';background:'+(active?'var(--s2)':'var(--s2)')+';color:'+(active?'var(--t1)':'var(--t2)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">'+y+'</button>';
+      html+='<button onclick="setActivityYearFilter('+y+')" style="flex:0 0 auto;padding:6px 14px;border-radius:16px;border:1px solid '+(active?'var(--t1)':'var(--b1)')+';background:'+(active?'var(--s2)':'var(--s2)')+';color:'+(active?'var(--t1)':'var(--t2)')+';font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">'+y+'</button>';
     });
     html+='</div>';
   }
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
-  var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56',Strength:'#7C3AED',VirtualRide:'#0EA5E9'};
-  var rideIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
-  var runIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
-  var strengthIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M6.5 6.5h11v11h-11z"/><path d="M2 9v6M22 9v6"/></svg>';
+  var sportColors={Ride:'#2FA8E0',GravelRide:'#2FA8E0',MountainBikeRide:'#E24B4A',Run:'#5DCAA5',TrailRun:'#0F6E56',Strength:'#A855F7',VirtualRide:'#4D9FFF'};
   var listGroup=document.createElement('div');
   listGroup.style.cssText='margin:0 16px';
   rides.forEach(function(r,idx){
     var realIdx=st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
     var sport=r.sportType||r.type||'Ride';
-    var iconColor=sportColors[sport]||'#FC4C02';
-    var icon=/strength|weight/i.test(sport)?strengthIcon:/run/i.test(sport)?runIcon:rideIcon;
+    var iconColor=sportColors[sport]||'#2FA8E0';
+    var icon=actIconG(sport,16,'#fff');
     var row=document.createElement('div');
     row.style.cssText='padding:11px 4px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
     row.innerHTML='<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
@@ -8338,6 +8373,7 @@ function renderRideList(container, limit){
     // being cut off or requiring a separate page - matches the request
     // to see a handful of activities with the remainder scrollable.
     var scrollWrap=document.createElement('div');
+    scrollWrap.className='aiq-vscroll';
     scrollWrap.style.cssText='max-height:'+(limit*58)+'px;overflow-y:auto;-webkit-overflow-scrolling:touch';
     scrollWrap.appendChild(listGroup);
     var outer=document.createElement('div');
