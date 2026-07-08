@@ -9794,6 +9794,7 @@ function openRideDetail(idx){
   ];
   var activeTab='overview';
   var tabsRow=document.createElement('div');
+  tabsRow.className='aiq-hscroll';
   tabsRow.style.cssText='display:flex;gap:18px;overflow-x:auto;padding:8px 16px 0;-webkit-overflow-scrolling:touch;flex-shrink:0;border-bottom:1px solid var(--b1)';
   var tabBtns={};
   tabDefs.forEach(function(t){
@@ -9809,6 +9810,7 @@ function openRideDetail(idx){
 
   var body = document.createElement('div');
   body.id = 'ride-detail-body';
+  body.className = 'aiq-vscroll';
   body.style.cssText = 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px';
   document.body.style.overflow = 'hidden';
 
@@ -10167,6 +10169,12 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
     eleCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Elevation</div>'
       +buildLineChart(r.chartEle,'#27AE60','ft',r.elev?('+'+r.elev+' ft gain'):'');
     wrap.appendChild(eleCard);
+  } else {
+    var eleNote=document.createElement('div');
+    eleNote.style.cssText='background:var(--s2);border-radius:14px;padding:14px;border:1px solid var(--b1);color:var(--t3);font-size:12px;line-height:1.5';
+    eleNote.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Elevation</div>'
+      +(r.elev?('+'+r.elev+' ft total gain. '):'')+'No elevation profile stored for this ride &mdash; it was imported without a per-point altitude stream.';
+    wrap.appendChild(eleNote);
   }
 
   body.appendChild(wrap);
