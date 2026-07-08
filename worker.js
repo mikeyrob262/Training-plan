@@ -9957,10 +9957,41 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     var mapWrap=document.createElement('div');
     mapWrap.style.cssText='position:relative;border-radius:16px;overflow:hidden;margin-bottom:14px';
     mapWrap.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+    var previewMapId = window._lastRouteMapId;
     var mapTools=document.createElement('div');
     mapTools.style.cssText='position:absolute;top:10px;right:10px;z-index:400;display:flex;flex-direction:column;gap:6px';
-    mapTools.innerHTML='<div style="background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div>'
-      +'<div style="background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></div>';
+    var layersBtn=document.createElement('div');
+    layersBtn.style.cssText='background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer';
+    layersBtn.title='Toggle satellite';
+    layersBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
+    layersBtn.onclick=function(){
+      var h=window['_routeMap_'+previewMapId];
+      if(!h || !h.map) return;
+      if(h.satOn){
+        if(h.sat){ try{h.map.removeLayer(h.sat);}catch(e){} }
+        try{h.base.addTo(h.map);}catch(e){}
+        h.satOn=false;
+      } else {
+        if(!h.sat){
+          h.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
+        }
+        try{h.base.remove();}catch(e){}
+        try{h.sat.addTo(h.map);}catch(e){}
+        h.satOn=true;
+      }
+    };
+    var expandBtn=document.createElement('div');
+    expandBtn.style.cssText='background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer';
+    expandBtn.title='Open full map';
+    expandBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+    expandBtn.onclick=function(){
+      var bodyEl=document.getElementById('ride-detail-body');
+      if(!bodyEl || !bodyEl.parentNode) return;
+      var btns=bodyEl.parentNode.querySelectorAll('button');
+      for(var i=0;i<btns.length;i++){ if(btns[i].textContent.trim()==='Map'){ btns[i].click(); return; } }
+    };
+    mapTools.appendChild(layersBtn);
+    mapTools.appendChild(expandBtn);
     mapWrap.appendChild(mapTools);
     wrap.appendChild(mapWrap);
 
@@ -10963,6 +10994,7 @@ function buildRouteMap(lats, lons, pwrData, FTP){
   if(!lats.length) return '';
   // Generate unique map ID
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
+  window._lastRouteMapId = mapId;
   var html = '<div id="'+mapId+'" style="width:100%;height:260px;border-radius:16px;overflow:hidden"></div>';
 
   // Initialize map after DOM insertion
@@ -10981,10 +11013,13 @@ function buildRouteMap(lats, lons, pwrData, FTP){
     });
 
     // OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    var baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap',
       maxZoom: 17
     }).addTo(map);
+    // Expose this map + its base layer so external controls (e.g. the
+    // Overview preview's layers button) can toggle satellite/street.
+    window['_routeMap_'+mapId] = { map: map, base: baseOSM, sat: null, satOn: false };
 
     // Build color-coded polyline segments
     if(pwrData && pwrData.length > 5){
