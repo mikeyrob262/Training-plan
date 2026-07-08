@@ -13219,10 +13219,15 @@ function fetchStravaElevStats(silent){
   }
   if(st.stravaAthleteId){ doFetch(st.stravaAthleteId); return; }
   fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+st.stravaToken}})
-  .then(function(r){ return r.ok?r.json():null; })
+  .then(function(r){
+    if(r.status===401){ if(!silent) toast('Strava token expired — run Sync Strava first then try Elev Stats'); return null; }
+    if(!r.ok){ if(!silent) toast('Strava /athlete returned HTTP '+r.status); return null; }
+    return r.json();
+  })
   .then(function(a){
+    if(!a) return;
     if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id); }
-    else { if(!silent) toast('Could not get Strava athlete ID'); }
+    else { if(!silent) toast('No athlete ID in response — keys: '+(a?JSON.stringify(Object.keys(a)):'null')); }
   })
   .catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
 }
