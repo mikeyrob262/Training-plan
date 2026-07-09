@@ -10600,7 +10600,6 @@ function openDesktopRideDetail(idx){
       '<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="1.5"/>';
   }
 
-  var routeSVG = buildRouteSVG(lats,lons);
   var elevSVG = buildElevSVG(r.chartEle);
 
   main.innerHTML =
@@ -10667,6 +10666,21 @@ function openDesktopRideDetail(idx){
     '</div>'+
   '</div>';
 
+  // Init GPS map right after main innerHTML is set
+  setTimeout(function(){
+    var mapDiv = document.getElementById('ds-detail-map');
+    var mapLats = r.gpsLats||r.lats;
+    var mapLons = r.gpsLons||r.lons;
+    if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
+      mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
+    } else if(mapDiv){
+      mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+      mapDiv.textContent = 'No GPS data';
+    }
+    var backBtn2 = document.getElementById('ds-back-btn');
+    if(backBtn2) backBtn2.onclick = function(){ dsNav('dashboard'); };
+  }, 50);
+
   // Right panel
   var rp = document.getElementById('ds-right-panel');
   if(rp){
@@ -10723,22 +10737,6 @@ function openDesktopRideDetail(idx){
         lbody.innerHTML=lt;
       }
     }
-
-    // Init real route map
-    var mapDiv = document.getElementById('ds-detail-map');
-    var mapLats = r.gpsLats||r.lats;
-    var mapLons = r.gpsLons||r.lons;
-    console.log('GPS check: gpsLats=', r.gpsLats&&r.gpsLats.length, 'lats=', r.lats&&r.lats.length);
-    if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
-      mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
-    } else if(mapDiv){
-      mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
-      mapDiv.textContent = 'No GPS data (pts: '+(mapLats?mapLats.length:0)+')';
-    }
-
-    // Back button
-    var backBtn2 = document.getElementById('ds-back-btn');
-    if(backBtn2) backBtn2.onclick = function(){ dsNav('dashboard'); };
 
     // Fetch current conditions
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
