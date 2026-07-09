@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783625072 v1783625072 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783625167 v1783625167 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783625072</title>
+<title>Athlete IQ v1783625167</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10565,8 +10565,15 @@ function dsShowRidesList(){
       row.onclick = function(){ openRideDetail(idx); };
 
       var icon = document.createElement('div');
-      icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#1a1f2e;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+      icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#111318;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative';
+      var _st=(r.sportType||r.type||'').toLowerCase();
+      var _path='M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3';
+      var _col='#4ade80';
+      if(_st.indexOf('run')>=0){_path='M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4';_col='#FC4C02';}
+      else if(_st.indexOf('swim')>=0){_path='M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0';_col='#60a5fa';}
+      else if(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0){_path='M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z';_col='#8b5cf6';}
+      icon.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+_col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+_path+'"/></svg>';
+      if(r.gpsLats&&r.gpsLats.length>1){var dot=document.createElement('div');dot.style.cssText='position:absolute;bottom:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#4ade80';icon.appendChild(dot);}
       row.appendChild(icon);
 
       var info = document.createElement('div');
