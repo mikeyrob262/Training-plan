@@ -10324,25 +10324,25 @@ function dsShowDashboard(){
   // Nutrition
   var nc=card(''); nc.appendChild(lbl('NUTRITION'));
   nc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:10px','Today'));
-  var nrow=row('gap:12px;margin-bottom:10px');
-  var dnut=div('position:relative;width:64px;height:64px;flex-shrink:0');
+  var nrow=row('gap:8px;margin-bottom:6px');
+  var dnut=div('position:relative;width:50px;height:50px;flex-shrink:0');
   var svgD=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgD.setAttribute('width','64'); svgD.setAttribute('height','64'); svgD.setAttribute('viewBox','0 0 64 64');
+  svgD.setAttribute('width','50'); svgD.setAttribute('height','50'); svgD.setAttribute('viewBox','0 0 64 64');
   var dc0=svgCircle('32','32','26','#1a1f2e','8'); svgD.appendChild(dc0);
   [[87,'#FC4C02',41],[49,'#60a5fa',-46],[27,'#8b5cf6',-95]].forEach(function(x){
     svgD.appendChild(svgCircle('32','32','26',x[1],'8',x[0]+' 163',''+x[2],'rotate(-90 32 32)'));
   });
   var dnum=div('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center');
-  dnum.appendChild(div('font-size:13px;font-weight:700;color:#fff','2,845'));
-  dnum.appendChild(div('font-size:8px;color:#64748b','of 3,250 cal'));
+  dnum.appendChild(div('font-size:10px;font-weight:700;color:#fff','2,845'));
+  dnum.appendChild(div('font-size:7px;color:#64748b','of 3,250 cal'));
   dnut.appendChild(svgD); dnut.appendChild(dnum);
   var nlist=div('flex:1;display:flex;flex-direction:column;gap:5px');
   [['#FC4C02','Protein','182/165g'],['#60a5fa','Carbs','412/420g'],['#8b5cf6','Fat','102/90g'],['#22d3ee','Hydration','74/90oz']].forEach(function(x){
     var nr=row('justify-content:space-between');
     var nl=row('gap:4px');
     var dot=div('width:8px;height:8px;border-radius:50%;flex-shrink:0'); dot.style.background=x[0];
-    nl.appendChild(dot); nl.appendChild(div('font-size:11px;color:#94a3b8',x[1]));
-    nr.appendChild(nl); nr.appendChild(div('font-size:11px;color:#e2e8f0',x[2]));
+    nl.appendChild(dot); nl.appendChild(div('font-size:10px;color:#94a3b8',x[1]));
+    nr.appendChild(nl); nr.appendChild(div('font-size:10px;color:#e2e8f0',x[2]));
     nlist.appendChild(nr);
   });
   nrow.appendChild(dnut); nrow.appendChild(nlist);
