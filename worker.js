@@ -16085,9 +16085,18 @@ function showWeatherHistory(){
     } else {
       var groupCard=document.createElement('div');
       groupCard.style.cssText='background:var(--s2);border-radius:14px;overflow:hidden';
+      // Scroll container: shows ~5 rows then scrolls
+      var ROW_H=54; // approx px per row
+      var scrollWrap=document.createElement('div');
+      scrollWrap.style.cssText='max-height:'+(ROW_H*5)+'px;overflow-y:scroll;overflow-x:hidden;border-radius:14px;scrollbar-width:thin;scrollbar-color:#555 #1a1a1a';
+      // Webkit scrollbar styles via injected style tag
+      var sbStyle=document.createElement('style');
+      sbStyle.textContent='.route-scroll::-webkit-scrollbar{width:5px}.route-scroll::-webkit-scrollbar-track{background:#1a1a1a;border-radius:3px}.route-scroll::-webkit-scrollbar-thumb{background:#666;border-radius:3px}.route-scroll::-webkit-scrollbar-thumb:hover{background:#888}';
+      document.head.appendChild(sbStyle);
+      scrollWrap.classList.add('route-scroll');
       routes.forEach(function(r,idx){
         var sport=r.sportType||r.type||'Ride';
-        var iconColor=sportColors[sport]||'#FC4C02';
+        var iconColor=sportColors[sport]||'#3A4A5C';
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var row=document.createElement('div');
         row.style.cssText='padding:11px 14px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
@@ -16101,8 +16110,9 @@ function showWeatherHistory(){
           if(!r.gpsLats||r.gpsLats.length<=5){r.noGPS=true;r.gpsLats=[42.9634];r.gpsLons=[-85.6681];}
           renderDatePicker(r);
         };
-        groupCard.appendChild(row);
+        scrollWrap.appendChild(row);
       });
+      groupCard.appendChild(scrollWrap);
       listWrap.appendChild(groupCard);
     }
     scr.appendChild(listWrap);
