@@ -409,7 +409,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
   </div>
   <div class="ds-main" id="ds-main-area">
     <div id="ds-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>
+      <div id="ds-loading" style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Loading dashboard...</div>
     </div>
   </div>
   <div class="ds-rpanel" id="ds-right-panel">
