@@ -15101,7 +15101,7 @@ function renderWeatherPlannerTab(body){
     +'<div style="margin-bottom:10px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>'
     +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:16px">Plan your ride</div>'
     +'<div style="font-size:13px;line-height:1.5;margin-bottom:20px">Pick a route, choose a departure time, and see forecast conditions for that ride.</div>'
-    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
+    +'<button onclick="showWeatherHistory()" style="padding:12px 24px;background:var(--s2);border:1px solid var(--b1);border-radius:12px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer">Choose a Route</button>'
     +'</div>';
 }
 
@@ -16248,6 +16248,25 @@ function showWeatherHistory(){
     hdr.appendChild(titleWrap);
     scr.appendChild(hdr);
 
+    // Route map preview
+    if(route.gpsLats && route.gpsLats.length>5 && typeof L !== 'undefined'){
+      var mapCard=document.createElement('div');
+      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:180px;background:var(--s2)';
+      var mapId='dp-map-'+Date.now();
+      mapCard.id=mapId;
+      scr.appendChild(mapCard);
+      setTimeout(function(){
+        try{
+          var lats=route.lats||route.gpsLats, lons=route.lons||route.gpsLons;
+          var m=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:false,attributionControl:false});
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
+          var pts=lats.map(function(lat,i){return[lat,lons[i]];});
+          L.polyline(pts,{color:'#A8C4E0',weight:2.5,opacity:0.9}).addTo(m);
+          m.fitBounds(L.latLngBounds(pts),{padding:[16,16]});
+        }catch(e){}
+      },80);
+    }
+
     var body=document.createElement('div');
     body.style.cssText='padding:12px 16px';
 
@@ -16342,7 +16361,7 @@ function showWeatherHistory(){
 
     var goBtn=document.createElement('button');
     goBtn.style.cssText='width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;padding:14px;cursor:pointer';
-    goBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>'
+    goBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2.5"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>'
       +'<span style="font-size:14px;font-weight:700;color:var(--t1)">Check weather</span>';
     goBtn.onclick=function(){renderDetail(route,selectedDate,selectedHour);};
     body.appendChild(goBtn);
