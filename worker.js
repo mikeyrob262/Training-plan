@@ -10057,10 +10057,12 @@ function dsShowDashboard(){
   var dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var dateStr = dayNames[now.getDay()]+', '+monthNames[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();
   var score = Math.min(99,Math.max(60,Math.round(70+(ftp/bwt-2.5)*10)));
+  var cutoff=new Date(); cutoff.setDate(cutoff.getDate()-7);
+  var cutoffStr=cutoff.toISOString().split('T')[0];
   var weekTSS = Math.round(rides.filter(function(r){
-    var d=new Date(); d.setDate(d.getDate()-7);
-    return r.date&&r.date>=d.toISOString().split('T')[0];
+    return r.date&&r.date>=cutoffStr;
   }).reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0));
+  if(weekTSS>999) weekTSS=Math.round(weekTSS/10); // sanity cap
 
   function mk(tag,css,txt){
     var e=document.createElement(tag);
@@ -10209,22 +10211,22 @@ function dsShowDashboard(){
 
   // Today Plan
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
-  var ptop=row('gap:12px;margin-bottom:10px');
-  var pico=div('width:44px;height:44px;border-radius:12px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
-  pico.appendChild(ico('ti-bike','#4ade80','22'));
+  var ptop=row('gap:10px;margin-bottom:6px');
+  var pico=div('width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
+  pico.appendChild(ico('ti-bike','#4ade80','20'));
   var pinfo=div('');
   pinfo.appendChild(div('font-size:14px;font-weight:700;color:#fff;margin-bottom:2px','Threshold Intervals'));
   pinfo.appendChild(div('font-size:15px;font-weight:800;color:#4ade80','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
   ptop.appendChild(pico); ptop.appendChild(pinfo);
   pc.appendChild(ptop);
-  var pmeta=row('gap:16px;margin-bottom:10px;flex-wrap:wrap');
+  var pmeta=row('gap:10px;margin-bottom:6px;flex-wrap:wrap');
   [['ti-clock','1h 15m'],['ti-chart-bar','Zone 4'],['ti-bolt',''+ftp+'W'],['ti-trending-up','Stress 86']].forEach(function(x){
     var m=row('gap:4px'); m.appendChild(ico(x[0],'#64748b','11')); m.appendChild(div('font-size:11px;color:#94a3b8',x[1]));
     pmeta.appendChild(m);
   });
   pc.appendChild(pmeta);
-  pc.appendChild(div('font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:8px','This is the ideal session to build FTP. You are more likely to see a breakthrough today.'));
-  pc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:10px','Workout will be ready to export to your devices.'));
+  pc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.4;margin-bottom:6px','Ideal session to build FTP.'));
+  
   var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer','View Workout Details');
   pc.appendChild(vwb);
   r2.appendChild(pc);
@@ -10237,9 +10239,9 @@ function dsShowDashboard(){
   ohd.appendChild(oico); ohd.appendChild(lbl("TODAY'S BIGGEST OPPORTUNITY"));
   oc.appendChild(ohd);
   oc.appendChild(div('font-size:13px;font-weight:700;color:#fff;margin-bottom:4px','Ride before 8:30 AM'));
-  oc.appendChild(div('font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:8px','Avoid a 15 mph headwind and 92F temperatures.'));
+  oc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.3;margin-bottom:6px','Avoid 15 mph headwind and 92F temps.'));
   oc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:4px','Estimated gain'));
-  oc.appendChild(div('font-size:16px;font-weight:800;color:#4ade80;margin-bottom:6px','+14 watts'));
+  oc.appendChild(div('font-size:16px;font-weight:800;color:#4ade80;margin-bottom:4px','+14 watts'));
   var svgO=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svgO.setAttribute('width','100%'); svgO.setAttribute('height','36'); svgO.setAttribute('viewBox','0 0 200 50'); svgO.setAttribute('preserveAspectRatio','none');
   var opf=document.createElementNS('http://www.w3.org/2000/svg','path');
@@ -10361,7 +10363,7 @@ function dsShowDashboard(){
   wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
   wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
   wmain.appendChild(wnum); wc.appendChild(wmain);
-  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:6px');
+  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:4px;overflow:hidden');
   var wwind=div(''); wwind.appendChild(div('font-size:10px;color:#64748b','Wind'));
   var wwv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); wwv.id='ds-wx-wind';
   wwind.appendChild(wwv); wgrid.appendChild(wwind);
