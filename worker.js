@@ -10465,19 +10465,17 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  // Deduplicate: when two rides share a stravaId, keep the one WITH gpsLats
   var _byId = {};
   (st.rides||[]).forEach(function(r){
-    var key = r.stravaId ? 'sid:'+r.stravaId : 'dnm:'+(r.date||'')+'|'+(r.name||'')+'|'+(r.duration||'');
-    if(!_byId[key]){
-      _byId[key] = r;
-    } else if(r.gpsLats && r.gpsLats.length > 1 && !(_byId[key].gpsLats && _byId[key].gpsLats.length > 1)){
-      _byId[key] = r; // prefer the one with GPS
-    }
+    var s=r.sportType||r.type||'';
+    if(/virtual|weight|strength/i.test(s)) return;
+    var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+(r.date||'')+(r.name||'')+(r.duration||'');
+    var existing = _byId[key];
+    if(!existing) { _byId[key]=r; return; }
+    if(r.gpsLats&&r.gpsLats.length>1&&!(existing.gpsLats&&existing.gpsLats.length>1)) _byId[key]=r;
   });
   var rides = Object.values(_byId).sort(function(a,b){
-    var da=a.date||'', db=b.date||'';
-    if(db>da) return 1; if(db<da) return -1; return 0;
+    return (b.date||'')>(a.date||'')?1:-1;
   });
 
   var wrap = document.createElement('div');
