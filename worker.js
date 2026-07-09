@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783636200 v1783636200 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783636350 v1783636350 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11620,6 +11620,18 @@ function dsShowRidesList(){
   mc.innerHTML='';
   mc.appendChild(wrap);
 }
+
+function dsInitProfile(){
+  var name=(st.profile&&st.profile.name)||'Mikey';
+  var wt=st.weight?st.weight+'lbs':'';
+  var initials=name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+  var el=document.getElementById('ds-avatar-initials'); if(el) el.textContent=initials;
+  var pn=document.getElementById('ds-profile-name'); if(pn) pn.textContent=name;
+  var pw=document.getElementById('ds-profile-wt'); if(pw) pw.textContent=wt;
+  var cw=typeof getCurrentPlanWeek==='function'?getCurrentPlanWeek():1;
+  var pb=document.getElementById('ds-profile-badge'); if(pb) pb.textContent='Week '+cw;
+}
+
 
 function openDesktopRideDetail(idx){
   var rpEl=document.getElementById('ds-right-panel');
