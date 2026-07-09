@@ -10754,7 +10754,7 @@ function openDesktopRideDetail(idx){
       mapDiv.textContent='No GPS data';
     }
     var bb=document.getElementById('ds-back-btn');
-    if(bb) bb.onclick=function(){dsNav('dashboard');};
+    if(bb) bb.onclick=function(){ dsNav('activities'); };
   })();
 
   // Right panel
