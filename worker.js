@@ -16249,22 +16249,29 @@ function showWeatherHistory(){
     scr.appendChild(hdr);
 
     // Route map preview
-    if(route.gpsLats && route.gpsLats.length>5 && typeof L !== 'undefined'){
+    var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
+    if(_dpLats && _dpLats.length>5){
       var mapCard=document.createElement('div');
       mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:180px;background:var(--s2)';
       var mapId='dp-map-'+Date.now();
       mapCard.id=mapId;
       scr.appendChild(mapCard);
-      setTimeout(function(){
+      var _dpAttempts=0;
+      function _initDpMap(){
+        _dpAttempts++;
+        if(typeof L==='undefined'){
+          if(_dpAttempts<20) setTimeout(_initDpMap,150);
+          return;
+        }
         try{
-          var lats=route.lats||route.gpsLats, lons=route.lons||route.gpsLons;
+          var pts=_dpLats.map(function(lat,i){return[lat,_dpLons[i]];});
           var m=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:false,attributionControl:false});
           L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
-          var pts=lats.map(function(lat,i){return[lat,lons[i]];});
           L.polyline(pts,{color:'#A8C4E0',weight:2.5,opacity:0.9}).addTo(m);
           m.fitBounds(L.latLngBounds(pts),{padding:[16,16]});
         }catch(e){}
-      },80);
+      }
+      setTimeout(_initDpMap,100);
     }
 
     var body=document.createElement('div');
