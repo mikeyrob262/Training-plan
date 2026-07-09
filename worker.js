@@ -4357,7 +4357,7 @@ function doSwap(w,idx,btn){
   var sl=sessName.toLowerCase();
   var opts=[];
   // Cycling options
-  var cycling=['Outdoor Ride','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Easy Spin 30 min'];
+  var cycling=['Outdoor Ride','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Zwift Climb','Zwift Race','Easy Spin 30 min'];
   // Run options  
   var running=['Easy Run','Tempo Run','Fartlek Run','Hill Repeats','400m Repeats x8','800m Repeats x6','Mile Repeats x4','Track Intervals','Treadmill Run','Walk 30 min'];
   // Swim options
@@ -4368,13 +4368,14 @@ function doSwap(w,idx,btn){
   var rest=['Race','Rest Day'];
 
   if(sl.indexOf('strength')>=0||sl.indexOf('full body')>=0){
-    opts=running.concat(swimming).concat(['Easy Spin 20 min']).concat(rest);
+    opts=cycling.concat(running).concat(swimming).concat(rest);
   } else if(sl.indexOf('zwift')>=0||sl.indexOf('ride')>=0||sl.indexOf('bike')>=0||sl.indexOf('chase')>=0){
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('run')>=0||sl.indexOf('jog')>=0){
-    opts=running.concat(cycling).concat(swimming).concat(strength).concat(rest);
+    // Put cycling first — most common cross-training swap for a run
+    opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   } else if(sl.indexOf('swim')>=0){
-    opts=swimming.concat(running).concat(cycling).concat(rest);
+    opts=swimming.concat(cycling).concat(running).concat(rest);
   } else {
     opts=cycling.concat(running).concat(swimming).concat(strength).concat(rest);
   }
