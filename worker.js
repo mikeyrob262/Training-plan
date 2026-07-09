@@ -10671,11 +10671,13 @@ function openDesktopRideDetail(idx){
     var mapDiv = document.getElementById('ds-detail-map');
     var mapLats = r.gpsLats||r.lats;
     var mapLons = r.gpsLons||r.lons;
+    console.log('MAP INIT: mapDiv=',!!mapDiv,'pts=',mapLats&&mapLats.length,'lons=',mapLons&&mapLons.length);
     if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
       mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
+      console.log('MAP RENDERED');
     } else if(mapDiv){
       mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
-      mapDiv.textContent = 'No GPS data';
+      mapDiv.textContent = 'No GPS (div='+!!mapDiv+' pts='+(mapLats?mapLats.length:0)+')';
     }
     var backBtn2 = document.getElementById('ds-back-btn');
     if(backBtn2) backBtn2.onclick = function(){ dsNav('dashboard'); };
