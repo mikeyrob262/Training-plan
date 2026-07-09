@@ -16304,6 +16304,16 @@ function showWeatherHistory(){
     body.style.cssText='padding:12px 16px';
     scr.appendChild(body);
 
+    // Route map preview
+    var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
+    if(_dpLats && _dpLats.length>1 && _dpLons && _dpLons.length>1){
+      var mapWrap=document.createElement('div');
+      mapWrap.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden';
+      mapWrap.innerHTML=buildRouteMap(_dpLats, _dpLons, [], 0);
+      body.appendChild(mapWrap);
+    }
+
+
 
 
     var today=new Date();
