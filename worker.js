@@ -10047,9 +10047,8 @@ function dsShowDashboard(){
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
-  // Most recent 3 rides - deduplicate by stravaId keeping GPS version
-  var _rSeen={};
-  var _rDeduped=[];
+  // Most recent 3 unique rides with GPS preferred
+  var _rSeen={}, _rDeduped=[];
   (st.rides||[]).forEach(function(r){
     var key=r.stravaId?'s'+r.stravaId:'d'+(r.date||'')+(r.name||'');
     var ex=_rSeen[key];
@@ -10058,7 +10057,9 @@ function dsShowDashboard(){
       _rDeduped[_rDeduped.indexOf(ex)]=r;_rSeen[key]=r;
     }
   });
-  var recent = _rDeduped.sort(function(a,b){
+  var recent = _rDeduped.filter(function(r){
+    return !/virtual|weight|strength/i.test(r.sportType||r.type||'');
+  }).sort(function(a,b){
     return (b.date||'')>(a.date||'')?1:-1;
   }).slice(0,3);
   var ftp = parseInt(st.ftp||186);
@@ -10417,10 +10418,7 @@ function dsShowDashboard(){
   var whum=div(''); whum.appendChild(div('font-size:10px;color:#64748b','Humidity'));
   var whv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); whv.id='ds-wx-hum';
   whum.appendChild(whv); wgrid.appendChild(whum);
-  var wpr=div(''); wpr.appendChild(div('font-size:10px;color:#64748b','Precip'));
-  wpr.appendChild(div('font-size:11px;font-weight:600;color:#e2e8f0','0%')); wgrid.appendChild(wpr);
-  var wrd=div(''); wrd.appendChild(div('font-size:10px;color:#64748b','Road'));
-  wrd.appendChild(div('font-size:11px;font-weight:600;color:#4ade80','Excellent')); wgrid.appendChild(wrd);
+
   wc.appendChild(wgrid); r3.appendChild(wc);
   body.appendChild(r3);
 
