@@ -16304,13 +16304,58 @@ function showWeatherHistory(){
     body.style.cssText='padding:12px 16px';
     scr.appendChild(body);
 
-    // Route map preview
+    // Route map preview with wind coloring
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>1 && _dpLons && _dpLons.length>1){
       var mapWrap=document.createElement('div');
-      mapWrap.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden';
+      mapWrap.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;position:relative';
       mapWrap.innerHTML=buildRouteMap(_dpLats, _dpLons, [], 0);
       body.appendChild(mapWrap);
+      // Legend
+      var leg=document.createElement('div');
+      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:4px 0 8px';
+      [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
+        var p=document.createElement('div');
+        p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
+        p.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
+        leg.appendChild(p);
+      });
+      body.appendChild(leg);
+      // Fetch wind and overlay colored polylines on the buildRouteMap instance
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+        .then(function(r){return r.json();})
+        .then(function(wx){
+          var hi=new Date().getHours();
+          var wdir=wx&&wx.hourly?wx.hourly.winddirection_10m[hi]:null;
+          var wspd=wx&&wx.hourly?wx.hourly.windspeed_10m[hi]:0;
+          // Wait for buildRouteMap's setTimeout to finish, then overlay
+          setTimeout(function(){
+            var mapId=window._lastRouteMapId;
+            var inst=mapId&&window['_routeMap_'+mapId];
+            if(!inst||!inst.map||wdir==null) return;
+            var m=inst.map;
+            var pts=_dpLats.map(function(la,i){return[la,_dpLons[i]];});
+            var windToward=((wdir||0)+180)%360;
+            for(var si=0;si<pts.length-1;si++){
+              var p1=pts[Math.max(0,si-1)], p2=pts[Math.min(pts.length-1,si+1)];
+              var bearing=Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI;
+              var travel=(bearing+360)%360;
+              var diff=Math.abs(((travel-windToward+540)%360)-180);
+              var col=diff<45?'#1D9E75':diff>135?'#E24B4A':'#BA7517';
+              L.polyline([pts[si],pts[si+1]],{color:col,weight:4,opacity:0.9}).addTo(m);
+            }
+            // Wind compass
+            var dirs=['N','NE','E','SE','S','SW','W','NW'];
+            var fromLbl=dirs[Math.round((wdir||0)/45)%8];
+            var blowTo=((wdir||0)+180)%360;
+            var comp=document.createElement('div');
+            comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(16,18,22,.88);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none';
+            comp.innerHTML='<div style="transform:rotate('+blowTo+'deg)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
+              +'<div style="font-size:11px;font-weight:800;color:#fff">'+fromLbl+' wind</div>'
+              +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wspd)+'mph</div>';
+            mapWrap.appendChild(comp);
+          }, 600);
+        }).catch(function(){});
     }
 
 
