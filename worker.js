@@ -72,7 +72,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-ni.on{color:#FC4C02;border-left-color:#FC4C02;background:rgba(252,76,2,.07)}
 .ds-ni i{font-size:14px;width:16px;flex-shrink:0}
 .ds-foot{padding:8px 0;border-top:1px solid #1e2130}
-.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14;max-width:calc(100vw - 152px - 286px)}
+.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14}
 .ds-mhdr{padding:13px 18px 11px;border-bottom:1px solid #1e2130;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
 .ds-back{font-size:11px;color:#64748b;display:flex;align-items:center;gap:3px;margin-bottom:4px;cursor:pointer}
 .ds-title{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em}
@@ -10086,16 +10086,16 @@ function dsShowDashboard(){
   }
 
   mc.innerHTML='';
-  var shell=div('display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14');
+  var shell=div('display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;box-sizing:border-box');
 
   // Top bar
-  var topbar=row('justify-content:space-between;padding:12px 18px 10px;border-bottom:1px solid #1a1f2e;flex-shrink:0');
+  var topbar=row('justify-content:space-between;padding:10px 16px 8px;border-bottom:1px solid #1a1f2e;flex-shrink:0;min-width:0');
   var greetWrap=div('');
-  var greetEl=div('font-size:22px;font-weight:700;color:#fff;letter-spacing:-.02em');
+  var greetEl=div('font-size:18px;font-weight:700;color:#fff;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis');
   greetEl.textContent=greeting+', Mikey';
   greetWrap.appendChild(greetEl);
   greetWrap.appendChild(div('font-size:12px;color:#64748b;margin-top:2px','Here is what matters today.'));
-  var dateDiv=row('gap:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:8px;padding:6px 12px');
+  var dateDiv=row('gap:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:8px;padding:5px 10px;flex-shrink:0');
   var calIco=ico('ti-calendar','#94a3b8','14'); calIco.style.marginRight='4px';
   dateDiv.appendChild(calIco);
   dateDiv.appendChild(mk('span','font-size:12px;color:#e2e8f0;font-weight:500',dateStr));
@@ -10110,9 +10110,9 @@ function dsShowDashboard(){
   // Readiness
   var rc=card(''); rc.appendChild(lbl('READINESS'));
   var rrow=row('gap:12px');
-  var ringWrap=div('position:relative;width:70px;height:70px;flex-shrink:0');
+  var ringWrap=div('position:relative;width:58px;height:58px;flex-shrink:0');
   var svgR=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgR.setAttribute('width','70'); svgR.setAttribute('height','70'); svgR.setAttribute('viewBox','0 0 70 70');
+  svgR.setAttribute('width','58'); svgR.setAttribute('height','58'); svgR.setAttribute('viewBox','0 0 70 70');
   function svgCircle(cx,cy,r,stroke,sw,dash,offset,transform){
     var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.setAttribute('cx',cx); c.setAttribute('cy',cy); c.setAttribute('r',r);
@@ -10143,10 +10143,10 @@ function dsShowDashboard(){
   var sc=card('');
   var shd=row('gap:6px;margin-bottom:8px'); shd.appendChild(ico('ti-moon','#8b5cf6')); shd.appendChild(lbl('SLEEP'));
   sc.appendChild(shd);
-  sc.appendChild(div('font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em','7h 48m'));
+  sc.appendChild(div('font-size:20px;font-weight:800;color:#fff;letter-spacing:-.02em','7h 48m'));
   sc.appendChild(div('font-size:11px;color:#4ade80;font-weight:600;margin-bottom:8px','Good'));
   var svgS=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgS.setAttribute('width','100%'); svgS.setAttribute('height','40'); svgS.setAttribute('viewBox','0 0 140 40'); svgS.setAttribute('preserveAspectRatio','none');
+  svgS.setAttribute('width','100%'); svgS.setAttribute('height','30'); svgS.setAttribute('viewBox','0 0 140 40'); svgS.setAttribute('preserveAspectRatio','none');
   [[0,10],[20,5],[40,8],[60,12],[80,6],[100,14],[120,4]].forEach(function(x,i){
     var h=40-x[1]; var rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
     rect.setAttribute('x',''+x[0]); rect.setAttribute('y',''+x[1]); rect.setAttribute('width','16'); rect.setAttribute('height',''+h);
@@ -10162,10 +10162,10 @@ function dsShowDashboard(){
   var hc=card('');
   var hhd=row('gap:6px;margin-bottom:8px'); hhd.appendChild(ico('ti-heart','#e24b4a')); hhd.appendChild(lbl('HRV'));
   hc.appendChild(hhd);
-  hc.appendChild(div('font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em','62 ms'));
+  hc.appendChild(div('font-size:20px;font-weight:800;color:#fff;letter-spacing:-.02em','62 ms'));
   hc.appendChild(div('font-size:11px;color:#4ade80;font-weight:600;margin-bottom:8px','Above Base'));
   var svgH=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgH.setAttribute('width','100%'); svgH.setAttribute('height','40'); svgH.setAttribute('viewBox','0 0 140 40'); svgH.setAttribute('preserveAspectRatio','none');
+  svgH.setAttribute('width','100%'); svgH.setAttribute('height','30'); svgH.setAttribute('viewBox','0 0 140 40'); svgH.setAttribute('preserveAspectRatio','none');
   var pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');
   pl.setAttribute('points','0,28 20,25 40,22 60,20 80,18 100,20 120,16 140,14');
   pl.setAttribute('fill','none'); pl.setAttribute('stroke','#4ade80'); pl.setAttribute('stroke-width','2'); pl.setAttribute('stroke-linecap','round');
@@ -10186,7 +10186,7 @@ function dsShowDashboard(){
   var tbl2=row('gap:5px'); tbl2.appendChild(ico('ti-bolt','#4ade80')); tbl2.appendChild(lbl('TRAINING BALANCE'));
   tbhd.appendChild(tbl2); tbhd.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View Calendar'));
   tbc.appendChild(tbhd);
-  tbc.appendChild(div('font-size:26px;font-weight:800;color:#4ade80;margin-bottom:10px','+ +6'));
+  tbc.appendChild(div('font-size:20px;font-weight:800;color:#4ade80;margin-bottom:6px','+ +6'));
   [['JUL','12','Lake Michigan Century','Kenosha, WI','18 days'],['AUG','9','Mt. Washington','Auto Road, NH','46 days'],['SEP','21','Gran Fondo Hincapie','Greenville, SC','78 days'],['OCT','18','Chicago Marathon','Chicago, IL','105 days']].forEach(function(ev){
     var er=row('gap:10px;margin-bottom:8px');
     var dc=div('width:36px;text-align:center;flex-shrink:0');
@@ -10211,8 +10211,8 @@ function dsShowDashboard(){
   var pico=div('width:44px;height:44px;border-radius:12px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
   pico.appendChild(ico('ti-bike','#4ade80','22'));
   var pinfo=div('');
-  pinfo.appendChild(div('font-size:16px;font-weight:700;color:#fff;margin-bottom:3px','Threshold Intervals'));
-  pinfo.appendChild(div('font-size:18px;font-weight:800;color:#4ade80','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
+  pinfo.appendChild(div('font-size:14px;font-weight:700;color:#fff;margin-bottom:2px','Threshold Intervals'));
+  pinfo.appendChild(div('font-size:15px;font-weight:800;color:#4ade80','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
   ptop.appendChild(pico); ptop.appendChild(pinfo);
   pc.appendChild(ptop);
   var pmeta=row('gap:16px;margin-bottom:10px;flex-wrap:wrap');
@@ -10234,12 +10234,12 @@ function dsShowDashboard(){
   oico.appendChild(ico('ti-target','#4ade80','18'));
   ohd.appendChild(oico); ohd.appendChild(lbl("TODAY'S BIGGEST OPPORTUNITY"));
   oc.appendChild(ohd);
-  oc.appendChild(div('font-size:15px;font-weight:700;color:#fff;margin-bottom:6px','Ride before 8:30 AM'));
+  oc.appendChild(div('font-size:13px;font-weight:700;color:#fff;margin-bottom:4px','Ride before 8:30 AM'));
   oc.appendChild(div('font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:8px','Avoid a 15 mph headwind and 92F temperatures.'));
   oc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:4px','Estimated gain'));
-  oc.appendChild(div('font-size:20px;font-weight:800;color:#4ade80;margin-bottom:10px','+14 watts'));
+  oc.appendChild(div('font-size:16px;font-weight:800;color:#4ade80;margin-bottom:6px','+14 watts'));
   var svgO=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgO.setAttribute('width','100%'); svgO.setAttribute('height','50'); svgO.setAttribute('viewBox','0 0 200 50'); svgO.setAttribute('preserveAspectRatio','none');
+  svgO.setAttribute('width','100%'); svgO.setAttribute('height','36'); svgO.setAttribute('viewBox','0 0 200 50'); svgO.setAttribute('preserveAspectRatio','none');
   var opf=document.createElementNS('http://www.w3.org/2000/svg','path');
   opf.setAttribute('d','M0,40 C20,38 35,20 50,15 C65,10 80,30 100,35 C120,40 140,42 200,44 L200,50 L0,50 Z');
   opf.setAttribute('fill','rgba(74,222,128,0.2)');
@@ -10309,7 +10309,7 @@ function dsShowDashboard(){
   // Training Load
   var tlc=card(''); tlc.appendChild(lbl('TRAINING LOAD'));
   tlc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:4px','This Week'));
-  tlc.appendChild(div('font-size:32px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1',''+weekTSS));
+  tlc.appendChild(div('font-size:22px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1',''+weekTSS));
   tlc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:10px','of 650 TSS'));
   var bb=div('background:#1a1f2e;border-radius:4px;height:6px;margin-bottom:6px');
   var bf=div('border-radius:4px;height:6px;background:#4ade80'); bf.style.width=Math.min(100,Math.round(weekTSS/650*100))+'%';
@@ -10356,7 +10356,7 @@ function dsShowDashboard(){
   var wmain=row('gap:8px;margin-bottom:10px');
   wmain.appendChild(ico('ti-sun','#f59e0b','28'));
   var wnum=div('');
-  wnum.appendChild(div('font-size:26px;font-weight:800;color:#fff','72\u00B0F'));
+  wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
   wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
   wmain.appendChild(wnum); wc.appendChild(wmain);
   var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:6px');
@@ -10385,7 +10385,7 @@ function dsShowDashboard(){
   [['ti-bike','#4ade80',Math.min(rdys,9),'Ride Days'],['ti-run','#FC4C02',Math.min(rndys,5),'Run Days'],['ti-barbell','#60a5fa',Math.min(stdys,4),'Strength']].forEach(function(x){
     var sc2=div('display:flex;flex-direction:column;align-items:center;text-align:center');
     sc2.appendChild(ico(x[0],x[1],'20'));
-    sc2.appendChild(div('font-size:20px;font-weight:800;color:#fff',''+x[2]));
+    sc2.appendChild(div('font-size:18px;font-weight:800;color:#fff',''+x[2]));
     sc2.appendChild(div('font-size:9px;color:#64748b',x[3]));
     strrow.appendChild(sc2);
   });
@@ -10425,7 +10425,7 @@ function dsShowDashboard(){
   hyc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:8px','Today'));
   var hyrow=row('gap:12px');
   var hyl=div('');
-  hyl.appendChild(div('font-size:20px;font-weight:800;color:#fff','742 ml'));
+  hyl.appendChild(div('font-size:16px;font-weight:800;color:#fff','742 ml'));
   hyl.appendChild(div('font-size:10px;color:#64748b','Remaining'));
   var hyring=div('position:relative;width:52px;height:52px');
   var svgHy=document.createElementNS('http://www.w3.org/2000/svg','svg');
