@@ -6885,7 +6885,7 @@ function renderNutr(){
     var mAddBtn=document.createElement('button');
     mAddBtn.style.cssText='background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:inherit';
     mAddBtn.textContent='+ Add';
-    (function(mn){mAddBtn.onclick=function(){openFoodForMeal(mn);};})(meal);
+    (function(mn){mAddBtn.onclick=function(){ try{ openFoodForMeal(mn); }catch(e){ toast('Food modal error: '+e.message); } };})(meal);
     mRight.appendChild(mCalSpan);mRight.appendChild(mAddBtn);
     mHdr.appendChild(mTitle);mHdr.appendChild(mRight);
     mealDiv.appendChild(mHdr);
