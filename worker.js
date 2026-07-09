@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783626949 v1783626949 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783627146 v1783627146 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783626949</title>
+<title>Athlete IQ v1783627146</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10525,100 +10525,61 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
+
+  // Deduplicate preferring GPS version
   var _byId = {};
   (st.rides||[]).forEach(function(r){
-    var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+(r.date||'')+(r.name||'')+(r.duration||'');
-    var existing = _byId[key];
-    if(!existing) { _byId[key]=r; return; }
-    // Always prefer the version with more GPS points
-    var rGps = (r.gpsLats&&r.gpsLats.length)||0;
-    var eGps = (existing.gpsLats&&existing.gpsLats.length)||0;
-    if(rGps > eGps) _byId[key]=r;
+    var dist = r.distance ? Math.round(parseFloat(r.distance)) : 0;
+    var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.duration||'');
+    var ex = _byId[key];
+    if(!ex){ _byId[key]=r; return; }
+    if(((r.gpsLats&&r.gpsLats.length)||0) > ((ex.gpsLats&&ex.gpsLats.length)||0)) _byId[key]=r;
   });
-  var rides = Object.values(_byId).sort(function(a,b){
+  var allRides = Object.values(_byId).sort(function(a,b){
     return normDate(b.date)>normDate(a.date)?1:-1;
   });
 
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
 
+  // Title bar + filters
   var titleBar = document.createElement('div');
   titleBar.style.cssText = 'padding:14px 18px 10px;border-bottom:1px solid #1e2130;flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
   var tbTitle = document.createElement('div');
   tbTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff';
   tbTitle.textContent = 'Activities';
   titleBar.appendChild(tbTitle);
+
   var tbFilters = document.createElement('div');
   tbFilters.style.cssText = 'display:flex;gap:6px';
-  ['All','Rides','Runs','Strength'].forEach(function(f){
-    var btn = document.createElement('div');
-    var active = f==='All';
-    btn.style.cssText = 'padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(active?'#4ade80':'#252d40')+';color:'+(active?'#4ade80':'#64748b')+';background:'+(active?'rgba(74,222,128,.1)':'transparent');
-    btn.textContent = f;
-    btn.onclick = function(){
-      tbFilters.querySelectorAll('div').forEach(function(b){b.style.borderColor='#252d40';b.style.color='#64748b';b.style.background='transparent';});
-      btn.style.borderColor='#4ade80';btn.style.color='#4ade80';btn.style.background='rgba(74,222,128,.1)';
-      var fval = f.toLowerCase();
-      var filtered = fval==='all' ? rides : rides.filter(function(r){
-        var s=r.sportType||r.type||'';
-        if(fval==='rides') return /ride|cycling/i.test(s);
-        if(fval==='runs') return /run/i.test(s);
-        if(fval==='strength') return /strength|weight/i.test(s);
-        return true;
-      });
-      _vis=10;
-      // Re-render with filtered set
-      list.innerHTML='';
-      filtered.slice(0,_vis).forEach(function(r){ renderRow(r); });
-      if(_vis<filtered.length){
-        var mb=document.createElement('div');
-        mb.className='load-more-btn';
-        mb.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
-        mb.textContent='Load more ('+(filtered.length-_vis)+' remaining)';
-        mb.onclick=function(){_vis+=20;mb.remove();filtered.slice(_vis-20,_vis).forEach(function(r){list.insertBefore(renderRow(r),null);});if(_vis<filtered.length){list.appendChild(mb);}};
-        list.appendChild(mb);
-      }
-    };
-    tbFilters.appendChild(btn);
-  });
-  titleBar.appendChild(tbFilters);
-  wrap.appendChild(titleBar);
+  var currentFilter = 'all';
+  var visCount = 10;
 
-  var list = document.createElement('div');
-  list.style.cssText = 'overflow-y:auto;flex:1';
+  function getFiltered(){
+    return allRides.filter(function(r){
+      var s = r.sportType||r.type||'';
+      if(currentFilter==='rides') return /ride|cycling/i.test(s);
+      if(currentFilter==='runs') return /run/i.test(s);
+      if(currentFilter==='strength') return /strength|weight/i.test(s);
+      return true;
+    });
+  }
 
-  if(!rides.length){
-    var empty = document.createElement('div');
-    empty.style.cssText = 'padding:40px;text-align:center;color:#64748b';
-    empty.textContent = 'No activities yet';
-    list.appendChild(empty);
-  } else {
-    var _vis=10;
-    function renderRow(r){
+  function renderList(){
+    list.innerHTML='';
+    var filtered = getFiltered();
+    tbTitle.textContent = 'Activities ('+filtered.length+')';
+    filtered.slice(0, visCount).forEach(function(r){
       var ridx=(st.rides||[]).indexOf(r);
       if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
-      var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
-      row.onmouseover=function(){this.style.background='#1a1f2e';};
-      row.onmouseout=function(){this.style.background='';};
-      row.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
-      row.className='act-row';
-      row.setAttribute('data-sport',r.sportType||r.type||'Ride');
-      return row;
-    }
-    function _renderMore(){
-      var old2=list.querySelector('.load-more-btn'); if(old2) old2.remove();
-      Array.from(list.querySelectorAll('.act-row')).forEach(function(row){row.remove();});
-      rides.slice(0,_vis).forEach(function(r){
-      var idx = (st.rides||[]).indexOf(r);
+
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
       row.onmouseover = function(){ this.style.background='#1a1f2e'; };
       row.onmouseout = function(){ this.style.background=''; };
-      row.onclick = function(){ openRideDetail(idx); };
-      row.className='act-row';
-      row.setAttribute('data-sport',r.sportType||r.type||'Ride');
+      row.onclick = (function(i){ return function(){ openRideDetail(i); }; })(ridx);
 
+      // Icon
       var icon = document.createElement('div');
       icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#111318;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative';
       var _st=(r.sportType||r.type||'').toLowerCase();
@@ -10628,51 +10589,77 @@ function dsShowRidesList(){
       else if(_st.indexOf('swim')>=0){_path='M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0';_col='#60a5fa';}
       else if(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0){_path='M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z';_col='#8b5cf6';}
       icon.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+_col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+_path+'"/></svg>';
-      if(r.gpsLats&&r.gpsLats.length>1){var dot=document.createElement('div');dot.style.cssText='position:absolute;bottom:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#4ade80';icon.appendChild(dot);}
+      if(r.gpsLats&&r.gpsLats.length>1){
+        var dot=document.createElement('div');
+        dot.style.cssText='position:absolute;bottom:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#4ade80';
+        icon.appendChild(dot);
+      }
       row.appendChild(icon);
 
+      // Info
       var info = document.createElement('div');
       info.style.cssText = 'flex:1;min-width:0';
       var name = document.createElement('div');
       name.style.cssText = 'font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-      var _rn=r.name||r.sportType||'Activity'; if(_rn.indexOf(' ACTIVITY')>0&&parseInt(_rn)>0) _rn=r.sportType||r.type||'Ride'; name.textContent=_rn;
-      var date = document.createElement('div');
-      date.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
-      date.textContent = r.date||'';
-      info.appendChild(name);
-      info.appendChild(date);
+      var _rn=r.name||r.sportType||'Activity';
+      if(_rn.indexOf(' ACTIVITY')>0&&parseInt(_rn)>0) _rn=r.sportType||r.type||'Ride';
+      name.textContent=_rn;
+      var dateEl = document.createElement('div');
+      dateEl.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
+      dateEl.textContent = r.date||'';
+      info.appendChild(name); info.appendChild(dateEl);
       row.appendChild(info);
 
+      // Stats
       var stats = document.createElement('div');
       stats.style.cssText = 'display:flex;gap:16px;flex-shrink:0';
-      function addStat(val, lbl, color){
+      function addStat(val,lbl,color){
         if(!val) return;
-        var s = document.createElement('div');
-        s.style.cssText = 'text-align:right';
-        s.innerHTML = '<div style="font-size:13px;font-weight:600;color:'+color+'">'+val+'</div><div style="font-size:10px;color:#64748b">'+lbl+'</div>';
+        var s=document.createElement('div'); s.style.cssText='text-align:right';
+        s.innerHTML='<div style="font-size:13px;font-weight:600;color:'+color+'">'+val+'</div><div style="font-size:10px;color:#64748b">'+lbl+'</div>';
         stats.appendChild(s);
       }
-      addStat(r.distance ? r.distance+' mi' : '', 'Dist', '#e2e8f0');
-      addStat(r.duration||'', 'Time', '#e2e8f0');
-      addStat(r.avgPower ? r.avgPower+'w' : '', 'Power', '#FC4C02');
-      addStat(r.avgHR ? r.avgHR+' bpm' : '', 'HR', '#60a5fa');
+      addStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'','Dist','#e2e8f0');
+      addStat(r.duration||'','Time','#e2e8f0');
+      addStat(r.avgHR?r.avgHR+' bpm':'','HR','#60a5fa');
+      addStat(r.tss?Math.round(r.tss)+' TSS':'','TSS','#f59e0b');
       row.appendChild(stats);
-        list.appendChild(row);
-        shown++;
-      });
-      if(_vis < rides.length){
-        var moreBtn=document.createElement('div');
-        moreBtn.className='load-more-btn';
-        moreBtn.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
-        moreBtn.textContent='Load more ('+(rides.length-_vis)+' remaining)';
-        moreBtn.onclick=function(){_vis+=20;_renderMore();};
-        list.appendChild(moreBtn);
-      }
+      list.appendChild(row);
+    });
+
+    // Load more
+    if(visCount < getFiltered().length){
+      var mb=document.createElement('div');
+      mb.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
+      mb.textContent='Load more ('+(getFiltered().length-visCount)+' remaining)';
+      mb.onclick=function(){visCount+=20;renderList();};
+      list.appendChild(mb);
     }
-    _renderMore();
   }
+
+  ['All','Rides','Runs','Strength'].forEach(function(f){
+    var btn=document.createElement('div');
+    var active=f==='All';
+    btn.style.cssText='padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(active?'#4ade80':'#252d40')+';color:'+(active?'#4ade80':'#64748b')+';background:'+(active?'rgba(74,222,128,.1)':'transparent');
+    btn.textContent=f;
+    btn.onclick=function(){
+      tbFilters.querySelectorAll('div').forEach(function(b){b.style.borderColor='#252d40';b.style.color='#64748b';b.style.background='transparent';});
+      btn.style.borderColor='#4ade80';btn.style.color='#4ade80';btn.style.background='rgba(74,222,128,.1)';
+      currentFilter=f.toLowerCase();
+      visCount=10;
+      renderList();
+    };
+    tbFilters.appendChild(btn);
+  });
+  titleBar.appendChild(tbFilters);
+  wrap.appendChild(titleBar);
+
+  var list=document.createElement('div');
+  list.style.cssText='overflow-y:auto;flex:1';
   wrap.appendChild(list);
-  mc.innerHTML = '';
+
+  renderList();
+  mc.innerHTML='';
   mc.appendChild(wrap);
 }
 
