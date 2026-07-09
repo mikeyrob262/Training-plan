@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783620921 v1783620921 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783623787 v1783623787 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783620921</title>
+<title>Athlete IQ v1783623787</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -4030,6 +4030,7 @@ function weatherFormRowHTML(){
     formHTML = '<div style="font-size:13px;color:var(--t2);margin-top:2px">Log more rides for a form reading</div>';
   } else {
     var pmc = computePMC(withLoad);
+    if(!pmc||!pmc.length||!pmc[pmc.length-1]) return '<div style="font-size:13px;color:var(--t2)">PMC data unavailable</div>';
     var tsb = Math.round(pmc[pmc.length-1].ctl - pmc[pmc.length-1].atl);
     var formColor = tsb >= 10 ? '#5DCAA5' : tsb >= -10 ? '#4D9FFF' : tsb >= -25 ? '#EF9F27' : '#E24B4A';
     var formLabel = tsb >= 10 ? 'Fresh, good day to push' : tsb >= -10 ? 'Steady state' : tsb >= -25 ? 'Fatigue building' : 'Prioritize recovery';
