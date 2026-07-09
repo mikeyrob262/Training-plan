@@ -10013,20 +10013,9 @@ function dsShowActivities(){
 
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
-  var ni = document.querySelector('.ds-ni[onclick*="''+section+''"]');
-  if(ni) ni.classList.add('on');
-  var mapping = {
-    home: dsShowRidesList,
-    activities: dsShowRidesList,
-    calendar: dsShowRidesList,
-    analytics: dsShowRidesList,
-    nutrition: dsShowRidesList,
-    weather: dsShowRidesList,
-    gear: dsShowRidesList,
-    aicoach: dsShowRidesList,
-    settings: dsShowRidesList,
-  };
-  if(mapping[section]) try{ mapping[section](); }catch(e){}
+  var nis = document.querySelectorAll('.ds-ni');
+  nis.forEach(function(n){ if((n.getAttribute('onclick')||'').indexOf(section) >= 0) n.classList.add('on'); });
+  dsShowRidesList();
 }
 
 function dsShowRidesList(){
@@ -10038,35 +10027,71 @@ function dsShowRidesList(){
   }).slice().sort(function(a,b){
     return (b.date||'') > (a.date||'') ? 1 : -1;
   });
-  var html = '<div style="padding:16px 18px 8px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff">Activities</div>';
-  html += '<div style="overflow-y:auto;flex:1">';
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
+
+  var titleBar = document.createElement('div');
+  titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
+  titleBar.textContent = 'Activities';
+  wrap.appendChild(titleBar);
+
+  var list = document.createElement('div');
+  list.style.cssText = 'overflow-y:auto;flex:1';
+
   if(!rides.length){
-    html += '<div style="padding:40px;text-align:center;color:#64748b">No activities yet</div>';
+    var empty = document.createElement('div');
+    empty.style.cssText = 'padding:40px;text-align:center;color:#64748b';
+    empty.textContent = 'No activities yet';
+    list.appendChild(empty);
   } else {
-    rides.slice(0,50).forEach(function(r,i){
+    rides.slice(0,60).forEach(function(r){
       var idx = (st.rides||[]).indexOf(r);
-      var dist = r.distance ? r.distance+' mi' : '';
-      var dur = r.duration || '';
-      var pwr = r.avgPower ? r.avgPower+'w' : '';
-      var hr = r.avgHR ? r.avgHR+' bpm' : '';
-      var date = r.date || '';
-      html += '<div onclick="openRideDetail('+idx+')" style="display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#1a1f2e'" onmouseout="this.style.background=''">';
-      html += '<div style="width:38px;height:38px;border-radius:10px;background:#1a1f2e;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4.4 0-8 1.8-8 4v2h16v-2c0-2.2-3.6-4-8-4z"/></svg></div>';
-      html += '<div style="flex:1;min-width:0">';
-      html += '<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||r.sportType||'Activity')+'</div>';
-      html += '<div style="font-size:11px;color:#64748b;margin-top:2px">'+date+'</div>';
-      html += '</div>';
-      html += '<div style="display:flex;gap:16px;flex-shrink:0">';
-      if(dist) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+dist+'</div><div style="font-size:10px;color:#64748b">Dist</div></div>';
-      if(dur) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+dur+'</div><div style="font-size:10px;color:#64748b">Time</div></div>';
-      if(pwr) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#FC4C02">'+pwr+'</div><div style="font-size:10px;color:#64748b">Power</div></div>';
-      if(hr) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#60a5fa">'+hr+'</div><div style="font-size:10px;color:#64748b">HR</div></div>';
-      html += '</div></div>';
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
+      row.onmouseover = function(){ this.style.background='#1a1f2e'; };
+      row.onmouseout = function(){ this.style.background=''; };
+      row.onclick = function(){ openRideDetail(idx); };
+
+      var icon = document.createElement('div');
+      icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#1a1f2e;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+      row.appendChild(icon);
+
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      var name = document.createElement('div');
+      name.style.cssText = 'font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      name.textContent = r.name||r.sportType||'Activity';
+      var date = document.createElement('div');
+      date.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
+      date.textContent = r.date||'';
+      info.appendChild(name);
+      info.appendChild(date);
+      row.appendChild(info);
+
+      var stats = document.createElement('div');
+      stats.style.cssText = 'display:flex;gap:16px;flex-shrink:0';
+      function addStat(val, lbl, color){
+        if(!val) return;
+        var s = document.createElement('div');
+        s.style.cssText = 'text-align:right';
+        s.innerHTML = '<div style="font-size:13px;font-weight:600;color:'+color+'">'+val+'</div><div style="font-size:10px;color:#64748b">'+lbl+'</div>';
+        stats.appendChild(s);
+      }
+      addStat(r.distance ? r.distance+' mi' : '', 'Dist', '#e2e8f0');
+      addStat(r.duration||'', 'Time', '#e2e8f0');
+      addStat(r.avgPower ? r.avgPower+'w' : '', 'Power', '#FC4C02');
+      addStat(r.avgHR ? r.avgHR+' bpm' : '', 'HR', '#60a5fa');
+      row.appendChild(stats);
+      list.appendChild(row);
     });
   }
-  html += '</div>';
-  mc.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+html+'</div>';
+  wrap.appendChild(list);
+  mc.innerHTML = '';
+  mc.appendChild(wrap);
 }
+
 
 function dsInitProfile(){
   var name = (st.profile&&st.profile.name) || 'Mikey';
