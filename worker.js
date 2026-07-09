@@ -16482,10 +16482,13 @@ function showWeatherHistory(){
 
     var mapId='wx-map-'+Date.now();
     if(!ride.noGPS){
-      var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1)';
-      mapCard.innerHTML='<div id="'+mapId+'" style="height:260px"></div>';
-      scr.appendChild(mapCard);
+      var lats=ride.lats||ride.gpsLats, lons=ride.lons||ride.gpsLons;
+      if(lats&&lats.length>1&&lons&&lons.length>1){
+        var mapCard=document.createElement('div');
+        mapCard.style.cssText='margin:0 16px 12px;border-radius:16px;overflow:hidden;border:1px solid var(--b1);position:relative';
+        mapCard.innerHTML=buildRouteMap(lats,lons,[],0);
+        scr.appendChild(mapCard);
+      }
     }
 
     var chartsArea=document.createElement('div');
@@ -16494,17 +16497,6 @@ function showWeatherHistory(){
     scr.appendChild(chartsArea);
 
     setTimeout(function(){
-      var el=document.getElementById(mapId);
-      if(!el||typeof L==='undefined'||ride.noGPS) return;
-      var lats=ride.gpsLats,lons=ride.gpsLons;
-      var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      var pts=lats.map(function(la,i){return[la,lons[i]];});
-      var pl=L.polyline(pts,{color:'#FC4C02',weight:3.5}).addTo(map);
-      map.fitBounds(pl.getBounds(),{padding:[40,60]});
-      L.circleMarker(pts[0],{radius:8,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2.5}).addTo(map);
-      L.circleMarker(pts[pts.length-1],{radius:8,color:'#fff',fillColor:'#FC4C02',fillOpacity:1,weight:2.5}).addTo(map);
-      window['_wxmap_'+mapId]=map;
     },200);
 
     var lat=ride.gpsLats[0],lon=ride.gpsLons[0];
