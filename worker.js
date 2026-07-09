@@ -11051,10 +11051,15 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
 
   // Route map preview - if GPS available, shown here on Overview like the
   // reference (full map tools live on the Route tab)
-  if(r.gpsLats && r.gpsLats.length>5){
+  var _gpsR = r;
+  if(!(r.gpsLats&&r.gpsLats.length>5) && r.stravaId){
+    var _alt2=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>5;});
+    if(_alt2) _gpsR=_alt2;
+  }
+  if(_gpsR.gpsLats && _gpsR.gpsLats.length>5){
     var mapWrap=document.createElement('div');
     mapWrap.style.cssText='position:relative;border-radius:16px;overflow:hidden;margin-bottom:14px';
-    mapWrap.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP);
+    mapWrap.innerHTML=buildRouteMap(_gpsR.lats||_gpsR.gpsLats, _gpsR.lons||_gpsR.gpsLons, r.chartPwr||[], FTP);
     var previewMapId = window._lastRouteMapId;
     var mapTools=document.createElement('div');
     mapTools.style.cssText='position:absolute;top:10px;right:10px;z-index:400;display:flex;flex-direction:column;gap:6px';
