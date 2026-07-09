@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783628234 v1783628234 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783628725 v1783628725 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783628234</title>
+<title>Athlete IQ v1783628725</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10035,7 +10035,7 @@ function dsNav(section){
   } else if(section === 'analytics') {
     dsShowAnalytics();
   } else if(section === 'nutrition') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-apple" style="font-size:32px"></i><div>Nutrition coming soon</div>'; mc.appendChild(d); }
+    dsShowNutrition();
   } else if(section === 'weather') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-cloud" style="font-size:32px"></i><div>Weather coming soon</div>'; mc.appendChild(d); }
   } else if(section === 'gear') {
@@ -10045,6 +10045,138 @@ function dsNav(section){
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowNutrition(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+
+  var now=new Date();
+  var todayKey=now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate();
+  var viewKey=todayKey;
+
+  function getTotals(dk){
+    var nd=st.nl&&st.nl[dk];
+    if(!nd||!nd.meals) return {cal:0,p:0,c:0,f:0,water:0,items:[]};
+    var cal=0,p=0,c=0,f=0,items=[];
+    Object.values(nd.meals).forEach(function(bucket){
+      (bucket||[]).forEach(function(food){
+        cal+=(food.cal||0); p+=(food.p||0); c+=(food.c||0); f+=(food.f||0);
+        items.push(food);
+      });
+    });
+    return {cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f),water:nd.water||0,meals:nd.meals,items:items};
+  }
+
+  function render(){
+    mc.innerHTML='';
+    var data=getTotals(viewKey);
+    var goals={cal:st.calGoal||2800,p:st.proteinGoal||165,c:st.carbGoal||350,f:st.fatGoal||90};
+
+    var wrap=document.createElement('div');
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:12px';
+
+    // Date nav
+    var dateNav=document.createElement('div');
+    dateNav.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0';
+    var dPrev=document.createElement('div');
+    dPrev.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
+    dPrev.textContent='‹';
+    dPrev.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()-1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();render();};
+    var dTitle=document.createElement('div');
+    dTitle.style.cssText='font-size:18px;font-weight:700;color:#fff';
+    var vd=new Date(viewKey);
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    dTitle.textContent=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
+    var dNext=document.createElement('div');
+    dNext.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
+    dNext.textContent='›';
+    dNext.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()+1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();render();};
+    dateNav.appendChild(dPrev); dateNav.appendChild(dTitle); dateNav.appendChild(dNext);
+    wrap.appendChild(dateNav);
+
+    // Calorie ring + macros
+    var topRow=document.createElement('div');
+    topRow.style.cssText='display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px;flex-shrink:0';
+
+    // Donut ring
+    var ringWrap=document.createElement('div');
+    ringWrap.style.cssText='position:relative;width:100px;height:100px;flex-shrink:0';
+    var pct=Math.min(100,Math.round((data.cal/goals.cal)*100));
+    var arc=Math.round(pct/100*251);
+    var ringColor=pct>110?'#e24b4a':pct>90?'#4ade80':'#60a5fa';
+    ringWrap.innerHTML='<svg width="100" height="100" viewBox="0 0 100 100">'+
+      '<circle cx="50" cy="50" r="40" fill="none" stroke="#1a1f2e" stroke-width="10"/>'+
+      '<circle cx="50" cy="50" r="40" fill="none" stroke="'+ringColor+'" stroke-width="10" stroke-dasharray="'+arc+' 251" stroke-dashoffset="63" stroke-linecap="round" transform="rotate(-90 50 50)"/>'+
+      '</svg>'+
+      '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
+        '<div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+data.cal+'</div>'+
+        '<div style="font-size:9px;color:#64748b">of '+goals.cal+' cal</div>'+
+      '</div>';
+    topRow.appendChild(ringWrap);
+
+    // Macro bars
+    var macros=document.createElement('div');
+    macros.style.cssText='display:flex;flex-direction:column;gap:8px';
+    [['Protein',data.p,goals.p,'#FC4C02'],['Carbs',data.c,goals.c,'#60a5fa'],['Fat',data.f,goals.f,'#8b5cf6']].forEach(function(x){
+      var row=document.createElement('div');
+      var pct2=Math.min(100,Math.round((x[1]/x[2])*100));
+      row.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
+        '<span style="font-size:11px;font-weight:600;color:#e2e8f0">'+x[0]+'</span>'+
+        '<span style="font-size:11px;color:#64748b">'+x[1]+'g / '+x[2]+'g</span>'+
+        '</div>'+
+        '<div style="background:#1a1f2e;border-radius:4px;height:6px">'+
+          '<div style="background:'+x[3]+';border-radius:4px;height:6px;width:'+pct2+'%;transition:width .3s"></div>'+
+        '</div>';
+      macros.appendChild(row);
+    });
+    // Water
+    var waterRow=document.createElement('div');
+    waterRow.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
+      '<span style="font-size:11px;font-weight:600;color:#e2e8f0">Water</span>'+
+      '<span style="font-size:11px;color:#64748b">'+(data.water||0)+' oz</span>'+
+      '</div>'+
+      '<div style="background:#1a1f2e;border-radius:4px;height:6px">'+
+        '<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+Math.min(100,Math.round(((data.water||0)/90)*100))+'%"></div>'+
+      '</div>';
+    macros.appendChild(waterRow);
+    topRow.appendChild(macros);
+    wrap.appendChild(topRow);
+
+    // Meal breakdown
+    var mealNames={breakfast:'Breakfast',preworkout:'Pre-Workout',during:'During',postworkout:'Post-Workout',lunch:'Lunch',dinner:'Dinner',snacks:'Snacks'};
+    var meals=data.meals||{};
+    Object.keys(mealNames).forEach(function(key){
+      var items=meals[key]||[];
+      if(!items.length) return;
+      var mealCal=items.reduce(function(s,f){return s+(f.cal||0);},0);
+      var card=document.createElement('div');
+      card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px;flex-shrink:0';
+      var mHdr=document.createElement('div');
+      mHdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px';
+      mHdr.innerHTML='<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+mealNames[key]+'</div>'+
+        '<div style="font-size:11px;color:#64748b">'+Math.round(mealCal)+' cal</div>';
+      card.appendChild(mHdr);
+      items.forEach(function(food){
+        var fRow=document.createElement('div');
+        fRow.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #1a1f2e';
+        fRow.innerHTML='<div style="font-size:12px;color:#94a3b8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(food.n||food.name||'Food')+'</div>'+
+          '<div style="font-size:11px;color:#64748b;flex-shrink:0;margin-left:8px">'+(food.cal||0)+' cal</div>';
+        card.appendChild(fRow);
+      });
+      wrap.appendChild(card);
+    });
+
+    if(!data.items.length){
+      var empty=document.createElement('div');
+      empty.style.cssText='text-align:center;color:#64748b;padding:40px;font-size:13px';
+      empty.textContent='No food logged for this day. Use the mobile app to log meals.';
+      wrap.appendChild(empty);
+    }
+
+    mc.appendChild(wrap);
+  }
+  render();
 }
 
 function dsShowAnalytics(){
