@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783633800 v1783633800 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783634700 v1783634700 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11812,7 +11812,7 @@ function openDesktopRideDetail(idx){
       '<div class="ds-c4">'+
         '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-gauge" style="font-size:11px"></i> SPEED</div>'+
           '<div class="ds-c4main">'+(r.avgSpeed?Math.round(r.avgSpeed*10)/10+' mph':'--')+'</div>'+
-          '<div class="ds-c4sub">'+(r.maxSpeed?r.maxSpeed+' mph max':'')+'</div></div>'+
+          '<div class="ds-c4sub">'+(r.maxSpeed?(r.maxSpeed>10?r.maxSpeed:Math.round(r.maxSpeed*2.237*10)/10)+' mph max':'')+'</div></div>'+
         '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-mountain" style="font-size:11px"></i> ELEVATION</div>'+
           '<div class="ds-c4main">'+(r.elev?r.elev+' ft':'--')+'</div>'+
           '<div class="ds-c4sub">'+(r.maxElev?r.maxElev+' ft max':'gain')+'</div></div>'+
