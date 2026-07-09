@@ -3628,7 +3628,7 @@ function fbPull(silent){
       try{restoreExtraSessions();}catch(e){}
       try{cw=getCurrentPlanWeek();GW(cw);updHdr();}catch(e){}
       if(!silent) toast('OK Synced!');
-      try{ if(isDesktop()) dsShowDashboard(); }catch(e){}
+      // Desktop refresh removed - don't reset current view on sync
     } else {
       if(!silent) toast('No cloud data yet');
     }
