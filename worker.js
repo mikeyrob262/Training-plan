@@ -10187,11 +10187,20 @@ function dsShowAICoach(){
     }
 
     var stats=document.createElement('div');
-    stats.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:8px 0 16px;border-bottom:1px solid var(--b1)';
-    [{l:'FITNESS',v:ctl,c:'#4D9FFF'},{l:'FATIGUE',v:atl,c:'#FF7A45'},{l:'FORM',v:(tsb>0?'+':'')+tsb,c:tsb>0?'#00C896':tsb<-20?'#ef4444':'#FFB938'}].forEach(function(s){
+    stats.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:16px 0 20px;border-bottom:1px solid var(--b1)';
+    [{l:'FITNESS',v:ctl,max:100,c:'#4D9FFF'},{l:'FATIGUE',v:atl,max:100,c:'#FF7A45'},{l:'FORM',v:(tsb>0?'+':'')+tsb,max:null,c:tsb>0?'#00C896':tsb<-20?'#ef4444':'#FFB938'}].forEach(function(s){
+      var pct=s.max?Math.min(100,Math.max(0,(typeof s.v==='number'?s.v:parseInt(s.v))/s.max)):0.75;
+      var r=28, circ=2*Math.PI*r, dash=circ*pct;
       var cell=document.createElement('div');
-      cell.style.cssText='text-align:center';
-      cell.innerHTML='<div style="font-size:26px;font-weight:700;color:'+s.c+'">'+s.v+'</div><div style="font-size:11px;font-weight:600;color:var(--t3);margin-top:2px">'+s.l+'</div>';
+      cell.style.cssText='text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px';
+      cell.innerHTML='<div style="position:relative;width:72px;height:72px">'
+        +'<svg width="72" height="72" viewBox="0 0 72 72" style="transform:rotate(-90deg)">'
+        +'<circle cx="36" cy="36" r="'+r+'" fill="none" stroke="'+s.c+'" stroke-width="5" opacity="0.15"/>'
+        +'<circle cx="36" cy="36" r="'+r+'" fill="none" stroke="'+s.c+'" stroke-width="5" stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'" stroke-linecap="round"/>'
+        +'</svg>'
+        +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:'+s.c+'">'+s.v+'</div>'
+        +'</div>'
+        +'<div style="font-size:11px;font-weight:600;color:var(--t3)">'+s.l+'</div>';
       stats.appendChild(cell);
     });
     body.appendChild(stats);
