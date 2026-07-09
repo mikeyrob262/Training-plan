@@ -393,7 +393,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
       </div>
     </div>
     <div class="ds-nav">
-      <div class="ds-ni" onclick="dsNav('home')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+      <div class="ds-ni" onclick="dsNav('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
       <div class="ds-ni on" id="ds-ni-activities" onclick="dsNav('activities')"><i class="ti ti-run"></i>Activities</div>
       <div class="ds-ni" onclick="dsNav('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
       <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
@@ -10014,8 +10014,28 @@ function dsShowActivities(){
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
   var nis = document.querySelectorAll('.ds-ni');
-  nis.forEach(function(n){ if((n.getAttribute('onclick')||'').indexOf(section) >= 0) n.classList.add('on'); });
-  dsShowRidesList();
+  nis.forEach(function(n){ if((n.getAttribute('onclick')||'').indexOf("'"+section+"'") >= 0) n.classList.add('on'); });
+  var mc = document.getElementById('ds-content');
+  var rp = document.getElementById('ds-right-panel');
+  if(section === 'activities') {
+    dsShowRidesList();
+  } else if(section === 'home' || section === 'dashboard') {
+    dsShowRidesList();
+  } else if(section === 'calendar') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-calendar" style="font-size:32px"></i><div>Calendar coming soon</div>'; mc.appendChild(d); }
+  } else if(section === 'analytics') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-chart-line" style="font-size:32px"></i><div>Analytics coming soon</div>'; mc.appendChild(d); }
+  } else if(section === 'nutrition') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-apple" style="font-size:32px"></i><div>Nutrition coming soon</div>'; mc.appendChild(d); }
+  } else if(section === 'weather') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-cloud" style="font-size:32px"></i><div>Weather coming soon</div>'; mc.appendChild(d); }
+  } else if(section === 'gear') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-bike" style="font-size:32px"></i><div>Gear coming soon</div>'; mc.appendChild(d); }
+  } else if(section === 'aicoach') {
+    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-message-circle" style="font-size:32px"></i><div>AI Coach coming soon</div>'; mc.appendChild(d); }
+  } else {
+    dsShowRidesList();
+  }
 }
 
 function dsShowRidesList(){
