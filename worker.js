@@ -10465,11 +10465,15 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
+  var _seen = {};
   var rides = (st.rides||[]).filter(function(r){
-    var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength/i.test(s);
+    var key = r.stravaId ? 'sid:'+r.stravaId : 'dnm:'+(r.date||'')+'|'+(r.name||'')+'|'+(r.duration||'');
+    if(_seen[key]) return false;
+    _seen[key] = true;
+    return true;
   }).slice().sort(function(a,b){
-    return (b.date||'') > (a.date||'') ? 1 : -1;
+    var da=a.date||'', db=b.date||'';
+    if(db>da) return 1; if(db<da) return -1; return 0;
   });
 
   var wrap = document.createElement('div');
