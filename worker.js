@@ -15,7 +15,7 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.19.0/tabler-icons.min.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css"/>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10369,10 +10369,7 @@ function dsShowDashboard(){
   var whum=div(''); whum.appendChild(div('font-size:10px;color:#64748b','Humidity'));
   var whv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); whv.id='ds-wx-hum';
   whum.appendChild(whv); wgrid.appendChild(whum);
-  var wpr=div(''); wpr.appendChild(div('font-size:10px;color:#64748b','Precip'));
-  wpr.appendChild(div('font-size:11px;font-weight:600;color:#e2e8f0','0%')); wgrid.appendChild(wpr);
-  var wrd=div(''); wrd.appendChild(div('font-size:10px;color:#64748b','Road'));
-  wrd.appendChild(div('font-size:11px;font-weight:600;color:#4ade80','Excellent')); wgrid.appendChild(wrd);
+
   wc.appendChild(wgrid); r3.appendChild(wc);
   body.appendChild(r3);
 
@@ -10726,6 +10723,21 @@ function openDesktopRideDetail(idx){
         lbody.innerHTML=lt;
       }
     }
+
+    // Init real route map
+    var mapDiv = document.getElementById('ds-detail-map');
+    var mapLats = lats && lats.length > 1 ? lats : null;
+    var mapLons = lons && lons.length > 1 ? lons : null;
+    if(mapDiv && mapLats){
+      mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
+    } else if(mapDiv){
+      mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+      mapDiv.textContent = 'No GPS data';
+    }
+
+    // Back button
+    var backBtn2 = document.getElementById('ds-back-btn');
+    if(backBtn2) backBtn2.onclick = function(){ dsNav('dashboard'); };
 
     // Fetch current conditions
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
