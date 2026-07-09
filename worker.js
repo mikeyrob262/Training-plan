@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783627892 v1783627892 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783628015 v1783628015 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783627892</title>
+<title>Athlete IQ v1783628015</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10033,7 +10033,7 @@ function dsNav(section){
   } else if(section === 'calendar') {
     dsShowCalendar();
   } else if(section === 'analytics') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-chart-line" style="font-size:32px"></i><div>Analytics coming soon</div>'; mc.appendChild(d); }
+    dsShowAnalytics();
   } else if(section === 'nutrition') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-apple" style="font-size:32px"></i><div>Nutrition coming soon</div>'; mc.appendChild(d); }
   } else if(section === 'weather') {
@@ -10045,6 +10045,142 @@ function dsNav(section){
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowAnalytics(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+
+  var rides=st.rides||[];
+  var FTP=parseInt(st.ftp||186);
+  var BWT=parseFloat(st.weight||162.5);
+
+  // Compute last 90 days of data
+  var now=new Date();
+  var days90=[];
+  for(var i=89;i>=0;i--){
+    var d=new Date(now); d.setDate(d.getDate()-i);
+    days90.push(normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()));
+  }
+
+  // TSS by date
+  var tssByDate={};
+  rides.forEach(function(r){
+    if(!r.date||!r.tss) return;
+    var nd=normDate(r.date);
+    tssByDate[nd]=(tssByDate[nd]||0)+(parseFloat(r.tss)||0);
+  });
+
+  // Compute CTL/ATL/TSB
+  var ctl=0,atl=0;
+  var ctlArr=[],atlArr=[],tsbArr=[],labels=[];
+  days90.forEach(function(d){
+    var tss=tssByDate[d]||0;
+    ctl=ctl+(tss-ctl)/42;
+    atl=atl+(tss-atl)/7;
+    ctlArr.push(Math.round(ctl*10)/10);
+    atlArr.push(Math.round(atl*10)/10);
+    tsbArr.push(Math.round((ctl-atl)*10)/10);
+    labels.push(d.slice(5)); // MM-DD
+  });
+
+  // Weekly distance last 12 weeks
+  var weekDist=[];
+  var weekLabels=[];
+  for(var w=11;w>=0;w--){
+    var wStart=new Date(now); wStart.setDate(wStart.getDate()-w*7-6);
+    var wEnd=new Date(now); wEnd.setDate(wEnd.getDate()-w*7);
+    var wDist=0;
+    rides.forEach(function(r){
+      if(!r.date) return;
+      var rd=new Date(normDate(r.date));
+      if(rd>=wStart&&rd<=wEnd) wDist+=parseFloat(r.distance)||0;
+    });
+    weekDist.push(Math.round(wDist));
+    weekLabels.push('W'+(12-w));
+  }
+
+  // W/kg history
+  var wkgHistory=[];
+  var wkgLabels=[];
+  var sortedRides=rides.filter(function(r){return r.date&&r.avgPower;}).sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;}).slice(-20);
+  sortedRides.forEach(function(r){
+    wkgHistory.push(Math.round((r.avgPower/BWT)*100)/100);
+    wkgLabels.push(normDate(r.date).slice(5));
+  });
+
+  var lastTSB=tsbArr[tsbArr.length-1]||0;
+  var lastCTL=ctlArr[ctlArr.length-1]||0;
+  var lastATL=atlArr[atlArr.length-1]||0;
+  var tsbColor=lastTSB>=10?'#4ade80':lastTSB>=-10?'#60a5fa':lastTSB>=-25?'#f59e0b':'#e24b4a';
+  var tsbLabel=lastTSB>=10?'Fresh':lastTSB>=-10?'Optimal':lastTSB>=-25?'Tired':'Very Tired';
+
+  mc.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
+
+  // Top KPI cards
+  var kpiRow=document.createElement('div');
+  kpiRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
+  [
+    ['Fitness (CTL)',Math.round(lastCTL),'#4ade80','Training load over 42 days'],
+    ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days'],
+    ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel],
+    ['W/kg',wkgHistory.length?(wkgHistory[wkgHistory.length-1]+' W/kg'):'--','#60a5fa','Latest avg power/weight']
+  ].forEach(function(x){
+    var card=document.createElement('div');
+    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px';
+    card.innerHTML='<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">'+x[0]+'</div>'+
+      '<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'+
+      '<div style="font-size:10px;color:#64748b;margin-top:3px">'+x[3]+'</div>';
+    kpiRow.appendChild(card);
+  });
+  wrap.appendChild(kpiRow);
+
+  // CTL/ATL/TSB chart
+  var fitnessCard=document.createElement('div');
+  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — Last 90 Days</div>'+
+    '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
+  wrap.appendChild(fitnessCard);
+
+  // Weekly distance chart
+  var distCard=document.createElement('div');
+  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last 12 Weeks</div>'+
+    '<div style="position:relative;height:140px"><canvas id="ds-dist-chart"></canvas></div>';
+  wrap.appendChild(distCard);
+
+  // W/kg trend
+  if(wkgHistory.length>2){
+    var wkgCard=document.createElement('div');
+    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">W/kg Trend</div>'+
+      '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
+    wrap.appendChild(wkgCard);
+  }
+
+  mc.appendChild(wrap);
+
+  // Draw charts
+  setTimeout(function(){
+    var gc=document.getElementById('ds-fitness-chart');
+    if(gc&&typeof Chart!=='undefined'){
+      new Chart(gc,{type:'line',data:{labels:labels.filter(function(_,i){return i%7===0;}),datasets:[
+        {label:'CTL',data:ctlArr.filter(function(_,i){return i%7===0;}),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:0},
+        {label:'ATL',data:atlArr.filter(function(_,i){return i%7===0;}),borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,fill:false,tension:0.3,pointRadius:0},
+        {label:'TSB',data:tsbArr.filter(function(_,i){return i%7===0;}),borderColor:'#60a5fa',backgroundColor:'transparent',borderWidth:1.5,fill:false,tension:0.3,pointRadius:0,borderDash:[4,4]}
+      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,labels:{color:'#64748b',font:{size:10},boxWidth:12}}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0}}}});
+    }
+    var dc=document.getElementById('ds-dist-chart');
+    if(dc&&typeof Chart!=='undefined'){
+      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#4ade80':'rgba(74,222,128,.4)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
+    }
+    var wc=document.getElementById('ds-wkg-chart');
+    if(wc&&typeof Chart!=='undefined'){
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' W/kg';}}}}}});
+    }
+  },100);
 }
 
 function dsShowCalendar(){
