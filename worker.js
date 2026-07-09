@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783629296 v1783629296 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783630016 v1783630016 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783629296</title>
+<title>Athlete IQ v1783630016</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10052,8 +10052,8 @@ function dsShowGear(){
   var mc=document.getElementById('ds-content'); if(!mc) return;
 
   var bikes=[
-    {name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null},
-    {name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null}
+    {name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null,photo:BIKE_PHOTO_DOGMA},
+    {name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null,photo:BIKE_PHOTO_ROADMACHINE}
   ];
 
   // Calculate miles per bike from rides
@@ -10089,23 +10089,13 @@ function dsShowGear(){
     bHdr.appendChild(bInfo); bHdr.appendChild(bBadge);
     card.appendChild(bHdr);
 
-    // Bike SVG illustration
+    // Bike photo from garage
     var bikeIllus=document.createElement('div');
-    bikeIllus.style.cssText='margin-bottom:14px;text-align:center';
-    bikeIllus.innerHTML='<svg width="200" height="80" viewBox="0 0 200 80" fill="none" xmlns="http://www.w3.org/2000/svg">'+
-      '<circle cx="40" cy="55" r="22" stroke="'+bike.color+'" stroke-width="3" fill="none"/>'+
-      '<circle cx="160" cy="55" r="22" stroke="'+bike.color+'" stroke-width="3" fill="none"/>'+
-      '<circle cx="40" cy="55" r="4" fill="'+bike.color+'"/>'+
-      '<circle cx="160" cy="55" r="4" fill="'+bike.color+'"/>'+
-      '<line x1="40" y1="55" x2="80" y2="20" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
-      '<line x1="80" y1="20" x2="160" y2="55" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
-      '<line x1="80" y1="20" x2="100" y2="55" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
-      '<line x1="100" y1="55" x2="160" y2="55" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
-      '<line x1="80" y1="20" x2="70" y2="10" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
-      '<line x1="65" y1="10" x2="75" y2="10" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
-      '<line x1="155" y1="20" x2="165" y2="20" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
-      '<line x1="160" y1="20" x2="160" y2="33" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
-      '</svg>';
+    bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;background:#0d0f14';
+    var bikeImg=document.createElement('img');
+    bikeImg.src=bike.photo;
+    bikeImg.style.cssText='width:100%;max-height:180px;object-fit:cover;display:block';
+    bikeIllus.appendChild(bikeImg);
     card.appendChild(bikeIllus);
 
     // Specs grid
