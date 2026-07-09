@@ -15,7 +15,7 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/@tabler/icons-webfont@3.19.0/tabler-icons.min.css"/>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10362,7 +10362,7 @@ function dsShowDashboard(){
   wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
   wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
   wmain.appendChild(wnum); wc.appendChild(wmain);
-  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:4px;overflow:hidden');
+  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:3px;overflow:hidden;font-size:10px');
   var wwind=div(''); wwind.appendChild(div('font-size:10px;color:#64748b','Wind'));
   var wwv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); wwv.id='ds-wx-wind';
   wwind.appendChild(wwv); wgrid.appendChild(wwind);
@@ -10630,17 +10630,7 @@ function openDesktopRideDetail(idx){
     '</div>'+
     '<div class="ds-tabs"><div class="ds-tab on">Route</div><div class="ds-tab">Charts</div><div class="ds-tab">Laps</div><div class="ds-tab">Breakdown</div></div>'+
     '<div class="ds-scroll">'+
-      '<div class="ds-mapbox">'+
-        '<div class="ds-map-base"></div>'+
-        '<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 560 180" preserveAspectRatio="xMidYMid slice">'+
-          '<line x1="0" y1="45" x2="560" y2="45" stroke="#2a3a2a" stroke-width="5" opacity=".5"/>'+
-          '<line x1="0" y1="140" x2="560" y2="140" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
-          '<line x1="160" y1="0" x2="160" y2="180" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
-          '<line x1="340" y1="0" x2="340" y2="180" stroke="#2a3a2a" stroke-width="4" opacity=".5"/>'+
-          routeSVG+
-        '</svg>'+
-        '<div class="ds-map-ctrl"><div class="ds-map-btn">+</div><div class="ds-map-btn">&minus;</div></div>'+
-      '</div>'+
+      '<div id="ds-detail-map" style="height:210px;border-radius:0;overflow:hidden;flex-shrink:0"></div>'+
       '<div class="ds-elev">'+
         '<div class="ds-elev-lbl">Elevation</div>'+
         '<svg style="width:100%;height:48px" viewBox="0 0 560 48" preserveAspectRatio="none">'+elevSVG+'</svg>'+
