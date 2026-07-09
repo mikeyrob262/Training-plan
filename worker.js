@@ -10205,7 +10205,7 @@ function dsShowDashboard(){
     todayPlan = st['w'+cw2] && st['w'+cw2][dayKeys[dow]];
   }catch(e){}
   plan.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">TODAY'S PLAN</div>'+
+    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">TODAY&#39;S PLAN</div>'+
     '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">'+
       '<div style="width:44px;height:44px;border-radius:12px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
         '<i class="ti ti-bike" style="font-size:22px;color:#4ade80"></i>'+
@@ -10234,7 +10234,7 @@ function dsShowDashboard(){
       '<div style="width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,.15);display:flex;align-items:center;justify-content:center">'+
         '<i class="ti ti-target" style="font-size:18px;color:#4ade80"></i>'+
       '</div>'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">TODAY'S BIGGEST OPPORTUNITY</div>'+
+      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">TODAY&#39;S BIGGEST OPPORTUNITY</div>'+
     '</div>'+
     '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px">Ride before 8:30 AM</div>'+
     '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">You&#39;ll avoid a 15 mph headwind and 92°F temperatures.</div>'+
