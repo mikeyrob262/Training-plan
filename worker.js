@@ -4486,6 +4486,13 @@ function applySwap(w,idx,val){
     }
   }
   toast('Swapped to: '+val);
+  // For open-ended cycling/ride swaps, clear the planned duration — a
+  // "Zwift Ride" or "Easy Spin" has no time target, just get on the bike.
+  var openEndedRide=/zwift ride|outdoor ride|easy spin|easy ride|zwift climb|zwift race/i.test(val);
+  if(openEndedRide && card){
+    var durEl=card.querySelector('.wof-pl');
+    if(durEl) durEl.textContent='';
+  }
 }
 
 function openStr(letter,w){
