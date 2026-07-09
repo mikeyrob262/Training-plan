@@ -6270,10 +6270,6 @@ function editFoodItem(meal, idx) {
 }
 
 function renderNutr(){
-  // Restore scroll position if a food modal was open (iOS can jump on fixed overlay)
-  var scrollRestore = window._nutrSavedScroll;
-  window._nutrSavedScroll = undefined;
-
   MTGT = calcMTGT(); // recalc in case weight changed
   var nd=getNDay(nutrDate),tot=getDTots(nutrDate);
   // Training-aware targets: real calorie/carb/protein/sodium/fluid needs
@@ -7092,26 +7088,12 @@ function renderNutr(){
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=null;wm.addEventListener('click',function(){updWater(-1);});}
   var wp=document.getElementById('water-plus');if(wp){wp.onclick=null;wp.addEventListener('click',function(){updWater(1);});}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=null;bb.addEventListener('click',showTrain);}
-
-  // Restore scroll after re-render (prevents jump when food modal closes)
-  if(scrollRestore!=null){
-    var ns=document.getElementById('NUTR');
-    if(ns) setTimeout(function(){ ns.scrollTop=scrollRestore; },0);
-  }
-
-
 }
 function openFoodForMeal(meal){
   curMeal = meal;
   if(!nutrDate) nutrDate = getTodayKey();
   var old = document.getElementById('food-modal');
   if(old) old.remove();
-
-  // Save scroll position — adding a fixed overlay can cause iOS Safari to
-  // reset the underlying page scroll. We restore it in renderNutr() which
-  // always fires when the modal closes (on add or dismiss).
-  var nutrScroll = document.getElementById('NUTR');
-  window._nutrSavedScroll = nutrScroll ? nutrScroll.scrollTop : 0;
 
   var overlay = document.createElement('div');
   overlay.id = 'food-modal';
