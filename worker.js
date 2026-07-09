@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783630016 v1783630016 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783632562 v1783632562 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
