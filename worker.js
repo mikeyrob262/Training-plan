@@ -113,7 +113,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-c4hd{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:5px;margin-bottom:4px}
 .ds-c4main{font-size:13px;font-weight:600;color:#fff}
 .ds-c4sub{font-size:10px;color:#64748b;margin-top:2px}
-.ds-rpanel{width:286px;flex-shrink:0;border-left:1px solid #1e2130;background:#111318;overflow-y:auto;display:flex;flex-direction:column}
+.ds-rpanel{width:286px;flex-shrink:0;border-left:1px solid #1e2130;background:#111318;overflow-y:auto;display:none;flex-direction:column}
 .ds-rp{padding:13px 15px;border-bottom:1px solid #1e2130}
 .ds-rp-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
 .ds-rp-t{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
