@@ -5498,19 +5498,28 @@ function openFoodForMeal(meal){
       if(q){
         var ql = q.toLowerCase();
         var qWords = ql.split(/\s+/).filter(Boolean);
-        // Fuzzy: all words must appear somewhere in the name
+        // Tier 1: exact phrase start
         var starts = allLocal.filter(function(f){return f.n.toLowerCase().startsWith(ql);});
+        var startNames = new Set(starts.map(function(f){return f.n;}));
+        // Tier 2: all query words present anywhere in name (any order)
         var wordMatch = allLocal.filter(function(f){
+          if(startNames.has(f.n)) return false;
           var name = f.n.toLowerCase();
-          return !name.startsWith(ql) && qWords.every(function(w){return name.indexOf(w)>=0;});
+          return qWords.every(function(w){return name.indexOf(w)>=0;});
         });
-        local = starts.concat(wordMatch);
+        // Tier 3: any single query word matches (partial hit)
+        var wordNames = new Set(wordMatch.map(function(f){return f.n;}));
+        var anyMatch = allLocal.filter(function(f){
+          if(startNames.has(f.n)||wordNames.has(f.n)) return false;
+          var name = f.n.toLowerCase();
+          return qWords.some(function(w){return w.length>=3 && name.indexOf(w)>=0;});
+        });
+        local = starts.concat(wordMatch).concat(anyMatch);
       } else { local = allLocal; }
       if(local.length || !q){
-        renderFoodRows(foodList, local.slice(0,30));
-      } else if(local.length > 0) {
-        // Local results found - show them, no need for API
-        renderFoodRows(foodList, local.slice(0,30));
+        renderFoodRows(foodList, local.slice(0,40));
+      } else if(q.length < 3) {
+        renderFoodRows(foodList, []);
       } else {
         foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
         fetch('https://mikey-food-api2.mgrobinson07.workers.dev/search?q=' + encodeURIComponent(q))
