@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783627769 v1783627769 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783627892 v1783627892 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783627769</title>
+<title>Athlete IQ v1783627892</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10137,7 +10137,7 @@ function dsShowCalendar(){
       var hasActivity=dayRides.length>0;
 
       var cell=document.createElement('div');
-      cell.style.cssText='display:flex;flex-direction:column;align-items:center;border-radius:10px;padding:5px 3px;min-height:68px;background:'+(isToday?'rgba(74,222,128,.1)':'#111318')+';border:1px solid '+(isToday?'rgba(74,222,128,.4)':'#1a1f2e')+';overflow:hidden';
+      cell.style.cssText='display:flex;flex-direction:column;align-items:center;border-radius:10px;padding:6px 4px;min-height:90px;background:'+(isToday?'rgba(74,222,128,.1)':'#111318')+';border:1px solid '+(isToday?'rgba(74,222,128,.4)':'#1a1f2e')+';overflow:hidden';
       if(hasActivity){
         cell.style.cursor='pointer';
         cell.onmouseover=function(){this.style.borderColor='#4ade80';};
@@ -10154,7 +10154,7 @@ function dsShowCalendar(){
 
       // Day number
       var dayNum=document.createElement('div');
-      dayNum.style.cssText='font-size:11px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'#4ade80':hasActivity?'#e2e8f0':'#475569')+';margin-bottom:4px;text-align:center';
+      dayNum.style.cssText='font-size:12px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'#4ade80':hasActivity?'#e2e8f0':'#475569')+';margin-bottom:4px;text-align:center';
       dayNum.textContent=d;
       cell.appendChild(dayNum);
 
@@ -10162,11 +10162,11 @@ function dsShowCalendar(){
       dayRides.slice(0,2).forEach(function(r){
         var info=getSportInfo(r);
         var actDiv=document.createElement('div');
-        actDiv.style.cssText='display:flex;flex-direction:column;align-items:center;gap:1px';
-        actDiv.innerHTML=makeSVG(info.key,info.col,'18');
+        actDiv.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px';
+        actDiv.innerHTML=makeSVG(info.key,info.col,'22');
         if(info.val){
           var valEl=document.createElement('div');
-          valEl.style.cssText='font-size:9px;font-weight:600;color:'+info.col+';text-align:center;line-height:1.2';
+          valEl.style.cssText='font-size:10px;font-weight:700;color:'+info.col+';text-align:center;line-height:1.3';
           valEl.textContent=info.val;
           actDiv.appendChild(valEl);
         }
