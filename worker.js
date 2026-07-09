@@ -10737,24 +10737,25 @@ function openDesktopRideDetail(idx){
     '</div>'+
   '</div>';
 
-  // Init real Leaflet map
-  setTimeout(function(){
+  // Init real Leaflet map - find div and inject buildRouteMap HTML
+  (function initDsMap(){
     var mapDiv = document.getElementById('ds-real-map');
+    if(!mapDiv){ setTimeout(initDsMap, 100); return; }
     var gpsLats = lats && lats.length > 1 ? lats : null;
     var gpsLons = lons && lons.length > 1 ? lons : null;
     if(!gpsLats && r.stravaId){
       var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
       if(alt){gpsLats=alt.gpsLats;gpsLons=alt.gpsLons;}
     }
-    if(mapDiv && gpsLats){
+    if(gpsLats && gpsLats.length > 1){
       mapDiv.innerHTML = buildRouteMap(gpsLats, gpsLons, r.chartPwr||[], FTP);
-    } else if(mapDiv){
+    } else {
       mapDiv.style.cssText='height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-shrink:0';
       mapDiv.textContent='No GPS data';
     }
     var bb=document.getElementById('ds-back-btn');
     if(bb) bb.onclick=function(){dsNav('dashboard');};
-  }, 50);
+  })();
 
   // Right panel
   var rp = document.getElementById('ds-right-panel');
