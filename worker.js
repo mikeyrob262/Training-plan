@@ -5559,6 +5559,8 @@ var CF=[...RESTAURANT_FOODS,
   {n:"Subway 6in Steak & Cheese",cal:380,p:25,c:46,f:11,srv:"6 inch"},
   {n:"Subway 6in BLT",cal:360,p:16,c:43,f:14,srv:"6 inch"},
   // -- PANERA --
+  {n:"Panera Shrimply Baja Salad",cal:340,p:23,c:22,f:19,fiber:7,sodium:710,srv:"full"},
+  {n:"Panera Shrimply Baja Salad Half",cal:180,p:12,c:12,f:10,fiber:4,sodium:370,srv:"half"},
   {n:"Panera Fuji Apple Salad with Chicken",cal:570,p:31,c:55,f:25,srv:"full"},
   {n:"Panera Greek Salad",cal:370,p:11,c:14,f:30,srv:"full"},
   {n:"Panera Chicken Noodle Soup",cal:110,p:9,c:15,f:2,srv:"1 cup"},
@@ -7265,15 +7267,24 @@ function openFoodForMeal(meal){
       var local = [];
       if(q){
         var ql = q.toLowerCase();
+        var qWords = ql.split(/\s+/).filter(Boolean);
         var starts = allLocal.filter(function(f){return f.n.toLowerCase().startsWith(ql);});
-        var contains = allLocal.filter(function(f){return !f.n.toLowerCase().startsWith(ql) && f.n.toLowerCase().indexOf(ql)>=0;});
-        local = starts.concat(contains);
+        var startNames = new Set(starts.map(function(f){return f.n;}));
+        var wordMatch = allLocal.filter(function(f){
+          if(startNames.has(f.n)) return false;
+          var name = f.n.toLowerCase();
+          return qWords.every(function(w){return name.indexOf(w)>=0;});
+        });
+        var wordNames = new Set(wordMatch.map(function(f){return f.n;}));
+        var anyMatch = allLocal.filter(function(f){
+          if(startNames.has(f.n)||wordNames.has(f.n)) return false;
+          var name = f.n.toLowerCase();
+          return qWords.some(function(w){return w.length>=3 && name.indexOf(w)>=0;});
+        });
+        local = starts.concat(wordMatch).concat(anyMatch);
       } else { local = allLocal; }
       if(local.length || !q){
-        renderFoodRows(foodList, local.slice(0,30));
-      } else if(local.length > 0) {
-        // Local results found - show them, no need for API
-        renderFoodRows(foodList, local.slice(0,30));
+        renderFoodRows(foodList, local.slice(0,40));
       } else {
         foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
         fetch('https://mikey-food-api2.mgrobinson07.workers.dev/search?q=' + encodeURIComponent(q))
