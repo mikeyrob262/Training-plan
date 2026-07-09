@@ -10472,11 +10472,18 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
+  // Deduplicate by stravaId or date+name, sort newest first
+  var seen = {};
   var rides = (st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength/i.test(s);
+    if(/virtual|weight|strength/i.test(s)) return false;
+    var key = r.stravaId || ((r.date||'')+'|'+(r.name||'')+'|'+(r.duration||''));
+    if(seen[key]) return false;
+    seen[key] = true;
+    return true;
   }).slice().sort(function(a,b){
-    return (b.date||'') > (a.date||'') ? 1 : -1;
+    var da=(a.startTime||a.date||''), db=(b.startTime||b.date||'');
+    return db>da?1:db<da?-1:0;
   });
 
   var wrap = document.createElement('div');
@@ -10484,7 +10491,7 @@ function dsShowRidesList(){
 
   var titleBar = document.createElement('div');
   titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
-  titleBar.textContent = 'Activities';
+  titleBar.textContent = 'Activities ('+rides.length+')';
   wrap.appendChild(titleBar);
 
   var list = document.createElement('div');
