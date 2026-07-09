@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783636700 v1783636700 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783637100 v1783637100 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11736,7 +11736,7 @@ function openDesktopRideDetail(idx){
   }
 
   main.innerHTML=
-    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14">'+
+    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;min-width:0;width:100%">'+
 
     // HEADER
     '<div style="padding:10px 18px 8px;border-bottom:1px solid #1e2130;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
@@ -11780,10 +11780,10 @@ function openDesktopRideDetail(idx){
       '<div class="ds-tab" data-rdtab="analytics">Analytics</div>'+
     '</div>'+
 
-    '<div style="flex:1;overflow-y:auto" id="rd-scroll">'+
+    '<div style="flex:1;overflow-y:auto;overflow-x:hidden;min-width:0" id="rd-scroll">'+
 
       // MAP
-      '<div id="rd-map" style="height:320px;background:#1c2535;position:relative;flex-shrink:0"></div>'+
+      '<div id="rd-map" style="height:320px;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden;width:100%"></div>'+
 
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
@@ -11806,8 +11806,9 @@ function openDesktopRideDetail(idx){
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em">Power</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">NP</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg</div></div>'+
           '</div>'+
           spark(r.chartPwr,'#FC4C02')+
         '</div>'+
