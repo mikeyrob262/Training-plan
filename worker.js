@@ -10294,7 +10294,18 @@ function dsShowDashboard(){
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
-    abox.appendChild(ico(sportMap[ikey],'#4ade80','16'));
+    var svgIco=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svgIco.setAttribute('width','16'); svgIco.setAttribute('height','16'); svgIco.setAttribute('viewBox','0 0 24 24');
+    svgIco.setAttribute('fill','none'); svgIco.setAttribute('stroke','#4ade80'); svgIco.setAttribute('stroke-width','2');
+    svgIco.setAttribute('stroke-linecap','round'); svgIco.setAttribute('stroke-linejoin','round');
+    var svgPath=document.createElementNS('http://www.w3.org/2000/svg','path');
+    var isSport=stype.toLowerCase();
+    if(isSport.indexOf('run')>=0) svgPath.setAttribute('d','M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4');
+    else if(isSport.indexOf('swim')>=0) svgPath.setAttribute('d','M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0');
+    else if(isSport.indexOf('strength')>=0||isSport.indexOf('weight')>=0) svgPath.setAttribute('d','M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z');
+    else svgPath.setAttribute('d','M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3');
+    svgIco.appendChild(svgPath);
+    abox.appendChild(svgIco);
     var ainfo=div('flex:1;min-width:0');
     ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',r.name||r.sportType||'Activity'));
     var dt=''; if(r.startTime){var d=new Date(r.startTime);dt=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dt=r.date;}
