@@ -16307,16 +16307,16 @@ function showWeatherHistory(){
     scr.appendChild(hdr);
 
     var body=document.createElement('div');
-    body.style.cssText='padding:0 0 12px';
+    body.style.cssText='padding:12px 16px';
 
-    // Route map preview - wind-colored, lives inside body so it's in DOM when Leaflet measures it
+    // Route map preview - wind-colored
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>5){
       var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
+      mapCard.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
       body.appendChild(mapCard);
       var leg=document.createElement('div');
-      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:6px 0 4px';
+      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:4px 0 10px';
       [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
         var p=document.createElement('div');
         p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
@@ -16333,11 +16333,6 @@ function showWeatherHistory(){
         })
         .catch(function(){ drawWindMap(mapCard, route, null); });
     }
-
-    var innerPad=document.createElement('div');
-    innerPad.style.cssText='padding:4px 16px 0';
-    body.appendChild(innerPad);
-    var body=innerPad;
 
     var today=new Date();
     var tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
