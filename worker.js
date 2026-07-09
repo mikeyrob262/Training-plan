@@ -10042,6 +10042,8 @@ function dsNav(section){
 }
 
 function dsShowDashboard(){
+  console.log('DASH START rides=', (st.rides||[]).length);
+  try{
   var mc = document.getElementById('ds-content');
   if(!mc) return;
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
