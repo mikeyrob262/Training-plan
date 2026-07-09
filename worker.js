@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783619550 v1783619550 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783619893 v1783619893 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783619550</title>
+<title>Athlete IQ v1783619893</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10543,8 +10543,32 @@ function dsShowRidesList(){
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
 
   var titleBar = document.createElement('div');
-  titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
-  titleBar.textContent = 'Activities';
+  titleBar.style.cssText = 'padding:14px 18px 10px;border-bottom:1px solid #1e2130;flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
+  var tbTitle = document.createElement('div');
+  tbTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff';
+  tbTitle.textContent = 'Activities ('+rides.length+')';
+  var tbFilters = document.createElement('div');
+  tbFilters.style.cssText = 'display:flex;gap:6px';
+  var activeFilter = 'all';
+  ['All','Rides','Runs','Strength'].forEach(function(f){
+    var btn = document.createElement('div');
+    btn.style.cssText = 'padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(f==='All'?'#4ade80':'#252d40')+';color:'+(f==='All'?'#4ade80':'#64748b')+';background:'+(f==='All'?'rgba(74,222,128,.1)':'transparent');
+    btn.textContent = f;
+    btn.onclick = function(){
+      activeFilter = f.toLowerCase();
+      tbFilters.querySelectorAll('div').forEach(function(b){ b.style.borderColor='#252d40'; b.style.color='#64748b'; b.style.background='transparent'; });
+      btn.style.borderColor='#4ade80'; btn.style.color='#4ade80'; btn.style.background='rgba(74,222,128,.1)';
+      var rows = list.querySelectorAll('.act-row');
+      rows.forEach(function(row){ 
+        var s = row.getAttribute('data-sport')||'';
+        var show = activeFilter==='all' || (activeFilter==='rides'&&/ride|cycling/i.test(s)) || (activeFilter==='runs'&&/run/i.test(s)) || (activeFilter==='strength'&&/strength|weight/i.test(s));
+        row.style.display = show ? 'flex' : 'none';
+      });
+    };
+    tbFilters.appendChild(btn);
+  });
+  titleBar.appendChild(tbTitle);
+  titleBar.appendChild(tbFilters);
   wrap.appendChild(titleBar);
 
   var list = document.createElement('div');
@@ -10556,17 +10580,27 @@ function dsShowRidesList(){
     empty.textContent = 'No activities yet';
     list.appendChild(empty);
   } else {
-    rides.slice(0,60).forEach(function(r){
+    rides.forEach(function(r){
       var idx = (st.rides||[]).indexOf(r);
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
       row.onmouseover = function(){ this.style.background='#1a1f2e'; };
       row.onmouseout = function(){ this.style.background=''; };
       row.onclick = function(){ openRideDetail(idx); };
+      row.className = 'act-row';
+      row.setAttribute('data-sport', r.sportType||r.type||'Ride');
 
       var icon = document.createElement('div');
       icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#1a1f2e;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+      var _st=(r.sportType||r.type||'').toLowerCase();
+      var _ic='M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3';
+      var _ic_color='#4ade80';
+      if(_st.indexOf('run')>=0){_ic='M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4';_ic_color='#FC4C02';}
+      else if(_st.indexOf('swim')>=0){_ic='M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0';_ic_color='#60a5fa';}
+      else if(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0){_ic='M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z';_ic_color='#8b5cf6';}
+      else if(_st.indexOf('virtual')>=0||_st.indexOf('zwift')>=0){_ic_color='#f59e0b';}
+      icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+_ic_color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+_ic+'"/></svg>';
+      if(r.gpsLats&&r.gpsLats.length>1){ var dot=document.createElement('div'); dot.style.cssText='position:absolute;bottom:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#4ade80'; icon.style.position='relative'; icon.appendChild(dot); }
       row.appendChild(icon);
 
       var info = document.createElement('div');
