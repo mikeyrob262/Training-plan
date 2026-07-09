@@ -48,10 +48,10 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 }
 @media (min-width:1024px){
   body{background:#0a0c10;overflow:hidden}
-  #app-shell{max-width:none;margin:0;box-shadow:none;background:transparent;display:flex;height:100vh;overflow:hidden}
-  #app-shell .bnav{display:none}
-  #app-shell .hdr{display:none}
-  #desktop-shell{display:flex!important}
+  #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:#0d0f14!important;display:block!important;height:100vh;overflow:hidden;position:relative}
+  #app-shell .bnav{display:none!important}
+  #app-shell .hdr{display:none!important}
+  #desktop-shell{display:flex!important;position:absolute;inset:0;z-index:999}
   #mobile-content{display:none!important}
 }
 .ds{display:none;flex:1;height:100vh;overflow:hidden;background:#0d0f14;color:#e2e8f0}
