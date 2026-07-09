@@ -10356,13 +10356,13 @@ function dsShowDashboard(){
   // Weather
   var wc=card(''); wc.appendChild(lbl('WEATHER'));
   wc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:8px','Grand Rapids, MI'));
-  var wmain=row('gap:8px;margin-bottom:10px');
+  var wmain=row('gap:6px;margin-bottom:6px');
   wmain.appendChild(ico('ti-sun','#f59e0b','28'));
   var wnum=div('');
   wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
   wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
   wmain.appendChild(wnum); wc.appendChild(wmain);
-  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:3px;overflow:hidden;font-size:10px');
+  var wgrid=div('display:flex;flex-direction:column;gap:4px;margin-top:4px');
   var wwind=div(''); wwind.appendChild(div('font-size:10px;color:#64748b','Wind'));
   var wwv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); wwv.id='ds-wx-wind';
   wwind.appendChild(wwv); wgrid.appendChild(wwind);
@@ -10726,13 +10726,14 @@ function openDesktopRideDetail(idx){
 
     // Init real route map
     var mapDiv = document.getElementById('ds-detail-map');
-    var mapLats = lats && lats.length > 1 ? lats : null;
-    var mapLons = lons && lons.length > 1 ? lons : null;
-    if(mapDiv && mapLats){
+    var mapLats = r.gpsLats||r.lats;
+    var mapLons = r.gpsLons||r.lons;
+    console.log('GPS check: gpsLats=', r.gpsLats&&r.gpsLats.length, 'lats=', r.lats&&r.lats.length);
+    if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
       mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
     } else if(mapDiv){
       mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
-      mapDiv.textContent = 'No GPS data';
+      mapDiv.textContent = 'No GPS data (pts: '+(mapLats?mapLats.length:0)+')';
     }
 
     // Back button
