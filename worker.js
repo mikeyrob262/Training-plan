@@ -10190,11 +10190,11 @@ function dsShowDashboard(){
   row1.appendChild(tb);
   body.appendChild(row1);
 
-  // Row 2: Today's Plan | Today's Biggest Opportunity | Coach Note
+  // Row 2: Today&#39;s Plan | Today&#39;s Biggest Opportunity | Coach Note
   var row2 = document.createElement('div');
   row2.style.cssText = 'display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:12px';
 
-  // Today's Plan
+  // Today&#39;s Plan
   var plan = document.createElement('div');
   plan.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px';
   var todayPlan = null;
@@ -10226,7 +10226,7 @@ function dsShowDashboard(){
     '<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer">View Workout Details</div>';
   row2.appendChild(plan);
 
-  // Today's Biggest Opportunity
+  // Today&#39;s Biggest Opportunity
   var opp = document.createElement('div');
   opp.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px';
   opp.innerHTML =
