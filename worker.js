@@ -15908,7 +15908,9 @@ function drawWindMap(containerEl, ride, wind){
   containerEl.innerHTML='<div id="'+mapId+'" style="width:100%;height:220px"></div>';
   setTimeout(function(){
     var el=document.getElementById(mapId);
-    if(!el||typeof L==='undefined') return;
+    if(!el){ console.error('WM: el not found', mapId); return; }
+    if(typeof L==='undefined'){ console.error('WM: L undefined'); return; }
+    console.log('WM: init', mapId, 'pts:', pts.length, 'el.offsetHeight:', el.offsetHeight);
     try{
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
