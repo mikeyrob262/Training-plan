@@ -10014,8 +10014,10 @@ function dsShowActivities(){
 
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
-  var nis = document.querySelectorAll('.ds-ni');
-  nis.forEach(function(n){ if((n.getAttribute('onclick')||'').indexOf("'"+section+"'") >= 0) n.classList.add('on'); });
+  document.querySelectorAll('.ds-ni').forEach(function(n){
+    var oc = n.getAttribute('onclick')||'';
+    if(oc.indexOf("'"+section+"'") >= 0) n.classList.add('on');
+  });
   var mc = document.getElementById('ds-content');
   var rp = document.getElementById('ds-right-panel');
   if(section === 'activities') {
@@ -10319,7 +10321,7 @@ function openDesktopRideDetail(idx){
         '</div>'+
       '</div>'+
       '<div class="ds-c4">'+
-        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-gauge" style="font-size:11px"></i> SPEED</div><div class="ds-c4main">'+(r.avgSpeed?r.avgSpeed+' mph':'--')+'</div><div class="ds-c4sub">'+(r.maxSpeed?r.maxSpeed+' max':'')+'</div></div>'+
+        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-gauge" style="font-size:11px"></i> SPEED</div><div class="ds-c4main">'+(r.avgSpeed?Math.round(r.avgSpeed*10)/10+' mph':'--')+'</div><div class="ds-c4sub">'+(r.maxSpeed?r.maxSpeed+' max':'')+'</div></div>'+
         '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-mountain" style="font-size:11px"></i> ELEVATION</div><div class="ds-c4main">'+(r.elevation?r.elevation+' ft':'--')+'</div><div class="ds-c4sub">gain</div></div>'+
         '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-temperature" style="font-size:11px"></i> TEMPERATURE</div><div class="ds-c4main">'+(r.avgTemp?r.avgTemp+'°F':'--')+'</div><div class="ds-c4sub">'+(r.maxTemp?r.maxTemp+'° max':'')+'</div></div>'+
         '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-wind" style="font-size:11px"></i> WIND</div><div class="ds-c4main">--</div><div class="ds-c4sub">from conditions</div></div>'+
@@ -10337,10 +10339,10 @@ function openDesktopRideDetail(idx){
       '<div class="ds-rp">'+
         '<div class="ds-rp-hd"><div class="ds-rp-t">Conditions</div><div class="ds-rp-link">View details &rsaquo;</div></div>'+
         '<div class="ds-conds" id="ds-conds-grid">'+
-          '<div><div class="ds-cd-icon">🌡</div><div class="ds-cd-val" id="ds-cond-temp">--</div><div class="ds-cd-lbl">Temp</div></div>'+
-          '<div><div class="ds-cd-icon">&#10145;</div><div class="ds-cd-val" id="ds-cond-wind">--</div><div class="ds-cd-lbl">Wind</div></div>'+
-          '<div><div class="ds-cd-icon">💧</div><div class="ds-cd-val" id="ds-cond-hum">--</div><div class="ds-cd-lbl">Humidity</div></div>'+
-          '<div><div class="ds-cd-icon">👁</div><div class="ds-cd-val">10 mi</div><div class="ds-cd-lbl">Visibility</div></div>'+
+          '<div style="text-align:center"><i class="ti ti-temperature" style="font-size:22px;color:#94a3b8;display:block;margin-bottom:4px"></i><div class="ds-cd-val" id="ds-cond-temp">--</div><div class="ds-cd-lbl">Temp</div></div>'+
+          '<div style="text-align:center"><i class="ti ti-wind" style="font-size:22px;color:#94a3b8;display:block;margin-bottom:4px"></i><div class="ds-cd-val" id="ds-cond-wind">--</div><div class="ds-cd-lbl">Wind</div></div>'+
+          '<div style="text-align:center"><i class="ti ti-droplet" style="font-size:22px;color:#94a3b8;display:block;margin-bottom:4px"></i><div class="ds-cd-val" id="ds-cond-hum">--</div><div class="ds-cd-lbl">Humidity</div></div>'+
+          '<div style="text-align:center"><i class="ti ti-eye" style="font-size:22px;color:#94a3b8;display:block;margin-bottom:4px"></i><div class="ds-cd-val">10 mi</div><div class="ds-cd-lbl">Visibility</div></div>'+
         '</div>'+
       '</div>'+
       '<div class="ds-rp">'+
@@ -10406,9 +10408,9 @@ window.addEventListener('load', function(){
   dsInitProfile();
   if(isDesktop()){
     dsInitProfile();
-    dsShowDashboard();
+    dsNav('dashboard');
     // Backup in case st.rides wasn't ready yet
-    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsShowDashboard(); } }, 2000);
+    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsNav('dashboard'); } }, 2000);
   }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
@@ -16480,7 +16482,7 @@ function drawWindMap(containerEl, ride, wind){
         L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:0.9}).addTo(map);
       }
       var bl=L.polyline(pts,{opacity:0}).addTo(map);
-      map.fitBounds(bl.getBounds(),{padding:[20,20]});
+      map.fitBounds(bl.getBounds(),{padding:[30,40]});
       L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#E24B4A',fillOpacity:1,weight:2}).addTo(map);
       if(wind&&wind.winddirection_10m!=null){
