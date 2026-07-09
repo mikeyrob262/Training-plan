@@ -3627,6 +3627,7 @@ function fbPull(silent){
       try{restoreExtraSessions();}catch(e){}
       try{cw=getCurrentPlanWeek();GW(cw);updHdr();}catch(e){}
       if(!silent) toast('OK Synced!');
+      try{ if(isDesktop()) dsShowDashboard(); }catch(e){}
     } else {
       if(!silent) toast('No cloud data yet');
     }
@@ -10397,7 +10398,7 @@ function openDesktopRideDetail(idx){
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
   dsInitProfile();
-  if(isDesktop()){ dsShowDashboard(); }
+  if(isDesktop()){ setTimeout(function(){ dsInitProfile(); dsShowDashboard(); }, 500); }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
