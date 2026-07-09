@@ -16306,13 +16306,24 @@ function showWeatherHistory(){
     hdr.appendChild(titleWrap);
     scr.appendChild(hdr);
 
-    // Route map preview - wind-colored via standalone drawWindMap
+    var body=document.createElement('div');
+    body.style.cssText='padding:0 0 12px';
+
+    // Route map preview - wind-colored, lives inside body so it's in DOM when Leaflet measures it
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>5){
       var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:210px;background:var(--s2)';
-      scr.appendChild(mapCard);
-      // Fetch current wind then draw
+      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
+      body.appendChild(mapCard);
+      var leg=document.createElement('div');
+      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:6px 0 4px';
+      [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
+        var p=document.createElement('div');
+        p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
+        p.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
+        leg.appendChild(p);
+      });
+      body.appendChild(leg);
       fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m,windgusts_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
         .then(function(r){return r.json();})
         .then(function(wx){
@@ -16321,20 +16332,12 @@ function showWeatherHistory(){
           drawWindMap(mapCard, route, wind);
         })
         .catch(function(){ drawWindMap(mapCard, route, null); });
-      // Legend
-      var leg=document.createElement('div');
-      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:6px 0 2px;';
-      [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
-        var p=document.createElement('div');
-        p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
-        p.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
-        leg.appendChild(p);
-      });
-      scr.appendChild(leg);
     }
 
-    var body=document.createElement('div');
-    body.style.cssText='padding:12px 16px';
+    var innerPad=document.createElement('div');
+    innerPad.style.cssText='padding:4px 16px 0';
+    body.appendChild(innerPad);
+    var body=innerPad;
 
     var today=new Date();
     var tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
