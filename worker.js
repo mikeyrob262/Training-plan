@@ -15899,25 +15899,22 @@ function renderMapContent(body, ride, wind, forTime){
   },200);
 }
 
-// Standalone wind-colored route map — no global state, safe to call anywhere.
-// containerEl: a div that will receive the map. wind: {windspeed_10m, winddirection_10m, windgusts_10m} or null.
+// Standalone wind-colored route map — injects HTML then inits map via setTimeout
 function drawWindMap(containerEl, ride, wind){
   var lats=ride.lats||ride.gpsLats, lons=ride.lons||ride.gpsLons;
   if(!lats||lats.length<2) return;
-  var mapId='wm-'+Date.now();
-  containerEl.innerHTML='<div id="'+mapId+'" style="height:220px;width:100%"></div>';
-  var attempts=0;
-  function init(){
-    attempts++;
-    if(typeof L==='undefined'){ if(attempts<25) setTimeout(init,150); return; }
+  if(!window._wmCount) window._wmCount=0; window._wmCount++;
+  var mapId='wm-'+window._wmCount;
+  containerEl.innerHTML='<div id="'+mapId+'" style="width:100%;height:220px"></div>';
+  setTimeout(function(){
+    var el=document.getElementById(mapId);
+    if(!el||typeof L==='undefined') return;
     try{
-      var el=document.getElementById(mapId);
-      if(!el) return;
       var pts=lats.map(function(la,i){return[la,lons[i]];});
-      var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+      var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:17}).addTo(map);
       function classifySeg(idx){
-        if(!wind||wind.winddirection_10m==null) return '#A8C4E0';
+        if(!wind||wind.winddirection_10m==null) return '#378ADD';
         var p1=pts[Math.max(0,idx-1)], p2=pts[Math.min(pts.length-1,idx+1)];
         var bearing=Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI;
         var travelBearing=(bearing+360)%360;
@@ -15927,38 +15924,29 @@ function drawWindMap(containerEl, ride, wind){
         if(diff>135) return '#E24B4A';
         return '#BA7517';
       }
-      if(wind&&wind.winddirection_10m!=null){
-        for(var si=0;si<pts.length-1;si++){
-          L.polyline([pts[si],pts[si+1]],{color:'#000',weight:6,opacity:.4}).addTo(map); L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:1}).addTo(map);
-        }
-      } else {
-        L.polyline(pts,{color:'#000',weight:6,opacity:.4}).addTo(map); L.polyline(pts,{color:'#378ADD',weight:4,opacity:1}).addTo(map);
+      for(var si=0;si<pts.length-1;si++){
+        L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:0.9}).addTo(map);
       }
       var bl=L.polyline(pts,{opacity:0}).addTo(map);
       map.fitBounds(bl.getBounds(),{padding:[20,20]});
-      setTimeout(function(){map.invalidateSize();},300);
-      setTimeout(function(){map.invalidateSize();},800);
       L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#E24B4A',fillOpacity:1,weight:2}).addTo(map);
-      // Wind compass overlay
       if(wind&&wind.winddirection_10m!=null){
         var dirs=['N','NE','E','SE','S','SW','W','NW'];
         var fromLbl=dirs[Math.round((wind.winddirection_10m||0)/45)%8];
         var blowTo=((wind.winddirection_10m||0)+180)%360;
-        var isGusty=wind.windgusts_10m&&wind.windgusts_10m>=(wind.windspeed_10m+8);
         var comp=document.createElement('div');
         comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(16,18,22,.88);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none';
         comp.innerHTML='<div style="transform:rotate('+blowTo+'deg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
           +'<div style="font-size:11px;font-weight:800;color:#fff">'+fromLbl+' wind</div>'
-          +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wind.windspeed_10m)+'mph'+(isGusty?' g'+Math.round(wind.windgusts_10m):'')+'</div>';
+          +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wind.windspeed_10m)+'mph</div>';
         containerEl.style.position='relative';
         containerEl.appendChild(comp);
       }
     }catch(e){}
-  }
-  // Wait for body to be in DOM and painted before init
-  setTimeout(function(){ requestAnimationFrame(function(){ requestAnimationFrame(init); }); }, 50);
+  },250);
 }
+
 
 function showWeatherHistory(){
   var old=document.getElementById('WX-RIDE-FLOW');if(old)old.remove();
