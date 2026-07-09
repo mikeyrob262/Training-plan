@@ -10044,6 +10044,8 @@ function dsNav(section){
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
+  // Hide right panel on dashboard
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
   var recent = rides.slice(0,3);
   var ftp = parseInt(st.ftp||186);
@@ -10458,6 +10460,7 @@ function dsShowDashboard(){
 
 
 function dsShowRidesList(){
+  var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
   var rides = (st.rides||[]).filter(function(r){
@@ -10544,6 +10547,7 @@ function dsInitProfile(){
 }
 
 function openDesktopRideDetail(idx){
+  var rp2=document.getElementById('ds-right-panel'); if(rp2) rp2.style.display='flex';
   var r = st.rides[idx];
   if(!r) return;
   var FTP = parseInt(st.ftp||186);
