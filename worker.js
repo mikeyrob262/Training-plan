@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783635500 v1783635500 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783636150 v1783636150 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11548,7 +11548,7 @@ function dsShowRidesList(){
       row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
       row.onmouseover=function(){this.style.background='#111318';};
       row.onmouseout=function(){this.style.background='';};
-      row.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
+      row.onclick=(function(i){return function(){ if(typeof isDesktop==='function'&&isDesktop()){var rp=document.getElementById('ds-right-panel');if(rp)rp.style.display='flex';openDesktopRideDetail(i);}else{openRideDetail(i);} };})(ridx);
 
       // Sport icon
       var _st=(r.sportType||r.type||'').toLowerCase();
