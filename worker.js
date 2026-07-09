@@ -10498,6 +10498,8 @@ function dsShowRidesList(){
   titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
   titleBar.textContent = 'Activities ('+rides.length+')';
   console.log('TOP 5:', rides.slice(0,5).map(function(r){return r.date+'|'+r.name;}));
+  var fondo = (st.rides||[]).find(function(r){return r.name&&r.name.indexOf('Fondo')>=0;});
+  console.log('FONDO:', fondo&&(fondo.date+'|'+fondo.name+'|stravaId:'+fondo.stravaId));
   wrap.appendChild(titleBar);
 
   var list = document.createElement('div');
