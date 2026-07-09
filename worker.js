@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783625269 v1783625269 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783626659 v1783626659 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783625269</title>
+<title>Athlete IQ v1783626659</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10579,7 +10579,15 @@ function dsShowRidesList(){
     empty.textContent = 'No activities yet';
     list.appendChild(empty);
   } else {
-    rides.slice(0,60).forEach(function(r){
+    var _vis=20;
+    function _renderMore(){
+      // Remove existing load-more button
+      var old=list.querySelector('.load-more-btn'); if(old) old.remove();
+      // Remove rows beyond current filter that were already rendered
+      // Re-render visible rows
+      var shown=0;
+      Array.from(list.querySelectorAll('.act-row')).forEach(function(row){row.remove();});
+      rides.slice(0,_vis).forEach(function(r){
       var idx = (st.rides||[]).indexOf(r);
       var row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
@@ -10627,8 +10635,19 @@ function dsShowRidesList(){
       addStat(r.avgPower ? r.avgPower+'w' : '', 'Power', '#FC4C02');
       addStat(r.avgHR ? r.avgHR+' bpm' : '', 'HR', '#60a5fa');
       row.appendChild(stats);
-      list.appendChild(row);
-    });
+        list.appendChild(row);
+        shown++;
+      });
+      if(_vis < rides.length){
+        var moreBtn=document.createElement('div');
+        moreBtn.className='load-more-btn';
+        moreBtn.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
+        moreBtn.textContent='Load more ('+(rides.length-_vis)+' remaining)';
+        moreBtn.onclick=function(){_vis+=20;_renderMore();};
+        list.appendChild(moreBtn);
+      }
+    }
+    _renderMore();
   }
   wrap.appendChild(list);
   mc.innerHTML = '';
