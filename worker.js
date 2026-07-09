@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783628015 v1783628015 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783628117 v1783628117 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783628015</title>
+<title>Athlete IQ v1783628117</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10162,8 +10162,9 @@ function dsShowAnalytics(){
 
   mc.appendChild(wrap);
 
-  // Draw charts
-  setTimeout(function(){
+  // Draw charts - wait for Chart.js to load
+  function drawCharts(){
+    if(typeof Chart==='undefined'){ setTimeout(drawCharts,200); return; }
     var gc=document.getElementById('ds-fitness-chart');
     if(gc&&typeof Chart!=='undefined'){
       new Chart(gc,{type:'line',data:{labels:labels.filter(function(_,i){return i%7===0;}),datasets:[
@@ -10180,7 +10181,8 @@ function dsShowAnalytics(){
     if(wc&&typeof Chart!=='undefined'){
       new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' W/kg';}}}}}});
     }
-  },100);
+  }
+  setTimeout(drawCharts,100);
 }
 
 function dsShowCalendar(){
