@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783619893 v1783619893 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783620705 v1783620705 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783619893</title>
+<title>Athlete IQ v1783620705</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -8811,7 +8811,10 @@ function computePMC(rides){
     dt.setDate(dt.getDate() - d);
     var key = dt.getFullYear() + '-' + (dt.getMonth()+1) + '-' + dt.getDate();
     var tss = 0;
-    rides.forEach(function(r){
+    var _visCount = 10;
+    function renderRides(){
+      list.innerHTML='';
+      rides.filter(function(r){ var s=r.sportType||r.type||''; return activeFilter==='all'||(activeFilter==='rides'&&/ride|cycling/i.test(s))||(activeFilter==='runs'&&/run/i.test(s))||(activeFilter==='strength'&&/strength|weight/i.test(s)); }).slice(0,_visCount).forEach(function(r){
       if(r.date === key) tss += (r.load != null ? r.load : (r.tss || 0));
     });
     ctl = ctl + (tss - ctl) / 42;
@@ -10527,13 +10530,15 @@ function dsShowRidesList(){
   if(!mc) return;
   var _byId = {};
   (st.rides||[]).forEach(function(r){
-    var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+(r.date||'')+(r.name||'')+(r.duration||'');
+    // Primary key: stravaId. Fallback: date + rounded distance
+    var dist = r.distance ? Math.round(parseFloat(r.distance)) : 0;
+    var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.duration||'');
     var existing = _byId[key];
-    if(!existing) { _byId[key]=r; return; }
-    // Always prefer the version with more GPS points
-    var rGps = (r.gpsLats&&r.gpsLats.length)||0;
-    var eGps = (existing.gpsLats&&existing.gpsLats.length)||0;
-    if(rGps > eGps) _byId[key]=r;
+    if(!existing){ _byId[key]=r; return; }
+    // Keep version with more GPS points
+    var rGps=(r.gpsLats&&r.gpsLats.length)||0;
+    var eGps=(existing.gpsLats&&existing.gpsLats.length)||0;
+    if(rGps>eGps) _byId[key]=r;
   });
   var rides = Object.values(_byId).sort(function(a,b){
     return normDate(b.date)>normDate(a.date)?1:-1;
@@ -10629,8 +10634,19 @@ function dsShowRidesList(){
       addStat(r.avgPower ? r.avgPower+'w' : '', 'Power', '#FC4C02');
       addStat(r.avgHR ? r.avgHR+' bpm' : '', 'HR', '#60a5fa');
       row.appendChild(stats);
-      list.appendChild(row);
-    });
+        list.appendChild(row);
+      });
+      // Load more button
+      var filtered=rides.filter(function(r){ var s=r.sportType||r.type||''; return activeFilter==='all'||(activeFilter==='rides'&&/ride|cycling/i.test(s))||(activeFilter==='runs'&&/run/i.test(s))||(activeFilter==='strength'&&/strength|weight/i.test(s)); });
+      if(_visCount < filtered.length){
+        var more=document.createElement('div');
+        more.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
+        more.textContent='Load more ('+(filtered.length-_visCount)+' remaining)';
+        more.onclick=function(){ _visCount+=20; renderRides(); };
+        list.appendChild(more);
+      }
+    }
+    renderRides();
   }
   wrap.appendChild(list);
   mc.innerHTML = '';
