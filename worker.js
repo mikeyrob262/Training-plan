@@ -10307,7 +10307,9 @@ function dsShowDashboard(){
     svgIco.appendChild(svgPath);
     abox.appendChild(svgIco);
     var ainfo=div('flex:1;min-width:0');
-    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',r.name||r.sportType||'Activity'));
+    var displayName = r.name||r.sportType||'Activity';
+    if(/^\d+\s+ACTIVITY$/i.test(displayName)) displayName = r.sportType||'Cycling';
+    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',displayName));
     var dt=''; if(r.startTime){var d=new Date(r.startTime);dt=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dt=r.date;}
     ainfo.appendChild(div('font-size:10px;color:#64748b;margin-top:1px',dt));
     var astats=row('gap:12px;flex-shrink:0');
