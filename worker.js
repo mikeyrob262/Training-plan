@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783626821 v1783626821 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783626949 v1783626949 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783626821</title>
+<title>Athlete IQ v1783626949</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10559,11 +10559,25 @@ function dsShowRidesList(){
       tbFilters.querySelectorAll('div').forEach(function(b){b.style.borderColor='#252d40';b.style.color='#64748b';b.style.background='transparent';});
       btn.style.borderColor='#4ade80';btn.style.color='#4ade80';btn.style.background='rgba(74,222,128,.1)';
       var fval = f.toLowerCase();
-      list.querySelectorAll('.act-row').forEach(function(row){
-        var s = row.getAttribute('data-sport')||'';
-        var show = fval==='all'||(fval==='rides'&&/ride|cycling/i.test(s))||(fval==='runs'&&(/run/i.test(s)||/walk/i.test(s)))||(fval==='strength'&&/strength|weight/i.test(s));
-        row.style.display = show?'flex':'none';
+      var filtered = fval==='all' ? rides : rides.filter(function(r){
+        var s=r.sportType||r.type||'';
+        if(fval==='rides') return /ride|cycling/i.test(s);
+        if(fval==='runs') return /run/i.test(s);
+        if(fval==='strength') return /strength|weight/i.test(s);
+        return true;
       });
+      _vis=10;
+      // Re-render with filtered set
+      list.innerHTML='';
+      filtered.slice(0,_vis).forEach(function(r){ renderRow(r); });
+      if(_vis<filtered.length){
+        var mb=document.createElement('div');
+        mb.className='load-more-btn';
+        mb.style.cssText='padding:14px;text-align:center;color:#4ade80;cursor:pointer;font-size:13px;font-weight:600;border-top:1px solid #1a1f2e';
+        mb.textContent='Load more ('+(filtered.length-_vis)+' remaining)';
+        mb.onclick=function(){_vis+=20;mb.remove();filtered.slice(_vis-20,_vis).forEach(function(r){list.insertBefore(renderRow(r),null);});if(_vis<filtered.length){list.appendChild(mb);}};
+        list.appendChild(mb);
+      }
     };
     tbFilters.appendChild(btn);
   });
@@ -10580,12 +10594,20 @@ function dsShowRidesList(){
     list.appendChild(empty);
   } else {
     var _vis=10;
+    function renderRow(r){
+      var ridx=(st.rides||[]).indexOf(r);
+      if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
+      row.onmouseover=function(){this.style.background='#1a1f2e';};
+      row.onmouseout=function(){this.style.background='';};
+      row.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
+      row.className='act-row';
+      row.setAttribute('data-sport',r.sportType||r.type||'Ride');
+      return row;
+    }
     function _renderMore(){
-      // Remove existing load-more button
-      var old=list.querySelector('.load-more-btn'); if(old) old.remove();
-      // Remove rows beyond current filter that were already rendered
-      // Re-render visible rows
-      var shown=0;
+      var old2=list.querySelector('.load-more-btn'); if(old2) old2.remove();
       Array.from(list.querySelectorAll('.act-row')).forEach(function(row){row.remove();});
       rides.slice(0,_vis).forEach(function(r){
       var idx = (st.rides||[]).indexOf(r);
