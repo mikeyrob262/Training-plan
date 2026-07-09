@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783619380 v1783619380 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783619550 v1783619550 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783619380</title>
+<title>Athlete IQ v1783619550</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10359,7 +10359,7 @@ function dsShowDashboard(){
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
     abox.appendChild(ico(sportMap[ikey],'#4ade80','16'));
     var ainfo=div('flex:1;min-width:0');
-    var _dn=r.name||r.sportType||'Activity'; if(/^\d+\s+ACTIVITY$/i.test(_dn)) _dn=r.sportType||r.type||'Ride';
+    var _dn=r.name||r.sportType||'Activity'; if(_dn.indexOf(' ACTIVITY')>0&&parseInt(_dn)>0) _dn=r.sportType||r.type||'Ride';
     ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',_dn));
     var dt=''; if(r.startTime){var d=new Date(r.startTime);dt=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dt=r.date;}
     ainfo.appendChild(div('font-size:10px;color:#64748b;margin-top:1px',dt));
@@ -10573,7 +10573,7 @@ function dsShowRidesList(){
       info.style.cssText = 'flex:1;min-width:0';
       var name = document.createElement('div');
       name.style.cssText = 'font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-      var _rn=r.name||r.sportType||'Activity'; name.textContent=/^\d+\s+ACTIVITY$/i.test(_rn)?r.sportType||r.type||'Ride':_rn;
+      var _rn=r.name||r.sportType||'Activity'; if(_rn.indexOf(' ACTIVITY')>0&&parseInt(_rn)>0) _rn=r.sportType||r.type||'Ride'; name.textContent=_rn;
       var date = document.createElement('div');
       date.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
       date.textContent = r.date||'';
