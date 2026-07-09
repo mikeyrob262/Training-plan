@@ -10697,17 +10697,7 @@ function openDesktopRideDetail(idx){
     '</div>'+
     '<div class="ds-tabs"><div class="ds-tab on">Route</div><div class="ds-tab">Charts</div><div class="ds-tab">Laps</div><div class="ds-tab">Breakdown</div></div>'+
     '<div class="ds-scroll">'+
-      '<div class="ds-mapbox">'+
-        '<div class="ds-map-base"></div>'+
-        '<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 560 180" preserveAspectRatio="xMidYMid slice">'+
-          '<line x1="0" y1="45" x2="560" y2="45" stroke="#2a3a2a" stroke-width="5" opacity=".5"/>'+
-          '<line x1="0" y1="140" x2="560" y2="140" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
-          '<line x1="160" y1="0" x2="160" y2="180" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
-          '<line x1="340" y1="0" x2="340" y2="180" stroke="#2a3a2a" stroke-width="4" opacity=".5"/>'+
-          routeSVG+
-        '</svg>'+
-        '<div class="ds-map-ctrl"><div class="ds-map-btn">+</div><div class="ds-map-btn">&minus;</div></div>'+
-      '</div>'+
+      '<div id="ds-real-map" style="height:210px;flex-shrink:0"></div>'+
       '<div class="ds-elev">'+
         '<div class="ds-elev-lbl">Elevation</div>'+
         '<svg style="width:100%;height:48px" viewBox="0 0 560 48" preserveAspectRatio="none">'+elevSVG+'</svg>'+
@@ -10746,6 +10736,25 @@ function openDesktopRideDetail(idx){
       '</div>'+
     '</div>'+
   '</div>';
+
+  // Init real Leaflet map
+  setTimeout(function(){
+    var mapDiv = document.getElementById('ds-real-map');
+    var gpsLats = lats && lats.length > 1 ? lats : null;
+    var gpsLons = lons && lons.length > 1 ? lons : null;
+    if(!gpsLats && r.stravaId){
+      var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
+      if(alt){gpsLats=alt.gpsLats;gpsLons=alt.gpsLons;}
+    }
+    if(mapDiv && gpsLats){
+      mapDiv.innerHTML = buildRouteMap(gpsLats, gpsLons, r.chartPwr||[], FTP);
+    } else if(mapDiv){
+      mapDiv.style.cssText='height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-shrink:0';
+      mapDiv.textContent='No GPS data';
+    }
+    var bb=document.getElementById('ds-back-btn');
+    if(bb) bb.onclick=function(){dsNav('dashboard');};
+  }, 50);
 
   // Right panel
   var rp = document.getElementById('ds-right-panel');
