@@ -15899,6 +15899,64 @@ function renderMapContent(body, ride, wind, forTime){
   },200);
 }
 
+// Standalone wind-colored route map — no global state, safe to call anywhere.
+// containerEl: a div that will receive the map. wind: {windspeed_10m, winddirection_10m, windgusts_10m} or null.
+function drawWindMap(containerEl, ride, wind){
+  var lats=ride.lats||ride.gpsLats, lons=ride.lons||ride.gpsLons;
+  if(!lats||lats.length<2) return;
+  var mapId='wm-'+Date.now();
+  containerEl.innerHTML='<div id="'+mapId+'" style="height:100%;width:100%"></div>';
+  var attempts=0;
+  function init(){
+    attempts++;
+    if(typeof L==='undefined'){ if(attempts<25) setTimeout(init,150); return; }
+    try{
+      var el=document.getElementById(mapId);
+      if(!el) return;
+      var pts=lats.map(function(la,i){return[la,lons[i]];});
+      var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false});
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+      function classifySeg(idx){
+        if(!wind||wind.winddirection_10m==null) return '#A8C4E0';
+        var p1=pts[Math.max(0,idx-1)], p2=pts[Math.min(pts.length-1,idx+1)];
+        var bearing=Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI;
+        var travelBearing=(bearing+360)%360;
+        var windToward=((wind.winddirection_10m||0)+180)%360;
+        var diff=Math.abs(((travelBearing-windToward+540)%360)-180);
+        if(diff<45) return '#1D9E75';
+        if(diff>135) return '#E24B4A';
+        return '#BA7517';
+      }
+      if(wind&&wind.winddirection_10m!=null){
+        for(var si=0;si<pts.length-1;si++){
+          L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:.9}).addTo(map);
+        }
+      } else {
+        L.polyline(pts,{color:'#A8C4E0',weight:4,opacity:.9}).addTo(map);
+      }
+      var bl=L.polyline(pts,{opacity:0}).addTo(map);
+      map.fitBounds(bl.getBounds(),{padding:[20,20]});
+      L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#E24B4A',fillOpacity:1,weight:2}).addTo(map);
+      // Wind compass overlay
+      if(wind&&wind.winddirection_10m!=null){
+        var dirs=['N','NE','E','SE','S','SW','W','NW'];
+        var fromLbl=dirs[Math.round((wind.winddirection_10m||0)/45)%8];
+        var blowTo=((wind.winddirection_10m||0)+180)%360;
+        var isGusty=wind.windgusts_10m&&wind.windgusts_10m>=(wind.windspeed_10m+8);
+        var comp=document.createElement('div');
+        comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(16,18,22,.88);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none';
+        comp.innerHTML='<div style="transform:rotate('+blowTo+'deg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
+          +'<div style="font-size:11px;font-weight:800;color:#fff">'+fromLbl+' wind</div>'
+          +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wind.windspeed_10m)+'mph'+(isGusty?' g'+Math.round(wind.windgusts_10m):'')+'</div>';
+        containerEl.style.position='relative';
+        containerEl.appendChild(comp);
+      }
+    }catch(e){}
+  }
+  setTimeout(init,100);
+}
+
 function showWeatherHistory(){
   var old=document.getElementById('WX-RIDE-FLOW');if(old)old.remove();
   var scr=document.createElement('div');
@@ -16248,33 +16306,31 @@ function showWeatherHistory(){
     hdr.appendChild(titleWrap);
     scr.appendChild(hdr);
 
-    // Route map preview - simple Leaflet map with route polyline
+    // Route map preview - wind-colored via standalone drawWindMap
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>5){
       var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:200px;background:var(--s2)';
-      var mapId='dp-map-'+Date.now();
-      mapCard.id=mapId;
+      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:210px;background:var(--s2)';
       scr.appendChild(mapCard);
-      var _dpAttempts=0;
-      var _dpRoute=route;
-      function _initDpMap(){
-        _dpAttempts++;
-        if(typeof L==='undefined'){
-          if(_dpAttempts<20) setTimeout(_initDpMap,150);
-          return;
-        }
-        try{
-          var lats=_dpRoute.lats||_dpRoute.gpsLats;
-          var lons=_dpRoute.lons||_dpRoute.gpsLons;
-          var pts=lats.map(function(la,i){return[la,lons[i]];});
-          var m=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false});
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
-          L.polyline(pts,{color:'#A8C4E0',weight:3,opacity:0.9}).addTo(m);
-          m.fitBounds(L.latLngBounds(pts),{padding:[16,16]});
-        }catch(e){}
-      }
-      setTimeout(_initDpMap,120);
+      // Fetch current wind then draw
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m,windgusts_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+        .then(function(r){return r.json();})
+        .then(function(wx){
+          var hi=new Date().getHours();
+          var wind=wx&&wx.hourly?{windspeed_10m:wx.hourly.windspeed_10m[hi],winddirection_10m:wx.hourly.winddirection_10m[hi],windgusts_10m:wx.hourly.windgusts_10m[hi]}:null;
+          drawWindMap(mapCard, route, wind);
+        })
+        .catch(function(){ drawWindMap(mapCard, route, null); });
+      // Legend
+      var leg=document.createElement('div');
+      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:6px 0 2px;';
+      [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
+        var p=document.createElement('div');
+        p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
+        p.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
+        leg.appendChild(p);
+      });
+      scr.appendChild(leg);
     }
 
     var body=document.createElement('div');
