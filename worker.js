@@ -10013,18 +10013,59 @@ function dsShowActivities(){
 
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
+  var ni = document.querySelector('.ds-ni[onclick*="''+section+''"]');
+  if(ni) ni.classList.add('on');
   var mapping = {
-    home: showHomeDash,
-    activities: function(){ showScreen('HOME_DASH'); showHomeDash(); },
-    calendar: function(){ showScreen('CALENDAR'); },
-    analytics: function(){ showScreen('ANALYTICS'); },
-    nutrition: function(){ showScreen('FUEL'); },
-    weather: function(){ showScreen('WEATHER'); },
-    gear: function(){ openGarage(); },
-    aicoach: function(){ openAICoach(); },
-    settings: function(){ openSettings(); },
+    home: dsShowRidesList,
+    activities: dsShowRidesList,
+    calendar: dsShowRidesList,
+    analytics: dsShowRidesList,
+    nutrition: dsShowRidesList,
+    weather: dsShowRidesList,
+    gear: dsShowRidesList,
+    aicoach: dsShowRidesList,
+    settings: dsShowRidesList,
   };
   if(mapping[section]) try{ mapping[section](); }catch(e){}
+}
+
+function dsShowRidesList(){
+  var mc = document.getElementById('ds-content');
+  if(!mc) return;
+  var rides = (st.rides||[]).filter(function(r){
+    var s=r.sportType||r.type||'';
+    return !/virtual|weight|strength/i.test(s);
+  }).slice().sort(function(a,b){
+    return (b.date||'') > (a.date||'') ? 1 : -1;
+  });
+  var html = '<div style="padding:16px 18px 8px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff">Activities</div>';
+  html += '<div style="overflow-y:auto;flex:1">';
+  if(!rides.length){
+    html += '<div style="padding:40px;text-align:center;color:#64748b">No activities yet</div>';
+  } else {
+    rides.slice(0,50).forEach(function(r,i){
+      var idx = (st.rides||[]).indexOf(r);
+      var dist = r.distance ? r.distance+' mi' : '';
+      var dur = r.duration || '';
+      var pwr = r.avgPower ? r.avgPower+'w' : '';
+      var hr = r.avgHR ? r.avgHR+' bpm' : '';
+      var date = r.date || '';
+      html += '<div onclick="openRideDetail('+idx+')" style="display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer;transition:background .1s" onmouseover="this.style.background='#1a1f2e'" onmouseout="this.style.background=''">';
+      html += '<div style="width:38px;height:38px;border-radius:10px;background:#1a1f2e;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 10c-4.4 0-8 1.8-8 4v2h16v-2c0-2.2-3.6-4-8-4z"/></svg></div>';
+      html += '<div style="flex:1;min-width:0">';
+      html += '<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||r.sportType||'Activity')+'</div>';
+      html += '<div style="font-size:11px;color:#64748b;margin-top:2px">'+date+'</div>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:16px;flex-shrink:0">';
+      if(dist) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+dist+'</div><div style="font-size:10px;color:#64748b">Dist</div></div>';
+      if(dur) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+dur+'</div><div style="font-size:10px;color:#64748b">Time</div></div>';
+      if(pwr) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#FC4C02">'+pwr+'</div><div style="font-size:10px;color:#64748b">Power</div></div>';
+      if(hr) html += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#60a5fa">'+hr+'</div><div style="font-size:10px;color:#64748b">HR</div></div>';
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+  mc.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+html+'</div>';
 }
 
 function dsInitProfile(){
@@ -10247,6 +10288,7 @@ function openDesktopRideDetail(idx){
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
   dsInitProfile();
+  if(isDesktop()) dsShowRidesList();
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
