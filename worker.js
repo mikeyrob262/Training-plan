@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783597957 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783599278 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783597957</title>
+<title>Athlete IQ v1783599278</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -16304,14 +16304,7 @@ function showWeatherHistory(){
     body.style.cssText='padding:12px 16px';
     scr.appendChild(body);
 
-    // Route map preview - use buildRouteMap which is proven to work
-    var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
-    if(_dpLats && _dpLats.length>1 && _dpLons && _dpLons.length>1){
-      var mapWrap=document.createElement('div');
-      mapWrap.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden';
-      mapWrap.innerHTML=buildRouteMap(_dpLats, _dpLons, [], 0);
-      body.appendChild(mapWrap);
-    }
+
 
     var today=new Date();
     var tomorrow=new Date(today);tomorrow.setDate(today.getDate()+1);
