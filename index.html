@@ -5281,7 +5281,7 @@ function renderNutr(){
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          sv();renderNutr();showScreen('NUTR');
+          var _sp=window.scrollY;var _sp2=window.scrollY;sv();renderNutr();showScreen('NUTR');requestAnimationFrame(function(){window.scrollTo(0,_sp2);});requestAnimationFrame(function(){window.scrollTo(0,_sp);});
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
@@ -5294,7 +5294,7 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          sv();renderNutr();showScreen('NUTR');
+          var _sp=window.scrollY;var _sp2=window.scrollY;sv();renderNutr();showScreen('NUTR');requestAnimationFrame(function(){window.scrollTo(0,_sp2);});requestAnimationFrame(function(){window.scrollTo(0,_sp);});
         };
       })(meal,ii,item);
       rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
