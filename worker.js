@@ -10140,10 +10140,9 @@ function dsShowDashboard(){
     svg.setAttribute('fill','none');svg.setAttribute('stroke',color||'#94a3b8');
     svg.setAttribute('stroke-width','2');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
     svg.style.cssText='flex-shrink:0;display:inline-block;vertical-align:middle';
-    d.split('M').filter(Boolean).forEach(function(seg){
-      var p=document.createElementNS('http://www.w3.org/2000/svg','path');
-      p.setAttribute('d','M'+seg);svg.appendChild(p);
-    });
+    // Use single path element with full path data
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d);svg.appendChild(p);
     return svg;
   }
   function row(extra){
