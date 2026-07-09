@@ -10288,8 +10288,8 @@ function dsShowDashboard(){
     var stype=r.sportType||r.type||'Ride';
     var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
-    var actualIdx=(st.rides||[]).indexOf(r);
-    ar.onclick=(function(i){return function(){openRideDetail(i);};})(actualIdx);
+    var _ridx = (st.rides||[]).indexOf(r);
+    ar.onclick=(function(i){return function(){openRideDetail(i);};})(Math.max(0,_ridx));
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
@@ -10473,14 +10473,19 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
+  // Build deduped list using stravaId as key, preserving first occurrence
+  var _seenIds = {}, _seenKeys = {};
   var rides = (st.rides||[]).filter(function(r){
-    var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength/i.test(s);
-  }).slice().sort(function(a,b){
+    var s = r.sportType||r.type||'';
+    if(/virtual|weight|strength/i.test(s)) return false;
+    // Deduplicate: prefer stravaId, fallback to date+name+distance combo
+    var uid = r.stravaId ? ('id_'+r.stravaId) : ('dk_'+(r.date||'')+'_'+(r.name||'')+'_'+(r.distance||''));
+    if(_seenIds[uid]) return false;
+    _seenIds[uid] = true;
+    return true;
+  }).sort(function(a,b){
     var da=a.date||'', db=b.date||'';
-    if(db>da) return 1;
-    if(db<da) return -1;
-    return 0;
+    if(db>da) return 1; if(db<da) return -1; return 0;
   });
 
   var wrap = document.createElement('div');
