@@ -15,6 +15,7 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css"/>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10006,10 +10007,7 @@ function renameRide(idx){
 // ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
 function isDesktop(){ return window.innerWidth >= 1024; }
 function dsShowActivities(){
-  var mc = document.getElementById('ds-content');
-  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>';
-  var rp = document.getElementById('ds-right-panel');
-  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
+  dsNav('dashboard');
 }
 
 function dsNav(section){
@@ -10291,7 +10289,8 @@ function dsShowDashboard(){
     var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
     var ridx=rides.indexOf(r);
-    ar.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
+    var actualIdx=(st.rides||[]).indexOf(r);
+    ar.onclick=(function(i){return function(){openRideDetail(i);};})(actualIdx);
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
@@ -10611,7 +10610,7 @@ function openDesktopRideDetail(idx){
     '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+
     '<div class="ds-mhdr">'+
       '<div>'+
-        '<div class="ds-back" onclick="dsShowActivities()">&lsaquo; Back</div>'+
+        '<div class="ds-back" onclick="dsNav('dashboard')">&lsaquo; Back</div>'+
         '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
         '<div class="ds-subtitle">'+dtStr+'</div>'+
       '</div>'+
