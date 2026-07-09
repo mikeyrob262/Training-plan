@@ -15967,7 +15967,7 @@ function showWeatherHistory(){
   var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
     var lats=r.lats||r.gpsLats;
-    return !/virtual|weight|strength|walk/i.test(s) && lats && lats.length>10;
+    return !/virtual|weight|strength|walk/i.test(s) && lats && lats.length>1;
   }).slice().sort(function(a,b){
     var da=(a.date||'').replace(/-/g,'');
     var db=(b.date||'').replace(/-/g,'');
