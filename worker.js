@@ -10047,10 +10047,18 @@ function dsShowDashboard(){
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
-  // Most recent 3 rides by date
-  var recent = (st.rides||[]).filter(function(r){
-    return r.date || r.startTime;
-  }).slice().sort(function(a,b){
+  // Most recent 3 rides - deduplicate by stravaId keeping GPS version
+  var _rSeen={};
+  var _rDeduped=[];
+  (st.rides||[]).forEach(function(r){
+    var key=r.stravaId?'s'+r.stravaId:'d'+(r.date||'')+(r.name||'');
+    var ex=_rSeen[key];
+    if(!ex){_rSeen[key]=r;_rDeduped.push(r);}
+    else if((r.gpsLats&&r.gpsLats.length||0)>(ex.gpsLats&&ex.gpsLats.length||0)){
+      _rDeduped[_rDeduped.indexOf(ex)]=r;_rSeen[key]=r;
+    }
+  });
+  var recent = _rDeduped.sort(function(a,b){
     return (b.date||'')>(a.date||'')?1:-1;
   }).slice(0,3);
   var ftp = parseInt(st.ftp||186);
