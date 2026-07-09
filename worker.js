@@ -10482,8 +10482,6 @@ function dsShowRidesList(){
     if(db<da) return -1;
     return 0;
   });
-  console.log('RIDES[0]:', rides[0]&&rides[0].date, rides[0]&&rides[0].name, 'total:', rides.length);
-  console.log('FONDO in list:', rides.filter(function(r){return r.name&&r.name.indexOf('Fondo')>=0;}).length);
 
   var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
