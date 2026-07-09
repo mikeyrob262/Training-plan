@@ -10073,7 +10073,7 @@ function dsShowDashboard(){
   topbar.innerHTML =
     '<div>'+
       '<div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-.02em">'+greeting+', Mikey 👋</div>'+
-      '<div style="font-size:12px;color:#64748b;margin-top:2px">Here's what matters today.</div>'+
+      '<div style="font-size:12px;color:#64748b;margin-top:2px">Here&#39;s what matters today.</div>'+
     '</div>'+
     '<div style="display:flex;align-items:center;gap:8px">'+
       '<div style="display:flex;align-items:center;gap:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:8px;padding:6px 12px;font-size:12px;color:#64748b">'+
@@ -10221,7 +10221,7 @@ function dsShowDashboard(){
       '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-bolt" style="font-size:11px"></i> '+(ftp||235)+'W</div>'+
       '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-trending-up" style="font-size:11px"></i> Stress 86</div>'+
     '</div>'+
-    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">This is the ideal session to build FTP.<br>You're more likely to see a breakthrough today.</div>'+
+    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">This is the ideal session to build FTP.<br>You&#39;re more likely to see a breakthrough today.</div>'+
     '<div style="font-size:10px;color:#64748b;margin-bottom:10px">Workout will be ready to export to your devices.</div>'+
     '<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer">View Workout Details</div>';
   row2.appendChild(plan);
@@ -10237,7 +10237,7 @@ function dsShowDashboard(){
       '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">TODAY'S BIGGEST OPPORTUNITY</div>'+
     '</div>'+
     '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px">Ride before 8:30 AM</div>'+
-    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">You'll avoid a 15 mph headwind and 92°F temperatures.</div>'+
+    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">You&#39;ll avoid a 15 mph headwind and 92°F temperatures.</div>'+
     '<div style="font-size:11px;color:#64748b;margin-bottom:4px">Estimated gain</div>'+
     '<div style="font-size:20px;font-weight:800;color:#4ade80;margin-bottom:12px">+14 watts</div>'+
     '<svg width="100%" height="50" viewBox="0 0 200 50" preserveAspectRatio="none">'+
