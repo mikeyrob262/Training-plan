@@ -10768,6 +10768,7 @@ window.addEventListener('load', function(){
   }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
+    console.log('openRideDetail called idx=',idx,'isDesktop=',isDesktop());
     if(isDesktop()){
       // Highlight nav
       document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
