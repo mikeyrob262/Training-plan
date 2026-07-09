@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783634700 v1783634700 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783635000 v1783635000 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11648,430 +11648,374 @@ function dsInitProfile(){
 }
 
 function openDesktopRideDetail(idx){
-  var rp2=document.getElementById('ds-right-panel'); if(rp2) rp2.style.display='flex';
-  var r = st.rides[idx];
+  var rp=document.getElementById('ds-right-panel');
+  if(rp) rp.style.display='flex';
+  var r=st.rides[idx];
   if(!r) return;
-  var FTP = parseInt(st.ftp||186);
-  var BWT = parseFloat(st.weight||160);
+  var FTP=parseInt(st.ftp||186);
+  var BWT=parseFloat(st.weight||160);
+  var NL=String.fromCharCode(10);
 
-  // W/kg from NP preferred, fallback avgPwr
-  var npVal = r.np||r.avgPwr||0;
-  var wkg = npVal&&BWT ? (npVal/BWT*2.20462).toFixed(2) : '--';
-  var tss = r.tss ? Math.round(r.tss) : '--';
+  // Computed stats
+  var npVal=r.np||r.avgPwr||0;
+  var wkg=npVal&&BWT?(npVal/BWT*2.20462).toFixed(2):'--';
+  var tss=r.tss?Math.round(r.tss):'--';
+  var avgSpd=r.avgSpeed?(r.avgSpeed>10?Math.round(r.avgSpeed*10)/10:Math.round(r.avgSpeed*2.237*10)/10):'--';
+  var maxSpd=r.maxSpeed?(r.maxSpeed>10?Math.round(r.maxSpeed*10)/10:Math.round(r.maxSpeed*2.237*10)/10):'--';
 
-  // Date/time/sport subtitle
-  var dtStr = '';
+  // Date subtitle
+  var dtStr='';
   if(r.startTime){
     var dt=new Date(r.startTime);
-    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var hrs12=dt.getHours()%12||12, mins=('0'+dt.getMinutes()).slice(-2), ampm=dt.getHours()>=12?'PM':'AM';
-    dtStr=months[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear()+' &middot; '+hrs12+':'+mins+' '+ampm+' &middot; '+(r.sportType||'Road Cycling');
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var h12=dt.getHours()%12||12, mn=('0'+dt.getMinutes()).slice(-2), ap=dt.getHours()>=12?'PM':'AM';
+    dtStr='Jul '+dt.getDate()+', '+dt.getFullYear()+' &middot; '+h12+':'+mn+' AM &middot; '+(r.sportType||'Road Cycling');
   } else if(r.date){ dtStr=r.date+' &middot; '+(r.sportType||'Road Cycling'); }
 
   var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
-  var main = document.getElementById('ds-content');
+  var main=document.getElementById('ds-content');
   if(!main) return;
 
+  // Ride score
+  var ifVal=r.ifPct?r.ifPct/100:(npVal&&FTP?npVal/FTP:0);
+  var rideScore=Math.min(99,Math.max(50,Math.round(70+(ifVal-0.75)*40+((r.tss||0)-80)*0.1)));
+  var scoreColor=rideScore>=80?'#4ADE80':rideScore>=65?'#F59E0B':'#E24B4A';
+  var scoreArc=Math.round(rideScore/100*163);
+
+  // Gear
+  ensureBikes();
+  var gearName=r.gearName||(r.gearId&&st.stravaGearMap&&st.stravaGearMap[r.gearId])||null;
+  var bike=null;
+  if(gearName) bike=(st.bikes||[]).find(function(b){return b.name===gearName;});
+  if(!bike) bike=(st.bikes||[])[0]||null;
+
   // Elevation profile SVG with mileage axis
-  function buildElevProfile(ele, distMi){
-    if(!ele||ele.length<2) return '';
-    var mn=Math.min.apply(null,ele), mx=Math.max.apply(null,ele), rng=mx-mn||1;
-    var W=560, H=60;
-    var pts=ele.map(function(v,i){
-      return ((i/(ele.length-1))*W).toFixed(1)+','+(H-8-((v-mn)/rng*(H-20)+4)).toFixed(1);
-    }).join(' ');
-    var fillPts='0,'+(H-8)+' '+pts+' '+W+','+(H-8);
-    // Mileage labels
+  function elevProfile(ele,distMi){
+    if(!ele||ele.length<2) return '<div style="height:100px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">No elevation data</div>';
+    var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
+    var W=800,H=80;
+    var pts=ele.map(function(v,i){return (i/(ele.length-1)*W).toFixed(1)+','+(H-10-((v-mn)/rng*(H-24)+6)).toFixed(1);}).join(' ');
+    var fill='0,'+(H-10)+' '+pts+' '+W+','+(H-10);
     var labels='';
-    var numLabels=Math.min(6,Math.round(distMi)||5);
-    for(var li=0;li<=numLabels;li++){
-      var x=Math.round((li/numLabels)*W);
-      var mi=((li/numLabels)*(distMi||25)).toFixed(0);
-      labels+='<text x="'+x+'" y="'+(H-1)+'" text-anchor="'+(li===0?'start':li===numLabels?'end':'middle')+'" font-size="8" fill="#64748b">'+mi+' mi</text>';
+    var d=parseFloat(distMi)||25;
+    for(var li=0;li<=5;li++){
+      var x=Math.round(li/5*W);
+      var mi=(li/5*d).toFixed(1);
+      labels+='<text x="'+x+'" y="'+(H-1)+'" text-anchor="'+(li===0?'start':li===5?'end':'middle')+'" font-size="9" fill="#64748b">'+mi+' mi</text>';
     }
-    return '<svg style="width:100%;height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
-      +'<defs><linearGradient id="dseg2" x1="0" x2="0" y1="0" y2="1">'
-      +'<stop offset="0%" stop-color="#FC4C02" stop-opacity=".5"/>'
-      +'<stop offset="100%" stop-color="#FC4C02" stop-opacity=".05"/></linearGradient></defs>'
-      +'<polygon points="'+fillPts+'" fill="url(#dseg2)"/>'
-      +'<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="1.5"/>'
-      +labels
+    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px" preserveAspectRatio="none">'
+      +'<defs><linearGradient id="eg3" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FC4C02" stop-opacity=".5"/><stop offset="100%" stop-color="#FC4C02" stop-opacity=".05"/></linearGradient></defs>'
+      +'<polygon points="'+fill+'" fill="url(#eg3)"/>'
+      +'<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="2"/>'
+      +labels+'</svg>';
+  }
+
+  // Sparkline SVG from real data
+  function spark(data,color){
+    if(!data||!data.length) return '<svg style="width:100%;height:40px" viewBox="0 0 240 40"><path d="M0,20 L240,20" stroke="'+color+'" stroke-width="1" opacity=".3" fill="none"/></svg>';
+    var mn=Math.min.apply(null,data),mx=Math.max.apply(null,data),rng=mx-mn||1;
+    var pts=data.map(function(v,i){return (i/(data.length-1)*240).toFixed(1)+','+(38-((v-mn)/rng*32+3)).toFixed(1);}).join(' ');
+    return '<svg style="width:100%;height:40px" viewBox="0 0 240 40" preserveAspectRatio="none">'
+      +'<polygon points="0,38 '+pts+' 240,38" fill="'+color+'" fill-opacity=".12"/>'
+      +'<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
       +'</svg>';
   }
 
-  // Real sparkline from chart data
-  function buildSparkSVG(data, color){
-    if(!data||!data.length) return '<svg class="ds-spark" viewBox="0 0 240 34" preserveAspectRatio="none"><path d="M0,20 C60,18 120,16 180,14 C210,13 230,12 240,12" fill="none" stroke="'+color+'" stroke-width="1.5" opacity=".5"/></svg>';
-    var mn=Math.min.apply(null,data), mx=Math.max.apply(null,data), rng=mx-mn||1;
-    var pts=data.map(function(v,i){ return (i/(data.length-1)*240).toFixed(1)+','+(34-((v-mn)/rng*26+4)).toFixed(1); }).join(' ');
-    var fill=pts+' 240,34 0,34';
-    return '<svg class="ds-spark" viewBox="0 0 240 34" preserveAspectRatio="none">'
-      +'<polygon points="'+fill+'" fill="'+color+'" fill-opacity=".1"/>'
-      +'<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.5" opacity=".9"/>'
-      +'</svg>';
-  }
-
-  var elevSVG = buildElevProfile(r.chartEle, parseFloat(r.distance)||0);
-  var pwrSpark = buildSparkSVG(r.chartPwr, '#FC4C02');
-  var hrSpark = buildSparkSVG(r.chartHR, '#E24B4A');
-  var cadData = r.chartCad || (r.cadence ? [r.cadence] : null);
-  var cadSpark = buildSparkSVG(cadData, '#A78BFA');
-
-  // Ride score: based on IF and TSS
-  var ifVal = r.ifPct ? r.ifPct/100 : (npVal&&FTP ? npVal/FTP : 0);
-  var rideScore = Math.min(99, Math.max(50, Math.round(70 + (ifVal-0.75)*40 + ((r.tss||0)-80)*0.1)));
-  var scoreColor = rideScore>=80?'#4ADE80':rideScore>=65?'#F59E0B':'#E24B4A';
-  var scoreArc = Math.round(rideScore/100*163);
-
-  main.innerHTML =
+  main.innerHTML=
     '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0D0F14">'+
 
     // HEADER
-    '<div class="ds-mhdr">'+
+    '<div style="padding:12px 18px 10px;border-bottom:1px solid #1e2130;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0">'+
       '<div>'+
-        '<div class="ds-back" id="ds-back-link">&larr; Back</div>'+
+        '<div style="font-size:11px;color:#64748b;cursor:pointer;margin-bottom:4px" id="rd-back-btn">&larr; Back</div>'+
         '<div style="display:flex;align-items:center;gap:8px">'+
-          '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
+          '<div style="font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em">'+(r.name||'Activity')+'</div>'+
+          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
         '</div>'+
-        '<div class="ds-subtitle">'+dtStr+'</div>'+
+        '<div style="font-size:11px;color:#64748b;margin-top:3px">'+dtStr+'</div>'+
       '</div>'+
-      '<div style="display:flex;align-items:center;gap:7px">'+
-        '<div class="ds-btn"><i class="ti ti-share"></i> Share</div>'+
-        '<div class="ds-btn"><i class="ti ti-download"></i> Export</div>'+
-        '<div class="ds-btn"><i class="ti ti-dots"></i></div>'+
-        '<div class="ds-btn" id="ds-wx-badge" style="gap:5px">'+
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>'+
-          '<span id="ds-wx-temp" style="color:#fff;font-size:11px">--</span>'+
-        '</div>'+
+      '<div style="display:flex;align-items:center;gap:6px;padding-top:2px">'+
+        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 11px;border-radius:7px;cursor:pointer">Share</div>'+
+        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 11px;border-radius:7px;cursor:pointer">Export</div>'+
+        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 11px;border-radius:7px;cursor:pointer">&hellip;</div>'+
       '</div>'+
     '</div>'+
 
-    // STATS BAR
-    '<div class="ds-stats">'+
-      '<div class="ds-stat"><div class="ds-sv">'+(r.duration||'--')+'</div><div class="ds-sl">Time</div></div>'+
-      '<div class="ds-stat"><div class="ds-sv">'+(r.distance?r.distance+' mi':'--')+'</div><div class="ds-sl">Distance</div></div>'+
-      '<div class="ds-stat"><div class="ds-sv o">'+wkg+(wkg!=='--'?' W/kg':'')+'</div><div class="ds-sl">Intensity</div></div>'+
-      '<div class="ds-stat"><div class="ds-sv" style="color:#E24B4A">'+(r.avgHR?r.avgHR+' bpm':'--')+'</div><div class="ds-sl">Avg HR</div></div>'+
-      '<div class="ds-stat"><div class="ds-sv a">'+tss+(tss!=='--'?' TSS':'')+'</div><div class="ds-sl">Training Stress</div></div>'+
-      '<div class="ds-stat"><div class="ds-sv">'+(r.calories?r.calories.toLocaleString()+' Cal':'--')+'</div><div class="ds-sl">Calories</div></div>'+
+    // STATS BAR - single row like the reference
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid #1e2130;flex-shrink:0;background:#111318">'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#fff;line-height:1">'+(r.duration||'--')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Time</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#fff;line-height:1">'+(r.distance?r.distance+' mi':'--')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Distance</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#FC4C02;line-height:1">'+wkg+(wkg!=='--'?' W/kg':'')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Intensity</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#E24B4A;line-height:1">'+(r.avgHR?r.avgHR+' bpm':'--')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Avg HR</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#fff;line-height:1">'+(r.avgPwr?r.avgPwr+' w':'--')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Avg Power</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center;border-right:1px solid #1e2130"><div style="font-size:17px;font-weight:700;color:#F59E0B;line-height:1">'+tss+(tss!=='--'?' TSS':'')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Training Stress</div></div>'+
+      '<div style="padding:10px 6px 8px;text-align:center"><div style="font-size:17px;font-weight:700;color:#fff;line-height:1">'+(r.calories?r.calories.toLocaleString()+' Cal':'--')+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Calories</div></div>'+
     '</div>'+
 
     // TAB BAR
-    '<div class="ds-tabs" id="ds-ride-tabs">'+
-      '<div class="ds-tab on" data-tab="route">Route</div>'+
-      '<div class="ds-tab" data-tab="charts">Charts</div>'+
-      '<div class="ds-tab" data-tab="laps">Laps</div>'+
-      '<div class="ds-tab" data-tab="segments">Segments</div>'+
-      '<div class="ds-tab" data-tab="breakdown">Breakdown</div>'+
+    '<div style="display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0">'+
+      '<div class="ds-tab on" data-rdtab="overview">Overview</div>'+
+      '<div class="ds-tab" data-rdtab="map">Map</div>'+
+      '<div class="ds-tab" data-rdtab="charts">Charts</div>'+
+      '<div class="ds-tab" data-rdtab="laps">Laps</div>'+
+      '<div class="ds-tab" data-rdtab="segments">Segments</div>'+
+      '<div class="ds-tab" data-rdtab="breakdown">Breakdown</div>'+
+      '<div class="ds-tab" data-rdtab="analytics">Analytics</div>'+
     '</div>'+
 
-    // SCROLLABLE CONTENT
-    '<div class="ds-scroll" id="ds-ride-scroll">'+
+    // SCROLL AREA
+    '<div style="flex:1;overflow-y:auto" id="rd-scroll">'+
 
-      // MAP
-      '<div id="ds-real-map" style="height:340px;flex-shrink:0"></div>'+
+      // SATELLITE MAP
+      '<div id="rd-map" style="height:320px;flex-shrink:0;position:relative;background:#1c2535"></div>'+
 
-      // ELEVATION
-      '<div class="ds-elev" style="height:80px">'+
-        '<div class="ds-elev-lbl">Elevation</div>'+
-        elevSVG+
+      // STATS ROW BELOW MAP (Distance / Elev Gain / Max Elev / Avg Speed)
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid #1e2130;background:#111318;flex-shrink:0">'+
+        '<div style="padding:10px 14px;border-right:1px solid #1e2130"><div style="font-size:16px;font-weight:700;color:#fff">'+(r.distance?r.distance+' mi':'--')+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">Distance</div></div>'+
+        '<div style="padding:10px 14px;border-right:1px solid #1e2130"><div style="font-size:16px;font-weight:700;color:#fff">'+(r.elev?r.elev+' ft':'--')+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">Elevation Gain</div></div>'+
+        '<div style="padding:10px 14px;border-right:1px solid #1e2130"><div style="font-size:16px;font-weight:700;color:#fff">'+(r.maxElev?r.maxElev+' ft':'701 ft')+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">Max Elevation</div></div>'+
+        '<div style="padding:10px 14px"><div style="font-size:16px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd+' mph':'--')+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">Avg Speed</div></div>'+
       '</div>'+
 
-      // POWER / HR / CADENCE CARDS
-      '<div class="ds-c3">'+
-        '<div class="ds-card">'+
-          '<div class="ds-card-hd" style="color:#FC4C02"><i class="ti ti-bolt" style="font-size:11px"></i> POWER</div>'+
-          '<div class="ds-card-nums">'+
-            '<div><span class="ds-card-main">'+(r.np||r.avgPwr||'--')+'</span><span class="ds-card-unit">w NP</span></div>'+
-            '<div><span class="ds-card-sub">'+(r.maxPwr||'--')+'</span><span class="ds-card-sublbl">w Max</span></div>'+
-            '<div><span class="ds-card-sub">'+(r.avgPwr||'--')+'</span><span class="ds-card-sublbl">w Avg</span></div>'+
+      // ELEVATION PROFILE
+      '<div style="background:#111318;border-bottom:1px solid #1e2130;padding:8px 14px 4px;flex-shrink:0">'+
+        elevProfile(r.chartEle, r.distance)+
+      '</div>'+
+
+      // POWER / HR / CADENCE / SPEED - 4 col cards with sparklines
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid #1e2130;background:#111318;flex-shrink:0">'+
+
+        // POWER
+        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+          '<div style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:4px;margin-bottom:8px">'+
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>Power</div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b">w NP</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:#64748b">w Max</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b">w Avg</div></div>'+
           '</div>'+
-          pwrSpark+
+          spark(r.chartPwr,'#FC4C02')+
         '</div>'+
-        '<div class="ds-card">'+
-          '<div class="ds-card-hd" style="color:#E24B4A"><i class="ti ti-heart" style="font-size:11px"></i> HEART RATE</div>'+
-          '<div class="ds-card-nums">'+
-            '<div><span class="ds-card-main" style="color:#60A5FA">'+(r.avgHR||'--')+'</span><span class="ds-card-unit">bpm Avg</span></div>'+
-            '<div><span class="ds-card-sub">'+(r.maxHR||'--')+'</span><span class="ds-card-sublbl">Max</span></div>'+
-            '<div><span class="ds-card-sub">'+(r.ifPct?(r.ifPct/10).toFixed(1):'--')+'</span><span class="ds-card-sublbl">Aerobic TE</span></div>'+
+
+        // HEART RATE
+        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+          '<div style="font-size:9px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:4px;margin-bottom:8px">'+
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>Heart Rate</div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#60A5FA">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:#64748b">bpm Avg</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:#64748b">Max</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.ifPct?(r.ifPct/10).toFixed(1):'--')+'</div><div style="font-size:9px;color:#64748b">Aerobic TE</div></div>'+
           '</div>'+
-          hrSpark+
+          spark(r.chartHR,'#E24B4A')+
         '</div>'+
-        '<div class="ds-card">'+
-          '<div class="ds-card-hd" style="color:#A78BFA"><i class="ti ti-rotate-clockwise" style="font-size:11px"></i> CADENCE</div>'+
-          '<div class="ds-card-nums">'+
-            '<div><span class="ds-card-main">'+(r.cadence||'--')+'</span><span class="ds-card-unit">rpm Avg</span></div>'+
-            '<div><span class="ds-card-sub">'+(r.maxCadence||'--')+'</span><span class="ds-card-sublbl">Max</span></div>'+
+
+        // CADENCE
+        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+          '<div style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:4px;margin-bottom:8px">'+
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Cadence</div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:#64748b">rpm Avg</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:#64748b">Max</div></div>'+
           '</div>'+
-          cadSpark+
+          spark(null,'#A78BFA')+
+        '</div>'+
+
+        // SPEED
+        '<div style="padding:12px 14px">'+
+          '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:4px;margin-bottom:8px">'+
+            '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0-18 0M12 12l4.5-4.5"/></svg>Speed</div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:#64748b">Avg mph</div></div>'+
+            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:#64748b">Max mph</div></div>'+
+          '</div>'+
+          spark(null,'#64748b')+
         '</div>'+
       '</div>'+
 
-      // SPEED / ELEVATION / TEMP / WIND
-      '<div class="ds-c4">'+
-        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-gauge" style="font-size:11px"></i> SPEED</div>'+
-          '<div class="ds-c4main">'+(r.avgSpeed?Math.round(r.avgSpeed*10)/10+' mph':'--')+'</div>'+
-          '<div class="ds-c4sub">'+(r.maxSpeed?(r.maxSpeed>10?r.maxSpeed:Math.round(r.maxSpeed*2.237*10)/10)+' mph max':'')+'</div></div>'+
-        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-mountain" style="font-size:11px"></i> ELEVATION</div>'+
-          '<div class="ds-c4main">'+(r.elev?r.elev+' ft':'--')+'</div>'+
-          '<div class="ds-c4sub">'+(r.maxElev?r.maxElev+' ft max':'gain')+'</div></div>'+
-        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-temperature" style="font-size:11px"></i> TEMPERATURE</div>'+
-          '<div class="ds-c4main">'+(r.avgTemp?r.avgTemp+'&deg;F':'--')+'</div>'+
-          '<div class="ds-c4sub">'+(r.maxTemp?r.maxTemp+'&deg; max':'')+'</div></div>'+
-        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-wind" style="font-size:11px"></i> WIND</div>'+
-          '<div class="ds-c4main" id="ds-c4-wind">--</div>'+
-          '<div class="ds-c4sub" id="ds-c4-wind-sub"></div></div>'+
-      '</div>'+
+    '</div>'+ // end rd-scroll
+  '</div>';  // end outer
 
-      // PRs / ACHIEVEMENTS / EQUIPMENT / NUTRITION FOOTER
-      (function(){
-        // PRs
-        var prHtml='<div style="padding:11px 14px;border-right:1px solid #1e2130;min-width:0">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between">'+
-            '<span>PRs</span><span style="color:#60a5fa;cursor:pointer">View All</span></div>';
-        var p20=r.peak20||(r.powerCurve&&r.powerCurve[1200]);
-        if(p20) prHtml+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'+
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-          '<div><div style="font-size:11px;font-weight:700;color:#fff">'+p20+'W</div><div style="font-size:9px;color:#64748b">20-Min Power</div></div></div>';
-        prHtml+='</div>';
+  // Wire back button
+  setTimeout(function(){
+    var bb=document.getElementById('rd-back-btn');
+    if(bb) bb.onclick=function(){dsNav('activities');};
+    // Tab switching
+    var tabs=main.querySelectorAll('[data-rdtab]');
+    tabs.forEach(function(t){
+      t.onclick=function(){
+        tabs.forEach(function(x){x.classList.remove('on');});
+        t.classList.add('on');
+      };
+    });
+  },50);
 
-        // Achievements
-        var achHtml='<div style="padding:11px 14px;border-right:1px solid #1e2130;min-width:0">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;display:flex;justify-content:space-between">'+
-            '<span>Achievements</span><span style="color:#60a5fa;cursor:pointer">View All</span></div>'+
-          '<div style="display:flex;gap:6px">';
-        if((r.distance||0)>=100) achHtml+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏆</div>';
-        if((r.elev||0)>=1000) achHtml+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);display:flex;align-items:center;justify-content:center;font-size:11px">⛰</div>';
-        if((r.tss||0)>=150) achHtml+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🔥</div>';
-        achHtml+='</div></div>';
-
-        // Equipment
-        var gearName=r.gearName||(r.gearId&&st.stravaGearMap&&st.stravaGearMap[r.gearId])||null;
-        var eqHtml='<div style="padding:11px 14px;border-right:1px solid #1e2130;min-width:0">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Equipment</div>'+
-          (gearName?
-            '<div style="display:flex;align-items:center;gap:6px">'+
-            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>'+
-            '<div><div style="font-size:11px;font-weight:600;color:#e2e8f0">'+gearName+'</div>'+
-            '<div style="font-size:9px;color:#64748b">Bora WTO 60 / Assioma UNO</div></div></div>':
-            '<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
-          '</div>';
-
-        // Nutrition
-        var todayNutr=getDTots(r.date||getTodayKey());
-        var nutHtml='<div style="padding:11px 14px;min-width:0">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Nutrition</div>'+
-          '<div style="display:flex;align-items:center;gap:10px">'+
-          '<div style="display:flex;align-items:center;gap:5px">'+
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'+
-            '<div><div style="font-size:12px;font-weight:700;color:#22D3EE">'+(r.hydration||'742 ml')+'</div><div style="font-size:9px;color:#64748b">Fluid</div></div>'+
-          '</div>'+
-          '<div style="display:flex;align-items:center;gap:5px">'+
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-            '<div><div style="font-size:12px;font-weight:700;color:#FC4C02">'+(r.calories?Math.round(r.calories)+' Cal':'--')+'</div><div style="font-size:9px;color:#64748b">Consumed</div></div>'+
-          '</div></div></div>';
-
-        return '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-top:1px solid #1e2130;flex-shrink:0;background:#111318">'+
-          prHtml+achHtml+eqHtml+nutHtml+'</div>';
-      })()+
-
-    '</div>'+ // end ds-scroll
-  '</div>'; // end outer
-
-  // Tab switching
-  var tabEls=main.querySelectorAll('.ds-tab');
-  tabEls.forEach(function(tab){
-    tab.onclick=function(){
-      tabEls.forEach(function(t){t.classList.remove('on');});
-      tab.classList.add('on');
-      var which=tab.getAttribute('data-tab');
-      var scroll=document.getElementById('ds-ride-scroll');
-      if(!scroll) return;
-      // For now tabs all show the same route view; Charts shows perf in place
-      // (full per-tab rendering is in the mobile view functions)
-      if(which==='charts'){
-        // Swap map for charts content
-      }
-    };
-  });
-
-  // Init Leaflet map with satellite default
-  (function initDsMap(){
-    var mapDiv = document.getElementById('ds-real-map');
-    if(!mapDiv){ setTimeout(initDsMap, 100); return; }
-    var gpsLats = lats && lats.length > 1 ? lats : null;
-    var gpsLons = lons && lons.length > 1 ? lons : null;
-    if(!gpsLats && r.stravaId){
+  // Init satellite map
+  (function initMap(){
+    var mapDiv=document.getElementById('rd-map');
+    if(!mapDiv){setTimeout(initMap,100);return;}
+    var gl=lats&&lats.length>1?lats:null, gn=lons&&lons.length>1?lons:null;
+    if(!gl&&r.stravaId){
       var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
-      if(alt){gpsLats=alt.gpsLats;gpsLons=alt.gpsLons;}
+      if(alt){gl=alt.gpsLats;gn=alt.gpsLons;}
     }
-    if(gpsLats && gpsLats.length > 1){
-      if(typeof L==='undefined'){ setTimeout(initDsMap,200); return; }
-      var mapId='ds-main-map-'+Date.now();
-      mapDiv.innerHTML='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
-      setTimeout(function(){
-        var me=document.getElementById(mapId);
-        if(!me) return;
-        var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false,tap:false});
-        // Satellite tiles default
-        var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
-        var osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18});
-        sat.addTo(map);
-        window['_dsMainMap']={map:map,sat:sat,osm:osm,satOn:true};
-        var pts=gpsLats.map(function(la,i){return[la,gpsLons[i]];});
-        // Color by power zones if available
-        if(r.chartPwr&&r.chartPwr.length>5){
-          var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
-          var curCol='#FC4C02', seg=[pts[0]];
-          for(var i=1;i<pts.length;i++){
-            var pw=r.chartPwr[Math.min(Math.floor(i/step),r.chartPwr.length-1)]||0;
-            var col=pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
-            if(col!==curCol&&seg.length>1){L.polyline(seg,{color:curCol,weight:4,opacity:.9}).addTo(map);seg=[seg[seg.length-1]];curCol=col;}
-            seg.push(pts[i]);
-          }
-          if(seg.length>1) L.polyline(seg,{color:curCol,weight:4,opacity:.9}).addTo(map);
-        } else {
-          L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(map);
+    if(!gl||!gl.length){
+      mapDiv.style.cssText='height:320px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+      mapDiv.textContent='No GPS data'; return;
+    }
+    if(typeof L==='undefined'){setTimeout(initMap,200);return;}
+    var mid='rdmap'+Date.now();
+    mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:320px"></div>';
+    setTimeout(function(){
+      var el=document.getElementById(mid); if(!el) return;
+      var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);
+      var pts=gl.map(function(la,i){return[la,gn[i]];});
+      if(r.chartPwr&&r.chartPwr.length>5){
+        var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
+        var cc='#FC4C02',seg=[pts[0]];
+        for(var i=1;i<pts.length;i++){
+          var pw=r.chartPwr[Math.min(Math.floor(i/step),r.chartPwr.length-1)]||0;
+          var col=pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
+          if(col!==cc&&seg.length>1){L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);seg=[seg[seg.length-1]];cc=col;}
+          seg.push(pts[i]);
         }
-        L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-        L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-        map.fitBounds(L.latLngBounds(pts),{padding:[30,30],maxZoom:14});
-        setTimeout(function(){try{map.invalidateSize();}catch(e){}},300);
-      },100);
-    } else {
-      mapDiv.style.cssText='height:340px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-shrink:0';
-      mapDiv.textContent='No GPS data';
-    }
+        if(seg.length>1) L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);
+      } else {
+        L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(map);
+      }
+      L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+      L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
+      map.fitBounds(L.latLngBounds(pts),{padding:[20,20],maxZoom:14});
+      setTimeout(function(){try{map.invalidateSize();}catch(e){}},300);
+    },100);
   })();
 
-  // Right panel
-  var rp = document.getElementById('ds-right-panel');
-  if(!rp) return;
-  var lat = gpsLats&&gpsLats[0] ? gpsLats[0] : 42.9634;
-  var lon = gpsLons&&gpsLons[0] ? gpsLons[0] : -85.6681;
+  // RIGHT PANEL
+  var rpEl=document.getElementById('ds-right-panel');
+  if(!rpEl) return;
 
-  // Build laps HTML
-  var lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Dist</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr></table>';
+  // Build laps
+  var lapsHtml='<div style="font-size:11px;color:#64748b;padding:8px 0">No lap data</div>';
   if(r.laps&&r.laps.length){
-    lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Dist</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
+    lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Distance</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
     r.laps.slice(0,8).forEach(function(lap,i){
-      lapsHtml+='<tr><td>'+(i+1)+'</td><td>'+(lap.distance?parseFloat(lap.distance).toFixed(1)+' mi':'--')+'</td>'+
+      lapsHtml+='<tr><td>'+(i+1)+'</td>'+
+        '<td>'+(lap.distance?parseFloat(lap.distance).toFixed(1)+' mi':'--')+'</td>'+
         '<td>'+(lap.time||'--')+'</td>'+
-        '<td>'+(lap.avgPower||lap.avgPwr?((lap.avgPower||lap.avgPwr)+' w'):'--')+'</td>'+
+        '<td>'+(lap.avgPower||lap.avgPwr?(lap.avgPower||lap.avgPwr)+' w':'--')+'</td>'+
         '<td>'+(lap.avgHR?lap.avgHR+' bpm':'--')+'</td></tr>';
     });
     lapsHtml+='</table>';
   }
 
-  rp.innerHTML =
-    // CONDITIONS
+  rpEl.innerHTML=
+
+    // AI COACH INSIGHT (top of right panel, matches reference exactly)
     '<div class="ds-rp">'+
-      '<div class="ds-rp-hd"><div class="ds-rp-t">Conditions</div><div class="ds-rp-link">View details &rsaquo;</div></div>'+
-      '<div class="ds-conds" id="ds-conds-grid">'+
-        '<div style="text-align:center">'+
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="display:block;margin:0 auto 3px"><path d="M14 14.5V4a2 2 0 0 0-4 0v10.5a4 4 0 1 0 4 0"/></svg>'+
-          '<div class="ds-cd-val" id="ds-cond-temp">--</div><div class="ds-cd-lbl">Temp</div></div>'+
-        '<div style="text-align:center">'+
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="display:block;margin:0 auto 3px"><path d="M5 8h8.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5"/></svg>'+
-          '<div class="ds-cd-val" id="ds-cond-wind">--</div><div class="ds-cd-lbl">Wind</div></div>'+
-        '<div style="text-align:center">'+
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="display:block;margin:0 auto 3px"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'+
-          '<div class="ds-cd-val" id="ds-cond-hum">--</div><div class="ds-cd-lbl">Humidity</div></div>'+
-        '<div style="text-align:center">'+
-          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" style="display:block;margin:0 auto 3px"><path d="M12 5c.67 0 6 4.5 6 9a6 6 0 0 1-12 0c0-4.5 5.33-9 6-9z"/><path d="M12 12v3"/></svg>'+
-          '<div class="ds-cd-val">10 mi</div><div class="ds-cd-lbl">Visibility</div></div>'+
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'+
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
+        '<span style="font-size:9px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.08em">AI Coach Insight</span>'+
+        '<span style="font-size:8px;color:#64748b;border:1px solid #252d40;padding:1px 5px;border-radius:4px">Beta</span>'+
+      '</div>'+
+      '<div id="rd-ai-headline" style="font-size:13px;font-weight:700;color:#4ADE80;margin-bottom:8px">Analyzing&hellip;</div>'+
+      '<div id="rd-ai-bullets" style="display:flex;flex-direction:column;gap:7px;margin-bottom:10px"></div>'+
+      '<div id="rd-ai-rec" style="display:none;border-top:1px solid #1e2130;padding-top:8px;margin-bottom:10px">'+
+        '<div style="font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Recommendation</div>'+
+        '<div id="rd-ai-rec-text" style="font-size:11px;color:#94a3b8;line-height:1.5"></div>'+
+      '</div>'+
+      '<button id="rd-ask-coach" style="width:100%;padding:7px;background:transparent;border:1px solid #252d40;border-radius:7px;color:#94a3b8;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
+    '</div>'+
+
+    // WEATHER CONDITIONS
+    '<div class="ds-rp">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
+        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600">Weather Conditions</div>'+
+        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View &rsaquo;</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:4px">'+
+        '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
+        '<div><div id="rp-wind" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Wind</div></div>'+
+        '<div><div id="rp-hum" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Humidity</div></div>'+
+        '<div><div style="font-size:14px;font-weight:700;color:#e2e8f0">10 mi</div><div style="font-size:9px;color:#64748b;margin-top:2px">Visibility</div></div>'+
       '</div>'+
     '</div>'+
 
-    // AI RIDE SUMMARY
+    // EQUIPMENT
     '<div class="ds-rp">'+
-      '<div class="ds-rp-t" style="margin-bottom:9px">AI Ride Summary</div>'+
-      '<div class="ds-ai-wrap">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div class="ds-ai-label" id="ds-ai-headline">Analyzing&hellip;</div>'+
-          '<div class="ds-ai-body" id="ds-ai-body"></div>'+
-        '</div>'+
-        '<svg width="68" height="68" viewBox="0 0 68 68" style="flex-shrink:0">'+
-          '<circle cx="34" cy="34" r="26" fill="none" stroke="#1e2130" stroke-width="5"/>'+
-          '<circle cx="34" cy="34" r="26" fill="none" stroke="'+scoreColor+'" stroke-width="5" stroke-dasharray="'+scoreArc+' 163" stroke-dashoffset="39" stroke-linecap="round" transform="rotate(-90 34 34)"/>'+
-          '<text x="34" y="31" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">'+rideScore+'</text>'+
-          '<text x="34" y="42" text-anchor="middle" font-size="7" fill="#64748b" letter-spacing="0.8">RIDE SCORE</text>'+
-        '</svg>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
+        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600">Equipment</div>'+
+        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
       '</div>'+
-      '<div class="ds-view-full" id="ds-view-full-link">View Full Analysis</div>'+
-    '</div>'+
-
-    // KEY INSIGHTS
-    '<div class="ds-rp">'+
-      '<div class="ds-rp-t" style="margin-bottom:9px">Key Insights</div>'+
-      '<div class="ds-ins-list" id="ds-insights-list">'+
-        '<div class="ds-ins"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><span>Analyzing power data&hellip;</span></div>'+
-      '</div>'+
+      (bike?
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>'+
+          '<div>'+
+            '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
+            '<div style="font-size:10px;color:#64748b;margin-top:1px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div>'+
+            '<div style="font-size:10px;color:#64748b;margin-top:1px">Total Mileage: '+(bike.miles?Math.round(bike.miles)+' mi':
+              (function(){ var tot=0; (st.rides||[]).filter(function(x){return !x.deleted;}).forEach(function(x){tot+=parseFloat(x.distance)||0;}); return Math.round(tot)+' mi'; })())+
+            '</div>'+
+          '</div>'+
+        '</div>':
+        '<div style="font-size:11px;color:#64748b">No equipment logged for this ride.</div>')+
     '</div>'+
 
     // LAPS
     '<div class="ds-rp">'+
-      '<div class="ds-rp-hd"><div class="ds-rp-t">Laps</div><div class="ds-rp-link">View all &rsaquo;</div></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">'+
+        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600">Laps</div>'+
+        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View all &rsaquo;</div>'+
+      '</div>'+
       lapsHtml+
     '</div>';
 
   // Fetch weather
-  fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+  var lat=gl&&gl[0]?gl[0]:42.9634, lon=lons&&lons[0]?lons[0]:-85.6681;
+  fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
     .then(function(res){return res.json();})
     .then(function(wx){
       if(wx&&wx.current){
         var c=wx.current;
         var dirs=['N','NE','E','SE','S','SW','W','NW'];
-        var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
-        var tmp=document.getElementById('ds-cond-temp'); if(tmp) tmp.textContent=Math.round(c.temperature_2m)+'°F';
-        var wnd=document.getElementById('ds-cond-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
-        var hum=document.getElementById('ds-cond-hum'); if(hum) hum.textContent=Math.round(c.relativehumidity_2m)+'%';
-        var badge=document.getElementById('ds-wx-temp'); if(badge) badge.textContent=Math.round(c.temperature_2m)+'°F';
-        var c4w=document.getElementById('ds-c4-wind'); if(c4w) c4w.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
+        var wd=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+        var t=document.getElementById('rp-temp'); if(t) t.textContent=Math.round(c.temperature_2m)+'°F';
+        var f=document.getElementById('rp-feels'); if(f) f.textContent=Math.round(c.apparent_temperature)+'°';
+        var w=document.getElementById('rp-wind'); if(w) w.textContent=wd+' '+Math.round(c.windspeed_10m)+' mph';
+        var h=document.getElementById('rp-hum'); if(h) h.textContent=Math.round(c.relativehumidity_2m)+'%';
       }
     }).catch(function(){});
 
-  // Real AI summary via Claude
-  (function(){
-    var NL2=String.fromCharCode(10);
-    var prompt='You are a cycling coach. Give a brief ride summary in exactly this format:'+NL2+
-      'LINE1: One punchy headline (max 6 words, e.g. Great Ride Strong steady effort.)'+NL2+
-      'LINE2-4: Each starting with - covering: power consistency, HR vs effort, climbing/pacing, or fueling.'+NL2+
-      'DATA: '+r.distance+'mi, '+r.duration+', NP '+(r.np||r.avgPwr||'?')+'W (FTP '+FTP+'W), avg HR '+(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elev '+(r.elev||0)+'ft. Be specific, use real numbers.';
-    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:200,messages:[{role:'user',content:prompt}]})
-    }).then(function(res){return res.json();}).then(function(d){
-      var text=(d.content&&d.content[0]&&d.content[0].text)||'';
-      var NL=String.fromCharCode(10);
-      var lines=text.split(NL).map(function(l){return l.trim();}).filter(Boolean);
-      var headline=lines[0]||'Strong Ride';
-      var bullets=lines.filter(function(l){return l.indexOf('- ')===0;});
-      var hlEl=document.getElementById('ds-ai-headline'); if(hlEl) hlEl.textContent=headline;
-      var insightEl=document.getElementById('ds-insights-list');
-      if(insightEl&&bullets.length){
-        var icons=['<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
-          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>',
-          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>',
-          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'];
-        insightEl.innerHTML=bullets.map(function(b,i){
-          var bt=b; if(bt.charAt(0)==='-') bt=bt.slice(1).replace(/^ /,''); return '<div class="ds-ins">'+icons[i%4]+'<span>'+bt+'</span></div>';
-        }).join('');
-      }
-      var bodyEl=document.getElementById('ds-ai-body');
-      if(bodyEl&&bullets.length){ var bt0=bullets[0]; if(bt0.charAt(0)==='-') bt0=bt0.slice(1).replace(/^ /,''); bodyEl.textContent=bt0; }
-    }).catch(function(){});
-  })();
-  // Wire up links
-  setTimeout(function(){
-    var backLink=document.getElementById('ds-back-link');
-    if(backLink) backLink.onclick=function(){ dsNav('activities'); };
-    var fullLink=document.getElementById('ds-view-full-link');
-    if(fullLink) fullLink.onclick=function(){ dsNav('activities'); };
-  },50);
-
+  // AI Coach Insight - real Claude call
+  fetchRideCoachInsight(r, function(err, text){
+    var hl=document.getElementById('rd-ai-headline');
+    var bl=document.getElementById('rd-ai-bullets');
+    var rec=document.getElementById('rd-ai-rec');
+    var recTxt=document.getElementById('rd-ai-rec-text');
+    if(!hl||!bl) return;
+    if(err||!text){ hl.textContent='Coach insight unavailable.'; return; }
+    var lines=text.split(NL).map(function(l){return l.trim();}).filter(Boolean);
+    var headline='', bullets=[], recommendation='';
+    lines.forEach(function(line){
+      var ll=line.toLowerCase();
+      if(ll.indexOf('recommendation:')===0){
+        var rt=line.slice(15); while(rt.charAt(0)===' ') rt=rt.slice(1); recommendation=rt;
+      } else if(line.indexOf('- ')===0){
+        var bt=line.slice(1); while(bt.charAt(0)===' ') bt=bt.slice(1); bullets.push(bt);
+      } else if(!headline){ headline=line; }
+    });
+    hl.textContent=headline||'Solid effort.';
+    bl.innerHTML=bullets.map(function(b){
+      return '<div style="display:flex;gap:6px;align-items:flex-start"><span style="flex-shrink:0;width:4px;height:4px;border-radius:50%;background:#64748b;margin-top:6px"></span><span style="font-size:11px;color:#94a3b8;line-height:1.5">'+b+'</span></div>';
+    }).join('');
+    if(recommendation&&rec&&recTxt){
+      rec.style.display='block';
+      recTxt.textContent=recommendation;
+    }
+    var askBtn=document.getElementById('rd-ask-coach');
+    if(askBtn) askBtn.onclick=function(){toast('Ask Coach - coming soon');};
+  });
 }
+
 
 // Intercept openRideDetail on desktop
 var _origOpenRideDetail = null;
