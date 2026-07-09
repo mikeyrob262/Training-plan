@@ -15966,7 +15966,8 @@ function showWeatherHistory(){
   // All outdoor rides sorted newest first - include rides without GPS
   var routes=(st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
-    return !/virtual|weight|strength|walk/i.test(s);
+    var lats=r.lats||r.gpsLats;
+    return !/virtual|weight|strength|walk/i.test(s) && lats && lats.length>10;
   }).slice().sort(function(a,b){
     var da=(a.date||'').replace(/-/g,'');
     var db=(b.date||'').replace(/-/g,'');
@@ -16311,11 +16312,7 @@ function showWeatherHistory(){
 
     // Route map preview - wind-colored
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
-    var _dbg=document.createElement('div');
-    _dbg.style.cssText='font-size:11px;color:var(--t3);margin-bottom:6px;padding:4px 0';
-    _dbg.textContent='GPS pts: '+(_dpLats?_dpLats.length:0)+' | typeof L: '+(typeof L);
-    body.appendChild(_dbg);
-    if(_dpLats && _dpLats.length>5){
+    if(_dpLats && _dpLats.length>10){
       var mapCard=document.createElement('div');
       mapCard.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
       body.appendChild(mapCard);
