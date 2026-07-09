@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783628117 v1783628117 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783628234 v1783628234 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783628117</title>
+<title>Athlete IQ v1783628234</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10123,10 +10123,10 @@ function dsShowAnalytics(){
   var kpiRow=document.createElement('div');
   kpiRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
   [
-    ['Fitness (CTL)',Math.round(lastCTL),'#4ade80','Training load over 42 days'],
+    ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days'],
     ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days'],
     ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel],
-    ['W/kg',wkgHistory.length?(wkgHistory[wkgHistory.length-1]+' W/kg'):'--','#60a5fa','Latest avg power/weight']
+    ['W/kg',wkgHistory.length?(wkgHistory[wkgHistory.length-1]+' W/kg'):'--','#4ade80','Latest avg power/weight']
   ].forEach(function(x){
     var card=document.createElement('div');
     card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px';
@@ -10168,14 +10168,14 @@ function dsShowAnalytics(){
     var gc=document.getElementById('ds-fitness-chart');
     if(gc&&typeof Chart!=='undefined'){
       new Chart(gc,{type:'line',data:{labels:labels.filter(function(_,i){return i%7===0;}),datasets:[
-        {label:'CTL',data:ctlArr.filter(function(_,i){return i%7===0;}),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:0},
+        {label:'CTL',data:ctlArr.filter(function(_,i){return i%7===0;}),borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:0},
         {label:'ATL',data:atlArr.filter(function(_,i){return i%7===0;}),borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,fill:false,tension:0.3,pointRadius:0},
         {label:'TSB',data:tsbArr.filter(function(_,i){return i%7===0;}),borderColor:'#60a5fa',backgroundColor:'transparent',borderWidth:1.5,fill:false,tension:0.3,pointRadius:0,borderDash:[4,4]}
       ]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,labels:{color:'#64748b',font:{size:10},boxWidth:12}}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0}}}});
     }
     var dc=document.getElementById('ds-dist-chart');
     if(dc&&typeof Chart!=='undefined'){
-      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#4ade80':'rgba(74,222,128,.4)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
+      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#60a5fa':'rgba(96,165,250,.4)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
