@@ -10472,20 +10472,21 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  // Deduplicate by stravaId or date+name, sort newest first
+  // Deduplicate by stravaId only, sort by date desc
   var seen = {};
   var rides = (st.rides||[]).filter(function(r){
     var s=r.sportType||r.type||'';
     if(/virtual|weight|strength/i.test(s)) return false;
-    var key = r.stravaId || ((r.date||'')+'|'+(r.name||'')+'|'+(r.duration||''));
-    if(seen[key]) return false;
-    seen[key] = true;
+    if(r.stravaId){
+      if(seen['s'+r.stravaId]) return false;
+      seen['s'+r.stravaId] = true;
+    }
     return true;
   }).slice().sort(function(a,b){
-    // Use startTime (ms epoch) if available, else date string
-    var ta = a.startTime ? new Date(a.startTime).getTime() : (a.date?new Date(a.date).getTime():0);
-    var tb = b.startTime ? new Date(b.startTime).getTime() : (b.date?new Date(b.date).getTime():0);
-    return tb - ta;
+    var da=a.date||'', db=b.date||'';
+    if(db>da) return 1;
+    if(db<da) return -1;
+    return 0;
   });
 
   var wrap = document.createElement('div');
