@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783632792 v1783632792 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783633064 v1783633064 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -10208,8 +10208,8 @@ function dsShowAICoach(){
     others.forEach(function(s){
       var sec=document.createElement('div');
       sec.style.cssText='padding:4px 0 14px 0;border-bottom:1px solid var(--b1)';
-      sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t1);margin-bottom:6px">'+s.label+'</div>'
-        +'<div style="font-size:15px;color:var(--t2);line-height:1.6">'+s.lines.join(' ')+'</div>';
+      sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ffffff;margin-bottom:8px">'+s.label+'</div>'
+        +'<div style="font-size:15px;color:#cbd5e1;line-height:1.6">'+s.lines.join(' ')+'</div>';
       body.appendChild(sec);
     });
 
