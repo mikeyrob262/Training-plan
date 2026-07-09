@@ -15902,7 +15902,7 @@ function renderMapContent(body, ride, wind, forTime){
 // Standalone wind-colored route map — injects HTML then inits map via setTimeout
 function drawWindMap(containerEl, ride, wind){
   var lats=ride.lats||ride.gpsLats, lons=ride.lons||ride.gpsLons;
-  if(!lats||lats.length<2) return;
+  if(!lats||lats.length<2||!lons||lons.length<2) return;
   if(!window._wmCount) window._wmCount=0; window._wmCount++;
   var mapId='wm-'+window._wmCount;
   containerEl.innerHTML='<div id="'+mapId+'" style="width:100%;height:220px"></div>';
@@ -15910,9 +15910,9 @@ function drawWindMap(containerEl, ride, wind){
     var el=document.getElementById(mapId);
     if(!el){ console.error('WM: el not found', mapId); return; }
     if(typeof L==='undefined'){ console.error('WM: L undefined'); return; }
-    console.log('WM: init', mapId, 'pts:', pts.length, 'el.offsetHeight:', el.offsetHeight);
     try{
       var pts=lats.map(function(la,i){return[la,lons[i]];});
+      console.log('WM: init', mapId, 'pts:', pts.length, 'el.offsetHeight:', el.offsetHeight);
       var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:17}).addTo(map);
       function classifySeg(idx){
