@@ -4890,10 +4890,19 @@ function renderNutr(){
 
   // Date nav
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
-  h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
-  h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
-  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dtLabels[dt]+'</div></div>';
-  h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
+  h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
+  h+='<div style="text-align:center;flex:1;cursor:pointer" id="nutr-date-tap"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
+  h+='<div style="font-size:11px;color:var(--orange);font-weight:600;margin-top:2px">'+dtLabels[dt]+' · tap to jump</div></div>';
+  h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t1);width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
+  h+='</div>';
+  // Quick date shortcuts
+  var yd=new Date(now); yd.setDate(now.getDate()-1);
+  var ydKey=yd.getFullYear()+'-'+(yd.getMonth()+1)+'-'+yd.getDate();
+  var isToday=nutrDate===getTodayKey();
+  var isYesterday=nutrDate===ydKey;
+  h+='<div style="display:flex;gap:6px;padding:8px 16px 0;justify-content:center">';
+  h+='<button id="nutr-today-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--b1);background:'+(isToday?'#FC4C02':'var(--s2)')+';color:'+(isToday?'white':'var(--t2)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Today</button>';
+  h+='<button id="nutr-yesterday-btn" style="padding:4px 12px;border-radius:20px;border:1px solid var(--b1);background:'+(isYesterday?'#FC4C02':'var(--s2)')+';color:'+(isYesterday?'white':'var(--t2)')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">Yesterday</button>';
   h+='</div>';
 
   // -- CALORIE BUDGET (Lose It style big number)
@@ -5309,6 +5318,10 @@ function renderNutr(){
   // Bind water and nav buttons
   var np=document.getElementById('nutr-prev');if(np){np.onclick=null;np.addEventListener('click',function(){nutrDelta(-1);});}
   var nn=document.getElementById('nutr-next');if(nn){nn.onclick=null;nn.addEventListener('click',function(){nutrDelta(1);});}
+  var todayBtn=document.getElementById('nutr-today-btn');
+  if(todayBtn) todayBtn.addEventListener('click',function(){nutrDate=getTodayKey();renderNutr();showScreen('NUTR');});
+  var ydBtn=document.getElementById('nutr-yesterday-btn');
+  if(ydBtn) ydBtn.addEventListener('click',function(){var yd=new Date();yd.setDate(yd.getDate()-1);nutrDate=yd.getFullYear()+'-'+(yd.getMonth()+1)+'-'+yd.getDate();renderNutr();showScreen('NUTR');});
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=null;wm.addEventListener('click',function(){updWater(-1);});}
   var wp=document.getElementById('water-plus');if(wp){wp.onclick=null;wp.addEventListener('click',function(){updWater(1);});}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=null;bb.addEventListener('click',showTrain);}
