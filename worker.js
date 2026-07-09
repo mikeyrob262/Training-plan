@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783629145 v1783629145 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783629296 v1783629296 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783629145</title>
+<title>Athlete IQ v1783629296</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10039,12 +10039,116 @@ function dsNav(section){
   } else if(section === 'weather') {
     dsShowWeather();
   } else if(section === 'gear') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-bike" style="font-size:32px"></i><div>Gear coming soon</div>'; mc.appendChild(d); }
+    dsShowGear();
   } else if(section === 'aicoach') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-message-circle" style="font-size:32px"></i><div>AI Coach coming soon</div>'; mc.appendChild(d); }
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowGear(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+
+  var bikes=[
+    {name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null},
+    {name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null}
+  ];
+
+  // Calculate miles per bike from rides
+  var totalMiles=0;
+  (st.rides||[]).forEach(function(r){
+    totalMiles+=(parseFloat(r.distance)||0);
+  });
+
+  mc.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
+
+  // Header
+  var hdr=document.createElement('div');
+  hdr.style.cssText='font-size:20px;font-weight:700;color:#fff;flex-shrink:0;margin-bottom:4px';
+  hdr.textContent='My Gear';
+  wrap.appendChild(hdr);
+
+  // Bike cards
+  bikes.forEach(function(bike,i){
+    var card=document.createElement('div');
+    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:16px;padding:18px 20px;flex-shrink:0';
+
+    // Bike header
+    var bHdr=document.createElement('div');
+    bHdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px';
+    var bInfo=document.createElement('div');
+    bInfo.innerHTML='<div style="font-size:16px;font-weight:700;color:#fff">'+bike.name+'</div>'+
+      '<div style="font-size:11px;color:'+bike.color+';font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">'+bike.type+'</div>';
+    var bBadge=document.createElement('div');
+    bBadge.style.cssText='background:'+bike.color+'22;border:1px solid '+bike.color+'44;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;color:'+bike.color;
+    bBadge.textContent=i===0?'Primary':'Training';
+    bHdr.appendChild(bInfo); bHdr.appendChild(bBadge);
+    card.appendChild(bHdr);
+
+    // Bike SVG illustration
+    var bikeIllus=document.createElement('div');
+    bikeIllus.style.cssText='margin-bottom:14px;text-align:center';
+    bikeIllus.innerHTML='<svg width="200" height="80" viewBox="0 0 200 80" fill="none" xmlns="http://www.w3.org/2000/svg">'+
+      '<circle cx="40" cy="55" r="22" stroke="'+bike.color+'" stroke-width="3" fill="none"/>'+
+      '<circle cx="160" cy="55" r="22" stroke="'+bike.color+'" stroke-width="3" fill="none"/>'+
+      '<circle cx="40" cy="55" r="4" fill="'+bike.color+'"/>'+
+      '<circle cx="160" cy="55" r="4" fill="'+bike.color+'"/>'+
+      '<line x1="40" y1="55" x2="80" y2="20" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
+      '<line x1="80" y1="20" x2="160" y2="55" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
+      '<line x1="80" y1="20" x2="100" y2="55" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
+      '<line x1="100" y1="55" x2="160" y2="55" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
+      '<line x1="80" y1="20" x2="70" y2="10" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
+      '<line x1="65" y1="10" x2="75" y2="10" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
+      '<line x1="155" y1="20" x2="165" y2="20" stroke="'+bike.color+'" stroke-width="3" stroke-linecap="round"/>'+
+      '<line x1="160" y1="20" x2="160" y2="33" stroke="'+bike.color+'" stroke-width="2.5" stroke-linecap="round"/>'+
+      '</svg>';
+    card.appendChild(bikeIllus);
+
+    // Specs grid
+    var specs=document.createElement('div');
+    specs.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px';
+    [['Wheels',bike.wheels],['Power Meter',bike.power],['Groupset',bike.groupset],['Condition','Excellent']].forEach(function(x){
+      var spec=document.createElement('div');
+      spec.style.cssText='background:#0d0f14;border-radius:8px;padding:8px 10px';
+      spec.innerHTML='<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+x[0]+'</div>'+
+        '<div style="font-size:11px;font-weight:600;color:#e2e8f0">'+x[1]+'</div>';
+      specs.appendChild(spec);
+    });
+    card.appendChild(specs);
+
+    // Miles this year
+    var statsRow=document.createElement('div');
+    statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e';
+    var yr=new Date().getFullYear();
+    var yrMiles=Math.round((st.rides||[]).filter(function(r){return r.date&&r.date.startsWith(yr+'');}).reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0));
+    [['Total Miles',Math.round(totalMiles/(bikes.length))+' mi'],['This Year',Math.round(yrMiles/(bikes.length))+' mi'],['Last Ride','Recent']].forEach(function(x){
+      var s=document.createElement('div');
+      s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
+      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+bike.color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
+      statsRow.appendChild(s);
+    });
+    card.appendChild(statsRow);
+    wrap.appendChild(card);
+  });
+
+  // Shoes & accessories
+  var accCard=document.createElement('div');
+  accCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+  accCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Accessories</div>';
+  [['Lake CX301 Cycling Shoes','Footwear','#f59e0b'],['Garmin Edge 840','Computer','#4ade80'],['Garmin HR Strap','Heart Rate','#e24b4a']].forEach(function(x){
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1a1f2e';
+    row.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+x[2]+';flex-shrink:0"></div>'+
+      '<div style="flex:1;font-size:12px;color:#e2e8f0">'+x[0]+'</div>'+
+      '<div style="font-size:10px;color:#64748b">'+x[1]+'</div>';
+    accCard.appendChild(row);
+  });
+  wrap.appendChild(accCard);
+  mc.appendChild(wrap);
 }
 
 function dsShowWeather(){
