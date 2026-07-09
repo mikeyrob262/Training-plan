@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783636500 v1783636500 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783636700 v1783636700 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11671,6 +11671,17 @@ function openDesktopRideDetail(idx){
   var bike=(st.bikes||[])[0]||null;
   if(r.gearName)(st.bikes||[]).forEach(function(b){if(b.name===r.gearName)bike=b;});
 
+  function statCell(val,lbl,color,last){
+    return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
+      +'<div style="font-size:17px;font-weight:700;color:'+color+';line-height:1">'+val+'</div>'
+      +'<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div></div>';
+  }
+  function miniStat(val,lbl,border){
+    return '<div style="padding:10px 16px;'+(border?'border-right:1px solid #1e2130':'')+'">'
+      +'<div style="font-size:16px;font-weight:700;color:#fff">'+val+'</div>'
+      +'<div style="font-size:10px;color:#64748b;margin-top:2px">'+lbl+'</div></div>';
+  }
+
   // Elevation profile with ft axis + mileage axis
   function elevProfile(ele,distMi){
     if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">No elevation data</div>';
@@ -11868,17 +11879,6 @@ function openDesktopRideDetail(idx){
 
     '</div>'+ // end scroll
   '</div>';  // end outer
-
-  function statCell(val,lbl,color,last){
-    return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
-      +'<div style="font-size:17px;font-weight:700;color:'+color+';line-height:1">'+val+'</div>'
-      +'<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div></div>';
-  }
-  function miniStat(val,lbl,border){
-    return '<div style="padding:10px 16px;'+(border?'border-right:1px solid #1e2130':'')+'">'
-      +'<div style="font-size:16px;font-weight:700;color:#fff">'+val+'</div>'
-      +'<div style="font-size:10px;color:#64748b;margin-top:2px">'+lbl+'</div></div>';
-  }
 
   // Wire back + tabs
   setTimeout(function(){
