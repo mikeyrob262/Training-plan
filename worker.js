@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783625167 v1783625167 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783625269 v1783625269 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783625167</title>
+<title>Athlete IQ v1783625269</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10543,8 +10543,31 @@ function dsShowRidesList(){
   wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden';
 
   var titleBar = document.createElement('div');
-  titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
-  titleBar.textContent = 'Activities';
+  titleBar.style.cssText = 'padding:14px 18px 10px;border-bottom:1px solid #1e2130;flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
+  var tbTitle = document.createElement('div');
+  tbTitle.style.cssText = 'font-size:18px;font-weight:700;color:#fff';
+  tbTitle.textContent = 'Activities';
+  titleBar.appendChild(tbTitle);
+  var tbFilters = document.createElement('div');
+  tbFilters.style.cssText = 'display:flex;gap:6px';
+  ['All','Rides','Runs','Strength'].forEach(function(f){
+    var btn = document.createElement('div');
+    var active = f==='All';
+    btn.style.cssText = 'padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid '+(active?'#4ade80':'#252d40')+';color:'+(active?'#4ade80':'#64748b')+';background:'+(active?'rgba(74,222,128,.1)':'transparent');
+    btn.textContent = f;
+    btn.onclick = function(){
+      tbFilters.querySelectorAll('div').forEach(function(b){b.style.borderColor='#252d40';b.style.color='#64748b';b.style.background='transparent';});
+      btn.style.borderColor='#4ade80';btn.style.color='#4ade80';btn.style.background='rgba(74,222,128,.1)';
+      var fval = f.toLowerCase();
+      list.querySelectorAll('.act-row').forEach(function(row){
+        var s = row.getAttribute('data-sport')||'';
+        var show = fval==='all'||(fval==='rides'&&/ride|cycling/i.test(s))||(fval==='runs'&&/run/i.test(s))||(fval==='strength'&&/strength|weight/i.test(s));
+        row.style.display = show?'flex':'none';
+      });
+    };
+    tbFilters.appendChild(btn);
+  });
+  titleBar.appendChild(tbFilters);
   wrap.appendChild(titleBar);
 
   var list = document.createElement('div');
@@ -10563,6 +10586,8 @@ function dsShowRidesList(){
       row.onmouseover = function(){ this.style.background='#1a1f2e'; };
       row.onmouseout = function(){ this.style.background=''; };
       row.onclick = function(){ openRideDetail(idx); };
+      row.className='act-row';
+      row.setAttribute('data-sport',r.sportType||r.type||'Ride');
 
       var icon = document.createElement('div');
       icon.style.cssText = 'width:38px;height:38px;border-radius:10px;background:#111318;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative';
