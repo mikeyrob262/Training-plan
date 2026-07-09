@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783619012 v1783619012 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783619380 v1783619380 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783619012</title>
+<title>Athlete IQ v1783619380</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10126,7 +10126,8 @@ function dsShowDashboard(){
       'ti-droplet':'M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z',
       'ti-eye':'M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6',
       'ti-temperature':'M14 14.5V4a2 2 0 0 0-4 0v10.5a4 4 0 1 0 4 0',
-      'ti-wind':'M5 8h8.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5'
+      'ti-wind':'M5 8h8.5a2.5 2.5 0 1 0-2.5-2.5M3 12h15.5a2.5 2.5 0 1 1-2.5 2.5',
+      'ti-barbell':'M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z'
     };
     var d=paths[cls];
     if(!d){
@@ -10358,7 +10359,8 @@ function dsShowDashboard(){
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
     abox.appendChild(ico(sportMap[ikey],'#4ade80','16'));
     var ainfo=div('flex:1;min-width:0');
-    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',r.name||r.sportType||'Activity'));
+    var _dn=r.name||r.sportType||'Activity'; if(/^\d+\s+ACTIVITY$/i.test(_dn)) _dn=r.sportType||r.type||'Ride';
+    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',_dn));
     var dt=''; if(r.startTime){var d=new Date(r.startTime);dt=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dt=r.date;}
     ainfo.appendChild(div('font-size:10px;color:#64748b;margin-top:1px',dt));
     var astats=row('gap:12px;flex-shrink:0');
@@ -10571,7 +10573,7 @@ function dsShowRidesList(){
       info.style.cssText = 'flex:1;min-width:0';
       var name = document.createElement('div');
       name.style.cssText = 'font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
-      name.textContent = r.name||r.sportType||'Activity';
+      var _rn=r.name||r.sportType||'Activity'; name.textContent=/^\d+\s+ACTIVITY$/i.test(_rn)?r.sportType||r.type||'Ride':_rn;
       var date = document.createElement('div');
       date.style.cssText = 'font-size:11px;color:#64748b;margin-top:2px';
       date.textContent = r.date||'';
