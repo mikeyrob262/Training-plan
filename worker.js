@@ -3133,6 +3133,28 @@ function preNormalizeRemoteArrays_(data){
   ['rides','cf'].forEach(function(k){
     if(isPlainObj_(data[k]) && looksLikeSparseArray_(data[k])) data[k] = objectToArray_(data[k]);
   });
+  // Firebase serializes arrays as numeric-keyed objects on round-trip.
+  // Meal buckets in st.nl[dateKey].meals[bucket] are arrays that suffer
+  // this mangling — if not normalized here, mergeState_ sees Array vs
+  // plain-object and returns the local array... BUT only if the local
+  // array already has the new entry. If the poll fires before fbPush
+  // completes, the remote object version wins via the plain-object branch,
+  // silently dropping the locally-added entry. Fix: normalize all meal
+  // bucket arrays from Firebase before they reach mergeState_.
+  var MEAL_KEYS=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
+  if(isPlainObj_(data.nl)){
+    Object.keys(data.nl).forEach(function(dateKey){
+      var day=data.nl[dateKey];
+      if(!isPlainObj_(day)) return;
+      if(isPlainObj_(day.meals)){
+        MEAL_KEYS.forEach(function(m){
+          if(isPlainObj_(day.meals[m]) && looksLikeSparseArray_(day.meals[m])){
+            day.meals[m]=objectToArray_(day.meals[m]);
+          }
+        });
+      }
+    });
+  }
   return data;
 }
 // When one side is an array and the other a plain object (e.g. Firebase's
