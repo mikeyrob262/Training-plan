@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783628725 v1783628725 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783629041 v1783629041 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783628725</title>
+<title>Athlete IQ v1783629041</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10037,7 +10037,7 @@ function dsNav(section){
   } else if(section === 'nutrition') {
     dsShowNutrition();
   } else if(section === 'weather') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-cloud" style="font-size:32px"></i><div>Weather coming soon</div>'; mc.appendChild(d); }
+    dsShowWeather();
   } else if(section === 'gear') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-bike" style="font-size:32px"></i><div>Gear coming soon</div>'; mc.appendChild(d); }
   } else if(section === 'aicoach') {
@@ -10045,6 +10045,114 @@ function dsNav(section){
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowWeather(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+
+  mc.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:12px';
+
+  // Loading state
+  var loading=document.createElement('div');
+  loading.style.cssText='text-align:center;color:#64748b;padding:40px;font-size:13px';
+  loading.textContent='Loading weather...';
+  wrap.appendChild(loading);
+  mc.appendChild(wrap);
+
+  // Fetch current + hourly + daily forecast for Grand Rapids
+  var lat=42.9634, lon=-85.6681;
+  var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
+    '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability'+
+    '&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m'+
+    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,sunrise,sunset'+
+    '&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7';
+
+  fetch(url).then(function(r){return r.json();}).then(function(data){
+    wrap.innerHTML='';
+    var c=data.current;
+    var daily=data.daily;
+    var hourly=data.hourly;
+
+    function wCode(code){
+      if(code===0) return {icon:'☀️',desc:'Clear'};
+      if(code<=2) return {icon:'⛅',desc:'Partly Cloudy'};
+      if(code<=3) return {icon:'☁️',desc:'Overcast'};
+      if(code<=48) return {icon:'🌫️',desc:'Fog'};
+      if(code<=55) return {icon:'🌦️',desc:'Drizzle'};
+      if(code<=65) return {icon:'🌧️',desc:'Rain'};
+      if(code<=77) return {icon:'❄️',desc:'Snow'};
+      if(code<=82) return {icon:'🌧️',desc:'Showers'};
+      return {icon:'⛈️',desc:'Thunderstorm'};
+    }
+
+    function windDir(deg){
+      var dirs=['N','NE','E','SE','S','SW','W','NW'];
+      return dirs[Math.round(deg/45)%8];
+    }
+
+    // Current conditions hero
+    var hero=document.createElement('div');
+    hero.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:16px;padding:20px 24px;flex-shrink:0';
+    var wx=wCode(c.weathercode);
+    hero.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Grand Rapids, MI — Now</div>'+
+      '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">'+
+        '<div style="font-size:52px;line-height:1">'+wx.icon+'</div>'+
+        '<div>'+
+          '<div style="font-size:48px;font-weight:800;color:#fff;letter-spacing:-.04em;line-height:1">'+Math.round(c.temperature_2m)+'°</div>'+
+          '<div style="font-size:14px;color:#94a3b8;margin-top:4px">Feels like '+Math.round(c.apparent_temperature)+'° · '+wx.desc+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'+
+        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#e2e8f0">'+Math.round(c.windspeed_10m)+'</div><div style="font-size:10px;color:#64748b">'+windDir(c.winddirection_10m)+' mph</div></div>'+
+        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#60a5fa">'+c.relativehumidity_2m+'%</div><div style="font-size:10px;color:#64748b">Humidity</div></div>'+
+        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#4ade80">'+(c.precipitation_probability||0)+'%</div><div style="font-size:10px;color:#64748b">Precip</div></div>'+
+        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#f59e0b">'+(c.windspeed_10m>15?'Hard':'Good')+'</div><div style="font-size:10px;color:#64748b">Ride Cond.</div></div>'+
+      '</div>';
+    wrap.appendChild(hero);
+
+    // Ride quality score
+    var windScore=c.windspeed_10m<10?100:c.windspeed_10m<20?70:40;
+    var tempScore=c.temperature_2m>45&&c.temperature_2m<85?100:c.temperature_2m>35&&c.temperature_2m<95?70:40;
+    var rainScore=(c.precipitation_probability||0)<20?100:(c.precipitation_probability||0)<50?60:20;
+    var rideScore=Math.round((windScore+tempScore+rainScore)/3);
+    var rideColor=rideScore>=80?'#4ade80':rideScore>=60?'#f59e0b':'#e24b4a';
+    var rideLabel=rideScore>=80?'Great day to ride!':rideScore>=60?'Decent conditions':'Tough conditions';
+
+    var rideCard=document.createElement('div');
+    rideCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0';
+    rideCard.innerHTML='<div style="position:relative;width:56px;height:56px;flex-shrink:0">'+
+      '<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="22" fill="none" stroke="#1a1f2e" stroke-width="6"/><circle cx="28" cy="28" r="22" fill="none" stroke="'+rideColor+'" stroke-width="6" stroke-dasharray="'+Math.round(rideScore/100*138)+' 138" stroke-dashoffset="35" stroke-linecap="round" transform="rotate(-90 28 28)"/></svg>'+
+      '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:'+rideColor+'">'+rideScore+'</div>'+
+      '</div>'+
+      '<div><div style="font-size:14px;font-weight:700;color:#fff">Ride Score</div><div style="font-size:12px;color:'+rideColor+';margin-top:2px">'+rideLabel+'</div>'+
+      '<div style="font-size:11px;color:#64748b;margin-top:4px">Wind: '+Math.round(c.windspeed_10m)+' mph · Temp: '+Math.round(c.temperature_2m)+'°F · Rain: '+(c.precipitation_probability||0)+'%</div></div>';
+    wrap.appendChild(rideCard);
+
+    // 7-day forecast
+    var forecastCard=document.createElement('div');
+    forecastCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+    forecastCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">7-Day Forecast</div>';
+    var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    (daily.time||[]).forEach(function(date,i){
+      var d=new Date(date+'T12:00:00');
+      var wx2=wCode(daily.weathercode[i]);
+      var row=document.createElement('div');
+      row.style.cssText='display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #1a1f2e';
+      row.innerHTML='<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:36px">'+dayNames2[d.getDay()]+'</div>'+
+        '<div style="font-size:18px;width:28px">'+wx2.icon+'</div>'+
+        '<div style="font-size:12px;color:#94a3b8;flex:1">'+wx2.desc+'</div>'+
+        '<div style="font-size:12px;color:#60a5fa">'+daily.precipitation_probability_max[i]+'%</div>'+
+        '<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:60px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div>';
+      forecastCard.appendChild(row);
+    });
+    wrap.appendChild(forecastCard);
+
+  }).catch(function(e){
+    wrap.innerHTML='<div style="padding:40px;text-align:center;color:#64748b">Weather unavailable</div>';
+  });
 }
 
 function dsShowNutrition(){
