@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783607766 v1783607766 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783601933 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783607766</title>
+<title>Athlete IQ v1783601933</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -69,7 +69,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-nav{flex:1;padding:4px 0;overflow-y:auto}
 .ds-ni{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:#64748b;cursor:pointer;border-left:2px solid transparent}
 .ds-ni:hover{color:#94a3b8;background:rgba(255,255,255,.03)}
-.ds-ni.on{color:#4ade80;border-left-color:#4ade80;background:rgba(74,222,128,.07)}
+.ds-ni.on{color:#FC4C02;border-left-color:#FC4C02;background:rgba(252,76,2,.07)}
 .ds-ni i{font-size:14px;width:16px;flex-shrink:0}
 .ds-foot{padding:8px 0;border-top:1px solid #1e2130}
 .ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14}
@@ -88,7 +88,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-sl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 .ds-tabs{display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0}
 .ds-tab{font-size:12px;padding:8px 12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
-.ds-tab.on{color:#e2e8f0;border-bottom-color:#4ade80}
+.ds-tab.on{color:#e2e8f0;border-bottom-color:#FC4C02}
 .ds-scroll{flex:1;overflow-y:auto}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
@@ -409,7 +409,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
   </div>
   <div class="ds-main" id="ds-main-area">
     <div id="ds-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-      <div id="ds-loading" style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Loading dashboard...</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>
     </div>
   </div>
   <div class="ds-rpanel" id="ds-right-panel">
@@ -10042,440 +10042,74 @@ function dsNav(section){
 }
 
 function dsShowDashboard(){
+  console.log('dsShowDashboard called, rides:', (st.rides||[]).length);
   var mc = document.getElementById('ds-content');
-  console.log('DASH START rides=', (st.rides||[]).length, 'mc=', !!mc, 'isDesktop=', isDesktop());
-  if(!mc){ setTimeout(dsShowDashboard, 300); return; }
-  try{
-  var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
-  var recent = rides.slice(0,3);
+  if(!mc) return;
+  var rides = st.rides||[];
+  var recentRides = rides.filter(function(r){ return !/virtual|weight|strength/i.test(r.sportType||''); });
+  var totalDist = recentRides.reduce(function(s,r){ return s+(parseFloat(r.distance)||0); },0);
+  var totalTime = recentRides.length;
+  var avgHR = recentRides.filter(function(r){return r.avgHR;}).reduce(function(s,r,_,a){ return s+(r.avgHR/a.length); },0);
   var ftp = parseInt(st.ftp||186);
-  var bwt = parseFloat(st.weight||162.5);
-  var totalTSS = rides.reduce(function(s,r){ return s+(parseFloat(r.tss)||0); },0);
-  var weekTSS = rides.filter(function(r){
-    var d=new Date(); d.setDate(d.getDate()-7);
-    return r.date && r.date >= d.toISOString().split('T')[0];
-  }).reduce(function(s,r){ return s+(parseFloat(r.tss)||0); },0);
-  var ctl = Math.round(totalTSS/Math.max(rides.length,1)/4);
-  var now = new Date();
-  var hour = now.getHours();
-  var greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var dateStr = days[now.getDay()]+', '+months[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();
+  var bwt = parseFloat(st.weight||160);
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:20px';
+
+  // Stats row
+  var statsRow = document.createElement('div');
+  statsRow.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px';
+  function statCard(val, lbl, color){
+    var c = document.createElement('div');
+    c.style.cssText = 'background:#111318;border:1px solid #1e2130;border-radius:10px;padding:14px 16px';
+    c.innerHTML = '<div style="font-size:22px;font-weight:700;color:'+(color||'#fff')+'">'+val+'</div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div>';
+    return c;
+  }
+  statsRow.appendChild(statCard(recentRides.length, 'Total rides', '#fff'));
+  statsRow.appendChild(statCard(Math.round(totalDist)+' mi', 'Total distance', '#FC4C02'));
+  statsRow.appendChild(statCard(ftp+'w', 'FTP', '#f59e0b'));
+  statsRow.appendChild(statCard((ftp/bwt).toFixed(2)+' W/kg', 'Power/weight', '#60a5fa'));
+  wrap.appendChild(statsRow);
+
+  // Recent rides header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'font-size:14px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center';
+  hdr.textContent = 'Recent Activities';
+  var viewAll = document.createElement('span');
+  viewAll.style.cssText = 'font-size:11px;color:#FC4C02;cursor:pointer;font-weight:400';
+  viewAll.textContent = 'View all';
+  viewAll.onclick = function(){ dsNav('activities'); };
+  hdr.appendChild(viewAll);
+  wrap.appendChild(hdr);
+
+  // Last 5 rides
+  recentRides.slice(0,5).forEach(function(r){
+    var idx = rides.indexOf(r);
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #1e2130;border-radius:10px;margin-bottom:8px;cursor:pointer;background:#111318';
+    row.onmouseover = function(){ this.style.borderColor='#252d40'; this.style.background='#1a1f2e'; };
+    row.onmouseout = function(){ this.style.borderColor='#1e2130'; this.style.background='#111318'; };
+    row.onclick = function(){ openRideDetail(idx); };
+    var icon = document.createElement('div');
+    icon.style.cssText = 'width:36px;height:36px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+    row.appendChild(icon);
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0';
+    info.innerHTML = '<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||r.sportType||'Activity')+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">'+(r.date||'')+'</div>';
+    row.appendChild(info);
+    var meta = document.createElement('div');
+    meta.style.cssText = 'display:flex;gap:16px;flex-shrink:0';
+    if(r.distance) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+r.distance+' mi</div><div style="font-size:10px;color:#64748b">Dist</div></div>';
+    if(r.duration) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+r.duration+'</div><div style="font-size:10px;color:#64748b">Time</div></div>';
+    if(r.avgHR) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#60a5fa">'+r.avgHR+' bpm</div><div style="font-size:10px;color:#64748b">HR</div></div>';
+    row.appendChild(meta);
+    wrap.appendChild(row);
+  });
 
   mc.innerHTML = '';
-  var shell = document.createElement('div');
-  shell.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto;background:#0d0f14';
-
-  // Top bar
-  var topbar = document.createElement('div');
-  topbar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:14px 24px 12px;border-bottom:1px solid #1a1f2e;flex-shrink:0';
-  topbar.innerHTML =
-    '<div>'+
-      '<div style="font-size:22px;font-weight:700;color:#fff;letter-spacing:-.02em">'+greeting+', Mikey 👋</div>'+
-      '<div style="font-size:12px;color:#64748b;margin-top:2px">Here&#39;s what matters today.</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:center;gap:8px">'+
-      '<div style="display:flex;align-items:center;gap:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:8px;padding:6px 12px;font-size:12px;color:#64748b">'+
-        '<i class="ti ti-chevron-left" style="font-size:14px;cursor:pointer;color:#94a3b8"></i>'+
-        '<i class="ti ti-calendar" style="font-size:14px;color:#94a3b8"></i>'+
-        '<span style="color:#e2e8f0;font-weight:500">'+dateStr+'</span>'+
-        '<i class="ti ti-chevron-right" style="font-size:14px;cursor:pointer;color:#94a3b8"></i>'+
-      '</div>'+
-    '</div>';
-  shell.appendChild(topbar);
-
-  var body = document.createElement('div');
-  body.style.cssText = 'padding:18px 24px;display:flex;flex-direction:column;gap:14px';
-
-  // Row 1: Readiness | Sleep | HRV | Training Balance
-  var row1 = document.createElement('div');
-  row1.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:12px';
-
-  // Readiness card
-  var readiness = document.createElement('div');
-  readiness.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  var score = Math.min(99, Math.max(60, Math.round(70 + (ftp/bwt - 2.5)*10)));
-  readiness.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">READINESS <i class="ti ti-info-circle" style="font-size:10px"></i></div>'+
-    '<div style="display:flex;align-items:center;gap:12px">'+
-      '<div style="position:relative;width:70px;height:70px;flex-shrink:0">'+
-        '<svg width="70" height="70" viewBox="0 0 70 70"><circle cx="35" cy="35" r="28" fill="none" stroke="#1e2130" stroke-width="6"/><circle cx="35" cy="35" r="28" fill="none" stroke="#4ade80" stroke-width="6" stroke-dasharray="'+(score/100*176)+' 176" stroke-dashoffset="44" stroke-linecap="round" transform="rotate(-90 35 35)"/></svg>'+
-        '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
-          '<div style="font-size:20px;font-weight:800;color:#fff;line-height:1">'+score+'</div>'+
-          '<div style="font-size:9px;color:#4ade80;font-weight:600">Optimal</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="flex:1;display:flex;flex-direction:column;gap:5px">'+
-        '<div style="font-size:9px;color:#64748b;font-weight:600;margin-bottom:2px">Why '+score+'?</div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#94a3b8"><i class="ti ti-heart" style="color:#e24b4a;font-size:11px"></i> Recovery</span><span style="font-size:11px;color:#4ade80;font-weight:600">+12</span></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#94a3b8"><i class="ti ti-moon" style="color:#8b5cf6;font-size:11px"></i> Sleep</span><span style="font-size:11px;color:#4ade80;font-weight:600">+8</span></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#94a3b8"><i class="ti ti-activity" style="color:#60a5fa;font-size:11px"></i> Training</span><span style="font-size:11px;color:#4ade80;font-weight:600">+6</span></div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:#94a3b8"><i class="ti ti-sun" style="color:#f59e0b;font-size:11px"></i> Weather</span><span style="font-size:11px;color:#e24b4a;font-weight:600">-3</span></div>'+
-      '</div>'+
-    '</div>';
-  row1.appendChild(readiness);
-
-  // Sleep card
-  var sleep = document.createElement('div');
-  sleep.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  sleep.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="ti ti-moon" style="color:#8b5cf6"></i> SLEEP</div>'+
-    '<div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em;margin-bottom:2px">7h 48m</div>'+
-    '<div style="font-size:11px;color:#4ade80;font-weight:600;margin-bottom:10px">Good</div>'+
-    '<svg width="100%" height="40" viewBox="0 0 140 40" preserveAspectRatio="none">'+
-      '<rect x="0" y="10" width="16" height="30" rx="3" fill="#8b5cf6" opacity=".7"/>'+
-      '<rect x="20" y="5" width="16" height="35" rx="3" fill="#8b5cf6" opacity=".9"/>'+
-      '<rect x="40" y="8" width="16" height="32" rx="3" fill="#8b5cf6" opacity=".8"/>'+
-      '<rect x="60" y="12" width="16" height="28" rx="3" fill="#8b5cf6" opacity=".6"/>'+
-      '<rect x="80" y="6" width="16" height="34" rx="3" fill="#8b5cf6"/>'+
-      '<rect x="100" y="14" width="16" height="26" rx="3" fill="#8b5cf6" opacity=".5"/>'+
-      '<rect x="120" y="4" width="16" height="36" rx="3" fill="#8b5cf6" opacity=".9"/>'+
-    '</svg>'+
-    '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:#64748b"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>';
-  row1.appendChild(sleep);
-
-  // HRV card
-  var hrv = document.createElement('div');
-  hrv.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  hrv.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="ti ti-heart" style="color:#e24b4a"></i> HRV</div>'+
-    '<div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em;margin-bottom:2px">62 ms</div>'+
-    '<div style="font-size:11px;color:#4ade80;font-weight:600;margin-bottom:10px">Above Base</div>'+
-    '<svg width="100%" height="40" viewBox="0 0 140 40" preserveAspectRatio="none">'+
-      '<polyline points="0,28 20,25 40,22 60,20 80,18 100,20 120,16 140,14" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>'+
-      '<circle cx="0" cy="28" r="3" fill="#4ade80"/><circle cx="40" cy="22" r="3" fill="#4ade80"/><circle cx="80" cy="18" r="3" fill="#4ade80"/><circle cx="120" cy="16" r="3" fill="#4ade80"/><circle cx="140" cy="14" r="3" fill="#4ade80"/>'+
-    '</svg>'+
-    '<div style="display:flex;justify-content:space-between;margin-top:4px;font-size:9px;color:#64748b"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>';
-  row1.appendChild(hrv);
-
-  // Training Balance
-  var tb = document.createElement('div');
-  tb.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  var events = (st.events||[]).slice(0,4);
-  var tbHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em"><i class="ti ti-bolt" style="color:#4ade80"></i> TRAINING BALANCE</div>'+
-      '<div style="font-size:10px;color:#4ade80;cursor:pointer">View Calendar</div>'+
-    '</div>'+
-    '<div style="font-size:28px;font-weight:800;color:#4ade80;margin-bottom:10px">+ +6</div>';
-  if(events.length){
-    events.forEach(function(ev){
-      var daysAway = ev.date ? Math.round((new Date(ev.date)-now)/86400000) : null;
-      var evDate = ev.date ? new Date(ev.date) : null;
-      tbHTML += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'+
-        '<div style="width:36px;text-align:center;flex-shrink:0">'+
-          (evDate?'<div style="font-size:9px;color:#64748b;text-transform:uppercase">'+months[evDate.getMonth()].slice(0,3)+'</div><div style="font-size:16px;font-weight:700;color:#fff">'+evDate.getDate()+'</div>':'<div style="font-size:16px;font-weight:700;color:#64748b">--</div>')+
-        '</div>'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(ev.name||ev.title||'Event')+'</div>'+
-          '<div style="font-size:10px;color:#64748b">'+(ev.location||'')+'</div>'+
-        '</div>'+
-        (daysAway!==null?'<div style="font-size:10px;color:#4ade80;font-weight:600;white-space:nowrap">'+daysAway+' days</div>':'')+
-      '</div>';
-    });
-  } else {
-    tbHTML += '<div style="display:grid;gap:8px">'+
-      ['Lake Michigan Century|Kenosha, WI|18','Mt. Washington|Auto Road, NH|46','Gran Fondo Hincapie|Greenville, SC|78','Chicago Marathon|Chicago, IL|105'].map(function(ev){
-        var p=ev.split('|');
-        return '<div style="display:flex;align-items:center;gap:10px">'+
-          '<div style="width:32px;text-align:center;flex-shrink:0"><div style="font-size:9px;color:#64748b">JUL</div><div style="font-size:15px;font-weight:700;color:#fff">12</div></div>'+
-          '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+p[0]+'</div><div style="font-size:10px;color:#64748b">'+p[1]+'</div></div>'+
-          '<div style="font-size:10px;color:#4ade80;font-weight:600">'+p[2]+' days</div>'+
-        '</div>';
-      }).join('')+
-    '</div>';
-  }
-  tb.innerHTML = tbHTML;
-  row1.appendChild(tb);
-  body.appendChild(row1);
-
-  // Row 2: Today&#39;s Plan | Today&#39;s Biggest Opportunity | Coach Note
-  var row2 = document.createElement('div');
-  row2.style.cssText = 'display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:12px';
-
-  // Today&#39;s Plan
-  var plan = document.createElement('div');
-  plan.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px';
-  var todayPlan = null;
-  try{
-    var cw2 = getCurrentPlanWeek ? getCurrentPlanWeek() : 1;
-    var dow = now.getDay();
-    var dayKeys = ['sun','mon','tue','wed','thu','fri','sat'];
-    todayPlan = st['w'+cw2] && st['w'+cw2][dayKeys[dow]];
-  }catch(e){}
-  plan.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">TODAY&#39;S PLAN</div>'+
-    '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">'+
-      '<div style="width:44px;height:44px;border-radius:12px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<i class="ti ti-bike" style="font-size:22px;color:#4ade80"></i>'+
-      '</div>'+
-      '<div>'+
-        '<div style="font-size:16px;font-weight:700;color:#fff;margin-bottom:3px">'+(todayPlan&&todayPlan.type ? todayPlan.type : 'Threshold Intervals')+'</div>'+
-        '<div style="font-size:18px;font-weight:800;color:#4ade80">2 x 20 min @ '+(ftp>0?Math.round(ftp*1.05)+'W':'235W')+'</div>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;gap:16px;margin-bottom:10px;flex-wrap:wrap">'+
-      '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-clock" style="font-size:11px"></i> 1h 15m</div>'+
-      '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-chart-bar" style="font-size:11px"></i> Zone 4</div>'+
-      '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-bolt" style="font-size:11px"></i> '+(ftp||235)+'W</div>'+
-      '<div style="font-size:11px;color:#94a3b8"><i class="ti ti-trending-up" style="font-size:11px"></i> Stress 86</div>'+
-    '</div>'+
-    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">This is the ideal session to build FTP.<br>You&#39;re more likely to see a breakthrough today.</div>'+
-    '<div style="font-size:10px;color:#64748b;margin-bottom:10px">Workout will be ready to export to your devices.</div>'+
-    '<div style="display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer">View Workout Details</div>';
-  row2.appendChild(plan);
-
-  // Today&#39;s Biggest Opportunity
-  var opp = document.createElement('div');
-  opp.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px';
-  opp.innerHTML =
-    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-      '<div style="width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,.15);display:flex;align-items:center;justify-content:center">'+
-        '<i class="ti ti-target" style="font-size:18px;color:#4ade80"></i>'+
-      '</div>'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">TODAY&#39;S BIGGEST OPPORTUNITY</div>'+
-    '</div>'+
-    '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px">Ride before 8:30 AM</div>'+
-    '<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:10px">You&#39;ll avoid a 15 mph headwind and 92°F temperatures.</div>'+
-    '<div style="font-size:11px;color:#64748b;margin-bottom:4px">Estimated gain</div>'+
-    '<div style="font-size:20px;font-weight:800;color:#4ade80;margin-bottom:12px">+14 watts</div>'+
-    '<svg width="100%" height="50" viewBox="0 0 200 50" preserveAspectRatio="none">'+
-      '<defs><linearGradient id="oppg" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#4ade80" stop-opacity=".4"/><stop offset="100%" stop-color="#4ade80" stop-opacity="0"/></linearGradient></defs>'+
-      '<path d="M0,40 C20,38 35,20 50,15 C65,10 80,30 100,35 C120,40 140,42 200,44 L200,50 L0,50 Z" fill="url(#oppg)"/>'+
-      '<path d="M0,40 C20,38 35,20 50,15 C65,10 80,30 100,35 C120,40 140,42 200,44" fill="none" stroke="#4ade80" stroke-width="2"/>'+
-    '</svg>'+
-    '<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-top:4px"><span>6AM</span><span>9AM</span><span>12PM</span><span>3PM</span><span>6PM</span></div>'+
-    '<div style="font-size:9px;color:#64748b;text-align:right;margin-top:2px">Power Impact Over Day</div>';
-  row2.appendChild(opp);
-
-  // Coach Note
-  var coach = document.createElement('div');
-  coach.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:0';
-  coach.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">COACH NOTE</div>'+
-      '<div style="font-size:10px;color:#4ade80;cursor:pointer">View All</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:flex-start;gap:10px">'+
-      '<div style="width:36px;height:36px;border-radius:10px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<i class="ti ti-brain" style="font-size:18px;color:#8b5cf6"></i>'+
-      '</div>'+
-      '<div>'+
-        '<div style="font-size:12px;color:#94a3b8;line-height:1.6">Your last three threshold workouts were all below target.</div>'+
-        '<div style="font-size:12px;color:#4ade80;font-weight:600;margin-top:6px">Reduce interval #2 to 225W today.</div>'+
-      '</div>'+
-    '</div>';
-  row2.appendChild(coach);
-  body.appendChild(row2);
-
-  // Row 3: Recent Activity | Training Load | Nutrition | Weather
-  var row3 = document.createElement('div');
-  row3.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px';
-
-  // Recent Activity
-  var recentAct = document.createElement('div');
-  recentAct.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  var raHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">RECENT ACTIVITY</div>'+
-      '<div style="font-size:10px;color:#4ade80;cursor:pointer" onclick="dsNav('activities')">View All Activities</div>'+
-    '</div>';
-
-  var actIcons = {'Ride':'ti-bike','Run':'ti-run','Swim':'ti-ripple','Strength':'ti-barbell'};
-  recent.forEach(function(r){
-    var ikey = Object.keys(actIcons).find(function(k){ return (r.sportType||'').toLowerCase().indexOf(k.toLowerCase())>=0; })||'Ride';
-    var icon = actIcons[ikey]||'ti-bike';
-    var tss = r.tss ? Math.round(r.tss) : '--';
-    var dist = r.distance ? parseFloat(r.distance).toFixed(1)+' mi' : '--';
-    var dateTime = '';
-    if(r.startTime){ var dt=new Date(r.startTime); dateTime=months[dt.getMonth()].slice(0,3)+' '+dt.getDate()+', '+dt.getFullYear()+' · '+(dt.getHours()%12||12)+':'+(('0'+dt.getMinutes()).slice(-2))+(dt.getHours()>=12?'PM':'AM'); }
-    else if(r.date){ dateTime=r.date; }
-    var ridx = rides.indexOf(r);
-    raHTML += '<div onclick="openRideDetail('+ridx+')" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer">'+
-      '<div style="width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
-        '<i class="ti '+icon+'" style="font-size:16px;color:#4ade80"></i>'+
-      '</div>'+
-      '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||r.sportType||'Activity')+'</div>'+
-        '<div style="font-size:10px;color:#64748b;margin-top:1px">'+dateTime+'</div>'+
-      '</div>'+
-      '<div style="display:flex;gap:14px;align-items:center;flex-shrink:0">'+
-        '<div style="text-align:right"><div style="font-size:12px;font-weight:600;color:#e2e8f0">'+dist+'</div><div style="font-size:9px;color:#64748b">Distance</div></div>'+
-        (r.duration?'<div style="text-align:right"><div style="font-size:12px;font-weight:600;color:#e2e8f0">'+r.duration+'</div><div style="font-size:9px;color:#64748b">Time</div></div>':'')+
-        (r.avgHR?'<div style="text-align:right"><div style="font-size:12px;font-weight:600;color:#e24b4a">'+r.avgHR+'</div><div style="font-size:9px;color:#64748b">bpm</div></div>':'')+
-        (tss!=='--'?'<div style="text-align:right"><div style="font-size:12px;font-weight:600;color:#f59e0b">'+tss+'</div><div style="font-size:9px;color:#64748b">TSS</div></div>':'')+
-      '</div>'+
-    '</div>';
-  });
-  recentAct.innerHTML = raHTML;
-  row3.appendChild(recentAct);
-
-  // Training Load
-  var tl = document.createElement('div');
-  tl.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  var weekTSSr = Math.round(weekTSS);
-  var ctlr = Math.max(ctl, Math.round(weekTSSr/7));
-  tl.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">TRAINING LOAD</div>'+
-    '<div style="font-size:10px;color:#64748b;margin-bottom:4px">This Week</div>'+
-    '<div style="font-size:32px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1">'+weekTSSr+'</div>'+
-    '<div style="font-size:11px;color:#64748b;margin-bottom:10px">of 650 TSS</div>'+
-    '<div style="background:#1a1f2e;border-radius:4px;height:6px;margin-bottom:6px">'+
-      '<div style="background:#4ade80;border-radius:4px;height:6px;width:'+Math.min(100,Math.round(weekTSSr/650*100))+'%"></div>'+
-    '</div>'+
-    '<div style="font-size:10px;color:'+(weekTSSr<650*0.9?'#f59e0b':'#4ade80')+';">'+
-      (weekTSSr<650*0.9?Math.round((650-weekTSSr)/650*100)+'% under plan':'On track')+
-    '</div>'+
-    '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #1a1f2e">'+
-      '<div style="font-size:10px;color:#64748b">Chronic Load</div>'+
-      '<div style="font-size:16px;font-weight:700;color:#e2e8f0">'+ctlr+'</div>'+
-    '</div>';
-  row3.appendChild(tl);
-
-  // Nutrition
-  var nutr = document.createElement('div');
-  nutr.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  nutr.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">NUTRITION</div>'+
-    '<div style="font-size:10px;color:#64748b;margin-bottom:10px">Today</div>'+
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'+
-      '<div style="position:relative;width:64px;height:64px;flex-shrink:0">'+
-        '<svg width="64" height="64" viewBox="0 0 64 64">'+
-          '<circle cx="32" cy="32" r="26" fill="none" stroke="#1a1f2e" stroke-width="8"/>'+
-          '<circle cx="32" cy="32" r="26" fill="none" stroke="#FC4C02" stroke-width="8" stroke-dasharray="87 163" stroke-dashoffset="41" stroke-linecap="round" transform="rotate(-90 32 32)"/>'+
-          '<circle cx="32" cy="32" r="26" fill="none" stroke="#60a5fa" stroke-width="8" stroke-dasharray="49 163" stroke-dashoffset="-46" stroke-linecap="round" transform="rotate(-90 32 32)"/>'+
-          '<circle cx="32" cy="32" r="26" fill="none" stroke="#8b5cf6" stroke-width="8" stroke-dasharray="27 163" stroke-dashoffset="-95" stroke-linecap="round" transform="rotate(-90 32 32)"/>'+
-        '</svg>'+
-        '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
-          '<div style="font-size:13px;font-weight:700;color:#fff">2,845</div>'+
-          '<div style="font-size:8px;color:#64748b">of 3,250</div>'+
-          '<div style="font-size:8px;color:#64748b">cal</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="flex:1;display:flex;flex-direction:column;gap:5px">'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#94a3b8"><i class="ti ti-circle-filled" style="font-size:8px;color:#FC4C02"></i> Protein</span><span style="color:#e2e8f0">182 / 165g</span></div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#94a3b8"><i class="ti ti-circle-filled" style="font-size:8px;color:#60a5fa"></i> Carbs</span><span style="color:#e2e8f0">412 / 420g</span></div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#94a3b8"><i class="ti ti-circle-filled" style="font-size:8px;color:#8b5cf6"></i> Fat</span><span style="color:#e2e8f0">102 / 90g</span></div>'+
-        '<div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:#94a3b8"><i class="ti ti-circle-filled" style="font-size:8px;color:#22d3ee"></i> Hydration</span><span style="color:#e2e8f0">74 / 90 oz</span></div>'+
-      '</div>'+
-    '</div>'+
-    '<div style="font-size:10px;color:#4ade80;cursor:pointer">View Details</div>';
-  row3.appendChild(nutr);
-
-  // Weather
-  var wx = document.createElement('div');
-  wx.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  wx.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">WEATHER</div>'+
-    '<div style="font-size:10px;color:#64748b;margin-bottom:8px">Grand Rapids, MI</div>'+
-    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
-      '<i class="ti ti-sun" style="font-size:28px;color:#f59e0b"></i>'+
-      '<div><div style="font-size:26px;font-weight:800;color:#fff">72°F</div><div style="font-size:11px;color:#64748b">Feels like 72°</div></div>'+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">'+
-      '<div><div style="color:#64748b">Wind</div><div style="color:#e2e8f0;font-weight:600" id="ds-wx-wind">SW 6 mph</div></div>'+
-      '<div><div style="color:#64748b">Humidity</div><div style="color:#e2e8f0;font-weight:600" id="ds-wx-hum">48%</div></div>'+
-      '<div><div style="color:#64748b">Precip</div><div style="color:#e2e8f0;font-weight:600">0%</div></div>'+
-      '<div><div style="color:#64748b">Road</div><div style="color:#4ade80;font-weight:600">Excellent</div></div>'+
-    '</div>';
-  row3.appendChild(wx);
-  body.appendChild(row3);
-
-  // Row 4: Streaks | Achievements | Equipment | Hydration
-  var row4 = document.createElement('div');
-  row4.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:8px';
-
-  // Streaks
-  var streaks = document.createElement('div');
-  streaks.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  var rideDays = new Set(rides.filter(function(r){return /ride|cycling/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
-  var runDays = new Set(rides.filter(function(r){return /run/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
-  var strengthDays = new Set(rides.filter(function(r){return /strength|weight/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
-  streaks.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">STREAKS</div>'+
-    '<div style="display:flex;gap:14px">'+
-      '<div style="text-align:center"><i class="ti ti-bike" style="font-size:20px;color:#4ade80;display:block;margin-bottom:3px"></i><div style="font-size:20px;font-weight:800;color:#fff">'+Math.min(rideDays,9)+'</div><div style="font-size:9px;color:#64748b">Ride Days</div></div>'+
-      '<div style="text-align:center"><i class="ti ti-run" style="font-size:20px;color:#FC4C02;display:block;margin-bottom:3px"></i><div style="font-size:20px;font-weight:800;color:#fff">'+Math.min(runDays,5)+'</div><div style="font-size:9px;color:#64748b">Run Days</div></div>'+
-      '<div style="text-align:center"><i class="ti ti-barbell" style="font-size:20px;color:#60a5fa;display:block;margin-bottom:3px"></i><div style="font-size:20px;font-weight:800;color:#fff">'+Math.min(strengthDays,4)+'</div><div style="font-size:9px;color:#64748b">Strength</div></div>'+
-    '</div>';
-  row4.appendChild(streaks);
-
-  // Achievements
-  var ach = document.createElement('div');
-  ach.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  ach.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">ACHIEVEMENTS</div>'+
-      '<div style="font-size:10px;color:#4ade80;cursor:pointer">View All</div>'+
-    '</div>'+
-    '<div style="display:flex;gap:8px">'+
-      ['100mi','Climber','1K ft','25 hr'].map(function(a,i){
-        var colors=['#f59e0b','#4ade80','#60a5fa','#8b5cf6'];
-        return '<div style="width:40px;height:40px;border-radius:10px;background:'+colors[i]+'22;border:1px solid '+colors[i]+'44;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
-          '<i class="ti ti-award" style="font-size:16px;color:'+colors[i]+'"></i>'+
-          '<div style="font-size:7px;color:'+colors[i]+';margin-top:1px;font-weight:600">'+a+'</div>'+
-        '</div>';
-      }).join('')+
-    '</div>';
-  row4.appendChild(ach);
-
-  // Equipment
-  var equip = document.createElement('div');
-  equip.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  equip.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-      '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">EQUIPMENT</div>'+
-      '<div style="font-size:10px;color:#4ade80;cursor:pointer">View All Gear</div>'+
-    '</div>'+
-    '<div style="display:flex;align-items:center;gap:10px">'+
-      '<i class="ti ti-bike" style="font-size:28px;color:#64748b"></i>'+
-      '<div>'+
-        '<div style="font-size:12px;font-weight:600;color:#e2e8f0">Pinarello Dogma F</div>'+
-        '<div style="font-size:10px;color:#64748b">Bora WTO 60 / Assioma UNO</div>'+
-      '</div>'+
-    '</div>';
-  row4.appendChild(equip);
-
-  // Hydration
-  var hyd = document.createElement('div');
-  hyd.style.cssText = 'background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px';
-  hyd.innerHTML =
-    '<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">HYDRATION</div>'+
-    '<div style="font-size:10px;color:#64748b;margin-bottom:8px">Today</div>'+
-    '<div style="display:flex;align-items:center;gap:12px">'+
-      '<div>'+
-        '<div style="font-size:20px;font-weight:800;color:#fff">742 ml</div>'+
-        '<div style="font-size:10px;color:#64748b">Remaining</div>'+
-      '</div>'+
-      '<div style="position:relative;width:52px;height:52px">'+
-        '<svg width="52" height="52" viewBox="0 0 52 52">'+
-          '<circle cx="26" cy="26" r="20" fill="none" stroke="#1a1f2e" stroke-width="5"/>'+
-          '<circle cx="26" cy="26" r="20" fill="none" stroke="#22d3ee" stroke-width="5" stroke-dasharray="79 125" stroke-dashoffset="31" stroke-linecap="round" transform="rotate(-90 26 26)"/>'+
-        '</svg>'+
-        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#22d3ee">65%</div>'+
-      '</div>'+
-    '</div>';
-  row4.appendChild(hyd);
-  body.appendChild(row4);
-
-  shell.appendChild(body);
-  mc.appendChild(shell);
-
-  // Fetch live weather
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
-    .then(function(r){return r.json();})
-    .then(function(data){
-      if(data&&data.current){
-        var c=data.current;
-        var dirs=['N','NE','E','SE','S','SW','W','NW'];
-        var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
-        var wnd=document.getElementById('ds-wx-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
-        var hum=document.getElementById('ds-wx-hum'); if(hum) hum.textContent=Math.round(c.relativehumidity_2m)+'%';
-      }
-    }).catch(function(){});
+  mc.appendChild(wrap);
 }
-
 
 function dsShowRidesList(){
   var mc = document.getElementById('ds-content');
