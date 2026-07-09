@@ -319,7 +319,8 @@ window.parseFitFile = function(arrayBuffer, callback) {
           }
         }
 
-        // Per-second record stream -> GPS + power curve (same downstream use as before)
+        // Per-second record stream -> GPS + power curve + chart streams
+        var eleStream = [], hrStream = [];
         records.forEach(function(r) {
           if (r.position_lat != null && r.position_long != null) {
             var lat = r.position_lat, lon = r.position_long;
@@ -329,6 +330,9 @@ window.parseFitFile = function(arrayBuffer, callback) {
             }
           }
           if (r.power != null && r.power < 2000) result.pwrStream.push(r.power);
+          var alt = r.enhanced_altitude != null ? r.enhanced_altitude : r.altitude;
+          if (alt != null && alt > -500 && alt < 9000) eleStream.push(Math.round(alt * 3.28084));
+          if (r.heart_rate != null && r.heart_rate > 0 && r.heart_rate < 250) hrStream.push(r.heart_rate);
         });
 
         // Calculate power curve for all durations (identical logic to before)
@@ -361,6 +365,18 @@ window.parseFitFile = function(arrayBuffer, callback) {
           result.lats = result.lats.filter(function(_,i){return i%step===0;}).slice(0,300);
           result.lons = result.lons.filter(function(_,i){return i%step===0;}).slice(0,300);
         }
+
+        // Build downsampled chart streams for elevation profile, sparklines
+        function dsChart(arr, n) {
+          if (!arr || arr.length < 2) return null;
+          if (arr.length <= n) return arr;
+          var s = Math.ceil(arr.length / n), out = [];
+          for (var i = 0; i < arr.length; i += s) out.push(arr[i]);
+          return out;
+        }
+        result.chartEle = dsChart(eleStream, 200);
+        result.chartPwr = dsChart(result.pwrStream, 200);
+        result.chartHR  = dsChart(hrStream, 200);
 
         callback(null, result);
       } catch(e2) {
@@ -9304,7 +9320,10 @@ function bulkImportTCX(input){
             workKj: data.workKj||null, ifPct: data.ifPct||null, tss: data.tss||null,
             avgHR: data.hr||null, maxHR: data.maxHR||null, cadence: data.cadence||null,
             avgTemp: data.avgTemp||null, maxTemp: data.maxTemp||null,
-            lrBalance: data.lrBalance||null, source:'fit'
+            lrBalance: data.lrBalance||null, source:'fit',
+            chartEle: data.chartEle||null,
+            chartPwr: data.chartPwr||null,
+            chartHR:  data.chartHR||null
           };
           if(!st.rides) st.rides=[];
           var dupIdx=-1;
@@ -9335,7 +9354,10 @@ function bulkImportTCX(input){
               maxTemp:ride2.maxTemp||existing.maxTemp,
               lrBalance:ride2.lrBalance||existing.lrBalance,
               powerCurve:ride2.powerCurve||existing.powerCurve,
-              lats:ride2.lats||existing.lats, lons:ride2.lons||existing.lons
+              lats:ride2.lats||existing.lats, lons:ride2.lons||existing.lons,
+              chartEle:ride2.chartEle||existing.chartEle,
+              chartPwr:ride2.chartPwr||existing.chartPwr,
+              chartHR:ride2.chartHR||existing.chartHR
             });
             sv();
             done++; setTimeout(next,10); return;
