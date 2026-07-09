@@ -10187,21 +10187,21 @@ function dsShowAICoach(){
     }
 
     var stats=document.createElement('div');
-    stats.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px';
+    stats.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:8px 0 16px;border-bottom:1px solid var(--b1)';
     [{l:'FITNESS',v:ctl,c:'#4D9FFF'},{l:'FATIGUE',v:atl,c:'#FF7A45'},{l:'FORM',v:(tsb>0?'+':'')+tsb,c:tsb>0?'#00C896':tsb<-20?'#ef4444':'#FFB938'}].forEach(function(s){
-      var card=document.createElement('div');
-      card.style.cssText='background:var(--s2);border-radius:12px;padding:10px;text-align:center;border:1px solid var(--b1)';
-      card.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700">'+s.l+'</div><div style="font-size:22px;font-weight:800;color:'+s.c+'">'+s.v+'</div>';
-      stats.appendChild(card);
+      var cell=document.createElement('div');
+      cell.style.cssText='text-align:center';
+      cell.innerHTML='<div style="font-size:26px;font-weight:700;color:'+s.c+'">'+s.v+'</div><div style="font-size:11px;font-weight:600;color:var(--t3);margin-top:2px">'+s.l+'</div>';
+      stats.appendChild(cell);
     });
     body.appendChild(stats);
 
     others.forEach(function(s){
-      var card=document.createElement('div');
-      card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
-      card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+s.label+'</div>'
-        +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+s.lines.join(' ')+'</div>';
-      body.appendChild(card);
+      var sec=document.createElement('div');
+      sec.style.cssText='padding:4px 0 14px 0;border-bottom:1px solid var(--b1)';
+      sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:5px">'+s.label+'</div>'
+        +'<div style="font-size:15px;color:var(--t1);line-height:1.6">'+s.lines.join(' ')+'</div>';
+      body.appendChild(sec);
     });
 
     var ref=document.createElement('button');
