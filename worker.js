@@ -10473,11 +10473,12 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  var rides = (st.rides||[]).filter(function(r){
-    var s = r.sportType||r.type||'';
-    return !/virtual|weight|strength/i.test(s);
-  }).sort(function(a,b){
-    var da=a.date||'', db=b.date||'';
+  var allRides = (st.rides||[]);
+  // Sort newest first - use date string (YYYY-M-D or YYYY-MM-DD both sort correctly)  
+  var rides = allRides.slice().sort(function(a,b){
+    // Normalize date format for comparison
+    var da=(a.date||'').replace(/-/g,'').padEnd(8,'0');
+    var db=(b.date||'').replace(/-/g,'').padEnd(8,'0');
     if(db>da) return 1; if(db<da) return -1; return 0;
   });
 
