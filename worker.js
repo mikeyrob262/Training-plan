@@ -10041,11 +10041,339 @@ function dsNav(section){
   } else if(section === 'gear') {
     dsShowGear();
   } else if(section === 'aicoach') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-message-circle" style="font-size:32px"></i><div>AI Coach coming soon</div>'; mc.appendChild(d); }
+    dsShowAICoach();
   } else {
     dsShowRidesList();
   }
 }
+
+function dsShowAICoach(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+  mc.innerHTML='';
+
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
+
+  var hdrRow=document.createElement('div');
+  hdrRow.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:2px';
+  var hdr=document.createElement('div');
+  hdr.style.cssText='font-size:20px;font-weight:700;color:#fff';
+  hdr.textContent='AI Coach';
+  var genBtn=document.createElement('button');
+  genBtn.style.cssText='display:flex;align-items:center;gap:6px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.35);color:#c084fc;font-size:13px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit';
+  genBtn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Generate Plan';
+  genBtn.onclick=function(){ openAICoachPlanGen(); };
+  hdrRow.appendChild(hdr); hdrRow.appendChild(genBtn);
+  wrap.appendChild(hdrRow);
+
+  var body=document.createElement('div');
+  body.style.cssText='display:flex;flex-direction:column;gap:12px';
+  body.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--t3)"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg><div style="font-size:15px;font-weight:600">Analyzing your training...</div></div>';
+  wrap.appendChild(body);
+  mc.appendChild(wrap);
+
+  var today=new Date();
+  var todayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][today.getDay()];
+  var todayIdx=today.getDay()===0?6:today.getDay()-1;
+  var NL=String.fromCharCode(10);
+
+  var acts=(st.rides||[]).filter(function(r){return !r.deleted;})
+    .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
+  acts.forEach(function(a){a.load=unifiedLoad(a);});
+  var wl=acts.filter(function(a){return a.load>0;});
+  var pmc=wl.length?computePMC(wl):null;
+  var ctl=pmc?Math.round(pmc[pmc.length-1].ctl):0;
+  var atl=pmc?Math.round(pmc[pmc.length-1].atl):0;
+  var tsb=ctl-atl;
+  var ftp=parseInt(st.ftp||186);
+  var weight=parseFloat(st.weight||162);
+  var wkg=(ftp/weight*2.20462).toFixed(2);
+
+  var weekData=ws(cw);
+  var dayShort=['mon','tue','wed','thu','fri','sat','sun'];
+  var todayWorkout=(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
+
+  var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
+  var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
+
+  var upcoming=[];
+  for(var di=todayIdx+1;di<7;di++){
+    var wkt=(weekData.swaps&&weekData.swaps[di])||(weekData.wo&&weekData.wo[di]);
+    if(wkt) upcoming.push(dayShort[di]+': '+wkt);
+  }
+
+  var todayNutr=getDTots(getTodayKey());
+
+  ensureBikes();
+  var bikeOpts=(st.bikes||[]).filter(function(b){return !b.indoor;}).map(function(b){
+    return b.name+' ('+b.type+', '+bikeStatusBadge(b).label+')';
+  }).join('; ');
+
+  ensureEvents();
+  var todayMid=new Date(); todayMid.setHours(0,0,0,0);
+  var nxt=(st.events||[]).map(function(e){return {e:e,d:Math.ceil((new Date(e.date+'T00:00:00')-todayMid)/864e5)};})
+    .filter(function(x){return x.d>=0;}).sort(function(a,b){return a.d-b.d;})[0];
+  var raceStr=nxt?nxt.e.name+' in '+nxt.d+' days':'none scheduled';
+
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+  .then(function(r){return r.json();})
+  .then(function(wx){
+    var c=wx&&wx.current;
+    var dirs=['N','NE','E','SE','S','SW','W','NW'];
+    var wstr=c?Math.round(c.temperature_2m)+'F (feels '+Math.round(c.apparent_temperature)+'F), wind '+Math.round(c.windspeed_10m)+'mph from '+dirs[Math.round((c.winddirection_10m||0)/45)%8]+(c.precipitation_probability!=null?', '+c.precipitation_probability+'% rain':''):'unavailable';
+    runBriefing(wstr);
+  }).catch(function(){runBriefing('unavailable');});
+
+  function runBriefing(wstr){
+    var prompt='You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
+      +' FTP:'+ftp+'W Weight:'+weight+'lbs W/kg:'+wkg
+      +' CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb+(tsb<-20?' TIRED':tsb>5?' FRESH':' NEUTRAL')
+      +' NEXT RACE:'+raceStr
+      +' TODAY WORKOUT:'+(todayWorkout||'Rest')
+      +' WEATHER:'+wstr
+      +' BIKES:'+(bikeOpts||'none')
+      +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
+      +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
+      +' UPCOMING:'+upcoming.join(', ')
+      +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.';
+
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(d){
+      var text=d.content&&d.content[0]&&d.content[0].text;
+      if(!text){body.innerHTML='<div style="padding:20px;color:var(--t3)">Coach unavailable.</div>';return;}
+      renderBriefing(text);
+    }).catch(function(){body.innerHTML='<div style="padding:20px;color:var(--t3)">Error connecting to coach.</div>';});
+  }
+
+  function renderBriefing(text){
+    body.innerHTML='';
+    var NL=String.fromCharCode(10);
+    var lines=text.split(NL);
+    var sections=[];
+    var cur=null;
+    lines.forEach(function(line){
+      var t=line.trim();
+      if(!t) return;
+      var labels=['DECISION','TODAY','FORM CHECK','KEY FOCUS','NUTRITION TIP','WEATHER NOTE'];
+      var isLabel=false;
+      for(var li=0;li<labels.length;li++){
+        if(t.toUpperCase().indexOf(labels[li])===0){
+          if(cur) sections.push(cur);
+          cur={label:labels[li],lines:[]};
+          var rest=t.slice(labels[li].length).replace(/^[:]+/,'').replace(/^[ ]+/,'').replace(/^[	]+/,'');
+          if(rest) cur.lines.push(rest);
+          isLabel=true; break;
+        }
+      }
+      if(!isLabel && cur) cur.lines.push(t);
+    });
+    if(cur) sections.push(cur);
+
+    var decision=null, others=[];
+    sections.forEach(function(s){
+      if(s.label==='DECISION') decision=s;
+      else others.push(s);
+    });
+
+    if(decision){
+      var dc=document.createElement('div');
+      dc.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(168,85,247,.06));border:1px solid rgba(168,85,247,.4);border-radius:16px;padding:16px 18px';
+      dc.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c084fc;margin-bottom:6px">Today&#39;s Call</div>'
+        +'<div style="font-size:19px;font-weight:800;color:var(--t1);line-height:1.3">'+decision.lines.join(' ')+'</div>';
+      body.appendChild(dc);
+    }
+
+    var stats=document.createElement('div');
+    stats.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px';
+    [{l:'FITNESS',v:ctl,c:'#4D9FFF'},{l:'FATIGUE',v:atl,c:'#FF7A45'},{l:'FORM',v:(tsb>0?'+':'')+tsb,c:tsb>0?'#00C896':tsb<-20?'#ef4444':'#FFB938'}].forEach(function(s){
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--s2);border-radius:12px;padding:10px;text-align:center;border:1px solid var(--b1)';
+      card.innerHTML='<div style="font-size:11px;color:var(--t3);font-weight:700">'+s.l+'</div><div style="font-size:22px;font-weight:800;color:'+s.c+'">'+s.v+'</div>';
+      stats.appendChild(card);
+    });
+    body.appendChild(stats);
+
+    others.forEach(function(s){
+      var card=document.createElement('div');
+      card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
+      card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+s.label+'</div>'
+        +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+s.lines.join(' ')+'</div>';
+      body.appendChild(card);
+    });
+
+    var ref=document.createElement('button');
+    ref.style.cssText='background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#a855f7;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
+    ref.textContent='Refresh Briefing';
+    ref.onclick=function(){dsShowAICoach();};
+    body.appendChild(ref);
+
+    var divlbl=document.createElement('div');
+    divlbl.style.cssText='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);padding-top:4px';
+    divlbl.textContent='Ask your coach';
+    body.appendChild(divlbl);
+
+    var chatLog=document.createElement('div');
+    chatLog.style.cssText='display:flex;flex-direction:column;gap:8px';
+    body.appendChild(chatLog);
+
+    var inputRow=document.createElement('div');
+    inputRow.style.cssText='display:flex;gap:8px;padding-bottom:8px';
+    var inp=document.createElement('input');
+    inp.placeholder='Ask anything about your training...';
+    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
+    var sendBtn=document.createElement('button');
+    sendBtn.textContent='Ask';
+    sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 16px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0';
+
+    var chatHistory=[{role:'assistant',content:text}];
+    function sendChat(){
+      var q=inp.value.trim(); if(!q) return;
+      inp.value='';
+      var ub=document.createElement('div');
+      ub.style.cssText='background:var(--s2);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t1);align-self:flex-end;max-width:85%;margin-left:auto';
+      ub.textContent=q; chatLog.appendChild(ub);
+      var tb=document.createElement('div');
+      tb.style.cssText='background:rgba(168,85,247,.1);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t3);border:1px solid rgba(168,85,247,.2);max-width:85%';
+      tb.textContent='Thinking...'; chatLog.appendChild(tb);
+      wrap.scrollTop=wrap.scrollHeight;
+      chatHistory.push({role:'user',content:q});
+      fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,
+          system:'You are a personal cycling and endurance coach for Mikey. FTP:'+ftp+'W CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb+'. Be concise.',
+          messages:chatHistory})
+      }).then(function(r){return r.json();}).then(function(d){
+        var reply=d.content&&d.content[0]&&d.content[0].text||'Sorry, try again';
+        tb.style.color='var(--t1)'; tb.textContent=reply;
+        chatHistory.push({role:'assistant',content:reply});
+        wrap.scrollTop=wrap.scrollHeight;
+      }).catch(function(){tb.textContent='Error, try again';});
+    }
+    sendBtn.onclick=sendChat;
+    inp.onkeydown=function(e){if(e.key==='Enter')sendChat();};
+    inputRow.appendChild(inp); inputRow.appendChild(sendBtn);
+    body.appendChild(inputRow);
+  }
+}
+
+function openAICoachPlanGen(){
+  var modal=document.getElementById('mod-SERVICE');
+  if(!modal){toast('Cannot open plan generator');return;}
+  modal.innerHTML='';
+  modal.style.cssText='align-items:center;justify-content:center;padding:20px';
+  modal.style.display='flex';
+
+  var card=document.createElement('div');
+  card.style.cssText='background:var(--s1);border-radius:16px;width:100%;max-width:340px;padding:22px 20px;box-shadow:0 8px 32px rgba(0,0,0,.35);max-height:88vh;overflow-y:auto';
+
+  var title=document.createElement('div');
+  title.style.cssText='font-size:17px;font-weight:800;color:var(--t1);margin-bottom:4px';
+  title.textContent='Generate Training Plan';
+  card.appendChild(title);
+  var sub=document.createElement('div');
+  sub.style.cssText='font-size:12px;color:var(--t3);margin-bottom:16px;line-height:1.4';
+  sub.textContent='Coach will use your FTP, fitness, and next race automatically.';
+  card.appendChild(sub);
+
+  function mkField(lbl){
+    var w=document.createElement('div'); w.style.cssText='margin-bottom:12px';
+    var l=document.createElement('div'); l.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; l.textContent=lbl;
+    w.appendChild(l); card.appendChild(w); return w;
+  }
+
+  var f1=mkField('Plan name');
+  var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='e.g. Century Build';
+  nameInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  f1.appendChild(nameInp);
+
+  var f2=mkField('Weeks');
+  var weeksInp=document.createElement('input'); weeksInp.type='number'; weeksInp.value='8'; weeksInp.min='1'; weeksInp.max='24';
+  weeksInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  f2.appendChild(weeksInp);
+
+  var f3=mkField('Days per week available');
+  var daysInp=document.createElement('input'); daysInp.type='number'; daysInp.value='5'; daysInp.min='2'; daysInp.max='7';
+  daysInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  f3.appendChild(daysInp);
+
+  var f4=mkField('Start date');
+  var td=new Date();
+  var startInp=document.createElement('input'); startInp.type='date';
+  startInp.value=td.getFullYear()+'-'+String(td.getMonth()+1).padStart(2,'0')+'-'+String(td.getDate()).padStart(2,'0');
+  startInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  f4.appendChild(startInp);
+
+  var f5=mkField('Constraints / preferences (optional)');
+  var notesInp=document.createElement('textarea'); notesInp.placeholder='e.g. long ride Saturdays, no Mondays, prefer Zwift midweek'; notesInp.rows=3;
+  notesInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical';
+  f5.appendChild(notesInp);
+
+  var actions=document.createElement('div'); actions.style.cssText='display:flex;gap:8px;margin-top:8px';
+  var cancelBtn=document.createElement('button'); cancelBtn.textContent='Cancel';
+  cancelBtn.style.cssText='flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit';
+  cancelBtn.onclick=function(){modal.style.display='none';modal.innerHTML='';};
+  var goBtn=document.createElement('button'); goBtn.textContent='Generate';
+  goBtn.style.cssText='flex:1.4;padding:11px;background:#a855f7;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit';
+  actions.appendChild(cancelBtn); actions.appendChild(goBtn);
+  card.appendChild(actions);
+  modal.appendChild(card);
+
+  goBtn.onclick=function(){
+    var name=nameInp.value.trim()||'Generated Plan';
+    var nW=Math.max(1,Math.min(24,parseInt(weeksInp.value)||8));
+    var nD=Math.max(2,Math.min(7,parseInt(daysInp.value)||5));
+    var startDate=startInp.value;
+    var constraints=notesInp.value.trim();
+    goBtn.disabled=true; goBtn.textContent='Generating...'; goBtn.style.opacity='.6'; cancelBtn.disabled=true;
+
+    var ftp=parseInt(st.ftp||186);
+    var weight=parseFloat(st.weight||162);
+    var wkg=(ftp/weight*2.20462).toFixed(2);
+    var a2=(st.rides||[]).filter(function(r){return !r.deleted;}).concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
+    a2.forEach(function(a){a.load=unifiedLoad(a);});
+    var wl2=a2.filter(function(a){return a.load>0;});
+    var pmc2=wl2.length?computePMC(wl2):null;
+    var ctl2=pmc2?Math.round(pmc2[pmc2.length-1].ctl):0;
+    var atl2=pmc2?Math.round(pmc2[pmc2.length-1].atl):0;
+    var tsb2=ctl2-atl2;
+    ensureEvents();
+    var tdm=new Date(); tdm.setHours(0,0,0,0);
+    var nr=(st.events||[]).map(function(e){return {e:e,d:Math.ceil((new Date(e.date+'T00:00:00')-tdm)/864e5)};})
+      .filter(function(x){return x.d>=0;}).sort(function(a,b){return a.d-b.d;})[0];
+    var rStr=nr?nr.e.name+' in '+nr.d+' days':'none scheduled';
+
+    var prompt='You are an expert endurance coach. Design a '+nW+'-week training plan.'
+      +' ATHLETE: FTP '+ftp+'W '+weight+'lbs '+wkg+' W/kg CTL '+ctl2+' ATL '+atl2+' TSB '+tsb2+'.'
+      +' RACE: '+rStr+'. DAYS/WEEK: '+nD+'. REST DAYS: '+(7-nD)+' per week.'
+      +' CONSTRAINTS: '+(constraints||'none')+'.'
+      +' Return ONLY a raw JSON array, no markdown, no explanation.'
+      +' Each item: {"week":<1 to '+nW+'>,"day":<0=Mon to 6=Sun>,"type":"workout name","duration":"90 min","notes":"details"}.'
+      +' Include all 7 days every week, use "Rest Day" for rest days.';
+
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(d){
+      var text=d.content&&d.content[0]&&d.content[0].text||'';
+      function reset(){goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false;}
+      var fence=String.fromCharCode(96,96,96);
+      var cleaned=text.split(fence+'json').join('').split(fence).join('').trim();
+      var parsed;
+      try{parsed=JSON.parse(cleaned);}catch(e){toast('Could not parse plan. Try again.');reset();return;}
+      if(!Array.isArray(parsed)||!parsed.length){toast('Empty plan. Try again.');reset();return;}
+      var newId=createPlan(name,startDate);
+      applyRacePlanToPlan(newId,parsed);
+      switchPlan(newId);
+      try{cw=getCurrentPlanWeek();GW(cw);updHdr();}catch(e){}
+      modal.style.display='none'; modal.innerHTML='';
+      toast('Plan "'+name+'" created ('+nW+' weeks)');
+    }).catch(function(e){toast('Error: '+e.message);goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false;});
+  };
+}
+
 
 function dsShowGear(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
