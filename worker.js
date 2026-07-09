@@ -15936,7 +15936,8 @@ function drawWindMap(containerEl, ride, wind){
       }
       var bl=L.polyline(pts,{opacity:0}).addTo(map);
       map.fitBounds(bl.getBounds(),{padding:[20,20]});
-      setTimeout(function(){map.invalidateSize();},200);
+      setTimeout(function(){map.invalidateSize();},300);
+      setTimeout(function(){map.invalidateSize();},800);
       L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#E24B4A',fillOpacity:1,weight:2}).addTo(map);
       // Wind compass overlay
@@ -15955,7 +15956,8 @@ function drawWindMap(containerEl, ride, wind){
       }
     }catch(e){}
   }
-  setTimeout(init,100);
+  // Wait for body to be in DOM and painted before init
+  setTimeout(function(){ requestAnimationFrame(function(){ requestAnimationFrame(init); }); }, 50);
 }
 
 function showWeatherHistory(){
@@ -16310,10 +16312,11 @@ function showWeatherHistory(){
 
     var body=document.createElement('div');
     body.style.cssText='padding:12px 16px';
+    scr.appendChild(body);
 
-    // Route map preview - wind-colored
+    // Route map preview - wind-colored. body must be in DOM before drawWindMap fires.
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
-    if(_dpLats && _dpLats.length>10){
+    if(_dpLats && _dpLats.length>1){
       var mapCard=document.createElement('div');
       mapCard.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
       body.appendChild(mapCard);
@@ -16326,6 +16329,7 @@ function showWeatherHistory(){
         leg.appendChild(p);
       });
       body.appendChild(leg);
+      // fetch wind then draw — body is already in DOM so Leaflet can measure dimensions
       fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m,windgusts_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
         .then(function(r){return r.json();})
         .then(function(wx){
@@ -16431,8 +16435,6 @@ function showWeatherHistory(){
       +'<span style="font-size:14px;font-weight:700;color:var(--t1)">Check weather</span>';
     goBtn.onclick=function(){renderDetail(route,selectedDate,selectedHour);};
     body.appendChild(goBtn);
-
-    scr.appendChild(body);
   }
 
   // ── DETAIL SCREEN ──
