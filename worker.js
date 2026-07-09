@@ -10288,7 +10288,7 @@ function openDesktopRideDetail(idx){
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
   dsInitProfile();
-  if(isDesktop()) dsShowRidesList();
+  if(isDesktop()){ console.log('DESKTOP: rides=', (st.rides||[]).length); dsShowRidesList(); }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
