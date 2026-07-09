@@ -393,8 +393,8 @@ window.parseFitFile = function(arrayBuffer, callback) {
       </div>
     </div>
     <div class="ds-nav">
-      <div class="ds-ni" onclick="dsNav('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
-      <div class="ds-ni on" id="ds-ni-activities" onclick="dsNav('activities')"><i class="ti ti-run"></i>Activities</div>
+      <div class="ds-ni on" id="ds-ni-dashboard" onclick="dsNav('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+      <div class="ds-ni" id="ds-ni-activities" onclick="dsNav('activities')"><i class="ti ti-run"></i>Activities</div>
       <div class="ds-ni" onclick="dsNav('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
       <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
       <div class="ds-ni" onclick="dsNav('nutrition')"><i class="ti ti-apple"></i>Nutrition</div>
