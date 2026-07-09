@@ -72,7 +72,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-ni.on{color:#FC4C02;border-left-color:#FC4C02;background:rgba(252,76,2,.07)}
 .ds-ni i{font-size:14px;width:16px;flex-shrink:0}
 .ds-foot{padding:8px 0;border-top:1px solid #1e2130}
-.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14}
+.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14;max-width:calc(100vw - 152px - 286px)}
 .ds-mhdr{padding:13px 18px 11px;border-bottom:1px solid #1e2130;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
 .ds-back{font-size:11px;color:#64748b;display:flex;align-items:center;gap:3px;margin-bottom:4px;cursor:pointer}
 .ds-title{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em}
@@ -10068,12 +10068,12 @@ function dsShowDashboard(){
   }
   function div(css,txt){ return mk('div',css,txt); }
   function card(extra){
-    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px');
+    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow:hidden;min-height:0');
     if(extra) d.style.cssText+=';'+extra;
     return d;
   }
   function lbl(txt){
-    return div('font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px',txt);
+    return div('font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px',txt);
   }
   function ico(cls,color,size){
     var i=document.createElement('i');
@@ -10086,10 +10086,10 @@ function dsShowDashboard(){
   }
 
   mc.innerHTML='';
-  var shell=div('display:flex;flex-direction:column;height:100%;overflow-y:auto;background:#0d0f14');
+  var shell=div('display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14');
 
   // Top bar
-  var topbar=row('justify-content:space-between;padding:14px 24px 12px;border-bottom:1px solid #1a1f2e;flex-shrink:0');
+  var topbar=row('justify-content:space-between;padding:12px 18px 10px;border-bottom:1px solid #1a1f2e;flex-shrink:0');
   var greetWrap=div('');
   var greetEl=div('font-size:22px;font-weight:700;color:#fff;letter-spacing:-.02em');
   greetEl.textContent=greeting+', Mikey';
@@ -10102,10 +10102,10 @@ function dsShowDashboard(){
   topbar.appendChild(greetWrap); topbar.appendChild(dateDiv);
   shell.appendChild(topbar);
 
-  var body=div('padding:16px 24px;display:flex;flex-direction:column;gap:12px');
+  var body=div('padding:10px 16px;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;overflow:hidden');
 
   // ROW 1
-  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:12px');
+  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex:1;min-height:0;overflow:hidden');
 
   // Readiness
   var rc=card(''); rc.appendChild(lbl('READINESS'));
@@ -10203,7 +10203,7 @@ function dsShowDashboard(){
   body.appendChild(r1);
 
   // ROW 2
-  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:12px');
+  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex:1;min-height:0;overflow:hidden');
 
   // Today Plan
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
@@ -10271,7 +10271,7 @@ function dsShowDashboard(){
   body.appendChild(r2);
 
   // ROW 3
-  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:12px');
+  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex:1;min-height:0;overflow:hidden');
 
   // Recent Activity
   var ac=card('');
@@ -10374,7 +10374,7 @@ function dsShowDashboard(){
   body.appendChild(r3);
 
   // ROW 4
-  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:8px');
+  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex:1;min-height:0;overflow:hidden');
 
   // Streaks
   var strc=card(''); strc.appendChild(lbl('STREAKS'));
