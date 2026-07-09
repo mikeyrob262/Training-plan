@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783627146 v1783627146 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783627271 v1783627271 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783627146</title>
+<title>Athlete IQ v1783627271</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10031,7 +10031,7 @@ function dsNav(section){
   } else if(section === 'home' || section === 'dashboard') {
     dsShowDashboard();
   } else if(section === 'calendar') {
-    if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-calendar" style="font-size:32px"></i><div>Calendar coming soon</div>'; mc.appendChild(d); }
+    dsShowCalendar();
   } else if(section === 'analytics') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-chart-line" style="font-size:32px"></i><div>Analytics coming soon</div>'; mc.appendChild(d); }
   } else if(section === 'nutrition') {
@@ -10045,6 +10045,128 @@ function dsNav(section){
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowCalendar(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+
+  var now=new Date();
+  var viewYear=now.getFullYear(), viewMonth=now.getMonth();
+  var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  function renderCalendar(){
+    mc.innerHTML='';
+    var wrap=document.createElement('div');
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;padding:16px 20px;box-sizing:border-box';
+
+    // Header
+    var hdr=document.createElement('div');
+    hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0';
+    var prev=document.createElement('div');
+    prev.style.cssText='width:32px;height:32px;border-radius:8px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#e2e8f0;font-size:18px';
+    prev.innerHTML='&#8249;';
+    prev.onclick=function(){viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderCalendar();};
+    var title=document.createElement('div');
+    title.style.cssText='font-size:18px;font-weight:700;color:#fff';
+    title.textContent=monthNames[viewMonth]+' '+viewYear;
+    var next=document.createElement('div');
+    next.style.cssText='width:32px;height:32px;border-radius:8px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#e2e8f0;font-size:18px';
+    next.innerHTML='&#8250;';
+    next.onclick=function(){viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderCalendar();};
+    hdr.appendChild(prev); hdr.appendChild(title); hdr.appendChild(next);
+    wrap.appendChild(hdr);
+
+    // Day headers
+    var dayHdr=document.createElement('div');
+    dayHdr.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;flex-shrink:0';
+    dayNames.forEach(function(d){
+      var dh=document.createElement('div');
+      dh.style.cssText='text-align:center;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;padding:4px 0';
+      dh.textContent=d; dayHdr.appendChild(dh);
+    });
+    wrap.appendChild(dayHdr);
+
+    // Build ride lookup by date
+    var ridesByDate={};
+    (st.rides||[]).forEach(function(r){
+      if(!r.date) return;
+      var nd=normDate(r.date);
+      if(!ridesByDate[nd]) ridesByDate[nd]=[];
+      ridesByDate[nd].push(r);
+    });
+
+    // Calendar grid
+    var grid=document.createElement('div');
+    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:4px;flex:1;min-height:0';
+
+    var firstDay=new Date(viewYear,viewMonth,1).getDay();
+    var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
+    var todayStr=normDate(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
+
+    // Empty cells before first day
+    for(var i=0;i<firstDay;i++){
+      var empty=document.createElement('div'); empty.style.cssText='border-radius:8px;background:#0d0f14';
+      grid.appendChild(empty);
+    }
+
+    // Day cells
+    for(var d=1;d<=daysInMonth;d++){
+      var dateStr=normDate(viewYear+'-'+(viewMonth+1)+'-'+d);
+      var dayRides=ridesByDate[dateStr]||[];
+      var isToday=dateStr===todayStr;
+      var isPast=dateStr<todayStr;
+
+      var cell=document.createElement('div');
+      cell.style.cssText='border-radius:8px;background:'+(isToday?'rgba(74,222,128,.1)':'#111318')+';border:1px solid '+(isToday?'#4ade80':'#1a1f2e')+';padding:6px;cursor:pointer;min-height:70px;display:flex;flex-direction:column;gap:3px;overflow:hidden';
+      cell.onmouseover=function(){if(this.style.borderColor!=='rgb(74, 222, 128)') this.style.borderColor='#252d40';};
+      cell.onmouseout=function(){if(this.style.borderColor!=='rgb(74, 222, 128)') this.style.borderColor='#1a1f2e';};
+
+      var dayNum=document.createElement('div');
+      dayNum.style.cssText='font-size:12px;font-weight:700;color:'+(isToday?'#4ade80':isPast?'#94a3b8':'#e2e8f0');
+      dayNum.textContent=d;
+      cell.appendChild(dayNum);
+
+      // Show up to 2 rides
+      dayRides.slice(0,2).forEach(function(r){
+        var _st=(r.sportType||r.type||'').toLowerCase();
+        var col=_st.indexOf('run')>=0?'#FC4C02':_st.indexOf('strength')>=0?'#8b5cf6':_st.indexOf('swim')>=0?'#60a5fa':'#4ade80';
+        var pill=document.createElement('div');
+        pill.style.cssText='font-size:9px;font-weight:600;color:#fff;background:'+col+';border-radius:4px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+        var _rn=r.name||r.sportType||'Ride'; if(_rn.indexOf(' ACTIVITY')>0&&parseInt(_rn)>0) _rn=r.sportType||'Ride';
+        pill.textContent=_rn;
+        pill.onclick=(function(r2){return function(e){e.stopPropagation();var idx=(st.rides||[]).indexOf(r2);if(idx>=0)openRideDetail(idx);};})(r);
+        cell.appendChild(pill);
+      });
+      if(dayRides.length>2){
+        var more=document.createElement('div');
+        more.style.cssText='font-size:9px;color:#64748b';
+        more.textContent='+'+(dayRides.length-2)+' more';
+        cell.appendChild(more);
+      }
+
+      grid.appendChild(cell);
+    }
+    wrap.appendChild(grid);
+
+    // Monthly summary
+    var monthRides=(st.rides||[]).filter(function(r){
+      return r.date&&normDate(r.date).startsWith(viewYear+'-'+(viewMonth<9?'0':'')+(viewMonth+1));
+    });
+    var totalDist=monthRides.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
+    var totalTSS=monthRides.reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0);
+    var summary=document.createElement('div');
+    summary.style.cssText='display:flex;gap:20px;margin-top:12px;padding-top:10px;border-top:1px solid #1a1f2e;flex-shrink:0';
+    [['Activities',monthRides.length,'#4ade80'],['Distance',Math.round(totalDist)+' mi','#60a5fa'],['Training Load',Math.round(totalTSS)+' TSS','#f59e0b']].forEach(function(x){
+      var s=document.createElement('div');
+      s.innerHTML='<div style="font-size:16px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><div style="font-size:10px;color:#64748b">'+x[0]+'</div>';
+      summary.appendChild(s);
+    });
+    wrap.appendChild(summary);
+    mc.appendChild(wrap);
+  }
+  renderCalendar();
 }
 
 function dsShowDashboard(){
