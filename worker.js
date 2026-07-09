@@ -10041,7 +10041,7 @@ function dsNav(section){
 
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
-  if(!mc){ setTimeout(dsShowDashboard,300); return; }
+  if(!mc){ return; } // Don't retry - avoids overwriting user navigation
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
