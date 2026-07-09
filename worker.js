@@ -15905,7 +15905,7 @@ function drawWindMap(containerEl, ride, wind){
   var lats=ride.lats||ride.gpsLats, lons=ride.lons||ride.gpsLons;
   if(!lats||lats.length<2) return;
   var mapId='wm-'+Date.now();
-  containerEl.innerHTML='<div id="'+mapId+'" style="height:100%;width:100%"></div>';
+  containerEl.innerHTML='<div id="'+mapId+'" style="height:220px;width:100%"></div>';
   var attempts=0;
   function init(){
     attempts++;
@@ -15936,6 +15936,7 @@ function drawWindMap(containerEl, ride, wind){
       }
       var bl=L.polyline(pts,{opacity:0}).addTo(map);
       map.fitBounds(bl.getBounds(),{padding:[20,20]});
+      setTimeout(function(){map.invalidateSize();},200);
       L.circleMarker(pts[0],{radius:7,color:'#fff',fillColor:'#1D9E75',fillOpacity:1,weight:2}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:7,color:'#fff',fillColor:'#E24B4A',fillOpacity:1,weight:2}).addTo(map);
       // Wind compass overlay
