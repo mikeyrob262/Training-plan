@@ -10061,7 +10061,7 @@ function dsShowAICoach(){
   hdr.style.cssText='font-size:20px;font-weight:700;color:#fff';
   hdr.textContent='AI Coach';
   var genBtn=document.createElement('button');
-  genBtn.style.cssText='display:flex;align-items:center;gap:6px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.35);color:#c084fc;font-size:13px;font-weight:700;padding:8px 14px;border-radius:20px;cursor:pointer;font-family:inherit';
+  genBtn.style.cssText='display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit';
   genBtn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>Generate Plan';
   genBtn.onclick=function(){ openAICoachPlanGen(); };
   hdrRow.appendChild(hdr); hdrRow.appendChild(genBtn);
@@ -10069,7 +10069,7 @@ function dsShowAICoach(){
 
   var body=document.createElement('div');
   body.style.cssText='display:flex;flex-direction:column;gap:12px';
-  body.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--t3)"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg><div style="font-size:15px;font-weight:600">Analyzing your training...</div></div>';
+  body.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--t3)"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg><div style="font-size:15px;font-weight:600">Analyzing your training...</div></div>';
   wrap.appendChild(body);
   mc.appendChild(wrap);
 
@@ -10180,9 +10180,9 @@ function dsShowAICoach(){
 
     if(decision){
       var dc=document.createElement('div');
-      dc.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(168,85,247,.06));border:1px solid rgba(168,85,247,.4);border-radius:16px;padding:16px 18px';
-      dc.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c084fc;margin-bottom:6px">Today&#39;s Call</div>'
-        +'<div style="font-size:19px;font-weight:800;color:var(--t1);line-height:1.3">'+decision.lines.join(' ')+'</div>';
+      dc.style.cssText='padding:4px 0 16px;border-bottom:1px solid var(--b1)';
+      dc.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">Today&#39;s Call</div>'
+        +'<div style="font-size:22px;font-weight:700;color:var(--t1);line-height:1.3">'+decision.lines.join(' ')+'</div>';
       body.appendChild(dc);
     }
 
@@ -10205,7 +10205,7 @@ function dsShowAICoach(){
     });
 
     var ref=document.createElement('button');
-    ref.style.cssText='background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#a855f7;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
+    ref.style.cssText='background:none;border:none;color:var(--t3);font-size:13px;font-weight:600;padding:8px 0;cursor:pointer;font-family:inherit;text-align:left';
     ref.textContent='Refresh Briefing';
     ref.onclick=function(){dsShowAICoach();};
     body.appendChild(ref);
@@ -10223,10 +10223,10 @@ function dsShowAICoach(){
     inputRow.style.cssText='display:flex;gap:8px;padding-bottom:8px';
     var inp=document.createElement('input');
     inp.placeholder='Ask anything about your training...';
-    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
+    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 14px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
     var sendBtn=document.createElement('button');
     sendBtn.textContent='Ask';
-    sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 16px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0';
+    sendBtn.style.cssText='background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-weight:600;padding:10px 16px;border-radius:10px;cursor:pointer;font-family:inherit;flex-shrink:0';
 
     var chatHistory=[{role:'assistant',content:text}];
     function sendChat(){
@@ -10236,7 +10236,7 @@ function dsShowAICoach(){
       ub.style.cssText='background:var(--s2);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t1);align-self:flex-end;max-width:85%;margin-left:auto';
       ub.textContent=q; chatLog.appendChild(ub);
       var tb=document.createElement('div');
-      tb.style.cssText='background:rgba(168,85,247,.1);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--t3);border:1px solid rgba(168,85,247,.2);max-width:85%';
+      tb.style.cssText='background:var(--s2);border-radius:10px;padding:10px 14px;font-size:14px;color:var(--t3);border:1px solid var(--b1);max-width:85%';
       tb.textContent='Thinking...'; chatLog.appendChild(tb);
       wrap.scrollTop=wrap.scrollHeight;
       chatHistory.push({role:'user',content:q});
