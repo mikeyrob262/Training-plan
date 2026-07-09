@@ -10040,6 +10040,7 @@ function dsNav(section){
 }
 
 function dsShowDashboard(){
+  console.log('dsShowDashboard called, rides:', (st.rides||[]).length);
   var mc = document.getElementById('ds-content');
   if(!mc) return;
   var rides = st.rides||[];
@@ -10398,7 +10399,12 @@ function openDesktopRideDetail(idx){
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
   dsInitProfile();
-  if(isDesktop()){ setTimeout(function(){ dsInitProfile(); dsShowDashboard(); }, 500); }
+  if(isDesktop()){
+    dsInitProfile();
+    dsShowDashboard();
+    // Backup in case st.rides wasn't ready yet
+    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsShowDashboard(); } }, 2000);
+  }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
