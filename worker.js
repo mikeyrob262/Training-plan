@@ -10610,7 +10610,7 @@ function openDesktopRideDetail(idx){
     '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+
     '<div class="ds-mhdr">'+
       '<div>'+
-        '<div class="ds-back" onclick="dsNav('dashboard')">&lsaquo; Back</div>'+
+        '<div class="ds-back" onclick="dsNav(\'dashboard\')">&lsaquo; Back</div>'+
         '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
         '<div class="ds-subtitle">'+dtStr+'</div>'+
       '</div>'+
