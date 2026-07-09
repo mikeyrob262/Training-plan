@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783627417 v1783627417 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783627769 v1783627769 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783627417</title>
+<title>Athlete IQ v1783627769</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10056,39 +10056,61 @@ function dsShowCalendar(){
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var dayNames=['S','M','T','W','T','F','S'];
 
+  var SPORT_SVG={
+    bike:'<path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/>',
+    run:'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4"/>',
+    swim:'<path d="M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0"/>',
+    strength:'<path d="M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z"/>',
+    walk:'<path d="M13 4a1 1 0 1 0 2 0M12 15l-2 5M16 15l1 5M10 9l5 1 2 4"/>'
+  };
+
+  function getSportInfo(r){
+    var s=(r.sportType||r.type||'').toLowerCase();
+    if(/ride|cycling/i.test(s)) return {key:'bike',col:'#4ade80',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
+    if(/run/i.test(s)) return {key:'run',col:'#FC4C02',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
+    if(/swim/i.test(s)) return {key:'swim',col:'#60a5fa',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
+    if(/strength|weight|lift/i.test(s)) return {key:'strength',col:'#8b5cf6',val:r.duration||''};
+    if(/walk/i.test(s)) return {key:'walk',col:'#f59e0b',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
+    return {key:'bike',col:'#4ade80',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':r.duration||''};
+  }
+
+  function makeSVG(key,col,size){
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(SPORT_SVG[key]||SPORT_SVG.bike)+'</svg>';
+  }
+
   function renderCalendar(){
     mc.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:20px 24px;box-sizing:border-box;overflow:hidden';
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:18px 20px;box-sizing:border-box;overflow:hidden';
 
-    // Header - clean Apple Health style
+    // Header
     var hdr=document.createElement('div');
-    hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0';
+    hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0';
     var navL=document.createElement('div');
-    navL.style.cssText='width:36px;height:36px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
+    navL.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
     navL.textContent='‹';
     navL.onclick=function(){viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderCalendar();};
     var hdrTitle=document.createElement('div');
     hdrTitle.style.cssText='font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em';
     hdrTitle.textContent=monthNames[viewMonth]+' '+viewYear;
     var navR=document.createElement('div');
-    navR.style.cssText='width:36px;height:36px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
+    navR.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
     navR.textContent='›';
     navR.onclick=function(){viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderCalendar();};
     hdr.appendChild(navL); hdr.appendChild(hdrTitle); hdr.appendChild(navR);
     wrap.appendChild(hdr);
 
-    // Day name headers
+    // Day headers
     var dayHdr=document.createElement('div');
-    dayHdr.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:8px;flex-shrink:0';
+    dayHdr.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:6px;flex-shrink:0';
     dayNames.forEach(function(d){
       var dh=document.createElement('div');
-      dh.style.cssText='text-align:center;font-size:11px;font-weight:600;color:#64748b;padding:4px 0';
+      dh.style.cssText='text-align:center;font-size:11px;font-weight:600;color:#64748b;padding:3px 0';
       dh.textContent=d; dayHdr.appendChild(dh);
     });
     wrap.appendChild(dayHdr);
 
-    // Build ride lookup by date
+    // Ride lookup
     var ridesByDate={};
     (st.rides||[]).forEach(function(r){
       if(!r.date) return;
@@ -10097,9 +10119,8 @@ function dsShowCalendar(){
       ridesByDate[nd].push(r);
     });
 
-    // Calendar grid
     var grid=document.createElement('div');
-    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:6px;flex:1;min-height:0';
+    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:4px;flex:1;min-height:0';
 
     var firstDay=new Date(viewYear,viewMonth,1).getDay();
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
@@ -10113,75 +10134,73 @@ function dsShowCalendar(){
       var dateStr=normDate(viewYear+'-'+(viewMonth+1)+'-'+d);
       var dayRides=ridesByDate[dateStr]||[];
       var isToday=dateStr===todayStr;
-      var hasBike=dayRides.some(function(r){return /ride|cycling|virtual/i.test(r.sportType||r.type||'');});
-      var hasRun=dayRides.some(function(r){return /run/i.test(r.sportType||r.type||'');});
-      var hasStrength=dayRides.some(function(r){return /strength|weight/i.test(r.sportType||r.type||'');});
       var hasActivity=dayRides.length>0;
 
       var cell=document.createElement('div');
-      cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:6px 4px;border-radius:12px;cursor:'+(hasActivity?'pointer':'default')+';background:'+(isToday?'rgba(74,222,128,.12)':'transparent')+';transition:background .15s';
+      cell.style.cssText='display:flex;flex-direction:column;align-items:center;border-radius:10px;padding:5px 3px;min-height:68px;background:'+(isToday?'rgba(74,222,128,.1)':'#111318')+';border:1px solid '+(isToday?'rgba(74,222,128,.4)':'#1a1f2e')+';overflow:hidden';
       if(hasActivity){
-        cell.onmouseover=function(){this.style.background='rgba(255,255,255,.05)';};
-        cell.onmouseout=function(){this.style.background=isToday?'rgba(74,222,128,.12)':'transparent';};
-        (function(rides){
+        cell.style.cursor='pointer';
+        cell.onmouseover=function(){this.style.borderColor='#4ade80';};
+        cell.onmouseout=function(){this.style.borderColor=isToday?'rgba(74,222,128,.4)':'#1a1f2e';};
+        (function(rides,ds){
           cell.onclick=function(){
-            // Show first ride detail
             var r=rides[0];
             var idx=(st.rides||[]).indexOf(r);
             if(idx<0) idx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
             if(idx>=0) openRideDetail(idx);
           };
-        })(dayRides);
+        })(dayRides,dateStr);
       }
 
       // Day number
       var dayNum=document.createElement('div');
-      dayNum.style.cssText='font-size:14px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'#4ade80':hasActivity?'#e2e8f0':'#64748b')+';margin-bottom:4px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:'+(isToday?'rgba(74,222,128,.2)':'transparent');
+      dayNum.style.cssText='font-size:11px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'#4ade80':hasActivity?'#e2e8f0':'#475569')+';margin-bottom:4px;text-align:center';
       dayNum.textContent=d;
       cell.appendChild(dayNum);
 
-      // Activity dots
-      if(hasActivity){
-        var dots=document.createElement('div');
-        dots.style.cssText='display:flex;gap:3px;justify-content:center';
-        if(hasBike){var dot=document.createElement('div');dot.style.cssText='width:6px;height:6px;border-radius:50%;background:#4ade80';dots.appendChild(dot);}
-        if(hasRun){var dot2=document.createElement('div');dot2.style.cssText='width:6px;height:6px;border-radius:50%;background:#FC4C02';dots.appendChild(dot2);}
-        if(hasStrength){var dot3=document.createElement('div');dot3.style.cssText='width:6px;height:6px;border-radius:50%;background:#8b5cf6';dots.appendChild(dot3);}
-        cell.appendChild(dots);
-
-        // Distance for rides
-        if(hasBike){
-          var totalDist=dayRides.filter(function(r){return /ride|cycling/i.test(r.sportType||r.type||'');}).reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
-          if(totalDist>0){
-            var distEl=document.createElement('div');
-            distEl.style.cssText='font-size:9px;color:#64748b;margin-top:2px';
-            distEl.textContent=totalDist.toFixed(0)+' mi';
-            cell.appendChild(distEl);
-          }
+      // Show up to 2 activities
+      dayRides.slice(0,2).forEach(function(r){
+        var info=getSportInfo(r);
+        var actDiv=document.createElement('div');
+        actDiv.style.cssText='display:flex;flex-direction:column;align-items:center;gap:1px';
+        actDiv.innerHTML=makeSVG(info.key,info.col,'18');
+        if(info.val){
+          var valEl=document.createElement('div');
+          valEl.style.cssText='font-size:9px;font-weight:600;color:'+info.col+';text-align:center;line-height:1.2';
+          valEl.textContent=info.val;
+          actDiv.appendChild(valEl);
         }
+        cell.appendChild(actDiv);
+      });
+
+      if(dayRides.length>2){
+        var more=document.createElement('div');
+        more.style.cssText='font-size:8px;color:#64748b;margin-top:2px';
+        more.textContent='+'+( dayRides.length-2);
+        cell.appendChild(more);
       }
 
       grid.appendChild(cell);
     }
     wrap.appendChild(grid);
 
-    // Monthly summary - Apple Health ring style
+    // Monthly summary
     var monthRides=(st.rides||[]).filter(function(r){
       if(!r.date) return false;
       var nd=normDate(r.date);
       var prefix=viewYear+'-'+(viewMonth<9?'0':'')+(viewMonth+1);
       return nd.startsWith(prefix);
     });
-    var totalDist2=Math.round(monthRides.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0));
-    var totalTSS2=Math.round(monthRides.reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0));
+    var totalDist=Math.round(monthRides.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0));
+    var totalTSS=Math.round(monthRides.reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0));
     var rideCount=monthRides.filter(function(r){return /ride|cycling/i.test(r.sportType||r.type||'');}).length;
 
     var summary=document.createElement('div');
-    summary.style.cssText='display:flex;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid #1a1f2e;flex-shrink:0';
-    [['Rides',rideCount,'#4ade80'],['Distance',totalDist2+' mi','#60a5fa'],['Load',totalTSS2+' TSS','#f59e0b'],['Activities',monthRides.length,'#94a3b8']].forEach(function(x){
+    summary.style.cssText='display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #1a1f2e;flex-shrink:0';
+    [['Rides',rideCount,'#4ade80'],['Distance',totalDist+' mi','#60a5fa'],['Load',totalTSS+' TSS','#f59e0b'],['Total',monthRides.length+' acts','#94a3b8']].forEach(function(x){
       var s=document.createElement('div');
-      s.style.cssText='flex:1;background:#111318;border-radius:12px;padding:10px 12px;text-align:center';
-      s.innerHTML='<div style="font-size:18px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><div style="font-size:10px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
+      s.style.cssText='flex:1;background:#111318;border-radius:10px;padding:8px;text-align:center';
+      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+x[0]+'</div>';
       summary.appendChild(s);
     });
     wrap.appendChild(summary);
