@@ -10075,7 +10075,6 @@ function dsShowAICoach(){
   wrap.appendChild(body);
   mc.appendChild(wrap);
 
-  // ---- Build context (same unified load model as Home readiness) ----
   var today=new Date();
   var dayFull=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var todayName=dayFull[today.getDay()];
@@ -10104,8 +10103,8 @@ function dsShowAICoach(){
 
   var upcoming=[];
   for(var d=todayIdx+1;d<7;d++){
-    var w=(weekData.swaps&&weekData.swaps[d])||(weekData.wo&&weekData.wo[d]);
-    if(w) upcoming.push({day:dayShort[d],name:w});
+    var wkt=(weekData.swaps&&weekData.swaps[d])||(weekData.wo&&weekData.wo[d]);
+    if(wkt) upcoming.push({day:dayShort[d],name:wkt});
   }
 
   var todayNutrition=getDTots(getTodayKey());
@@ -10164,14 +10163,13 @@ function dsShowAICoach(){
 
   function renderBriefing(text){
     body.innerHTML='';
-    var reDec=new RegExp('(?=\\d+\\.\\s*(?:DECISION|TODAY|FORM CHECK|KEY FOCUS|NUTRITION|WEATHER NOTE))');
-    var sections=text.split(reDec);
+    var sections=text.split(/(?=\\d+\\.\\s*(?:DECISION|TODAY|FORM CHECK|KEY FOCUS|NUTRITION|WEATHER NOTE))/);
     var decisionText='';var others=[];
     sections.forEach(function(sec){
       if(!sec.trim())return;
-      if(/^\d*\.?\s*DECISION/.test(sec.trim())){
-        var dl=sec.trim().split('\n');
-        decisionText=dl.slice(1).join(' ').trim()||dl[0].replace(/^\d+\.\s*DECISION[:\s]*/i,'').trim();
+      if(/^\\d*\\.?\\s*DECISION/.test(sec.trim())){
+        var dl=sec.trim().split('\\n');
+        decisionText=dl.slice(1).join(' ').trim()||dl[0].replace(/^\\d+\\.\\s*DECISION[:\\s]*/i,'').trim();
       } else others.push(sec);
     });
 
@@ -10197,11 +10195,11 @@ function dsShowAICoach(){
       if(!sec.trim())return;
       var card=document.createElement('div');
       card.style.cssText='background:var(--s2);border-radius:14px;padding:14px 16px;border:1px solid var(--b1)';
-      var lines=sec.trim().split('\n');
-      var hm=lines[0].match(/^\d+\.\s*(TODAY|FORM CHECK|KEY FOCUS|NUTRITION TIP|WEATHER NOTE)/);
-      var heading=hm?hm[1]:lines[0].replace(/^\d+\.\s*/,'').replace(/[:\s]*$/,'');
-      var rem=lines[0].replace(/^\d+\.\s*[A-Z ]+[:\s]*/,'').trim();
-      var bt=lines.slice(1).join(' ').trim()||rem||lines[0];
+      var ln=sec.trim().split('\\n');
+      var hm=ln[0].match(/^\\d+\\.\\s*(TODAY|FORM CHECK|KEY FOCUS|NUTRITION TIP|WEATHER NOTE)/);
+      var heading=hm?hm[1]:ln[0].replace(/^\\d+\\.\\s*/,'').replace(/[:\\s]*$/,'');
+      var rem=ln[0].replace(/^\\d+\\.\\s*[A-Z ]+[:\\s]*/,'').trim();
+      var bt=ln.slice(1).join(' ').trim()||rem||ln[0];
       card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+heading+'</div>'
         +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+bt+'</div>';
       body.appendChild(card);
@@ -10258,7 +10256,7 @@ function dsShowAICoach(){
         thinkBub.textContent=reply;
         chatHistory.push({role:'assistant',content:reply});
         wrap.scrollTop=wrap.scrollHeight;
-      }).catch(function(){thinkBub.textContent='Error — try again';});
+      }).catch(function(){thinkBub.textContent='Error, try again';});
     }
     sendBtn.onclick=sendChat;
     inp.onkeydown=function(e){if(e.key==='Enter')sendChat();};
@@ -10267,9 +10265,6 @@ function dsShowAICoach(){
   }
 }
 
-// Plan generation: asks only what cannot be inferred, pulls the rest from
-// app data, calls Claude for the same {week,day,type,duration,notes} JSON the
-// Race Plan upload uses, creates a NEW plan, and applies via applyRacePlanToPlan.
 function openAICoachPlanGen(){
   var modal=document.getElementById('mod-SERVICE');
   if(!modal){ toast('Cannot open plan generator'); return; }
@@ -10351,7 +10346,6 @@ function openAICoachPlanGen(){
     goBtn.disabled=true;goBtn.textContent='Generating...';goBtn.style.opacity='.6';
     cancelBtn.disabled=true;
 
-    // Pull inferable context
     var ftp=parseInt(st.ftp||186);
     var weight=parseFloat(st.weight||162);
     var wkg=(ftp/weight*2.20462).toFixed(2);
@@ -10386,13 +10380,14 @@ function openAICoachPlanGen(){
       body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,messages:[{role:'user',content:prompt}]})
     }).then(function(r){return r.json();}).then(function(dd){
       var text=dd.content&&dd.content[0]&&dd.content[0].text;
-      if(!text){ toast('Coach returned nothing. Try again.'); goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false; return; }
+      function reset(){goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false;}
+      if(!text){ toast('Coach returned nothing. Try again.'); reset(); return; }
       var fence=String.fromCharCode(96,96,96);
       var cleaned=text.split(fence+'json').join('').split(fence).join('').trim();
       var parsed;
       try{ parsed=JSON.parse(cleaned); }
-      catch(e){ toast('Could not parse the plan. Try again.'); goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false; return; }
-      if(!Array.isArray(parsed)||!parsed.length){ toast('Empty plan returned. Try again.'); goBtn.disabled=false;goBtn.textContent='Generate';goBtn.style.opacity='1';cancelBtn.disabled=false; return; }
+      catch(e){ toast('Could not parse the plan. Try again.'); reset(); return; }
+      if(!Array.isArray(parsed)||!parsed.length){ toast('Empty plan returned. Try again.'); reset(); return; }
 
       var newId=createPlan(name, startDate);
       applyRacePlanToPlan(newId, parsed);
