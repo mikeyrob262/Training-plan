@@ -10473,16 +10473,9 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  // Build deduped list using stravaId as key, preserving first occurrence
-  var _seenIds = {}, _seenKeys = {};
   var rides = (st.rides||[]).filter(function(r){
     var s = r.sportType||r.type||'';
-    if(/virtual|weight|strength/i.test(s)) return false;
-    // Deduplicate: prefer stravaId, fallback to date+name+distance combo
-    var uid = r.stravaId ? ('id_'+r.stravaId) : ('dk_'+(r.date||'')+'_'+(r.name||'')+'_'+(r.distance||''));
-    if(_seenIds[uid]) return false;
-    _seenIds[uid] = true;
-    return true;
+    return !/virtual|weight|strength/i.test(s);
   }).sort(function(a,b){
     var da=a.date||'', db=b.date||'';
     if(db>da) return 1; if(db<da) return -1; return 0;
