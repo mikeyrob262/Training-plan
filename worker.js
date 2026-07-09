@@ -10351,7 +10351,8 @@ function dsShowDashboard(){
     var stype=r.sportType||r.type||'Ride';
     var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
-    var ridx=rides.indexOf(r);
+    var ridx=(st.rides||[]).indexOf(r);
+    if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
     ar.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
