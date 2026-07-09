@@ -5497,9 +5497,14 @@ function openFoodForMeal(meal){
       var local = [];
       if(q){
         var ql = q.toLowerCase();
+        var qWords = ql.split(/\s+/).filter(Boolean);
+        // Fuzzy: all words must appear somewhere in the name
         var starts = allLocal.filter(function(f){return f.n.toLowerCase().startsWith(ql);});
-        var contains = allLocal.filter(function(f){return !f.n.toLowerCase().startsWith(ql) && f.n.toLowerCase().indexOf(ql)>=0;});
-        local = starts.concat(contains);
+        var wordMatch = allLocal.filter(function(f){
+          var name = f.n.toLowerCase();
+          return !name.startsWith(ql) && qWords.every(function(w){return name.indexOf(w)>=0;});
+        });
+        local = starts.concat(wordMatch);
       } else { local = allLocal; }
       if(local.length || !q){
         renderFoodRows(foodList, local.slice(0,30));
@@ -11103,7 +11108,7 @@ var LOCAL_FOODS = [
   {n:"Panera Bread Bagel Plain",cal:290,p:9,c:56,f:2,fiber:2,sodium:510},
   {n:"Panera Bread Bagel Everything",cal:300,p:10,c:57,f:3,fiber:2,sodium:590},
   // Panera Full Menu - Salads
-  {n:"Panera Shrimp Baja Salad",cal:340,p:23,c:22,f:19,fiber:7,sodium:710,srv:"full"},
+  {n:"Shrimply Baja Salad - Panera",cal:340,p:23,c:22,f:19,fiber:7,sodium:710,srv:"full"},
   {n:"Panera Green Goddess Salad with Chicken",cal:540,p:35,c:30,f:33,fiber:9,sodium:1130,srv:"full"},
   {n:"Panera Caesar Salad with Chicken",cal:480,p:37,c:20,f:29,fiber:4,sodium:1080,srv:"full"},
   {n:"Panera Caesar Salad",cal:350,p:14,c:20,f:25,fiber:4,sodium:870,srv:"full"},
@@ -11117,7 +11122,7 @@ var LOCAL_FOODS = [
   {n:"Panera Strawberry Poppyseed Salad",cal:230,p:9,c:34,f:7,fiber:5,sodium:380,srv:"full"},
   {n:"Panera Asian Sesame Salad with Chicken",cal:420,p:32,c:38,f:15,fiber:5,sodium:890,srv:"full"},
   // Panera Half Salads
-  {n:"Panera Shrimp Baja Salad Half",cal:180,p:12,c:12,f:10,fiber:4,sodium:370,srv:"half"},
+  {n:"Shrimply Baja Salad Half - Panera",cal:180,p:12,c:12,f:10,fiber:4,sodium:370,srv:"half"},
   {n:"Panera Green Goddess Salad Half",cal:280,p:18,c:16,f:17,fiber:5,sodium:580,srv:"half"},
   {n:"Panera Caesar Salad Half",cal:180,p:7,c:10,f:13,fiber:2,sodium:440,srv:"half"},
   {n:"Panera Fuji Apple Salad Half",cal:290,p:16,c:28,f:13,fiber:3,sodium:330,srv:"half"},
