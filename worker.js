@@ -10482,8 +10482,13 @@ function dsShowRidesList(){
     seen[key] = true;
     return true;
   }).slice().sort(function(a,b){
-    var da=(a.startTime||a.date||''), db=(b.startTime||b.date||'');
-    return db>da?1:db<da?-1:0;
+    // Sort by date string descending (YYYY-MM-DD format sorts correctly as string)
+    var da=a.date||'', db=b.date||'';
+    if(db>da) return 1;
+    if(db<da) return -1;
+    // Same date - sort by startTime
+    var ta=a.startTime||'', tb=b.startTime||'';
+    return tb>ta?1:tb<ta?-1:0;
   });
 
   var wrap = document.createElement('div');
