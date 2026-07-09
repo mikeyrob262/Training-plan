@@ -16311,6 +16311,10 @@ function showWeatherHistory(){
 
     // Route map preview - wind-colored
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
+    var _dbg=document.createElement('div');
+    _dbg.style.cssText='font-size:11px;color:var(--t3);margin-bottom:6px;padding:4px 0';
+    _dbg.textContent='GPS pts: '+(_dpLats?_dpLats.length:0)+' | typeof L: '+(typeof L);
+    body.appendChild(_dbg);
     if(_dpLats && _dpLats.length>5){
       var mapCard=document.createElement('div');
       mapCard.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
