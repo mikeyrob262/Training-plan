@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783599278 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783601933 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783599278</title>
+<title>Athlete IQ v1783601933</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10004,6 +10004,12 @@ function renameRide(idx){
 
 // ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
 function isDesktop(){ return window.innerWidth >= 1024; }
+function dsShowActivities(){
+  var mc = document.getElementById('ds-content');
+  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>';
+  var rp = document.getElementById('ds-right-panel');
+  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
+}
 
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
@@ -10094,7 +10100,7 @@ function openDesktopRideDetail(idx){
     '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+
     '<div class="ds-mhdr">'+
       '<div>'+
-        '<div class="ds-back" onclick="document.getElementById(\'ds-content\').innerHTML=\'<div style=\\"flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px\\">Select a ride to view details</div>\'">&lsaquo; Back</div>'+
+        '<div class="ds-back" onclick="dsShowActivities()">&lsaquo; Back</div>'+
         '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
         '<div class="ds-subtitle">'+dtStr+'</div>'+
       '</div>'+
