@@ -10072,7 +10072,12 @@ function dsShowDashboard(){
   // Recent rides header
   var hdr = document.createElement('div');
   hdr.style.cssText = 'font-size:14px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center';
-  hdr.innerHTML = 'Recent Activities <span onclick="dsNav('activities')" style="font-size:11px;color:#FC4C02;cursor:pointer;font-weight:400">View all</span>';
+  hdr.textContent = 'Recent Activities';
+  var viewAll = document.createElement('span');
+  viewAll.style.cssText = 'font-size:11px;color:#FC4C02;cursor:pointer;font-weight:400';
+  viewAll.textContent = 'View all';
+  viewAll.onclick = function(){ dsNav('activities'); };
+  hdr.appendChild(viewAll);
   wrap.appendChild(hdr);
 
   // Last 5 rides
