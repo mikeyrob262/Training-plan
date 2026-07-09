@@ -10467,12 +10467,13 @@ function dsShowRidesList(){
   if(!mc) return;
   var _byId = {};
   (st.rides||[]).forEach(function(r){
-    var s=r.sportType||r.type||'';
-    if(/virtual|weight|strength/i.test(s)) return;
     var key = r.stravaId ? 'sid:'+r.stravaId : 'k:'+(r.date||'')+(r.name||'')+(r.duration||'');
     var existing = _byId[key];
     if(!existing) { _byId[key]=r; return; }
-    if(r.gpsLats&&r.gpsLats.length>1&&!(existing.gpsLats&&existing.gpsLats.length>1)) _byId[key]=r;
+    // Always prefer the version with more GPS points
+    var rGps = (r.gpsLats&&r.gpsLats.length)||0;
+    var eGps = (existing.gpsLats&&existing.gpsLats.length)||0;
+    if(rGps > eGps) _byId[key]=r;
   });
   var rides = Object.values(_byId).sort(function(a,b){
     return (b.date||'')>(a.date||'')?1:-1;
