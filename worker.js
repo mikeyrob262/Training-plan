@@ -10004,6 +10004,12 @@ function renameRide(idx){
 }
 
 // ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
+function normDate(d){
+  if(!d) return '';
+  var p=d.split('-');
+  if(p.length===3) return p[0]+'-'+(p[1].length<2?'0'+p[1]:p[1])+'-'+(p[2].length<2?'0'+p[2]:p[2]);
+  return d;
+}
 function isDesktop(){ return window.innerWidth >= 1024; }
 function dsShowActivities(){
   var mc = document.getElementById('ds-content');
@@ -10046,7 +10052,7 @@ function dsShowDashboard(){
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
-  var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
+  var rides = (st.rides||[]).slice().sort(function(a,b){ return normDate(b.date)>normDate(a.date)?1:-1; });
   // Most recent 3 unique rides with GPS preferred
   var _rSeen={}, _rDeduped=[];
   (st.rides||[]).forEach(function(r){
@@ -10528,7 +10534,7 @@ function dsShowRidesList(){
     if(rGps > eGps) _byId[key]=r;
   });
   var rides = Object.values(_byId).sort(function(a,b){
-    return (b.date||'')>(a.date||'')?1:-1;
+    return normDate(b.date)>normDate(a.date)?1:-1;
   });
 
   var wrap = document.createElement('div');
