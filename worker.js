@@ -10042,7 +10042,12 @@ function dsNav(section){
 }
 
 function dsShowDashboard(){
-  console.log('DASH START rides=', (st.rides||[]).length);
+  console.log('DASH START rides=', (st.rides||[]).length, 'mc=', !!document.getElementById('ds-content'));
+  // If desktop shell not in DOM yet, retry after paint
+  if(!document.getElementById('ds-content')){
+    setTimeout(dsShowDashboard, 200);
+    return;
+  }
   try{
   var mc = document.getElementById('ds-content');
   if(!mc) return;
