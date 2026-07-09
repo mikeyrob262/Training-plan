@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783609595 v1783609595 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783597957 v1783601933 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -15,14 +15,13 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css"/>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783609595</title>
+<title>Athlete IQ v1783601933</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -3628,7 +3627,7 @@ function fbPull(silent){
       try{restoreExtraSessions();}catch(e){}
       try{cw=getCurrentPlanWeek();GW(cw);updHdr();}catch(e){}
       if(!silent) toast('OK Synced!');
-      // Desktop refresh removed - don't reset current view on sync
+      try{ if(isDesktop()) dsShowDashboard(); }catch(e){}
     } else {
       if(!silent) toast('No cloud data yet');
     }
@@ -10007,7 +10006,10 @@ function renameRide(idx){
 // ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
 function isDesktop(){ return window.innerWidth >= 1024; }
 function dsShowActivities(){
-  dsNav('dashboard');
+  var mc = document.getElementById('ds-content');
+  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>';
+  var rp = document.getElementById('ds-right-panel');
+  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
 }
 
 function dsNav(section){
@@ -10041,7 +10043,7 @@ function dsNav(section){
 
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
-  if(!mc){ return; } // Don't retry - avoids overwriting user navigation
+  if(!mc){ setTimeout(dsShowDashboard,300); return; }
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
@@ -10080,7 +10082,7 @@ function dsShowDashboard(){
   function ico(cls,color,size){
     var i=document.createElement('i');
     i.className='ti '+cls;
-    i.style.cssText='color:'+(color||'#94a3b8')+';font-size:'+(parseInt(size||14))+'px;flex-shrink:0';
+    i.style.cssText='color:'+(color||'#94a3b8')+';font-size:'+(size||'14')+'px';
     return i;
   }
   function row(extra){
@@ -10288,27 +10290,14 @@ function dsShowDashboard(){
     var stype=r.sportType||r.type||'Ride';
     var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
-    var _ridx = (st.rides||[]).indexOf(r);
-    ar.onclick=(function(i){return function(){openRideDetail(i);};})(Math.max(0,_ridx));
+    var ridx=rides.indexOf(r);
+    ar.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
     var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
-    var svgIco=document.createElementNS('http://www.w3.org/2000/svg','svg');
-    svgIco.setAttribute('width','16'); svgIco.setAttribute('height','16'); svgIco.setAttribute('viewBox','0 0 24 24');
-    svgIco.setAttribute('fill','none'); svgIco.setAttribute('stroke','#4ade80'); svgIco.setAttribute('stroke-width','2');
-    svgIco.setAttribute('stroke-linecap','round'); svgIco.setAttribute('stroke-linejoin','round');
-    var svgPath=document.createElementNS('http://www.w3.org/2000/svg','path');
-    var isSport=stype.toLowerCase();
-    if(isSport.indexOf('run')>=0) svgPath.setAttribute('d','M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4');
-    else if(isSport.indexOf('swim')>=0) svgPath.setAttribute('d','M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0');
-    else if(isSport.indexOf('strength')>=0||isSport.indexOf('weight')>=0) svgPath.setAttribute('d','M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z');
-    else svgPath.setAttribute('d','M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3');
-    svgIco.appendChild(svgPath);
-    abox.appendChild(svgIco);
+    abox.appendChild(ico(sportMap[ikey],'#4ade80','16'));
     var ainfo=div('flex:1;min-width:0');
-    var displayName = r.name||r.sportType||'Activity';
-    if(/^\d+\s+ACTIVITY$/i.test(displayName)) displayName = r.sportType||'Cycling';
-    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',displayName));
+    ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',r.name||r.sportType||'Activity'));
     var dt=''; if(r.startTime){var d=new Date(r.startTime);dt=(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dt=r.date;}
     ainfo.appendChild(div('font-size:10px;color:#64748b;margin-top:1px',dt));
     var astats=row('gap:12px;flex-shrink:0');
@@ -10368,20 +10357,23 @@ function dsShowDashboard(){
   // Weather
   var wc=card(''); wc.appendChild(lbl('WEATHER'));
   wc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:8px','Grand Rapids, MI'));
-  var wmain=row('gap:6px;margin-bottom:6px');
+  var wmain=row('gap:8px;margin-bottom:10px');
   wmain.appendChild(ico('ti-sun','#f59e0b','28'));
   var wnum=div('');
   wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
   wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
   wmain.appendChild(wnum); wc.appendChild(wmain);
-  var wgrid=div('display:flex;flex-direction:column;gap:4px;margin-top:4px');
+  var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:4px;overflow:hidden');
   var wwind=div(''); wwind.appendChild(div('font-size:10px;color:#64748b','Wind'));
   var wwv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); wwv.id='ds-wx-wind';
   wwind.appendChild(wwv); wgrid.appendChild(wwind);
   var whum=div(''); whum.appendChild(div('font-size:10px;color:#64748b','Humidity'));
   var whv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); whv.id='ds-wx-hum';
   whum.appendChild(whv); wgrid.appendChild(whum);
-
+  var wpr=div(''); wpr.appendChild(div('font-size:10px;color:#64748b','Precip'));
+  wpr.appendChild(div('font-size:11px;font-weight:600;color:#e2e8f0','0%')); wgrid.appendChild(wpr);
+  var wrd=div(''); wrd.appendChild(div('font-size:10px;color:#64748b','Road'));
+  wrd.appendChild(div('font-size:11px;font-weight:600;color:#4ade80','Excellent')); wgrid.appendChild(wrd);
   wc.appendChild(wgrid); r3.appendChild(wc);
   body.appendChild(r3);
 
@@ -10473,13 +10465,11 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  var allRides = (st.rides||[]);
-  // Sort newest first - use date string (YYYY-M-D or YYYY-MM-DD both sort correctly)  
-  var rides = allRides.slice().sort(function(a,b){
-    // Normalize date format for comparison
-    var da=(a.date||'').replace(/-/g,'').padEnd(8,'0');
-    var db=(b.date||'').replace(/-/g,'').padEnd(8,'0');
-    if(db>da) return 1; if(db<da) return -1; return 0;
+  var rides = (st.rides||[]).filter(function(r){
+    var s=r.sportType||r.type||'';
+    return !/virtual|weight|strength/i.test(s);
+  }).slice().sort(function(a,b){
+    return (b.date||'') > (a.date||'') ? 1 : -1;
   });
 
   var wrap = document.createElement('div');
@@ -10614,13 +10604,14 @@ function openDesktopRideDetail(idx){
       '<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="1.5"/>';
   }
 
+  var routeSVG = buildRouteSVG(lats,lons);
   var elevSVG = buildElevSVG(r.chartEle);
 
   main.innerHTML =
     '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+
     '<div class="ds-mhdr">'+
       '<div>'+
-        '<div class="ds-back" id="ds-back-btn">&lsaquo; Back</div>'+
+        '<div class="ds-back" onclick="dsShowActivities()">&lsaquo; Back</div>'+
         '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
         '<div class="ds-subtitle">'+dtStr+'</div>'+
       '</div>'+
@@ -10640,7 +10631,17 @@ function openDesktopRideDetail(idx){
     '</div>'+
     '<div class="ds-tabs"><div class="ds-tab on">Route</div><div class="ds-tab">Charts</div><div class="ds-tab">Laps</div><div class="ds-tab">Breakdown</div></div>'+
     '<div class="ds-scroll">'+
-      '<div id="ds-detail-map" style="height:210px;border-radius:0;overflow:hidden;flex-shrink:0"></div>'+
+      '<div class="ds-mapbox">'+
+        '<div class="ds-map-base"></div>'+
+        '<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 560 180" preserveAspectRatio="xMidYMid slice">'+
+          '<line x1="0" y1="45" x2="560" y2="45" stroke="#2a3a2a" stroke-width="5" opacity=".5"/>'+
+          '<line x1="0" y1="140" x2="560" y2="140" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
+          '<line x1="160" y1="0" x2="160" y2="180" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
+          '<line x1="340" y1="0" x2="340" y2="180" stroke="#2a3a2a" stroke-width="4" opacity=".5"/>'+
+          routeSVG+
+        '</svg>'+
+        '<div class="ds-map-ctrl"><div class="ds-map-btn">+</div><div class="ds-map-btn">&minus;</div></div>'+
+      '</div>'+
       '<div class="ds-elev">'+
         '<div class="ds-elev-lbl">Elevation</div>'+
         '<svg style="width:100%;height:48px" viewBox="0 0 560 48" preserveAspectRatio="none">'+elevSVG+'</svg>'+
@@ -10679,22 +10680,6 @@ function openDesktopRideDetail(idx){
       '</div>'+
     '</div>'+
   '</div>';
-
-  // Init GPS map right after main innerHTML is set
-  setTimeout(function(){
-    var mapDiv = document.getElementById('ds-detail-map');
-    var _r2 = st.rides[idx]||r;
-    var mapLats = _r2.gpsLats||_r2.lats;
-    var mapLons = _r2.gpsLons||_r2.lons;
-    if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
-      mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
-    } else if(mapDiv){
-      mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
-      mapDiv.textContent = 'No GPS (div='+!!mapDiv+' pts='+(mapLats?mapLats.length:0)+')';
-    }
-    var backBtn2 = document.getElementById('ds-back-btn');
-    if(backBtn2) backBtn2.onclick = function(){ dsNav('dashboard'); };
-  }, 50);
 
   // Right panel
   var rp = document.getElementById('ds-right-panel');
@@ -10777,7 +10762,7 @@ window.addEventListener('load', function(){
     dsInitProfile();
     dsNav('dashboard');
     // Backup in case st.rides wasn't ready yet
-    // Removed: 2s backup was overwriting user navigation
+    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsNav('dashboard'); } }, 2000);
   }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
