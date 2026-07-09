@@ -16248,31 +16248,15 @@ function showWeatherHistory(){
     hdr.appendChild(titleWrap);
     scr.appendChild(hdr);
 
-    // Route map preview
+    // Route map preview - fetch wind for selected time and render wind-colored map
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>5){
-      var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:8px 16px 0;border-radius:14px;overflow:hidden;height:180px;background:var(--s2)';
-      var mapId='dp-map-'+Date.now();
-      mapCard.id=mapId;
-      scr.appendChild(mapCard);
-      var _dpAttempts=0;
-      function _initDpMap(){
-        _dpAttempts++;
-        if(typeof L==='undefined'){
-          if(_dpAttempts<20) setTimeout(_initDpMap,150);
-          return;
-        }
-        try{
-          var pts=_dpLats.map(function(lat,i){return[lat,_dpLons[i]];});
-          var m=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:false,attributionControl:false});
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(m);
-          L.polyline(pts,{color:'#A8C4E0',weight:2.5,opacity:0.9}).addTo(m);
-          m.fitBounds(L.latLngBounds(pts),{padding:[16,16]});
-        }catch(e){}
-      }
-      setTimeout(_initDpMap,100);
-    }
+      var mapWrap=document.createElement('div');
+      mapWrap.id='dp-map-wrap';
+      mapWrap.style.cssText='margin:8px 16px 0';
+      scr.appendChild(mapWrap);
+      // Fetch forecast and draw wind-colored map
+      fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'        +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=2')      .then(function(r){return r.json();})      .then(function(wxData){        var now=new Date();        var hi=now.getHours();        var wind=wxData&&wxData.hourly?{windspeed_10m:wxData.hourly.windspeed_10m[hi],winddirection_10m:wxData.hourly.winddirection_10m[hi],windgusts_10m:wxData.hourly.windgusts_10m[hi]}:null;        renderMapContent(mapWrap, route, wind, now);      }).catch(function(){        // fallback: plain map no wind        renderMapContent(mapWrap, route, null, new Date());      });    }
 
     var body=document.createElement('div');
     body.style.cssText='padding:12px 16px';
