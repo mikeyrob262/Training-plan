@@ -10020,7 +10020,7 @@ function dsNav(section){
   if(section === 'activities') {
     dsShowRidesList();
   } else if(section === 'home' || section === 'dashboard') {
-    dsShowRidesList();
+    dsShowDashboard();
   } else if(section === 'calendar') {
     if(mc){ mc.innerHTML=''; var d=document.createElement('div'); d.style.cssText='flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px;flex-direction:column;gap:8px'; d.innerHTML='<i class="ti ti-calendar" style="font-size:32px"></i><div>Calendar coming soon</div>'; mc.appendChild(d); }
   } else if(section === 'analytics') {
@@ -10036,6 +10036,70 @@ function dsNav(section){
   } else {
     dsShowRidesList();
   }
+}
+
+function dsShowDashboard(){
+  var mc = document.getElementById('ds-content');
+  if(!mc) return;
+  var rides = st.rides||[];
+  var recentRides = rides.filter(function(r){ return !/virtual|weight|strength/i.test(r.sportType||''); });
+  var totalDist = recentRides.reduce(function(s,r){ return s+(parseFloat(r.distance)||0); },0);
+  var totalTime = recentRides.length;
+  var avgHR = recentRides.filter(function(r){return r.avgHR;}).reduce(function(s,r,_,a){ return s+(r.avgHR/a.length); },0);
+  var ftp = parseInt(st.ftp||186);
+  var bwt = parseFloat(st.weight||160);
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:20px';
+
+  // Stats row
+  var statsRow = document.createElement('div');
+  statsRow.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px';
+  function statCard(val, lbl, color){
+    var c = document.createElement('div');
+    c.style.cssText = 'background:#111318;border:1px solid #1e2130;border-radius:10px;padding:14px 16px';
+    c.innerHTML = '<div style="font-size:22px;font-weight:700;color:'+(color||'#fff')+'">'+val+'</div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div>';
+    return c;
+  }
+  statsRow.appendChild(statCard(recentRides.length, 'Total rides', '#fff'));
+  statsRow.appendChild(statCard(Math.round(totalDist)+' mi', 'Total distance', '#FC4C02'));
+  statsRow.appendChild(statCard(ftp+'w', 'FTP', '#f59e0b'));
+  statsRow.appendChild(statCard((ftp/bwt).toFixed(2)+' W/kg', 'Power/weight', '#60a5fa'));
+  wrap.appendChild(statsRow);
+
+  // Recent rides header
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'font-size:14px;font-weight:700;color:#fff;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center';
+  hdr.innerHTML = 'Recent Activities <span onclick="dsNav('activities')" style="font-size:11px;color:#FC4C02;cursor:pointer;font-weight:400">View all</span>';
+  wrap.appendChild(hdr);
+
+  // Last 5 rides
+  recentRides.slice(0,5).forEach(function(r){
+    var idx = rides.indexOf(r);
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #1e2130;border-radius:10px;margin-bottom:8px;cursor:pointer;background:#111318';
+    row.onmouseover = function(){ this.style.borderColor='#252d40'; this.style.background='#1a1f2e'; };
+    row.onmouseout = function(){ this.style.borderColor='#1e2130'; this.style.background='#111318'; };
+    row.onclick = function(){ openRideDetail(idx); };
+    var icon = document.createElement('div');
+    icon.style.cssText = 'width:36px;height:36px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+    row.appendChild(icon);
+    var info = document.createElement('div');
+    info.style.cssText = 'flex:1;min-width:0';
+    info.innerHTML = '<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||r.sportType||'Activity')+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">'+(r.date||'')+'</div>';
+    row.appendChild(info);
+    var meta = document.createElement('div');
+    meta.style.cssText = 'display:flex;gap:16px;flex-shrink:0';
+    if(r.distance) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+r.distance+' mi</div><div style="font-size:10px;color:#64748b">Dist</div></div>';
+    if(r.duration) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#e2e8f0">'+r.duration+'</div><div style="font-size:10px;color:#64748b">Time</div></div>';
+    if(r.avgHR) meta.innerHTML += '<div style="text-align:right"><div style="font-size:13px;font-weight:600;color:#60a5fa">'+r.avgHR+' bpm</div><div style="font-size:10px;color:#64748b">HR</div></div>';
+    row.appendChild(meta);
+    wrap.appendChild(row);
+  });
+
+  mc.innerHTML = '';
+  mc.appendChild(wrap);
 }
 
 function dsShowRidesList(){
@@ -10333,7 +10397,7 @@ function openDesktopRideDetail(idx){
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
   dsInitProfile();
-  if(isDesktop()){ console.log('DESKTOP: rides=', (st.rides||[]).length); dsShowRidesList(); }
+  if(isDesktop()){ dsShowDashboard(); }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
