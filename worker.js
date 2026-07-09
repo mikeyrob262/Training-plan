@@ -10465,13 +10465,17 @@ function dsShowRidesList(){
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc = document.getElementById('ds-content');
   if(!mc) return;
-  var _seen = {};
-  var rides = (st.rides||[]).filter(function(r){
+  // Deduplicate: when two rides share a stravaId, keep the one WITH gpsLats
+  var _byId = {};
+  (st.rides||[]).forEach(function(r){
     var key = r.stravaId ? 'sid:'+r.stravaId : 'dnm:'+(r.date||'')+'|'+(r.name||'')+'|'+(r.duration||'');
-    if(_seen[key]) return false;
-    _seen[key] = true;
-    return true;
-  }).slice().sort(function(a,b){
+    if(!_byId[key]){
+      _byId[key] = r;
+    } else if(r.gpsLats && r.gpsLats.length > 1 && !(_byId[key].gpsLats && _byId[key].gpsLats.length > 1)){
+      _byId[key] = r; // prefer the one with GPS
+    }
+  });
+  var rides = Object.values(_byId).sort(function(a,b){
     var da=a.date||'', db=b.date||'';
     if(db>da) return 1; if(db<da) return -1; return 0;
   });
