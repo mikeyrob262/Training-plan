@@ -16073,9 +16073,9 @@ function showWeatherHistory(){
     searchBar.onclick=function(){renderLocationSearch();};
     listWrap.appendChild(searchBar);
 
-    var sportColors={Ride:'#FC4C02',GravelRide:'#FC4C02',MountainBikeRide:'#E24B4A',Run:'#185FA5',TrailRun:'#0F6E56'};
-    var rideIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 0 0 0-2H9a1 1 0 0 0 0 2l-1 7h8l-1-7z"/></svg>';
-    var runIcon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 4a1 1 0 1 0 2 0m-5.5 13l2-7 3 3 2-4.5"/></svg>';
+    var sportColors={Ride:'#3A4A5C',GravelRide:'#4A5568',MountainBikeRide:'#2D3748',Run:'#2B4162',TrailRun:'#1A3A2A'};
+    var rideIcon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8C4E0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="17" r="3"/><circle cx="6" cy="17" r="3"/><path d="M6 17l3.5-6.5L12 12l2-4h2"/><path d="M14 8h2l1 3"/><circle cx="14" cy="6" r="1" fill="#A8C4E0"/></svg>';
+    var runIcon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A8D8B0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="14" cy="4" r="1.5" fill="#A8D8B0"/><path d="M9 18l2.5-5 2.5 2 2-5"/><path d="M5 20l3-4 3 1"/></svg>';
 
     if(!routes.length){
       var empty=document.createElement('div');
@@ -16091,7 +16091,7 @@ function showWeatherHistory(){
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var row=document.createElement('div');
         row.style.cssText='padding:11px 14px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
-        row.innerHTML='<div style="width:32px;height:32px;border-radius:8px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+        row.innerHTML='<div style="width:36px;height:36px;border-radius:10px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(168,196,224,0.15)">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
           +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+'mi':'')+(r.duration?' &middot; '+r.duration:'')+(r.date?' &middot; '+r.date:'')+'</div>'
