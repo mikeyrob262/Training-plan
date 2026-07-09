@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783626659 v1783626659 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783626821 v1783626821 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +21,7 @@ export default {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
 <meta name="theme-color" content="#252D3A">
-<title>Athlete IQ v1783626659</title>
+<title>Athlete IQ v1783626821</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -10561,7 +10561,7 @@ function dsShowRidesList(){
       var fval = f.toLowerCase();
       list.querySelectorAll('.act-row').forEach(function(row){
         var s = row.getAttribute('data-sport')||'';
-        var show = fval==='all'||(fval==='rides'&&/ride|cycling/i.test(s))||(fval==='runs'&&/run/i.test(s))||(fval==='strength'&&/strength|weight/i.test(s));
+        var show = fval==='all'||(fval==='rides'&&/ride|cycling/i.test(s))||(fval==='runs'&&(/run/i.test(s)||/walk/i.test(s)))||(fval==='strength'&&/strength|weight/i.test(s));
         row.style.display = show?'flex':'none';
       });
     };
@@ -10579,7 +10579,7 @@ function dsShowRidesList(){
     empty.textContent = 'No activities yet';
     list.appendChild(empty);
   } else {
-    var _vis=20;
+    var _vis=10;
     function _renderMore(){
       // Remove existing load-more button
       var old=list.querySelector('.load-more-btn'); if(old) old.remove();
