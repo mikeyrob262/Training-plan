@@ -10482,13 +10482,10 @@ function dsShowRidesList(){
     seen[key] = true;
     return true;
   }).slice().sort(function(a,b){
-    // Sort by date string descending (YYYY-MM-DD format sorts correctly as string)
-    var da=a.date||'', db=b.date||'';
-    if(db>da) return 1;
-    if(db<da) return -1;
-    // Same date - sort by startTime
-    var ta=a.startTime||'', tb=b.startTime||'';
-    return tb>ta?1:tb<ta?-1:0;
+    // Use startTime (ms epoch) if available, else date string
+    var ta = a.startTime ? new Date(a.startTime).getTime() : (a.date?new Date(a.date).getTime():0);
+    var tb = b.startTime ? new Date(b.startTime).getTime() : (b.date?new Date(b.date).getTime():0);
+    return tb - ta;
   });
 
   var wrap = document.createElement('div');
@@ -10496,10 +10493,7 @@ function dsShowRidesList(){
 
   var titleBar = document.createElement('div');
   titleBar.style.cssText = 'padding:16px 18px 12px;border-bottom:1px solid #1e2130;font-size:18px;font-weight:700;color:#fff;flex-shrink:0';
-  titleBar.textContent = 'Activities ('+rides.length+')';
-  console.log('TOP 5:', rides.slice(0,5).map(function(r){return r.date+'|'+r.name;}));
-  var fondo = (st.rides||[]).find(function(r){return r.name&&r.name.indexOf('Fondo')>=0;});
-  console.log('FONDO:', fondo&&(fondo.date+'|'+fondo.name+'|stravaId:'+fondo.stravaId));
+  titleBar.textContent = 'Activities';
   wrap.appendChild(titleBar);
 
   var list = document.createElement('div');
@@ -10695,12 +10689,11 @@ function openDesktopRideDetail(idx){
   // Init GPS map right after main innerHTML is set
   setTimeout(function(){
     var mapDiv = document.getElementById('ds-detail-map');
-    var mapLats = r.gpsLats||r.lats;
-    var mapLons = r.gpsLons||r.lons;
-    console.log('MAP INIT: mapDiv=',!!mapDiv,'pts=',mapLats&&mapLats.length,'lons=',mapLons&&mapLons.length);
+    var _r2 = st.rides[idx]||r;
+    var mapLats = _r2.gpsLats||_r2.lats||r.gpsLats||r.lats;
+    var mapLons = _r2.gpsLons||_r2.lons||r.gpsLons||r.lons;
     if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
       mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
-      console.log('MAP RENDERED');
     } else if(mapDiv){
       mapDiv.style.cssText = 'height:210px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
       mapDiv.textContent = 'No GPS (div='+!!mapDiv+' pts='+(mapLats?mapLats.length:0)+')';
@@ -10794,7 +10787,6 @@ window.addEventListener('load', function(){
   }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
-    console.log('openRideDetail called idx=',idx,'isDesktop=',isDesktop());
     if(isDesktop()){
       // Highlight nav
       document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
