@@ -10777,7 +10777,7 @@ window.addEventListener('load', function(){
     dsInitProfile();
     dsNav('dashboard');
     // Backup in case st.rides wasn't ready yet
-    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsNav('dashboard'); } }, 2000);
+    // Removed: 2s backup was overwriting user navigation
   }
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
