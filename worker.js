@@ -16304,30 +16304,13 @@ function showWeatherHistory(){
     body.style.cssText='padding:12px 16px';
     scr.appendChild(body);
 
-    // Route map preview - wind-colored. body must be in DOM before drawWindMap fires.
+    // Route map preview - use buildRouteMap which is proven to work
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
-    if(_dpLats && _dpLats.length>1){
-      var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:0 0 6px;height:220px;background:var(--s2);position:relative';
-      body.appendChild(mapCard);
-      var leg=document.createElement('div');
-      leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:4px 0 10px';
-      [{c:'#E24B4A',l:'Headwind'},{c:'#1D9E75',l:'Tailwind'},{c:'#BA7517',l:'Crosswind'}].forEach(function(item){
-        var p=document.createElement('div');
-        p.style.cssText='display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t3)';
-        p.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+item.c+'"></div>'+item.l;
-        leg.appendChild(p);
-      });
-      body.appendChild(leg);
-      // fetch wind then draw — body is already in DOM so Leaflet can measure dimensions
-      fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m,windgusts_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-        .then(function(r){return r.json();})
-        .then(function(wx){
-          var hi=new Date().getHours();
-          var wind=wx&&wx.hourly?{windspeed_10m:wx.hourly.windspeed_10m[hi],winddirection_10m:wx.hourly.winddirection_10m[hi],windgusts_10m:wx.hourly.windgusts_10m[hi]}:null;
-          drawWindMap(mapCard, route, wind);
-        })
-        .catch(function(){ drawWindMap(mapCard, route, null); });
+    if(_dpLats && _dpLats.length>1 && _dpLons && _dpLons.length>1){
+      var mapWrap=document.createElement('div');
+      mapWrap.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden';
+      mapWrap.innerHTML=buildRouteMap(_dpLats, _dpLons, [], 0);
+      body.appendChild(mapWrap);
     }
 
     var today=new Date();
