@@ -10690,9 +10690,8 @@ function openDesktopRideDetail(idx){
   setTimeout(function(){
     var mapDiv = document.getElementById('ds-detail-map');
     var _r2 = st.rides[idx]||r;
-    // GPS might be stored under different keys - check all possibilities
-    var mapLats = _r2.gpsLats||_r2.lats||_r2.polylineLats||r.gpsLats||r.lats;
-    var mapLons = _r2.gpsLons||_r2.lons||_r2.polylineLons||r.gpsLons||r.lons;
+    var mapLats = _r2.gpsLats||_r2.lats;
+    var mapLons = _r2.gpsLons||_r2.lons;
     if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
       mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
     } else if(mapDiv){
