@@ -46,6 +46,93 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
   #app-shell .bnav{max-width:480px;left:50%;transform:translateX(-50%)}
   #app-shell .toast{max-width:480px}
 }
+@media (min-width:1024px){
+  body{background:#0a0c10;overflow:hidden}
+  #app-shell{max-width:none;margin:0;box-shadow:none;background:transparent;display:flex;height:100vh;overflow:hidden}
+  #app-shell .bnav{display:none}
+  #app-shell .hdr{display:none}
+  #desktop-shell{display:flex!important}
+  #mobile-content{display:none!important}
+}
+.ds{display:none;flex:1;height:100vh;overflow:hidden;background:#0d0f14;color:#e2e8f0}
+.ds-sidebar{width:152px;flex-shrink:0;background:#111318;border-right:1px solid #1e2130;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.ds-sb-top{padding:14px 14px 0}
+.ds-brand{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.ds-brand-logo{width:26px;height:26px;background:#FC4C02;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ds-brand-logo svg{width:14px;height:14px;fill:#fff}
+.ds-brand-name{font-size:13px;font-weight:700;color:#fff;letter-spacing:-.01em}
+.ds-profile{display:flex;align-items:center;gap:9px;padding:10px 0 14px;border-bottom:1px solid #1e2130;margin-bottom:6px}
+.ds-avatar{width:34px;height:34px;border-radius:50%;background:#2a3a4a;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8}
+.ds-pname{font-size:12px;font-weight:600;color:#e2e8f0}
+.ds-pwt{font-size:10px;color:#64748b;margin-top:1px}
+.ds-pbadge{font-size:9px;background:#1a2030;color:#64748b;padding:1px 6px;border-radius:3px;display:inline-block;margin-top:3px}
+.ds-nav{flex:1;padding:4px 0;overflow-y:auto}
+.ds-ni{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:#64748b;cursor:pointer;border-left:2px solid transparent}
+.ds-ni:hover{color:#94a3b8;background:rgba(255,255,255,.03)}
+.ds-ni.on{color:#FC4C02;border-left-color:#FC4C02;background:rgba(252,76,2,.07)}
+.ds-ni i{font-size:14px;width:16px;flex-shrink:0}
+.ds-foot{padding:8px 0;border-top:1px solid #1e2130}
+.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14}
+.ds-mhdr{padding:13px 18px 11px;border-bottom:1px solid #1e2130;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
+.ds-back{font-size:11px;color:#64748b;display:flex;align-items:center;gap:3px;margin-bottom:4px;cursor:pointer}
+.ds-title{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em}
+.ds-subtitle{font-size:11px;color:#64748b;margin-top:3px}
+.ds-actions{display:flex;align-items:center;gap:7px;padding-top:2px}
+.ds-btn{font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 11px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ds-btn i{font-size:12px}
+.ds-stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #1e2130;flex-shrink:0}
+.ds-stat{padding:11px 6px 9px;text-align:center;border-right:1px solid #1e2130}
+.ds-stat:last-child{border-right:none}
+.ds-sv{font-size:16px;font-weight:700;color:#fff;line-height:1}
+.ds-sv.o{color:#FC4C02}.ds-sv.b{color:#60a5fa}.ds-sv.a{color:#f59e0b}
+.ds-sl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.ds-tabs{display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0}
+.ds-tab{font-size:12px;padding:8px 12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.ds-tab.on{color:#e2e8f0;border-bottom-color:#FC4C02}
+.ds-scroll{flex:1;overflow-y:auto}
+.ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
+.ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
+.ds-map-ctrl{position:absolute;top:10px;left:10px;background:rgba(17,19,24,.9);border:1px solid #2a3148;border-radius:6px;overflow:hidden}
+.ds-map-btn{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer;font-size:16px;font-weight:300;line-height:1}
+.ds-map-btn+.ds-map-btn{border-top:1px solid #2a3148}
+.ds-elev{height:72px;background:#111318;border-top:1px solid #1e2130;flex-shrink:0;position:relative;overflow:hidden;padding:5px 14px 0}
+.ds-elev-lbl{font-size:9px;color:#64748b}
+.ds-c3{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #1e2130;flex-shrink:0}
+.ds-card{padding:11px 14px;border-right:1px solid #1e2130}
+.ds-card:last-child{border-right:none}
+.ds-card-hd{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:5px;margin-bottom:7px}
+.ds-card-nums{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:7px}
+.ds-card-main{font-size:19px;font-weight:700;color:#fff;line-height:1}
+.ds-card-unit{font-size:11px;color:#64748b;margin-left:2px}
+.ds-card-sub{font-size:11px;color:#94a3b8}
+.ds-card-sublbl{font-size:10px;color:#64748b}
+.ds-spark{height:34px;width:100%}
+.ds-c4{display:grid;grid-template-columns:repeat(4,1fr);flex-shrink:0}
+.ds-c4card{padding:10px 14px;border-right:1px solid #1e2130;border-top:1px solid #1e2130}
+.ds-c4card:last-child{border-right:none}
+.ds-c4hd{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.ds-c4main{font-size:13px;font-weight:600;color:#fff}
+.ds-c4sub{font-size:10px;color:#64748b;margin-top:2px}
+.ds-rpanel{width:286px;flex-shrink:0;border-left:1px solid #1e2130;background:#111318;overflow-y:auto;display:flex;flex-direction:column}
+.ds-rp{padding:13px 15px;border-bottom:1px solid #1e2130}
+.ds-rp-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.ds-rp-t{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.ds-rp-link{font-size:10px;color:#60a5fa;cursor:pointer}
+.ds-conds{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
+.ds-cd-icon{font-size:18px;margin-bottom:3px}
+.ds-cd-val{font-size:12px;font-weight:700;color:#e2e8f0}
+.ds-cd-lbl{font-size:9px;color:#64748b;margin-top:1px}
+.ds-ai-wrap{display:flex;align-items:flex-start;gap:10px}
+.ds-ai-label{font-size:13px;font-weight:700;color:#4ade80;margin-bottom:4px}
+.ds-ai-body{font-size:11px;color:#94a3b8;line-height:1.5}
+.ds-view-full{width:100%;margin-top:9px;padding:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:7px;font-size:11px;color:#94a3b8;cursor:pointer;text-align:center}
+.ds-ins-list{display:flex;flex-direction:column;gap:8px}
+.ds-ins{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:#94a3b8;line-height:1.4}
+.ds-ins i{font-size:13px;margin-top:1px;flex-shrink:0}
+.ds-laps{width:100%;font-size:11px;border-collapse:collapse}
+.ds-laps th{color:#64748b;font-weight:500;text-align:left;padding:3px 5px 5px;border-bottom:1px solid #1e2130;font-size:10px}
+.ds-laps td{padding:5px 5px;color:#94a3b8;border-bottom:1px solid #161b27}
+.ds-laps td:first-child{color:#64748b}
 .hdr{background:#FFFFFF;padding:14px 16px 10px;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--b1);box-shadow:0 1px 8px rgba(0,0,0,.06)}
 .hdr-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .logo{display:flex;align-items:center;gap:8px}
@@ -289,6 +376,47 @@ window.parseFitFile = function(arrayBuffer, callback) {
 </head>
 <body>
 <div id="app-shell">
+<div id="desktop-shell" class="ds">
+  <div class="ds-sidebar">
+    <div class="ds-sb-top">
+      <div class="ds-brand">
+        <div class="ds-brand-logo"><svg viewBox="0 0 24 24"><path d="M13 3L4 14h8l-1 7 9-11h-8z"/></svg></div>
+        <div class="ds-brand-name">Athlete IQ</div>
+      </div>
+      <div class="ds-profile">
+        <div class="ds-avatar" id="ds-avatar-initials">MR</div>
+        <div>
+          <div class="ds-pname" id="ds-profile-name">Mikey</div>
+          <div class="ds-pwt" id="ds-profile-wt">--</div>
+          <div class="ds-pbadge" id="ds-profile-badge">Week 1</div>
+        </div>
+      </div>
+    </div>
+    <div class="ds-nav">
+      <div class="ds-ni" onclick="dsNav('home')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+      <div class="ds-ni on" id="ds-ni-activities" onclick="dsNav('activities')"><i class="ti ti-run"></i>Activities</div>
+      <div class="ds-ni" onclick="dsNav('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
+      <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
+      <div class="ds-ni" onclick="dsNav('nutrition')"><i class="ti ti-apple"></i>Nutrition</div>
+      <div class="ds-ni" onclick="dsNav('weather')"><i class="ti ti-cloud"></i>Weather</div>
+      <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
+      <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
+    </div>
+    <div class="ds-foot">
+      <div class="ds-ni" onclick="dsNav('settings')"><i class="ti ti-settings"></i>Settings</div>
+      <div class="ds-ni" onclick="dsNav('help')"><i class="ti ti-help-circle"></i>Help</div>
+    </div>
+  </div>
+  <div class="ds-main" id="ds-main-area">
+    <div id="ds-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>
+    </div>
+  </div>
+  <div class="ds-rpanel" id="ds-right-panel">
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>
+  </div>
+</div>
+<div id="mobile-content">
 <div class="hdr">
   <div class="hdr-top">
     <div class="logo"><div class="logo-ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><span class="logo-tx">Athlete IQ</span></div>
@@ -9874,6 +10002,259 @@ function renameRide(idx){
   toast('Renamed!');
 }
 
+// ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
+function isDesktop(){ return window.innerWidth >= 1024; }
+
+function dsNav(section){
+  document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
+  var mapping = {
+    home: showHomeDash,
+    activities: function(){ showScreen('HOME_DASH'); showHomeDash(); },
+    calendar: function(){ showScreen('CALENDAR'); },
+    analytics: function(){ showScreen('ANALYTICS'); },
+    nutrition: function(){ showScreen('FUEL'); },
+    weather: function(){ showScreen('WEATHER'); },
+    gear: function(){ openGarage(); },
+    aicoach: function(){ openAICoach(); },
+    settings: function(){ openSettings(); },
+  };
+  if(mapping[section]) try{ mapping[section](); }catch(e){}
+}
+
+function dsInitProfile(){
+  var name = (st.profile&&st.profile.name) || 'Mikey';
+  var wt = st.weight ? st.weight+'lbs' : '';
+  var initials = name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+  var el = document.getElementById('ds-avatar-initials'); if(el) el.textContent=initials;
+  var pn = document.getElementById('ds-profile-name'); if(pn) pn.textContent=name;
+  var pw = document.getElementById('ds-profile-wt'); if(pw) pw.textContent=wt;
+  var cw = getCurrentPlanWeek ? getCurrentPlanWeek() : 1;
+  var pb = document.getElementById('ds-profile-badge'); if(pb) pb.textContent='Week '+cw;
+}
+
+function openDesktopRideDetail(idx){
+  var r = st.rides[idx];
+  if(!r) return;
+  var FTP = parseInt(st.ftp||186);
+  var BWT = parseFloat(st.weight||160);
+  var wkg = r.avgPower&&BWT ? (r.avgPower/BWT).toFixed(2) : '--';
+  var tss = r.tss ? Math.round(r.tss) : '--';
+  var dtStr = '';
+  if(r.startTime){
+    var dt=new Date(r.startTime);
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var hrs12=dt.getHours()%12||12, mins=('0'+dt.getMinutes()).slice(-2), ampm=dt.getHours()>=12?'PM':'AM';
+    dtStr=months[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear()+' &middot; '+hrs12+':'+mins+' '+ampm+' &middot; '+(r.sportType||'Road Cycling');
+  } else if(r.date){ dtStr=r.date+' &middot; '+(r.sportType||'Road Cycling'); }
+
+  var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
+
+  var main = document.getElementById('ds-content');
+  if(!main) return;
+
+  // Build route SVG path from GPS
+  function buildRouteSVG(lats,lons){
+    if(!lats||lats.length<2) return '<text x="300" y="110" text-anchor="middle" fill="#64748b" font-size="12">No GPS data</text>';
+    var minLat=Math.min.apply(null,lats),maxLat=Math.max.apply(null,lats);
+    var minLon=Math.min.apply(null,lons),maxLon=Math.max.apply(null,lons);
+    var pad=0.05;
+    var latR=maxLat-minLat||0.01, lonR=maxLon-minLon||0.01;
+    var W=560,H=180;
+    var points=lats.map(function(la,i){
+      var x=((lons[i]-minLon)/lonR)*(W*(1-2*pad))+W*pad;
+      var y=H-(((la-minLat)/latR)*(H*(1-2*pad))+H*pad);
+      return x.toFixed(1)+','+y.toFixed(1);
+    }).join(' ');
+    return '<polyline points="'+points+'" fill="none" stroke="#FC4C02" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+
+      '<circle cx="'+lats.map(function(la,i){return((lons[i]-minLon)/lonR)*(W*(1-2*pad))+W*pad;})[0].toFixed(1)+'" cy="'+
+      (H-(((lats[0]-minLat)/latR)*(H*(1-2*pad))+H*pad)).toFixed(1)+'" r="6" fill="#4ade80" stroke="#fff" stroke-width="2"/>'+
+      '<circle cx="'+lats.map(function(la,i){return((lons[i]-minLon)/lonR)*(W*(1-2*pad))+W*pad;})[lats.length-1].toFixed(1)+'" cy="'+
+      (H-(((lats[lats.length-1]-minLat)/latR)*(H*(1-2*pad))+H*pad)).toFixed(1)+'" r="5" fill="#FC4C02" stroke="#fff" stroke-width="2"/>'; 
+  }
+
+  // Build elevation SVG
+  function buildElevSVG(ele){
+    if(!ele||ele.length<2) return '';
+    var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
+    var W=560,H=44;
+    var pts=ele.map(function(v,i){
+      return ((i/(ele.length-1))*W).toFixed(1)+','+(H-((v-mn)/rng*(H-8)+4)).toFixed(1);
+    }).join(' ');
+    return '<defs><linearGradient id="dseg" x1="0" x2="0" y1="0" y2="1">'+
+      '<stop offset="0%" stop-color="#FC4C02" stop-opacity=".5"/>'+
+      '<stop offset="100%" stop-color="#FC4C02" stop-opacity=".05"/></linearGradient></defs>'+
+      '<polygon points="0,'+H+' '+pts+' '+W+','+H+'" fill="url(#dseg)"/>'+
+      '<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="1.5"/>';
+  }
+
+  var routeSVG = buildRouteSVG(lats,lons);
+  var elevSVG = buildElevSVG(r.chartEle);
+
+  main.innerHTML =
+    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">'+
+    '<div class="ds-mhdr">'+
+      '<div>'+
+        '<div class="ds-back" onclick="document.getElementById(\'ds-content\').innerHTML=\'<div style=\\"flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px\\">Select a ride to view details</div>\'">&lsaquo; Back</div>'+
+        '<div class="ds-title">'+(r.name||'Activity')+'</div>'+
+        '<div class="ds-subtitle">'+dtStr+'</div>'+
+      '</div>'+
+      '<div class="ds-actions">'+
+        '<div class="ds-btn"><i class="ti ti-share"></i> Share</div>'+
+        '<div class="ds-btn"><i class="ti ti-download"></i> Export</div>'+
+        '<div class="ds-btn"><i class="ti ti-dots"></i></div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="ds-stats">'+
+      '<div class="ds-stat"><div class="ds-sv">'+(r.duration||'--')+'</div><div class="ds-sl">Time</div></div>'+
+      '<div class="ds-stat"><div class="ds-sv">'+(r.distance?r.distance+' mi':'--')+'</div><div class="ds-sl">Distance</div></div>'+
+      '<div class="ds-stat"><div class="ds-sv o">'+wkg+' W/kg</div><div class="ds-sl">Intensity</div></div>'+
+      '<div class="ds-stat"><div class="ds-sv b">'+(r.avgHR?r.avgHR+' bpm':'--')+'</div><div class="ds-sl">Avg HR</div></div>'+
+      '<div class="ds-stat"><div class="ds-sv a">'+tss+' <span style="font-size:11px">TSS</span></div><div class="ds-sl">Training stress</div></div>'+
+      '<div class="ds-stat"><div class="ds-sv">'+(r.calories?r.calories+' Cal':'--')+'</div><div class="ds-sl">Calories</div></div>'+
+    '</div>'+
+    '<div class="ds-tabs"><div class="ds-tab on">Route</div><div class="ds-tab">Charts</div><div class="ds-tab">Laps</div><div class="ds-tab">Breakdown</div></div>'+
+    '<div class="ds-scroll">'+
+      '<div class="ds-mapbox">'+
+        '<div class="ds-map-base"></div>'+
+        '<svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 560 180" preserveAspectRatio="xMidYMid slice">'+
+          '<line x1="0" y1="45" x2="560" y2="45" stroke="#2a3a2a" stroke-width="5" opacity=".5"/>'+
+          '<line x1="0" y1="140" x2="560" y2="140" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
+          '<line x1="160" y1="0" x2="160" y2="180" stroke="#2a3a2a" stroke-width="3" opacity=".4"/>'+
+          '<line x1="340" y1="0" x2="340" y2="180" stroke="#2a3a2a" stroke-width="4" opacity=".5"/>'+
+          routeSVG+
+        '</svg>'+
+        '<div class="ds-map-ctrl"><div class="ds-map-btn">+</div><div class="ds-map-btn">&minus;</div></div>'+
+      '</div>'+
+      '<div class="ds-elev">'+
+        '<div class="ds-elev-lbl">Elevation</div>'+
+        '<svg style="width:100%;height:48px" viewBox="0 0 560 48" preserveAspectRatio="none">'+elevSVG+'</svg>'+
+      '</div>'+
+      '<div class="ds-c3">'+
+        '<div class="ds-card">'+
+          '<div class="ds-card-hd" style="color:#FC4C02"><i class="ti ti-bolt" style="font-size:11px"></i> POWER</div>'+
+          '<div class="ds-card-nums">'+
+            '<div><span class="ds-card-main">'+(r.avgPower||'--')+'</span><span class="ds-card-unit">w NP</span></div>'+
+            '<div><span class="ds-card-sub">'+(r.maxPower||'--')+'</span><span class="ds-card-sublbl">w Max</span></div>'+
+          '</div>'+
+          '<svg class="ds-spark" viewBox="0 0 240 34" preserveAspectRatio="none"><path d="M0,28 C20,24 40,18 60,14 C80,10 100,16 120,12 C140,8 160,14 180,10 C200,6 220,12 240,8" fill="none" stroke="#FC4C02" stroke-width="1.5" opacity=".9"/><path d="M0,28 C20,24 40,18 60,14 C80,10 100,16 120,12 C140,8 160,14 180,10 C200,6 220,12 240,8 L240,34 L0,34 Z" fill="#FC4C02" fill-opacity=".1"/></svg>'+
+        '</div>'+
+        '<div class="ds-card">'+
+          '<div class="ds-card-hd" style="color:#e24b4a"><i class="ti ti-heart" style="font-size:11px"></i> HEART RATE</div>'+
+          '<div class="ds-card-nums">'+
+            '<div><span class="ds-card-main" style="color:#60a5fa">'+(r.avgHR||'--')+'</span><span class="ds-card-unit">bpm Avg</span></div>'+
+            '<div><span class="ds-card-sub">'+(r.maxHR||'--')+'</span><span class="ds-card-sublbl">Max</span></div>'+
+          '</div>'+
+          '<svg class="ds-spark" viewBox="0 0 240 34" preserveAspectRatio="none"><path d="M0,24 C20,20 40,16 60,18 C80,20 100,12 120,8 C140,4 160,12 180,8 C200,4 220,10 240,12" fill="none" stroke="#e24b4a" stroke-width="1.5" opacity=".9"/><path d="M0,24 C20,20 40,16 60,18 C80,20 100,12 120,8 C140,4 160,12 180,8 C200,4 220,10 240,12 L240,34 L0,34 Z" fill="#e24b4a" fill-opacity=".1"/></svg>'+
+        '</div>'+
+        '<div class="ds-card">'+
+          '<div class="ds-card-hd" style="color:#a78bfa"><i class="ti ti-rotate-clockwise" style="font-size:11px"></i> CADENCE</div>'+
+          '<div class="ds-card-nums">'+
+            '<div><span class="ds-card-main">'+(r.avgCadence||'--')+'</span><span class="ds-card-unit">rpm Avg</span></div>'+
+            '<div><span class="ds-card-sub">'+(r.maxCadence||'--')+'</span><span class="ds-card-sublbl">Max</span></div>'+
+          '</div>'+
+          '<svg class="ds-spark" viewBox="0 0 240 34" preserveAspectRatio="none"><path d="M0,18 C20,16 40,20 60,14 C80,8 100,14 120,16 C140,18 160,12 180,10 C200,8 220,12 240,14" fill="none" stroke="#a78bfa" stroke-width="1.5" opacity=".9"/><path d="M0,18 C20,16 40,20 60,14 C80,8 100,14 120,16 C140,18 160,12 180,10 C200,8 220,12 240,14 L240,34 L0,34 Z" fill="#a78bfa" fill-opacity=".1"/></svg>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ds-c4">'+
+        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-gauge" style="font-size:11px"></i> SPEED</div><div class="ds-c4main">'+(r.avgSpeed?r.avgSpeed+' mph':'--')+'</div><div class="ds-c4sub">'+(r.maxSpeed?r.maxSpeed+' max':'')+'</div></div>'+
+        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-mountain" style="font-size:11px"></i> ELEVATION</div><div class="ds-c4main">'+(r.elevation?r.elevation+' ft':'--')+'</div><div class="ds-c4sub">gain</div></div>'+
+        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-temperature" style="font-size:11px"></i> TEMPERATURE</div><div class="ds-c4main">'+(r.avgTemp?r.avgTemp+'°F':'--')+'</div><div class="ds-c4sub">'+(r.maxTemp?r.maxTemp+'° max':'')+'</div></div>'+
+        '<div class="ds-c4card"><div class="ds-c4hd"><i class="ti ti-wind" style="font-size:11px"></i> WIND</div><div class="ds-c4main">--</div><div class="ds-c4sub">from conditions</div></div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+
+  // Right panel
+  var rp = document.getElementById('ds-right-panel');
+  if(rp){
+    // Fetch weather for right panel
+    var lat = lats&&lats[0] ? lats[0] : 42.9634;
+    var lon = lons&&lons[0] ? lons[0] : -85.6681;
+    rp.innerHTML =
+      '<div class="ds-rp">'+
+        '<div class="ds-rp-hd"><div class="ds-rp-t">Conditions</div><div class="ds-rp-link">View details &rsaquo;</div></div>'+
+        '<div class="ds-conds" id="ds-conds-grid">'+
+          '<div><div class="ds-cd-icon">🌡</div><div class="ds-cd-val" id="ds-cond-temp">--</div><div class="ds-cd-lbl">Temp</div></div>'+
+          '<div><div class="ds-cd-icon">&#10145;</div><div class="ds-cd-val" id="ds-cond-wind">--</div><div class="ds-cd-lbl">Wind</div></div>'+
+          '<div><div class="ds-cd-icon">💧</div><div class="ds-cd-val" id="ds-cond-hum">--</div><div class="ds-cd-lbl">Humidity</div></div>'+
+          '<div><div class="ds-cd-icon">👁</div><div class="ds-cd-val">10 mi</div><div class="ds-cd-lbl">Visibility</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ds-rp">'+
+        '<div class="ds-rp-t">AI Ride Summary</div>'+
+        '<div class="ds-ai-wrap">'+
+          '<div><div class="ds-ai-label">Great Ride! 🎉</div><div class="ds-ai-body">Strong aerobic effort with good pacing and consistent power.</div></div>'+
+          '<svg width="68" height="68" viewBox="0 0 68 68" style="flex-shrink:0">'+
+            '<circle cx="34" cy="34" r="26" fill="none" stroke="#1e2130" stroke-width="5"/>'+
+            '<circle cx="34" cy="34" r="26" fill="none" stroke="#4ade80" stroke-width="5" stroke-dasharray="138 163" stroke-dashoffset="39" stroke-linecap="round" transform="rotate(-90 34 34)"/>'+
+            '<text x="34" y="31" text-anchor="middle" font-size="16" font-weight="700" fill="#fff">'+(r.rideScore||84)+'</text>'+
+            '<text x="34" y="42" text-anchor="middle" font-size="7" fill="#64748b" letter-spacing="0.8">RIDE SCORE</text>'+
+          '</svg>'+
+        '</div>'+
+        '<div class="ds-view-full">View Full Analysis</div>'+
+      '</div>'+
+      '<div class="ds-rp">'+
+        '<div class="ds-rp-t">Key Insights</div>'+
+        '<div class="ds-ins-list">'+
+          '<div class="ds-ins"><i class="ti ti-bolt" style="color:#FC4C02"></i>Held steady power with consistent pacing throughout.</div>'+
+          '<div class="ds-ins"><i class="ti ti-mountain" style="color:#f59e0b"></i>Strong climbing — best 20-min power on elevation.</div>'+
+          '<div class="ds-ins"><i class="ti ti-heart" style="color:#e24b4a"></i>HR drift minimal. Excellent aerobic conditioning.</div>'+
+          '<div class="ds-ins"><i class="ti ti-droplet" style="color:#60a5fa"></i>Hydration was on point. Keep it up!</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ds-rp">'+
+        '<div class="ds-rp-hd"><div class="ds-rp-t">Laps</div><div class="ds-rp-link">View all &rsaquo;</div></div>'+
+        '<table class="ds-laps"><tr><th>Lap</th><th>Dist</th><th>Time</th><th>Pwr</th><th>HR</th></tr></table>'+
+        '<div id="ds-laps-body"></div>'+
+      '</div>';
+
+    // Populate laps if available
+    if(r.laps&&r.laps.length){
+      var lbody = document.getElementById('ds-laps-body');
+      if(lbody){
+        var lt='<table class="ds-laps">';
+        r.laps.slice(0,8).forEach(function(lap,i){
+          lt+='<tr><td>'+(i+1)+'</td><td>'+(lap.distance?lap.distance.toFixed(1)+' mi':'--')+'</td><td>'+(lap.time||'--')+'</td><td>'+(lap.avgPower?lap.avgPower+'w':'--')+'</td><td>'+(lap.avgHR?lap.avgHR:'--')+'</td></tr>';
+        });
+        lt+='</table>';
+        lbody.innerHTML=lt;
+      }
+    }
+
+    // Fetch current conditions
+    fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+      .then(function(res){return res.json();})
+      .then(function(wx){
+        if(wx&&wx.current){
+          var c=wx.current;
+          var dirs=['N','NE','E','SE','S','SW','W','NW'];
+          var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+          var tmp=document.getElementById('ds-cond-temp'); if(tmp) tmp.textContent=Math.round(c.temperature_2m)+'°F';
+          var wnd=document.getElementById('ds-cond-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m);
+          var hum=document.getElementById('ds-cond-hum'); if(hum) hum.textContent=Math.round(c.relativehumidity_2m)+'%';
+        }
+      }).catch(function(){});
+  }
+}
+
+// Intercept openRideDetail on desktop
+var _origOpenRideDetail = null;
+window.addEventListener('load', function(){
+  dsInitProfile();
+  _origOpenRideDetail = openRideDetail;
+  openRideDetail = function(idx){
+    if(isDesktop()){
+      // Highlight nav
+      document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
+      var act=document.getElementById('ds-ni-activities'); if(act) act.classList.add('on');
+      openDesktopRideDetail(idx);
+    } else {
+      _origOpenRideDetail(idx);
+    }
+  };
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 function openRideDetail(idx){
   var r = st.rides[idx];
   if(!r) return;
@@ -18259,6 +18640,7 @@ window.onload = function(){
     More
   </button>
 </div>
+</div></div>
 </div>
 </body>
 </html>
