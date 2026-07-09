@@ -10057,10 +10057,17 @@ function dsShowDashboard(){
       _rDeduped[_rDeduped.indexOf(ex)]=r;_rSeen[key]=r;
     }
   });
+  function _normDate(d){
+    if(!d) return '';
+    // Normalize "2026-6-7" to "2026-06-07" for correct string sort
+    var p=d.split('-');
+    if(p.length===3) return p[0]+'-'+(p[1].length===1?'0':'')+p[1]+'-'+(p[2].length===1?'0':'')+p[2];
+    return d;
+  }
   var recent = _rDeduped.filter(function(r){
     return !/virtual|weight|strength/i.test(r.sportType||r.type||'');
   }).sort(function(a,b){
-    return (b.date||'')>(a.date||'')?1:-1;
+    return _normDate(b.date)>_normDate(a.date)?1:-1;
   }).slice(0,3);
   var ftp = parseInt(st.ftp||186);
   var bwt = parseFloat(st.weight||162.5);
