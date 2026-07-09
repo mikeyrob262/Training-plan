@@ -15905,7 +15905,7 @@ function drawWindMap(containerEl, ride, wind){
   if(!lats||lats.length<2||!lons||lons.length<2) return;
   if(!window._wmCount) window._wmCount=0; window._wmCount++;
   var mapId='wm-'+window._wmCount;
-  containerEl.innerHTML='<div id="'+mapId+'" style="width:100%;height:220px"></div>';
+  containerEl.innerHTML='<div id="'+mapId+'" style="width:100%;height:220px;border-radius:14px;overflow:hidden"></div>';
   setTimeout(function(){
     var el=document.getElementById(mapId);
     if(!el){ console.error('WM: el not found', mapId); return; }
@@ -16308,7 +16308,7 @@ function showWeatherHistory(){
     var _dpLats=route.lats||route.gpsLats, _dpLons=route.lons||route.gpsLons;
     if(_dpLats && _dpLats.length>1){
       var mapCard=document.createElement('div');
-      mapCard.style.cssText='margin:0 0 6px;border-radius:14px;overflow:hidden;height:220px;background:var(--s2);position:relative';
+      mapCard.style.cssText='margin:0 0 6px;height:220px;background:var(--s2);position:relative';
       body.appendChild(mapCard);
       var leg=document.createElement('div');
       leg.style.cssText='display:flex;gap:12px;justify-content:center;padding:4px 0 10px';
