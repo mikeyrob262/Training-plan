@@ -15915,7 +15915,7 @@ function drawWindMap(containerEl, ride, wind){
       if(!el) return;
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false});
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
       function classifySeg(idx){
         if(!wind||wind.winddirection_10m==null) return '#A8C4E0';
         var p1=pts[Math.max(0,idx-1)], p2=pts[Math.min(pts.length-1,idx+1)];
@@ -15929,10 +15929,10 @@ function drawWindMap(containerEl, ride, wind){
       }
       if(wind&&wind.winddirection_10m!=null){
         for(var si=0;si<pts.length-1;si++){
-          L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:.9}).addTo(map);
+          L.polyline([pts[si],pts[si+1]],{color:'#000',weight:6,opacity:.4}).addTo(map); L.polyline([pts[si],pts[si+1]],{color:classifySeg(si),weight:4,opacity:1}).addTo(map);
         }
       } else {
-        L.polyline(pts,{color:'#A8C4E0',weight:4,opacity:.9}).addTo(map);
+        L.polyline(pts,{color:'#000',weight:6,opacity:.4}).addTo(map); L.polyline(pts,{color:'#378ADD',weight:4,opacity:1}).addTo(map);
       }
       var bl=L.polyline(pts,{opacity:0}).addTo(map);
       map.fitBounds(bl.getBounds(),{padding:[20,20]});
