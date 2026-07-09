@@ -10042,15 +10042,10 @@ function dsNav(section){
 }
 
 function dsShowDashboard(){
-  console.log('DASH START rides=', (st.rides||[]).length, 'mc=', !!document.getElementById('ds-content'));
-  // If desktop shell not in DOM yet, retry after paint
-  if(!document.getElementById('ds-content')){
-    setTimeout(dsShowDashboard, 200);
-    return;
-  }
-  try{
   var mc = document.getElementById('ds-content');
-  if(!mc) return;
+  console.log('DASH START rides=', (st.rides||[]).length, 'mc=', !!mc, 'isDesktop=', isDesktop());
+  if(!mc){ setTimeout(dsShowDashboard, 300); return; }
+  try{
   var rides = (st.rides||[]).slice().sort(function(a,b){ return (b.date||'')>(a.date||'')?1:-1; });
   var recent = rides.slice(0,3);
   var ftp = parseInt(st.ftp||186);
