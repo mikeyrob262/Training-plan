@@ -4357,7 +4357,7 @@ function doSwap(w,idx,btn){
   var sl=sessName.toLowerCase();
   var opts=[];
   // Cycling options
-  var cycling=['Outdoor Ride','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Zwift Climb','Zwift Race','Easy Spin 30 min'];
+  var cycling=['Zwift Ride','Outdoor Ride','Zwift Zone 2','Zwift Intervals','Zwift Sweet Spot','Zwift Climb','Zwift Race','Easy Spin 30 min'];
   // Run options  
   var running=['Easy Run','Tempo Run','Fartlek Run','Hill Repeats','400m Repeats x8','800m Repeats x6','Mile Repeats x4','Track Intervals','Treadmill Run','Walk 30 min'];
   // Swim options
