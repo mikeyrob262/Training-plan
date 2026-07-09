@@ -10288,7 +10288,6 @@ function dsShowDashboard(){
     var stype=r.sportType||r.type||'Ride';
     var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
-    var ridx=rides.indexOf(r);
     var actualIdx=(st.rides||[]).indexOf(r);
     ar.onclick=(function(i){return function(){openRideDetail(i);};})(actualIdx);
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
@@ -10696,9 +10695,6 @@ function openDesktopRideDetail(idx){
     // GPS might be stored under different keys - check all possibilities
     var mapLats = _r2.gpsLats||_r2.lats||_r2.polylineLats||r.gpsLats||r.lats;
     var mapLons = _r2.gpsLons||_r2.lons||_r2.polylineLons||r.gpsLons||r.lons;
-    // Log all keys with GPS data
-    var gpsKey = Object.keys(_r2).filter(function(k){return k.toLowerCase().indexOf('lat')>=0||k.toLowerCase().indexOf('lon')>=0||k.toLowerCase().indexOf('gps')>=0;});
-    console.log('GPS KEYS on ride:', gpsKey, 'idx:', idx);
     if(mapDiv && mapLats && mapLats.length > 1 && mapLons && mapLons.length > 1){
       mapDiv.innerHTML = buildRouteMap(mapLats, mapLons, r.chartPwr||[], FTP);
     } else if(mapDiv){
