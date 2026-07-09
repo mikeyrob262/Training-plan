@@ -1,7 +1,7 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    return new Response(`<!DOCTYPE html><!-- BUST1783636350 v1783636350 -->
+    return new Response(`<!DOCTYPE html><!-- BUST1783636500 v1783636500 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
@@ -11655,8 +11655,8 @@ function openDesktopRideDetail(idx){
     var dt=new Date(r.startTime);
     var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var h12=dt.getHours()%12||12,mn=('0'+dt.getMinutes()).slice(-2),ap=dt.getHours()>=12?'PM':'AM';
-    dtStr=mo[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear()+' &middot; '+h12+':'+mn+' '+ap+' &middot; '+(r.sportType||'Road Cycling');
-  } else if(r.date){ dtStr=r.date+' &middot; '+(r.sportType||'Road Cycling'); }
+    dtStr=(r.sportType||'Road Cycling')+' &middot; '+mo[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear()+' &middot; '+h12+':'+mn+' '+ap;
+  } else if(r.date){ dtStr=(r.sportType||'Road Cycling')+' &middot; '+r.date; }
 
   var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
   var main=document.getElementById('ds-content');
@@ -11671,32 +11671,42 @@ function openDesktopRideDetail(idx){
   var bike=(st.bikes||[])[0]||null;
   if(r.gearName)(st.bikes||[]).forEach(function(b){if(b.name===r.gearName)bike=b;});
 
+  // Elevation profile with ft axis + mileage axis
   function elevProfile(ele,distMi){
-    if(!ele||ele.length<2) return '';
+    if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">No elevation data</div>';
     var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
-    var W=800,H=80;
-    var pts=ele.map(function(v,i){return (i/(ele.length-1)*W).toFixed(1)+','+(H-12-((v-mn)/rng*(H-28)+8)).toFixed(1);}).join(' ');
-    var fill='0,'+(H-12)+' '+pts+' '+W+','+(H-12);
+    var W=800,H=100,padL=36,padB=16;
+    var iW=W-padL, iH=H-padB;
+    var pts=ele.map(function(v,i){return (padL+i/(ele.length-1)*iW).toFixed(1)+','+(iH-((v-mn)/rng*(iH-8)+4)).toFixed(1);}).join(' ');
+    var fill=padL+','+iH+' '+pts+' '+W+','+iH;
+    // Y axis labels (ft)
+    var yLabels='';
+    for(var yi=0;yi<=3;yi++){
+      var yPct=yi/3;
+      var yVal=Math.round(mn+rng*yPct);
+      var yPos=(iH-yPct*(iH-8)-4).toFixed(0);
+      yLabels+='<text x="'+(padL-3)+'" y="'+yPos+'" text-anchor="end" font-size="9" fill="#64748b" font-family="sans-serif">'+yVal+' ft</text>';
+    }
+    // X axis mileage
+    var xLabels='';
     var d=parseFloat(distMi)||0;
-    var labels='';
-    for(var li=0;li<=5;li++){
-      var x=Math.round(li/5*W);
-      var mi=d?(li/5*d).toFixed(0):'';
-      labels+='<text x="'+x+'" y="'+(H-1)+'" text-anchor="'+(li===0?'start':li===5?'end':'middle')+'" font-size="9" fill="#64748b" font-family="sans-serif">'+mi+(mi?' mi':'')+'</text>';
+    for(var xi=0;xi<=5;xi++){
+      var xPos=(padL+xi/5*iW).toFixed(0);
+      var mi=d?(xi/5*d).toFixed(0)+'':xi===0?'0':'';
+      xLabels+='<text x="'+xPos+'" y="'+(H-2)+'" text-anchor="'+(xi===0?'start':xi===5?'end':'middle')+'" font-size="9" fill="#64748b" font-family="sans-serif">'+mi+(mi&&xi>0?' mi':'')+'</text>';
     }
     return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px" preserveAspectRatio="none">'
-      +'<defs><linearGradient id="elg" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FC4C02" stop-opacity=".5"/><stop offset="100%" stop-color="#FC4C02" stop-opacity=".03"/></linearGradient></defs>'
-      +'<polygon points="'+fill+'" fill="url(#elg)"/>'
+      +'<defs><linearGradient id="elg4" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FC4C02" stop-opacity=".6"/><stop offset="100%" stop-color="#FC4C02" stop-opacity=".02"/></linearGradient></defs>'
+      +'<polygon points="'+fill+'" fill="url(#elg4)"/>'
       +'<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="2"/>'
-      +labels+'</svg>';
+      +yLabels+xLabels+'</svg>';
   }
 
-  function sparkline(data,color){
-    if(!data||!data.length){
-      return '<svg style="width:100%;height:44px" viewBox="0 0 300 44"><line x1="0" y1="22" x2="300" y2="22" stroke="'+color+'" stroke-width="1" opacity=".2"/></svg>';
-    }
+  // Real sparkline
+  function spark(data,color){
+    if(!data||!data.length) return '<div style="height:48px"></div>';
     var mn=Math.min.apply(null,data),mx=Math.max.apply(null,data),rng=mx-mn||1;
-    var W=300,H=44;
+    var W=300,H=48;
     var pts=data.map(function(v,i){return (i/(data.length-1)*W).toFixed(1)+','+(H-4-((v-mn)/rng*(H-12)+4)).toFixed(1);}).join(' ');
     return '<svg style="width:100%;height:'+H+'px" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">'
       +'<polygon points="0,'+(H-4)+' '+pts+' '+W+','+(H-4)+'" fill="'+color+'" fill-opacity=".15"/>'
@@ -11704,16 +11714,14 @@ function openDesktopRideDetail(idx){
       +'</svg>';
   }
 
-  // Laps
-  var lapsHtml='';
+  // Laps table
+  var lapsHtml='<div style="font-size:11px;color:#64748b;padding:4px 0">No lap data available.</div>';
   if(r.laps&&r.laps.length){
-    lapsHtml='<table class="ds-laps" style="margin-top:4px"><tr><th>Lap</th><th>Distance</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
+    lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Distance</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
     r.laps.slice(0,8).forEach(function(lap,i){
       lapsHtml+='<tr><td>'+(i+1)+'</td><td>'+(lap.distance?parseFloat(lap.distance).toFixed(1)+' mi':'--')+'</td><td>'+(lap.time||'--')+'</td><td>'+(lap.avgPower||lap.avgPwr?(lap.avgPower||lap.avgPwr)+' w':'--')+'</td><td>'+(lap.avgHR?lap.avgHR+' bpm':'--')+'</td></tr>';
     });
     lapsHtml+='</table>';
-  } else {
-    lapsHtml='<div style="font-size:11px;color:#64748b">No lap data available.</div>';
   }
 
   main.innerHTML=
@@ -11721,179 +11729,139 @@ function openDesktopRideDetail(idx){
 
     // HEADER
     '<div style="padding:10px 18px 8px;border-bottom:1px solid #1e2130;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
-      '<div style="display:flex;align-items:center;gap:12px">'+
-        '<div id="rd-back" style="font-size:12px;color:#64748b;cursor:pointer;display:flex;align-items:center;gap:4px">'+
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg> Back</div>'+
+      '<div style="display:flex;align-items:center;gap:14px">'+
+        '<div id="rd-back" style="font-size:12px;color:#94a3b8;cursor:pointer;display:flex;align-items:center;gap:4px;flex-shrink:0">'+
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></div>'+
         '<div>'+
-          '<div style="display:flex;align-items:center;gap:6px">'+
-            '<span style="font-size:18px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
+          '<div style="display:flex;align-items:center;gap:7px">'+
+            '<span style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
             '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
           '</div>'+
           '<div style="font-size:11px;color:#64748b;margin-top:2px">'+dtStr+'</div>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
-        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px">'+
-          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg> Share</div>'+
-        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px">'+
-          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export</div>'+
-        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 8px;border-radius:6px;cursor:pointer">&#8943;</div>'+
-        '<div id="rd-wx-badge" style="font-size:11px;color:#fff;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;display:flex;align-items:center;gap:5px">'+
-          '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>'+
-          '<span id="rd-wx-temp">--</span>'+
-        '</div>'+
+        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share</div>'+
+        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</div>'+
+        '<div style="font-size:13px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
       '</div>'+
     '</div>'+
 
-    // STATS BAR - 6 columns matching reference
-    '<div style="display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #1e2130;flex-shrink:0;background:#111318">'+
-      '<div style="padding:10px 8px;text-align:center;border-right:1px solid #1e2130">'+
-        '<div style="font-size:18px;font-weight:700;color:#fff;line-height:1">'+(r.duration||'--')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Time</div></div>'+
-      '<div style="padding:10px 8px;text-align:center;border-right:1px solid #1e2130">'+
-        '<div style="font-size:18px;font-weight:700;color:#fff;line-height:1">'+(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Distance</div></div>'+
-      '<div style="padding:10px 8px;text-align:center;border-right:1px solid #1e2130">'+
-        '<div style="font-size:18px;font-weight:700;color:#FC4C02;line-height:1">'+wkg+(wkg!=='--'?' W/kg':'')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Intensity</div></div>'+
-      '<div style="padding:10px 8px;text-align:center;border-right:1px solid #1e2130">'+
-        '<div style="font-size:18px;font-weight:700;color:#E24B4A;line-height:1">'+(r.avgHR?r.avgHR+' bpm':'--')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Avg HR</div></div>'+
-      '<div style="padding:10px 8px;text-align:center;border-right:1px solid #1e2130">'+
-        '<div style="font-size:18px;font-weight:700;color:#F59E0B;line-height:1">'+tss+(tss!=='--'?' TSS':'')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Training Stress</div></div>'+
-      '<div style="padding:10px 8px;text-align:center">'+
-        '<div style="font-size:18px;font-weight:700;color:#fff;line-height:1">'+(r.calories?Math.round(r.calories).toLocaleString()+' Cal':'--')+'</div>'+
-        '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">Calories</div></div>'+
+    // STATS BAR — 7 cols matching reference exactly
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid #1e2130;flex-shrink:0;background:#111318">'+
+      statCell(r.duration||'--','Time','#fff')+
+      statCell(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance','#fff')+
+      statCell(wkg+(wkg!=='--'?' W/kg':''),'Intensity','#FC4C02')+
+      statCell(r.avgHR?r.avgHR+' bpm':'--','Avg HR','#E24B4A')+
+      statCell(r.avgPwr?r.avgPwr+' w':'--','Avg Power','#fff')+
+      statCell(tss+(tss!=='--'?' TSS':''),'Training Stress','#F59E0B')+
+      statCell(r.calories?Math.round(r.calories).toLocaleString()+' Cal':'--','Calories','#fff',true)+
     '</div>'+
 
     // TABS
     '<div style="display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0">'+
-      '<div class="ds-tab on" data-tab="route">Route</div>'+
-      '<div class="ds-tab" data-tab="charts">Charts</div>'+
-      '<div class="ds-tab" data-tab="laps">Laps</div>'+
-      '<div class="ds-tab" data-tab="segments">Segments</div>'+
-      '<div class="ds-tab" data-tab="breakdown">Breakdown</div>'+
+      '<div class="ds-tab on" data-rdtab="overview">Overview</div>'+
+      '<div class="ds-tab" data-rdtab="map">Map</div>'+
+      '<div class="ds-tab" data-rdtab="charts">Charts</div>'+
+      '<div class="ds-tab" data-rdtab="laps">Laps</div>'+
+      '<div class="ds-tab" data-rdtab="segments">Segments</div>'+
+      '<div class="ds-tab" data-rdtab="breakdown">Breakdown</div>'+
+      '<div class="ds-tab" data-rdtab="analytics">Analytics</div>'+
     '</div>'+
 
-    // SCROLL
     '<div style="flex:1;overflow-y:auto" id="rd-scroll">'+
 
       // MAP
-      '<div id="rd-map" style="height:320px;background:#1c2535;position:relative"></div>'+
+      '<div id="rd-map" style="height:320px;background:#1c2535;position:relative;flex-shrink:0"></div>'+
 
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
-        '<div style="padding:10px 16px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:16px;font-weight:700;color:#fff">'+(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--')+'</div>'+
-          '<div style="font-size:10px;color:#64748b;margin-top:2px">Distance</div></div>'+
-        '<div style="padding:10px 16px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:16px;font-weight:700;color:#fff">'+(r.elev?Math.round(r.elev)+' ft':'--')+'</div>'+
-          '<div style="font-size:10px;color:#64748b;margin-top:2px">Elevation Gain</div></div>'+
-        '<div style="padding:10px 16px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:16px;font-weight:700;color:#fff">'+(r.maxElev?Math.round(r.maxElev)+' ft':'701 ft')+'</div>'+
-          '<div style="font-size:10px;color:#64748b;margin-top:2px">Max Elevation</div></div>'+
-        '<div style="padding:10px 16px">'+
-          '<div style="font-size:16px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd+' mph':'--')+'</div>'+
-          '<div style="font-size:10px;color:#64748b;margin-top:2px">Avg Speed</div></div>'+
+        miniStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance',true)+
+        miniStat(r.elev?Math.round(r.elev)+' ft':'--','Elevation Gain',true)+
+        miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'701 ft','Max Elevation',true)+
+        miniStat(avgSpd!=='--'?avgSpd+' mph':'--','Avg Speed',false)+
       '</div>'+
 
       // ELEVATION PROFILE
-      '<div style="background:#0d0f14;padding:8px 14px 2px;border-bottom:1px solid #1e2130">'+
-        elevProfile(r.chartEle, r.distance)+
+      '<div style="background:#0d0f14;padding:8px 10px 2px;border-bottom:1px solid #1e2130">'+
+        elevProfile(r.chartEle,r.distance)+
       '</div>'+
 
-      // POWER / HR / CADENCE / SPEED - 4 metric cards
+      // 4 METRIC CARDS
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid #1e2130;background:#0d0f14">'+
 
         '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Power</div>'+
-          '<div style="display:flex;gap:14px;align-items:baseline;margin-bottom:4px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff;line-height:1">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">NP</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.ifPct?r.ifPct+'%':'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">IF</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Max</div></div>'+
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
+            '<span style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em">Power</span></div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
           '</div>'+
-          sparkline(r.chartPwr,'#FC4C02')+
+          spark(r.chartPwr,'#FC4C02')+
         '</div>'+
 
         '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:9px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Heart Rate</div>'+
-          '<div style="display:flex;gap:14px;align-items:baseline;margin-bottom:4px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#60A5FA;line-height:1">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">bpm Avg</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Max</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.ifPct?(r.ifPct/10).toFixed(1):'3.1')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Aerobic TE</div></div>'+
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>'+
+            '<span style="font-size:9px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.1em">Heart Rate</span></div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">bpm Avg</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
           '</div>'+
-          sparkline(r.chartHR,'#E24B4A')+
+          spark(r.chartHR,'#E24B4A')+
         '</div>'+
 
         '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
-          '<div style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Cadence</div>'+
-          '<div style="display:flex;gap:14px;align-items:baseline;margin-bottom:4px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff;line-height:1">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">rpm Avg</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Max</div></div>'+
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>'+
+            '<span style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.1em">Cadence</span></div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">rpm Avg</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
           '</div>'+
-          sparkline(r.chartCad||null,'#A78BFA')+
+          spark(r.chartCad||null,'#A78BFA')+
         '</div>'+
 
         '<div style="padding:12px 14px">'+
-          '<div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">Speed</div>'+
-          '<div style="display:flex;gap:14px;align-items:baseline;margin-bottom:4px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff;line-height:1">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Avg mph</div></div>'+
-            '<div><div style="font-size:13px;font-weight:600;color:#94a3b8">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Max mph</div></div>'+
+          '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'+
+            '<span style="font-size:9px;font-weight:700;color:#60A5FA;text-transform:uppercase;letter-spacing:.1em">Speed</span></div>'+
+          '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg mph</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max mph</div></div>'+
           '</div>'+
-          sparkline(null,'#94a3b8')+
+          spark(null,'#60A5FA')+
         '</div>'+
       '</div>'+
 
-      // FOOTER: PRs / Achievements / Equipment / Nutrition
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130">'+
-        // PRs
+      // FOOTER ROW: PRs / Achievements / Equipment / Nutrition
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14">'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-            '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">PRs</div>'+
-            '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View All</div></div>'+
-          (r.peak20||(r.powerCurve&&r.powerCurve[1200])?
-            '<div style="display:flex;align-items:center;gap:6px">'+
-            '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-            '<div><div style="font-size:12px;font-weight:700;color:#fff">'+(r.peak20||(r.powerCurve&&r.powerCurve[1200]))+'W</div>'+
-            '<div style="font-size:9px;color:#64748b">20-Min Power</div></div></div>':
-            '<div style="font-size:11px;color:#64748b">--</div>')+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
+          (r.peak20||(r.powerCurve&&r.powerCurve[1200])
+            ?'<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+(r.peak20||(r.powerCurve&&r.powerCurve[1200]))+'W</div><div style="font-size:9px;color:#64748b">20-Min Power</div></div></div>'
+            :'<div style="font-size:11px;color:#64748b">--</div>')+
         '</div>'+
-        // Achievements
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-            '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Achievements</div>'+
-            '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View All</div></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
           '<div style="display:flex;gap:5px">'+
-            ((r.distance>=100)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:10px">🏆</div>':'')+
-            ((r.elev>=1000)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);display:flex;align-items:center;justify-content:center;font-size:10px">⛰</div>':'')+
-            ((r.tss>=150)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);display:flex;align-items:center;justify-content:center;font-size:10px">🔥</div>':'')+
-            '<div style="width:26px;height:26px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;font-size:10px">🚴</div>'+
+            '<div style="width:26px;height:26px;border-radius:50%;background:#1a2030;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;font-size:11px">🚴</div>'+
+            ((r.distance>=50)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏆</div>':'')+
+            ((r.elev>=1000)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);display:flex;align-items:center;justify-content:center;font-size:11px">⛰</div>':'')+
           '</div>'+
         '</div>'+
-        // Equipment
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
-            '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
-            '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</div></div>'+
-          (bike?
-            '<div style="font-size:11px;font-weight:600;color:#e2e8f0">'+bike.name+'</div>'+
-            '<div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div>'+
-            '<div style="font-size:9px;color:#64748b;margin-top:1px">'+
-              (function(){var tot=0;(st.rides||[]).filter(function(x){return !x.deleted;}).forEach(function(x){tot+=parseFloat(x.distance)||0;});return Math.round(tot).toLocaleString()+' mi total';})()
-            +'</div>':
-            '<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
+          (bike
+            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(function(){var t=0;(st.rides||[]).forEach(function(x){t+=parseFloat(x.distance)||0;});return Math.round(t).toLocaleString()+' mi total';})()+'</div>'
+            :'<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
         '</div>'+
-        // Nutrition
         '<div style="padding:10px 14px">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Nutrition</div>'+
-          '<div style="display:flex;gap:10px;align-items:center">'+
-            '<div style="display:flex;align-items:center;gap:4px">'+
-              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'+
-              '<div><div style="font-size:12px;font-weight:700;color:#22D3EE">742 ml</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
-            '<div style="display:flex;align-items:center;gap:4px">'+
-              '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-              '<div><div style="font-size:12px;font-weight:700;color:#FC4C02">'+(r.calories?Math.round(r.calories)+' Cal':'-- Cal')+'</div><div style="font-size:9px;color:#64748b">Consumed</div></div></div>'+
+          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
+          '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+(r.calories?Math.round(r.calories)+' Cal':'--')+'</div><div style="font-size:9px;color:#64748b">Consumed</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">742 ml</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -11901,13 +11869,24 @@ function openDesktopRideDetail(idx){
     '</div>'+ // end scroll
   '</div>';  // end outer
 
+  function statCell(val,lbl,color,last){
+    return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
+      +'<div style="font-size:17px;font-weight:700;color:'+color+';line-height:1">'+val+'</div>'
+      +'<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div></div>';
+  }
+  function miniStat(val,lbl,border){
+    return '<div style="padding:10px 16px;'+(border?'border-right:1px solid #1e2130':'')+'">'
+      +'<div style="font-size:16px;font-weight:700;color:#fff">'+val+'</div>'
+      +'<div style="font-size:10px;color:#64748b;margin-top:2px">'+lbl+'</div></div>';
+  }
+
   // Wire back + tabs
   setTimeout(function(){
     var bb=document.getElementById('rd-back');
     if(bb) bb.onclick=function(){dsNav('activities');};
-    main.querySelectorAll('[data-tab]').forEach(function(t){
+    main.querySelectorAll('[data-rdtab]').forEach(function(t){
       t.onclick=function(){
-        main.querySelectorAll('[data-tab]').forEach(function(x){x.classList.remove('on');});
+        main.querySelectorAll('[data-rdtab]').forEach(function(x){x.classList.remove('on');});
         t.classList.add('on');
       };
     });
@@ -11917,7 +11896,7 @@ function openDesktopRideDetail(idx){
   (function initMap(){
     var mapDiv=document.getElementById('rd-map');
     if(!mapDiv){setTimeout(initMap,100);return;}
-    var gl=lats&&lats.length>1?lats:null, gn=lons&&lons.length>1?lons:null;
+    var gl=lats&&lats.length>1?lats:null,gn=lons&&lons.length>1?lons:null;
     if(!gl&&r.stravaId){
       var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
       if(alt){gl=alt.gpsLats;gn=alt.gpsLons;}
@@ -11927,7 +11906,7 @@ function openDesktopRideDetail(idx){
     var mid='rdmap'+Date.now();
     mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:320px"></div>';
     setTimeout(function(){
-      var el=document.getElementById(mid); if(!el) return;
+      var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);
       var pts=gl.map(function(la,i){return[la,gn[i]];});
@@ -11940,7 +11919,7 @@ function openDesktopRideDetail(idx){
           if(col!==cc&&seg.length>1){L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);seg=[seg[seg.length-1]];cc=col;}
           seg.push(pts[i]);
         }
-        if(seg.length>1) L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);
+        if(seg.length>1)L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);
       } else {
         L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(map);
       }
@@ -11951,81 +11930,114 @@ function openDesktopRideDetail(idx){
     },100);
   })();
 
-  // Right panel
-  if(!rpEl) return;
+  // RIGHT PANEL
+  if(!rpEl)return;
   rpEl.innerHTML=
+
+    // AI COACH INSIGHT
     '<div class="ds-rp">'+
-      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+
-        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-        '<span style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.08em">AI Ride Summary</span>'+
-        '<span style="font-size:8px;color:#64748b;border:1px solid #252d40;padding:1px 4px;border-radius:3px">Beta</span>'+
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'+
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
+        '<span style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">AI Coach Insight</span>'+
+        '<span style="font-size:8px;color:#64748b;border:1px solid #252d40;padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-left:auto;cursor:pointer"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
       '</div>'+
-      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">'+
-        '<div style="flex:1;min-width:0">'+
-          '<div id="rp-ai-hl" style="font-size:13px;font-weight:700;color:#4ADE80;margin-bottom:6px">Analyzing&hellip;</div>'+
-          '<div id="rp-ai-body" style="font-size:11px;color:#94a3b8;line-height:1.5"></div>'+
-        '</div>'+
-        '<svg width="64" height="64" viewBox="0 0 64 64" style="flex-shrink:0">'+
-          '<circle cx="32" cy="32" r="24" fill="none" stroke="#1e2130" stroke-width="5"/>'+
-          '<circle cx="32" cy="32" r="24" fill="none" stroke="'+scoreColor+'" stroke-width="5" stroke-dasharray="'+scoreArc+' 163" stroke-dashoffset="39" stroke-linecap="round" transform="rotate(-90 32 32)"/>'+
-          '<text x="32" y="28" text-anchor="middle" font-size="15" font-weight="700" fill="#fff">'+rideScore+'</text>'+
-          '<text x="32" y="39" text-anchor="middle" font-size="6" fill="#64748b" letter-spacing="0.5">RIDE SCORE</text>'+
-        '</svg>'+
+      '<div id="rp-ai-hl" style="font-size:13px;font-weight:700;color:#4ADE80;margin-bottom:8px;line-height:1.4">Analyzing&hellip;</div>'+
+      '<div id="rp-ai-bullets" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>'+
+      '<div id="rp-ai-rec-wrap" style="display:none;margin-bottom:10px">'+
+        '<div style="font-size:10px;font-weight:700;color:#4ADE80;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Recommendation</div>'+
+        '<div id="rp-ai-rec" style="font-size:11px;color:#94a3b8;line-height:1.5"></div>'+
       '</div>'+
-      '<div style="font-size:10px;color:#64748b;background:#1a1f2e;border:1px solid #252d40;border-radius:5px;padding:5px 8px;text-align:center;cursor:pointer">View Full Analysis</div>'+
+      '<button id="rp-ask-coach" style="width:100%;padding:7px;background:#1a1f2e;border:1px solid #252d40;border-radius:6px;color:#e2e8f0;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
     '</div>'+
 
+    // WEATHER CONDITIONS
     '<div class="ds-rp">'+
-      '<div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Key Insights</div>'+
-      '<div id="rp-insights" class="ds-ins-list">'+
-        '<div class="ds-ins"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><span>Analyzing ride data&hellip;</span></div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Weather Conditions</div>'+
+        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View Details &rsaquo;</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:6px">'+
+        '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
+        '<div><div id="rp-wind" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Wind</div></div>'+
+        '<div><div id="rp-hum" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Humidity</div></div>'+
+        '<div><div style="font-size:14px;font-weight:700;color:#e2e8f0">10 mi</div><div style="font-size:9px;color:#64748b;margin-top:2px">Visibility</div></div>'+
       '</div>'+
     '</div>'+
 
+    // EQUIPMENT
+    '<div class="ds-rp">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
+        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
+      '</div>'+
+      (bike?
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>'+
+          '<div>'+
+            '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
+            '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div>'+
+            '<div style="display:flex;gap:10px;margin-top:4px">'+
+              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+(function(){var t=0;(st.rides||[]).forEach(function(x){t+=parseFloat(x.distance)||0;});return Math.round(t).toLocaleString();})()+'</span> mi total</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>':
+        '<div style="font-size:11px;color:#64748b">No equipment logged for this ride.</div>')+
+    '</div>'+
+
+    // LAPS
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-        '<div style="font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.08em">Laps</div>'+
+        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Laps</div>'+
         '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View All Laps &rsaquo;</div>'+
       '</div>'+
       lapsHtml+
     '</div>';
 
-  // Weather
-  var lat=gl&&gl[0]?gl[0]:42.9634, lon=lons&&lons[0]?lons[0]:-85.6681;
+  // Weather fetch
+  var lat=lats&&lats[0]?lats[0]:42.9634,lon=lons&&lons[0]?lons[0]:-85.6681;
   fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
     .then(function(res){return res.json();})
     .then(function(wx){
       if(wx&&wx.current){
         var c=wx.current;
-        var tw=document.getElementById('rd-wx-temp'); if(tw) tw.textContent=Math.round(c.temperature_2m)+'°F';
+        var dirs=['N','NE','E','SE','S','SW','W','NW'];
+        var wd=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+        var t=document.getElementById('rp-temp');if(t)t.textContent=Math.round(c.temperature_2m)+'°F';
+        var f=document.getElementById('rp-feels');if(f)f.textContent=Math.round(c.apparent_temperature)+'°';
+        var w=document.getElementById('rp-wind');if(w)w.textContent=wd+' '+Math.round(c.windspeed_10m)+' mph';
+        var h=document.getElementById('rp-hum');if(h)h.textContent=Math.round(c.relativehumidity_2m)+'%';
       }
     }).catch(function(){});
 
   // AI insight
   fetchRideCoachInsight(r,function(err,text){
     var hl=document.getElementById('rp-ai-hl');
-    var bd=document.getElementById('rp-ai-body');
-    var ins=document.getElementById('rp-insights');
-    if(!hl||!text) return;
+    var bl=document.getElementById('rp-ai-bullets');
+    var rw=document.getElementById('rp-ai-rec-wrap');
+    var rt=document.getElementById('rp-ai-rec');
+    if(!hl||!text){if(hl)hl.textContent='Coach insight unavailable.';return;}
     var lines=text.split(NL).map(function(l){return l.trim();}).filter(Boolean);
     var headline='',bullets=[],rec='';
     lines.forEach(function(line){
       var ll=line.toLowerCase();
       if(ll.indexOf('recommendation:')===0){var t=line.slice(15);while(t.charAt(0)===' ')t=t.slice(1);rec=t;}
       else if(line.indexOf('- ')===0){var t=line.slice(1);while(t.charAt(0)===' ')t=t.slice(1);bullets.push(t);}
-      else if(!headline) headline=line;
+      else if(!headline)headline=line;
     });
-    if(hl) hl.textContent=headline||'Strong effort.';
-    if(bd&&rec) bd.textContent=rec;
-    if(ins&&bullets.length){
-      var icons=['<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/></svg>',
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>',
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'];
-      ins.innerHTML=bullets.slice(0,4).map(function(b,i){
-        return '<div class="ds-ins">'+icons[i%4]+'<span>'+b+'</span></div>';
-      }).join('');
-    }
+    if(hl)hl.textContent=headline||'Solid ride.';
+    var bulletIcons=[
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>',
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>',
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>',
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'
+    ];
+    if(bl)bl.innerHTML=bullets.slice(0,4).map(function(b,i){
+      return '<div style="display:flex;gap:6px;align-items:flex-start">'+bulletIcons[i%4]+'<span style="font-size:11px;color:#94a3b8;line-height:1.5">'+b+'</span></div>';
+    }).join('');
+    if(rec&&rw&&rt){rw.style.display='block';rt.textContent=rec;}
+    var ask=document.getElementById('rp-ask-coach');
+    if(ask)ask.onclick=function(){toast('Ask Coach coming soon');};
   });
 }
 
