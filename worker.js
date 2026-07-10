@@ -17251,10 +17251,77 @@ function showDropZone(){
   document.body.appendChild(overlay);
 }
 
+function bulkImportZip(zipFiles, otherFiles){
+  // Dynamically load JSZip from CDN
+  if(!window.JSZip){
+    var s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=function(){ bulkImportZip(zipFiles, otherFiles); };
+    document.head.appendChild(s);
+    toast('Loading zip support...');
+    return;
+  }
+  toast('Extracting zip files...');
+  var allFitFiles=[];
+  var pending=zipFiles.length;
+
+  function doneOne(){
+    pending--;
+    if(pending>0) return;
+    // Combine extracted FIT files with any non-zip files
+    var combined=allFitFiles.concat(otherFiles||[]);
+    if(!combined.length){ toast('No FIT files found in zip'); return; }
+    toast('Importing '+combined.length+' FIT/TCX files...');
+    // Create a fake input object
+    var fakeInput={files:combined};
+    bulkImportTCX(fakeInput);
+  }
+
+  zipFiles.forEach(function(zipFile){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      JSZip.loadAsync(e.target.result).then(function(zip){
+        var fitEntries=[];
+        zip.forEach(function(path, entry){
+          if(!entry.dir && /\.fit$/i.test(path)){
+            fitEntries.push(entry);
+          }
+        });
+        toast('Found '+fitEntries.length+' FIT files in '+zipFile.name);
+        var fitPending=fitEntries.length;
+        if(!fitPending){ doneOne(); return; }
+        fitEntries.forEach(function(entry){
+          entry.async('arraybuffer').then(function(buf){
+            // Create a File object from the arraybuffer
+            var fname=entry.name.split('/').pop();
+            var file=new File([buf], fname, {type:'application/octet-stream'});
+            allFitFiles.push(file);
+            fitPending--;
+            if(fitPending===0) doneOne();
+          });
+        });
+      }).catch(function(err){
+        toast('Error reading zip: '+err.message);
+        doneOne();
+      });
+    };
+    reader.readAsArrayBuffer(zipFile);
+  });
+}
+
 function showImportFromMore(){
   var inp=document.createElement('input');
-  inp.type='file';inp.accept='.tcx,.fit,.csv';inp.multiple=true;
-  inp.onchange=function(){bulkImportTCX(inp);};
+  inp.type='file';inp.accept='.tcx,.fit,.csv,.zip';inp.multiple=true;
+  inp.onchange=function(){
+    var files=Array.prototype.slice.call(inp.files);
+    var zips=files.filter(function(f){return f.name.toLowerCase().endsWith('.zip');});
+    var nonZips=files.filter(function(f){return !f.name.toLowerCase().endsWith('.zip');});
+    if(zips.length>0){
+      bulkImportZip(zips, nonZips);
+    } else {
+      bulkImportTCX(inp);
+    }
+  };
   inp.click();
 }
 
