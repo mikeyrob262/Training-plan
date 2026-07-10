@@ -13068,6 +13068,25 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
       +'</div>'
       +buildLineChart(r.chartHR,'#ef4444','bpm','')+'</div>';
   }
+  if(r.chartHR && r.chartHR.length>20){
+    var dHR=r.chartHR;
+    var dHalf=Math.floor(dHR.length/2);
+    var dF=dHR.slice(0,dHalf);
+    var dS=dHR.slice(dHalf);
+    var dAvgF=dF.reduce(function(a,b){return a+b;},0)/(dF.length||1);
+    var dAvgS=dS.reduce(function(a,b){return a+b;},0)/(dS.length||1);
+    var dDrift=dAvgF>0?Math.round((dAvgS-dAvgF)/dAvgF*100*10)/10:0;
+    var dAbs=Math.abs(dDrift);
+    var dCol=dAbs<3?'#4ade80':dAbs<6?'#f59e0b':'#e24b4a';
+    var dMsg=dAbs<3?'Excellent aerobic efficiency':dAbs<6?'Moderate — check hydration':'High — review pacing';
+    html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:10px">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">HR Drift</div>'
+      +'<div style="display:flex;align-items:baseline;gap:14px;margin-bottom:6px">'
+      +'<span style="font-size:28px;font-weight:800;letter-spacing:-.02em;color:'+dCol+'">'+(dDrift>=0?'+':'')+dDrift+'%</span>'
+      +'<span style="font-size:11px;color:var(--t3)">first half '+Math.round(dAvgF)+' &rarr; second half '+Math.round(dAvgS)+' bpm</span>'
+      +'</div>'
+      +'<div style="font-size:11px;font-weight:600;color:'+dCol+'">'+dMsg+'</div></div>';
+  }
   if(r.cadence){
     html+='<div style="background:var(--s2);border-radius:14px;padding:16px;margin-bottom:10px">'
       +'<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Cadence (rpm)</div>'
