@@ -12065,7 +12065,13 @@ function openDesktopRideDetail(idx){
       }
       L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      var bounds=L.latLngBounds(pts);
+      // Filter outliers: remove points more than 0.5 deg from median
+      var mlat=pts.map(function(p){return p[0];}).sort(function(a,b){return a-b;});
+      var mlon=pts.map(function(p){return p[1];}).sort(function(a,b){return a-b;});
+      var medlat=mlat[Math.floor(mlat.length/2)], medlon=mlon[Math.floor(mlon.length/2)];
+      var cleanPts=pts.filter(function(p){return Math.abs(p[0]-medlat)<0.5&&Math.abs(p[1]-medlon)<0.5;});
+      if(cleanPts.length<2) cleanPts=pts;
+      var bounds=L.latLngBounds(cleanPts);
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
       var latPad=(ne.lat-sw.lat)*0.08, lngPad=(ne.lng-sw.lng)*0.08;
       var tight=L.latLngBounds([sw.lat-latPad,sw.lng-lngPad],[ne.lat+latPad,ne.lng+lngPad]);
