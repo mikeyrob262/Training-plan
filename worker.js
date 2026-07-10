@@ -11568,6 +11568,12 @@ function dsShowDashboard(){
 
 
 function dsShowRidesList(){
+  // Just open the most recent ride - it builds the full split layout
+  var _sorted=((st&&st.rides)||[]).filter(Boolean).sort(function(a,b){return normDate(b.date||'')-normDate(a.date||'');});
+  if(_sorted.length>0){
+    var _firstIdx=(st.rides||[]).indexOf(_sorted[0]);
+    if(_firstIdx>=0){ openDesktopRideDetail(_firstIdx); return; }
+  }
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc=document.getElementById('ds-content');
   if(!mc) return;
