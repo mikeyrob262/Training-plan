@@ -12116,7 +12116,7 @@ function openDesktopRideDetail(idx){
     '<div style="flex:1;overflow-y:auto;overflow-x:hidden;min-width:0" id="rd-scroll">'+
 
       // MAP
-      '<div id="rd-map" style="height:200px;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden;width:100%"></div>'+
+      '<div id="rd-map" style="width:100%;max-width:400px;aspect-ratio:4/3;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
 
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
@@ -12237,7 +12237,7 @@ function openDesktopRideDetail(idx){
     if(!gl){mapDiv.style.cssText='height:200px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';mapDiv.textContent='No GPS data';return;}
     if(typeof L==='undefined'){setTimeout(initMap,200);return;}
     var mid='rdmap'+Date.now();
-    mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:200px"></div>';
+    mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:100%"></div>';
     setTimeout(function(){
       var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
@@ -13475,6 +13475,13 @@ function renderRideEquipmentTab(body, r, idx){
   }
   if(!bike && r.gearName){
     bike = matchBikeByName(r.gearName);
+  }
+  // Manual assignment fallback: if gear data didn't resolve a bike, honor a
+  // user-assigned bike stored in st.bikeAssignments (keyed by rideKey), so it
+  // flows into the existing bike-card renderer below.
+  if(!bike){
+    var assignedBikeId = (st.bikeAssignments||{})[rideKey(r)];
+    if(assignedBikeId) bike = (st.bikes||[]).find(function(b){ return b.id===assignedBikeId; }) || null;
   }
 
   // Shoes: resolved by the same gear fields as bikes. Strava rides carry a
