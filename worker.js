@@ -11668,7 +11668,7 @@ function dsShowDashboard(){
   hdWrap.appendChild(hdVal);
   hdWrap.appendChild(div('font-size:9px;color:#64748b;margin-top:4px','HR drift last ride'));
   var hdStatus=Math.abs(hdDrift)<3?'Excellent aerobic efficiency':Math.abs(hdDrift)<6?'Moderate — check hydration':'High — review pacing';
-  hdWrap.appendChild(div('font-size:9px;margin-top:6px;text-align:center;line-height:1.3',hdStatus).style&&hdWrap||hdWrap);
+  // (status line appended below as hdStatusEl)
   var hdStatusEl=div('font-size:9px;margin-top:6px;text-align:center;line-height:1.3;padding:0 4px',hdStatus);
   hdStatusEl.style.color=hdColor+'99';
   hdWrap.appendChild(hdStatusEl);
@@ -11690,13 +11690,9 @@ function dsShowDashboard(){
     else if(pf<1.0) idMod+=t;
     else idHard+=t;
   });
-  if(idTotal2>0){
-    var pEasy=Math.round(idEasy/idTotal2*100);
-    var pMod=Math.round(idMod/idTotal2*100);
-    var pHard=Math.round(idHard/idTotal2*100);
-  } else {
-    var pEasy=65,pMod=25,pHard=10;
-  }
+  var pEasy=idTotal2>0?Math.round(idEasy/idTotal2*100):65;
+  var pMod=idTotal2>0?Math.round(idMod/idTotal2*100):25;
+  var pHard=idTotal2>0?Math.round(idHard/idTotal2*100):10;
   var idRing=div('position:relative;width:60px;height:60px;flex-shrink:0;margin:0 auto');
   var svgId=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svgId.setAttribute('width','60'); svgId.setAttribute('height','60'); svgId.setAttribute('viewBox','0 0 60 60');
