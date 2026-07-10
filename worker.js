@@ -11983,7 +11983,7 @@ function openDesktopRideDetail(idx){
     setTimeout(function(){
       var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,opacity:1,attribution:''}).addTo(map);
       var pts=gl.map(function(la,i){return[la,gn[i]];});
       if(r.chartPwr&&r.chartPwr.length>5){
         var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
