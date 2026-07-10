@@ -12048,7 +12048,7 @@ function openDesktopRideDetail(idx){
         if(Math.abs(lt)>90) lt=lt*SC;
         if(Math.abs(ln)>180) ln=ln*SC;
         return[lt,ln];
-      }).filter(function(p){return Math.abs(p[0])<=90&&Math.abs(p[1])<=180;});
+      }).filter(function(p){return p[0]&&p[1]&&Math.abs(p[0])>0.1&&Math.abs(p[1])>0.1&&Math.abs(p[0])<=90&&Math.abs(p[1])<=180;});
       if(r.chartPwr&&r.chartPwr.length>5){
         var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
         var cc='#FC4C02',seg=[pts[0]];
