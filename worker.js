@@ -11537,7 +11537,7 @@ function dsShowDashboard(){
     // Photo thumbnail
     var bimg=document.createElement('img');
     bimg.src=b.photo;
-    bimg.style.cssText='width:52px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid #1a1f2e';
+    bimg.style.cssText='width:120px;height:90px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid #1a1f2e;filter:brightness(1.08)';
     br.appendChild(bimg);
     // Info
     var binfo=div('flex:1;min-width:0');
