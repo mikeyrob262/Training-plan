@@ -9410,22 +9410,25 @@ function bulkImportZip(zips, nonZips){
     var zf = zips[zi++];
     var reader = new FileReader();
     reader.onload = function(e){
-      try {
-        var u8 = new Uint8Array(e.target.result);
-        // filter runs BEFORE decompression, so json/csv/other junk in a
-        // ~1,750-entry export is never inflated into memory.
-        var entries = window.fflate.unzipSync(u8, {
-          filter: function(f){ return /\.(fit|tcx)$/i.test(f.name); }
-        });
+      var u8 = new Uint8Array(e.target.result);
+      // filter runs BEFORE decompression, so json/csv/other junk in a
+      // ~1,750-entry export is never inflated into memory. Async unzip runs
+      // decompression off the main thread so a big archive can't freeze the tab.
+      window.fflate.unzip(u8, {
+        filter: function(f){ return /\.(fit|tcx)$/i.test(f.name); }
+      }, function(err, entries){
+        if(err){
+          toast('Could not read '+((zf&&zf.name)||'zip')+': '+((err&&err.message)||err));
+          nextZip();   // one bad zip must not halt the batch
+          return;
+        }
         Object.keys(entries).forEach(function(path){
           var base = path.split('/').pop();   // ignore nested Garmin folder paths
           if(!base) return;
           collected.push(new File([entries[path]], base));
         });
-      } catch(err){
-        toast('Could not read '+((zf&&zf.name)||'zip')+': '+((err&&err.message)||err));
-      }
-      nextZip();
+        nextZip();
+      });
     };
     reader.onerror = function(){ toast('Failed to read '+((zf&&zf.name)||'zip')); nextZip(); };
     reader.readAsArrayBuffer(zf);
