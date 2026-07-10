@@ -11747,7 +11747,7 @@ function openDesktopRideDetail(idx){
   var _byId2={};
   (st.rides||[]).forEach(function(r2){
     var dist2=r2.distance?Math.round(parseFloat(r2.distance)):0;
-    var key2=r2.stravaId?'sid:'+r2.stravaId:'k:'+normDate(r2.date||'')+'_'+dist2+'_'+(r2.duration||'');
+    var key2=r2.stravaId?'sid:'+r2.stravaId:r2.intervalsId?'iid:'+r2.intervalsId:'k:'+normDate(r2.date||'')+'_'+dist2;
     var ex2=_byId2[key2];
     if(!ex2){_byId2[key2]=r2;return;}
     if(((r2.gpsLats&&r2.gpsLats.length)||0)>((ex2.gpsLats&&ex2.gpsLats.length)||0)) _byId2[key2]=r2;
