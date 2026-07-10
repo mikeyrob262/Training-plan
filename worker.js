@@ -11518,36 +11518,251 @@ function dsShowDashboard(){
   });
   ach.appendChild(achrow); r4.appendChild(ach);
 
-  // Equipment
-  var eq=card('');
-  var eqhd=row('justify-content:space-between;margin-bottom:10px');
-  eqhd.appendChild(lbl('EQUIPMENT'));
-  eqhd.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View All Gear'));
-  eq.appendChild(eqhd);
-  var eqrow=row('gap:10px');
-  eqrow.appendChild(ico('ti-bike','#64748b','28'));
-  var eqinfo=div('');
-  eqinfo.appendChild(div('font-size:12px;font-weight:600;color:#e2e8f0','Pinarello Dogma F'));
-  eqinfo.appendChild(div('font-size:10px;color:#64748b','Bora WTO 60 / Assioma UNO'));
-  eqrow.appendChild(eqinfo); eq.appendChild(eqrow); r4.appendChild(eq);
+  // Bikes card — shows both bike photos
+  var bkc=card('');
+  var bkhd=row('justify-content:space-between;margin-bottom:8px');
+  bkhd.appendChild(lbl('MY BIKES'));
+  var bklink=div('font-size:10px;color:#4ade80;cursor:pointer','View Gear');
+  bklink.onclick=function(){dsShowGear();};
+  bkhd.appendChild(bklink);
+  bkc.appendChild(bkhd);
+  var bkbikes=[
+    {name:'Dogma F',sub:'Bora WTO 60 + Assioma',color:'#4ade80',photo:BIKE_PHOTO_DOGMA},
+    {name:'Roadmachine 01',sub:'Black Inc 45 + Stages',color:'#60a5fa',photo:BIKE_PHOTO_ROADMACHINE}
+  ];
+  bkbikes.forEach(function(b){
+    var br=row('gap:8px;margin-bottom:6px;cursor:pointer');
+    br.onmouseover=function(){this.style.background='rgba(255,255,255,.03)';};
+    br.onmouseout=function(){this.style.background='';};
+    // Photo thumbnail
+    var bimg=document.createElement('img');
+    bimg.src=b.photo;
+    bimg.style.cssText='width:52px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid #1a1f2e';
+    br.appendChild(bimg);
+    // Info
+    var binfo=div('flex:1;min-width:0');
+    binfo.appendChild(div('font-size:11px;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',b.name));
+    binfo.appendChild(div('font-size:9px;color:#64748b;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',b.sub));
+    var bdot=div('width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px');
+    bdot.style.background=b.color;
+    binfo.appendChild(bdot);
+    br.appendChild(binfo);
+    bkc.appendChild(br);
+  });
+  r4.appendChild(bkc);
 
-  // Hydration
-  var hyc=card(''); hyc.appendChild(lbl('HYDRATION'));
-  hyc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:8px','Today'));
-  var hyrow=row('gap:12px');
-  var hyl=div('');
-  hyl.appendChild(div('font-size:16px;font-weight:800;color:#fff','742 ml'));
-  hyl.appendChild(div('font-size:10px;color:#64748b','Remaining'));
-  var hyring=div('position:relative;width:52px;height:52px');
-  var svgHy=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgHy.setAttribute('width','52'); svgHy.setAttribute('height','52'); svgHy.setAttribute('viewBox','0 0 52 52');
-  svgHy.appendChild(svgCircle('26','26','20','#1a1f2e','5'));
-  svgHy.appendChild(svgCircle('26','26','20','#22d3ee','5','79 125','31','rotate(-90 26 26)'));
-  var hypct=div('position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#22d3ee','65%');
-  hyring.appendChild(svgHy); hyring.appendChild(hypct);
-  hyrow.appendChild(hyl); hyrow.appendChild(hyring);
-  hyc.appendChild(hyrow); r4.appendChild(hyc);
+  // Power Zones card
+  var pzc=card('');
+  pzc.appendChild(lbl('POWER ZONES'));
+  var allRidesForZones=(st.rides||[]);
+  var z1=0,z2=0,z3=0,z4=0,z5=0,z6=0,zTotal=0;
+  allRidesForZones.slice(-20).forEach(function(r){
+    if(!r.chartPwr) return;
+    r.chartPwr.forEach(function(w){
+      if(!w) return; zTotal++;
+      var pct=w/ftp;
+      if(pct<0.56) z1++;
+      else if(pct<0.76) z2++;
+      else if(pct<0.91) z3++;
+      else if(pct<1.06) z4++;
+      else if(pct<1.21) z5++;
+      else z6++;
+    });
+  });
+  var zBars=[
+    ['Z1','Recovery','#94a3b8',zTotal?Math.round(z1/zTotal*100):15],
+    ['Z2','Endurance','#4ade80',zTotal?Math.round(z2/zTotal*100):35],
+    ['Z3','Tempo','#f59e0b',zTotal?Math.round(z3/zTotal*100):25],
+    ['Z4','Threshold','#f97316',zTotal?Math.round(z4/zTotal*100):15],
+    ['Z5','VO2 Max','#e24b4a',zTotal?Math.round(z5/zTotal*100):7],
+    ['Z6','Anaerobic','#8b5cf6',zTotal?Math.round(z6/zTotal*100):3]
+  ];
+  zBars.forEach(function(z){
+    var zr=row('gap:5px;margin-bottom:4px;align-items:center');
+    var zlbl=div('font-size:8px;font-weight:700;width:14px;flex-shrink:0');
+    zlbl.style.color=z[2]; zlbl.textContent=z[0];
+    var zbar=div('flex:1;height:6px;background:#1a1f2e;border-radius:3px;overflow:hidden');
+    var zfill=div('height:6px;border-radius:3px');
+    zfill.style.cssText='width:'+z[3]+'%;background:'+z[2];
+    zbar.appendChild(zfill);
+    var zpct=div('font-size:8px;color:#64748b;width:22px;text-align:right;flex-shrink:0',z[3]+'%');
+    zr.appendChild(zlbl); zr.appendChild(zbar); zr.appendChild(zpct);
+    pzc.appendChild(zr);
+  });
+  r4.appendChild(pzc);
   body.appendChild(r4);
+
+  // ROW 5 — Analytics: Power Curve + HR Drift + Intensity + Best Efforts
+  var r5=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex:1;min-height:0;overflow:hidden;margin-top:0');
+
+  // Power Curve card
+  var pcc=card('');
+  pcc.appendChild(lbl('POWER CURVE'));
+  // Find best power curve across rides
+  var pcDurations=[5,15,30,60,120,300,600,1200,1800];
+  var pcBest={};
+  (st.rides||[]).slice(-30).forEach(function(r){
+    if(!r.powerCurve) return;
+    pcDurations.forEach(function(d){
+      if(r.powerCurve[d]&&(!pcBest[d]||r.powerCurve[d]>pcBest[d])) pcBest[d]=r.powerCurve[d];
+    });
+  });
+  var pcVals=pcDurations.map(function(d){return pcBest[d]||0;});
+  var pcMax=Math.max.apply(null,pcVals)||1;
+  var pcH=60;
+  var pcW=pcDurations.length;
+  var svgPc=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svgPc.setAttribute('width','100%'); svgPc.setAttribute('height',''+pcH);
+  svgPc.setAttribute('viewBox','0 0 '+(pcW*14)+' '+pcH);
+  svgPc.setAttribute('preserveAspectRatio','none');
+  svgPc.style.cssText='width:100%;height:'+pcH+'px;display:block;margin-top:6px';
+  var pcPts=pcVals.map(function(v,i){
+    return (i*14+2)+','+(pcH-Math.round(v/pcMax*(pcH-8))-2);
+  }).join(' ');
+  var pcPoly=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+  pcPoly.setAttribute('points',pcPts);
+  pcPoly.setAttribute('fill','none');
+  pcPoly.setAttribute('stroke','#60a5fa');
+  pcPoly.setAttribute('stroke-width','1.5');
+  pcPoly.setAttribute('stroke-linecap','round');
+  pcPoly.setAttribute('stroke-linejoin','round');
+  svgPc.appendChild(pcPoly);
+  // Fill area
+  var pcArea=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+  var areaFirst=(0)+','+(pcH-Math.round(pcVals[0]/pcMax*(pcH-8))-2);
+  var areaLast=((pcW-1)*14+2)+','+(pcH-Math.round(pcVals[pcW-1]/pcMax*(pcH-8))-2);
+  pcArea.setAttribute('points',areaFirst+' '+pcPts+' '+areaLast+' '+(0+((pcW-1)*14+2))+','+pcH+' 0,'+pcH);
+  pcArea.setAttribute('fill','rgba(96,165,250,0.12)');
+  svgPc.insertBefore(pcArea,pcPoly);
+  pcc.appendChild(svgPc);
+  // Labels row
+  var pcLabel=row('justify-content:space-between;margin-top:4px');
+  [['5s',pcBest[5]],['1m',pcBest[60]],['5m',pcBest[300]],['20m',pcBest[1200]]].forEach(function(x){
+    var pl=div('text-align:center');
+    pl.appendChild(div('font-size:10px;font-weight:700;color:#60a5fa',x[1]?(x[1]+'W'):'--'));
+    pl.appendChild(div('font-size:8px;color:#64748b',x[0]));
+    pcLabel.appendChild(pl);
+  });
+  pcc.appendChild(pcLabel);
+  r5.appendChild(pcc);
+
+  // HR Drift card
+  var hdc=card('');
+  hdc.appendChild(lbl('HR DRIFT'));
+  var hdRides=(st.rides||[]).filter(function(r){return r.chartHR&&r.chartHR.length>20&&r.chartPwr&&r.chartPwr.length>20;}).slice(-10);
+  var hdDrift=0;
+  if(hdRides.length>0){
+    var hr=hdRides[0].chartHR;
+    var half=Math.floor(hr.length/2);
+    var firstHalf=hr.slice(0,half);
+    var secondHalf=hr.slice(half);
+    var avgF=firstHalf.reduce(function(a,b){return a+b;},0)/firstHalf.length;
+    var avgS=secondHalf.reduce(function(a,b){return a+b;},0)/secondHalf.length;
+    hdDrift=avgF>0?Math.round((avgS-avgF)/avgF*100*10)/10:0;
+  }
+  var hdColor=Math.abs(hdDrift)<3?'#4ade80':Math.abs(hdDrift)<6?'#f59e0b':'#e24b4a';
+  var hdWrap=div('display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:8px 0');
+  var hdVal=div('font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1');
+  hdVal.style.color=hdColor;
+  hdVal.textContent=(hdDrift>=0?'+':'')+hdDrift+'%';
+  hdWrap.appendChild(hdVal);
+  hdWrap.appendChild(div('font-size:9px;color:#64748b;margin-top:4px','HR drift last ride'));
+  var hdStatus=Math.abs(hdDrift)<3?'Excellent aerobic efficiency':Math.abs(hdDrift)<6?'Moderate — check hydration':'High — review pacing';
+  hdWrap.appendChild(div('font-size:9px;margin-top:6px;text-align:center;line-height:1.3',hdStatus).style&&hdWrap||hdWrap);
+  var hdStatusEl=div('font-size:9px;margin-top:6px;text-align:center;line-height:1.3;padding:0 4px',hdStatus);
+  hdStatusEl.style.color=hdColor+'99';
+  hdWrap.appendChild(hdStatusEl);
+  hdc.appendChild(hdWrap);
+  r5.appendChild(hdc);
+
+  // Intensity Distribution donut
+  var idc=card('');
+  idc.appendChild(lbl('INTENSITY'));
+  var idRides=(st.rides||[]).slice(-20);
+  var idEasy=0,idMod=0,idHard=0,idTotal2=0;
+  idRides.forEach(function(r){
+    var t=parseFloat(r.movingTime||r.elapsed_time||0)||60;
+    var p=parseFloat(r.avgPwr||r.avgPower||0);
+    if(!p) return;
+    idTotal2+=t;
+    var pf=p/ftp;
+    if(pf<0.75) idEasy+=t;
+    else if(pf<1.0) idMod+=t;
+    else idHard+=t;
+  });
+  if(idTotal2>0){
+    var pEasy=Math.round(idEasy/idTotal2*100);
+    var pMod=Math.round(idMod/idTotal2*100);
+    var pHard=Math.round(idHard/idTotal2*100);
+  } else {
+    var pEasy=65,pMod=25,pHard=10;
+  }
+  var idRing=div('position:relative;width:60px;height:60px;flex-shrink:0;margin:0 auto');
+  var svgId=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svgId.setAttribute('width','60'); svgId.setAttribute('height','60'); svgId.setAttribute('viewBox','0 0 60 60');
+  var idCirc=188; // 2*pi*30
+  var s1=Math.round(pEasy/100*idCirc);
+  var s2=Math.round(pMod/100*idCirc);
+  var s3=idCirc-s1-s2;
+  svgId.appendChild(svgCircle('30','30','24','#1a1f2e','6'));
+  // Segments
+  function idSeg(color,dash,off){
+    var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx','30');c.setAttribute('cy','30');c.setAttribute('r','24');
+    c.setAttribute('fill','none');c.setAttribute('stroke',color);c.setAttribute('stroke-width','6');
+    c.setAttribute('stroke-dasharray',dash+' '+idCirc);
+    c.setAttribute('stroke-dashoffset',''+off);
+    c.setAttribute('stroke-linecap','round');
+    c.setAttribute('transform','rotate(-90 30 30)');
+    svgId.appendChild(c);
+  }
+  idSeg('#4ade80',s1,0);
+  idSeg('#f59e0b',s2,-s1);
+  idSeg('#e24b4a',s3,-(s1+s2));
+  var idCenter=div('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center');
+  idCenter.appendChild(div('font-size:12px;font-weight:800;color:#fff',pEasy+'%'));
+  idCenter.appendChild(div('font-size:7px;color:#4ade80','Easy'));
+  idRing.appendChild(svgId); idRing.appendChild(idCenter);
+  idc.appendChild(idRing);
+  var idleg=div('display:flex;flex-direction:column;gap:4px;margin-top:8px');
+  [['#4ade80','Easy (<75%)',pEasy+'%'],['#f59e0b','Mod (75-100%)',pMod+'%'],['#e24b4a','Hard (>FTP)',pHard+'%']].forEach(function(x){
+    var lr=row('justify-content:space-between');
+    var ll=row('gap:4px');
+    var ld=div('width:7px;height:7px;border-radius:50%;flex-shrink:0'); ld.style.background=x[0];
+    ll.appendChild(ld); ll.appendChild(div('font-size:9px;color:#94a3b8',x[1]));
+    lr.appendChild(ll); lr.appendChild(div('font-size:9px;font-weight:700;color:#e2e8f0',x[2]));
+    idleg.appendChild(lr);
+  });
+  idc.appendChild(idleg);
+  r5.appendChild(idc);
+
+  // Best Efforts card
+  var bec=card('');
+  bec.appendChild(lbl('BEST EFFORTS'));
+  var beList=[
+    ['5 sec', pcBest[5], '#e24b4a'],
+    ['1 min', pcBest[60], '#f59e0b'],
+    ['5 min', pcBest[300], '#60a5fa'],
+    ['20 min', pcBest[1200], '#4ade80'],
+    ['1 hr', pcBest[3600], '#8b5cf6']
+  ];
+  beList.forEach(function(b){
+    if(!b[1]) return;
+    var br2=row('justify-content:space-between;margin-bottom:6px');
+    var bl=row('gap:5px');
+    var bdot2=div('width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:2px'); bdot2.style.background=b[2];
+    bl.appendChild(bdot2); bl.appendChild(div('font-size:10px;color:#94a3b8',b[0]));
+    var bval=div('font-size:11px;font-weight:700;color:#e2e8f0',''+b[1]+'W');
+    var bwkg=bwt>0?div('font-size:8px;color:#64748b',Math.round(b[1]/bwt*10)/10+' W'+String.fromCharCode(47)+'kg'):null;
+    var bvwrap=div('text-align:right');
+    bvwrap.appendChild(bval);
+    if(bwkg) bvwrap.appendChild(bwkg);
+    br2.appendChild(bl); br2.appendChild(bvwrap);
+    bec.appendChild(br2);
+  });
+  if(!pcBest[5]) bec.appendChild(div('font-size:10px;color:#64748b','Import FIT files to see power bests'));
+  r5.appendChild(bec);
+  body.appendChild(r5);
 
   shell.appendChild(body);
   mc.innerHTML='';
