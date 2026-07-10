@@ -13532,7 +13532,37 @@ function renderRideEquipmentTab(body, r, idx){
       return;
     }
 
-    wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No equipment logged for this activity.</div>';
+    // No bike resolved from gear data or a prior manual assignment — offer a
+    // manual "Assign bike" control. Selecting a bike stores it in
+    // st.bikeAssignments (keyed by rideKey, synced via sv()) and re-renders
+    // the tab so the bike card shows.
+    var assignWrap=document.createElement('div');
+    assignWrap.style.cssText='padding:32px 20px;text-align:center';
+    assignWrap.innerHTML='<div style="color:var(--t3);font-size:13px;margin-bottom:14px">No equipment logged for this activity.</div>'
+      +'<div style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;font-weight:700;margin-bottom:8px">Assign a bike</div>';
+    var sel=document.createElement('select');
+    sel.style.cssText='width:100%;max-width:280px;padding:10px 12px;background:var(--s2);color:var(--t1);border:1px solid var(--b1);border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
+    var optNone=document.createElement('option');
+    optNone.value=''; optNone.textContent='Unassigned';
+    sel.appendChild(optNone);
+    (st.bikes||[]).forEach(function(b){
+      var o=document.createElement('option');
+      o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:'');
+      sel.appendChild(o);
+    });
+    var curAssigned=(st.bikeAssignments||{})[rideKey(r)];
+    if(curAssigned) sel.value=curAssigned;
+    sel.onchange=function(){
+      if(!st.bikeAssignments) st.bikeAssignments={};
+      var val=sel.value;
+      if(val) st.bikeAssignments[rideKey(r)]=val;
+      else delete st.bikeAssignments[rideKey(r)];
+      sv();
+      body.innerHTML='';
+      renderRideEquipmentTab(body, r, idx);
+    };
+    assignWrap.appendChild(sel);
+    wrap.appendChild(assignWrap);
     body.appendChild(wrap);
     return;
   }
