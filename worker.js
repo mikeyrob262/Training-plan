@@ -17254,10 +17254,20 @@ function showDropZone(){
 function bulkImportZip(zipFiles, otherFiles){
   // Dynamically load JSZip from CDN
   if(!window.JSZip){
-    var s=document.createElement('script');
-    s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-    s.onload=function(){ bulkImportZip(zipFiles, otherFiles); };
-    document.head.appendChild(s);
+    var urls=[
+      'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+      'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'
+    ];
+    var tried=0;
+    function tryLoad(){
+      if(tried>=urls.length){ toast('Could not load zip support - try a different browser'); return; }
+      var s=document.createElement('script');
+      s.src=urls[tried++];
+      s.onload=function(){ bulkImportZip(zipFiles, otherFiles); };
+      s.onerror=function(){ tryLoad(); };
+      document.head.appendChild(s);
+    }
+    tryLoad();
     toast('Loading zip support...');
     return;
   }
