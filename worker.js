@@ -12000,7 +12000,7 @@ function openDesktopRideDetail(idx){
       }
       L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      map.fitBounds(L.latLngBounds(pts),{padding:[20,20],maxZoom:14});
+      map.fitBounds(L.latLngBounds(pts),{padding:[16,16]});
       setTimeout(function(){try{map.invalidateSize();}catch(e){}},300);
     },100);
   })();
