@@ -10565,6 +10565,51 @@ function dsShowGear(){
     accCard.appendChild(row);
   });
   wrap.appendChild(accCard);
+
+  // -- Bulk assign: set a default bike for every ride with no resolvable bike.
+  ensureBikes();
+  var bulkCard=document.createElement('div');
+  bulkCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+  bulkCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Set default bike for all unassigned rides</div>'
+    +'<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigns the chosen bike to every ride that has no bike from gear data or an existing manual assignment. Rides that already resolve a bike are left untouched.</div>';
+  var bulkRow=document.createElement('div');
+  bulkRow.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
+  var bulkSel=document.createElement('select');
+  bulkSel.style.cssText='flex:1;min-width:160px;padding:10px 12px;background:#0d0f14;color:#e2e8f0;border:1px solid #1a1f2e;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
+  var bulkNone=document.createElement('option');
+  bulkNone.value=''; bulkNone.textContent='Choose a bike…';
+  bulkSel.appendChild(bulkNone);
+  (st.bikes||[]).forEach(function(b){
+    var o=document.createElement('option');
+    o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:'');
+    bulkSel.appendChild(o);
+  });
+  var bulkBtn=document.createElement('button');
+  bulkBtn.textContent='Apply';
+  bulkBtn.style.cssText='padding:10px 18px;background:#4ade80;color:#0d0f14;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;flex-shrink:0';
+  bulkBtn.onclick=function(){
+    var chosen=bulkSel.value;
+    if(!chosen){ toast('Pick a bike first'); return; }
+    ensureBikes();
+    if(!st.bikeAssignments) st.bikeAssignments={};
+    var bikeObj=(st.bikes||[]).find(function(b){return b.id===chosen;});
+    var bikeName=(bikeObj&&bikeObj.name)||'bike';
+    // Build the target list first (rides with no resolvable bike), so we can
+    // show an accurate count in the confirm prompt before mutating anything.
+    var targets=(st.rides||[]).filter(function(r){
+      return r && !r.deleted && !resolveRideBike(r); // skip already-resolved / already-assigned
+    });
+    var N=targets.length;
+    if(N===0){ toast('All rides already have a bike'); return; }
+    if(!window.confirm('Assign '+bikeName+' to '+N+' unassigned ride'+(N===1?'':'s')+'?')) return;
+    targets.forEach(function(r){ st.bikeAssignments[rideKey(r)]=chosen; });
+    sv();                                          // persist once, after the loop
+    toast(N+' ride'+(N===1?'':'s')+' assigned to '+bikeName);
+  };
+  bulkRow.appendChild(bulkSel); bulkRow.appendChild(bulkBtn);
+  bulkCard.appendChild(bulkRow);
+  wrap.appendChild(bulkCard);
+
   mc.appendChild(wrap);
 }
 
@@ -13446,43 +13491,47 @@ function parseDurationToMinutes_(dur){
 
 // -- EQUIPMENT TAB: which bike was used, its mileage, and maintenance
 // status/next-service estimate, tying this ride into Garage's real data.
+// Shared bike resolution for a ride — the single source of truth used by both
+// the Equipment tab and the Gear bulk-assign tool, so they can never diverge.
+// Precedence: direct gear id / Strava gear-map name / gear name, then a manual
+// st.bikeAssignments entry. Returns the bike object or null.
+function resolveRideBike(r){
+  if(!r) return null;
+  var bikes = st.bikes || [];
+  var matchByName = function(name){
+    if(!name) return null;
+    var n = String(name).toLowerCase().replace(/\s+/g,' ').trim();
+    if(!n) return null;
+    return bikes.find(function(b){
+      var bn = String(b.name||'').toLowerCase().replace(/\s+/g,' ').trim();
+      return bn && (bn===n || n.indexOf(bn)!==-1 || bn.indexOf(n)!==-1);
+    }) || null;
+  };
+  var bike = null;
+  if(r.gearId){
+    bike = bikes.find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
+    if(!bike){
+      var mapped = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
+      if(mapped) bike = matchByName(mapped);
+    }
+  }
+  if(!bike && r.gearName) bike = matchByName(r.gearName);
+  if(!bike){
+    var assignedId = (st.bikeAssignments||{})[rideKey(r)];
+    if(assignedId) bike = bikes.find(function(b){ return b.id===assignedId; }) || null;
+  }
+  return bike || null;
+}
+
 function renderRideEquipmentTab(body, r, idx){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:14px 16px';
 
   ensureBikes();
-  var bike = null;
-  // Normalized name match so e.g. "Pinarello Dogma F" resolves to the seeded
-  // "Dogma F" (case-insensitive, whitespace-collapsed, either string
-  // containing the other).
-  var matchBikeByName = function(name){
-    if(!name) return null;
-    var n = String(name).toLowerCase().replace(/\s+/g,' ').trim();
-    if(!n) return null;
-    return (st.bikes||[]).find(function(b){
-      var bn = String(b.name||'').toLowerCase().replace(/\s+/g,' ').trim();
-      return bn && (bn===n || n.indexOf(bn)!==-1 || bn.indexOf(n)!==-1);
-    }) || null;
-  };
-  if(r.gearId){
-    bike = (st.bikes||[]).find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
-    // Strava rides carry a gear_id; map it to a display name via
-    // st.stravaGearMap (same as the shoe branch below), then match by name.
-    if(!bike){
-      var mappedBikeName = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
-      if(mappedBikeName) bike = matchBikeByName(mappedBikeName);
-    }
-  }
-  if(!bike && r.gearName){
-    bike = matchBikeByName(r.gearName);
-  }
-  // Manual assignment fallback: if gear data didn't resolve a bike, honor a
-  // user-assigned bike stored in st.bikeAssignments (keyed by rideKey), so it
-  // flows into the existing bike-card renderer below.
-  if(!bike){
-    var assignedBikeId = (st.bikeAssignments||{})[rideKey(r)];
-    if(assignedBikeId) bike = (st.bikes||[]).find(function(b){ return b.id===assignedBikeId; }) || null;
-  }
+  // Resolve the bike via the shared resolver (gear id / Strava gear map / gear
+  // name / manual st.bikeAssignments entry), so the tab and the Gear bulk-
+  // assign tool stay in lockstep.
+  var bike = resolveRideBike(r);
 
   // Shoes: resolved by the same gear fields as bikes. Strava rides carry a
   // gear_id (mapped to a name via st.stravaGearMap); ICU CSV imports carry
