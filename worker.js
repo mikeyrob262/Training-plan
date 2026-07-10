@@ -9388,6 +9388,51 @@ function bulkImportTCX(input){
   next();
 }
 
+// Unzip Garmin Connect / bulk .zip exports and feed the contained .fit/.tcx
+// files through the existing bulkImportTCX pipeline (parse + dedup + sv).
+// Stage B: extraction + routing only — progress UI and sv-batching are Stage C.
+function bulkImportZip(zips, nonZips){
+  zips = zips || [];
+  nonZips = Array.prototype.slice.call(nonZips || []);
+  if(typeof window.fflate === 'undefined'){
+    toast('Zip support still loading, try again in a moment');
+    return;
+  }
+  var collected = [];   // extracted .fit/.tcx File objects, across all zips
+  var zi = 0;
+  function finish(){
+    var allFiles = collected.concat(nonZips);
+    if(!allFiles.length){ toast('No FIT or TCX files found in zip'); return; }
+    bulkImportTCX({files: allFiles, value: ''});   // reuse the whole pipeline, once
+  }
+  function nextZip(){
+    if(zi >= zips.length){ finish(); return; }
+    var zf = zips[zi++];
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        var u8 = new Uint8Array(e.target.result);
+        // filter runs BEFORE decompression, so json/csv/other junk in a
+        // ~1,750-entry export is never inflated into memory.
+        var entries = window.fflate.unzipSync(u8, {
+          filter: function(f){ return /\.(fit|tcx)$/i.test(f.name); }
+        });
+        Object.keys(entries).forEach(function(path){
+          var base = path.split('/').pop();   // ignore nested Garmin folder paths
+          if(!base) return;
+          collected.push(new File([entries[path]], base));
+        });
+      } catch(err){
+        toast('Could not read '+((zf&&zf.name)||'zip')+': '+((err&&err.message)||err));
+      }
+      nextZip();
+    };
+    reader.onerror = function(){ toast('Failed to read '+((zf&&zf.name)||'zip')); nextZip(); };
+    reader.readAsArrayBuffer(zf);
+  }
+  nextZip();
+}
+
 function importRideFile(input){
   var file = input.files[0];
   if(!file) return;
