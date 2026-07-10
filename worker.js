@@ -17251,58 +17251,6 @@ function showDropZone(){
   document.body.appendChild(overlay);
 }
 
-/*!
-
-function bulkImportZip(zipFiles, otherFiles){
-  if(!window.JSZip){ toast('Zip support unavailable'); return; }
-  toast('Extracting zip files...');
-  var allFitFiles=[];
-  var pending=zipFiles.length;
-
-  function doneOne(){
-    pending--;
-    if(pending>0) return;
-    // Combine extracted FIT files with any non-zip files
-    var combined=allFitFiles.concat(otherFiles||[]);
-    if(!combined.length){ toast('No FIT files found in zip'); return; }
-    toast('Importing '+combined.length+' FIT/TCX files...');
-    // Create a fake input object
-    var fakeInput={files:combined};
-    bulkImportTCX(fakeInput);
-  }
-
-  zipFiles.forEach(function(zipFile){
-    var reader=new FileReader();
-    reader.onload=function(e){
-      JSZip.loadAsync(e.target.result).then(function(zip){
-        var fitEntries=[];
-        zip.forEach(function(path, entry){
-          if(!entry.dir && /\.fit$/i.test(path)){
-            fitEntries.push(entry);
-          }
-        });
-        toast('Found '+fitEntries.length+' FIT files in '+zipFile.name);
-        var fitPending=fitEntries.length;
-        if(!fitPending){ doneOne(); return; }
-        fitEntries.forEach(function(entry){
-          entry.async('arraybuffer').then(function(buf){
-            // Create a File object from the arraybuffer
-            var fname=entry.name.split('/').pop();
-            var file=new File([buf], fname, {type:'application/octet-stream'});
-            allFitFiles.push(file);
-            fitPending--;
-            if(fitPending===0) doneOne();
-          });
-        });
-      }).catch(function(err){
-        toast('Error reading zip: '+err.message);
-        doneOne();
-      });
-    };
-    reader.readAsArrayBuffer(zipFile);
-  });
-}
-
 function showImportFromMore(){
   var inp=document.createElement('input');
   inp.type='file';inp.accept='.tcx,.fit,.csv,.zip';inp.multiple=true;
