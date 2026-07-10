@@ -3540,6 +3540,11 @@ function normalizeState_(s){
     if(isPlainObj_(s[k])) { s[k] = Object.keys(s[k]).map(function(k2){return s[k][k2];}); return; }
     s[k] = [];
   });
+  // Manual bike assignments: a plain object keyed by rideKey(r) -> bike id.
+  // Lives in st (sibling of st.rides) so it syncs via sv()/fbPush and is
+  // deep-merged by mergeState_'s object branch — never touched by
+  // mergeArrays_/dedupeRides_ (those only operate on the rides array).
+  if(!isPlainObj_(s.bikeAssignments)) s.bikeAssignments = {};
   return s;
 }
 
@@ -10033,6 +10038,16 @@ function normDate(d){
   if(p.length===3) return p[0]+'-'+(p[1].length<2?'0'+p[1]:p[1])+'-'+(p[2].length<2?'0'+p[2]:p[2]);
   return d;
 }
+// Stable per-ride key for manual bike assignments. Mirrors the ride-list
+// dedup keys at ~11106/11770: Strava rides use their immutable stravaId;
+// non-Strava rides (FIT/TCX/ICU, which have no durable id) fall back to a
+// normalized date + rounded distance + moving-seconds/duration composite.
+function rideKey(r){
+  if(!r) return '';
+  if(r.stravaId) return 's'+r.stravaId;
+  var dist=r.distance?Math.round(parseFloat(r.distance)):0;
+  return 'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.movingSecs||r.duration||'');
+}
 function isDesktop(){ return window.innerWidth >= 1024; }
 function dsShowActivities(){
   var mc = document.getElementById('ds-content');
@@ -15886,6 +15901,10 @@ function syncStravaGear(){
 }
 
 function ensureBikes(){
+  // Guarantee the assignment map exists even before any Firebase merge runs
+  // (normalizeState_ only fires on sync). ensureBikes() is called before
+  // every equipment-tab render and gear operation.
+  if(!st.bikeAssignments || typeof st.bikeAssignments !== 'object') st.bikeAssignments = {};
   var defaults = [
     {id:'dogma-f', name:'Dogma F', type:'Race bike', brand:'Pinarello', groupset:'Shimano Ultegra', wheelset:'Campagnolo Bora WTO 60 C23',
       photo:BIKE_PHOTO_DOGMA,
