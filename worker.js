@@ -9136,8 +9136,12 @@ function bulkImportTCX(input){
   var skipped = 0;
   var failed = 0;
 
-  // Show progress toast
-  toast('Importing ' + total + ' files...');
+  // Persistent progress indicator — updated per file, removed at completion.
+  // (A transient toast would vanish mid-batch on a large ~1,750-file import.)
+  var prog = document.createElement('div');
+  prog.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:#111318;border:1px solid #1a1f2e;color:#e2e8f0;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  prog.textContent='Importing 0 / '+total+'…';
+  document.body.appendChild(prog);
 
   function processTCX(file, cb){
     var reader = new FileReader();
@@ -9296,7 +9300,8 @@ function bulkImportTCX(input){
   var idx=0, doneRuns=0;
   function next(){
     if(idx>=files.length){
-      sv();
+      sv();                                        // single persist for the whole batch
+      if(prog) prog.remove();
       var msg = '';
       if(done) msg += done+' ride(s) imported';
       if(doneRuns) msg += (msg?', ':'')+doneRuns+' run(s) imported';
@@ -9307,6 +9312,7 @@ function bulkImportTCX(input){
       input.value='';
       return;
     }
+    if(prog) prog.textContent='Importing '+idx+' / '+total+'…';
     var curFile = files[idx++];
     var curExt = (curFile.name||'').split('.').pop().toLowerCase();
     if(curExt === 'fit'){
@@ -9366,8 +9372,7 @@ function bulkImportTCX(input){
               chartPwr:ride2.chartPwr||existing.chartPwr,
               chartHR:ride2.chartHR||existing.chartHR
             });
-            sv();
-            done++; setTimeout(next,10); return;
+            done++; setTimeout(next,10); return;   // sv() deferred to end of batch
           }
           st.rides.push(ride2);
           done++;
