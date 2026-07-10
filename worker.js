@@ -11754,19 +11754,20 @@ function openDesktopRideDetail(idx){
   });
   var allR2=Object.values(_byId2).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
 
-  // Group by month
+  // Group by month - only rides with valid dates
   var months2={};
-  allR2.forEach(function(lr){
-    var mo2=lr.date?lr.date.substring(0,7):'';
+  allR2.filter(function(lr){return lr.date&&lr.date.length>=7;}).forEach(function(lr){
+    var mo2=lr.date.substring(0,7);
     if(!months2[mo2]) months2[mo2]=[];
     months2[mo2].push(lr);
   });
 
+  var MO_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var listHtml2='';
   Object.keys(months2).sort().reverse().forEach(function(mo2){
-    var moDate=new Date(mo2+'-15');
-    var moLabel=['January','February','March','April','May','June','July','August','September','October','November','December'][moDate.getMonth()]+' '+moDate.getFullYear();
-    listHtml2+='<div style="padding:6px 12px 2px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
+    var parts=mo2.split('-');
+    var moLabel=MO_NAMES[parseInt(parts[1],10)-1]+' '+parts[0];
+    listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
     months2[mo2].forEach(function(lr){
       var lridx=(st.rides||[]).indexOf(lr);
       if(lridx<0) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
