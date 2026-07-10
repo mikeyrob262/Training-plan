@@ -17,6 +17,7 @@ export default {
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fflate/0.8.2/umd/index.js" defer></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Training">
