@@ -11809,8 +11809,41 @@ function openDesktopRideDetail(idx){
     lapsHtml+='</table>';
   }
 
+  // Build activities mini-list for left panel
+  var _byId2={};
+  (st.rides||[]).forEach(function(r){
+    var dist=r.distance?Math.round(parseFloat(r.distance)):0;
+    var key=r.stravaId?'sid:'+r.stravaId:'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.duration||'');
+    var ex=_byId2[key];
+    if(!ex){_byId2[key]=r;return;}
+    if(((r.gpsLats&&r.gpsLats.length)||0)>((ex.gpsLats&&ex.gpsLats.length)||0)) _byId2[key]=r;
+  });
+  var allR2=Object.values(_byId2).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
+  var listHtml=allR2.slice(0,60).map(function(lr){
+    var lridx=(st.rides||[]).indexOf(lr);
+    if(lridx<0) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
+    var isActive=(lr===r||lridx===ridx);
+    var ldt=lr.date?new Date(lr.date+'T12:00:00'):null;
+    var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
+    var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
+    var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
+    return '<div onclick="dsShowRideDetail('+lridx+')' +
+      ' style="padding:10px 12px;border-bottom:1px solid #1e2130;cursor:pointer;'+
+      (isActive?'background:#1a1f2e;border-left:2px solid #FC4C02;':'border-left:2px solid transparent;')+ '">'+
+      '<div style="font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+( lr.name||'Activity')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:3px">'+
+        '<div style="font-size:10px;color:#64748b">'+ldStr+'</div>'+
+        '<div style="font-size:10px;font-weight:600;color:'+lcolor+'">'+( lwkg?lwkg+' W/kg':(lr.distance?parseFloat(lr.distance).toFixed(1)+' mi':''))+'</div>'+
+      '</div></div>';
+  }).join('');
+
   main.innerHTML=
-    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;min-width:0;width:100%">'+
+    '<div style="display:flex;height:100%;overflow:hidden;background:#0d0f14;min-width:0;width:100%">'+
+    '<div style="width:220px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:10px 12px;border-bottom:1px solid #1e2130;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'+
+      '<div style="overflow-y:auto;flex:1">'+listHtml+'</div>'+
+    '</div>'+
+    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;min-width:0;flex:1">'+
 
     // HEADER
     '<div style="padding:10px 18px 8px;border-bottom:1px solid #1e2130;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
@@ -11953,7 +11986,8 @@ function openDesktopRideDetail(idx){
       '</div>'+
 
     '</div>'+ // end scroll
-  '</div>';  // end outer
+  '</div>'+ // end detail column
+  '</div>';  // end two-panel wrapper
 
   // Wire back + tabs
   setTimeout(function(){
@@ -12008,6 +12042,10 @@ function openDesktopRideDetail(idx){
       setTimeout(function(){try{map.invalidateSize();}catch(e){}},300);
     },100);
   })();
+
+  // Close inner detail div + outer two-panel wrapper
+  var outerWrap = document.querySelector('#ds-content > div');
+  if(outerWrap) { var innerClose = document.createElement('div'); }
 
   // RIGHT PANEL
   if(!rpEl)return;
