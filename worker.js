@@ -11736,6 +11736,64 @@ function openDesktopRideDetail(idx){
   var main=document.getElementById('ds-content');
   if(!main) return;
 
+  // Build persistent activities list for left panel
+  var _byId2={};
+  (st.rides||[]).forEach(function(r2){
+    var dist2=r2.distance?Math.round(parseFloat(r2.distance)):0;
+    var key2=r2.stravaId?'sid:'+r2.stravaId:'k:'+normDate(r2.date||'')+'_'+dist2+'_'+(r2.duration||'');
+    var ex2=_byId2[key2];
+    if(!ex2){_byId2[key2]=r2;return;}
+    if(((r2.gpsLats&&r2.gpsLats.length)||0)>((ex2.gpsLats&&ex2.gpsLats.length)||0)) _byId2[key2]=r2;
+  });
+  var allR2=Object.values(_byId2).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
+
+  // Group by month
+  var months2={};
+  allR2.forEach(function(lr){
+    var mo2=lr.date?lr.date.substring(0,7):'';
+    if(!months2[mo2]) months2[mo2]=[];
+    months2[mo2].push(lr);
+  });
+
+  var listHtml2='';
+  Object.keys(months2).sort().reverse().forEach(function(mo2){
+    var moDate=new Date(mo2+'-15');
+    var moLabel=['January','February','March','April','May','June','July','August','September','October','November','December'][moDate.getMonth()]+' '+moDate.getFullYear();
+    listHtml2+='<div style="padding:6px 12px 2px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
+    months2[mo2].forEach(function(lr){
+      var lridx=(st.rides||[]).indexOf(lr);
+      if(lridx<0) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
+      var isActive=lridx===idx;
+      var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
+      var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
+      var ldt=lr.date?new Date(lr.date+'T12:00:00'):null;
+      var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
+      var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
+      var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
+      listHtml2+='<div onclick="openDesktopRideDetail('+lridx+')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:#4ade80">'+sportIcon+'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
+          +'<div style="font-size:10px;color:#64748b;margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'
+        +'</div>'
+        +(lwkg?'<div style="font-size:10px;font-weight:700;color:'+lcolor+'">'+lwkg+'</div>':'')
+        +'</div>';
+    });
+  });
+
+  // Inject two-column layout
+  main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
+    +'<div id="act-list-panel" style="width:240px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'
+      +'<div style="padding:10px 12px;border-bottom:1px solid #1e2130;font-size:14px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
+      +'<div style="overflow-y:auto;flex:1">'+listHtml2+'</div>'
+    +'</div>'
+    +'<div id="act-detail-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>'
+    +'</div>';
+
+  var main2=document.getElementById('act-detail-panel');
+  if(!main2) return;
+  var main=main2;
+
   var ifVal=r.ifPct?r.ifPct/100:(npVal&&FTP?npVal/FTP:0);
   var rideScore=Math.min(99,Math.max(50,Math.round(70+(ifVal-0.75)*40+((r.tss||0)-80)*0.1)));
   var scoreColor=rideScore>=80?'#4ADE80':rideScore>=65?'#F59E0B':'#E24B4A';
@@ -11809,41 +11867,7 @@ function openDesktopRideDetail(idx){
     lapsHtml+='</table>';
   }
 
-  // Build activities mini-list for left panel
-  var _byId2={};
-  (st.rides||[]).forEach(function(r){
-    var dist=r.distance?Math.round(parseFloat(r.distance)):0;
-    var key=r.stravaId?'sid:'+r.stravaId:'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.duration||'');
-    var ex=_byId2[key];
-    if(!ex){_byId2[key]=r;return;}
-    if(((r.gpsLats&&r.gpsLats.length)||0)>((ex.gpsLats&&ex.gpsLats.length)||0)) _byId2[key]=r;
-  });
-  var allR2=Object.values(_byId2).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
-  var listHtml=allR2.slice(0,60).map(function(lr){
-    var lridx=(st.rides||[]).indexOf(lr);
-    if(lridx<0) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
-    var isActive=(lr===r||lridx===ridx);
-    var ldt=lr.date?new Date(lr.date+'T12:00:00'):null;
-    var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
-    var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
-    var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
-    return '<div onclick="openDesktopRideDetail('+lridx+')' +
-      ' style="padding:10px 12px;border-bottom:1px solid #1e2130;cursor:pointer;'+
-      (isActive?'background:#1a1f2e;border-left:2px solid #FC4C02;':'border-left:2px solid transparent;')+ '">'+
-      '<div style="font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+( lr.name||'Activity')+'</div>'+
-      '<div style="display:flex;justify-content:space-between;margin-top:3px">'+
-        '<div style="font-size:10px;color:#64748b">'+ldStr+'</div>'+
-        '<div style="font-size:10px;font-weight:600;color:'+lcolor+'">'+( lwkg?lwkg+' W/kg':(lr.distance?parseFloat(lr.distance).toFixed(1)+' mi':''))+'</div>'+
-      '</div></div>';
-  }).join('');
-
-  main.innerHTML=
-    '<div style="display:flex;height:100%;overflow:hidden;background:#0d0f14;min-width:0;width:100%">'+
-    '<div style="width:220px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'+
-      '<div style="padding:10px 12px;border-bottom:1px solid #1e2130;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'+
-      '<div style="overflow-y:auto;flex:1">'+listHtml+'</div>'+
-    '</div>'+
-    '<div style="display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;min-width:0;flex:1">'+
+  main2.innerHTML=
 
     // HEADER
     '<div style="padding:10px 18px 8px;border-bottom:1px solid #1e2130;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
@@ -11985,9 +12009,7 @@ function openDesktopRideDetail(idx){
         '</div>'+
       '</div>'+
 
-    '</div>'+ // end scroll
-  '</div>'+ // end detail column
-  '</div>';  // end two-panel wrapper
+    '</div>'; // end scroll
 
   // Wire back + tabs
   setTimeout(function(){
