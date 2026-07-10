@@ -12071,6 +12071,11 @@ function openDesktopRideDetail(idx){
       if(cleanPts.length<2) cleanPts=pts;
       var bounds=L.latLngBounds(cleanPts);
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
+      // If bounds are unreasonably large (>1.5 deg), data is corrupt - show message
+      if((ne.lat-sw.lat)>1.5||(ne.lng-sw.lng)>1.5){
+        mapDiv.style.cssText='height:200px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+        mapDiv.textContent='GPS data unavailable';return;
+      }
       var latPad=(ne.lat-sw.lat)*0.08, lngPad=(ne.lng-sw.lng)*0.08;
       var tight=L.latLngBounds([sw.lat-latPad,sw.lng-lngPad],[ne.lat+latPad,ne.lng+lngPad]);
       map.fitBounds(tight);
