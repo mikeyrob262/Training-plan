@@ -90,6 +90,7 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-tab{font-size:12px;padding:8px 12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
 .ds-tab.on{color:#e2e8f0;border-bottom-color:#FC4C02}
 .ds-scroll{flex:1;overflow-y:auto}
+#act-list-panel div::-webkit-scrollbar{display:none}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
 .ds-map-ctrl{position:absolute;top:10px;left:10px;background:rgba(17,19,24,.9);border:1px solid #2a3148;border-radius:6px;overflow:hidden}
@@ -11776,7 +11777,7 @@ function openDesktopRideDetail(idx){
       var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
       var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
       var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
-      listHtml2+='<div onclick="openDesktopRideDetail('+lridx+')" style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
+      listHtml2+='<div onclick="openDesktopRideDetail('+lridx+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
         +'<div style="width:28px;height:28px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:#4ade80">'+sportIcon+'</div>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
@@ -11789,9 +11790,9 @@ function openDesktopRideDetail(idx){
 
   // Inject two-column layout
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
-    +'<div id="act-list-panel" style="width:240px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:10px 12px;border-bottom:1px solid #1e2130;font-size:14px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
-      +'<div style="overflow-y:auto;flex:1">'+listHtml2+'</div>'
+    +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'
+      +'<div style="padding:10px 14px 8px;border-bottom:1px solid #1e2130;font-size:15px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
+      +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'
     +'<div id="act-detail-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>'
     +'</div>';
