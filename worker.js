@@ -11756,8 +11756,9 @@ function openDesktopRideDetail(idx){
 
   // Group by month - only rides with valid dates
   var months2={};
-  allR2.filter(function(lr){return lr.date&&lr.date.length>=7;}).forEach(function(lr){
-    var mo2=lr.date.substring(0,7);
+  allR2.filter(function(lr){return lr.date&&lr.date.length>=6;}).forEach(function(lr){
+    var dp=lr.date.split('-');
+    var mo2=dp[0]+'-'+(dp[1]&&dp[1].length<2?'0'+dp[1]:dp[1]||'01');
     if(!months2[mo2]) months2[mo2]=[];
     months2[mo2].push(lr);
   });
@@ -11774,8 +11775,8 @@ function openDesktopRideDetail(idx){
       var isActive=lridx===idx;
       var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
       var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
-      var ldt=lr.date?new Date(lr.date+'T12:00:00'):null;
-      var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
+      var ldParts=lr.date?lr.date.split('-'):null;
+      var ldStr=ldParts&&ldParts.length>=3?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(ldParts[1],10)-1]+' '+parseInt(ldParts[2],10)):'';
       var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
       var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
       listHtml2+='<div onclick="openDesktopRideDetail('+lridx+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
