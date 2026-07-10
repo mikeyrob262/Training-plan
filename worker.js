@@ -12116,7 +12116,7 @@ function openDesktopRideDetail(idx){
     '<div style="flex:1;overflow-y:auto;overflow-x:hidden;min-width:0" id="rd-scroll">'+
 
       // MAP
-      '<div id="rd-map" style="width:100%;max-width:400px;aspect-ratio:4/3;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
+      '<div id="rd-map" style="width:100%;max-width:520px;aspect-ratio:4/3;margin:0 auto;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
 
       // 4-col stats below map
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
