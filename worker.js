@@ -11827,7 +11827,7 @@ function openDesktopRideDetail(idx){
     var ldStr=ldt?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][ldt.getMonth()]+' '+ldt.getDate()):'';
     var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
     var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
-    return '<div onclick="dsShowRideDetail('+lridx+')' +
+    return '<div onclick="openDesktopRideDetail('+lridx+')' +
       ' style="padding:10px 12px;border-bottom:1px solid #1e2130;cursor:pointer;'+
       (isActive?'background:#1a1f2e;border-left:2px solid #FC4C02;':'border-left:2px solid transparent;')+ '">'+
       '<div style="font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+( lr.name||'Activity')+'</div>'+
