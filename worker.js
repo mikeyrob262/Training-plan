@@ -12042,7 +12042,13 @@ function openDesktopRideDetail(idx){
       var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);
-      var pts=gl.map(function(la,i){return[la,gn[i]];});
+      var SC=180/Math.pow(2,31);
+      var pts=gl.map(function(la,i){
+        var lt=la,ln=gn[i];
+        if(Math.abs(lt)>90) lt=lt*SC;
+        if(Math.abs(ln)>180) ln=ln*SC;
+        return[lt,ln];
+      }).filter(function(p){return Math.abs(p[0])<=90&&Math.abs(p[1])<=180;});
       if(r.chartPwr&&r.chartPwr.length>5){
         var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
         var cc='#FC4C02',seg=[pts[0]];
