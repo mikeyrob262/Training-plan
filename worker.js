@@ -11743,16 +11743,9 @@ function openDesktopRideDetail(idx){
   var main=document.getElementById('ds-content');
   if(!main) return;
 
-  // Build persistent activities list for left panel
-  var _byId2={};
-  (st.rides||[]).forEach(function(r2){
-    var dist2=r2.distance?Math.round(parseFloat(r2.distance)):0;
-    var key2=r2.stravaId?'sid:'+r2.stravaId:r2.intervalsId?'iid:'+r2.intervalsId:'k:'+normDate(r2.date||'')+'_'+dist2;
-    var ex2=_byId2[key2];
-    if(!ex2){_byId2[key2]=r2;return;}
-    if(((r2.gpsLats&&r2.gpsLats.length)||0)>((ex2.gpsLats&&ex2.gpsLats.length)||0)) _byId2[key2]=r2;
-  });
-  var allR2=Object.values(_byId2).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
+  // Build persistent activities list using proper dedup
+  var _deduped=dedupeRides_(st.rides||[]);
+  var allR2=_deduped.kept.filter(function(r2){return r2&&!r2.deleted;}).sort(function(a,b){return normDate(b.date||'')>normDate(a.date||'')?1:-1;});
 
   // Group by month - only rides with valid dates
   var months2={};
@@ -12065,14 +12058,16 @@ function openDesktopRideDetail(idx){
       }
       L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      // Filter outliers using IQR
+      // Filter outliers: keep only points within 1.5x IQR of median cluster
       var slat=pts.map(function(p){return p[0];}).sort(function(a,b){return a-b;});
       var slon=pts.map(function(p){return p[1];}).sort(function(a,b){return a-b;});
       var n=slat.length;
+      var medlat=slat[Math.floor(n/2)], medlon=slon[Math.floor(n/2)];
       var q1lat=slat[Math.floor(n*0.25)],q3lat=slat[Math.floor(n*0.75)];
       var q1lon=slon[Math.floor(n*0.25)],q3lon=slon[Math.floor(n*0.75)];
-      var iqrlat=(q3lat-q1lat)*3, iqrlon=(q3lon-q1lon)*3;
-      var cleanPts=pts.filter(function(p){return p[0]>q1lat-iqrlat&&p[0]<q3lat+iqrlat&&p[1]>q1lon-iqrlon&&p[1]<q3lon+iqrlon;});
+      var thrlat=Math.max((q3lat-q1lat)*1.5, 0.05);
+      var thrlon=Math.max((q3lon-q1lon)*1.5, 0.05);
+      var cleanPts=pts.filter(function(p){return Math.abs(p[0]-medlat)<thrlat&&Math.abs(p[1]-medlon)<thrlon;});
       if(cleanPts.length<2) cleanPts=pts;
       var bounds=L.latLngBounds(cleanPts);
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
