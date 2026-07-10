@@ -13437,11 +13437,29 @@ function renderRideEquipmentTab(body, r, idx){
 
   ensureBikes();
   var bike = null;
+  // Normalized name match so e.g. "Pinarello Dogma F" resolves to the seeded
+  // "Dogma F" (case-insensitive, whitespace-collapsed, either string
+  // containing the other).
+  var matchBikeByName = function(name){
+    if(!name) return null;
+    var n = String(name).toLowerCase().replace(/\s+/g,' ').trim();
+    if(!n) return null;
+    return (st.bikes||[]).find(function(b){
+      var bn = String(b.name||'').toLowerCase().replace(/\s+/g,' ').trim();
+      return bn && (bn===n || n.indexOf(bn)!==-1 || bn.indexOf(n)!==-1);
+    }) || null;
+  };
   if(r.gearId){
     bike = (st.bikes||[]).find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
+    // Strava rides carry a gear_id; map it to a display name via
+    // st.stravaGearMap (same as the shoe branch below), then match by name.
+    if(!bike){
+      var mappedBikeName = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
+      if(mappedBikeName) bike = matchBikeByName(mappedBikeName);
+    }
   }
   if(!bike && r.gearName){
-    bike = (st.bikes||[]).find(function(b){ return b.name===r.gearName; });
+    bike = matchBikeByName(r.gearName);
   }
 
   // Shoes: resolved by the same gear fields as bikes. Strava rides carry a
