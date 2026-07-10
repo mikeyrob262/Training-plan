@@ -12065,11 +12065,14 @@ function openDesktopRideDetail(idx){
       }
       L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
       L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      // Filter outliers: remove points more than 0.5 deg from median
-      var mlat=pts.map(function(p){return p[0];}).sort(function(a,b){return a-b;});
-      var mlon=pts.map(function(p){return p[1];}).sort(function(a,b){return a-b;});
-      var medlat=mlat[Math.floor(mlat.length/2)], medlon=mlon[Math.floor(mlon.length/2)];
-      var cleanPts=pts.filter(function(p){return Math.abs(p[0]-medlat)<0.5&&Math.abs(p[1]-medlon)<0.5;});
+      // Filter outliers using IQR
+      var slat=pts.map(function(p){return p[0];}).sort(function(a,b){return a-b;});
+      var slon=pts.map(function(p){return p[1];}).sort(function(a,b){return a-b;});
+      var n=slat.length;
+      var q1lat=slat[Math.floor(n*0.25)],q3lat=slat[Math.floor(n*0.75)];
+      var q1lon=slon[Math.floor(n*0.25)],q3lon=slon[Math.floor(n*0.75)];
+      var iqrlat=(q3lat-q1lat)*3, iqrlon=(q3lon-q1lon)*3;
+      var cleanPts=pts.filter(function(p){return p[0]>q1lat-iqrlat&&p[0]<q3lat+iqrlat&&p[1]>q1lon-iqrlon&&p[1]<q3lon+iqrlon;});
       if(cleanPts.length<2) cleanPts=pts;
       var bounds=L.latLngBounds(cleanPts);
       var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
