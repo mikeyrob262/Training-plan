@@ -275,7 +275,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
     var parser = new window.FitParser({
       force: true,
       speedUnit: 'mph',
-      lengthUnit: 'ft',
+      lengthUnit: 'm', // FitParser supports only m/mi/km (no 'ft'); we convert m->mi/ft ourselves below
       temperatureUnit: 'fahrenheit',
       elapsedRecordField: true,
       mode: 'list'
@@ -301,7 +301,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
           result.date = d.toISOString().split('T')[0];
         }
         if (s.total_timer_time != null) result.duration = Math.round(s.total_timer_time);
-        if (s.total_distance != null) result.distance = parseFloat((s.total_distance/5280).toFixed(1)); // ft -> mi (lengthUnit ft above gives feet)
+        if (s.total_distance != null) result.distance = parseFloat((s.total_distance/1609.344).toFixed(1)); // m -> mi (FitParser returns meters; lengthUnit:'ft' is not honored)
         if (s.avg_power != null) result.avgPwr = Math.round(s.avg_power);
         if (s.max_power != null) result.maxPwr = Math.round(s.max_power);
         if (s.normalized_power != null) result.np = Math.round(s.normalized_power);
@@ -311,7 +311,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
         if (s.max_heart_rate != null) result.maxHR = Math.round(s.max_heart_rate);
         if (s.avg_cadence != null) result.cadence = Math.round(s.avg_cadence);
         if (s.total_calories != null) result.calories = Math.round(s.total_calories);
-        if (s.total_ascent != null) result.elev = Math.round(s.total_ascent); // already ft per lengthUnit
+        if (s.total_ascent != null) result.elev = Math.round(s.total_ascent * 3.28084); // m -> ft (FitParser returns meters; lengthUnit:'ft' is not honored)
         if (s.total_work != null) result.workKj = Math.round(s.total_work/1000);
         if (s.avg_temperature != null) result.avgTemp = Math.round(s.avg_temperature);
         if (s.max_temperature != null) result.maxTemp = Math.round(s.max_temperature);
