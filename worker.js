@@ -12560,7 +12560,7 @@ function openDesktopRideDetail(idx){
     setTimeout(function(){
       var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'}).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
       var SC=180/Math.pow(2,31);
       var pts=gl.map(function(la,i){
         var lt=la,ln=gn[i];
@@ -13042,7 +13042,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
         h.satOn=false;
       } else {
         if(!h.sat){
-          h.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,attribution:'Esri'});
+          h.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,detectRetina:true,attribution:'Esri'});
         }
         try{h.base.remove();}catch(e){}
         try{h.sat.addTo(h.map);}catch(e){}
@@ -13067,7 +13067,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
       setTimeout(function(){
         if(typeof L==='undefined') return;
         var m=L.map(fsMapId,{zoomControl:true,scrollWheelZoom:true});
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(m);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(m);
         var pts=lats.map(function(la,i){return[la,lons[i]];});
         L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(m);
         L.circleMarker(pts[0],{radius:7,fillColor:'#1D9E75',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
@@ -13262,7 +13262,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
       var mapEl=document.getElementById(mapId);
       if(!mapEl||typeof L==='undefined') return;
       var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       if(windDeg==null){
         L.polyline(pts,{color:'#94a3b8',weight:4,opacity:.85}).addTo(map);
@@ -13344,7 +13344,7 @@ function buildRouteMapHR(lats, lons, hrData, maxHR){
     var mapEl=document.getElementById(mapId);
     if(!mapEl||typeof L==='undefined') return;
     var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
     if(hrData && hrData.length>5){
       var step=Math.max(1,Math.floor(lats.length/hrData.length));
       var currentColor='#64748b';
@@ -14183,9 +14183,11 @@ function buildRouteMap(lats, lons, pwrData, FTP){
     });
 
     // OpenStreetMap tiles
-    var baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
-      maxZoom: 17
+    var baseOSM = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap contributors © CARTO',
+      detectRetina: true,
+      subdomains: 'abcd',
+      maxZoom: 20
     }).addTo(map);
     // Expose this map + its base layer so external controls (e.g. the
     // Overview preview's layers button) can toggle satellite/street.
@@ -18800,7 +18802,7 @@ function renderMapContent(body, ride, wind, forTime){
 
     var lats=ride.gpsLats, lons=ride.gpsLons;
     var map=L.map(mapId,{zoomControl:true,attributionControl:false,scrollWheelZoom:false});
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
     var pts=lats.map(function(la,i){return[la,lons[i]];});
 
     var gustThreshold = wind ? (wind.windspeed_10m||0)+8 : null;
@@ -18895,7 +18897,7 @@ function drawWindMap(containerEl, ride, wind){
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       console.log('WM: init', mapId, 'pts:', pts.length, 'el.offsetHeight:', el.offsetHeight);
       var map=L.map(mapId,{zoomControl:false,scrollWheelZoom:false,dragging:true,attributionControl:false,tap:false});
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:17}).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
       function classifySeg(idx){
         if(!wind||wind.winddirection_10m==null) return '#378ADD';
         var p1=pts[Math.max(0,idx-1)], p2=pts[Math.min(pts.length-1,idx+1)];
