@@ -3632,6 +3632,30 @@ function dedupeRuns_(runs){
   });
   return order.map(function(key){ return byKey[key]; });
 }
+// Collapse duplicate rides by activity identity (rideKey: stravaId, else
+// date_distance_duration). Same root cause as runs: id-less FIT rides fall to
+// mergeArrays_'s content-fingerprint path, which a Firebase round-trip
+// (key reorder / null strip) defeats, so they re-double on sync. This is a
+// CONSERVATIVE identity dedup (only exact-same-activity entries collapse; it
+// never merges two distinct rides the way dedupeRides_'s fuzzy clustering
+// can). Prefers a tombstone (deletions win) else the most-complete entry.
+function dedupeRidesByKey_(rides){
+  if(!Array.isArray(rides)) return rides;
+  function completeness(r){ var n=0; for(var k in r){ if(r[k]!=null && r[k]!=='') n++; } return n; }
+  var byKey = {}, order = [], keyless = [];
+  rides.forEach(function(r){
+    if(!r || typeof r !== 'object') return;
+    var key = (typeof rideKey === 'function') ? rideKey(r) : null;
+    if(!key){ keyless.push(r); return; }
+    if(byKey[key] === undefined){ byKey[key] = r; order.push(key); return; }
+    var cur = byKey[key], keep;
+    if(cur.deleted && !r.deleted) keep = cur;
+    else if(!cur.deleted && r.deleted) keep = r;
+    else keep = (completeness(cur) >= completeness(r)) ? cur : r;
+    byKey[key] = keep;
+  });
+  return order.map(function(key){ return byKey[key]; }).concat(keyless);
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf','runs'].forEach(function(k){
@@ -3641,9 +3665,11 @@ function normalizeState_(s){
     if(isPlainObj_(s[k])) { s[k] = Object.keys(s[k]).map(function(k2){return s[k][k2];}); return; }
     s[k] = [];
   });
-  // Runs have no stable id, so the union-merge can double them across a
-  // Firebase round-trip (key reorder / null strip). Collapse by identity here.
+  // Runs and id-less FIT rides have no stable id, so the union-merge can
+  // double them across a Firebase round-trip (key reorder / null strip).
+  // Collapse both by activity identity here.
   if(Array.isArray(s.runs)) s.runs = dedupeRuns_(s.runs);
+  if(Array.isArray(s.rides)) s.rides = dedupeRidesByKey_(s.rides);
   // Manual bike assignments: a plain object keyed by rideKey(r) -> bike id.
   // Lives in st (sibling of st.rides) so it syncs via sv()/fbPush and is
   // deep-merged by mergeState_'s object branch — never touched by
