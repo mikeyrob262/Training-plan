@@ -10501,6 +10501,8 @@ function dsShowAICoach(){
 
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
+  var todayActual=(st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   var upcoming=[];
   for(var di=todayIdx+1;di<7;di++){
@@ -10535,7 +10537,8 @@ function dsShowAICoach(){
       +' FTP:'+ftp+'W Weight:'+weight+'lbs W/kg:'+wkg
       +' CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb+(tsb<-20?' TIRED':tsb>5?' FRESH':' NEUTRAL')
       +' NEXT RACE:'+raceStr
-      +' TODAY WORKOUT:'+(todayWorkout||'Rest')
+      +' TODAY ALREADY LOGGED:'+(todayActual||'nothing yet')
+      +' TODAY PLANNED:'+(todayWorkout||'Rest')
       +' WEATHER:'+wstr
       +' BIKES:'+(bikeOpts||'none')
       +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
@@ -17680,6 +17683,8 @@ function fetchTodaysDecision(weatherStr, callback){
   var recentRides = (st.rides||[]).filter(function(r){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
+  var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   ensureBikes();
   var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
@@ -17691,6 +17696,7 @@ function fetchTodaysDecision(weatherStr, callback){
     +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs'
     +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
+    +'. TODAY ALREADY LOGGED: '+(todayActual||'nothing yet')
     +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
     +'. TODAYS WEATHER: '+(weatherStr||'unavailable')
     +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
@@ -17770,6 +17776,8 @@ function showAICoach(){
   var recentRides = (st.rides||[]).filter(function(r){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
+  var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   // Get upcoming workouts this week
   var upcoming = [];
@@ -17810,6 +17818,7 @@ function showAICoach(){
     +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
     +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
+    +'. TODAY ALREADY LOGGED: '+(todayActual||'nothing yet')
     +'. TODAYS PLANNED WORKOUT: '+(todayWorkout||'Rest or unplanned')
     +'. TODAYS WEATHER: '+weatherStr
     +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
