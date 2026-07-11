@@ -322,6 +322,9 @@ window.parseFitFile = function(arrayBuffer, callback) {
             if (leftPct > 0 && leftPct < 100) result.lrBalance = leftPct + '/' + (100 - leftPct);
           }
         }
+        // Activity type — lets the importer route to st.rides / st.runs / skip.
+        if (s.sport != null) result.sport = String(s.sport);           // 'cycling','running','walking','swimming','training',...
+        if (s.sub_sport != null) result.subSport = String(s.sub_sport);
 
         // Per-second record stream -> GPS + power curve + chart streams
         var eleStream = [], hrStream = [];
@@ -384,6 +387,20 @@ window.parseFitFile = function(arrayBuffer, callback) {
         result.chartEle = dsChart(eleStream, 200);
         result.chartPwr = dsChart(result.pwrStream, 200);
         result.chartHR  = dsChart(hrStream, 200);
+
+        // Run HR-zone distribution from record HR (same fixed thresholds as the
+        // TCX run path). Used only when this activity routes to st.runs.
+        if (hrStream.length) {
+          var hz1=0,hz2=0,hz3=0,hz4=0,hz5=0;
+          hrStream.forEach(function(hr){
+            if(hr<113) hz1++; else if(hr<=121) hz2++; else if(hr<=141) hz3++; else if(hr<=158) hz4++; else hz5++;
+          });
+          var hzn = hrStream.length;
+          result.hrZones = {
+            z1pct:Math.round(hz1/hzn*100), z2pct:Math.round(hz2/hzn*100), z3pct:Math.round(hz3/hzn*100),
+            z4pct:Math.round(hz4/hzn*100), z5pct:Math.round(hz5/hzn*100)
+          };
+        }
 
         callback(null, result);
       } catch(e2) {
