@@ -14826,17 +14826,26 @@ function renderRun(){
         }
       }
 
-      // Mini GPS map
-      if(r.gpsLats && Array.isArray(r.gpsLats) && r.gpsLats.length > 5 && r.gpsLons && r.gpsLons.length > 5){
-        var mapWrap=document.createElement('div');
-        mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1);height:160px';
-        try {
-          var mapHtml = buildRouteMap(r.gpsLats, r.gpsLons, [], 0);
-          mapHtml = mapHtml.replace('height:260px', 'height:160px');
-          mapWrap.innerHTML = mapHtml;
-          rcard.appendChild(mapWrap);
-        } catch(e) {}
-      }
+      // Mini GPS map — run GPS now lives in /gps/{rideKey} (lazy-load); legacy
+      // runs with inline gpsLats still draw immediately.
+      var mapSlot=document.createElement('div');
+      rcard.appendChild(mapSlot);
+      (function(rr, slot){
+        function drawMap(){
+          var glats=rr.gpsLats||rr.lats, glons=rr.gpsLons||rr.lons;
+          if(glats && glats.length>5 && glons && glons.length>5){
+            var mapWrap=document.createElement('div');
+            mapWrap.style.cssText='margin-bottom:8px;border-radius:12px;overflow:hidden;border:1px solid var(--b1);height:160px';
+            try{
+              mapWrap.innerHTML=buildRouteMap(glats, glons, [], 0).replace('height:260px','height:160px');
+              slot.appendChild(mapWrap);
+            }catch(e){}
+          }
+        }
+        var have=(rr.gpsLats&&rr.gpsLats.length>5)||(rr.lats&&rr.lats.length>5);
+        if(have){ drawMap(); }
+        else if(typeof ensureRideGps==='function' && !rr._gpsTried){ rr._gpsTried=true; ensureRideGps(rr).then(drawMap); }
+      })(r, mapSlot);
 
       // HR warning
       if(hrWarn){
