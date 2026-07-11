@@ -3162,6 +3162,43 @@ function ensureFbAuth_(){
 }
 // Builds an authenticated Firebase RTDB URL for the current request.
 function fbAuthedUrl_(token){ return FB_URL + '?auth=' + encodeURIComponent(token); }
+
+// -- Per-ride GPS storage --------------------------------------------------
+// Heavy GPS + chart streams are kept OUT of the monolithic st blob (which
+// syncs to localStorage's ~5MB cap) and stored per-ride at Firebase
+// /gps/{rideKey}, fetched lazily when a map opens. rideKey() is the existing
+// stable id (stravaId, else date_distance_duration) so paths survive re-syncs
+// and match dedup. Keyed on the same value used everywhere else.
+function fbGpsUrl_(key, token){
+  return FB_URL.replace('/data.json','') + '/gps/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(token);
+}
+// The heavy fields that should live in /gps/{key}, not in the st blob.
+function gpsPayload_(r){
+  if(!r) return null;
+  var p = {};
+  if(r.lats) p.lats = r.lats;
+  if(r.lons) p.lons = r.lons;
+  if(r.chartPwr) p.chartPwr = r.chartPwr;
+  if(r.chartHR)  p.chartHR  = r.chartHR;
+  if(r.chartEle) p.chartEle = r.chartEle;
+  return Object.keys(p).length ? p : null;
+}
+// Write one ride's GPS payload to /gps/{key}. Resolves true/false, never rejects.
+function gpsPut(key, payload){
+  if(!key || !payload) return Promise.resolve(false);
+  return ensureFbAuth_().then(function(token){
+    return fetch(fbGpsUrl_(key, token), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  }).then(function(r){ return !!(r && r.ok); }).catch(function(){ return false; });
+}
+// Fetch one ride's GPS payload from /gps/{key}. Resolves the object or null.
+function gpsGet(key){
+  if(!key) return Promise.resolve(null);
+  return ensureFbAuth_().then(function(token){
+    return fetch(fbGpsUrl_(key, token));
+  }).then(function(r){ return (r && r.ok) ? r.json() : null; }).catch(function(){ return null; });
+}
+// --------------------------------------------------------------------------
+
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
 
