@@ -5306,7 +5306,7 @@ function showProg(){
     h+='<div style="background:var(--s2);border-radius:12px;padding:12px;text-align:center">'      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:4px">'+st2.l+'</div>'      +'<div style="font-size:20px;font-weight:800;color:'+(st2.c||'var(--t1)')+';line-height:1">'+st2.v+'</div>'      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+st2.s+'</div></div>';
   });
   h+='</div>';
-  h+='<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
+  h+='<div data-view="progress" style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">'
     +'<div style="font-size:12px;color:var(--t1);font-weight:600">Detailed charts in Nutrition → Progress tab</div>'
     +'<div style="font-size:11px;color:var(--t3)">↗</div></div>';
 
@@ -10328,6 +10328,24 @@ function dsShowActivities(){
   if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
 }
 
+// -- Delegated "View" link dispatch -----------------------------------------
+// Previously-dead link-styled affordances are tagged with data-view (+ optional
+// data-arg). One document-level listener routes them to a whitelisted action,
+// so the wiring survives re-renders. Group-B links (no target) stay untagged.
+var VIEW_ACTIONS = {
+  calendar:  function(){ dsNav('calendar'); },
+  aicoach:   function(){ dsNav('aicoach'); },
+  nutrition: function(){ dsNav('nutrition'); },
+  gear:      function(){ dsNav('gear'); },
+  progress:  function(){ showNutr(); },
+  editRide:  function(a){ if(typeof editRideData==='function') editRideData(parseInt(a,10)); }
+};
+document.addEventListener('click', function(e){
+  var el = (e.target && e.target.closest) ? e.target.closest('[data-view]') : null;
+  if(!el) return;
+  var fn = VIEW_ACTIONS[el.getAttribute('data-view')];
+  if(fn){ e.preventDefault(); fn(el.getAttribute('data-arg')); }
+});
 function dsNav(section){
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
   document.querySelectorAll('.ds-ni').forEach(function(n){
@@ -11477,6 +11495,7 @@ function dsShowDashboard(){
     return e;
   }
   function div(css,txt){ return mk('div',css,txt); }
+  function navlink(css,txt,view,arg){ var e=mk('div',css,txt); e.setAttribute('data-view',view); if(arg!=null) e.setAttribute('data-arg',arg); return e; }
   function card(extra){
     var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow:hidden;min-height:0');
     if(extra) d.style.cssText+=';'+extra;
@@ -11628,7 +11647,7 @@ function dsShowDashboard(){
   var tbc=card('');
   var tbhd=row('justify-content:space-between;margin-bottom:8px');
   var tbl2=row('gap:5px'); tbl2.appendChild(ico('ti-bolt','#4ade80')); tbl2.appendChild(lbl('TRAINING BALANCE'));
-  tbhd.appendChild(tbl2); tbhd.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View Calendar'));
+  tbhd.appendChild(tbl2); tbhd.appendChild(navlink('font-size:10px;color:#4ade80;cursor:pointer','View Calendar','calendar'));
   tbc.appendChild(tbhd);
   tbc.appendChild(div('font-size:20px;font-weight:800;color:#4ade80;margin-bottom:6px','+ +6'));
   [['JUL','12','Lake Michigan Century','Kenosha, WI','18 days'],['AUG','9','Mt. Washington','Auto Road, NH','46 days'],['SEP','21','Gran Fondo Hincapie','Greenville, SC','78 days'],['OCT','18','Chicago Marathon','Chicago, IL','105 days']].forEach(function(ev){
@@ -11668,6 +11687,7 @@ function dsShowDashboard(){
   pc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.4;margin-bottom:6px','Ideal session to build FTP.'));
   
   var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer','View Workout Details');
+  vwb.setAttribute('data-view','calendar');
   pc.appendChild(vwb);
   r2.appendChild(pc);
 
@@ -11701,7 +11721,7 @@ function dsShowDashboard(){
   var cc=card('');
   var chd=row('justify-content:space-between;margin-bottom:10px');
   chd.appendChild(lbl('COACH NOTE'));
-  chd.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View All'));
+  chd.appendChild(navlink('font-size:10px;color:#4ade80;cursor:pointer','View All','aicoach'));
   cc.appendChild(chd);
   var crow=row('gap:10px');
   var cbox=div('width:36px;height:36px;border-radius:10px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0');
@@ -11793,7 +11813,7 @@ function dsShowDashboard(){
   });
   nrow.appendChild(dnut); nrow.appendChild(nlist);
   nc.appendChild(nrow);
-  nc.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View Details'));
+  nc.appendChild(navlink('font-size:10px;color:#4ade80;cursor:pointer','View Details','nutrition'));
   r3.appendChild(nc);
 
   // Weather
@@ -11864,6 +11884,7 @@ function dsShowDashboard(){
   ];
   bkbikes.forEach(function(b){
     var br=row('gap:8px;margin-bottom:6px;cursor:pointer');
+    br.setAttribute('data-view','gear');
     br.onmouseover=function(){this.style.background='rgba(255,255,255,.03)';};
     br.onmouseout=function(){this.style.background='';};
     // Photo thumbnail
@@ -12398,7 +12419,7 @@ function openDesktopRideDetail(idx){
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
             '<span style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
-            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
+            '<span data-view="editRide" data-arg="'+idx+'" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
           '<div style="font-size:11px;color:#64748b;margin-top:2px">'+dtStr+'</div>'+
         '</div>'+
@@ -12516,7 +12537,7 @@ function openDesktopRideDetail(idx){
           '</div>'+
         '</div>'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
           (bike
             ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(function(){var t=0;(st.rides||[]).forEach(function(x){t+=parseFloat(x.distance)||0;});return Math.round(t).toLocaleString()+' mi total';})()+'</div>'
             :'<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
@@ -12651,7 +12672,7 @@ function openDesktopRideDetail(idx){
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
-        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
+        '<div data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
       '</div>'+
       (bike?
         '<div style="display:flex;align-items:center;gap:10px">'+
