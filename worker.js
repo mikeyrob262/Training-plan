@@ -10654,10 +10654,19 @@ function dsShowAICoach(){
       tb.textContent='Thinking...'; chatLog.appendChild(tb);
       wrap.scrollTop=wrap.scrollHeight;
       chatHistory.push({role:'user',content:q});
+      // Inject real training so the chat can actually see the ride (was
+      // sending only FTP/CTL/ATL/TSB -> "I don't have visibility of the ride").
+      var _tk=normDate(getTodayKey());
+      var _today=(st.rides||[]).filter(function(x){return x&&!x.deleted&&normDate(x.date)===_tk;})
+        .map(function(x){return (x.name||'Ride')+' '+(x.distance||0)+'mi '+(x.duration||'')+' TSS:'+(x.tss||0)+' NP:'+(x.np||x.avgPwr||0)+'W';}).join('; ')||'none logged yet';
+      var _recent=(recentRides||[]).slice(0,10).map(function(x){return (x.name||'Ride')+' '+x.date+' '+(x.distance||0)+'mi TSS:'+(x.tss||0)+' NP:'+(x.np||x.avgPwr||0)+'W';}).join('; ')||'none';
       fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,
-          system:'You are a personal cycling and endurance coach for Mikey. FTP:'+ftp+'W CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb+'. Be concise.',
+          system:'You are a personal cycling and endurance coach for Mikey. FTP:'+ftp+'W CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb
+            +'. TODAY LOGGED ACTIVITY: '+_today
+            +'. RECENT RIDES (last 7 days): '+_recent
+            +'. Use this real training data to answer; never say you cannot see the ride. Be concise.',
           messages:chatHistory})
       }).then(function(r){return r.json();}).then(function(d){
         var reply=d.content&&d.content[0]&&d.content[0].text||'Sorry, try again';
