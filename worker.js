@@ -9320,9 +9320,7 @@ function bulkImportTCX(input){
             rss: tss2||0,
             source: 'garmin'
           };
-          if(!st.runs) st.runs=[];
-          st.runs.push(run);
-          cb(null, 'run');
+          cb(null, 'run', run);   // caller pushes (batch loop owns st mutation)
         } else {
           // Route to rides (existing behavior)
           var isDup = (st.rides||[]).some(function(r){
@@ -9341,14 +9339,15 @@ function bulkImportTCX(input){
             name:rideName, date:dateStr, duration:durStr, movingSecs:durSec,
             distance:distMi, avgPwr:avgPwr, np:np2, tss:tss2,
             ifPct:Math.round(IF2*100), avgHR:avgHR, cadence:avgCad,
-            elev:elevGain, source:'tcx',
+            elev:elevGain, source:'tcx'
+          };
+          // Heavy chart streams go to /gps/{rideKey}, not the st blob.
+          var gps={
             chartEle: (eleVals.length>1) ? downsampleG(eleVals.map(function(m){return Math.round(m*3.28084);}),200) : null,
             chartPwr: (pwrVals.length>1) ? downsampleG(pwrVals,200) : null,
             chartHR: (hrVals.length>1) ? downsampleG(hrVals,200) : null
           };
-          if(!st.rides) st.rides=[];
-          st.rides.push(ride);
-          cb(null, 'ride');
+          cb(null, 'ride', ride, gps);   // caller pushes + stores GPS
         }
       } catch(err){ cb(err.message); }
     };
@@ -9356,100 +9355,124 @@ function bulkImportTCX(input){
     reader.readAsText(file);
   }
 
-  var idx=0, doneRuns=0;
-  function next(){
-    if(idx>=files.length){
-      sv();                                        // single persist for the whole batch
-      if(prog) prog.remove();
-      var msg = '';
-      if(done) msg += done+' ride(s) imported';
-      if(doneRuns) msg += (msg?', ':'')+doneRuns+' run(s) imported';
-      if(skipped) msg += ', '+skipped+' duplicates skipped';
-      if(failed) msg += ', '+failed+' failed';
-      toast(msg||'Nothing imported');
-      renderPerf(document.getElementById('perf-body'));
-      input.value='';
-      return;
-    }
-    if(prog) prog.textContent='Importing '+idx+' / '+total+'…';
-    var curFile = files[idx++];
-    var curExt = (curFile.name||'').split('.').pop().toLowerCase();
-    if(curExt === 'fit'){
-      var fitReader = new FileReader();
-      fitReader.onload = function(fe){
-        window.parseFitFile(fe.target.result, function(err2, data){
-          if(err2){ failed++; setTimeout(next,10); return; }
-          var name2 = (curFile.name||'').replace(/\\.fit$/i,'').replace(/_/g,' ') || 'FIT Activity';
-          if(!data.date) data.date = getTodayKey();
-          var ride2 = {
-            name: name2, date: data.date, duration: data.duration, distance: data.distance,
-            avgPwr: data.avgPwr, np: data.np, hr: data.hr, tss: data.tss, elev: data.elev,
-            calories: data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
-            z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
-            lats: data.lats && data.lats.length>10 ? data.lats : null,
-            lons: data.lons && data.lons.length>10 ? data.lons : null,
-            max20: data.peak20||null, maxPwr: data.maxPwr||null, powerCurve: data.powerCurve||null,
-            workKj: data.workKj||null, ifPct: data.ifPct||null, tss: data.tss||null,
-            avgHR: data.hr||null, maxHR: data.maxHR||null, cadence: data.cadence||null,
-            avgTemp: data.avgTemp||null, maxTemp: data.maxTemp||null,
-            lrBalance: data.lrBalance||null, source:'fit',
-            chartEle: data.chartEle||null,
-            chartPwr: data.chartPwr||null,
-            chartHR:  data.chartHR||null
-          };
-          if(!st.rides) st.rides=[];
-          var dupIdx=-1;
-          for(var _i=0;_i<st.rides.length;_i++){
-            var _r=st.rides[_i];
-            if(_r.date===ride2.date && Math.abs((_r.distance||0)-(ride2.distance||0))<0.5){ dupIdx=_i; break; }
-          }
-          if(dupIdx>=0){
-            // Merge FIT data into existing ride (overwrite with richer fields)
-            var existing=st.rides[dupIdx];
-            st.rides[dupIdx]=Object.assign({},existing,{
-              max20:ride2.max20||existing.max20,
-              maxPwr:ride2.maxPwr||existing.maxPwr,
-              powerCurve:ride2.powerCurve||existing.powerCurve,
-              lrBalance:ride2.lrBalance||existing.lrBalance,
-              z1s:ride2.z1s||existing.z1s, z2s:ride2.z2s||existing.z2s,
-              z3s:ride2.z3s||existing.z3s, z4s:ride2.z4s||existing.z4s,
-              z5s:ride2.z5s||existing.z5s, z6s:ride2.z6s||existing.z6s,
-              np:ride2.np||existing.np, avgPwr:ride2.avgPwr||existing.avgPwr,
-              avgHR:ride2.avgHR||existing.avgHR,
-              maxHR:ride2.maxHR||existing.maxHR,
-              tss:ride2.tss||existing.tss, elev:ride2.elev||existing.elev,
-              calories:ride2.calories||existing.calories,
-              workKj:ride2.workKj||existing.workKj,
-              ifPct:ride2.ifPct||existing.ifPct,
-              cadence:ride2.cadence||existing.cadence,
-              avgTemp:ride2.avgTemp||existing.avgTemp,
-              maxTemp:ride2.maxTemp||existing.maxTemp,
-              lrBalance:ride2.lrBalance||existing.lrBalance,
-              powerCurve:ride2.powerCurve||existing.powerCurve,
-              lats:ride2.lats||existing.lats, lons:ride2.lons||existing.lons,
-              chartEle:ride2.chartEle||existing.chartEle,
-              chartPwr:ride2.chartPwr||existing.chartPwr,
-              chartHR:ride2.chartHR||existing.chartHR
-            });
-            done++; setTimeout(next,10); return;   // sv() deferred to end of batch
-          }
-          st.rides.push(ride2);
-          done++;
-          setTimeout(next,10);
-        });
-      };
-      fitReader.readAsArrayBuffer(curFile);
-    } else {
-    processTCX(curFile, function(err, type){
-      if(!err && type==='run') doneRuns++;
-      else if(!err) done++;
-      else if(err==='dup') skipped++;
-      else failed++;
-      setTimeout(next, 10);
+  var doneRuns=0;
+  var BATCH=25, PAUSE=200;   // ~25 files, then yield ~200ms so the tab stays responsive
+
+  // Promise wrappers around the callback-based parsers.
+  function parseFitAsync(file){
+    return new Promise(function(resolve){
+      var fr=new FileReader();
+      fr.onload=function(fe){ window.parseFitFile(fe.target.result,function(err,data){ resolve({err:err,data:data}); }); };
+      fr.onerror=function(){ resolve({err:'read error'}); };
+      fr.readAsArrayBuffer(file);
     });
-    }
   }
-  next();
+  function parseTcxAsync(file){
+    return new Promise(function(resolve){
+      processTCX(file,function(err,type,obj,gps){ resolve({err:err,type:type,obj:obj,gps:gps}); });
+    });
+  }
+  function pause(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+  function findRideDup(date,dist){
+    var rides=st.rides||[];
+    for(var i=0;i<rides.length;i++){
+      var r=rides[i];
+      if(r && !r.deleted && r.date===date && Math.abs((r.distance||0)-(dist||0))<0.5) return i;
+    }
+    return -1;
+  }
+
+  (async function runImport(){
+    var pending=[];   // gpsPut promises for the current batch (paces network + memory)
+    for(var i=0;i<files.length;i++){
+      var curFile=files[i];
+      var ext=(curFile.name||'').split('.').pop().toLowerCase();
+      try{
+        if(ext==='fit'){
+          var res=await parseFitAsync(curFile);
+          if(res.err||!res.data){ failed++; }
+          else {
+            var data=res.data;
+            if(!data.date) data.date=getTodayKey();
+            var name2=(curFile.name||'').replace(/\\.fit$/i,'').replace(/_/g,' ')||'FIT Activity';
+            // Light summary — GPS/chart streams deliberately excluded from st.
+            var lite={
+              name:name2, date:data.date, duration:data.duration, distance:data.distance,
+              avgPwr:data.avgPwr, np:data.np, hr:data.hr, tss:data.tss, elev:data.elev,
+              calories:data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
+              z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
+              max20:data.peak20||null, maxPwr:data.maxPwr||null, powerCurve:data.powerCurve||null,
+              workKj:data.workKj||null, ifPct:data.ifPct||null,
+              avgHR:data.hr||null, maxHR:data.maxHR||null, cadence:data.cadence||null,
+              avgTemp:data.avgTemp||null, maxTemp:data.maxTemp||null,
+              lrBalance:data.lrBalance||null, source:'fit'
+            };
+            var gps={
+              lats:(data.lats&&data.lats.length>10)?data.lats:null,
+              lons:(data.lons&&data.lons.length>10)?data.lons:null,
+              chartEle:data.chartEle||null, chartPwr:data.chartPwr||null, chartHR:data.chartHR||null
+            };
+            if(!st.rides) st.rides=[];
+            var dupIdx=findRideDup(lite.date,lite.distance);
+            var target;
+            if(dupIdx>=0){
+              var ex=st.rides[dupIdx];
+              // Merge richer FIT summary fields into the existing ride.
+              target=st.rides[dupIdx]=Object.assign({},ex,{
+                max20:lite.max20||ex.max20, maxPwr:lite.maxPwr||ex.maxPwr,
+                powerCurve:lite.powerCurve||ex.powerCurve, lrBalance:lite.lrBalance||ex.lrBalance,
+                z1s:lite.z1s||ex.z1s, z2s:lite.z2s||ex.z2s, z3s:lite.z3s||ex.z3s,
+                z4s:lite.z4s||ex.z4s, z5s:lite.z5s||ex.z5s, z6s:lite.z6s||ex.z6s,
+                np:lite.np||ex.np, avgPwr:lite.avgPwr||ex.avgPwr, avgHR:lite.avgHR||ex.avgHR,
+                maxHR:lite.maxHR||ex.maxHR, tss:lite.tss||ex.tss, elev:lite.elev||ex.elev,
+                calories:lite.calories||ex.calories, workKj:lite.workKj||ex.workKj,
+                ifPct:lite.ifPct||ex.ifPct, cadence:lite.cadence||ex.cadence,
+                avgTemp:lite.avgTemp||ex.avgTemp, maxTemp:lite.maxTemp||ex.maxTemp
+              });
+            } else {
+              st.rides.push(lite); target=lite;
+            }
+            var pl=gpsPayload_(gps);
+            if(pl) pending.push(gpsPut(rideKey(target), pl));
+            done++;
+          }
+        } else {
+          var t=await parseTcxAsync(curFile);
+          if(t.err==='dup'){ skipped++; }
+          else if(t.err||!t.type){ failed++; }
+          else if(t.type==='run'){ if(!st.runs) st.runs=[]; st.runs.push(t.obj); doneRuns++; }
+          else {
+            if(!st.rides) st.rides=[]; st.rides.push(t.obj);
+            var tpl=t.gps?gpsPayload_(t.gps):null;
+            if(tpl) pending.push(gpsPut(rideKey(t.obj), tpl));
+            done++;
+          }
+        }
+      }catch(e){ failed++; }
+
+      if(prog) prog.textContent='Importing '+(i+1)+' / '+total+'…';
+
+      // Batch boundary: flush this batch's GPS writes, persist the light blob,
+      // then yield so the browser can paint and GC (prevents the tab throttle).
+      if((i+1)%BATCH===0){
+        try{ await Promise.all(pending); }catch(e){}
+        pending=[];
+        sv();
+        await pause(PAUSE);
+      }
+    }
+    try{ await Promise.all(pending); }catch(e){}
+    sv();
+    if(prog) prog.remove();
+    var msg='';
+    if(done) msg+=done+' ride(s) imported';
+    if(doneRuns) msg+=(msg?', ':'')+doneRuns+' run(s) imported';
+    if(skipped) msg+=', '+skipped+' duplicates skipped';
+    if(failed) msg+=', '+failed+' failed';
+    toast(msg||'Nothing imported');
+    try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
+    input.value='';
+  })();
 }
 
 // Unzip Garmin Connect / bulk .zip exports and feed the contained .fit/.tcx
