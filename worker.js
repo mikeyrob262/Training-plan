@@ -3608,15 +3608,42 @@ function runNutritionCleanup(){
   toast('Removed '+result.totalRemoved+' duplicate food entries');
   try{ renderNutr(); }catch(e){}
 }
+// Collapse duplicate runs by activity identity (date + rounded distance +
+// duration). Runs carry no stravaId/id, so the generic union-merge dedups
+// them by JSON.stringify — which Firebase defeats by returning object keys
+// in a different order (and stripping nulls) on round-trip, so local vs
+// remote copies never match and every run doubles on the first sync after
+// import. An identity key is immune to key-order/null differences. Prefers a
+// tombstone (deletions win) else the most-complete entry.
+function dedupeRuns_(runs){
+  if(!Array.isArray(runs)) return runs;
+  var nd = (typeof normDate === 'function') ? normDate : function(x){ return x; };
+  function completeness(r){ var n=0; for(var k in r){ if(r[k]!=null && r[k]!=='') n++; } return n; }
+  var byKey = {}, order = [];
+  runs.forEach(function(r){
+    if(!r || typeof r !== 'object') return;
+    var key = nd(r.date||'') + '_' + (Math.round(parseFloat(r.distance)||0)) + '_' + (r.movingSecs||0);
+    if(byKey[key] === undefined){ byKey[key] = r; order.push(key); return; }
+    var cur = byKey[key], keep;
+    if(cur.deleted && !r.deleted) keep = cur;
+    else if(!cur.deleted && r.deleted) keep = r;
+    else keep = (completeness(cur) >= completeness(r)) ? cur : r;
+    byKey[key] = keep;
+  });
+  return order.map(function(key){ return byKey[key]; });
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
-  ['rides','cf'].forEach(function(k){
+  ['rides','cf','runs'].forEach(function(k){
     if(s[k] === undefined) { s[k] = []; return; }
     if(Array.isArray(s[k])) return;
     if(isPlainObj_(s[k]) && looksLikeSparseArray_(s[k])) { s[k] = objectToArray_(s[k]); return; }
     if(isPlainObj_(s[k])) { s[k] = Object.keys(s[k]).map(function(k2){return s[k][k2];}); return; }
     s[k] = [];
   });
+  // Runs have no stable id, so the union-merge can double them across a
+  // Firebase round-trip (key reorder / null strip). Collapse by identity here.
+  if(Array.isArray(s.runs)) s.runs = dedupeRuns_(s.runs);
   // Manual bike assignments: a plain object keyed by rideKey(r) -> bike id.
   // Lives in st (sibling of st.rides) so it syncs via sv()/fbPush and is
   // deep-merged by mergeState_'s object branch — never touched by
@@ -9400,9 +9427,13 @@ function bulkImportTCX(input){
   }
   function findRunDup(date,dist){
     var runs=st.runs||[];
+    var nd=(typeof normDate==='function')?normDate(date):date;   // normalize both dates
+    var d=parseFloat(dist)||0;                                    // coerce to number
     for(var i=0;i<runs.length;i++){
       var r=runs[i];
-      if(r && !r.deleted && r.date===date && Math.abs(parseFloat(r.distance||0)-(dist||0))<0.1) return true;
+      if(!r || r.deleted) continue;
+      var rd=(typeof normDate==='function')?normDate(r.date):r.date;
+      if(rd===nd && Math.abs((parseFloat(r.distance)||0)-d)<0.1) return true;
     }
     return false;
   }
