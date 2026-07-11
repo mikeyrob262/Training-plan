@@ -12603,7 +12603,7 @@ function openDesktopRideDetail(idx){
           else if(tab==='charts') renderRidePerformanceTab(dyn,r,idx,FTP,BWT);
           else if(tab==='laps') renderRideLapsTab(dyn,r,idx);
           else if(tab==='analytics') renderRideAnalysisTab(dyn,r,idx,FTP,BWT);
-          else if(tab==='segments') dyn.innerHTML='<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px">Segments — coming next</div>';
+          else if(tab==='segments') renderRideSegmentsTab(dyn,r,idx);
         }catch(e){ dyn.innerHTML='<div style="padding:40px 20px;color:#ef4444;font-size:13px">Tab error: '+(e&&e.message)+'</div>'; }
       };
     });
@@ -18052,6 +18052,87 @@ function decodePolyline(str) {
     lats.push(lat/1e5); lons.push(lng/1e5);
   }
   return {lats:lats, lons:lons};
+}
+
+// Fetch a ride's Strava segment efforts from the detailed-activity endpoint
+// (the same call fetchStravaGPS uses; segment_efforts ride in that response).
+// Only stravaId rides can have segments (Strava matches them server-side).
+// Caches onto r.segments. cb(array) on success, cb([]) if none, cb(null) on error.
+function fetchRideSegments(r, cb){
+  if(!r || !r.stravaId){ cb(null); return; }
+  if(r.segments){ cb(r.segments); return; }
+  var doFetch=function(token){
+    fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}})
+    .then(function(res){return res.json();}).then(function(a){
+      if(!a || !a.segment_efforts){ cb([]); return; }
+      var segs=a.segment_efforts.map(function(se){
+        var s=se.segment||{};
+        return {
+          name: s.name||se.name||'Segment',
+          time: se.elapsed_time||0,
+          distance: s.distance!=null?Math.round(s.distance/1609.344*100)/100:null,
+          grade: s.average_grade!=null?s.average_grade:null,
+          climb: s.climb_category||0,
+          avgPwr: se.average_watts!=null?Math.round(se.average_watts):null,
+          prRank: se.pr_rank||null,
+          komRank: se.kom_rank||null,
+          starred: !!s.starred
+        };
+      }).slice(0,100);
+      r.segments=segs; sv(); fbPush(true);
+      cb(segs);
+    }).catch(function(){ cb(null); });
+  };
+  if(st.stravaRefreshToken){
+    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    }).then(function(res){return res.json();}).then(function(d){
+      if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
+      else if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); }
+    }).catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); } });
+  } else if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); }
+}
+
+// Segments tab: lists this ride's Strava segment efforts (name, your time,
+// distance/grade/climb/power, PR medal, KOM rank if present). stravaId rides only.
+function renderRideSegmentsTab(body, r, idx){
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:14px 16px';
+  body.appendChild(wrap);
+  function fmtT(t){ var s=Math.round(t||0),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60; return (h>0?h+':'+(m<10?'0':'')+m:''+m)+':'+(ss<10?'0':'')+ss; }
+  function medal(n){ return n===1?'🥇':n===2?'🥈':n===3?'🥉':''; }
+  function render(segs){
+    if(segs===null){
+      wrap.innerHTML='<div style="padding:30px 10px;text-align:center;color:var(--t3)"><div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Couldn\\'t load segments</div><div style="font-size:13px;line-height:1.5">Connect Strava in Settings and try again.</div></div>';
+      return;
+    }
+    if(!segs.length){ wrap.innerHTML='<div style="padding:30px 10px;text-align:center;color:var(--t3);font-size:13px">No segment efforts on this ride.</div>'; return; }
+    var html='<div style="font-size:11px;color:var(--t3);margin-bottom:6px">'+segs.length+' segment effort'+(segs.length>1?'s':'')+'</div>';
+    segs.forEach(function(sg){
+      var meta=[];
+      if(sg.distance!=null) meta.push(sg.distance+' mi');
+      if(sg.grade!=null) meta.push(sg.grade+'%');
+      if(sg.climb>0) meta.push('Cat '+sg.climb);
+      if(sg.avgPwr!=null) meta.push(sg.avgPwr+'W');
+      html+='<div style="border-top:1px solid var(--b1);padding:9px 2px;display:flex;align-items:center;gap:8px">'
+        +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(sg.starred?'★ ':'')+sg.name+'</div>'
+          +'<div style="font-size:10px;color:var(--t3);margin-top:1px">'+meta.join(' · ')+'</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex-shrink:0">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+fmtT(sg.time)+(medal(sg.prRank)?' '+medal(sg.prRank):'')+'</div>'
+          +(sg.komRank?'<div style="font-size:10px;color:#f59e0b">KOM #'+sg.komRank+'</div>':'')
+        +'</div></div>';
+    });
+    wrap.innerHTML=html;
+  }
+  if(r.segments){ render(r.segments); return; }
+  if(!r.stravaId){
+    wrap.innerHTML='<div style="padding:30px 10px;text-align:center;color:var(--t3)"><div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Segments unavailable</div><div style="font-size:13px;line-height:1.5">Strava matches segments server-side, so they\\'re only available for Strava-synced rides — not FIT/TCX imports.</div></div>';
+    return;
+  }
+  wrap.innerHTML='<div style="padding:30px 10px;text-align:center;color:var(--t3);font-size:13px">Loading segments from Strava…</div>';
+  fetchRideSegments(r, function(segs){ render(segs); });
 }
 
 function fetchStravaGPS(stravaId, rideIndex) {
