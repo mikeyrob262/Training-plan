@@ -9398,9 +9398,47 @@ function bulkImportTCX(input){
     }
     return -1;
   }
+  function findRunDup(date,dist){
+    var runs=st.runs||[];
+    for(var i=0;i<runs.length;i++){
+      var r=runs[i];
+      if(r && !r.deleted && r.date===date && Math.abs(parseFloat(r.distance||0)-(dist||0))<0.1) return true;
+    }
+    return false;
+  }
+  function fmtDurHMS(sec){
+    sec=Math.round(sec||0);
+    var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+    return h>0 ? (h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s) : (m+':'+(s<10?'0':'')+s);
+  }
+  // Build an st.runs-shaped object (mirrors the TCX run path) from FIT data.
+  function buildFitRun(data, name){
+    var distMi=data.distance||0, durSec=data.duration||0;
+    var paceSec=distMi>0?Math.round(durSec/distMi):0;
+    var paceStr=paceSec>0?(Math.floor(paceSec/60)+':'+(paceSec%60<10?'0':'')+(paceSec%60)):'';
+    var rawCad=data.cadence||0;
+    var runCad=rawCad>0?(rawCad<100?rawCad*2:rawCad):0;   // steps/min (FIT stores per-leg cadence)
+    var hz=data.hrZones||{z1pct:0,z2pct:0,z3pct:0,z4pct:0,z5pct:0};
+    var autoType='Easy Run';
+    if(hz.z4pct+hz.z5pct>30) autoType='Tempo Run';
+    else if(distMi>=6) autoType='Long Run';
+    else if(hz.z3pct+hz.z4pct+hz.z5pct>50) autoType='Fartlek Run';
+    var distM=distMi*1609.344;
+    var strideM=runCad>0&&durSec>0?Math.round((distM/(runCad/60*durSec))*100)/100:0;
+    var strideFt=strideM?Math.round(strideM*3.28084*10)/10:0;
+    return {
+      name:name, date:data.date, type:autoType, distance:distMi,
+      time:fmtDurHMS(durSec), movingSecs:durSec, pace:paceStr,
+      avgHR:data.hr||null, cadence:runCad, elevation:data.elev||0,
+      stride:strideFt?strideFt+' ft':0,
+      z1pct:hz.z1pct, z2pct:hz.z2pct, z3pct:hz.z3pct, z4pct:hz.z4pct, z5pct:hz.z5pct,
+      rss:data.tss||0, source:'fit'
+    };
+  }
 
   (async function runImport(){
     var pending=[];   // gpsPut promises for the current batch (paces network + memory)
+    var skippedTypes={};   // sport -> count for activity types we don't import (swim/strength/etc.)
     for(var i=0;i<files.length;i++){
       var curFile=files[i];
       var ext=(curFile.name||'').split('.').pop().toLowerCase();
@@ -9412,46 +9450,65 @@ function bulkImportTCX(input){
             var data=res.data;
             if(!data.date) data.date=getTodayKey();
             var name2=(curFile.name||'').replace(/\\.fit$/i,'').replace(/_/g,' ')||'FIT Activity';
-            // Light summary — GPS/chart streams deliberately excluded from st.
-            var lite={
-              name:name2, date:data.date, duration:data.duration, distance:data.distance,
-              avgPwr:data.avgPwr, np:data.np, hr:data.hr, tss:data.tss, elev:data.elev,
-              calories:data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
-              z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
-              max20:data.peak20||null, maxPwr:data.maxPwr||null, powerCurve:data.powerCurve||null,
-              workKj:data.workKj||null, ifPct:data.ifPct||null,
-              avgHR:data.hr||null, maxHR:data.maxHR||null, cadence:data.cadence||null,
-              avgTemp:data.avgTemp||null, maxTemp:data.maxTemp||null,
-              lrBalance:data.lrBalance||null, source:'fit'
-            };
+            var sport=(data.sport||'').toLowerCase();
+            // Heavy GPS/chart streams -> /gps/{rideKey}, never the st blob (rides AND runs).
             var gps={
               lats:(data.lats&&data.lats.length>10)?data.lats:null,
               lons:(data.lons&&data.lons.length>10)?data.lons:null,
               chartEle:data.chartEle||null, chartPwr:data.chartPwr||null, chartHR:data.chartHR||null
             };
-            if(!st.rides) st.rides=[];
-            var dupIdx=findRideDup(lite.date,lite.distance);
-            var target;
-            if(dupIdx>=0){
-              var ex=st.rides[dupIdx];
-              // Merge richer FIT summary fields into the existing ride.
-              target=st.rides[dupIdx]=Object.assign({},ex,{
-                max20:lite.max20||ex.max20, maxPwr:lite.maxPwr||ex.maxPwr,
-                powerCurve:lite.powerCurve||ex.powerCurve, lrBalance:lite.lrBalance||ex.lrBalance,
-                z1s:lite.z1s||ex.z1s, z2s:lite.z2s||ex.z2s, z3s:lite.z3s||ex.z3s,
-                z4s:lite.z4s||ex.z4s, z5s:lite.z5s||ex.z5s, z6s:lite.z6s||ex.z6s,
-                np:lite.np||ex.np, avgPwr:lite.avgPwr||ex.avgPwr, avgHR:lite.avgHR||ex.avgHR,
-                maxHR:lite.maxHR||ex.maxHR, tss:lite.tss||ex.tss, elev:lite.elev||ex.elev,
-                calories:lite.calories||ex.calories, workKj:lite.workKj||ex.workKj,
-                ifPct:lite.ifPct||ex.ifPct, cadence:lite.cadence||ex.cadence,
-                avgTemp:lite.avgTemp||ex.avgTemp, maxTemp:lite.maxTemp||ex.maxTemp
-              });
+            if(sport==='running' || sport==='walking'){
+              // ---- RUN / WALK -> st.runs ----
+              if(!st.runs) st.runs=[];
+              if(findRunDup(data.date, data.distance)){ skipped++; }
+              else {
+                var run=buildFitRun(data, name2);
+                st.runs.push(run);
+                var rpl=gpsPayload_(gps);
+                if(rpl) pending.push(gpsPut(rideKey(run), rpl));
+                doneRuns++;
+              }
+            } else if(sport==='cycling'){
+              // ---- RIDE -> st.rides (light summary; GPS to /gps) ----
+              var lite={
+                name:name2, date:data.date, duration:data.duration, distance:data.distance,
+                avgPwr:data.avgPwr, np:data.np, hr:data.hr, tss:data.tss, elev:data.elev,
+                calories:data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
+                z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
+                max20:data.peak20||null, maxPwr:data.maxPwr||null, powerCurve:data.powerCurve||null,
+                workKj:data.workKj||null, ifPct:data.ifPct||null,
+                avgHR:data.hr||null, maxHR:data.maxHR||null, cadence:data.cadence||null,
+                avgTemp:data.avgTemp||null, maxTemp:data.maxTemp||null,
+                lrBalance:data.lrBalance||null, source:'fit'
+              };
+              if(!st.rides) st.rides=[];
+              var dupIdx=findRideDup(lite.date,lite.distance);
+              var target;
+              if(dupIdx>=0){
+                var ex=st.rides[dupIdx];
+                // Merge richer FIT summary fields into the existing ride.
+                target=st.rides[dupIdx]=Object.assign({},ex,{
+                  max20:lite.max20||ex.max20, maxPwr:lite.maxPwr||ex.maxPwr,
+                  powerCurve:lite.powerCurve||ex.powerCurve, lrBalance:lite.lrBalance||ex.lrBalance,
+                  z1s:lite.z1s||ex.z1s, z2s:lite.z2s||ex.z2s, z3s:lite.z3s||ex.z3s,
+                  z4s:lite.z4s||ex.z4s, z5s:lite.z5s||ex.z5s, z6s:lite.z6s||ex.z6s,
+                  np:lite.np||ex.np, avgPwr:lite.avgPwr||ex.avgPwr, avgHR:lite.avgHR||ex.avgHR,
+                  maxHR:lite.maxHR||ex.maxHR, tss:lite.tss||ex.tss, elev:lite.elev||ex.elev,
+                  calories:lite.calories||ex.calories, workKj:lite.workKj||ex.workKj,
+                  ifPct:lite.ifPct||ex.ifPct, cadence:lite.cadence||ex.cadence,
+                  avgTemp:lite.avgTemp||ex.avgTemp, maxTemp:lite.maxTemp||ex.maxTemp
+                });
+              } else {
+                st.rides.push(lite); target=lite;
+              }
+              var pl=gpsPayload_(gps);
+              if(pl) pending.push(gpsPut(rideKey(target), pl));
+              done++;
             } else {
-              st.rides.push(lite); target=lite;
+              // swimming / training / rowing / generic / sport-less -> skip (reported in summary)
+              var stype=sport||'(none)';
+              skippedTypes[stype]=(skippedTypes[stype]||0)+1;
             }
-            var pl=gpsPayload_(gps);
-            if(pl) pending.push(gpsPut(rideKey(target), pl));
-            done++;
           }
         } else {
           var t=await parseTcxAsync(curFile);
@@ -9484,8 +9541,13 @@ function bulkImportTCX(input){
     var msg='';
     if(done) msg+=done+' ride(s) imported';
     if(doneRuns) msg+=(msg?', ':'')+doneRuns+' run(s) imported';
-    if(skipped) msg+=', '+skipped+' duplicates skipped';
-    if(failed) msg+=', '+failed+' failed';
+    if(skipped) msg+=(msg?', ':'')+skipped+' duplicates skipped';
+    if(failed) msg+=(msg?', ':'')+failed+' failed';
+    var skT=Object.keys(skippedTypes);
+    if(skT.length){
+      var stot=skT.reduce(function(a,k){return a+skippedTypes[k];},0);
+      msg+=(msg?', ':'')+stot+' skipped ('+skT.map(function(k){return skippedTypes[k]+' '+k;}).join(', ')+')';
+    }
     toast(msg||'Nothing imported');
     try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
     input.value='';
