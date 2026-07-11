@@ -402,6 +402,25 @@ window.parseFitFile = function(arrayBuffer, callback) {
           };
         }
 
+        // Lap splits — the FitParser exposes lap messages the wrapper used to
+        // discard. Lightweight per-lap summary for the Laps tab (speed computed
+        // from distance/time to avoid unit ambiguity).
+        if (data.laps && data.laps.length) {
+          result.laps = data.laps.map(function(lp){
+            var distMi = lp.total_distance!=null ? Math.round(lp.total_distance/1609.344*100)/100 : 0;
+            var timeSec = lp.total_elapsed_time!=null ? Math.round(lp.total_elapsed_time)
+                        : (lp.total_timer_time!=null ? Math.round(lp.total_timer_time) : 0);
+            return {
+              distance: distMi, time: timeSec,
+              avgPwr: lp.avg_power!=null ? Math.round(lp.avg_power) : null,
+              maxPwr: lp.max_power!=null ? Math.round(lp.max_power) : null,
+              avgHR: lp.avg_heart_rate!=null ? Math.round(lp.avg_heart_rate) : null,
+              avgCad: lp.avg_cadence!=null ? Math.round(lp.avg_cadence) : null,
+              avgSpd: (distMi>0 && timeSec>0) ? Math.round(distMi/(timeSec/3600)*10)/10 : null
+            };
+          }).filter(function(lp){ return lp.distance>0 || lp.time>0; }).slice(0,200);
+        }
+
         callback(null, result);
       } catch(e2) {
         callback(e2.message, null);
@@ -3198,6 +3217,7 @@ function gpsPayload_(r){
   if(r.chartPwr) p.chartPwr = r.chartPwr;
   if(r.chartHR)  p.chartHR  = r.chartHR;
   if(r.chartEle) p.chartEle = r.chartEle;
+  if(r.laps && r.laps.length) p.laps = r.laps;
   return Object.keys(p).length ? p : null;
 }
 // Write one ride's GPS payload to /gps/{key}. Resolves true/false, never rejects.
@@ -3227,6 +3247,7 @@ function ensureRideGps(r){
       if(p.chartPwr) r.chartPwr = p.chartPwr;
       if(p.chartHR)  r.chartHR  = p.chartHR;
       if(p.chartEle) r.chartEle = p.chartEle;
+      if(p.laps) r.laps = p.laps;
     }
     return r;
   });
@@ -9512,7 +9533,8 @@ function bulkImportTCX(input){
             var gps={
               lats:(data.lats&&data.lats.length>10)?data.lats:null,
               lons:(data.lons&&data.lons.length>10)?data.lons:null,
-              chartEle:data.chartEle||null, chartPwr:data.chartPwr||null, chartHR:data.chartHR||null
+              chartEle:data.chartEle||null, chartPwr:data.chartPwr||null, chartHR:data.chartHR||null,
+              laps:(data.laps&&data.laps.length)?data.laps:null
             };
             if(sport==='running' || sport==='walking'){
               // ---- RUN / WALK -> st.runs ----
@@ -12953,10 +12975,46 @@ function openRideDetail(idx){
 // currently parsed/stored anywhere in this app (confirmed earlier this
 // session). Shown honestly as not-yet-available rather than faked.
 function renderRideLapsTab(body, r, idx){
+  var laps = (r && r.laps) || [];
   var wrap=document.createElement('div');
-  wrap.style.cssText='padding:40px 20px;text-align:center;color:var(--t3)';
-  wrap.innerHTML='<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Lap data not available yet</div>'
-    +'<div style="font-size:13px;line-height:1.5">This ride was not recorded with lap markers, or lap data has not been imported for it.</div>';
+  wrap.style.cssText='padding:14px 16px';
+  if(!laps.length){
+    wrap.innerHTML='<div style="padding:30px 10px;text-align:center;color:var(--t3)">'
+      +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">No lap data</div>'
+      +'<div style="font-size:13px;line-height:1.5">This ride has no lap splits — it was recorded without lap markers, or (for FIT rides imported before laps were captured) it needs a re-import to pick them up.</div></div>';
+    body.appendChild(wrap); return;
+  }
+  function fmtT(t){
+    if(t==null) return '--';
+    if(typeof t==='string') return t;                 // garmin-csv laps store a formatted string
+    var s=Math.round(t),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
+    return (h>0?h+':'+(m<10?'0':'')+m:''+m)+':'+(ss<10?'0':'')+ss;
+  }
+  var pw=function(l){ return l.avgPwr!=null?l.avgPwr:(l.avgPower!=null?l.avgPower:null); };
+  var hasPwr=laps.some(function(l){return pw(l)!=null;});
+  var hasCad=laps.some(function(l){return l.avgCad!=null;});
+  var hasSpd=laps.some(function(l){return l.avgSpd!=null;});
+  var th='padding:7px 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);text-align:right';
+  var td='padding:8px 5px;color:var(--t1);text-align:right';
+  var html='<table style="width:100%;border-collapse:collapse;font-size:12px">'
+    +'<tr><th style="'+th+';text-align:left">Lap</th><th style="'+th+'">Dist</th><th style="'+th+'">Time</th>'
+    +(hasSpd?'<th style="'+th+'">Speed</th>':'')
+    +(hasPwr?'<th style="'+th+'">Power</th>':'')
+    +'<th style="'+th+'">HR</th>'
+    +(hasCad?'<th style="'+th+'">Cad</th>':'')+'</tr>';
+  laps.forEach(function(l,i){
+    var p=pw(l);
+    html+='<tr style="border-top:1px solid var(--b1)">'
+      +'<td style="'+td+';text-align:left;font-weight:700">'+(i+1)+'</td>'
+      +'<td style="'+td+'">'+(l.distance?parseFloat(l.distance).toFixed(2)+' mi':'--')+'</td>'
+      +'<td style="'+td+'">'+fmtT(l.time)+'</td>'
+      +(hasSpd?'<td style="'+td+'">'+(l.avgSpd!=null?l.avgSpd+' mph':'--')+'</td>':'')
+      +(hasPwr?'<td style="'+td+'">'+(p!=null?p+' W':'--')+'</td>':'')
+      +'<td style="'+td+'">'+(l.avgHR!=null?l.avgHR+' bpm':'--')+'</td>'
+      +(hasCad?'<td style="'+td+'">'+(l.avgCad!=null?l.avgCad:'--')+'</td>':'')+'</tr>';
+  });
+  html+='</table>';
+  wrap.innerHTML=html;
   body.appendChild(wrap);
 }
 
