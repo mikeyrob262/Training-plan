@@ -3197,6 +3197,23 @@ function gpsGet(key){
     return fetch(fbGpsUrl_(key, token));
   }).then(function(r){ return (r && r.ok) ? r.json() : null; }).catch(function(){ return null; });
 }
+// Lazy-load a ride's heavy GPS/chart streams from /gps/{rideKey} onto the ride
+// object. Resolves once populated (or confirmed unavailable). No-op if the ride
+// already carries GPS in-blob (legacy rides / freshly imported this session).
+function ensureRideGps(r){
+  if(!r) return Promise.resolve(r);
+  if((r.lats && r.lats.length) || (r.gpsLats && r.gpsLats.length)) return Promise.resolve(r);
+  return gpsGet(rideKey(r)).then(function(p){
+    if(p){
+      if(p.lats) r.lats = p.lats;
+      if(p.lons) r.lons = p.lons;
+      if(p.chartPwr) r.chartPwr = p.chartPwr;
+      if(p.chartHR)  r.chartHR  = p.chartHR;
+      if(p.chartEle) r.chartEle = p.chartEle;
+    }
+    return r;
+  });
+}
 // --------------------------------------------------------------------------
 
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
@@ -12060,6 +12077,8 @@ function openDesktopRideDetail(idx){
   if(rpEl) rpEl.style.display='flex';
   var r=st.rides[idx];
   if(!r) return;
+  // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
+  if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
   var NL=String.fromCharCode(10);
@@ -12573,6 +12592,8 @@ window.addEventListener('load', function(){
 function openRideDetail(idx){
   var r = st.rides[idx];
   if(!r) return;
+  // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
+  if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openRideDetail(idx); }); return; }
   var old = document.getElementById('ride-detail-modal');
   if(old) old.remove();
 
