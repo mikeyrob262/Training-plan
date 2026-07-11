@@ -8982,10 +8982,13 @@ function computePMC(rides){
   for(var d = days; d >= 0; d--){
     var dt = new Date(today);
     dt.setDate(dt.getDate() - d);
-    var key = dt.getFullYear() + '-' + (dt.getMonth()+1) + '-' + dt.getDate();
+    // Normalize both sides: the built key is non-zero-padded ("2026-7-11")
+    // while ride dates are ISO zero-padded ("2026-07-11"), so a raw === never
+    // matched -> every day scored 0 TSS and CTL decayed to ~3. normDate pads.
+    var key = normDate(dt.getFullYear() + '-' + (dt.getMonth()+1) + '-' + dt.getDate());
     var tss = 0;
     rides.forEach(function(r){
-      if(r.date === key) tss += (r.load != null ? r.load : (r.tss || 0));
+      if(normDate(r.date) === key) tss += (r.load != null ? r.load : (r.tss || 0));
     });
     ctl = ctl + (tss - ctl) / 42;
     atl = atl + (tss - atl) / 7;
