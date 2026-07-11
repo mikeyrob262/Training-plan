@@ -369,6 +369,9 @@ window.parseFitFile = function(arrayBuffer, callback) {
           result.lats = result.lats.filter(function(_,i){return i%step===0;}).slice(0,300);
           result.lons = result.lons.filter(function(_,i){return i%step===0;}).slice(0,300);
         }
+        // GPS diet: round to 5 decimals (~1.1m) — plenty for route shape, ~halves stored size
+        result.lats = result.lats.map(function(v){return Math.round(v*1e5)/1e5;});
+        result.lons = result.lons.map(function(v){return Math.round(v*1e5)/1e5;});
 
         // Build downsampled chart streams for elevation profile, sparklines
         function dsChart(arr, n) {
