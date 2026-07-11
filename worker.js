@@ -12449,11 +12449,11 @@ function openDesktopRideDetail(idx){
       '<div class="ds-tab" data-rdtab="charts">Charts</div>'+
       '<div class="ds-tab" data-rdtab="laps">Laps</div>'+
       '<div class="ds-tab" data-rdtab="segments">Segments</div>'+
-      '<div class="ds-tab" data-rdtab="breakdown">Breakdown</div>'+
       '<div class="ds-tab" data-rdtab="analytics">Analytics</div>'+
     '</div>'+
 
     '<div style="flex:1;overflow-y:auto;overflow-x:hidden;min-width:0" id="rd-scroll">'+
+      '<div id="rd-tab-overview">'+
 
       // MAP
       '<div id="rd-map" style="width:100%;max-width:520px;aspect-ratio:4/3;margin:0 auto;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
@@ -12551,6 +12551,8 @@ function openDesktopRideDetail(idx){
         '</div>'+
       '</div>'+
 
+      '</div>'+ // end rd-tab-overview
+      '<div id="rd-tab-dynamic" style="display:none"></div>'+
     '</div>'; // end scroll
 
   // Wire back + tabs
@@ -12561,6 +12563,26 @@ function openDesktopRideDetail(idx){
       t.onclick=function(){
         main.querySelectorAll('[data-rdtab]').forEach(function(x){x.classList.remove('on');});
         t.classList.add('on');
+        var tab=t.getAttribute('data-rdtab');
+        var ov=document.getElementById('rd-tab-overview');
+        var dyn=document.getElementById('rd-tab-dynamic');
+        if(!dyn) return;
+        if(tab==='overview'){ if(ov) ov.style.display=''; dyn.style.display='none'; dyn.innerHTML=''; return; }
+        if(ov) ov.style.display='none';
+        dyn.style.display=''; dyn.innerHTML='';
+        try{
+          if(tab==='map'){
+            // renderRideRouteTab reads r.gpsLats; FIT rides carry GPS as r.lats
+            // (lazy-loaded). Alias via a shallow clone so we don't mutate/persist r.
+            var rr=r;
+            if((!r.gpsLats||!r.gpsLats.length) && r.lats && r.lats.length){ rr=Object.assign({},r,{gpsLats:r.lats,gpsLons:r.lons}); }
+            renderRideRouteTab(dyn,rr,idx,FTP,BWT);
+          }
+          else if(tab==='charts') renderRidePerformanceTab(dyn,r,idx,FTP,BWT);
+          else if(tab==='laps') renderRideLapsTab(dyn,r,idx);
+          else if(tab==='analytics') renderRideAnalysisTab(dyn,r,idx,FTP,BWT);
+          else if(tab==='segments') dyn.innerHTML='<div style="padding:40px 20px;text-align:center;color:#64748b;font-size:13px">Segments — coming next</div>';
+        }catch(e){ dyn.innerHTML='<div style="padding:40px 20px;color:#ef4444;font-size:13px">Tab error: '+(e&&e.message)+'</div>'; }
       };
     });
   },50);
