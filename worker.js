@@ -11971,8 +11971,9 @@ function dsShowDashboard(){
   r1.appendChild(tbc);
   body.appendChild(r1);
 
-  // ROW 2
-  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
+  // ROW 2 — Today's Plan + real Coach Note. (The fabricated "Today's Biggest
+  // Opportunity" card was removed; there is no real data source for it.)
+  var r2=div('display:grid;grid-template-columns:1.2fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Today Plan — real scheduled workout for today (was hardcoded).
   // getWorkoutForDate_ reads the current week's session from the plan DOM,
@@ -12011,33 +12012,8 @@ function dsShowDashboard(){
   pc.appendChild(vwb);
   r2.appendChild(pc);
 
-  // Opportunity
-  var oc=card('');
-  var ohd=row('gap:8px;margin-bottom:10px');
-  var oico=div('width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,.15);display:flex;align-items:center;justify-content:center');
-  oico.appendChild(ico('ti-target','#4ade80','18'));
-  ohd.appendChild(oico); ohd.appendChild(lbl("TODAY'S BIGGEST OPPORTUNITY"));
-  oc.appendChild(ohd);
-  oc.appendChild(div('font-size:13px;font-weight:700;color:#fff;margin-bottom:4px','Ride before 8:30 AM'));
-  oc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.3;margin-bottom:6px','Avoid 15 mph headwind and 92F temps.'));
-  oc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:4px','Estimated gain'));
-  oc.appendChild(div('font-size:16px;font-weight:800;color:#4ade80;margin-bottom:4px','+14 watts'));
-  var svgO=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgO.setAttribute('width','100%'); svgO.setAttribute('height','36'); svgO.setAttribute('viewBox','0 0 200 50'); svgO.setAttribute('preserveAspectRatio','none');
-  var opf=document.createElementNS('http://www.w3.org/2000/svg','path');
-  opf.setAttribute('d','M0,40 C20,38 35,20 50,15 C65,10 80,30 100,35 C120,40 140,42 200,44 L200,50 L0,50 Z');
-  opf.setAttribute('fill','rgba(74,222,128,0.2)');
-  var opl=document.createElementNS('http://www.w3.org/2000/svg','path');
-  opl.setAttribute('d','M0,40 C20,38 35,20 50,15 C65,10 80,30 100,35 C120,40 140,42 200,44');
-  opl.setAttribute('fill','none'); opl.setAttribute('stroke','#4ade80'); opl.setAttribute('stroke-width','2');
-  svgO.appendChild(opf); svgO.appendChild(opl);
-  oc.appendChild(svgO);
-  var otr=row('justify-content:space-between;margin-top:4px');
-  ['6AM','9AM','12PM','3PM','6PM'].forEach(function(t){otr.appendChild(div('font-size:9px;color:#64748b',t));});
-  oc.appendChild(otr);
-  r2.appendChild(oc);
-
-  // Coach Note
+  // Coach Note — real AI coach decision (live weather + fetchTodaysDecision,
+  // the same source the mobile Coach card and AI Coach screen use).
   var cc=card('');
   var chd=row('justify-content:space-between;margin-bottom:10px');
   chd.appendChild(lbl('COACH NOTE'));
@@ -12046,13 +12022,15 @@ function dsShowDashboard(){
   var crow=row('gap:10px');
   var cbox=div('width:36px;height:36px;border-radius:10px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0');
   cbox.appendChild(ico('ti-brain','#8b5cf6','18'));
-  var ctxt=div('');
-  ctxt.appendChild(div('font-size:12px;color:#94a3b8;line-height:1.6','Your last three threshold workouts were all below target.'));
-  ctxt.appendChild(div('font-size:12px;color:#4ade80;font-weight:600;margin-top:6px','Reduce interval #2 to 225W today.'));
+  var ctxt=div('flex:1;min-width:0');
+  var coachId='ds-coach-note-'+Date.now();
+  var coachTextEl=div('font-size:12px;color:#94a3b8;line-height:1.5'); coachTextEl.id=coachId; coachTextEl.textContent='Thinking…';
+  ctxt.appendChild(coachTextEl);
   crow.appendChild(cbox); crow.appendChild(ctxt);
   cc.appendChild(crow);
   r2.appendChild(cc);
   body.appendChild(r2);
+  if(typeof fetchCoachNote==='function') setTimeout(function(){ fetchCoachNote(coachId); }, 0);
 
   // ROW 3
   var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
