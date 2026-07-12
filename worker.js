@@ -10562,27 +10562,16 @@ function dsShowAICoach(){
     var lines=text.split(NL);
     var sections=[];
     var cur=null;
-    // The model sometimes ignores the plain-label format and returns markdown
-    // (## headings, **bold**, --- dividers); handle it so tokens don't leak as
-    // literal text. mdInline converts inline markdown to HTML for display.
-    function mdInline(s){ return String(s)
-      .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
-      .replace(/__([^_]+)__/g,'<b>$1</b>')
-      .replace(/(^|[^*])\*([^*]+)\*/g,'$1<i>$2</i>')
-      .replace(new RegExp(String.fromCharCode(96)+'([^'+String.fromCharCode(96)+']+)'+String.fromCharCode(96),'g'),'$1')
-      .replace(/#+\s?/g,''); }
     lines.forEach(function(line){
       var t=line.trim();
       if(!t) return;
-      if(/^[-*_=]{3,}$/.test(t)) return;                                  // skip --- *** === dividers
-      var tl=t.replace(/^#+\s*/,'').replace(/^\*\*\s*/,'').replace(/^\*\s*/,''); // strip leading ##/** for label match
       var labels=['DECISION','TODAY','FORM CHECK','KEY FOCUS','NUTRITION TIP','WEATHER NOTE'];
       var isLabel=false;
       for(var li=0;li<labels.length;li++){
-        if(tl.toUpperCase().indexOf(labels[li])===0){
+        if(t.toUpperCase().indexOf(labels[li])===0){
           if(cur) sections.push(cur);
           cur={label:labels[li],lines:[]};
-          var rest=tl.slice(labels[li].length).replace(/^\*\*/,'').replace(/^[:\s]+/,'').replace(/\*\*$/,'');
+          var rest=t.slice(labels[li].length).replace(/^[: ]+/,'');
           if(rest) cur.lines.push(rest);
           isLabel=true; break;
         }
@@ -10601,7 +10590,7 @@ function dsShowAICoach(){
       var dc=document.createElement('div');
       dc.style.cssText='padding:4px 0 16px;border-bottom:1px solid var(--b1)';
       dc.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">Today&#39;s Call</div>'
-        +'<div style="font-size:22px;font-weight:700;color:var(--t1);line-height:1.3">'+mdInline(decision.lines.join(' '))+'</div>';
+        +'<div style="font-size:22px;font-weight:700;color:var(--t1);line-height:1.3">'+decision.lines.join(' ')+'</div>';
       body.appendChild(dc);
     }
 
@@ -10628,7 +10617,7 @@ function dsShowAICoach(){
       var sec=document.createElement('div');
       sec.style.cssText='padding:4px 0 14px 0;border-bottom:1px solid var(--b1)';
       sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ffffff;margin-bottom:8px">'+s.label+'</div>'
-        +'<div style="font-size:15px;color:#ffffff;line-height:1.6">'+mdInline(s.lines.join(' '))+'</div>';
+        +'<div style="font-size:15px;color:#ffffff;line-height:1.6">'+s.lines.join(' ')+'</div>';
       body.appendChild(sec);
     });
 
