@@ -7788,12 +7788,17 @@ function openFoodForMeal(meal){
                   p: Math.round((f.p||f.nf_protein||f.protein||0)*10)/10,
                   c: Math.round((f.c||f.nf_total_carbohydrate||f.carbs||0)*10)/10,
                   f: Math.round((f.f||f.nf_total_fat||f.fat||0)*10)/10,
+                  // Capture fiber/sodium/sugar too (were dropped here, which is
+                  // why Key Nutrients read 0 for search-logged foods).
+                  fiber: Math.round((f.fiber||f.nf_dietary_fiber||0)*10)/10,
+                  sodium: Math.round(f.sodium||f.nf_sodium||0),
+                  sugar: Math.round((f.sugar||f.nf_sugars||0)*10)/10,
                   srv: f.srv||f.serving_size||(f.serving_unit?(f.serving_qty||1)+' '+f.serving_unit:'1 serving')
                 };
               });
             } else if(Array.isArray(d)){
               results = d.map(function(f){
-                return {n:f.n||'Unknown',cal:Math.round(f.cal||0),p:Math.round((f.p||0)*10)/10,c:Math.round((f.c||0)*10)/10,f:Math.round((f.f||0)*10)/10,srv:f.srv||'1 serving'};
+                return {n:f.n||'Unknown',cal:Math.round(f.cal||0),p:Math.round((f.p||0)*10)/10,c:Math.round((f.c||0)*10)/10,f:Math.round((f.f||0)*10)/10,fiber:Math.round((f.fiber||0)*10)/10,sodium:Math.round(f.sodium||0),sugar:Math.round((f.sugar||0)*10)/10,srv:f.srv||'1 serving'};
               });
             }
             if(results.length){
@@ -7914,7 +7919,7 @@ function renderFoodRows(container, list){
   lbl.textContent = '+ Add custom food';
   var grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;margin-bottom:8px';
-  var flds = [{ph:'Food name',type:'text',span:true},{ph:'Calories',type:'number'},{ph:'Protein (g)',type:'number'},{ph:'Carbs (g)',type:'number'},{ph:'Fat (g)',type:'number'},{ph:'Fiber (g)',type:'number'},{ph:'Sat Fat (g)',type:'number'}];
+  var flds = [{ph:'Food name',type:'text',span:true},{ph:'Calories',type:'number'},{ph:'Protein (g)',type:'number'},{ph:'Carbs (g)',type:'number'},{ph:'Fat (g)',type:'number'},{ph:'Fiber (g)',type:'number'},{ph:'Sat Fat (g)',type:'number'},{ph:'Sodium (mg)',type:'number'}];
   var inps = [];
   flds.forEach(function(fd){
     var inp = document.createElement('input');
@@ -7932,7 +7937,7 @@ function renderFoodRows(container, list){
     if(!name){alert('Enter food name');return;}
     if(!cal){alert('Enter calories');return;}
     saveBtn.disabled=true;
-    var food={n:name,cal:cal,p:parseFloat(inps[2].value)||0,c:parseFloat(inps[3].value)||0,f:parseFloat(inps[4].value)||0,fiber:parseFloat(inps[5]&&inps[5].value)||0,satFat:parseFloat(inps[6]&&inps[6].value)||0,srv:'custom'};
+    var food={n:name,cal:cal,p:parseFloat(inps[2].value)||0,c:parseFloat(inps[3].value)||0,f:parseFloat(inps[4].value)||0,fiber:parseFloat(inps[5]&&inps[5].value)||0,satFat:parseFloat(inps[6]&&inps[6].value)||0,sodium:parseFloat(inps[7]&&inps[7].value)||0,srv:'custom'};
     CF.push(food);
     if(!st.cf)st.cf=[];
     st.cf.push(food);
@@ -11022,16 +11027,13 @@ function dsShowGear(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
 
+  ensureBikes(); // so st.bikes exists for the per-bike mileage resolver
+  // id links each displayed bike to its st.bikes entry, so mileage is summed
+  // per bike via resolveRideBike instead of dividing the grand total.
   var bikes=[
-    {name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null,photo:BIKE_PHOTO_DOGMA},
-    {name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null,photo:BIKE_PHOTO_ROADMACHINE}
+    {id:'dogma-f',name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null,photo:BIKE_PHOTO_DOGMA},
+    {id:'roadmachine',name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null,photo:BIKE_PHOTO_ROADMACHINE}
   ];
-
-  // Calculate miles per bike from rides
-  var totalMiles=0;
-  (st.rides||[]).forEach(function(r){
-    totalMiles+=(parseFloat(r.distance)||0);
-  });
 
   mc.innerHTML='';
   var wrap=document.createElement('div');
@@ -11089,12 +11091,11 @@ function dsShowGear(){
     });
     card.appendChild(specs);
 
-    // Miles this year
+    // Miles this year — real per-bike stats (only rides assigned to THIS bike).
     var statsRow=document.createElement('div');
     statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e';
-    var yr=new Date().getFullYear();
-    var yrMiles=Math.round((st.rides||[]).filter(function(r){return r.date&&r.date.startsWith(yr+'');}).reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0));
-    [['Total Miles',Math.round(totalMiles/(bikes.length))+' mi'],['This Year',Math.round(yrMiles/(bikes.length))+' mi'],['Last Ride','Recent']].forEach(function(x){
+    var bstats=bikeMileageStats_((st.bikes||[]).find(function(b){return b.id===bike.id;}));
+    [['Total Miles',bstats.totalMi.toLocaleString()+' mi'],['This Year',bstats.yearMi.toLocaleString()+' mi'],['Last Ride',bstats.lastDate?fmtRideDate_(bstats.lastDate):'—']].forEach(function(x){
       var s=document.createElement('div');
       s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
       s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+bike.color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
@@ -11283,15 +11284,17 @@ function dsShowNutrition(){
 
   function getTotals(dk){
     var nd=st.nl&&st.nl[dk];
-    if(!nd||!nd.meals) return {cal:0,p:0,c:0,f:0,water:0,items:[]};
-    var cal=0,p=0,c=0,f=0,items=[];
+    if(!nd||!nd.meals) return {cal:0,p:0,c:0,f:0,fiber:0,sodium:0,water:0,items:[]};
+    var cal=0,p=0,c=0,f=0,fiber=0,sodium=0,items=[];
     Object.values(nd.meals).forEach(function(bucket){
       (bucket||[]).forEach(function(food){
+        if(food.deleted) return;
         cal+=(food.cal||0); p+=(food.p||0); c+=(food.c||0); f+=(food.f||0);
+        fiber+=(food.fiber||0); sodium+=(food.sodium||0);
         items.push(food);
       });
     });
-    return {cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f),water:nd.water||0,meals:nd.meals,items:items};
+    return {cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f),fiber:Math.round(fiber),sodium:Math.round(sodium),water:nd.water||0,meals:nd.meals,items:items};
   }
 
   function render(){
@@ -11378,6 +11381,47 @@ function dsShowNutrition(){
     topRow.appendChild(macros);
     wrap.appendChild(topRow);
 
+    // Key Nutrients (fiber + sodium) — parity with the mobile screen.
+    var fiberTgt=(trainingTgt&&trainingTgt.fiber)||30;
+    var sodiumTgt=(trainingTgt&&trainingTgt.sodium)||2300;
+    var knCard=document.createElement('div');
+    knCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+    knCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Key Nutrients</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+        [['Fiber',data.fiber,fiberTgt,'g','#4ade80'],['Sodium',data.sodium,sodiumTgt,'mg','#f59e0b']].map(function(x){
+          var kpct=Math.min(100,Math.round((x[1]/x[2])*100));
+          return '<div style="background:#0d0f14;border-radius:10px;padding:10px 12px">'+
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px"><span style="font-size:12px;color:#94a3b8">'+x[0]+'</span>'+
+            '<span style="font-size:14px;font-weight:800;color:#fff">'+x[1]+'<span style="font-size:10px;color:#64748b;font-weight:600">'+x[3]+'</span></span></div>'+
+            '<div style="background:#1a1f2e;border-radius:3px;height:5px"><div style="background:'+x[4]+';border-radius:3px;height:5px;width:'+kpct+'%"></div></div>'+
+            '<div style="font-size:9px;color:#64748b;margin-top:4px">of '+x[2]+x[3]+' target</div>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+    wrap.appendChild(knCard);
+
+    // Nutrition Insight — deterministic guidance from the day's real numbers
+    // vs targets (same idea as the mobile insight card; not an LLM claim).
+    var bullets=[];
+    if(data.cal>0){
+      var proGap=Math.round(goals.p-data.p);
+      if(proGap>25) bullets.push('Protein is '+proGap+'g short of your '+goals.p+'g target — add a protein source.');
+      else if(proGap<=0) bullets.push('Protein target hit ('+data.p+'g). Solid.');
+      var calGap=Math.round(goals.cal-data.cal);
+      if(calGap>350) bullets.push(calGap+' calories under target — fuel up, especially on a training day.');
+      else if(calGap<-350) bullets.push(Math.abs(calGap)+' calories over target today.');
+      if(data.fiber<Math.round(fiberTgt*0.7)) bullets.push('Fiber is '+data.fiber+'g; aim for '+fiberTgt+'g (fruit, veg, whole grains).');
+      if(data.sodium>sodiumTgt) bullets.push('Sodium is '+data.sodium+'mg — above the '+sodiumTgt+'mg guide.');
+      if(!bullets.length) bullets.push('On track across calories and macros. Keep it steady.');
+    } else {
+      bullets.push('No food logged for this day yet.');
+    }
+    var insCard=document.createElement('div');
+    insCard.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,.12),rgba(168,85,247,.03));border:1px solid rgba(168,85,247,.28);border-radius:14px;padding:14px 16px;flex-shrink:0';
+    insCard.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg><span style="font-size:11px;font-weight:700;color:#c084fc;text-transform:uppercase;letter-spacing:.06em">Nutrition Insight</span></div>'+
+      bullets.map(function(b){return '<div style="display:flex;gap:7px;margin-bottom:6px"><span style="color:#c084fc;flex-shrink:0">•</span><span style="font-size:12px;color:#e2e8f0;line-height:1.4">'+b+'</span></div>';}).join('');
+    wrap.appendChild(insCard);
+
     // Meal breakdown
     var mealNames={breakfast:'Breakfast',preworkout:'Pre-Workout',during:'During',postworkout:'Post-Workout',lunch:'Lunch',dinner:'Dinner',snacks:'Snacks'};
     var meals=data.meals||{};
@@ -11418,7 +11462,12 @@ function dsShowAnalytics(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
 
-  var rides=st.rides||[];
+  // Dedupe like the rest of the app (activities list, dashboard) — raw st.rides
+  // holds duplicate Strava+FIT+TCX imports of the same ride, which was inflating
+  // every analytics sum (e.g. an impossible ~591 mi in one week).
+  var rides;
+  try{ rides=dedupeRides_(st.rides||[]).kept.filter(function(r){return r&&!r.deleted;}); }
+  catch(e){ rides=(st.rides||[]).filter(function(r){return r&&!r.deleted;}); }
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||162.5);
 
@@ -11467,12 +11516,16 @@ function dsShowAnalytics(){
     weekLabels.push('W'+(12-w));
   }
 
-  // W/kg history
+  // W/kg history — rides store normalized/avg power as np/avgPwr (NOT
+  // avgPower), so the old r.avgPower filter matched nothing and the card
+  // showed "--". BWT is pounds; convert to kg. Prefer NP, fall back to avg.
   var wkgHistory=[];
   var wkgLabels=[];
-  var sortedRides=rides.filter(function(r){return r.date&&r.avgPower;}).sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;}).slice(-20);
+  var _kg=BWT/2.20462;
+  var sortedRides=rides.filter(function(r){return r.date&&(r.np||r.avgPwr||r.avgPower);}).sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;}).slice(-20);
   sortedRides.forEach(function(r){
-    wkgHistory.push(Math.round((r.avgPower/BWT)*100)/100);
+    var pw=r.np||r.avgPwr||r.avgPower;
+    wkgHistory.push(Math.round((pw/_kg)*100)/100);
     wkgLabels.push(normDate(r.date).slice(5));
   });
 
@@ -12658,8 +12711,9 @@ function openDesktopRideDetail(idx){
   var scoreArc=Math.round(rideScore/100*163);
 
   ensureBikes();
-  var bike=(st.bikes||[])[0]||null;
-  if(r.gearName)(st.bikes||[]).forEach(function(b){if(b.name===r.gearName)bike=b;});
+  // Resolve THIS ride's bike via the shared resolver (was defaulting to the
+  // first bike for any unassigned ride). null => no bike assigned.
+  var bike=resolveRideBike(r);
 
   function statCell(val,lbl,color,last){
     return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
@@ -12842,9 +12896,17 @@ function openDesktopRideDetail(idx){
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14">'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
-          (r.peak20||(r.powerCurve&&r.powerCurve[1200])
-            ?'<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+(r.peak20||(r.powerCurve&&r.powerCurve[1200]))+'W</div><div style="font-size:9px;color:#64748b">20-Min Power</div></div></div>'
-            :'<div style="font-size:11px;color:#64748b">--</div>')+
+          (function(){
+            // Best power peak for THIS ride. Prefer 20-min; fall back through
+            // 5-min / 1-min / 5-sec so short rides still show a record. A ride
+            // with no power stream (e.g. an ICU CSV-summary import, which has
+            // only averages) genuinely has no peak — say so instead of "--".
+            var pc=r.powerCurve||{};
+            var picks=[[r.peak20||pc[1200],'20-Min Power'],[pc[300],'5-Min Power'],[pc[60],'1-Min Power'],[pc[5],'5-Sec Power']];
+            var top=picks.filter(function(p){return p[0];})[0];
+            if(!top) return '<div style="font-size:11px;color:#64748b">No power data</div>';
+            return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+top[0]+'W</div><div style="font-size:9px;color:#64748b">'+top[1]+'</div></div></div>';
+          })()+
         '</div>'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span></div>'+
@@ -12857,7 +12919,7 @@ function openDesktopRideDetail(idx){
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
           (bike
-            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(function(){var t=0;(st.rides||[]).forEach(function(x){t+=parseFloat(x.distance)||0;});return Math.round(t).toLocaleString()+' mi total';})()+'</div>'
+            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+bikeMileageStats_(bike).totalMi.toLocaleString()+' mi total</div>'
             :'<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
         '</div>'+
         '<div style="padding:10px 14px">'+
@@ -13024,9 +13086,9 @@ function openDesktopRideDetail(idx){
           '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>'+
           '<div>'+
             '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
-            '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheels||'Bora WTO 60')+' / '+(bike.power||'Assioma UNO')+'</div>'+
+            '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div>'+
             '<div style="display:flex;gap:10px;margin-top:4px">'+
-              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+(function(){var t=0;(st.rides||[]).forEach(function(x){t+=parseFloat(x.distance)||0;});return Math.round(t).toLocaleString();})()+'</span> mi total</div>'+
+              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+bikeMileageStats_(bike).totalMi.toLocaleString()+'</span> mi total</div>'+
             '</div>'+
           '</div>'+
         '</div>':
@@ -14221,6 +14283,39 @@ function resolveRideBike(r){
     if(assignedId) bike = bikes.find(function(b){ return b.id===assignedId; }) || null;
   }
   return bike || null;
+}
+
+// Real mileage for a single bike: sums only DEDUPED rides that actually
+// resolve to this bike (gear id / Strava gear map / gear name / manual
+// assignment). Runs and unassigned rides never count. Used everywhere bike
+// mileage is shown so the Gear page and ride-detail Equipment card agree.
+function bikeMileageStats_(bike){
+  var out={totalMi:0, yearMi:0, lastDate:null, count:0};
+  if(!bike || !bike.id) return out;
+  var yr=String(new Date().getFullYear());
+  var list;
+  try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
+  list.forEach(function(r){
+    if(!r || r.deleted) return;
+    var sp=String(r.sportType||r.type||'').toLowerCase();
+    if(sp.indexOf('run')>=0 || sp.indexOf('walk')>=0 || sp.indexOf('swim')>=0 || sp.indexOf('strength')>=0) return; // rides only
+    var rb=resolveRideBike(r);
+    if(!rb || rb.id!==bike.id) return;
+    var mi=parseFloat(r.distance)||0;
+    out.totalMi+=mi; out.count++;
+    if(r.date && String(r.date).slice(0,4)===yr) out.yearMi+=mi;
+    var nd=normDate(r.date||'');
+    if(nd && (!out.lastDate || nd>out.lastDate)) out.lastDate=nd;
+  });
+  out.totalMi=Math.round(out.totalMi); out.yearMi=Math.round(out.yearMi);
+  return out;
+}
+// Format a normalized 'YYYY-MM-DD' date as e.g. "Jul 5, 2026".
+function fmtRideDate_(nd){
+  if(!nd) return '—';
+  var p=String(nd).split('-'); if(p.length<3) return nd;
+  var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1],10)-1]||'';
+  return mo+' '+parseInt(p[2],10)+', '+p[0];
 }
 
 function renderRideEquipmentTab(body, r, idx){
