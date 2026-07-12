@@ -11260,14 +11260,18 @@ function dsShowNutrition(){
         '</div>';
       macros.appendChild(row);
     });
-    // Water
+    // Water — consumed vs oz target (same source/units as the mobile card):
+    // nd.water is a glass count, one glass = 8oz; target from trainingTgt.fluidOz.
+    var wTgtOz=(function(){ try{ var _t=calcTrainingAwareTargets_(viewKey); return (_t&&_t.fluidOz)||64; }catch(e){ return 64; } })();
+    var wOz=(data.water||0)*8;
+    var wPct=Math.min(100,Math.round(wOz/wTgtOz*100));
     var waterRow=document.createElement('div');
-    waterRow.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
-      '<span style="font-size:11px;font-weight:600;color:#e2e8f0">Water</span>'+
-      '<span style="font-size:11px;color:#64748b">'+(data.water||0)+' oz</span>'+
+    waterRow.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
+      '<span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#e2e8f0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span>'+
+      '<span style="font-size:11px;color:#64748b">'+wOz+' / '+wTgtOz+' oz</span>'+
       '</div>'+
       '<div style="background:#1a1f2e;border-radius:4px;height:6px">'+
-        '<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+Math.min(100,Math.round(((data.water||0)/90)*100))+'%"></div>'+
+        '<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>'+
       '</div>';
     macros.appendChild(waterRow);
     topRow.appendChild(macros);
