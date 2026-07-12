@@ -6531,6 +6531,13 @@ function renderAllAvatars(){
 var MEAL_BUCKETS=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
 
 function getWorkoutForDate_(dateKey){
+  // A user-scheduled override (from the Calendar) wins for any date.
+  var _ov=(typeof plannedOverrideFor_==='function')?plannedOverrideFor_(dateKey):null;
+  if(_ov && _ov.name){
+    var onm=_ov.name, omin=90;
+    if(_ov.dur){ var _dn=String(_ov.dur).match(/[0-9]+/g); if(_dn && _dn.length>=2 && String(_ov.dur).indexOf('-')>=0) omin=(parseInt(_dn[0])+parseInt(_dn[1]))/2; else if(_dn && _dn.length) omin=parseInt(_dn[0]); }
+    return {name:onm, minutes:omin, isRide:/zwift|ride|bike|chase/i.test(onm), isRest:/rest/i.test(onm), isHard:/interval|sweet spot|threshold|tempo|hill|vo2|race/i.test(onm)};
+  }
   var target=new Date(dateKey+'T00:00:00');
   var todayKey=getTodayKey();
   var isToday=(dateKey===todayKey);
@@ -6546,12 +6553,15 @@ function getWorkoutForDate_(dateKey){
   var plannedEl=cardEl?cardEl.querySelector('.wof-pl'):null;
   var plannedDurText=plannedEl?plannedEl.textContent.trim():null;
   // Planned duration is often a range like "55-65 min" - take the midpoint.
+  // NOTE: this file is served inside one template literal, which strips a
+  // single backslash — so \d/\s regexes become d/s and never match. Use a
+  // backslash-free [0-9] number scan instead (this previously always fell
+  // through to the 90-min default).
   var minutes=90;
   if(plannedDurText){
-    var rangeMatch=plannedDurText.match(/(\d+)\s*-\s*(\d+)/);
-    var singleMatch=plannedDurText.match(/(\d+)/);
-    if(rangeMatch) minutes=(parseInt(rangeMatch[1])+parseInt(rangeMatch[2]))/2;
-    else if(singleMatch) minutes=parseInt(singleMatch[1]);
+    var durNums=plannedDurText.match(/[0-9]+/g);
+    if(durNums && durNums.length>=2 && plannedDurText.indexOf('-')>=0) minutes=(parseInt(durNums[0])+parseInt(durNums[1]))/2;
+    else if(durNums && durNums.length) minutes=parseInt(durNums[0]);
   }
   var isRide=/zwift|ride|bike|chase/i.test(sessName);
   var isRest=/rest/i.test(sessName);
@@ -9432,7 +9442,12 @@ function openManualActivity(){
     st.rides.push(ride);
     sv();
     overlay.remove();
-    renderPerf();
+    // Refresh whichever surface is active.
+    try{
+      if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsNav==='function') dsNav('activities'); }
+      else { renderPerf(); }
+    }catch(e){ try{ renderPerf(); }catch(e2){} }
+    try{ if(typeof toast==='function') toast('Activity logged'); }catch(e){}
   };
 
   body.appendChild(grid);
@@ -10661,7 +10676,7 @@ function dsShowAICoach(){
 
   var weekData=ws(cw);
   var dayShort=['mon','tue','wed','thu','fri','sat','sun'];
-  var todayWorkout=(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
+  var todayWorkout=((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name||(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
 
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
@@ -11566,14 +11581,25 @@ function dsShowCalendar(){
     navL.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
     navL.textContent='‹';
     navL.onclick=function(){viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderCalendar();};
-    var hdrTitle=document.createElement('div');
-    hdrTitle.style.cssText='font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em';
-    hdrTitle.textContent=monthNames[viewMonth]+' '+viewYear;
+    // Month + Year jump dropdowns (Fix 5) — filter/jump without paging.
+    var jump=document.createElement('div');
+    jump.style.cssText='display:flex;align-items:center;gap:8px';
+    var selCss='background:#1a1f2e;color:#fff;border:1px solid #252d40;border-radius:8px;padding:6px 8px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer';
+    var moSel=document.createElement('select'); moSel.style.cssText=selCss;
+    monthNames.forEach(function(nm,mi){ var op=document.createElement('option'); op.value=mi; op.textContent=nm; if(mi===viewMonth) op.selected=true; moSel.appendChild(op); });
+    moSel.onchange=function(){ viewMonth=parseInt(moSel.value,10); renderCalendar(); };
+    var yrSel=document.createElement('select'); yrSel.style.cssText=selCss;
+    var _nowY=new Date().getFullYear(); var _minY=_nowY-5;
+    (st.rides||[]).forEach(function(r){ if(r&&r.date){ var y=parseInt(String(r.date).slice(0,4),10); if(y && y<_minY) _minY=y; } });
+    if(viewYear<_minY) _minY=viewYear;
+    for(var _yy=_minY; _yy<=_nowY+1; _yy++){ var op2=document.createElement('option'); op2.value=_yy; op2.textContent=_yy; if(_yy===viewYear) op2.selected=true; yrSel.appendChild(op2); }
+    yrSel.onchange=function(){ viewYear=parseInt(yrSel.value,10); renderCalendar(); };
+    jump.appendChild(moSel); jump.appendChild(yrSel);
     var navR=document.createElement('div');
     navR.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px;user-select:none';
     navR.textContent='›';
     navR.onclick=function(){viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderCalendar();};
-    hdr.appendChild(navL); hdr.appendChild(hdrTitle); hdr.appendChild(navR);
+    hdr.appendChild(navL); hdr.appendChild(jump); hdr.appendChild(navR);
     wrap.appendChild(hdr);
 
     // Day headers
@@ -11614,18 +11640,22 @@ function dsShowCalendar(){
 
       var cell=document.createElement('div');
       cell.style.cssText='display:flex;flex-direction:column;align-items:center;border-radius:10px;padding:6px 4px;min-height:90px;background:'+(isToday?'rgba(74,222,128,.1)':'#111318')+';border:1px solid '+(isToday?'rgba(74,222,128,.4)':'#1a1f2e')+';overflow:hidden';
+      // Every day is clickable: activity days open the ride; empty days open
+      // the scheduler so a planned workout can be added (Fix 7a).
+      cell.style.cursor='pointer';
+      cell.onmouseover=function(){this.style.borderColor='#4ade80';};
+      cell.onmouseout=(function(it){return function(){this.style.borderColor=it?'rgba(74,222,128,.4)':'#1a1f2e';};})(isToday);
       if(hasActivity){
-        cell.style.cursor='pointer';
-        cell.onmouseover=function(){this.style.borderColor='#4ade80';};
-        cell.onmouseout=function(){this.style.borderColor=isToday?'rgba(74,222,128,.4)':'#1a1f2e';};
-        (function(rides,ds){
+        (function(rides){
           cell.onclick=function(){
             var r=rides[0];
             var idx=(st.rides||[]).indexOf(r);
             if(idx<0) idx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
             if(idx>=0) openRideDetail(idx);
           };
-        })(dayRides,dateStr);
+        })(dayRides);
+      } else {
+        (function(ds){ cell.onclick=function(){ if(typeof openDayEditor==='function') openDayEditor(ds); }; })(dateStr);
       }
 
       // Day number
@@ -11633,6 +11663,21 @@ function dsShowCalendar(){
       dayNum.style.cssText='font-size:12px;font-weight:'+(isToday?'700':'500')+';color:'+(isToday?'#4ade80':hasActivity?'#e2e8f0':'#475569')+';margin-bottom:4px;text-align:center';
       dayNum.textContent=d;
       cell.appendChild(dayNum);
+
+      // Scheduled (user-planned) workout indicator on days with no activity.
+      if(!hasActivity){
+        var _pov=(typeof plannedOverrideFor_==='function')?plannedOverrideFor_(dateStr):null;
+        if(_pov && _pov.name){
+          var _pk=/run/i.test(_pov.name)?'run':/swim/i.test(_pov.name)?'swim':/strength|weight|lift/i.test(_pov.name)?'strength':'bike';
+          var _pd=document.createElement('div');
+          _pd.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;opacity:.7';
+          _pd.innerHTML=makeSVG(_pk,'#64748b','18');
+          var _pl=document.createElement('div');
+          _pl.style.cssText='font-size:8px;color:#64748b;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+          _pl.textContent=_pov.name;
+          _pd.appendChild(_pl); cell.appendChild(_pd);
+        }
+      }
 
       // Show up to 2 activities
       dayRides.slice(0,2).forEach(function(r){
@@ -12416,9 +12461,15 @@ function dsShowRidesList(){
   titleBar.appendChild(tbTitle);
 
   var tbFilters=document.createElement('div');
-  tbFilters.style.cssText='display:flex;gap:6px';
+  tbFilters.style.cssText='display:flex;gap:6px;align-items:center';
   var currentFilter='all';
   var visCount=20;
+
+  // Manual "Add Activity" (log a completed ride without a file import).
+  var addAct=document.createElement('div');
+  addAct.style.cssText='padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:#00C896;background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25)';
+  addAct.textContent='+ Add Activity';
+  addAct.onclick=function(){ if(typeof openManualActivity==='function') openManualActivity(); };
 
   function getFiltered(){
     return allRides.filter(function(r){
@@ -12511,6 +12562,7 @@ function dsShowRidesList(){
     tbFilters.appendChild(btn);
   });
 
+  tbFilters.appendChild(addAct);
   titleBar.appendChild(tbFilters);
   wrap.appendChild(titleBar);
   wrap.appendChild(list);
@@ -12808,13 +12860,13 @@ function openDesktopRideDetail(idx){
       // FOOTER ROW: PRs / Achievements / Equipment / Nutrition
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14">'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
           (r.peak20||(r.powerCurve&&r.powerCurve[1200])
             ?'<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+(r.peak20||(r.powerCurve&&r.powerCurve[1200]))+'W</div><div style="font-size:9px;color:#64748b">20-Min Power</div></div></div>'
             :'<div style="font-size:11px;color:#64748b">--</div>')+
         '</div>'+
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span><span style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span></div>'+
           '<div style="display:flex;gap:5px">'+
             '<div style="width:26px;height:26px;border-radius:50%;background:#1a2030;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;font-size:11px">🚴</div>'+
             ((r.distance>=50)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏆</div>':'')+
@@ -12844,6 +12896,11 @@ function openDesktopRideDetail(idx){
   setTimeout(function(){
     var bb=document.getElementById('rd-back');
     if(bb) bb.onclick=function(){dsNav('activities');};
+    // Previously-dead "View All" links: jump to the matching detail tab.
+    var vaLaps=document.getElementById('rd-viewall-laps');
+    if(vaLaps) vaLaps.onclick=function(){ var t=main.querySelector('[data-rdtab="laps"]'); if(t) t.click(); };
+    var vaPrs=document.getElementById('rd-viewall-prs');
+    if(vaPrs) vaPrs.onclick=function(){ var t=main.querySelector('[data-rdtab="analytics"]'); if(t) t.click(); };
     main.querySelectorAll('[data-rdtab]').forEach(function(t){
       t.onclick=function(){
         main.querySelectorAll('[data-rdtab]').forEach(function(x){x.classList.remove('on');});
@@ -12999,7 +13056,7 @@ function openDesktopRideDetail(idx){
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Laps</div>'+
-        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View All Laps &rsaquo;</div>'+
+        '<div id="rd-viewall-laps" style="font-size:10px;color:#60a5fa;cursor:pointer">View All Laps &rsaquo;</div>'+
       '</div>'+
       lapsHtml+
     '</div>';
@@ -15902,7 +15959,24 @@ function getCurrentPlanWeek(){
 // that field is only populated if the user explicitly renamed a session -
 // this reads the real displayed name instead, respecting any swaps/edits
 // the user has made along the way.
+// Persistent per-date planned-workout overrides (user-scheduled workouts on
+// the Calendar). Stored in st so they survive reload and sync, and so both
+// Today's Plan and the AI Coach can read what was scheduled for a date.
+function plannedOverrideFor_(dateKey){
+  try{ return (st.plannedWorkouts && st.plannedWorkouts[dateKey]) || null; }catch(e){ return null; }
+}
+function setPlannedOverride_(dateKey, name, dur){
+  if(!dateKey) return;
+  if(!st.plannedWorkouts) st.plannedWorkouts={};
+  if(!name){ delete st.plannedWorkouts[dateKey]; }
+  else st.plannedWorkouts[dateKey]={name:name, dur:dur||''};
+  try{ sv(); }catch(e){}
+}
+
 function getPlannedWorkoutForDate(dateStr){
+  // A user-scheduled override wins over the fixed 17-week plan.
+  var _ov=plannedOverrideFor_(dateStr);
+  if(_ov && _ov.name) return {week:null, dayIdx:null, name:_ov.name, dur:_ov.dur||'', custom:true};
   var plan = getActivePlan();
   var planStart = new Date((plan.planStart||'2026-06-08')+'T00:00:00');
   planStart.setHours(0,0,0,0);
@@ -17987,7 +18061,7 @@ function fetchTodaysDecision(weatherStr, callback){
 
   var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
-  var todayWorkout = weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null;
+  var todayWorkout = ((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
 
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
   var recentRides = (st.rides||[]).filter(function(r){
@@ -18079,7 +18153,7 @@ function showAICoach(){
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
   var dayNames2=['mon','tue','wed','thu','fri','sat','sun'];
   var todayKey = dayNames2[todayIdx];
-  var todayWorkout = weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null;
+  var todayWorkout = ((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
 
   // Get recent rides (last 7 days)
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
@@ -20206,8 +20280,14 @@ function showCalendarTab(){
     if(/race|fondo|flag/.test(t)){ // checkered flag
       return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
     }
-    if(/run/.test(t)){ // app's run icon
-      return o+'<circle cx="13" cy="4" r="1"/><path d="M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5"/></svg>';
+    if(/swim/.test(t)){ // swimmer (canonical sport icon)
+      return o+'<path d="M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0"/></svg>';
+    }
+    if(/walk/.test(t)){ // walker
+      return o+'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M12 15l-2 5M16 15l1 5M10 9l5 1 2 4"/></svg>';
+    }
+    if(/run/.test(t)){ // runner (canonical sport icon)
+      return o+'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4"/></svg>';
     }
     if(/strength|core|gym|lift/.test(t)){ // dumbbell (lucide)
       return o+'<path d="M14.4 14.4 9.6 9.6M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4M3.9 3.9 2.5 2.5M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>';
@@ -20218,8 +20298,8 @@ function showCalendarTab(){
     if(/recovery|rest|easy/.test(t)){ // hollow ring
       return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="'+col+'" stroke-width="2"/></svg>';
     }
-    // ride / default: app's bike icon (lucide bike)
-    return o+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
+    // ride / default: canonical sport bike icon (matches desktop calendar SPORT_SVG)
+    return o+'<path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>';
   }
 
   // ---- Build markup --------------------------------------------------------
@@ -20302,7 +20382,7 @@ function showCalendarTab(){
       var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
       h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
       h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
-      if(!mRest){ h+='<div style="width:6px;height:6px;border-radius:50%;background:'+mCol+';margin-top:3px"></div>'; }
+      if(!mRest){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon(mLabel,13,mCol)+'</div>'; }
       if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
       h+='</div>';
     }
@@ -20610,17 +20690,26 @@ function openDayEditor(dateKey){
       if(o.distance&&o.duration&&!paceR.completed.value){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
     }
     // Planned side -> plan session name + duration text back into the plan DOM
-    if(plan){
+    if(plan && plan.week){
       var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
       if(el && nameInp.value.trim()) el.textContent=nameInp.value.trim();
       var card2=document.getElementById('wc'+plan.week+'_'+plan.dayIdx);
       var plEl2=card2?card2.querySelector('.wof-pl'):null;
       if(plEl2 && durR.planned.value.trim()) plEl2.textContent=durR.planned.value.trim();
     }
+    // Persist the planned workout for this date so it survives reload/sync and
+    // feeds Today's Plan + the AI Coach. Only when scheduling a plan (no
+    // recorded activity being edited on this day).
+    if(!o && nameInp.value.trim()){
+      setPlannedOverride_(dateKey, nameInp.value.trim(), durR.planned.value.trim());
+    }
     try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
     modal.remove();
-    try{ showCalendarTab(); }catch(e){}
+    try{
+      if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); }
+      else { showCalendarTab(); }
+    }catch(e){}
   };
   sheet.appendChild(save);
 
