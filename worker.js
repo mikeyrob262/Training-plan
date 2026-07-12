@@ -10562,16 +10562,46 @@ function dsShowAICoach(){
     var lines=text.split(NL);
     var sections=[];
     var cur=null;
+    // Markdown handling — string-ops only (NO regex literals: a backslash-bearing
+    // regex would get its backslash stripped by the served template literal).
+    function stripLeadMarks(s){
+      var i=0;
+      while(i<s.length){ var c=s.charAt(i); if(c==='#'||c==='*'||c==='_'||c===':'||c===' ') i++; else break; }
+      return s.slice(i);
+    }
+    function isDivider(s){
+      if(s.length<3) return false;
+      for(var i=0;i<s.length;i++){ var c=s.charAt(i); if(c!=='-'&&c!=='*'&&c!=='_'&&c!=='='&&c!==' ') return false; }
+      return true;
+    }
+    function esc(s){ return String(s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;'); }
+    function wrapPairs(s,delim,tag){
+      var parts=s.split(delim);
+      if(parts.length<3||parts.length%2===0) return s; // nothing to wrap, or unbalanced -> leave literal
+      var out='';
+      for(var i=0;i<parts.length;i++){ out+=(i%2===1)?'<'+tag+'>'+parts[i]+'</'+tag+'>':parts[i]; }
+      return out;
+    }
+    function mdInline(s){
+      s=esc(s);
+      s=s.split(String.fromCharCode(96)).join('');           // drop code-span backtick chars
+      var i=0; while(i<s.length&&(s.charAt(i)==='#'||s.charAt(i)===' ')) i++; s=s.slice(i); // leading #
+      s=wrapPairs(s,'__','b'); s=wrapPairs(s,'**','b');       // bold
+      s=wrapPairs(s,'*','i');                                 // italic
+      return s;
+    }
     lines.forEach(function(line){
       var t=line.trim();
       if(!t) return;
+      if(isDivider(t)) return;               // skip --- / *** / === rules
+      var ts=stripLeadMarks(t);              // tolerate "## DECISION" / "**DECISION**"
       var labels=['DECISION','TODAY','FORM CHECK','KEY FOCUS','NUTRITION TIP','WEATHER NOTE'];
       var isLabel=false;
       for(var li=0;li<labels.length;li++){
-        if(t.toUpperCase().indexOf(labels[li])===0){
+        if(ts.toUpperCase().indexOf(labels[li])===0){
           if(cur) sections.push(cur);
           cur={label:labels[li],lines:[]};
-          var rest=t.slice(labels[li].length).replace(/^[: ]+/,'');
+          var rest=stripLeadMarks(ts.slice(labels[li].length));
           if(rest) cur.lines.push(rest);
           isLabel=true; break;
         }
@@ -10590,7 +10620,7 @@ function dsShowAICoach(){
       var dc=document.createElement('div');
       dc.style.cssText='padding:4px 0 16px;border-bottom:1px solid var(--b1)';
       dc.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:6px">Today&#39;s Call</div>'
-        +'<div style="font-size:22px;font-weight:700;color:var(--t1);line-height:1.3">'+decision.lines.join(' ')+'</div>';
+        +'<div style="font-size:22px;font-weight:700;color:var(--t1);line-height:1.3">'+mdInline(decision.lines.join(' '))+'</div>';
       body.appendChild(dc);
     }
 
@@ -10617,7 +10647,7 @@ function dsShowAICoach(){
       var sec=document.createElement('div');
       sec.style.cssText='padding:4px 0 14px 0;border-bottom:1px solid var(--b1)';
       sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ffffff;margin-bottom:8px">'+s.label+'</div>'
-        +'<div style="font-size:15px;color:#ffffff;line-height:1.6">'+s.lines.join(' ')+'</div>';
+        +'<div style="font-size:15px;color:#ffffff;line-height:1.6">'+mdInline(s.lines.join(' '))+'</div>';
       body.appendChild(sec);
     });
 
