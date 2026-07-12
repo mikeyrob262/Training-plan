@@ -3576,6 +3576,20 @@ function mergeItemFast_(a, b){
   Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') aNoGps[k]=a[k]; });
   Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
+  // EDIT-WINS: a ride the user manually edited must beat a stale remote copy.
+  // The generic merge above resolves numbers with Math.max, which silently
+  // reverts any edit that LOWERS a value (e.g. correcting an inflated
+  // distance/duration/TSS). When either side carries an editedAt stamp, the
+  // most-recently-edited side's user-editable fields override that merge. a is
+  // always the local side and b the remote (see mergeArrays_/fbPush).
+  var aEdit = a.editedAt||0, bEdit = b.editedAt||0;
+  if(aEdit || bEdit){
+    var win = (aEdit>=bEdit) ? a : b;
+    ['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed','avgHR','hr','calories','sportType','type'].forEach(function(f){
+      if(win[f]!==undefined) merged[f]=win[f];
+    });
+    merged.editedAt = Math.max(aEdit,bEdit);
+  }
   if(gpsWinner.gpsLats !== undefined){
     merged.gpsLats = gpsWinner.gpsLats;
     merged.gpsLons = gpsWinner.gpsLons;
@@ -9437,7 +9451,7 @@ function openManualActivity(){
       if(secs && np && FTP) tss = Math.round((secs * np * (np/FTP)) / (FTP * 3600) * 100);
     }
 
-    var ride = {name:name,date:date,duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev};
+    var ride = {name:name,date:date,duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev,editedAt:Date.now()};
     if(!st.rides) st.rides=[];
     st.rides.push(ride);
     sv();
@@ -11731,6 +11745,30 @@ function dsShowCalendar(){
 }
 
 
+// Current fitness numbers for the desktop dashboard. Prefers the live
+// Intervals.icu wellness cache (same source Home's Readiness card + the AI
+// Coach use); falls back to computing CTL/ATL/TSB from the unified load model.
+function getDesktopFitness_(){
+  try{ var lw=window.__liveWellness; if(lw && lw.fetchedAt && (Date.now()-lw.fetchedAt)<3600000) return {ctl:lw.ctl, atl:lw.atl, tsb:lw.tsb}; }catch(e){}
+  try{
+    var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
+      .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
+    a.forEach(function(x){ x.load=unifiedLoad(x); });
+    var wl=a.filter(function(x){return x.load>0;});
+    var pmc=wl.length?computePMC(wl):null;
+    if(pmc && pmc.length){ var last=pmc[pmc.length-1]; var ctl=Math.round(last.ctl), atl=Math.round(last.atl); return {ctl:ctl, atl:atl, tsb:ctl-atl}; }
+  }catch(e){}
+  return {ctl:0, atl:0, tsb:0};
+}
+// TSB-based readiness on a 0-100 scale (desktop ring), mirroring the mobile
+// card's 5 + TSB/6 (0-10) formula. Returns {score,label,color}.
+function readinessFromTSB_(tsb){
+  var r10=Math.max(0,Math.min(10,5+(tsb/6)));
+  var label=r10>=7.5?'Good':r10>=5?'Fair':r10>=3?'Low':'Poor';
+  var color=r10>=7.5?'#4ade80':r10>=5?'#FFB938':'#e24b4a';
+  return {score:Math.round(r10*10), label:label, color:color};
+}
+
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -11855,10 +11893,14 @@ function dsShowDashboard(){
 
   var body=div('padding:10px 16px 32px;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;overflow-y:auto;overflow-x:hidden');
 
-  // ROW 1
-  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
+  // ROW 1 — honest cards only: real TSB-based Readiness + Upcoming Races.
+  // (The old hardcoded Sleep/HRV placeholder cards were removed; this app has
+  // no sleep/HRV data source.)
+  var r1=div('display:grid;grid-template-columns:1.25fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
-  // Readiness
+  // Readiness — computed from real TSB (same model as the mobile card).
+  var _fit=getDesktopFitness_();
+  var _rdy=readinessFromTSB_(_fit.tsb);
   var rc=card(''); rc.appendChild(lbl('READINESS'));
   var rrow=row('gap:12px');
   var ringWrap=div('position:relative;width:58px;height:58px;flex-shrink:0');
@@ -11872,64 +11914,25 @@ function dsShowDashboard(){
     if(transform) c.setAttribute('transform',transform);
     return c;
   }
-  var arc=Math.round(score/100*176);
+  var arc=Math.round(_rdy.score/100*176);
   svgR.appendChild(svgCircle('35','35','28','#1e2130','6'));
-  svgR.appendChild(svgCircle('35','35','28','#4ade80','6',arc+' 176','44','rotate(-90 35 35)'));
+  svgR.appendChild(svgCircle('35','35','28',_rdy.color,'6',arc+' 176','44','rotate(-90 35 35)'));
   var numWrap=div('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center');
-  numWrap.appendChild(div('font-size:20px;font-weight:800;color:#fff;line-height:1',''+score));
-  numWrap.appendChild(div('font-size:9px;color:#4ade80;font-weight:600','Optimal'));
+  numWrap.appendChild(div('font-size:20px;font-weight:800;color:#fff;line-height:1',''+_rdy.score));
+  numWrap.appendChild(div('font-size:9px;font-weight:600',_rdy.label)).style.color=_rdy.color;
   ringWrap.appendChild(svgR); ringWrap.appendChild(numWrap);
   var whyDiv=div('flex:1');
-  whyDiv.appendChild(div('font-size:9px;color:#64748b;font-weight:600;margin-bottom:4px','Why '+score+'?'));
-  [['ti-heart','#e24b4a','Recovery','+12'],['ti-moon','#8b5cf6','Sleep','+8'],['ti-activity','#60a5fa','Training','+6'],['ti-sun','#f59e0b','Weather','-3']].forEach(function(x){
+  whyDiv.appendChild(div('font-size:9px;color:#64748b;font-weight:600;margin-bottom:4px','Training load'));
+  [['ti-activity','#60a5fa','Fitness (CTL)',''+_fit.ctl,'#94a3b8'],
+   ['ti-heart','#e24b4a','Fatigue (ATL)',''+_fit.atl,'#94a3b8'],
+   ['ti-bolt',_rdy.color,'Form (TSB)',(_fit.tsb>=0?'+':'')+_fit.tsb,_rdy.color]].forEach(function(x){
     var rr=row('justify-content:space-between;margin-bottom:3px');
     var ll=row('gap:4px'); ll.appendChild(ico(x[0],x[1],'11')); ll.appendChild(div('font-size:11px;color:#94a3b8',x[2]));
-    var vv=div('font-size:11px;font-weight:600',x[3]); vv.style.color=x[3].indexOf('-')>=0?'#e24b4a':'#4ade80';
+    var vv=div('font-size:11px;font-weight:700',x[3]); vv.style.color=x[4];
     rr.appendChild(ll); rr.appendChild(vv); whyDiv.appendChild(rr);
   });
   rrow.appendChild(ringWrap); rrow.appendChild(whyDiv);
   rc.appendChild(rrow); r1.appendChild(rc);
-
-  // Sleep
-  var sc=card('');
-  var shd=row('gap:6px;margin-bottom:8px'); shd.appendChild(ico('ti-moon','#8b5cf6')); shd.appendChild(lbl('SLEEP'));
-  sc.appendChild(shd);
-  sc.appendChild(div('font-size:20px;font-weight:800;color:#fff;letter-spacing:-.02em','7h 48m'));
-  sc.appendChild(div('font-size:11px;color:#4ade80;font-weight:600;margin-bottom:8px','Good'));
-  var svgS=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgS.setAttribute('width','100%'); svgS.setAttribute('height','30'); svgS.setAttribute('viewBox','0 0 140 40'); svgS.setAttribute('preserveAspectRatio','none');
-  [[0,10],[20,5],[40,8],[60,12],[80,6],[100,14],[120,4]].forEach(function(x,i){
-    var h=40-x[1]; var rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-    rect.setAttribute('x',''+x[0]); rect.setAttribute('y',''+x[1]); rect.setAttribute('width','16'); rect.setAttribute('height',''+h);
-    rect.setAttribute('rx','3'); rect.setAttribute('fill','#8b5cf6'); rect.setAttribute('opacity',i===4?'1':'0.6');
-    svgS.appendChild(rect);
-  });
-  sc.appendChild(svgS);
-  var sdays=row('justify-content:space-between;margin-top:4px');
-  ['M','T','W','T','F','S','S'].forEach(function(d){sdays.appendChild(div('font-size:9px;color:#64748b',d));});
-  sc.appendChild(sdays); r1.appendChild(sc);
-
-  // HRV
-  var hc=card('');
-  var hhd=row('gap:6px;margin-bottom:8px'); hhd.appendChild(ico('ti-heart','#e24b4a')); hhd.appendChild(lbl('HRV'));
-  hc.appendChild(hhd);
-  hc.appendChild(div('font-size:20px;font-weight:800;color:#fff;letter-spacing:-.02em','62 ms'));
-  hc.appendChild(div('font-size:11px;color:#4ade80;font-weight:600;margin-bottom:8px','Above Base'));
-  var svgH=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svgH.setAttribute('width','100%'); svgH.setAttribute('height','30'); svgH.setAttribute('viewBox','0 0 140 40'); svgH.setAttribute('preserveAspectRatio','none');
-  var pl=document.createElementNS('http://www.w3.org/2000/svg','polyline');
-  pl.setAttribute('points','0,28 20,25 40,22 60,20 80,18 100,20 120,16 140,14');
-  pl.setAttribute('fill','none'); pl.setAttribute('stroke','#4ade80'); pl.setAttribute('stroke-width','2'); pl.setAttribute('stroke-linecap','round');
-  svgH.appendChild(pl);
-  [[0,28],[40,22],[80,18],[120,16],[140,14]].forEach(function(x){
-    var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.setAttribute('cx',''+x[0]); c.setAttribute('cy',''+x[1]); c.setAttribute('r','3'); c.setAttribute('fill','#4ade80');
-    svgH.appendChild(c);
-  });
-  hc.appendChild(svgH);
-  var hdays=row('justify-content:space-between;margin-top:4px');
-  ['M','T','W','T','F','S','S'].forEach(function(d){hdays.appendChild(div('font-size:9px;color:#64748b',d));});
-  hc.appendChild(hdays); r1.appendChild(hc);
 
   // Upcoming Races — real, editable data from the unified st.races store.
   // The "+ Add" affordance and clickable rows both open the race editor and
@@ -14541,6 +14544,9 @@ function editRideData(idx){
     if(elevI.value!=='') r.elev=parseFloat(elevI.value);
     // Recompute avg speed from the corrected distance + duration if both present.
     if(r.distance && r.duration){ r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10; }
+    // Stamp the edit so the sync merge lets this manual correction win over a
+    // stale remote copy instead of Math.max-ing it away.
+    r.editedAt=Date.now();
     try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Ride updated'); }catch(e){}
     overlay.remove();
@@ -20414,10 +20420,14 @@ function showCalendarTab(){
     return s+'</div>';
   }
   h+='    <div>';
-  h+=vitalRow('Ride Score','9.4','#5DCAA5',null); // TODO: wire next session (no ride-score metric yet)
-  h+=vitalRow('Recovery',(Math.max(0,Math.min(100,Math.round(60+tsb)))+'%'),'#4D9FFF',Math.max(0,Math.min(100,Math.round(60+tsb))));
-  h+=vitalRow('Sleep','7h 48m','#A855F7',78);   // TODO: wire to Intervals.icu wellness
-  h+=vitalRow('HRV','71 ms','#5DCAA5',71);       // TODO: wire to Intervals.icu wellness
+  // Honest training-load vitals (real CTL/ATL/TSB) instead of the old
+  // fabricated Ride Score / Sleep / HRV placeholders.
+  var _cf=(typeof getDesktopFitness_==='function')?getDesktopFitness_():{ctl:0,atl:0,tsb:tsb};
+  var _rec=Math.max(0,Math.min(100,Math.round(60+_cf.tsb)));
+  h+=vitalRow('Recovery',_rec+'%','#4D9FFF',_rec);
+  h+=vitalRow('Fitness (CTL)',''+_cf.ctl,'#60a5fa',null);
+  h+=vitalRow('Fatigue (ATL)',''+_cf.atl,'#e24b4a',null);
+  h+=vitalRow('Form (TSB)',(_cf.tsb>=0?'+':'')+_cf.tsb,(_cf.tsb>=5?'#4ade80':_cf.tsb<-20?'#e24b4a':'#FFB938'),null);
   h+='    </div>';
   h+='  </div>';
   // Weather sub-block (TODO: wire next session)
@@ -20688,6 +20698,7 @@ function openDayEditor(dateKey){
       var pv=num(pwrR.completed.value);  if(pv!=null) o.np=pv;
       var ev=num(elevR.completed.value); if(ev!=null) o.elev=ev;
       if(o.distance&&o.duration&&!paceR.completed.value){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
+      o.editedAt=Date.now();
     }
     // Planned side -> plan session name + duration text back into the plan DOM
     if(plan && plan.week){
