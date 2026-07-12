@@ -4164,6 +4164,17 @@ function migrateRaces_(){
     if(!r.id){ r.id='race-'+(r.date||'x')+'-'+i; changed=true; }
     if(!r.sport){ r.sport=raceSportGuess_(r.name); changed=true; }
   });
+  // Remove duplicate races (same name + date) that earlier seeds/migrations
+  // left behind — e.g. Grand Rapids Half seeded into both st.races and the old
+  // st.events. NOTE: no backslash regex (template literal strips it); collapse
+  // runs of literal spaces only.
+  var _seen={}, _deduped=[];
+  st.races.forEach(function(r){
+    var k=String(r.name||'').toLowerCase().replace(/ +/g,' ').trim()+'|'+String(r.date||'').trim();
+    if(_seen[k]) return;
+    _seen[k]=true; _deduped.push(r);
+  });
+  if(_deduped.length!==st.races.length){ st.races=_deduped; changed=true; }
   _racesReady=true;
   if(changed){ try{ sv(); }catch(e){} }
 }
@@ -9392,7 +9403,9 @@ function openManualActivity(){
 
   var overlay = document.createElement('div');
   overlay.id = 'ride-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;z-index:300';
+  // z-index above #desktop-shell (999) so it works from the desktop Activities
+  // "+ Add Activity" button, not just mobile.
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;z-index:1000';
 
   var modal = document.createElement('div');
   modal.style.cssText = 'background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-height:85vh;overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid rgba(255,255,255,.14)';
@@ -11516,18 +11529,14 @@ function dsShowAnalytics(){
     weekLabels.push('W'+(12-w));
   }
 
-  // W/kg history — rides store normalized/avg power as np/avgPwr (NOT
-  // avgPower), so the old r.avgPower filter matched nothing and the card
-  // showed "--". BWT is pounds; convert to kg. Prefer NP, fall back to avg.
-  var wkgHistory=[];
-  var wkgLabels=[];
-  var _kg=BWT/2.20462;
-  var sortedRides=rides.filter(function(r){return r.date&&(r.np||r.avgPwr||r.avgPower);}).sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;}).slice(-20);
-  sortedRides.forEach(function(r){
-    var pw=r.np||r.avgPwr||r.avgPower;
-    wkgHistory.push(Math.round((pw/_kg)*100)/100);
-    wkgLabels.push(normDate(r.date).slice(5));
-  });
+  // W/kg — the KPI is the category metric FTP ÷ weight (Chase 1 = 3.14), which
+  // is always available; the old per-ride "avg power ÷ weight" showed "--"
+  // whenever rides lacked stored power. The trend chart uses wkgTrend_ (best
+  // 20-min power ÷ kg, or FTP ÷ logged weight as a fallback).
+  var wkgNow=currentWkg_();
+  var _wt=wkgTrend_();
+  var wkgHistory=_wt.pts.map(function(p){return p.wkg;});
+  var wkgLabels=_wt.pts.map(function(p){return String(p.date).slice(5);});
 
   var lastTSB=tsbArr[tsbArr.length-1]||0;
   var lastCTL=ctlArr[ctlArr.length-1]||0;
@@ -11546,7 +11555,7 @@ function dsShowAnalytics(){
     ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days'],
     ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days'],
     ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel],
-    ['W/kg',wkgHistory.length?(wkgHistory[wkgHistory.length-1]+' W/kg'):'--','#4ade80','Latest avg power/weight']
+    ['W/kg',wkgNow.toFixed(2)+' W/kg',wkgNow>=3.14?'#4ade80':'#60a5fa','FTP ÷ weight · Chase 1 = 3.14']
   ].forEach(function(x){
     var card=document.createElement('div');
     card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px';
@@ -11821,6 +11830,29 @@ function readinessFromTSB_(tsb){
   var color=r10>=7.5?'#4ade80':r10>=5?'#FFB938':'#e24b4a';
   return {score:Math.round(r10*10), label:label, color:color};
 }
+// Category W/kg = FTP ÷ bodyweight (kg). This is the metric Chase-1 (3.14 W/kg)
+// is defined by and, unlike per-ride average power, is always available.
+function currentWkg_(){
+  var ftp=parseFloat(st.ftp||186), kg=parseFloat(st.weight||162.5)/2.20462;
+  return (kg>0)?Math.round((ftp/kg)*100)/100:0;
+}
+// Honest W/kg trend. Preferred: best 20-min power ÷ kg per ride (a true fitness
+// signal) when at least 3 rides carry a 20-min peak. Fallback: FTP ÷ each
+// logged bodyweight over time (weight is the lever being actively chased).
+// Returns {source, pts:[{date,wkg}]} — empty pts when there simply isn't data.
+function wkgTrend_(){
+  var ftp=parseFloat(st.ftp||186), kg=parseFloat(st.weight||162.5)/2.20462;
+  var list; try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
+  var peaks=list.filter(function(r){return r&&!r.deleted&&r.date&&(r.peak20||(r.powerCurve&&r.powerCurve[1200]));})
+    .map(function(r){var p=r.peak20||r.powerCurve[1200];return {date:normDate(r.date), wkg:Math.round((p/kg)*100)/100};})
+    .sort(function(a,b){return a.date>b.date?1:-1;});
+  if(peaks.length>=3) return {source:'best 20-min power', pts:peaks.slice(-10)};
+  var wl=(st.weightLog||[]).filter(function(w){return w&&w.date&&w.weight;})
+    .map(function(w){return {date:normDate(w.date), wkg:Math.round((ftp/(parseFloat(w.weight)/2.20462))*100)/100};})
+    .sort(function(a,b){return a.date>b.date?1:-1;});
+  if(wl.length>=2) return {source:'FTP ÷ logged weight', pts:wl.slice(-10)};
+  return {source:null, pts:[]};
+}
 
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
@@ -11946,10 +11978,10 @@ function dsShowDashboard(){
 
   var body=div('padding:10px 16px 32px;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;overflow-y:auto;overflow-x:hidden');
 
-  // ROW 1 — honest cards only: real TSB-based Readiness + Upcoming Races.
-  // (The old hardcoded Sleep/HRV placeholder cards were removed; this app has
-  // no sleep/HRV data source.)
-  var r1=div('display:grid;grid-template-columns:1.25fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
+  // ROW 1 — three honest cards: real TSB-based Readiness, W/kg (the athlete's
+  // headline goal), and Upcoming Races. (The old hardcoded Sleep/HRV cards
+  // were removed; this app has no sleep/HRV data source.)
+  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Readiness — computed from real TSB (same model as the mobile card).
   var _fit=getDesktopFitness_();
@@ -11986,6 +12018,45 @@ function dsShowDashboard(){
   });
   rrow.appendChild(ringWrap); rrow.appendChild(whyDiv);
   rc.appendChild(rrow); r1.appendChild(rc);
+
+  // W/kg — the number the athlete cares most about (chasing 3.14 = Chase 1).
+  // FTP ÷ bodyweight; trend + honest empty-states from wkgTrend_.
+  var _wkg=currentWkg_();
+  var _wtr=wkgTrend_();
+  var TARGET_WKG=3.14;
+  var wkgPct=Math.max(0,Math.min(100,Math.round(_wkg/TARGET_WKG*100)));
+  var wkgColor=_wkg>=TARGET_WKG?'#4ade80':_wkg>=2.8?'#FFB938':'#60a5fa';
+  var wc=card('');
+  var whd=row('gap:6px;margin-bottom:6px'); whd.appendChild(ico('ti-bolt',wkgColor)); whd.appendChild(lbl('W/KG'));
+  wc.appendChild(whd);
+  var wtop=row('align-items:baseline;gap:6px;margin-bottom:2px');
+  wtop.appendChild(div('font-size:26px;font-weight:800;line-height:1',_wkg.toFixed(2))).style.color=wkgColor;
+  wtop.appendChild(div('font-size:10px;color:#64748b','FTP ÷ weight'));
+  wc.appendChild(wtop);
+  if(_wtr.pts.length>=2){
+    var _vals=_wtr.pts.map(function(p){return p.wkg;});
+    var _mn=Math.min.apply(null,_vals.concat([TARGET_WKG])), _mx=Math.max.apply(null,_vals.concat([TARGET_WKG]));
+    var _rng=(_mx-_mn)||1;
+    var _pts=_vals.map(function(v,i){var x=(_vals.length>1?(i/(_vals.length-1)):0)*140; var y=30-((v-_mn)/_rng)*30; return x.toFixed(0)+','+y.toFixed(0);}).join(' ');
+    var _tgtY=(30-((TARGET_WKG-_mn)/_rng)*30).toFixed(0);
+    var _sd=div('margin:6px 0 2px');
+    _sd.innerHTML='<svg width="100%" height="30" viewBox="0 0 140 30" preserveAspectRatio="none">'
+      +'<line x1="0" y1="'+_tgtY+'" x2="140" y2="'+_tgtY+'" stroke="#4ade80" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>'
+      +'<polyline points="'+_pts+'" fill="none" stroke="'+wkgColor+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    wc.appendChild(_sd);
+    wc.appendChild(div('font-size:9px;color:#64748b','trend: '+_wtr.source+' · dashes = 3.14'));
+  } else {
+    wc.appendChild(div('font-size:10px;color:#64748b;margin:8px 0','Log your weight over time to chart the W/kg trend.'));
+  }
+  var _gap=Math.round((TARGET_WKG-_wkg)*100)/100;
+  var wtgt=row('justify-content:space-between;margin:8px 0 3px');
+  wtgt.appendChild(div('font-size:10px;color:#94a3b8',_wkg>=TARGET_WKG?'Chase 1 reached':'Target 3.14 (Chase 1)'));
+  wtgt.appendChild(div('font-size:10px;font-weight:700',_wkg>=TARGET_WKG?'✓':('+'+_gap.toFixed(2)+' to go'))).style.color=wkgColor;
+  wc.appendChild(wtgt);
+  var wbar=div('height:5px;background:#1a1f2e;border-radius:3px');
+  wbar.innerHTML='<div style="height:5px;background:'+wkgColor+';border-radius:3px;width:'+wkgPct+'%"></div>';
+  wc.appendChild(wbar);
+  r1.appendChild(wc);
 
   // Upcoming Races — real, editable data from the unified st.races store.
   // The "+ Add" affordance and clickable rows both open the race editor and
@@ -14575,7 +14646,8 @@ function editRideData(idx){
 
   var overlay=document.createElement('div');
   overlay.id='ride-edit-modal';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:450;display:flex;align-items:flex-end;justify-content:center';
+  // z-index above #desktop-shell (999) so editing a ride works on desktop too.
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
   overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
 
   var sheet=document.createElement('div');
@@ -15580,7 +15652,10 @@ function openRaceEditor(idx,onSaved){
   var esc=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
   var sportOpt=function(v,label){ return '<option value="'+v+'"'+(sport===v?' selected':'')+'>'+label+'</option>'; };
   var modal=document.createElement('div');
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:flex-end;justify-content:center';
+  // z-index 1000 so the sheet sits ABOVE #desktop-shell (z-index:999). At 300
+  // it opened behind the desktop shell — invisible/unclickable — which is why
+  // "+ Add" and race rows appeared to do nothing on desktop.
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:600px;max-height:92vh;overflow-y:auto';
   var fieldCss='width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit';
@@ -20704,7 +20779,8 @@ function openDayEditor(dateKey){
 
   var modal=document.createElement('div');
   modal.id='day-editor-modal';
-  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  // z-index above #desktop-shell (999) so the desktop calendar day-editor shows.
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
   modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
 
   var sheet=document.createElement('div');
