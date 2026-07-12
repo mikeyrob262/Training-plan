@@ -4100,36 +4100,91 @@ function parseDurToMin(durStr){
   return parseFloat(durStr)||0;
 }
 
-// Events: real, editable race/goal-date entries, replacing the old
-// hardcoded "Grand Rapids Half, Oct 18" date with a proper st.events array.
-function ensureEvents(){
-  if(!st.events){
-    st.events = [
-      {id:'evt-'+Date.now(), name:'Grand Rapids Half Marathon', date:'2026-10-18', type:'race'}
-    ];
-    sv();
+// ===== RACES: single source of truth =====================================
+// st.races is the ONE store. getNextRace_() is the single accessor every
+// consumer (dashboards, AI Coach) reads, so there is no more fake/hardcoded
+// race data anywhere. Legacy st.events entries are folded in once, then
+// st.events is retired. No auto-seeded demo race — an empty list stays empty.
+var _racesReady=false;
+// Parse 'YYYY-MM-DD' (zero-padded OR not) as a LOCAL date. new Date('2026-7-8')
+// is invalid and new Date('2026-07-08') is UTC midnight (drifts a day west of
+// GMT) — both bugs this avoids.
+function parseRaceDate_(s){
+  var p=String(s||'').split('-');
+  if(p.length===3){
+    var dt=new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+    return isNaN(dt)?null:dt;
   }
+  var d=new Date(s); return isNaN(d)?null:d;
 }
+// Best-effort sport for legacy/imported races that predate the sport field.
+function raceSportGuess_(name){
+  var n=' '+String(name||'').toLowerCase()+' ';
+  // NOTE: this whole file is served inside one template literal, so regex
+  // backslash-escapes get stripped one level — avoid them here (pad with
+  // spaces instead of using word boundaries).
+  if(/century|fondo|gravel| crit|cyclo| bike | ride |zwift|watopia|kanza| 100 | 50 /.test(n)) return 'bike';
+  if(/marathon|half|10k|5k| run | mile |trail|ultra/.test(n)) return 'run';
+  return 'other';
+}
+// Migrate legacy st.events -> st.races and backfill id/sport. Runs once per
+// load (guarded) and only persists when it actually changes something.
+function migrateRaces_(){
+  if(_racesReady && Array.isArray(st.races)) return;
+  var changed=false;
+  if(!Array.isArray(st.races)){ st.races=[]; changed=true; }
+  if(Array.isArray(st.events) && st.events.length){
+    st.events.forEach(function(e){
+      if(!e || !e.date) return;
+      var dup=st.races.some(function(r){ return r.name===e.name && r.date===e.date; });
+      if(!dup){
+        st.races.push({id:e.id||('race-'+Date.now()+'-'+st.races.length),
+          name:e.name||'Race', date:e.date, sport:raceSportGuess_(e.name),
+          distance:null, goal:(e.type==='goal'?'Goal':'Finish Strong'), target:'', location:''});
+        changed=true;
+      }
+    });
+  }
+  if(st.events && st.events.length){ st.events=[]; changed=true; } // retire, keep [] so old reads stay safe
+  st.races.forEach(function(r,i){
+    if(!r.id){ r.id='race-'+(r.date||'x')+'-'+i; changed=true; }
+    if(!r.sport){ r.sport=raceSportGuess_(r.name); changed=true; }
+  });
+  _racesReady=true;
+  if(changed){ try{ sv(); }catch(e){} }
+}
+// All upcoming races (today or later), soonest first, normalized. The _i field
+// is the index into st.races so edit/delete can target the exact entry.
+function upcomingRaces_(){
+  migrateRaces_();
+  var today=new Date(); today.setHours(0,0,0,0);
+  return (st.races||[]).map(function(r,i){
+    var d=parseRaceDate_(r.date);
+    var daysOut=d?Math.round((d-today)/86400000):null;
+    return {id:r.id, name:r.name||'Race', date:r.date, sport:r.sport||'other',
+      distance:(r.distance!=null?r.distance:null), goal:r.goal||'Finish Strong',
+      target:r.target||'', location:r.location||'', dateObj:d,
+      daysOut:daysOut, weeksOut:(daysOut!=null?Math.ceil(daysOut/7):null), _i:i};
+  }).filter(function(x){ return x.dateObj && x.daysOut>=0; })
+    .sort(function(a,b){ return a.dateObj-b.dateObj; });
+}
+// The single accessor: soonest upcoming race, normalized, or null.
+function getNextRace_(){
+  var up=upcomingRaces_();
+  return up.length?up[0]:null;
+}
+// Kept for older callers; now just ensures the store is migrated.
+function ensureEvents(){ migrateRaces_(); }
 
 function eventsCardHTML(){
-  ensureEvents();
-  var today = new Date(); today.setHours(0,0,0,0);
-  var upcoming = (st.events||[]).map(function(e){
-    var d = new Date(e.date+'T00:00:00');
-    var daysOut = Math.ceil((d-today)/(1000*60*60*24));
-    return {evt:e, daysOut:daysOut};
-  }).filter(function(x){ return x.daysOut >= 0; })
-    .sort(function(a,b){ return a.daysOut - b.daysOut; });
-
-  if(!upcoming.length) return '';
-  var next = upcoming[0];
-  var weeksOut = Math.floor(next.daysOut/7);
-
-  return '<div style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(15,110,86,.12),rgba(15,110,86,.04));border:1px solid rgba(15,110,86,.25);border-radius:14px;padding:14px 16px">'
-    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0F6E56;margin-bottom:4px">'+(next.evt.type==='race'?'🏁':'📅')+' '+next.evt.name+'</div>'
+  var next = getNextRace_();
+  if(!next) return '';
+  var icon = next.sport==='bike'?'🚴':next.sport==='run'?'🏃':'🏁';
+  return '<div onclick="openRaceEditor('+next._i+')" style="margin:0 16px 12px;background:linear-gradient(135deg,rgba(15,110,86,.12),rgba(15,110,86,.04));border:1px solid rgba(15,110,86,.25);border-radius:14px;padding:14px 16px;cursor:pointer">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#0F6E56;margin-bottom:4px">'+icon+' '+next.name+'</div>'
     + '<div style="display:flex;align-items:baseline;gap:8px">'
     + '<div style="font-size:28px;font-weight:900;color:var(--t1)">'+next.daysOut+'</div>'
-    + '<div style="font-size:13px;color:var(--t2)">days out · '+weeksOut+' weeks</div>'
+    + '<div style="font-size:13px;color:var(--t2)">days out · '+next.weeksOut+' weeks'+(next.target?' · target '+next.target:'')+'</div>'
     + '</div></div>';
 }
 
@@ -4195,8 +4250,9 @@ function openEventEdit(){
     if(!name){ nameInput.style.borderColor='#E24B4A'; return; }
     var dateStr = dateInput.value;
     if(!dateStr || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateStr)){ dateInput.style.borderColor='#E24B4A'; return; }
-    ensureEvents();
-    st.events.push({id:'evt-'+Date.now(), name:name, date:dateStr, type:typeSelect.value});
+    migrateRaces_();
+    st.races.push({id:'race-'+Date.now(), name:name, date:dateStr, sport:raceSportGuess_(name),
+      distance:null, goal:(typeSelect.value==='goal'?'Goal':'Finish Strong'), target:'', location:''});
     sv();
     closeServiceModal();
     renderHomeTSSAndPR();
@@ -5346,10 +5402,9 @@ function showProg(){
     lrLabels.push('W'+(12-wi3));
   }
 
-  // Race countdown
-  var races=st.races||[];
-  var nextRace=races.length?races[0]:null;
-  var raceDays=nextRace?Math.max(0,Math.round((new Date(nextRace.date)-now)/86400000)):null;
+  // Race countdown — real next race from the unified store.
+  var nextRace=getNextRace_();
+  var raceDays=nextRace?nextRace.daysOut:null;
 
   // Build HTML
   var h='<div style="padding:14px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)">'    +''    +'<div style="font-size:19px;font-weight:800;color:var(--t1)">Progress</div></div>';
@@ -8093,15 +8148,15 @@ function showHomeDash(){
 
   // Upcoming Events (real race data) - showing up to 3, not just the
   // next one, per request to keep motivation front and center.
-  var upcomingRaces=(st.races||[]).filter(function(r){return new Date(r.date)>=new Date();}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  var upcomingRaces=upcomingRaces_();
   if(upcomingRaces.length){
     html+='<div style="margin:0 16px 20px">'
       +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming Events</div>';
     upcomingRaces.slice(0,3).forEach(function(race,ridx){
-      var raceDate=new Date(race.date);
-      var daysOut=Math.max(0,Math.round((raceDate-new Date())/86400000));
+      var raceDate=race.dateObj;
+      var daysOut=race.daysOut;
       var monthAbbr=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][raceDate.getMonth()];
-      html+='<div onclick="showCalendar()" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:'+(ridx>0?'10px 0 0':'0')+';'+(ridx>0?'border-top:1px solid var(--b1);margin-top:10px;':'')+'">'
+      html+='<div onclick="openRaceEditor('+race._i+')" style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:'+(ridx>0?'10px 0 0':'0')+';'+(ridx>0?'border-top:1px solid var(--b1);margin-top:10px;':'')+'">'
         +'<div style="border:1px solid var(--b1);border-radius:10px;padding:6px 10px;text-align:center;flex-shrink:0">'
         +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
         +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
@@ -8623,9 +8678,16 @@ function renderPerf(container){
   // CTL projection
   var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0,d:''};
   var curCTL=last.ctl||0;
-  var raceDate=new Date('2026-10-18');
-  var daysToRace=Math.round((raceDate-now)/(1000*60*60*24));
-  var weeksToRace=Math.ceil(daysToRace/7);
+  // Real next race drives the season projection (falls back to an 8-week
+  // horizon when nothing is scheduled, so the charts still render).
+  var _seasonRace=getNextRace_();
+  var _hasRace=!!_seasonRace;
+  var raceDate=_hasRace?_seasonRace.dateObj:null;
+  var raceName=_hasRace?_seasonRace.name:'your next race';
+  var weeksToRace=_hasRace?_seasonRace.weeksOut:8;
+  var daysToRace=_hasRace?_seasonRace.daysOut:weeksToRace*7;
+  var _monAbbr=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var raceDateLabel=raceDate?(_monAbbr[raceDate.getMonth()]+' '+raceDate.getDate()+', '+raceDate.getFullYear()):'—';
   var projCTL=Math.round(curCTL+(weeksToRace*2.8)); // ~2.8 CTL/week ramp
   projCTL=Math.min(projCTL,85);
 
@@ -8696,9 +8758,9 @@ function renderPerf(container){
   html+='<div style="margin:0 16px 20px">';
   html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
   html+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Fitness Projection &rarr; Race Day</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load &rarr; projected CTL on Oct 18: <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
+  html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load &rarr; projected CTL by '+raceDateLabel+': <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
   html+='<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">'+daysToRace+' days out</div>';
-  html+='<div style="font-size:12px;font-weight:700;color:#ef4444">Oct 18, 2026</div></div></div>';
+  html+='<div style="font-size:12px;font-weight:700;color:#ef4444">'+raceDateLabel+'</div></div></div>';
   // Build CTL projection chart data
   var ctlActual=[],ctlProj=[],ctlLabels2=[];
   var ctlWeeks=Math.min(pmcData.length,8);
@@ -8714,7 +8776,7 @@ function renderPerf(container){
     lastCtl=Math.min(lastCtl+2.8,85);
     ctlProj.push(Math.round(lastCtl));
     var pd=new Date(now); pd.setDate(now.getDate()+pw*7);
-    ctlLabels2.push(pw===Math.min(weeksToRace,8)?'Oct 18':pd.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    ctlLabels2.push(pw===Math.min(weeksToRace,8)?(raceDate?(_monAbbr[raceDate.getMonth()]+' '+raceDate.getDate()):'Race'):pd.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
   }
   // Connect actual to proj
   if(ctlActual.length>0&&ctlProj.length>0){
@@ -8748,11 +8810,11 @@ function renderPerf(container){
   html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Countdown</div>';
   var raceStats=[
-    ['Days to race',daysToRace,'#ef4444'],
-    ['Weeks remaining',weeksToRace,'var(--t1)'],
+    ['Days to race',_hasRace?daysToRace:'—','#ef4444'],
+    ['Weeks remaining',_hasRace?weeksToRace:'—','var(--t1)'],
     ['Current CTL',curCTL,'var(--blue)'],
     ['Projected CTL',projCTL,'var(--blue)'],
-    ['Half marathon',Math.round(((raceDate-now)/86400000/7))+'w away','var(--green)']
+    [raceName,_hasRace?weeksToRace+'w away':'not scheduled','var(--green)']
   ];
   raceStats.forEach(function(r){
     html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1)">';
@@ -10616,11 +10678,8 @@ function dsShowAICoach(){
     return b.name+' ('+b.type+', '+bikeStatusBadge(b).label+')';
   }).join('; ');
 
-  ensureEvents();
-  var todayMid=new Date(); todayMid.setHours(0,0,0,0);
-  var nxt=(st.events||[]).map(function(e){return {e:e,d:Math.ceil((new Date(e.date+'T00:00:00')-todayMid)/864e5)};})
-    .filter(function(x){return x.d>=0;}).sort(function(a,b){return a.d-b.d;})[0];
-  var raceStr=nxt?nxt.e.name+' in '+nxt.d+' days':'none scheduled';
+  var _nextRace=getNextRace_();
+  var raceStr=_nextRace?_nextRace.name+' in '+_nextRace.daysOut+' days'+(_nextRace.target?' (target '+_nextRace.target+')':''):'none scheduled';
 
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
   .then(function(r){return r.json();})
@@ -10894,11 +10953,8 @@ function openAICoachPlanGen(){
     var ctl2=pmc2?Math.round(pmc2[pmc2.length-1].ctl):0;
     var atl2=pmc2?Math.round(pmc2[pmc2.length-1].atl):0;
     var tsb2=ctl2-atl2;
-    ensureEvents();
-    var tdm=new Date(); tdm.setHours(0,0,0,0);
-    var nr=(st.events||[]).map(function(e){return {e:e,d:Math.ceil((new Date(e.date+'T00:00:00')-tdm)/864e5)};})
-      .filter(function(x){return x.d>=0;}).sort(function(a,b){return a.d-b.d;})[0];
-    var rStr=nr?nr.e.name+' in '+nr.d+' days':'none scheduled';
+    var _planRace=getNextRace_();
+    var rStr=_planRace?_planRace.name+' in '+_planRace.daysOut+' days'+(_planRace.target?' (target '+_planRace.target+')':''):'none scheduled';
 
     var prompt='You are an expert endurance coach. Design a '+nW+'-week training plan.'
       +' ATHLETE: FTP '+ftp+'W '+weight+'lbs '+wkg+' W/kg CTL '+ctl2+' ATL '+atl2+' TSB '+tsb2+'.'
@@ -11819,25 +11875,40 @@ function dsShowDashboard(){
   ['M','T','W','T','F','S','S'].forEach(function(d){hdays.appendChild(div('font-size:9px;color:#64748b',d));});
   hc.appendChild(hdays); r1.appendChild(hc);
 
-  // Training Balance
+  // Upcoming Races — real, editable data from the unified st.races store.
+  // The "+ Add" affordance and clickable rows both open the race editor and
+  // refresh this dashboard on save, so a race can be added right here.
   var tbc=card('');
   var tbhd=row('justify-content:space-between;margin-bottom:8px');
-  var tbl2=row('gap:5px'); tbl2.appendChild(ico('ti-bolt','#4ade80')); tbl2.appendChild(lbl('TRAINING BALANCE'));
-  tbhd.appendChild(tbl2); tbhd.appendChild(navlink('font-size:10px;color:#4ade80;cursor:pointer','View Calendar','calendar'));
+  var tbl2=row('gap:5px'); tbl2.appendChild(ico('ti-award','#4ade80')); tbl2.appendChild(lbl('UPCOMING RACES'));
+  var addLink=div('font-size:10px;color:#4ade80;cursor:pointer;font-weight:700','+ Add');
+  addLink.onclick=function(){ openRaceEditor(undefined, dsShowDashboard); };
+  tbhd.appendChild(tbl2); tbhd.appendChild(addLink);
   tbc.appendChild(tbhd);
-  tbc.appendChild(div('font-size:20px;font-weight:800;color:#4ade80;margin-bottom:6px','+ +6'));
-  [['JUL','12','Lake Michigan Century','Kenosha, WI','18 days'],['AUG','9','Mt. Washington','Auto Road, NH','46 days'],['SEP','21','Gran Fondo Hincapie','Greenville, SC','78 days'],['OCT','18','Chicago Marathon','Chicago, IL','105 days']].forEach(function(ev){
-    var er=row('gap:10px;margin-bottom:8px');
-    var dc=div('width:36px;text-align:center;flex-shrink:0');
-    dc.appendChild(div('font-size:9px;color:#64748b;text-transform:uppercase',ev[0]));
-    dc.appendChild(div('font-size:16px;font-weight:700;color:#fff',ev[1]));
-    var ei=div('flex:1;min-width:0');
-    ei.appendChild(div('font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',ev[2]));
-    ei.appendChild(div('font-size:10px;color:#64748b',ev[3]));
-    er.appendChild(dc); er.appendChild(ei);
-    er.appendChild(div('font-size:10px;color:#4ade80;font-weight:600;white-space:nowrap',ev[4]));
-    tbc.appendChild(er);
-  });
+  var _upRaces=upcomingRaces_();
+  var _monAbbr=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  if(_upRaces.length){
+    _upRaces.slice(0,4).forEach(function(rr){
+      var er=row('gap:10px;margin-bottom:8px;cursor:pointer');
+      er.onclick=(function(i){return function(){ openRaceEditor(i, dsShowDashboard); };})(rr._i);
+      er.onmouseover=function(){this.style.opacity='.75';}; er.onmouseout=function(){this.style.opacity='1';};
+      var dc=div('width:36px;text-align:center;flex-shrink:0');
+      dc.appendChild(div('font-size:9px;color:#64748b;text-transform:uppercase',_monAbbr[rr.dateObj.getMonth()]));
+      dc.appendChild(div('font-size:16px;font-weight:700;color:#fff',''+rr.dateObj.getDate()));
+      var ei=div('flex:1;min-width:0');
+      var sIcon=rr.sport==='bike'?'🚴 ':rr.sport==='run'?'🏃 ':'🏁 ';
+      ei.appendChild(div('font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',sIcon+rr.name));
+      ei.appendChild(div('font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',rr.location||(rr.distance!=null?rr.distance+' mi':rr.goal)));
+      er.appendChild(dc); er.appendChild(ei);
+      er.appendChild(div('font-size:10px;color:#4ade80;font-weight:600;white-space:nowrap',rr.daysOut+' days'));
+      tbc.appendChild(er);
+    });
+  } else {
+    var empty=div('font-size:12px;color:#64748b;padding:8px 0;text-align:center','No races scheduled — tap + Add');
+    empty.style.cursor='pointer';
+    empty.onclick=function(){ openRaceEditor(undefined, dsShowDashboard); };
+    tbc.appendChild(empty);
+  }
   r1.appendChild(tbc);
   body.appendChild(r1);
 
@@ -15228,8 +15299,9 @@ function renderRun(){
   // Race Goals collapsible
   var raceToggle=document.createElement('div');
   raceToggle.style.cssText='display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 14px;background:var(--s2);border-radius:12px;margin:0 16px 10px;border:0.5px solid var(--b1)';
+  migrateRaces_();
   var races=st.races||[];
-  raceToggle.innerHTML='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Race Goals</div>'
+  raceToggle.innerHTML='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Races</div>'
     +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(races.length?races.length+' race'+(races.length>1?'s':'')+ ' scheduled':'Tap to add a race')+'</div></div>'
     +'<span id="race-chev-btn" style="font-size:18px;color:var(--t3);transition:transform .2s">▾</span>';
   scr.appendChild(raceToggle);
@@ -15246,20 +15318,21 @@ function renderRun(){
   racePanel.appendChild(addRaceBtn);
 
   races.forEach(function(race,ri){
-    var now2=new Date();
-    var rd=new Date(race.date);
-    var days=Math.max(0,Math.round((rd-now2)/86400000));
+    var now2=new Date(); now2.setHours(0,0,0,0);
+    var rd=parseRaceDate_(race.date);
+    var days=rd?Math.max(0,Math.round((rd-now2)/86400000)):0;
     var weeks=Math.ceil(days/7);
+    var sportLbl=race.sport==='bike'?'🚴 Bike':race.sport==='run'?'🏃 Run':'🏁 Race';
     var rc=document.createElement('div');
     rc.style.cssText='background:var(--s2);border-radius:14px;border-left:3px solid #ef4444;padding:14px;margin-bottom:8px';
     rc.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
       +'<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+race.name+'</div>'
-      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+race.date+' · '+(race.goal||'Finish Strong')+'</div></div>'
+      +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+sportLbl+' · '+race.date+' · '+(race.goal||'Finish Strong')+(race.location?' · '+race.location:'')+(race.target?' · target '+race.target:'')+'</div></div>'
       +'<div style="text-align:right"><div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1">'+days+'</div>'
       +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">days</div></div></div>'
       +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:8px;margin-bottom:10px">'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+weeks+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">weeks out</div></div>'
-      +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+(race.distance||13.1)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">race miles</div></div>'
+      +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+(race.distance!=null?race.distance:'—')+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">race miles</div></div>'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800;color:#0F6E56">'+ytdMi.toFixed(1)+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">run mi YTD</div></div>'
       +'</div>'
       +'<div style="display:flex;gap:6px">'
@@ -15279,12 +15352,7 @@ function renderRun(){
     if(chev) chev.style.transform=open?'':'rotate(180deg)';
   };
 
-  // Pre-load Grand Rapids race if no races exist
-  if(!st.races||!st.races.length){
-    if(!st.races) st.races=[];
-    st.races.push({name:'Grand Rapids Half Marathon',date:'2026-10-18',distance:13.1,goal:'Finish Strong'});
-    sv();
-  }
+  // No auto-seeded demo race — an empty list stays empty until the user adds one.
 
   document.body.appendChild(scr);
 
@@ -15316,32 +15384,72 @@ function renderRun(){
   },300);
 }
 
-function openRaceEditor(idx){
-  var existing=st.races&&idx!==undefined?st.races[idx]:null;
+// Add/edit a race. idx is the index into st.races (undefined = add new).
+// onSaved is an optional re-render callback so the editor can refresh
+// whichever screen opened it (mobile Run tab, desktop dashboard, calendar).
+// Defaults to renderRun() for backward compatibility.
+function openRaceEditor(idx,onSaved){
+  migrateRaces_();
+  var existing=(idx!==undefined && idx!==null)?st.races[idx]:null;
+  var refresh=(typeof onSaved==='function')?onSaved:function(){ if(typeof renderRun==='function') renderRun(); };
+  var sport=existing&&existing.sport?existing.sport:'bike';
+  var esc=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
+  var sportOpt=function(v,label){ return '<option value="'+v+'"'+(sport===v?' selected':'')+'>'+label+'</option>'; };
   var modal=document.createElement('div');
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
-  sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:600px';
+  sheet.style.cssText='background:var(--bg);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:600px;max-height:92vh;overflow-y:auto';
+  var fieldCss='width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit';
+  var lblCss='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px';
   sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2);border-radius:2px;margin:0 auto 16px"></div>'
     +'<div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:16px">'+(existing?'Edit Race':'Add a Race')+'</div>'
-    +'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Race name</div>'
-    +'<input id="re-name" type="text" placeholder="e.g. Grand Rapids Half Marathon" value="'+(existing?existing.name:'')+'" style="width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit"></div>'
-    +'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Race date</div>'
-    +'<input id="re-date" type="date" value="'+(existing?existing.date:'2026-10-18')+'" style="width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit"></div>'
-    +'<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Distance (miles)</div>'
-    +'<input id="re-dist" type="number" step="0.1" placeholder="13.1" value="'+(existing?existing.distance:'')+'" style="width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit"></div>'
-    +'<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Goal</div>'
-    +'<input id="re-goal" type="text" placeholder="e.g. Finish Strong" value="'+(existing?existing.goal:'')+'" style="width:100%;border:1px solid var(--b2);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2);color:var(--t1);font-family:inherit"></div>';
+    +'<div style="margin-bottom:10px"><div style="'+lblCss+'">Race name</div>'
+    +'<input id="re-name" type="text" placeholder="e.g. Holland 100" value="'+(existing?esc(existing.name):'')+'" style="'+fieldCss+'"></div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:10px">'
+    +'<div style="flex:1"><div style="'+lblCss+'">Sport</div>'
+    +'<select id="re-sport" style="'+fieldCss+'">'+sportOpt('bike','Bike')+sportOpt('run','Run')+sportOpt('other','Other')+'</select></div>'
+    +'<div style="flex:1"><div style="'+lblCss+'">Date</div>'
+    +'<input id="re-date" type="date" value="'+(existing?esc(existing.date):'')+'" style="'+fieldCss+'"></div></div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:10px">'
+    +'<div style="flex:1"><div style="'+lblCss+'">Distance (mi)</div>'
+    +'<input id="re-dist" type="number" step="0.1" placeholder="100" value="'+(existing&&existing.distance!=null?esc(existing.distance):'')+'" style="'+fieldCss+'"></div>'
+    +'<div style="flex:1"><div style="'+lblCss+'">Target time</div>'
+    +'<input id="re-target" type="text" placeholder="e.g. 5:30:00" value="'+(existing?esc(existing.target):'')+'" style="'+fieldCss+'"></div></div>'
+    +'<div style="margin-bottom:10px"><div style="'+lblCss+'">Location</div>'
+    +'<input id="re-loc" type="text" placeholder="e.g. Holland, MI" value="'+(existing?esc(existing.location):'')+'" style="'+fieldCss+'"></div>'
+    +'<div style="margin-bottom:16px"><div style="'+lblCss+'">Goal</div>'
+    +'<input id="re-goal" type="text" placeholder="e.g. Finish Strong" value="'+(existing?esc(existing.goal):'')+'" style="'+fieldCss+'"></div>';
+
+  // Sport switch sets a sensible default distance when the field is empty.
+  setTimeout(function(){
+    var sp=document.getElementById('re-sport'), di=document.getElementById('re-dist');
+    if(sp&&di) sp.addEventListener('change',function(){
+      if(di.value) return;
+      di.placeholder=sp.value==='run'?'13.1':sp.value==='bike'?'100':'';
+    });
+  },0);
 
   var saveBtn=document.createElement('button');
   saveBtn.style.cssText='width:100%;padding:15px;background:#0F6E56;border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px';
   saveBtn.textContent='Save Race';
   saveBtn.onclick=function(){
-    if(!st.races) st.races=[];
-    var race={name:document.getElementById('re-name').value||'Race',date:document.getElementById('re-date').value,distance:parseFloat(document.getElementById('re-dist').value)||13.1,goal:document.getElementById('re-goal').value||'Finish Strong'};
-    if(idx!==undefined) st.races[idx]=race;
+    migrateRaces_();
+    var dateVal=document.getElementById('re-date').value;
+    if(!dateVal){ toast('Pick a race date'); return; }
+    var distVal=parseFloat(document.getElementById('re-dist').value);
+    var race={
+      id:(existing&&existing.id)?existing.id:'race-'+Date.now(),
+      name:document.getElementById('re-name').value.trim()||'Race',
+      date:dateVal,
+      sport:document.getElementById('re-sport').value||'other',
+      distance:isNaN(distVal)?null:distVal,
+      target:document.getElementById('re-target').value.trim(),
+      location:document.getElementById('re-loc').value.trim(),
+      goal:document.getElementById('re-goal').value.trim()||'Finish Strong'
+    };
+    if(idx!==undefined && idx!==null) st.races[idx]=race;
     else st.races.push(race);
-    sv(); modal.remove(); renderRun(); toast('Race saved!');
+    sv(); modal.remove(); refresh(); toast('Race saved!');
   };
   var cancelBtn=document.createElement('button');
   cancelBtn.style.cssText='width:100%;padding:12px;background:none;border:none;color:var(--t3);font-size:14px;cursor:pointer;font-family:inherit';
@@ -15353,10 +15461,13 @@ function openRaceEditor(idx){
   document.body.appendChild(modal);
 }
 
-function deleteRace(idx){
+function deleteRace(idx,onDone){
   if(!confirm('Remove this race?')) return;
   if(st.races) st.races.splice(idx,1);
-  sv(); renderRun(); toast('Race removed');
+  sv();
+  if(typeof onDone==='function') onDone();
+  else if(typeof renderRun==='function') renderRun();
+  toast('Race removed');
 }
 
 function openRunLog(){
@@ -20285,21 +20396,27 @@ function showCalendarTab(){
   h+='  </div>';
   h+='</div>';
 
-  // RACE COUNTDOWN — real st.goals race if present
-  var race=null;
-  try{ if(typeof getNextRace_==='function'){race=getNextRace_();} }catch(e){}
-  var raceName='Grand Rapids Half Marathon', raceDateObj=new Date('2026-10-17'), raceTarget='1:32:00', raceWeekOf='Week 4 of 18';
-  if(race&&race.name){ raceName=race.name; if(race.date) raceDateObj=new Date(race.date); if(race.target) raceTarget=race.target; }
-  var daysToGo=Math.max(0,Math.round((raceDateObj-now)/86400000));
-  var raceDateStr=monthNames[raceDateObj.getMonth()].slice(0,3)+' '+raceDateObj.getDate()+', '+raceDateObj.getFullYear();
+  // GOAL RACE — real next race from the unified store (no hardcoded fallback).
+  var race=getNextRace_();
   h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
-  h+='  <div style="font-size:11px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Goal Race</div>';
-  h+='  <div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:2px">'+raceName+'</div>';
-  h+='  <div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+raceDateStr+'</div>';
-  h+='  <div style="display:flex;align-items:flex-end;gap:16px">';
-  h+='    <div><div style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+daysToGo+'</div><div style="font-size:12px;color:var(--t3)">Days to go</div></div>';
-  h+='    <div style="flex:1"><div style="font-size:12px;color:var(--t3);margin-bottom:2px">Target '+raceTarget+'</div><div style="font-size:11px;color:var(--t3)">'+raceWeekOf+'</div></div>';
+  h+='  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h+='    <div style="font-size:11px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.06em">Goal Race</div>';
+  h+='    <div onclick="openRaceEditor('+(race?race._i:'undefined')+', showCalendarTab)" style="font-size:12px;font-weight:700;color:#FC4C02;cursor:pointer">'+(race?'Edit':'')+'</div>';
   h+='  </div>';
+  if(race){
+    var raceDateObj=race.dateObj;
+    var raceDateStr=monthNames[raceDateObj.getMonth()].slice(0,3)+' '+raceDateObj.getDate()+', '+raceDateObj.getFullYear();
+    var sportIcon=race.sport==='bike'?'🚴':race.sport==='run'?'🏃':'🏁';
+    h+='  <div style="font-size:18px;font-weight:800;color:var(--t1);margin-bottom:2px">'+sportIcon+' '+race.name+'</div>';
+    h+='  <div style="font-size:13px;color:var(--t2);margin-bottom:14px">'+raceDateStr+(race.location?' · '+race.location:'')+'</div>';
+    h+='  <div style="display:flex;align-items:flex-end;gap:16px">';
+    h+='    <div><div style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+race.daysOut+'</div><div style="font-size:12px;color:var(--t3)">Days to go</div></div>';
+    h+='    <div style="flex:1">'+(race.target?'<div style="font-size:12px;color:var(--t3);margin-bottom:2px">Target '+race.target+'</div>':'')+'<div style="font-size:11px;color:var(--t3)">'+race.weeksOut+' weeks out'+(race.distance!=null?' · '+race.distance+' mi':'')+'</div></div>';
+    h+='  </div>';
+  } else {
+    h+='  <div style="font-size:14px;color:var(--t2);margin-bottom:12px">No races scheduled yet.</div>';
+    h+='  <button onclick="openRaceEditor(undefined, showCalendarTab)" style="width:100%;padding:12px;background:#FC4C02;border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit">+ Add a race</button>';
+  }
   h+='</div>';
 
   scr.innerHTML=h;
