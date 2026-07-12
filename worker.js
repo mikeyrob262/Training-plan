@@ -11534,7 +11534,7 @@ function dsShowDashboard(){
   function div(css,txt){ return mk('div',css,txt); }
   function navlink(css,txt,view,arg){ var e=mk('div',css,txt); e.setAttribute('data-view',view); if(arg!=null) e.setAttribute('data-arg',arg); return e; }
   function card(extra){
-    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow:hidden;min-height:0');
+    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow:hidden');
     if(extra) d.style.cssText+=';'+extra;
     return d;
   }
@@ -11605,7 +11605,7 @@ function dsShowDashboard(){
   var body=div('padding:10px 16px 32px;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;overflow-y:auto;overflow-x:hidden');
 
   // ROW 1
-  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex-shrink:0');
+  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
 
   // Readiness
   var rc=card(''); rc.appendChild(lbl('READINESS'));
@@ -11703,7 +11703,7 @@ function dsShowDashboard(){
   body.appendChild(r1);
 
   // ROW 2
-  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0');
+  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
 
   // Today Plan
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
@@ -11772,7 +11772,7 @@ function dsShowDashboard(){
   body.appendChild(r2);
 
   // ROW 3
-  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0');
+  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
 
   // Recent Activity
   var ac=card('');
@@ -11874,7 +11874,7 @@ function dsShowDashboard(){
   body.appendChild(r3);
 
   // ROW 4
-  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0');
+  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
 
   // Streaks
   var strc=card(''); strc.appendChild(lbl('STREAKS'));
@@ -11983,7 +11983,7 @@ function dsShowDashboard(){
   body.appendChild(r4);
 
   // ROW 5 — Analytics
-  var r5=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0');
+  var r5=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
 
   // -- Power Curve --
   var pcc=card('');
