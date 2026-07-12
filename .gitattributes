@@ -1,0 +1,5 @@
+# Keep the pre-push hook and preflight script LF so `sh` never chokes on \r
+# on a fresh clone (Windows autocrlf would otherwise store them CRLF).
+.githooks/** text eol=lf
+*.mjs text eol=lf
+*.sh text eol=lf
