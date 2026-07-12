@@ -11201,7 +11201,12 @@ function dsShowNutrition(){
   function render(){
     mc.innerHTML='';
     var data=getTotals(viewKey);
-    var goals={cal:st.calGoal||2800,p:st.proteinGoal||165,c:st.carbGoal||350,f:st.fatGoal||90};
+    // Training-aware targets — identical source to the mobile Nutrition screen
+    // so the same day never shows different targets on desktop vs mobile.
+    var trainingTgt; try{ trainingTgt=calcTrainingAwareTargets_(viewKey); }catch(e){ trainingTgt=null; }
+    var goals=trainingTgt
+      ? {cal:trainingTgt.cal, p:trainingTgt.pro, c:trainingTgt.carb, f:trainingTgt.fat}
+      : {cal:st.calGoal||2800, p:st.proteinGoal||165, c:st.carbGoal||350, f:st.fatGoal||90};
 
     var wrap=document.createElement('div');
     wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:12px';
@@ -11262,7 +11267,7 @@ function dsShowNutrition(){
     });
     // Water — consumed vs oz target (same source/units as the mobile card):
     // nd.water is a glass count, one glass = 8oz; target from trainingTgt.fluidOz.
-    var wTgtOz=(function(){ try{ var _t=calcTrainingAwareTargets_(viewKey); return (_t&&_t.fluidOz)||64; }catch(e){ return 64; } })();
+    var wTgtOz=(trainingTgt&&trainingTgt.fluidOz)||64;
     var wOz=(data.water||0)*8;
     var wPct=Math.min(100,Math.round(wOz/wTgtOz*100));
     var waterRow=document.createElement('div');
