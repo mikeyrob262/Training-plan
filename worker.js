@@ -10569,7 +10569,7 @@ function dsShowAICoach(){
       .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
       .replace(/__([^_]+)__/g,'<b>$1</b>')
       .replace(/(^|[^*])\*([^*]+)\*/g,'$1<i>$2</i>')
-      .replace(/`([^`]+)`/g,'$1')
+      .replace(new RegExp(String.fromCharCode(96)+'([^'+String.fromCharCode(96)+']+)'+String.fromCharCode(96),'g'),'$1')
       .replace(/#+\s?/g,''); }
     lines.forEach(function(line){
       var t=line.trim();
