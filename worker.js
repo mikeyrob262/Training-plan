@@ -6392,6 +6392,28 @@ try{nutrDate=getTodayKey();}catch(e){}
 // Shared activity icon + color, matching the Calendar screen's icon family,
 // usable anywhere (lists, detail views). White stroke variant for colored
 // icon chips in the Activities list.
+// Professionally-drawn sport glyphs — inner SVG content (paths/circles) from
+// Lucide (bike, dumbbell, waves) and Tabler (run, walk). Single source of
+// truth so every icon surface uses the same correct artwork; the hand-rolled
+// versions rendered as broken wheels / stick figures.
+function sportPaths_(key){
+  switch(key){
+    case 'run':      return '<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M4 17l5 1l.75-1.5"/><path d="M15 21l0-4l-4-3l1-6"/><path d="M7 12l0-3l5-1l3 3l3 1"/>';
+    case 'walk':     return '<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M7 21l3-4"/><path d="M16 21l-2-4l-3-3l1-6"/><path d="M6 12l2-3l4-1l3 3l3 1"/>';
+    case 'swim':     return '<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>';
+    case 'strength': return '<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>';
+    default:         return '<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>'; // bike
+  }
+}
+// Map a free-text activity/workout name to a sport-glyph key.
+function sportKeyFor_(t){
+  t=String(t||'').toLowerCase();
+  if(/swim/.test(t)) return 'swim';
+  if(/strength|core|gym|lift|weight/.test(t)) return 'strength';
+  if(/\bwalk\b|hike/.test(t)) return 'walk';
+  if(/run|jog/.test(t)) return 'run';
+  return 'bike';
+}
 function actIconG(type, sz, col){
   sz=sz||16; col=col||'#fff';
   var t=(type||'').toLowerCase();
@@ -6399,17 +6421,10 @@ function actIconG(type, sz, col){
   if(/race|fondo|flag/.test(t)){
     return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
   }
-  if(/run|jog|walk/.test(t)){
-    return o+'<circle cx="13" cy="4" r="1"/><path d="M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5"/></svg>';
-  }
-  if(/strength|core|gym|lift|weight/.test(t)){
-    return o+'<path d="M14.4 14.4 9.6 9.6M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4M3.9 3.9 2.5 2.5M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>';
-  }
   if(/threshold|interval|tempo|vo2|sweet/.test(t)){
     return o+'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
   }
-  // ride / default: bike
-  return o+'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
+  return o+sportPaths_(sportKeyFor_(t))+'</svg>';
 }
 
 
@@ -11119,7 +11134,7 @@ function dsShowGear(){
       bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;height:170px;background-color:#0d0f14;background-image:url('+bike.photo+');background-size:cover;background-position:center 40%';
     } else {
       bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;height:130px;background:linear-gradient(160deg,#1c2030,#12151d);display:flex;align-items:center;justify-content:center';
-      bikeIllus.innerHTML='<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>';
+      bikeIllus.innerHTML='<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7">'+sportPaths_('bike')+'</svg>';
     }
     card.appendChild(bikeIllus);
 
@@ -11674,12 +11689,10 @@ function dsShowCalendar(){
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var dayNames=['S','M','T','W','T','F','S'];
 
+  // Real Lucide/Tabler glyphs (shared with the rest of the app via sportPaths_).
   var SPORT_SVG={
-    bike:'<path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/>',
-    run:'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4"/>',
-    swim:'<path d="M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0"/>',
-    strength:'<path d="M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z"/>',
-    walk:'<path d="M13 4a1 1 0 1 0 2 0M12 15l-2 5M16 15l1 5M10 9l5 1 2 4"/>'
+    bike:sportPaths_('bike'), run:sportPaths_('run'), swim:sportPaths_('swim'),
+    strength:sportPaths_('strength'), walk:sportPaths_('walk')
   };
 
   function getSportInfo(r){
@@ -11716,10 +11729,18 @@ function dsShowCalendar(){
     monthNames.forEach(function(nm,mi){ var op=document.createElement('option'); op.value=mi; op.textContent=nm; if(mi===viewMonth) op.selected=true; moSel.appendChild(op); });
     moSel.onchange=function(){ viewMonth=parseInt(moSel.value,10); renderCalendar(); };
     var yrSel=document.createElement('select'); yrSel.style.cssText=selCss;
-    var _nowY=new Date().getFullYear(); var _minY=_nowY-5;
-    (st.rides||[]).forEach(function(r){ if(r&&r.date){ var y=parseInt(String(r.date).slice(0,4),10); if(y && y<_minY) _minY=y; } });
-    if(viewYear<_minY) _minY=viewYear;
-    for(var _yy=_minY; _yy<=_nowY+1; _yy++){ var op2=document.createElement('option'); op2.value=_yy; op2.textContent=_yy; if(_yy===viewYear) op2.selected=true; yrSel.appendChild(op2); }
+    // Year range is computed from the data so it extends itself and never needs
+    // editing: min = earliest activity/race year; max = later of (this year + 3)
+    // or the furthest-out future race.
+    var _nowY=new Date().getFullYear();
+    var _yrOf=function(d){ var y=parseInt(String(d||'').slice(0,4),10); return (y>1990&&y<3000)?y:null; };
+    var _yrs=[], _futureRaceMax=0;
+    (st.rides||[]).forEach(function(r){ if(r){ var y=_yrOf(r.date); if(y) _yrs.push(y); } });
+    (st.runs||[]).forEach(function(r){ if(r){ var y=_yrOf(r.date); if(y) _yrs.push(y); } });
+    (st.races||[]).forEach(function(r){ if(r&&!r.deleted){ var y=_yrOf(r.date); if(y){ _yrs.push(y); if(y>_futureRaceMax) _futureRaceMax=y; } } });
+    var _minY=Math.min(_yrs.length?Math.min.apply(null,_yrs):_nowY, viewYear, _nowY);
+    var _maxY=Math.max(_nowY+3, _futureRaceMax, viewYear);
+    for(var _yy=_minY; _yy<=_maxY; _yy++){ var op2=document.createElement('option'); op2.value=_yy; op2.textContent=_yy; if(_yy===viewYear) op2.selected=true; yrSel.appendChild(op2); }
     yrSel.onchange=function(){ viewYear=parseInt(yrSel.value,10); renderCalendar(); };
     jump.appendChild(moSel); jump.appendChild(yrSel);
     var navR=document.createElement('div');
@@ -12663,18 +12684,12 @@ function dsShowRidesList(){
       row.onmouseout=function(){this.style.background='';};
       row.onclick=(function(i){return function(){ console.log('CLICK',i); try{ if(typeof isDesktop==='function'&&isDesktop()){var rp=document.getElementById('ds-right-panel');if(rp)rp.style.display='flex';openDesktopRideDetail(i);}else{openRideDetail(i);} }catch(e){console.error(e);} };})(ridx);
 
-      // Sport icon
+      // Sport icon (real Lucide/Tabler glyph via actIconG)
       var _st=(r.sportType||r.type||'').toLowerCase();
-      var _col='#FC4C02';
-      var _path='M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3';
-      if(_st.indexOf('run')>=0){_col='#FC4C02';_path='M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4';}
-      else if(_st.indexOf('swim')>=0){_col='#60a5fa';_path='M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0';}
-      else if(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0){_col='#8b5cf6';_path='M2 12h2M6 8h2v8H6zM18 8h2v8h-2zM20 12h2M10 10h4v4h-4z';}
-      else if(_st.indexOf('virtual')>=0){_col='#60a5fa';}
-
+      var _col=_st.indexOf('run')>=0?'#FC4C02':_st.indexOf('swim')>=0?'#60a5fa':(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0)?'#8b5cf6':'#FC4C02';
       var icon=document.createElement('div');
       icon.style.cssText='width:36px;height:36px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-      icon.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+_col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+_path+'"/></svg>';
+      icon.innerHTML=actIconG(_st,16,_col);
       row.appendChild(icon);
 
       // Name + date
@@ -13127,10 +13142,10 @@ function openDesktopRideDetail(idx){
         return[lt,ln];
       }).filter(function(p){return p[0]&&p[1]&&Math.abs(p[0])>0.1&&Math.abs(p[1])>0.1&&Math.abs(p[0])<=90&&Math.abs(p[1])<=180;});
       if(r.chartPwr&&r.chartPwr.length>5){
-        var step=Math.max(1,Math.floor(pts.length/r.chartPwr.length));
+        var _den=Math.max(1,pts.length-1), _pmax=r.chartPwr.length-1;
         var cc='#FC4C02',seg=[pts[0]];
         for(var i=1;i<pts.length;i++){
-          var pw=r.chartPwr[Math.min(Math.floor(i/step),r.chartPwr.length-1)]||0;
+          var pw=r.chartPwr[Math.min(Math.round(i/_den*_pmax),_pmax)]||0;
           var col=pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
           if(col!==cc&&seg.length>1){L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);seg=[seg[seg.length-1]];cc=col;}
           seg.push(pts[i]);
@@ -13213,7 +13228,7 @@ function openDesktopRideDetail(idx){
       '</div>'+
       (bike?
         '<div style="display:flex;align-items:center;gap:10px">'+
-          '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>'+
+          '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+sportPaths_('bike')+'</svg>'+
           '<div>'+
             '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
             '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div>'+
@@ -13962,12 +13977,12 @@ function buildRouteMapHR(lats, lons, hrData, maxHR){
     var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
     addRouteBasemap_(map);
     if(hrData && hrData.length>5){
-      var step=Math.max(1,Math.floor(lats.length/hrData.length));
       var currentColor='#64748b';
       var segPoints=[[lats[0],lons[0]]];
+      var _den=Math.max(1,lats.length-1), _hmax=hrData.length-1;
       for(var i=1;i<lats.length;i++){
-        var pIdx=Math.floor(i/step);
-        var hr=hrData[Math.min(pIdx,hrData.length-1)]||0;
+        var pIdx=Math.round(i/_den*_hmax);
+        var hr=hrData[Math.min(pIdx,_hmax)]||0;
         var pct=hr/maxHR;
         var col=pct>=.9?'#ef4444':pct>=.8?'#f59e0b':pct>=.7?'#22c55e':pct>=.6?'#3b82f6':'#64748b';
         if(col!==currentColor && segPoints.length>1){
@@ -15011,15 +15026,19 @@ function buildRouteMap(lats, lons, pwrData, FTP){
     // Overview preview's layers button) can toggle satellite/street.
     window['_routeMap_'+mapId] = { map: map, base: baseOSM, sat: null, satOn: false };
 
-    // Build color-coded polyline segments
+    // Build color-coded polyline segments. Map each GPS point to the power
+    // sample by FRACTION of the route, not floor(i/step): the power stream is
+    // downsampled to ~200 points while GPS is full-res, so the old step math
+    // collapsed to 1 and overshot the array, clamping the route tail to the
+    // last (cooldown) sample — the whole middle rendered grey.
     if(pwrData && pwrData.length > 5){
-      var step = Math.max(1, Math.floor(lats.length/pwrData.length));
       var currentColor = '#94a3b8';
       var segPoints = [[lats[0], lons[0]]];
+      var _den = Math.max(1, lats.length-1), _pmax = pwrData.length-1;
 
       for(var i=1; i<lats.length; i++){
-        var pIdx = Math.floor(i/step);
-        var pw = pwrData[Math.min(pIdx, pwrData.length-1)] || 0;
+        var pIdx = Math.round(i/_den*_pmax);
+        var pw = pwrData[Math.min(pIdx, _pmax)] || 0;
         var col = pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
 
         if(col !== currentColor && segPoints.length > 1){
@@ -20678,26 +20697,14 @@ function showCalendarTab(){
     if(/race|fondo|flag/.test(t)){ // checkered flag
       return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
     }
-    if(/swim/.test(t)){ // swimmer (canonical sport icon)
-      return o+'<path d="M3 7c3-2 6-2 9 0s6 2 9 0M3 12c3-2 6-2 9 0s6 2 9 0M3 17c3-2 6-2 9 0s6 2 9 0"/></svg>';
-    }
-    if(/walk/.test(t)){ // walker
-      return o+'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M12 15l-2 5M16 15l1 5M10 9l5 1 2 4"/></svg>';
-    }
-    if(/run/.test(t)){ // runner (canonical sport icon)
-      return o+'<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0M3 17l4-4 2.5 2.5 3-5.5 3.5 5.5M3 7l4 4"/></svg>';
-    }
-    if(/strength|core|gym|lift/.test(t)){ // dumbbell (lucide)
-      return o+'<path d="M14.4 14.4 9.6 9.6M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4M3.9 3.9 2.5 2.5M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/></svg>';
-    }
-    if(/threshold|interval|tempo|vo2|sweet/.test(t)){ // bar chart (lucide)
+    if(/threshold|interval|tempo|vo2|sweet/.test(t)){ // bar chart (intensity)
       return o+'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
     }
     if(/recovery|rest|easy/.test(t)){ // hollow ring
       return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="'+col+'" stroke-width="2"/></svg>';
     }
-    // ride / default: canonical sport bike icon (matches desktop calendar SPORT_SVG)
-    return o+'<path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>';
+    // Real Lucide/Tabler sport glyph for swim/walk/run/strength/ride.
+    return o+sportPaths_(sportKeyFor_(t))+'</svg>';
   }
 
   // ---- Build markup --------------------------------------------------------
