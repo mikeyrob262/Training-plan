@@ -4164,17 +4164,24 @@ function migrateRaces_(){
     if(!r.id){ r.id='race-'+(r.date||'x')+'-'+i; changed=true; }
     if(!r.sport){ r.sport=raceSportGuess_(r.name); changed=true; }
   });
-  // Remove duplicate races (same name + date) that earlier seeds/migrations
-  // left behind — e.g. Grand Rapids Half seeded into both st.races and the old
-  // st.events. NOTE: no backslash regex (template literal strips it); collapse
-  // runs of literal spaces only.
-  var _seen={}, _deduped=[];
+  // Collapse duplicate races (same name + same calendar date) that earlier
+  // seeds/migrations left behind — e.g. Grand Rapids Half seeded into both
+  // st.races and the old st.events. IMPORTANT: mark the extras deleted:true
+  // (a tombstone) rather than splicing them out. A splice does not survive the
+  // Firebase merge — the duplicate has its own id, so mergeArrays_ re-unions it
+  // from remote on the next sync (which is why the earlier hard dedup "didn't
+  // work"). A deleted flag OR-merges to true and sticks. Date is normalized
+  // through parseRaceDate_ so format variants (padding / T00:00:00 / unpadded)
+  // still count as the same day. No backslash regex (template literal strips it).
+  var _seen={};
   st.races.forEach(function(r){
-    var k=String(r.name||'').toLowerCase().replace(/ +/g,' ').trim()+'|'+String(r.date||'').trim();
-    if(_seen[k]) return;
-    _seen[k]=true; _deduped.push(r);
+    if(r.deleted) return; // don't resurrect already-tombstoned races
+    var d=parseRaceDate_(r.date);
+    var dk=d?(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()):String(r.date||'');
+    var k=String(r.name||'').toLowerCase().replace(/ +/g,' ').trim()+'|'+dk;
+    if(_seen[k]){ r.deleted=true; changed=true; }   // keep the first, tombstone the rest
+    else _seen[k]=true;
   });
-  if(_deduped.length!==st.races.length){ st.races=_deduped; changed=true; }
   _racesReady=true;
   if(changed){ try{ sv(); }catch(e){} }
 }
@@ -4189,8 +4196,8 @@ function upcomingRaces_(){
     return {id:r.id, name:r.name||'Race', date:r.date, sport:r.sport||'other',
       distance:(r.distance!=null?r.distance:null), goal:r.goal||'Finish Strong',
       target:r.target||'', location:r.location||'', dateObj:d,
-      daysOut:daysOut, weeksOut:(daysOut!=null?Math.ceil(daysOut/7):null), _i:i};
-  }).filter(function(x){ return x.dateObj && x.daysOut>=0; })
+      daysOut:daysOut, weeksOut:(daysOut!=null?Math.ceil(daysOut/7):null), _i:i, _deleted:!!r.deleted};
+  }).filter(function(x){ return !x._deleted && x.dateObj && x.daysOut>=0; })
     .sort(function(a,b){ return a.dateObj-b.dateObj; });
 }
 // The single accessor: soonest upcoming race, normalized, or null.
@@ -11040,13 +11047,13 @@ function dsShowGear(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
 
-  ensureBikes(); // so st.bikes exists for the per-bike mileage resolver
-  // id links each displayed bike to its st.bikes entry, so mileage is summed
-  // per bike via resolveRideBike instead of dividing the grand total.
-  var bikes=[
-    {id:'dogma-f',name:'Pinarello Dogma F',type:'Performance',wheels:'Campagnolo Bora WTO 60 C23',power:'Favero Assioma DUO',groupset:'Shimano Ultegra',color:'#4ade80',miles:null,photo:BIKE_PHOTO_DOGMA},
-    {id:'roadmachine',name:'BMC Roadmachine 01 Five',type:'Endurance',wheels:'Black Inc Forty Five',power:'Stages',groupset:'Shimano Ultegra',color:'#60a5fa',miles:null,photo:BIKE_PHOTO_ROADMACHINE}
-  ];
+  ensureBikes();
+  // Render the REAL bike list (st.bikes), so add/edit/delete reflect here and
+  // every bike appears — not a hardcoded two. Mileage is computed once for all
+  // bikes and looked up by id.
+  var STATS=allBikeStats_();
+  var BIKE_COLORS=['#4ade80','#60a5fa','#f59e0b','#a855f7','#22d3ee','#ef4444','#eab308'];
+  var bikes=(st.bikes||[]).filter(function(b){ return b && !b.deleted; });
 
   mc.innerHTML='';
   var wrap=document.createElement('div');
@@ -11063,58 +11070,102 @@ function dsShowGear(){
   var hTitle=document.createElement('div');
   hTitle.style.cssText='font-size:20px;font-weight:700;color:#fff';
   hTitle.textContent='My Gear';
-  hdr.appendChild(backBtn); hdr.appendChild(hTitle);
+  var leftGrp=document.createElement('div'); leftGrp.style.cssText='display:flex;align-items:center;gap:12px';
+  leftGrp.appendChild(backBtn); leftGrp.appendChild(hTitle);
+  var addBikeBtn=document.createElement('div');
+  addBikeBtn.style.cssText='padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:#0d0f14;background:#4ade80';
+  addBikeBtn.textContent='+ Add Bike';
+  addBikeBtn.onclick=function(){ openBikeEditor(undefined, dsShowGear); };
+  hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:4px';
+  hdr.appendChild(leftGrp); hdr.appendChild(addBikeBtn);
   wrap.appendChild(hdr);
 
-  // Bike cards
-  bikes.forEach(function(bike,i){
+  if(!bikes.length){
+    var noB=document.createElement('div');
+    noB.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:22px;text-align:center;color:#64748b;font-size:13px;flex-shrink:0';
+    noB.textContent='No bikes yet — tap "+ Add Bike" to add one.';
+    wrap.appendChild(noB);
+  }
+
+  // Bike cards — from the real st.bikes store, with real per-bike mileage and
+  // an ownership era used to attribute historical rides.
+  bikes.forEach(function(bike){
+    var realIdx=(st.bikes||[]).indexOf(bike);
+    var color=BIKE_COLORS[realIdx % BIKE_COLORS.length] || '#4ade80';
+    var stats=STATS[bike.id]||{totalMi:0,yearMi:0,lastDate:null,count:0};
+    var dispName=(bike.brand?bike.brand+' ':'')+(bike.name||'Bike');
+    var eraStr=bike.ownedFrom
+      ? (fmtRideDate_(bike.ownedFrom)+' – '+(bike.ownedTo?fmtRideDate_(bike.ownedTo):'present'))
+      : 'No ownership dates — set them to attribute rides by era';
+
     var card=document.createElement('div');
     card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:16px;padding:18px 20px;flex-shrink:0';
 
-    // Bike header
+    // Header
     var bHdr=document.createElement('div');
     bHdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px';
     var bInfo=document.createElement('div');
-    bInfo.innerHTML='<div style="font-size:16px;font-weight:700;color:#fff">'+bike.name+'</div>'+
-      '<div style="font-size:11px;color:'+bike.color+';font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">'+bike.type+'</div>';
+    bInfo.innerHTML='<div style="font-size:16px;font-weight:700;color:#fff">'+dispName+'</div>'+
+      '<div style="font-size:11px;color:'+color+';font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">'+(bike.type||'Bike')+'</div>';
     var bBadge=document.createElement('div');
-    bBadge.style.cssText='background:'+bike.color+'22;border:1px solid '+bike.color+'44;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;color:'+bike.color;
-    bBadge.textContent=i===0?'Primary':'Training';
+    bBadge.style.cssText='background:'+color+'22;border:1px solid '+color+'44;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;color:'+color+';white-space:nowrap';
+    bBadge.textContent=bike.indoor?'Indoor':(bike.ownedTo?'Retired':'Active');
     bHdr.appendChild(bInfo); bHdr.appendChild(bBadge);
     card.appendChild(bHdr);
 
-    // Bike photo from garage
+    // Photo (or default illustration)
     var bikeIllus=document.createElement('div');
-    bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;background:#0d0f14';
-    var bikeImg=document.createElement('img');
-    bikeImg.src=bike.photo;
-    bikeImg.style.cssText='width:100%;max-height:180px;object-fit:cover;display:block';
-    bikeIllus.appendChild(bikeImg);
+    if(bike.photo){
+      bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;height:170px;background-color:#0d0f14;background-image:url('+bike.photo+');background-size:cover;background-position:center 40%';
+    } else {
+      bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;height:130px;background:linear-gradient(160deg,#1c2030,#12151d);display:flex;align-items:center;justify-content:center';
+      bikeIllus.innerHTML='<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"><path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M15 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0M12 17V8h3l2 3M9 17l2-9M5 6h3l4 3"/></svg>';
+    }
     card.appendChild(bikeIllus);
 
-    // Specs grid
+    // Era
+    var eraEl=document.createElement('div');
+    eraEl.style.cssText='font-size:11px;color:#94a3b8;margin-bottom:12px;display:flex;align-items:center;gap:6px';
+    eraEl.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zM16 3v4M8 3v4M4 11h16"/></svg><span>'+eraStr+'</span>';
+    card.appendChild(eraEl);
+
+    // Specs
     var specs=document.createElement('div');
     specs.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px';
-    [['Wheels',bike.wheels],['Power Meter',bike.power],['Groupset',bike.groupset],['Condition','Excellent']].forEach(function(x){
+    [['Wheels',bike.wheelset||bike.wheels||'—'],['Power Meter',bike.power||'—'],['Groupset',bike.groupset||'—'],['Rides logged',stats.count+'']].forEach(function(x){
       var spec=document.createElement('div');
       spec.style.cssText='background:#0d0f14;border-radius:8px;padding:8px 10px';
       spec.innerHTML='<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+x[0]+'</div>'+
-        '<div style="font-size:11px;font-weight:600;color:#e2e8f0">'+x[1]+'</div>';
+        '<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x[1]+'</div>';
       specs.appendChild(spec);
     });
     card.appendChild(specs);
 
-    // Miles this year — real per-bike stats (only rides assigned to THIS bike).
+    // Mileage stats
     var statsRow=document.createElement('div');
-    statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e';
-    var bstats=bikeMileageStats_((st.bikes||[]).find(function(b){return b.id===bike.id;}));
-    [['Total Miles',bstats.totalMi.toLocaleString()+' mi'],['This Year',bstats.yearMi.toLocaleString()+' mi'],['Last Ride',bstats.lastDate?fmtRideDate_(bstats.lastDate):'—']].forEach(function(x){
+    statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e;margin-bottom:12px';
+    [['Total Miles',stats.totalMi.toLocaleString()+' mi'],['This Year',stats.yearMi.toLocaleString()+' mi'],['Last Ride',stats.lastDate?fmtRideDate_(stats.lastDate):'—']].forEach(function(x){
       var s=document.createElement('div');
       s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
-      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+bike.color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
+      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
       statsRow.appendChild(s);
     });
     card.appendChild(statsRow);
+
+    // Edit / Delete
+    var actRow=document.createElement('div');
+    actRow.style.cssText='display:flex;gap:8px';
+    var editB=document.createElement('button');
+    editB.style.cssText='flex:1;padding:9px;background:none;border:1px solid #1e2130;border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    editB.textContent='Edit';
+    editB.onclick=(function(ix){return function(){ openBikeEditor(ix, dsShowGear); };})(realIdx);
+    var delB=document.createElement('button');
+    delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid #1e2130;border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    delB.textContent='Delete';
+    delB.onclick=(function(ix,nm){return function(){ if(!confirm('Delete "'+nm+'"? Its mileage attribution will be removed.')) return; deleteBike(ix); dsShowGear(); };})(realIdx, dispName);
+    actRow.appendChild(editB); actRow.appendChild(delB);
+    card.appendChild(actRow);
+
     wrap.appendChild(card);
   });
 
@@ -11145,7 +11196,7 @@ function dsShowGear(){
   var bulkNone=document.createElement('option');
   bulkNone.value=''; bulkNone.textContent='Choose a bike…';
   bulkSel.appendChild(bulkNone);
-  (st.bikes||[]).forEach(function(b){
+  (st.bikes||[]).filter(function(b){return !b.deleted;}).forEach(function(b){
     var o=document.createElement('option');
     o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:'');
     bulkSel.appendChild(o);
@@ -12083,7 +12134,15 @@ function dsShowDashboard(){
       ei.appendChild(div('font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',sIcon+rr.name));
       ei.appendChild(div('font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',rr.location||(rr.distance!=null?rr.distance+' mi':rr.goal)));
       er.appendChild(dc); er.appendChild(ei);
-      er.appendChild(div('font-size:10px;color:#4ade80;font-weight:600;white-space:nowrap',rr.daysOut+' days'));
+      var rMeta=row('gap:8px;flex-shrink:0');
+      rMeta.appendChild(div('font-size:10px;color:#4ade80;font-weight:600;white-space:nowrap',rr.daysOut+' days'));
+      // × soft-deletes this race (survives sync); stopPropagation so it doesn't
+      // also open the editor via the row click.
+      var del=div('font-size:15px;line-height:1;color:#64748b;cursor:pointer;padding:0 2px','×');
+      del.onmouseover=function(){this.style.color='#ef4444';}; del.onmouseout=function(){this.style.color='#64748b';};
+      del.onclick=(function(i,nm){return function(e){ if(e&&e.stopPropagation)e.stopPropagation(); if(!confirm('Delete "'+nm+'"?')) return; if(st.races&&st.races[i]) st.races[i].deleted=true; sv(); dsShowDashboard(); toast('Race removed'); };})(rr._i, rr.name);
+      rMeta.appendChild(del);
+      er.appendChild(rMeta);
       tbc.appendChild(er);
     });
   } else {
@@ -14330,17 +14389,21 @@ function parseDurationToMinutes_(dur){
 // st.bikeAssignments entry. Returns the bike object or null.
 function resolveRideBike(r){
   if(!r) return null;
-  var bikes = st.bikes || [];
+  // Only real (non-deleted) bikes can own a ride.
+  var bikes = (st.bikes || []).filter(function(b){ return b && !b.deleted; });
+  // NOTE: this file is served in one template literal, so \s regexes become
+  // /s/ (strip the letter s). Use a literal-space collapse instead.
+  var norm = function(s){ return String(s||'').toLowerCase().replace(/ +/g,' ').trim(); };
   var matchByName = function(name){
-    if(!name) return null;
-    var n = String(name).toLowerCase().replace(/\s+/g,' ').trim();
+    var n = norm(name);
     if(!n) return null;
     return bikes.find(function(b){
-      var bn = String(b.name||'').toLowerCase().replace(/\s+/g,' ').trim();
+      var bn = norm(b.name);
       return bn && (bn===n || n.indexOf(bn)!==-1 || bn.indexOf(n)!==-1);
     }) || null;
   };
   var bike = null;
+  // 1) Explicit Strava gear id / gear map.
   if(r.gearId){
     bike = bikes.find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
     if(!bike){
@@ -14348,12 +14411,173 @@ function resolveRideBike(r){
       if(mapped) bike = matchByName(mapped);
     }
   }
+  // 2) Gear name from the activity.
   if(!bike && r.gearName) bike = matchByName(r.gearName);
+  // 3) Manual per-ride assignment.
   if(!bike){
     var assignedId = (st.bikeAssignments||{})[rideKey(r)];
-    if(assignedId) bike = bikes.find(function(b){ return b.id===assignedId; }) || null;
+    if(assignedId) bike = bikes.find(function(b){ return b.id===assignedId && !b.deleted; }) || null;
+  }
+  // 4) Date-range (era) fallback: attribute an otherwise-unassigned ride to the
+  // bike whose ownership window contains its date. Narrowest window wins on
+  // overlap. Explicit gear / manual assignment above always take precedence.
+  if(!bike){
+    var rd = parseRaceDate_(r.date);
+    if(rd){
+      var best=null, bestSpan=Infinity;
+      bikes.forEach(function(b){
+        if(!b.ownedFrom) return;                 // needs a start to define an era
+        var from = parseRaceDate_(b.ownedFrom); if(!from) return;
+        var to = b.ownedTo ? parseRaceDate_(b.ownedTo) : new Date();
+        if(!to) to = new Date();
+        if(rd>=from && rd<=to){
+          var span = to - from;
+          if(span < bestSpan){ bestSpan = span; best = b; }
+        }
+      });
+      if(best) bike = best;
+    }
   }
   return bike || null;
+}
+// All bikes' mileage in ONE pass over deduped rides (resolves each ride once
+// and buckets it) — cheaper than re-scanning per bike over thousands of rides.
+// Returns {bikeId: {totalMi, yearMi, lastDate, count}}.
+function allBikeStats_(){
+  var out={}, yr=String(new Date().getFullYear());
+  (st.bikes||[]).forEach(function(b){ if(b&&b.id&&!b.deleted) out[b.id]={totalMi:0,yearMi:0,lastDate:null,count:0}; });
+  var list; try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
+  list.forEach(function(r){
+    if(!r || r.deleted) return;
+    var sp=String(r.sportType||r.type||'').toLowerCase();
+    if(sp.indexOf('run')>=0 || sp.indexOf('walk')>=0 || sp.indexOf('swim')>=0 || sp.indexOf('strength')>=0) return;
+    var rb=resolveRideBike(r); if(!rb || !out[rb.id]) return;
+    var mi=parseFloat(r.distance)||0, s=out[rb.id];
+    s.totalMi+=mi; s.count++;
+    if(r.date && String(r.date).slice(0,4)===yr) s.yearMi+=mi;
+    var nd=normDate(r.date||''); if(nd && (!s.lastDate || nd>s.lastDate)) s.lastDate=nd;
+  });
+  Object.keys(out).forEach(function(k){ out[k].totalMi=Math.round(out[k].totalMi); out[k].yearMi=Math.round(out[k].yearMi); });
+  return out;
+}
+
+// Downscale a chosen image file to a small JPEG data URI (~500px, q0.7) so bike
+// photos sync without bloating state. Falls back to the raw data URL on error.
+function downscalePhoto_(file, cb){
+  try{
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var max=500, w=img.width, h=img.height;
+        if(w>h && w>max){ h=Math.round(h*max/w); w=max; }
+        else if(h>=w && h>max){ w=Math.round(w*max/h); h=max; }
+        try{
+          var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+          cv.getContext('2d').drawImage(img,0,0,w,h);
+          cb(cv.toDataURL('image/jpeg',0.7));
+        }catch(err){ cb(e.target.result); }
+      };
+      img.onerror=function(){ cb(e.target.result); };
+      img.src=e.target.result;
+    };
+    reader.onerror=function(){ cb(null); };
+    reader.readAsDataURL(file);
+  }catch(err){ cb(null); }
+}
+
+// Add/edit a bike. idx = index into st.bikes (undefined = add). onSaved is an
+// optional re-render callback (desktop Gear vs mobile Garage). Modal z-index
+// 1000 so it clears #desktop-shell (999).
+function openBikeEditor(idx, onSaved){
+  ensureBikes();
+  var existing=(idx!==undefined && idx!==null)?st.bikes[idx]:null;
+  var refresh=(typeof onSaved==='function')?onSaved:function(){ if(typeof renderGarage==='function') renderGarage(); };
+  var photoData=existing&&existing.photo?existing.photo:null;
+  var esc=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
+  var typeOpts=['Race bike','Endurance bike','Gravel bike','TT bike','Indoor trainer','Other'];
+  var typeSel=existing&&existing.type?existing.type:'Race bike';
+  var modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--bg,#0d0f14);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto';
+  var fc='width:100%;border:1px solid var(--b2,#252d40);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2,#1a1f2e);color:var(--t1,#e2e8f0);font-family:inherit;box-sizing:border-box';
+  var lc='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3,#64748b);margin-bottom:5px';
+  sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2,#252d40);border-radius:2px;margin:0 auto 16px"></div>'
+    +'<div style="font-size:18px;font-weight:800;color:var(--t1,#fff);margin-bottom:16px">'+(existing?'Edit Bike':'Add a Bike')+'</div>'
+    +'<div style="margin-bottom:10px"><div style="'+lc+'">Name</div><input id="bk-name" type="text" placeholder="e.g. Dogma F" value="'+(existing?esc(existing.name):'')+'" style="'+fc+'"></div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Brand</div><input id="bk-brand" type="text" placeholder="e.g. Pinarello" value="'+(existing?esc(existing.brand):'')+'" style="'+fc+'"></div>'
+    +'<div style="flex:1"><div style="'+lc+'">Type</div><select id="bk-type" style="'+fc+'">'+typeOpts.map(function(t){return '<option'+(t===typeSel?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div></div>'
+    +'<div style="margin-bottom:10px"><div style="'+lc+'">Wheels</div><input id="bk-wheels" type="text" placeholder="e.g. Bora WTO 60" value="'+(existing?esc(existing.wheelset||existing.wheels):'')+'" style="'+fc+'"></div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Groupset</div><input id="bk-group" type="text" placeholder="e.g. Ultegra Di2" value="'+(existing?esc(existing.groupset):'')+'" style="'+fc+'"></div>'
+    +'<div style="flex:1"><div style="'+lc+'">Power meter</div><input id="bk-power" type="text" placeholder="e.g. Assioma DUO" value="'+(existing?esc(existing.power):'')+'" style="'+fc+'"></div></div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Owned from</div><input id="bk-from" type="date" value="'+(existing?esc(existing.ownedFrom):'')+'" style="'+fc+'"></div>'
+    +'<div style="flex:1"><div style="'+lc+'">Owned to <span style="text-transform:none;font-weight:400;color:#64748b">(blank = current)</span></div><input id="bk-to" type="date" value="'+(existing?esc(existing.ownedTo):'')+'" style="'+fc+'"></div></div>'
+    +'<div style="margin-bottom:16px"><div style="'+lc+'">Photo</div>'
+    +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:#0d0f14;background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,#252d40);margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px">'+(photoData?'':'No photo')+'</div>'
+    +'<input id="bk-photo" type="file" accept="image/*" style="font-size:12px;color:var(--t2,#94a3b8)"></div>';
+
+  setTimeout(function(){
+    var pf=document.getElementById('bk-photo');
+    if(pf) pf.addEventListener('change',function(){
+      var f=pf.files&&pf.files[0]; if(!f) return;
+      downscalePhoto_(f,function(dataUrl){
+        if(!dataUrl) return;
+        photoData=dataUrl;
+        var pv=document.getElementById('bk-photo-prev');
+        if(pv){ pv.style.backgroundImage='url('+dataUrl+')'; pv.textContent=''; }
+      });
+    });
+  },0);
+
+  var saveBtn=document.createElement('button');
+  saveBtn.style.cssText='width:100%;padding:14px;background:#4ade80;border:none;border-radius:12px;color:#0d0f14;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px';
+  saveBtn.textContent='Save Bike';
+  saveBtn.onclick=function(){
+    ensureBikes();
+    var name=document.getElementById('bk-name').value.trim(); if(!name){ toast('Enter a bike name'); return; }
+    var typeVal=document.getElementById('bk-type').value;
+    var bike={
+      id:(existing&&existing.id)?existing.id:'bike-'+Date.now(),
+      name:name,
+      brand:document.getElementById('bk-brand').value.trim(),
+      type:typeVal,
+      wheelset:document.getElementById('bk-wheels').value.trim(),
+      groupset:document.getElementById('bk-group').value.trim(),
+      power:document.getElementById('bk-power').value.trim(),
+      ownedFrom:document.getElementById('bk-from').value,
+      ownedTo:document.getElementById('bk-to').value,
+      photo:photoData||null,
+      indoor:/indoor|trainer|zwift/i.test(typeVal),
+      components:(existing&&existing.components)||[]
+    };
+    if(existing){ ['stravaGearId','miles','elevationFt','longestMi','avgSpeed'].forEach(function(k){ if(existing[k]!=null && bike[k]==null) bike[k]=existing[k]; }); }
+    if(idx!==undefined && idx!==null) st.bikes[idx]=bike; else st.bikes.push(bike);
+    sv(); modal.remove(); refresh(); toast('Bike saved');
+  };
+  var cancelBtn=document.createElement('button');
+  cancelBtn.style.cssText='width:100%;padding:12px;background:none;border:none;color:var(--t3,#64748b);font-size:14px;cursor:pointer;font-family:inherit';
+  cancelBtn.textContent='Cancel'; cancelBtn.onclick=function(){ modal.remove(); };
+  sheet.appendChild(saveBtn); sheet.appendChild(cancelBtn);
+  if(existing){
+    var delBtn=document.createElement('button');
+    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
+    delBtn.textContent='Delete bike';
+    delBtn.onclick=function(){ if(!confirm('Delete "'+(existing.name||'this bike')+'"? Its mileage attribution will be removed.')) return; deleteBike(idx); modal.remove(); refresh(); };
+    sheet.appendChild(delBtn);
+  }
+  modal.appendChild(sheet);
+  modal.onclick=function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
+// Soft-delete a bike (survives the Firebase merge, like races) and drop any
+// manual ride assignments that pointed at it.
+function deleteBike(idx){
+  ensureBikes();
+  var b=st.bikes&&st.bikes[idx]; if(!b) return;
+  b.deleted=true;
+  if(st.bikeAssignments){ Object.keys(st.bikeAssignments).forEach(function(k){ if(st.bikeAssignments[k]===b.id) delete st.bikeAssignments[k]; }); }
+  sv(); toast('Bike removed');
 }
 
 // Real mileage for a single bike: sums only DEDUPED rides that actually
@@ -14460,7 +14684,7 @@ function renderRideEquipmentTab(body, r, idx){
     var optNone=document.createElement('option');
     optNone.value=''; optNone.textContent='Unassigned';
     sel.appendChild(optNone);
-    (st.bikes||[]).forEach(function(b){
+    (st.bikes||[]).filter(function(b){return !b.deleted;}).forEach(function(b){
       var o=document.createElement('option');
       o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:'');
       sel.appendChild(o);
@@ -15557,8 +15781,9 @@ function renderRun(){
   raceToggle.style.cssText='display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:12px 14px;background:var(--s2);border-radius:12px;margin:0 16px 10px;border:0.5px solid var(--b1)';
   migrateRaces_();
   var races=st.races||[];
+  var _liveRaceCount=races.filter(function(r){return !r.deleted;}).length;
   raceToggle.innerHTML='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Races</div>'
-    +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(races.length?races.length+' race'+(races.length>1?'s':'')+ ' scheduled':'Tap to add a race')+'</div></div>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(_liveRaceCount?_liveRaceCount+' race'+(_liveRaceCount>1?'s':'')+ ' scheduled':'Tap to add a race')+'</div></div>'
     +'<span id="race-chev-btn" style="font-size:18px;color:var(--t3);transition:transform .2s">▾</span>';
   scr.appendChild(raceToggle);
 
@@ -15574,6 +15799,7 @@ function renderRun(){
   racePanel.appendChild(addRaceBtn);
 
   races.forEach(function(race,ri){
+    if(race.deleted) return; // ri stays the raw st.races index for edit/delete
     var now2=new Date(); now2.setHours(0,0,0,0);
     var rd=parseRaceDate_(race.date);
     var days=rd?Math.max(0,Math.round((rd-now2)/86400000)):0;
@@ -15715,6 +15941,19 @@ function openRaceEditor(idx,onSaved){
   cancelBtn.textContent='Cancel';
   cancelBtn.onclick=function(){modal.remove();};
   sheet.appendChild(saveBtn); sheet.appendChild(cancelBtn);
+  // Delete affordance (editing an existing race only). Soft-delete so it
+  // survives the Firebase merge; confirm before removing the sheet.
+  if(existing){
+    var delBtn=document.createElement('button');
+    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
+    delBtn.textContent='Delete race';
+    delBtn.onclick=function(){
+      if(!confirm('Delete "'+(existing.name||'this race')+'"?')) return;
+      if(st.races&&st.races[idx]) st.races[idx].deleted=true;
+      sv(); modal.remove(); refresh(); toast('Race removed');
+    };
+    sheet.appendChild(delBtn);
+  }
   modal.appendChild(sheet);
   modal.onclick=function(e){if(e.target===modal)modal.remove();};
   document.body.appendChild(modal);
@@ -15722,7 +15961,10 @@ function openRaceEditor(idx,onSaved){
 
 function deleteRace(idx,onDone){
   if(!confirm('Remove this race?')) return;
-  if(st.races) st.races.splice(idx,1);
+  // Soft-delete (tombstone) rather than splice: a hard removal is re-added by
+  // the Firebase merge on the next sync (the race keeps its own id remotely).
+  // deleted:true OR-merges to true and survives.
+  if(st.races && st.races[idx]){ st.races[idx].deleted=true; }
   sv();
   if(typeof onDone==='function') onDone();
   else if(typeof renderRun==='function') renderRun();
@@ -17623,6 +17865,7 @@ function renderGarage(){
     +'</div>';
 
   (st.bikes||[]).forEach(function(bike, bi){
+    if(bike.deleted) return;
     var badge = bikeStatusBadge(bike);
     var subtitle = bike.indoor ? bike.type : (bike.miles||0)+' mi · '+bike.type;
     var photoStyle = bike.photo
@@ -17640,6 +17883,7 @@ function renderGarage(){
 
   var needsAttention = [];
   (st.bikes||[]).forEach(function(bike){
+    if(bike.deleted) return;
     (bike.components||[]).forEach(function(c){
       var pct = c.pct!=null ? c.pct : (c.dueEvery ? Math.max(0,100-Math.round((c.milesSince/c.dueEvery)*100)) : 100);
       if(pct < 30 || (c.dueEvery && c.milesSince >= c.dueEvery)){
@@ -17676,7 +17920,7 @@ function renderGarage(){
   }
 
   h += '<div style="display:flex;gap:10px;margin:0 16px 14px">'
-    +'<button onclick="openBikeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:500;cursor:pointer">'
+    +'<button onclick="openBikeEditor(undefined, renderGarage)" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:500;cursor:pointer">'
     +'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'
     +'Bike</button>'
     +'<button onclick="openShoeEdit()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:14px;background:var(--s2);border:1px solid var(--b1);border-radius:14px;color:var(--t1);font-size:14px;font-weight:500;cursor:pointer">'
