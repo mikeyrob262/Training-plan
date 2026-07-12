@@ -1,0 +1,11 @@
+#!/bin/sh
+# Version-controlled pre-push guard (active via: git config core.hooksPath .githooks).
+# Blocks a push if the built Worker won't build or the served scripts won't parse
+# in the browser — the two failure modes node --check misses. Override with
+# `git push --no-verify` only if you truly know better.
+echo "[pre-push] preflight: build + browser-equivalent parse…"
+if ! node scripts/preflight.mjs; then
+  echo "[pre-push] BLOCKED — do not push a broken build. (bypass: git push --no-verify)"
+  exit 1
+fi
+exit 0
