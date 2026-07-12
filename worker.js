@@ -8,7 +8,7 @@ export default {
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Mikey's Training">
@@ -10532,7 +10532,10 @@ document.addEventListener('click', function(e){
   var fn = VIEW_ACTIONS[el.getAttribute('data-view')];
   if(fn){ e.preventDefault(); fn(el.getAttribute('data-arg')); }
 });
+var _dsPrevView='dashboard', _dsCurView='dashboard';
 function dsNav(section){
+  // Track previous desktop view so screens like Gear can offer a Back button.
+  if(section!==_dsCurView){ _dsPrevView=_dsCurView; _dsCurView=section; }
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
   document.querySelectorAll('.ds-ni').forEach(function(n){
     var oc = n.getAttribute('onclick')||'';
@@ -11005,10 +11008,18 @@ function dsShowGear(){
   var wrap=document.createElement('div');
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
 
-  // Header
+  // Header with a Back button — Gear is reached from ride detail / activities
+  // and previously had no way back.
   var hdr=document.createElement('div');
-  hdr.style.cssText='font-size:20px;font-weight:700;color:#fff;flex-shrink:0;margin-bottom:4px';
-  hdr.textContent='My Gear';
+  hdr.style.cssText='display:flex;align-items:center;gap:12px;flex-shrink:0;margin-bottom:4px';
+  var backBtn=document.createElement('div');
+  backBtn.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#94a3b8;cursor:pointer;padding:4px 8px;border:1px solid #1e2130;border-radius:8px';
+  backBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Back</span>';
+  backBtn.onclick=function(){ dsNav((_dsPrevView && _dsPrevView!=='gear')?_dsPrevView:'dashboard'); };
+  var hTitle=document.createElement('div');
+  hTitle.style.cssText='font-size:20px;font-weight:700;color:#fff';
+  hTitle.textContent='My Gear';
+  hdr.appendChild(backBtn); hdr.appendChild(hTitle);
   wrap.appendChild(hdr);
 
   // Bike cards
@@ -11915,25 +11926,39 @@ function dsShowDashboard(){
   // ROW 2
   var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
-  // Today Plan
+  // Today Plan — real scheduled workout for today (was hardcoded).
+  // getWorkoutForDate_ reads the current week's session from the plan DOM,
+  // the same source Home's Today's Plan card uses.
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
+  var _twk=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_((typeof getTodayKey==='function')?getTodayKey():''):null;
   var ptop=row('gap:10px;margin-bottom:6px');
+  var _isRun=!!(_twk && !_twk.isRide && /run/i.test(_twk.name||''));
   var pico=div('width:36px;height:36px;border-radius:10px;background:rgba(252,76,2,.15);border:1px solid rgba(252,76,2,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
-  pico.appendChild(ico('ti-bike','#FC4C02','20'));
+  pico.appendChild(ico(_isRun?'ti-run':'ti-bike','#FC4C02','20'));
   var pinfo=div('');
-  pinfo.appendChild(div('font-size:14px;font-weight:700;color:#FC4C02;margin-bottom:2px','Threshold Intervals'));
-  pinfo.appendChild(div('font-size:15px;font-weight:800;color:#FC4C02','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
-  ptop.appendChild(pico); ptop.appendChild(pinfo);
-  pc.appendChild(ptop);
-  var pmeta=row('gap:10px;margin-bottom:6px;flex-wrap:wrap');
-  [['ti-clock','1h 15m'],['ti-chart-bar','Zone 4'],['ti-bolt',''+ftp+'W'],['ti-trending-up','Stress 86']].forEach(function(x){
-    var m=row('gap:4px'); m.appendChild(ico(x[0],'#64748b','11')); m.appendChild(div('font-size:11px;color:#94a3b8',x[1]));
-    pmeta.appendChild(m);
-  });
-  pc.appendChild(pmeta);
-  pc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.4;margin-bottom:6px','Ideal session to build FTP.'));
-  
-  var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #FC4C02;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#FC4C02;cursor:pointer','View Workout Details');
+  if(_twk && !_twk.isRest){
+    var _mins=Math.round(_twk.minutes||0);
+    var _durStr=_mins>=60?(Math.floor(_mins/60)+'h'+(_mins%60?' '+(_mins%60)+'m':'')):(_mins+' min');
+    pinfo.appendChild(div('font-size:14px;font-weight:700;color:#FC4C02;margin-bottom:2px',_twk.name));
+    pinfo.appendChild(div('font-size:13px;font-weight:600;color:#94a3b8',_durStr+(_twk.isHard?' · hard session':(_twk.isRide?' · endurance':''))));
+    ptop.appendChild(pico); ptop.appendChild(pinfo); pc.appendChild(ptop);
+    var pmeta=row('gap:10px;margin-bottom:6px;flex-wrap:wrap');
+    var _chips=[['ti-clock',_durStr]];
+    if(_twk.isHard) _chips.push(['ti-bolt','~'+Math.round(ftp*1.02)+'W (Z4)']);
+    else if(_twk.isRide) _chips.push(['ti-bolt','~'+Math.round(ftp*0.65)+'W (Z2)']);
+    _chips.forEach(function(x){ var m=row('gap:4px'); m.appendChild(ico(x[0],'#64748b','11')); m.appendChild(div('font-size:11px;color:#94a3b8',x[1])); pmeta.appendChild(m); });
+    pc.appendChild(pmeta);
+  } else if(_twk && _twk.isRest){
+    pinfo.appendChild(div('font-size:14px;font-weight:700;color:#FC4C02;margin-bottom:2px','Rest Day'));
+    pinfo.appendChild(div('font-size:13px;font-weight:600;color:#94a3b8','Recovery — keep it easy'));
+    ptop.appendChild(pico); ptop.appendChild(pinfo); pc.appendChild(ptop);
+  } else {
+    pinfo.appendChild(div('font-size:14px;font-weight:700;color:#FC4C02;margin-bottom:2px','No workout scheduled'));
+    pinfo.appendChild(div('font-size:13px;font-weight:600;color:#94a3b8','Tap below to view your plan'));
+    ptop.appendChild(pico); ptop.appendChild(pinfo); pc.appendChild(ptop);
+  }
+
+  var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #FC4C02;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#FC4C02;cursor:pointer','View in Calendar');
   vwb.setAttribute('data-view','calendar');
   pc.appendChild(vwb);
   r2.appendChild(pc);
@@ -12584,6 +12609,7 @@ function openDesktopRideDetail(idx){
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
     +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'
       +'<div style="padding:10px 14px 8px;border-bottom:1px solid #1e2130;font-size:15px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid #1e2130;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
       +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'
     +'<div id="act-detail-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>'
@@ -12657,11 +12683,13 @@ function openDesktopRideDetail(idx){
   }
 
   // Laps table
+  // lap.time is stored in raw seconds — format as mm:ss (or h:mm:ss).
+  var fmtLapT=function(t){ if(t==null||t==='') return '--'; var s=Math.round(parseFloat(t)); if(!isFinite(s)) return '--'; var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60; return (h>0?h+':'+(m<10?'0':'')+m:''+m)+':'+(ss<10?'0':'')+ss; };
   var lapsHtml='<div style="font-size:11px;color:#64748b;padding:4px 0">No lap data available.</div>';
   if(r.laps&&r.laps.length){
     lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Distance</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
     r.laps.slice(0,8).forEach(function(lap,i){
-      lapsHtml+='<tr><td>'+(i+1)+'</td><td>'+(lap.distance?parseFloat(lap.distance).toFixed(1)+' mi':'--')+'</td><td>'+(lap.time||'--')+'</td><td>'+(lap.avgPower||lap.avgPwr?(lap.avgPower||lap.avgPwr)+' w':'--')+'</td><td>'+(lap.avgHR?lap.avgHR+' bpm':'--')+'</td></tr>';
+      lapsHtml+='<tr><td>'+(i+1)+'</td><td>'+(lap.distance?parseFloat(lap.distance).toFixed(1)+' mi':'--')+'</td><td>'+fmtLapT(lap.time)+'</td><td>'+(lap.avgPower||lap.avgPwr?(lap.avgPower||lap.avgPwr)+' w':'--')+'</td><td>'+(lap.avgHR?lap.avgHR+' bpm':'--')+'</td></tr>';
     });
     lapsHtml+='</table>';
   }
@@ -12860,7 +12888,7 @@ function openDesktopRideDetail(idx){
     setTimeout(function(){
       var el=document.getElementById(mid);if(!el)return;
       var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+      addRouteBasemap_(map);
       var SC=180/Math.pow(2,31);
       var pts=gl.map(function(la,i){
         var lt=la,ln=gn[i];
@@ -13405,7 +13433,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
       setTimeout(function(){
         if(typeof L==='undefined') return;
         var m=L.map(fsMapId,{zoomControl:true,scrollWheelZoom:true});
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(m);
+        addRouteBasemap_(m);
         var pts=lats.map(function(la,i){return[la,lons[i]];});
         L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(m);
         L.circleMarker(pts[0],{radius:7,fillColor:'#1D9E75',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
@@ -13507,6 +13535,26 @@ function fetchRideCoachInsight(r, callback){
   .catch(function(){ callback('Could not reach the coach right now.', null); });
 }
 
+// Voyager basemap for route maps, with street labels rendered ABOVE the
+// route line so they stay legible. The base tiles carry no labels; a
+// labels-only layer sits in a dedicated high-z pane (above the polyline in
+// overlayPane, below popups) — this is the #2 legibility fix.
+function addRouteBasemap_(map){
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+  try{
+    if(!map.getPane('routeLabels')){
+      map.createPane('routeLabels');
+      map.getPane('routeLabels').style.zIndex=650;
+      map.getPane('routeLabels').style.pointerEvents='none';
+    }
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'routeLabels'}).addTo(map);
+  }catch(e){
+    // If custom panes/labels tiles fail, fall back to the labeled base so
+    // the map never ends up with no street names at all.
+    try{ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd'}).addTo(map); }catch(e2){}
+  }
+}
+
 // -- ROUTE TAB: hero map (larger), toggle buttons to recolor by
 // Power / Heart Rate / Wind, elevation profile underneath as a linked timeline
 function renderRideRouteTab(body, r, idx, FTP, BWT){
@@ -13600,7 +13648,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
       var mapEl=document.getElementById(mapId);
       if(!mapEl||typeof L==='undefined') return;
       var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+      addRouteBasemap_(map);
       var pts=lats.map(function(la,i){return[la,lons[i]];});
       if(windDeg==null){
         L.polyline(pts,{color:'#94a3b8',weight:4,opacity:.85}).addTo(map);
@@ -13682,7 +13730,7 @@ function buildRouteMapHR(lats, lons, hrData, maxHR){
     var mapEl=document.getElementById(mapId);
     if(!mapEl||typeof L==='undefined') return;
     var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+    addRouteBasemap_(map);
     if(hrData && hrData.length>5){
       var step=Math.max(1,Math.floor(lats.length/hrData.length));
       var currentColor='#64748b';
