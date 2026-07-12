@@ -94,6 +94,12 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 .ds-tab.on{color:#e2e8f0;border-bottom-color:#FC4C02}
 .ds-scroll{flex:1;overflow-y:auto}
 *::-webkit-scrollbar{display:none}*{scrollbar-width:none;-ms-overflow-style:none}
+.ds-card{scrollbar-color:transparent transparent}
+.ds-card:hover{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent}
+.ds-card:hover::-webkit-scrollbar{display:block;width:6px;height:6px}
+.ds-card:hover::-webkit-scrollbar-track{background:transparent}
+.ds-card:hover::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+.ds-card:hover::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32)}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
 .ds-map-ctrl{position:absolute;top:10px;left:10px;background:rgba(17,19,24,.9);border:1px solid #2a3148;border-radius:6px;overflow:hidden}
@@ -11564,7 +11570,8 @@ function dsShowDashboard(){
   function div(css,txt){ return mk('div',css,txt); }
   function navlink(css,txt,view,arg){ var e=mk('div',css,txt); e.setAttribute('data-view',view); if(arg!=null) e.setAttribute('data-arg',arg); return e; }
   function card(extra){
-    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow:hidden');
+    var d=mk('div','background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:10px 12px;overflow-y:auto;overflow-x:hidden');
+    d.className='ds-card';
     if(extra) d.style.cssText+=';'+extra;
     return d;
   }
@@ -11635,7 +11642,7 @@ function dsShowDashboard(){
   var body=div('padding:10px 16px 32px;display:flex;flex-direction:column;gap:8px;min-width:0;flex:1;overflow-y:auto;overflow-x:hidden');
 
   // ROW 1
-  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
+  var r1=div('display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Readiness
   var rc=card(''); rc.appendChild(lbl('READINESS'));
@@ -11733,16 +11740,16 @@ function dsShowDashboard(){
   body.appendChild(r1);
 
   // ROW 2
-  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
+  var r2=div('display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Today Plan
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
   var ptop=row('gap:10px;margin-bottom:6px');
-  var pico=div('width:36px;height:36px;border-radius:10px;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
-  pico.appendChild(ico('ti-bike','#4ade80','20'));
+  var pico=div('width:36px;height:36px;border-radius:10px;background:rgba(252,76,2,.15);border:1px solid rgba(252,76,2,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
+  pico.appendChild(ico('ti-bike','#FC4C02','20'));
   var pinfo=div('');
-  pinfo.appendChild(div('font-size:14px;font-weight:700;color:#fff;margin-bottom:2px','Threshold Intervals'));
-  pinfo.appendChild(div('font-size:15px;font-weight:800;color:#4ade80','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
+  pinfo.appendChild(div('font-size:14px;font-weight:700;color:#FC4C02;margin-bottom:2px','Threshold Intervals'));
+  pinfo.appendChild(div('font-size:15px;font-weight:800;color:#FC4C02','2 x 20 min @ '+Math.round(ftp*1.05)+'W'));
   ptop.appendChild(pico); ptop.appendChild(pinfo);
   pc.appendChild(ptop);
   var pmeta=row('gap:10px;margin-bottom:6px;flex-wrap:wrap');
@@ -11753,7 +11760,7 @@ function dsShowDashboard(){
   pc.appendChild(pmeta);
   pc.appendChild(div('font-size:11px;color:#94a3b8;line-height:1.4;margin-bottom:6px','Ideal session to build FTP.'));
   
-  var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #4ade80;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#4ade80;cursor:pointer','View Workout Details');
+  var vwb=div('display:inline-flex;align-items:center;gap:6px;border:1px solid #FC4C02;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;color:#FC4C02;cursor:pointer','View Workout Details');
   vwb.setAttribute('data-view','calendar');
   pc.appendChild(vwb);
   r2.appendChild(pc);
@@ -11802,7 +11809,7 @@ function dsShowDashboard(){
   body.appendChild(r2);
 
   // ROW 3
-  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
+  var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Recent Activity
   var ac=card('');
@@ -11904,7 +11911,7 @@ function dsShowDashboard(){
   body.appendChild(r3);
 
   // ROW 4
-  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
+  var r4=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // Streaks
   var strc=card(''); strc.appendChild(lbl('STREAKS'));
@@ -12013,7 +12020,7 @@ function dsShowDashboard(){
   body.appendChild(r4);
 
   // ROW 5 — Analytics
-  var r5=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:start');
+  var r5=div('display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
 
   // -- Power Curve --
   var pcc=card('');
