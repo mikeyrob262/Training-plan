@@ -3223,6 +3223,7 @@ function gpsPayload_(r){
   if(r.chartPwr) p.chartPwr = r.chartPwr;
   if(r.chartHR)  p.chartHR  = r.chartHR;
   if(r.chartEle) p.chartEle = r.chartEle;
+  if(r.chartCad) p.chartCad = r.chartCad;
   if(r.laps && r.laps.length) p.laps = r.laps;
   return Object.keys(p).length ? p : null;
 }
@@ -3253,9 +3254,94 @@ function ensureRideGps(r){
       if(p.chartPwr) r.chartPwr = p.chartPwr;
       if(p.chartHR)  r.chartHR  = p.chartHR;
       if(p.chartEle) r.chartEle = p.chartEle;
+      if(p.chartCad) r.chartCad = p.chartCad;
       if(p.laps) r.laps = p.laps;
     }
     return r;
+  });
+}
+
+// Lazily pull per-point streams (+laps) for a Strava-synced ride and cache them
+// in /gps/{rideKey} exactly like FIT rides do — so the elevation chart, Charts
+// and Laps tabs, and Max values (power/HR/cadence/speed) all light up. Summary
+// sync only gives scalars, not the per-point profile. One Strava call per ride;
+// cached to /gps after the first fetch so it never re-fetches. Never rejects.
+function ensureRideStreams(r){
+  if(!r || !r.stravaId) return Promise.resolve(r);
+  if(r.chartEle && r.chartEle.length) return Promise.resolve(r);
+  // Downsample to n points for charts; compute maxes on the FULL-res stream.
+  function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
+  function maxOf(arr,cap){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v<cap && v>m) m=v; } return m||null; }
+  // 1) Cache: streams may already sit in /gps from a prior session/device.
+  return gpsGet(rideKey(r)).then(function(p){
+    if(p){
+      if(p.lats && !(r.lats&&r.lats.length)) r.lats=p.lats;
+      if(p.lons && !(r.lons&&r.lons.length)) r.lons=p.lons;
+      if(p.chartPwr) r.chartPwr=p.chartPwr;
+      if(p.chartHR)  r.chartHR=p.chartHR;
+      if(p.chartEle) r.chartEle=p.chartEle;
+      if(p.chartCad) r.chartCad=p.chartCad;
+      if(p.laps) r.laps=p.laps;
+    }
+    if(r.chartEle && r.chartEle.length) return r; // cache hit — no API call
+    return fetchStravaStreams_(r, ds, maxOf);
+  });
+}
+
+// Does the actual Strava fetch for ensureRideStreams: pulls the per-point
+// streams and the detailed activity (for laps[], which the segment fetch
+// currently discards), maps them onto r like the FIT importer, then persists
+// heavy streams to /gps and scalar maxes to the blob. Token handling mirrors
+// fetchRideSegments (refresh via refresh_token, fall back to the stored token).
+function fetchStravaStreams_(r, ds, maxOf){
+  return new Promise(function(resolve){
+    var done=function(){ resolve(r); };
+    var run=function(token){
+      var base='https://www.strava.com/api/v3/activities/'+r.stravaId;
+      var sUrl=base+'/streams?keys=altitude,watts,heartrate,cadence,velocity_smooth,distance&key_by_type=true';
+      Promise.all([
+        fetch(sUrl,{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;}),
+        fetch(base+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;})
+      ]).then(function(arr){
+        var s=arr[0]||{}, a=arr[1]||{};
+        var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
+        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth');
+        if(alt) r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
+        if(pwr){ r.chartPwr=ds(pwr,200); if(!r.maxPwr) r.maxPwr=maxOf(pwr,2000); }
+        if(hr){ r.chartHR=ds(hr,200); if(!r.maxHR) r.maxHR=maxOf(hr,250); }
+        if(cad){ r.chartCad=ds(cad,200); if(!r.maxCadence) r.maxCadence=maxOf(cad,255); }
+        if(vel && !r.maxSpeed){ var mv=maxOf(vel,50); if(mv) r.maxSpeed=Math.round(mv*2.23694*10)/10; } // m/s -> mph (display expects mph when >10)
+        // laps[] from the detailed activity (Strava field names, m & sec).
+        if(a && a.laps && a.laps.length && !(r.laps&&r.laps.length)){
+          r.laps=a.laps.map(function(lp){
+            var distMi=lp.distance!=null?Math.round(lp.distance/1609.344*100)/100:0;
+            var timeSec=lp.elapsed_time!=null?Math.round(lp.elapsed_time):(lp.moving_time!=null?Math.round(lp.moving_time):0);
+            return {
+              distance:distMi, time:timeSec,
+              avgPwr:lp.average_watts!=null?Math.round(lp.average_watts):null,
+              maxPwr:lp.max_watts!=null?Math.round(lp.max_watts):null,
+              avgHR:lp.average_heartrate!=null?Math.round(lp.average_heartrate):null,
+              avgCad:lp.average_cadence!=null?Math.round(lp.average_cadence):null,
+              avgSpd:(distMi>0&&timeSec>0)?Math.round(distMi/(timeSec/3600)*10)/10:null
+            };
+          }).filter(function(lp){return lp.distance>0||lp.time>0;}).slice(0,200);
+        }
+        // Persist heavy streams to /gps (like FIT), scalar maxes to the blob.
+        var payload=gpsPayload_(r);
+        if(payload) gpsPut(rideKey(r), payload);
+        try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+        done();
+      }).catch(done);
+    };
+    if(!st.stravaToken && !st.stravaRefreshToken){ done(); return; }
+    if(st.stravaRefreshToken){
+      fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+      }).then(function(res){return res.json();}).then(function(d){
+        if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); run(d.access_token); }
+        else if(st.stravaToken){ run(st.stravaToken); } else { done(); }
+      }).catch(function(){ if(st.stravaToken){ run(st.stravaToken); } else { done(); } });
+    } else { run(st.stravaToken); }
   });
 }
 // --------------------------------------------------------------------------
@@ -12333,6 +12419,9 @@ function openDesktopRideDetail(idx){
   if(!r) return;
   // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openDesktopRideDetail(idx); }); return; }
+  // Strava-synced rides have summary scalars but no streams — fetch altitude/
+  // watts/HR/cadence/velocity + laps on demand, cache to /gps, then re-open.
+  if(r.stravaId && !(r.chartEle&&r.chartEle.length) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
   var NL=String.fromCharCode(10);
@@ -12870,6 +12959,8 @@ function openRideDetail(idx){
   if(!r) return;
   // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openRideDetail(idx); }); return; }
+  // Strava-synced rides: lazy-fetch streams + laps on demand (cached to /gps).
+  if(r.stravaId && !(r.chartEle&&r.chartEle.length) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openRideDetail(idx); }); return; }
   var old = document.getElementById('ride-detail-modal');
   if(old) old.remove();
 
