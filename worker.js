@@ -6683,6 +6683,12 @@ function renderNutr(){
   // automatically (inside calcTrainingAwareTargets_) for dates outside
   // today, where the real workout can't be reliably read from the DOM.
   var trainingTgt=calcTrainingAwareTargets_(nutrDate);
+  // Water: nd.water is a glass count (each +/- press = one 8oz glass). Show it
+  // in ounces against the oz fluid target so consumed/target/bar all agree.
+  var WATER_GLASS_OZ=8;
+  var waterOz=(nd.water||0)*WATER_GLASS_OZ;
+  var waterTgtOz=trainingTgt.fluidOz||64;                 // fallback 64oz/day if no training target
+  var waterPctOz=Math.min(100,Math.round(waterOz/waterTgtOz*100));
   var dt=getDType(nutrDate),tgt={cal:trainingTgt.cal,pro:trainingTgt.pro,carb:trainingTgt.carb,fat:trainingTgt.fat};
   var fuelPlan=calcFuelTheWorkout_(nutrDate);
   var d=new Date(nutrDate);
@@ -6912,11 +6918,10 @@ function renderNutr(){
       insightBullets.push({ok:true,text:'Calories in vs. burned are well matched today.'});
     }
   }
-  var waterPct=Math.round((nd.water||0)/8*100);
-  if(waterPct>=75){
-    insightBullets.push({ok:true,text:'Hydration is on track ('+(nd.water||0)+'/8 today).'});
-  } else if(waterPct>0){
-    insightBullets.push({ok:null,text:'Hydration at '+(nd.water||0)+'/8 - keep drinking through the day.'});
+  if(waterPctOz>=75){
+    insightBullets.push({ok:true,text:'Hydration is on track ('+waterOz+' of '+waterTgtOz+' oz today).'});
+  } else if(waterOz>0){
+    insightBullets.push({ok:null,text:'Hydration at '+waterOz+' of '+waterTgtOz+' oz - keep drinking through the day.'});
   }
   if(insightBullets.length){
     h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
@@ -7012,16 +7017,18 @@ function renderNutr(){
   // -- WATER
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:14px;border:1px solid var(--b1);padding:13px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center">';
+  h+='<div style="display:flex;align-items:center;gap:9px">';
+  h+='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2980B9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>';
   h+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Water</div>';
-  if(trainingTgt.fluidOz) h+='<div style="font-size:10px;color:var(--t3);margin-top:1px">Target: '+trainingTgt.fluidOz+'oz today</div>';
-  h+='</div>';
+  h+='<div style="font-size:10px;color:var(--t3);margin-top:1px">'+waterTgtOz+' oz target &middot; +8 oz per glass</div>';
+  h+='</div></div>';
   h+='<div style="display:flex;align-items:center;gap:10px">';
   h+='<button id="water-minus" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>';
-  h+='<span style="font-size:16px;font-weight:800;min-width:50px;text-align:center">'+(nd.water||0)+'/8</span>';
+  h+='<span style="font-size:16px;font-weight:800;min-width:82px;text-align:center">'+waterOz+' / '+waterTgtOz+' oz</span>';
   h+='<button id="water-plus" style="background:rgba(41,128,185,.1);border:1px solid rgba(41,128,185,.2);color:#2980B9;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>';
   h+='</div></div>';
   h+='<div style="height:5px;background:var(--s3);border-radius:3px;margin-top:10px">';
-  h+='<div style="height:5px;background:#2980B9;border-radius:3px;width:'+Math.min(100,Math.round((nd.water||0)/8*100))+'%"></div>';
+  h+='<div style="height:5px;background:#2980B9;border-radius:3px;width:'+waterPctOz+'%"></div>';
   h+='</div></div>';
 
   // Build static part via innerHTML
