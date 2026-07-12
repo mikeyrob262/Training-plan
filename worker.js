@@ -12267,10 +12267,17 @@ function dsShowDashboard(){
 
 
 function dsShowRidesList(){
-  // Just open the most recent ride - it builds the full split layout
-  var _sorted=((st&&st.rides)||[]).filter(Boolean).sort(function(a,b){return normDate(b.date||'')-normDate(a.date||'');});
+  // Open the most recent activity by default — must match the list panel's
+  // ordering (dedup + drop deleted + newest-first) so the default selection is
+  // the item shown at the top. normDate() returns a 'YYYY-MM-DD' string, so
+  // compare with > : subtracting strings yields NaN, which no-ops the sort and
+  // left the default stuck on whatever happened to sit at st.rides[0].
+  var _pool=(typeof dedupeRides_==='function') ? (dedupeRides_(st.rides||[]).kept||[]) : ((st&&st.rides)||[]);
+  var _sorted=_pool.filter(function(r){return r && !r.deleted && r.date;}).sort(function(a,b){return normDate(b.date||'')>normDate(a.date||'')?1:-1;});
   if(_sorted.length>0){
-    var _firstIdx=(st.rides||[]).indexOf(_sorted[0]);
+    var _first=_sorted[0];
+    var _firstIdx=(st.rides||[]).indexOf(_first);
+    if(_firstIdx<0 && _first.stravaId){ _firstIdx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===_first.stravaId;}); }
     if(_firstIdx>=0){ openDesktopRideDetail(_firstIdx); return; }
   }
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
