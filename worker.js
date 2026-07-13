@@ -3840,6 +3840,16 @@ function normalizeState_(s){
 
 // Save to localStorage, then debounce-push to Firebase after 1.5s
 function sv(){
+  // Any persisted mutation may change a ride's dedup keys (date / distance /
+  // movingSecs / stravaId), soft-delete one, or replace one in place without
+  // changing st.rides' length or identity — all of which would leave the
+  // dedupeRides_ memo serving a stale, silently-wrong kept list. sv() is the
+  // single choke point every mutation flows through, so invalidating here is
+  // provably complete (covers edit, delete, import-replace, and any future
+  // site) and cannot be missed. The hot render path doesn't call sv()
+  // synchronously between its dedupe calls, so the per-navigation memo still
+  // collapses the 5 calls into one compute.
+  dedupeInvalidate_();
   if(Array.isArray(st)) st=Object.assign({},st);
   // Defer the (potentially expensive, ~6MB+) serialization to the next
   // event loop tick so it never blocks the current click/tap handler's
