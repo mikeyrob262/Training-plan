@@ -21544,7 +21544,23 @@ function fetchStravaPage(token, page, imported, forceAll) {
     acts.forEach(function(a){
       var dateStr = (a.start_date||'').split('T')[0];
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
-      var dup = st.rides.find(function(r){ return !r.deleted && ((r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5)); });
+      var aMovingSecs = a.moving_time||a.elapsed_time||0;
+      // Match precedence: an exact Strava id is always the same activity. The
+      // date+distance fallback (for rides that carry no matching stravaId — e.g.
+      // ICU-imported ones) adds a moving-time tie-break so a same-day
+      // out-and-back (two rides, same date and ~same distance, different
+      // duration) isn't collapsed onto its sibling. The tie-break only applies
+      // when both durations are known; 120s tolerance absorbs the small
+      // moving-time differences between Strava and ICU for the same activity.
+      var dup = st.rides.find(function(r){
+        if(r.deleted) return false;
+        if(r.stravaId && r.stravaId===a.id) return true;
+        if(r.date!==dateStr) return false;
+        if(Math.abs((r.distance||0)-distMi)>=0.5) return false;
+        var rMovingSecs = r.movingSecs||0;
+        if(rMovingSecs>0 && aMovingSecs>0 && Math.abs(rMovingSecs-aMovingSecs)>120) return false;
+        return true;
+      });
       if(dup) return;
       var dur = a.moving_time||a.elapsed_time||0;
       var np = a.weighted_average_watts||null;
