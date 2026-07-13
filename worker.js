@@ -3124,7 +3124,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
 </div>
 
 <div id="PROG" style="display:none"></div>
-<div id="NUTR" style="display:none"></div>
+<div id="NUTR" style="display:none;padding:0 0 80px 0"></div>
 <div id="PERF" style="display:none"></div>
 <div id="SET"  style="display:none"></div>
 
@@ -3306,7 +3306,10 @@ function fetchStravaStreams_(r, ds, maxOf){
         var s=arr[0]||{}, a=arr[1]||{};
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
         var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth');
-        if(alt) r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
+        if(alt){
+          r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
+          if(!r.maxElev){ var _ma=maxOf(alt,10000); if(_ma!=null) r.maxElev=Math.round(_ma*3.28084); } // highest point, m -> ft (was never computed anywhere)
+        }
         if(pwr){ r.chartPwr=ds(pwr,200); if(!r.maxPwr) r.maxPwr=maxOf(pwr,2000); }
         if(hr){ r.chartHR=ds(hr,200); if(!r.maxHR) r.maxHR=maxOf(hr,250); }
         if(cad){ r.chartCad=ds(cad,200); if(!r.maxCadence) r.maxCadence=maxOf(cad,255); }
@@ -4151,19 +4154,32 @@ function migrateRaces_(){
   if(_racesReady && Array.isArray(st.races)) return;
   var changed=false;
   if(!Array.isArray(st.races)){ st.races=[]; changed=true; }
+  // Fold legacy st.events into st.races. Key the "already present" check on a
+  // NORMALIZED name|calendar-day (same as the dedup below) and include
+  // tombstoned (deleted:true) races. Previously this compared dates by exact
+  // string, so a soft-deleted race whose tombstone date format differed from
+  // the immortal st.events entry (padding / T00:00:00 / unpadded) failed the
+  // check and got re-added un-deleted on every reload — silently resurrecting
+  // user deletions. Keying on the normalized day + including tombstones makes
+  // the fold idempotent, so it no longer matters that st.events=[] can't
+  // survive the Firebase union merge.
+  var norm_=function(s){ return String(s||'').toLowerCase().replace(/ +/g,' ').trim(); };
+  var raceKey_=function(name,date){ var d=parseRaceDate_(date); var dk=d?(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()):String(date||''); return norm_(name)+'|'+dk; };
+  var existingKeys_={};
+  st.races.forEach(function(r){ if(r) existingKeys_[raceKey_(r.name,r.date)]=true; });
   if(Array.isArray(st.events) && st.events.length){
     st.events.forEach(function(e){
       if(!e || !e.date) return;
-      var dup=st.races.some(function(r){ return r.name===e.name && r.date===e.date; });
-      if(!dup){
-        st.races.push({id:e.id||('race-'+Date.now()+'-'+st.races.length),
-          name:e.name||'Race', date:e.date, sport:raceSportGuess_(e.name),
-          distance:null, goal:(e.type==='goal'?'Goal':'Finish Strong'), target:'', location:''});
-        changed=true;
-      }
+      var ek=raceKey_(e.name,e.date);
+      if(existingKeys_[ek]) return;   // present live OR tombstoned — never re-add
+      st.races.push({id:e.id||('race-'+Date.now()+'-'+st.races.length),
+        name:e.name||'Race', date:e.date, sport:raceSportGuess_(e.name),
+        distance:null, goal:(e.type==='goal'?'Goal':'Finish Strong'), target:'', location:''});
+      existingKeys_[ek]=true;
+      changed=true;
     });
   }
-  if(st.events && st.events.length){ st.events=[]; changed=true; } // retire, keep [] so old reads stay safe
+  if(st.events && st.events.length){ st.events=[]; changed=true; } // best-effort retire; harmless now that the fold is idempotent
   st.races.forEach(function(r,i){
     if(!r.id){ r.id='race-'+(r.date||'x')+'-'+i; changed=true; }
     if(!r.sport){ r.sport=raceSportGuess_(r.name); changed=true; }
@@ -5560,7 +5576,7 @@ function showProg(){
     // Protein chart lives in Nutrition → Progress tab
 
     var wc=document.getElementById('prog-wt-chart');
-    if(wc&&cd.wtData.length) new Chart(wc,{type:'line',data:{labels:cd.wtLabels,datasets:[{data:cd.wtData,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',borderWidth:2,fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#378ADD'}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},callback:function(v){return v+'lb';}}}})});
+    if(wc&&cd.wtData.length) new Chart(wc,{type:'line',data:{labels:cd.wtLabels,datasets:[{data:cd.wtData,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',borderWidth:2,fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#378ADD'}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},callback:function(v){return (Math.round(v*100)/100)+'lb';}}}})});
 
     var lc=document.getElementById('prog-lr-chart');
     if(lc) new Chart(lc,{type:'bar',data:{labels:cd.lrLabels,datasets:[{data:cd.lrData,backgroundColor:cd.lrData.map(function(v,i){return i===cd.lrData.length-1&&v>0?'#0F6E56':'rgba(15,110,86,0.5)';}),borderRadius:4}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
@@ -6697,6 +6713,20 @@ function calcFuelTheWorkout_(dateKey){
 function getNDay(k){if(!st.nl)st.nl={};if(!st.nl[k])st.nl[k]={meals:{breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]},water:0};var d=st.nl[k];if(!d.meals)d.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'].forEach(function(m){if(!d.meals[m])d.meals[m]=[];});return d;}
 function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};MEAL_BUCKETS.forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(i.deleted)return;t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
 function getDType(k){var d=new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return DTYPE[idx]||'MOD';}
+// Single source of truth for a day's nutrition, so the dashboard, calendar tab
+// and nutrition page can't diverge (the dashboard cards previously printed
+// hardcoded mockup numbers). Consumed from the food log (getDTots + water),
+// goals from calcTrainingAwareTargets_. Returns rounded {consumed, goals}.
+function nutritionForDate(key){
+  var k=key||((typeof nutrDate!=='undefined'&&nutrDate)?nutrDate:(typeof getTodayKey==='function'?getTodayKey():''));
+  var t=getDTots(k)||{}, g=calcTrainingAwareTargets_(k)||{};
+  var nd=(typeof getNDay==='function')?getNDay(k):null;
+  var waterOz=(nd&&nd.water)?nd.water:0;
+  return {
+    consumed:{ cal:Math.round(t.cal||0), pro:Math.round(t.p||0), carb:Math.round(t.c||0), fat:Math.round(t.f||0), fluidOz:Math.round(waterOz) },
+    goals:{ cal:Math.round(g.cal||0), pro:Math.round(g.pro||0), carb:Math.round(g.carb||0), fat:Math.round(g.fat||0), fluidOz:Math.round(g.fluidOz||0) }
+  };
+}
 
 
 
@@ -6870,6 +6900,7 @@ function renderNutr(){
   h+='<div style="position:relative;overflow:hidden;padding:20px 16px 18px;background:linear-gradient(135deg,#0F7A54 0%,#1AA06B 45%,#2FA8E0 120%)">';
   h+='  <div style="position:absolute;right:-20px;top:-10px;opacity:.18"><svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.2"><path d="M12 2c-1 4-4 5-4 9a4 4 0 0 0 8 0c0-4-3-5-4-9z"/><path d="M6 14c0 4 2 7 6 7s6-3 6-7"/></svg></div>';
   h+='  <div style="position:relative">';
+  h+='    <button onclick="showHomeDash()" aria-label="Back to home" style="background:rgba(255,255,255,.2);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:600;padding:5px 10px 5px 8px;cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:4px;font-family:inherit">&#8592; Back</button>';
   h+='    <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.08em">Fuel</div>';
   h+='    <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.3px;margin-top:2px">Nutrition</div>';
   h+='    <div style="font-size:12px;color:rgba(255,255,255,.8);margin-top:3px">Dial in today&#39;s fueling to match your training.</div>';
@@ -8950,7 +8981,7 @@ function renderPerf(container){
     var nc=document.getElementById('perf-np-chart');
     if(nc) new Chart(nc,{type:'line',data:{labels:cd.npWLabels,
       datasets:[{data:cd.npWeekly,borderColor:'#BA7517',backgroundColor:'rgba(186,117,23,0.08)',borderWidth:2,fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#BA7517',spanGaps:true}]},
-      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return v+'W';}}}}})});
+      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return (Math.round(v*100)/100)+'W';}}}}})});
 
     var cc=document.getElementById('perf-ctl-chart');
     if(cc) new Chart(cc,{type:'line',data:{labels:cd.ctlLabels2,
@@ -11682,7 +11713,7 @@ function dsShowAnalytics(){
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' W/kg';}}}}}});
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return (Math.round(v*100)/100)+' W/kg';}}}}}});
     }
   }
   setTimeout(drawCharts,100);
@@ -12294,10 +12325,11 @@ function dsShowDashboard(){
   tlc.appendChild(div('font-size:10px;color:'+(pct>=90?'#4ade80':'#f59e0b'),pct+'% of weekly target'));
   var ctlDiv=div('margin-top:12px;padding-top:10px;border-top:1px solid #1a1f2e');
   ctlDiv.appendChild(div('font-size:10px;color:#64748b','Chronic Load'));
-  ctlDiv.appendChild(div('font-size:16px;font-weight:700;color:#e2e8f0',''+(Math.round(weekTSS/7)||42)));
+  ctlDiv.appendChild(div('font-size:16px;font-weight:700;color:#e2e8f0',weekTSS?''+Math.round(weekTSS/7):'—'));
   tlc.appendChild(ctlDiv); r3.appendChild(tlc);
 
-  // Nutrition
+  // Nutrition — real consumed/goal from the shared accessor (was hardcoded mockup)
+  var _nf=nutritionForDate();
   var nc=card(''); nc.appendChild(lbl('NUTRITION'));
   nc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:10px','Today'));
   var nrow=row('gap:8px;margin-bottom:6px');
@@ -12305,15 +12337,14 @@ function dsShowDashboard(){
   var svgD=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svgD.setAttribute('width','50'); svgD.setAttribute('height','50'); svgD.setAttribute('viewBox','0 0 64 64');
   var dc0=svgCircle('32','32','26','#1a1f2e','8'); svgD.appendChild(dc0);
-  [[87,'#FC4C02',41],[49,'#60a5fa',-46],[27,'#8b5cf6',-95]].forEach(function(x){
-    svgD.appendChild(svgCircle('32','32','26',x[1],'8',x[0]+' 163',''+x[2],'rotate(-90 32 32)'));
-  });
+  var _calPct=_nf.goals.cal?Math.min(1,_nf.consumed.cal/_nf.goals.cal):0;
+  svgD.appendChild(svgCircle('32','32','26','#FC4C02','8',(Math.round(_calPct*163))+' 163','0','rotate(-90 32 32)'));
   var dnum=div('position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center');
-  dnum.appendChild(div('font-size:10px;font-weight:700;color:#fff','2,845'));
-  dnum.appendChild(div('font-size:7px;color:#64748b','of 3,250 cal'));
+  dnum.appendChild(div('font-size:10px;font-weight:700;color:#fff',_nf.consumed.cal.toLocaleString()));
+  dnum.appendChild(div('font-size:7px;color:#64748b','of '+_nf.goals.cal.toLocaleString()+' cal'));
   dnut.appendChild(svgD); dnut.appendChild(dnum);
   var nlist=div('flex:1;display:flex;flex-direction:column;gap:5px');
-  [['#FC4C02','Protein','182/165g'],['#60a5fa','Carbs','412/420g'],['#8b5cf6','Fat','102/90g'],['#22d3ee','Hydration','74/90oz']].forEach(function(x){
+  [['#FC4C02','Protein',_nf.consumed.pro+'/'+_nf.goals.pro+'g'],['#60a5fa','Carbs',_nf.consumed.carb+'/'+_nf.goals.carb+'g'],['#8b5cf6','Fat',_nf.consumed.fat+'/'+_nf.goals.fat+'g'],['#22d3ee','Hydration',_nf.consumed.fluidOz+'/'+_nf.goals.fluidOz+'oz']].forEach(function(x){
     var nr=row('justify-content:space-between');
     var nl=row('gap:4px');
     var dot=div('width:8px;height:8px;border-radius:50%;flex-shrink:0'); dot.style.background=x[0];
@@ -12332,8 +12363,8 @@ function dsShowDashboard(){
   var wmain=row('gap:8px;margin-bottom:10px');
   wmain.appendChild(ico('ti-sun','#f59e0b','28'));
   var wnum=div('');
-  wnum.appendChild(div('font-size:20px;font-weight:800;color:#fff','72\u00B0F'));
-  wnum.appendChild(div('font-size:11px;color:#64748b','Feels like 72\u00B0'));
+  var _wtd=div('font-size:20px;font-weight:800;color:#fff','\u2014\u00B0F'); _wtd.id='ds-wx-temp'; wnum.appendChild(_wtd);
+  var _wfd=div('font-size:11px;color:#64748b','Feels like \u2014\u00B0'); _wfd.id='ds-wx-feels'; wnum.appendChild(_wfd);
   wmain.appendChild(wnum); wc.appendChild(wmain);
   var wgrid=div('display:grid;grid-template-columns:1fr 1fr;gap:4px;overflow:hidden');
   var wwind=div(''); wwind.appendChild(div('font-size:10px;color:#64748b','Wind'));
@@ -12364,21 +12395,11 @@ function dsShowDashboard(){
   });
   strc.appendChild(strrow); r4.appendChild(strc);
 
-  // Achievements
-  var ach=card('');
-  var achd=row('justify-content:space-between;margin-bottom:10px');
-  achd.appendChild(lbl('ACHIEVEMENTS'));
-  achd.appendChild(div('font-size:10px;color:#4ade80;cursor:pointer','View All'));
-  ach.appendChild(achd);
-  var achrow=row('gap:8px');
-  [['#f59e0b','100mi'],['#4ade80','Climber'],['#60a5fa','1K ft'],['#8b5cf6','25 hr']].forEach(function(x){
-    var ab=div('width:40px;height:40px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center');
-    ab.style.background=x[0]+'22'; ab.style.border='1px solid '+x[0]+'44';
-    ab.appendChild(ico('ti-award',x[0],'16'));
-    var al=div('font-size:7px;font-weight:600;margin-top:1px',x[1]); al.style.color=x[0];
-    ab.appendChild(al); achrow.appendChild(ab);
-  });
-  ach.appendChild(achrow); r4.appendChild(ach);
+  // Achievements card removed: the four badges (100mi / Climber / 1K ft / 25 hr)
+  // were hardcoded labels with a dead "View All" (no handler / no data-view).
+  // Honest achievement surfaces already exist (renderAchievementStrip,
+  // checkForNewAchievements, Strava PR/KOM via fetchRideSegments); a real
+  // computed dashboard card can be a future feature rather than a fake one.
 
   // Bikes card — shows both bike photos
   var bkc=card('');
@@ -12602,13 +12623,15 @@ function dsShowDashboard(){
   mc.appendChild(shell);
 
   // Live weather
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
     .then(function(r){return r.json();})
     .then(function(data){
       if(data&&data.current){
         var c=data.current;
         var dirs=['N','NE','E','SE','S','SW','W','NW'];
         var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+        var tmp=document.getElementById('ds-wx-temp'); if(tmp&&c.temperature_2m!=null) tmp.textContent=Math.round(c.temperature_2m)+'°F';
+        var fls=document.getElementById('ds-wx-feels'); if(fls&&c.apparent_temperature!=null) fls.textContent='Feels like '+Math.round(c.apparent_temperature)+'°';
         var wnd=document.getElementById('ds-wx-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
         var hum=document.getElementById('ds-wx-hum'); if(hum) hum.textContent=Math.round(c.relativehumidity_2m)+'%';
       }
@@ -12987,7 +13010,7 @@ function openDesktopRideDetail(idx){
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
         miniStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance',true)+
         miniStat(r.elev?Math.round(r.elev)+' ft':'--','Elevation Gain',true)+
-        miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'701 ft','Max Elevation',true)+
+        miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'—','Max Elevation',true)+
         miniStat(avgSpd!=='--'?avgSpd+' mph':'--','Avg Speed',false)+
       '</div>'+
 
@@ -13057,7 +13080,10 @@ function openDesktopRideDetail(idx){
             var pc=r.powerCurve||{};
             var picks=[[r.peak20||pc[1200],'20-Min Power'],[pc[300],'5-Min Power'],[pc[60],'1-Min Power'],[pc[5],'5-Sec Power']];
             var top=picks.filter(function(p){return p[0];})[0];
-            if(!top) return '<div style="font-size:11px;color:#64748b">No power data</div>';
+            // Don't claim "No power data" when the ride HAS summary power (NP/avg
+            // are shown right beside this) but no detailed power curve/streams —
+            // that self-contradiction was the bug. Distinguish the two states.
+            if(!top) return '<div style="font-size:11px;color:#64748b">'+((r.np||r.avgPwr)?'Detailed power not recorded':'No power data')+'</div>';
             return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+top[0]+'W</div><div style="font-size:9px;color:#64748b">'+top[1]+'</div></div></div>';
           })()+
         '</div>'+
@@ -13079,7 +13105,7 @@ function openDesktopRideDetail(idx){
           '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
           '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
             '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+(r.calories?Math.round(r.calories)+' Cal':'--')+'</div><div style="font-size:9px;color:#64748b">Consumed</div></div></div>'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">742 ml</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -13775,17 +13801,23 @@ function fetchRideCoachInsight(r, callback){
     +'Then 2-3 short bullet-style observations, each starting with "- ", covering things like time in zone, power/HR steadiness, or fueling if relevant. '
     +'Then a final line starting with "Recommendation: " giving one concrete suggestion for the next session.';
 
+  // Time-box the coach call so the insight card can never hang on "Analyzing…"
+  // forever when the proxy stalls (it has no server-side timeout of its own).
+  var _ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  var _to = setTimeout(function(){ if(_ac) _ac.abort(); }, 20000);
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:250, messages:[{role:'user',content:prompt}] })
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:250, messages:[{role:'user',content:prompt}] }),
+    signal:_ac?_ac.signal:undefined
   })
   .then(function(res){ return res.json(); })
   .then(function(d){
+    clearTimeout(_to);
     var text = d.content && d.content[0] && d.content[0].text;
     callback(null, (text||'').trim());
   })
-  .catch(function(){ callback('Could not reach the coach right now.', null); });
+  .catch(function(){ clearTimeout(_to); callback('Could not reach the coach right now.', null); });
 }
 
 // Voyager basemap for route maps, with street labels rendered ABOVE the
@@ -13971,12 +14003,39 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
 
 // HR-zone equivalent of buildRouteMap - colors route segments by heart
 // rate zone instead of power zone, same rendering approach.
+// Normalize a raw GPS track for the mobile map builders: convert Strava
+// semicircles (|lat|>90 / |lon|>180) to degrees, drop null/zero/out-of-range
+// points, and IQR-guard the span so corrupt coordinates render "GPS
+// unavailable" instead of zooming out to the whole world. The desktop initMap
+// does this inline; buildRouteMap/buildRouteMapHR previously fed raw coords
+// straight into fitBounds, which is the "renders the entire world map" bug.
+function normalizeTrack_(lats, lons){
+  if(!lats||!lons||lats.length<2) return {lats:[], lons:[], ok:false};
+  var SC=180/Math.pow(2,31), oLa=[], oLo=[];
+  for(var i=0;i<lats.length;i++){
+    var lt=lats[i], ln=lons[i];
+    if(lt==null||ln==null) continue;
+    if(Math.abs(lt)>90) lt=lt*SC;
+    if(Math.abs(ln)>180) ln=ln*SC;
+    if(!lt||!ln||Math.abs(lt)<=0.1||Math.abs(ln)<=0.1) continue;
+    if(Math.abs(lt)>90||Math.abs(ln)>180) continue;
+    oLa.push(lt); oLo.push(ln);
+  }
+  if(oLa.length<2) return {lats:oLa, lons:oLo, ok:false};
+  var sLa=oLa.slice().sort(function(a,b){return a-b;}), sLo=oLo.slice().sort(function(a,b){return a-b;});
+  var n=sLa.length;
+  var ok=((sLa[Math.floor(n*0.75)]-sLa[Math.floor(n*0.25)])<=1.5 && (sLo[Math.floor(n*0.75)]-sLo[Math.floor(n*0.25)])<=1.5);
+  return {lats:oLa, lons:oLo, ok:ok};
+}
 function buildRouteMapHR(lats, lons, hrData, maxHR){
   if(!lats||!lats.length) return '';
   if(lons && lons.length!==lats.length){
     var minLen=Math.min(lats.length,lons.length);
     lats=lats.slice(0,minLen); lons=lons.slice(0,minLen);
   }
+  var _ntHR=normalizeTrack_(lats,lons);
+  if(!_ntHR.ok) return '<div style="width:100%;height:340px;display:flex;align-items:center;justify-content:center;background:#1c2535;color:#64748b;font-size:13px">GPS data unavailable</div>';
+  lats=_ntHR.lats; lons=_ntHR.lons;
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId='leaflet-map-hr-'+window._mapCount;
   var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
   setTimeout(function(){
@@ -15055,6 +15114,9 @@ function buildRouteMap(lats, lons, pwrData, FTP){
     lons = lons.slice(0, minLen);
   }
   if(!lats.length) return '';
+  var _ntPM=normalizeTrack_(lats,lons);
+  if(!_ntPM.ok) return '<div style="width:100%;height:260px;display:flex;align-items:center;justify-content:center;background:#1c2535;color:#64748b;font-size:13px;border-radius:16px">GPS data unavailable</div>';
+  lats=_ntPM.lats; lons=_ntPM.lons;
   // Generate unique map ID
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
   window._lastRouteMapId = mapId;
@@ -20956,18 +21018,19 @@ function showCalendarTab(){
   h+='</div>';
 
   // THREE-UP: Nutrition (donut + macros) / Training Load / Up Next
-  // Nutrition — "show what you see": mockup macro values, real cal total if logged.
-  var calTarget=3250, calNow=3145;
-  try{ if(typeof nutritionTotalsForDate_==='function'){var nt=nutritionTotalsForDate_(getTodayKey()); if(nt&&nt.cal){calNow=Math.round(nt.cal);}} }catch(e){}
-  // Macros (mockup values; TODO: wire real per-macro next session)
+  // Nutrition — real consumed/goal via the shared accessor (was mockup values;
+  // the old nutritionTotalsForDate_ it referenced never existed, so the calorie
+  // total was hardcoded too).
+  var _nfC=nutritionForDate(getTodayKey());
+  var calTarget=_nfC.goals.cal, calNow=_nfC.consumed.cal;
   var macros=[
-    {n:'Protein', v:182, t:165, c:'#5DCAA5'},
-    {n:'Carbs',   v:412, t:420, c:'#4D9FFF'},
-    {n:'Fat',     v:102, t:90,  c:'#A855F7'},
-    {n:'Hydration',v:84, t:90,  c:'#22B8CF', u:'oz'}
+    {n:'Protein', v:_nfC.consumed.pro, t:_nfC.goals.pro, c:'#5DCAA5'},
+    {n:'Carbs',   v:_nfC.consumed.carb, t:_nfC.goals.carb, c:'#4D9FFF'},
+    {n:'Fat',     v:_nfC.consumed.fat, t:_nfC.goals.fat,  c:'#A855F7'},
+    {n:'Hydration',v:_nfC.consumed.fluidOz, t:_nfC.goals.fluidOz,  c:'#22B8CF', u:'oz'}
   ];
   // Donut: 3 macro arcs (protein/carbs/fat) proportional to their gram totals.
-  var gP=macros[0].v, gC=macros[1].v, gF=macros[2].v, gTot=gP+gC+gF;
+  var gP=macros[0].v, gC=macros[1].v, gF=macros[2].v, gTot=(gP+gC+gF)||1;
   var RR=34, CC=2*Math.PI*RR;
   var segs=[{c:macros[0].c,frac:gP/gTot},{c:macros[1].c,frac:gC/gTot},{c:macros[2].c,frac:gF/gTot}];
   var acc=0, donut='';
