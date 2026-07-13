@@ -17187,12 +17187,37 @@ function recomputeGearMileage(){
 // Fetches the athlete's registered gear (bikes + shoes) from Strava,
 // so we can map gear_id -> real name and attribute mileage correctly.
 // Requires an existing valid Strava token (from stravaBackfill()).
+// Run a Strava API call with a guaranteed-fresh access token. The activity
+// sync always refreshes before fetching (the ~6h access token is otherwise
+// stale); the gear/elev calls historically used st.stravaToken directly and
+// 401'd, which is why st.stravaGearMap never populated. This centralizes the
+// refresh so every path gets a live token. onToken(token) runs the actual
+// call; onNoToken() fires only when there is neither a refresh nor an access
+// token. NOTE: client_secret is still inline here (matches the other sync
+// paths) — B2 rotates it and moves this exchange behind the Worker; keeping it
+// in one place is deliberate setup for that.
+function withFreshStravaToken(onToken, onNoToken){
+  var noToken = onNoToken || function(){};
+  if(st.stravaRefreshToken){
+    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    }).then(function(res){return res.json();}).then(function(d){
+      if(d && d.access_token){
+        st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token;
+        if(d.athlete&&d.athlete.id) st.stravaAthleteId=d.athlete.id;
+        sv(); onToken(d.access_token);
+      }
+      else if(st.stravaToken){ onToken(st.stravaToken); }   // refresh failed but a token exists — try it
+      else { noToken(); }
+    }).catch(function(){ if(st.stravaToken){ onToken(st.stravaToken); } else { noToken(); } });
+  } else if(st.stravaToken){ onToken(st.stravaToken); } else { noToken(); }
+}
 function fetchStravaElevStats(silent){
-  if(!st.stravaToken){ if(!silent) toast('Sync Strava first to get a token'); return; }
+  if(!st.stravaToken && !st.stravaRefreshToken){ if(!silent) toast('Sync Strava first to get a token'); return; }
   if(!silent) toast('Fetching elevation stats from Strava...');
-  function doFetch(athleteId){
+  function doFetch(athleteId, token){
     fetch('https://www.strava.com/api/v3/athletes/'+athleteId+'/stats',{
-      headers:{'Authorization':'Bearer '+st.stravaToken}
+      headers:{'Authorization':'Bearer '+token}
     }).then(function(r){
       if(r.status===401){ if(!silent) toast('Strava token expired — tap Sync Strava first'); return null; }
       return r.ok?r.json():null;
@@ -17210,42 +17235,46 @@ function fetchStravaElevStats(silent){
       }
     }).catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
   }
-  if(st.stravaAthleteId){ doFetch(st.stravaAthleteId); return; }
-  fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+st.stravaToken}})
-  .then(function(r){
-    if(r.status===401){ if(!silent) toast('Strava token expired — run Sync Strava first then try Elev Stats'); return null; }
-    if(!r.ok){ if(!silent) toast('Strava /athlete returned HTTP '+r.status); return null; }
-    return r.json();
-  })
-  .then(function(a){
-    if(!a) return;
-    if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id); }
-    else { if(!silent) toast('No athlete ID in response — keys: '+(a?JSON.stringify(Object.keys(a)):'null')); }
-  })
-  .catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
+  withFreshStravaToken(function(token){
+    if(st.stravaAthleteId){ doFetch(st.stravaAthleteId, token); return; }
+    fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+token}})
+    .then(function(r){
+      if(r.status===401){ if(!silent) toast('Strava token expired — run Sync Strava first then try Elev Stats'); return null; }
+      if(!r.ok){ if(!silent) toast('Strava /athlete returned HTTP '+r.status); return null; }
+      return r.json();
+    })
+    .then(function(a){
+      if(!a) return;
+      if(a&&a.id){ st.stravaAthleteId=a.id; sv(); doFetch(a.id, token); }
+      else { if(!silent) toast('No athlete ID in response — keys: '+(a?JSON.stringify(Object.keys(a)):'null')); }
+    })
+    .catch(function(e){ if(!silent) toast('Strava error: '+(e&&e.message?e.message:'network')); });
+  }, function(){ if(!silent) toast('Sync Strava first to get a token'); });
 }
 
 function syncStravaGear(){
-  if(!st.stravaToken){ toast('Sync Strava first to get a token'); return; }
+  if(!st.stravaToken && !st.stravaRefreshToken){ toast('Sync Strava first to get a token'); return; }
   toast('Fetching your Strava gear...');
-  fetch('https://www.strava.com/api/v3/athlete', {
-    headers: { 'Authorization': 'Bearer ' + st.stravaToken }
-  }).then(function(r){
-    if(r.status === 401){ toast('Strava token expired — tap Sync Strava first'); return null; }
-    if(!r.ok){ toast('Strava HTTP ' + r.status); return null; }
-    return r.json();
-  }).then(function(athlete){
-    if(!athlete) return;
-    var gearMap = {};
-    (athlete.shoes||[]).forEach(function(s){ gearMap[s.id] = s.name; });
-    (athlete.bikes||[]).forEach(function(b){ gearMap[b.id] = b.name; });
-    st.stravaGearMap = gearMap;
-    sv();
-    var shoeCount = (athlete.shoes||[]).length;
-    var bikeCount = (athlete.bikes||[]).length;
-    toast('Synced '+shoeCount+' shoes, '+bikeCount+' bikes from Strava');
-    recomputeGearMileage();
-  }).catch(function(){ toast('Network error fetching gear'); });
+  withFreshStravaToken(function(token){
+    fetch('https://www.strava.com/api/v3/athlete', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    }).then(function(r){
+      if(r.status === 401){ toast('Strava token expired — tap Sync Strava first'); return null; }
+      if(!r.ok){ toast('Strava HTTP ' + r.status); return null; }
+      return r.json();
+    }).then(function(athlete){
+      if(!athlete) return;
+      var gearMap = {};
+      (athlete.shoes||[]).forEach(function(s){ gearMap[s.id] = s.name; });
+      (athlete.bikes||[]).forEach(function(b){ gearMap[b.id] = b.name; });
+      st.stravaGearMap = gearMap;
+      sv();
+      var shoeCount = (athlete.shoes||[]).length;
+      var bikeCount = (athlete.bikes||[]).length;
+      toast('Synced '+shoeCount+' shoes, '+bikeCount+' bikes from Strava');
+      recomputeGearMileage();
+    }).catch(function(){ toast('Network error fetching gear'); });
+  }, function(){ toast('Sync Strava first to get a token'); });
 }
 
 function ensureBikes(){
@@ -21515,7 +21544,23 @@ function fetchStravaPage(token, page, imported, forceAll) {
     acts.forEach(function(a){
       var dateStr = (a.start_date||'').split('T')[0];
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
-      var dup = st.rides.find(function(r){ return !r.deleted && ((r.stravaId && r.stravaId===a.id) || (r.date===dateStr && Math.abs((r.distance||0)-distMi)<0.5)); });
+      var aMovingSecs = a.moving_time||a.elapsed_time||0;
+      // Match precedence: an exact Strava id is always the same activity. The
+      // date+distance fallback (for rides that carry no matching stravaId — e.g.
+      // ICU-imported ones) adds a moving-time tie-break so a same-day
+      // out-and-back (two rides, same date and ~same distance, different
+      // duration) isn't collapsed onto its sibling. The tie-break only applies
+      // when both durations are known; 120s tolerance absorbs the small
+      // moving-time differences between Strava and ICU for the same activity.
+      var dup = st.rides.find(function(r){
+        if(r.deleted) return false;
+        if(r.stravaId && r.stravaId===a.id) return true;
+        if(r.date!==dateStr) return false;
+        if(Math.abs((r.distance||0)-distMi)>=0.5) return false;
+        var rMovingSecs = r.movingSecs||0;
+        if(rMovingSecs>0 && aMovingSecs>0 && Math.abs(rMovingSecs-aMovingSecs)>120) return false;
+        return true;
+      });
       if(dup) return;
       var dur = a.moving_time||a.elapsed_time||0;
       var np = a.weighted_average_watts||null;
