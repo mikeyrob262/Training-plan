@@ -3618,58 +3618,84 @@ function genEntryId_(){
 // same-date entries within 0.5mi of each other, and merges each cluster
 // into a single entry (preferring a stravaId-having copy, filling in any
 // fields the winner was missing from the other copies so no data is lost).
+// Memo for the hot path: st.rides gets deduped several times per navigation
+// (dsShowRidesList -> openDesktopRideDetail -> bikeMileageStats_ x2, etc.) and
+// always recomputes the identical answer. Keyed on array identity + length —
+// add / remove / array-replace all change one of those. Invalidate explicitly
+// via dedupeInvalidate_() after an in-place edit that could change clustering.
+var _dedupeCache={arr:null, len:-1, result:null};
+function dedupeInvalidate_(){ _dedupeCache.arr=null; _dedupeCache.len=-1; _dedupeCache.result=null; }
 function dedupeRides_(rides){
-  var indexed = rides.map(function(r,i){ return {idx:i, ride:r}; });
-
-  function datesClose(d1str, d2str){
-    if(d1str === d2str) return true;
-    var d1 = new Date(d1str), d2 = new Date(d2str);
-    if(isNaN(d1) || isNaN(d2)) return false;
-    var diffDays = Math.abs(d1 - d2) / (1000*60*60*24);
-    return diffDays <= 1; // allow adjacent-day for timezone edge cases (FIT UTC vs Strava local date)
+  var isMain = !!(st && rides===st.rides);
+  if(isMain && _dedupeCache.arr===rides && _dedupeCache.len===rides.length){
+    return _dedupeCache.result;
   }
-  function matches(a, b){
-    // Two entries each with their OWN distinct stravaId are, by definition,
-    // two different real Strava activities - never merge them even if
-    // their date/distance happen to be close.
-    if(a.stravaId && b.stravaId && a.stravaId !== b.stravaId) return false;
-    if(!datesClose(a.date, b.date)) return false;
-    var d1 = parseFloat(a.distance||0), d2 = parseFloat(b.distance||0);
-    var distMatch = d1>0 && d2>0 && Math.abs(d1-d2) < 1.0;
-    var t1 = a.movingSecs||0, t2 = b.movingSecs||0;
-    var timeMatch = t1>0 && t2>0 && Math.abs(t1-t2) < 120;
+  var n = rides.length;
+  // Pre-parse each ride's comparison keys ONCE (O(n)) instead of constructing
+  // new Date() inside the O(n^2) inner loop. That inner parsing was the real
+  // cost: ~n^2 * 2 Date() constructions (~27M at 3,677 rides) per call, five
+  // calls per nav = the 10s stall. Now it's ~n Date parses total.
+  var P = new Array(n);
+  for(var a=0;a<n;a++){
+    var r = rides[a];
+    var ds = (r && r.date) || '';
+    var d = ds ? new Date(ds) : null;
+    P[a] = {
+      ts: (d && !isNaN(d)) ? d.getTime() : NaN,
+      dateStr: ds,
+      dist: parseFloat((r && r.distance) || 0) || 0,
+      secs: (r && r.movingSecs) || 0,
+      sid: (r && r.stravaId) || null
+    };
+  }
+  // Faithful to the original matches(): distinct stravaIds never merge; dates
+  // "close" = exact string OR within 24h; then distance<1mi OR movingSecs<120.
+  function matchesP(i, j){
+    var A = P[i], B = P[j];
+    if(A.sid && B.sid && A.sid !== B.sid) return false;
+    var dayClose;
+    if(A.dateStr === B.dateStr) dayClose = true;
+    else if(!isNaN(A.ts) && !isNaN(B.ts)) dayClose = Math.abs(A.ts - B.ts) <= 86400000;
+    else dayClose = false;
+    if(!dayClose) return false;
+    var distMatch = A.dist>0 && B.dist>0 && Math.abs(A.dist-B.dist) < 1.0;
+    var timeMatch = A.secs>0 && B.secs>0 && Math.abs(A.secs-B.secs) < 120;
     return distMatch || timeMatch;
   }
 
-  var used = new Array(indexed.length).fill(false);
+  var used = new Array(n).fill(false);
   var toRemove = {};
-  for(var i=0;i<indexed.length;i++){
+  for(var i=0;i<n;i++){
     if(used[i]) continue;
-    var cluster = [indexed[i]];
+    var cluster = [i];
     used[i] = true;
-    for(var j=i+1;j<indexed.length;j++){
+    for(var j=i+1;j<n;j++){
       if(used[j]) continue;
-      var matchedAny = cluster.some(function(c){ return matches(c.ride, indexed[j].ride); });
-      if(matchedAny){ cluster.push(indexed[j]); used[j] = true; }
+      var matchedAny = false;
+      for(var c=0;c<cluster.length;c++){ if(matchesP(cluster[c], j)){ matchedAny = true; break; } }
+      if(matchedAny){ cluster.push(j); used[j] = true; }
     }
     if(cluster.length > 1){
-      cluster.sort(function(a,b){
-        var aScore = (a.ride.stravaId?1000:0) + Object.keys(a.ride).filter(function(k){return a.ride[k]!=null && a.ride[k]!=='';}).length;
-        var bScore = (b.ride.stravaId?1000:0) + Object.keys(b.ride).filter(function(k){return b.ride[k]!=null && b.ride[k]!=='';}).length;
-        return bScore - aScore;
+      cluster.sort(function(x,y){
+        var xr=rides[x], yr=rides[y];
+        var xScore = (xr.stravaId?1000:0) + Object.keys(xr).filter(function(k){return xr[k]!=null && xr[k]!=='';}).length;
+        var yScore = (yr.stravaId?1000:0) + Object.keys(yr).filter(function(k){return yr[k]!=null && yr[k]!=='';}).length;
+        return yScore - xScore;
       });
-      var winner = cluster[0].ride;
+      var winner = rides[cluster[0]];
       for(var m=1;m<cluster.length;m++){
-        var loser = cluster[m].ride;
+        var loser = rides[cluster[m]];
         Object.keys(loser).forEach(function(k){
           if((winner[k]==null || winner[k]==='') && loser[k]!=null && loser[k]!=='') winner[k]=loser[k];
         });
-        toRemove[cluster[m].idx] = true;
+        toRemove[cluster[m]] = true;
       }
     }
   }
   var kept = rides.filter(function(r, i){ return !toRemove[i]; });
-  return { kept: kept, removedCount: Object.keys(toRemove).length };
+  var out = { kept: kept, removedCount: Object.keys(toRemove).length };
+  if(isMain){ _dedupeCache.arr=rides; _dedupeCache.len=rides.length; _dedupeCache.result=out; }
+  return out;
 }
 function runRideCleanup(){
   if(!st.rides || !st.rides.length){ toast('No rides to clean up'); return; }
@@ -12950,6 +12976,9 @@ function openDesktopRideDetail(idx){
   // Resolve THIS ride's bike via the shared resolver (was defaulting to the
   // first bike for any unassigned ride). null => no bike assigned.
   var bike=resolveRideBike(r);
+  // Compute this bike's mileage ONCE — both equipment cards below used it, each
+  // walking all rides + resolving every ride again. (was a redundant full pass)
+  var _bikeMi = bike ? bikeMileageStats_(bike).totalMi.toLocaleString() : '';
 
   function statCell(val,lbl,color,last){
     return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
@@ -13158,7 +13187,7 @@ function openDesktopRideDetail(idx){
         '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
           (bike
-            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+bikeMileageStats_(bike).totalMi.toLocaleString()+' mi total</div>'
+            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+_bikeMi+' mi total</div>'
             :'<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
         '</div>'+
         '<div style="padding:10px 14px">'+
@@ -13327,7 +13356,7 @@ function openDesktopRideDetail(idx){
             '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
             '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div>'+
             '<div style="display:flex;gap:10px;margin-top:4px">'+
-              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+bikeMileageStats_(bike).totalMi.toLocaleString()+'</span> mi total</div>'+
+              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+_bikeMi+'</span> mi total</div>'+
             '</div>'+
           '</div>'+
         '</div>':
