@@ -260,6 +260,15 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .set-r.done{background:rgba(252,76,2,.04)}
 .fin-btn{margin:16px;background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:16px;font-weight:700;padding:15px;border-radius:13px;width:calc(100% - 32px);cursor:pointer}
 .toast{position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#1C1C1E;border:none;color:#FFFFFF;padding:11px 18px;border-radius:28px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.ui-modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:10000;opacity:0;transition:opacity .15s;padding:24px}
+.ui-modal-card{background:var(--s1,#1C1C1E);border:1px solid var(--b1,#2a2a2e);border-radius:16px;padding:20px 20px 16px;max-width:320px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.ui-modal-title{font-size:15px;font-weight:700;color:var(--t1,#fff);margin-bottom:6px}
+.ui-modal-msg{font-size:13px;line-height:1.45;color:var(--t2,#c7c7cc);white-space:pre-wrap}
+.ui-modal-btns{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+.ui-modal-btn{padding:8px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid transparent}
+.ui-modal-cancel{background:var(--s2,#2a2a2e);border-color:var(--b1,#3a3a3e);color:var(--t2,#c7c7cc)}
+.ui-modal-ok{background:rgba(41,128,185,.15);border-color:rgba(41,128,185,.35);color:#2980B9}
+.ui-modal-danger{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:#E74C3C}
 .back-btn{background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer;letter-spacing:-.1px}
 
 .bnav{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--b1);display:flex;z-index:250;padding-bottom:env(safe-area-inset-bottom)}
@@ -4069,6 +4078,39 @@ var FBB=[["Back Squat","3","8","Bar on traps, depth parallel"],["Single-Leg RDL"
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(function(){t.remove();},400);},2500);}
 
+// Shared in-app modal replacing native confirm()/alert(). Promise-based:
+// uiConfirm(msg[,opts]) -> Promise<boolean>, uiAlert(msg[,opts]) -> Promise<void>.
+// opts: {title, danger, okText, cancelText}. Enter=OK, Escape/backdrop=cancel.
+function uiEsc_(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':'&quot;';});}
+function uiModal_(opts){
+  opts=opts||{};
+  return new Promise(function(resolve){
+    var old=document.getElementById('ui-modal');if(old)old.remove();
+    var ov=document.createElement('div');ov.id='ui-modal';ov.className='ui-modal-ov';
+    var card=document.createElement('div');card.className='ui-modal-card';
+    var html='';
+    if(opts.title)html+='<div class="ui-modal-title">'+uiEsc_(opts.title)+'</div>';
+    html+='<div class="ui-modal-msg">'+uiEsc_(opts.message||'')+'</div>';
+    card.innerHTML=html;
+    var btns=document.createElement('div');btns.className='ui-modal-btns';
+    var done=false;
+    function finish(v){if(done)return;done=true;document.removeEventListener('keydown',onKey);ov.style.opacity='0';setTimeout(function(){if(ov.parentNode)ov.remove();},150);resolve(v);}
+    function onKey(e){if(e.key==='Escape')finish(opts.confirm?false:true);else if(e.key==='Enter')finish(true);}
+    if(opts.confirm){
+      var cancel=document.createElement('button');cancel.className='ui-modal-btn ui-modal-cancel';cancel.textContent=opts.cancelText||'Cancel';cancel.onclick=function(){finish(false);};btns.appendChild(cancel);
+    }
+    var ok=document.createElement('button');ok.className='ui-modal-btn '+(opts.danger?'ui-modal-danger':'ui-modal-ok');ok.textContent=opts.okText||(opts.confirm?'Confirm':'OK');ok.onclick=function(){finish(true);};btns.appendChild(ok);
+    card.appendChild(btns);ov.appendChild(card);
+    ov.addEventListener('click',function(e){if(e.target===ov)finish(opts.confirm?false:true);});
+    document.addEventListener('keydown',onKey);
+    document.body.appendChild(ov);
+    requestAnimationFrame(function(){ov.style.opacity='1';});
+    setTimeout(function(){try{ok.focus();}catch(_){}},0);
+  });
+}
+function uiConfirm(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:true,danger:opts.danger,okText:opts.okText,cancelText:opts.cancelText});}
+function uiAlert(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:false,okText:opts.okText});}
+
 function updDots(){
   var row=document.getElementById('dots-row');
   if(!row)return;
@@ -5193,8 +5235,8 @@ function openStr(letter,w){
   document.body.style.overflow='hidden';
 }
 
-function clearStrSession(l,w){
-  if(!confirm('Clear all data for this session?')) return;
+async function clearStrSession(l,w){
+  if(!(await uiConfirm('Clear all data for this session?',{danger:true}))) return;
   var s=ws(w);
   if(s.str&&s.str[l]) delete s.str[l];
   sv();
@@ -5708,10 +5750,9 @@ function showSet(){
           var d=JSON.parse(e.target.result);
           if(d&&typeof d==='object'){
             st=d; sv();
-            alert('Data restored! '+((d.rides||[]).length)+' rides loaded.');
-            location.reload();
+            uiAlert('Data restored! '+((d.rides||[]).length)+' rides loaded.').then(function(){ location.reload(); });
           }
-        }catch(err){alert('Invalid backup file.');}
+        }catch(err){uiAlert('Invalid backup file.');}
       };
       r.readAsText(f);
     });
@@ -6603,9 +6644,9 @@ function uploadAvatar(){
           var dataUrl=canvas.toDataURL('image/jpeg', 0.85);
           localStorage.setItem('aiq_avatar', dataUrl);
           renderAllAvatars();
-        }catch(e){ try{ alert('Could not save photo: '+e.message); }catch(_){}}
+        }catch(e){ try{ uiAlert('Could not save photo: '+e.message); }catch(_){}}
       };
-      img.onerror=function(){ try{ alert('That file could not be read as an image.'); }catch(_){}}
+      img.onerror=function(){ try{ uiAlert('That file could not be read as an image.'); }catch(_){}}
       img.src=ev.target.result;
     };
     reader.readAsDataURL(file);
@@ -6891,7 +6932,7 @@ function nutrDelta(d){
 }
 
 
-function showNutr(){try{nutrDate=getTodayKey();nutRefresh();}catch(e){console.error('showNutr error:',e);alert('Nutrition error: '+e.message);}}
+function showNutr(){try{nutrDate=getTodayKey();nutRefresh();}catch(e){console.error('showNutr error:',e);uiAlert('Nutrition error: '+e.message);}}
 
 
 function editFoodItem(meal, idx) {
@@ -7771,7 +7812,7 @@ function renderNutr(){
   var nn=document.getElementById('nutr-next');if(nn){nn.onclick=function(){nutrDelta(1);};}
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=function(){updWater(-1);};}
   var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(){updWater(1);};}
-  var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ if(confirm('Reset today\\'s water to 0?')) resetWater(); };}
+  var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
 function openFoodForMeal(meal){
@@ -7928,7 +7969,7 @@ function openFoodForMeal(meal){
       }
     }).catch(function(){
       camOverlay.remove();
-      alert('Camera access denied. Please allow camera access to scan barcodes.');
+      uiAlert('Camera access denied. Please allow camera access to scan barcodes.');
     });
   });
   searchRow.appendChild(scanBtn);
@@ -8129,8 +8170,8 @@ function renderFoodRows(container, list){
   saveBtn.onclick = function(){
     if(saveBtn.disabled) return;
     var name=inps[0].value.trim(), cal=parseInt(inps[1].value)||0;
-    if(!name){alert('Enter food name');return;}
-    if(!cal){alert('Enter calories');return;}
+    if(!name){uiAlert('Enter food name');return;}
+    if(!cal){uiAlert('Enter calories');return;}
     saveBtn.disabled=true;
     var food={n:name,cal:cal,p:parseFloat(inps[2].value)||0,c:parseFloat(inps[3].value)||0,f:parseFloat(inps[4].value)||0,fiber:parseFloat(inps[5]&&inps[5].value)||0,satFat:parseFloat(inps[6]&&inps[6].value)||0,sodium:parseFloat(inps[7]&&inps[7].value)||0,srv:'custom'};
     CF.push(food);
@@ -11339,7 +11380,7 @@ function dsShowGear(){
     var delB=document.createElement('button');
     delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid #1e2130;border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
     delB.textContent='Delete';
-    delB.onclick=(function(ix,nm){return function(){ if(!confirm('Delete "'+nm+'"? Its mileage attribution will be removed.')) return; deleteBike(ix); dsShowGear(); };})(realIdx, dispName);
+    delB.onclick=(function(ix,nm){return async function(){ if(!(await uiConfirm('Delete "'+nm+'"? Its mileage attribution will be removed.',{danger:true}))) return; deleteBike(ix); dsShowGear(); };})(realIdx, dispName);
     actRow.appendChild(editB); actRow.appendChild(delB);
     card.appendChild(actRow);
 
@@ -11635,7 +11676,7 @@ function dsShowNutrition(){
     wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
     wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
     var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
-    wReset.onclick=function(){ nutrDate=viewKey; if(confirm('Reset today\\'s water to 0?')) resetWater(); };
+    wReset.onclick=function(){ nutrDate=viewKey; uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };
     wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
     wHead.appendChild(wCtl);
     waterRow.appendChild(wHead);
@@ -12361,7 +12402,7 @@ function dsShowDashboard(){
       // also open the editor via the row click.
       var del=div('font-size:15px;line-height:1;color:#64748b;cursor:pointer;padding:0 2px','×');
       del.onmouseover=function(){this.style.color='#ef4444';}; del.onmouseout=function(){this.style.color='#64748b';};
-      del.onclick=(function(i,nm){return function(e){ if(e&&e.stopPropagation)e.stopPropagation(); if(!confirm('Delete "'+nm+'"?')) return; if(st.races&&st.races[i]) st.races[i].deleted=true; sv(); dsShowDashboard(); toast('Race removed'); };})(rr._i, rr.name);
+      del.onclick=(function(i,nm){return async function(e){ if(e&&e.stopPropagation)e.stopPropagation(); if(!(await uiConfirm('Delete "'+nm+'"?',{danger:true}))) return; if(st.races&&st.races[i]) st.races[i].deleted=true; sv(); dsShowDashboard(); toast('Race removed'); };})(rr._i, rr.name);
       rMeta.appendChild(del);
       er.appendChild(rMeta);
       tbc.appendChild(er);
@@ -14837,7 +14878,7 @@ function openBikeEditor(idx, onSaved){
     var delBtn=document.createElement('button');
     delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
     delBtn.textContent='Delete bike';
-    delBtn.onclick=function(){ if(!confirm('Delete "'+(existing.name||'this bike')+'"? Its mileage attribution will be removed.')) return; deleteBike(idx); modal.remove(); refresh(); };
+    delBtn.onclick=async function(){ if(!(await uiConfirm('Delete "'+(existing.name||'this bike')+'"? Its mileage attribution will be removed.',{danger:true}))) return; deleteBike(idx); modal.remove(); refresh(); };
     sheet.appendChild(delBtn);
   }
   modal.appendChild(sheet);
@@ -16048,8 +16089,8 @@ function renderRun(){
       var delBtn=document.createElement('button');
       delBtn.style.cssText='margin-top:8px;font-size:11px;color:#ef4444;background:none;border:none;cursor:pointer;font-family:inherit;padding:0';
       delBtn.textContent='Delete run';
-      (function(rRef){delBtn.onclick=function(){
-        if(!confirm('Delete this run?')) return;
+      (function(rRef){delBtn.onclick=async function(){
+        if(!(await uiConfirm('Delete this run?',{danger:true}))) return;
         if(rRef.stravaId){
           var rideIdx=st.rides.findIndex(function(x){return x.stravaId===rRef.stravaId;});
           if(rideIdx>=0) st.rides.splice(rideIdx,1);
@@ -16251,8 +16292,8 @@ function openRaceEditor(idx,onSaved){
     var delBtn=document.createElement('button');
     delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
     delBtn.textContent='Delete race';
-    delBtn.onclick=function(){
-      if(!confirm('Delete "'+(existing.name||'this race')+'"?')) return;
+    delBtn.onclick=async function(){
+      if(!(await uiConfirm('Delete "'+(existing.name||'this race')+'"?',{danger:true}))) return;
       if(st.races&&st.races[idx]) st.races[idx].deleted=true;
       sv(); modal.remove(); refresh(); toast('Race removed');
     };
@@ -16263,8 +16304,8 @@ function openRaceEditor(idx,onSaved){
   document.body.appendChild(modal);
 }
 
-function deleteRace(idx,onDone){
-  if(!confirm('Remove this race?')) return;
+async function deleteRace(idx,onDone){
+  if(!(await uiConfirm('Remove this race?',{danger:true}))) return;
   // Soft-delete (tombstone) rather than splice: a hard removal is re-added by
   // the Firebase merge on the next sync (the race keeps its own id remotely).
   // deleted:true OR-merges to true and survives.
@@ -16559,8 +16600,8 @@ function injectRideStats(w){
   }
 }
 
-function deleteRideFromCard(idx){
-  if(!confirm('Delete this ride?')) return;
+async function deleteRideFromCard(idx){
+  if(!(await uiConfirm('Delete this ride?',{danger:true}))) return;
   if(st.rides&&st.rides[idx]!==undefined){
     st.rides.splice(idx,1);
     sv();
@@ -20544,14 +20585,14 @@ function showWeatherHistory(){
           fetch('https://nominatim.openstreetmap.org/search?format=json&q='+encodeURIComponent(q2)+'&limit=1',
             {headers:{'Accept-Language':'en','User-Agent':'AthleteIQ/1.0'}})
           .then(function(r){return r.json();}).then(function(results){
-            if(!results||!results.length){alert('Location not found. Try a different search.');return;}
+            if(!results||!results.length){uiAlert('Location not found. Try a different search.');return;}
             var r2=results[0];
             var lat=parseFloat(r2.lat),lon=parseFloat(r2.lon);
             var name=r2.display_name.split(',').slice(0,2).join(', ');
             // Fake route with just a center point - no GPS track
             var fakeRoute={name:name,gpsLats:[lat],gpsLons:[lon],distance:'',duration:'2:00',sportType:'Ride',noGPS:true};
             renderDatePicker(fakeRoute);
-          }).catch(function(){alert('Search failed. Check connection.');});
+          }).catch(function(){uiAlert('Search failed. Check connection.');});
         };
         return;
       }
@@ -21694,8 +21735,8 @@ function stravaFullResync() {
 // makes stravaBackfill() take the full-OAuth branch, which re-requests with the
 // current scope (now activity:read_all,profile:read_all so /athlete returns the
 // bikes/shoes gear list). Synced activities are untouched — only credentials.
-function reconnectStrava(){
-  if(!confirm('Reconnect Strava? You will re-authorize in a popup to grant gear access. Your synced activities are kept.')) return;
+async function reconnectStrava(){
+  if(!(await uiConfirm('Reconnect Strava? You will re-authorize in a popup to grant gear access. Your synced activities are kept.',{okText:'Reconnect'}))) return;
   st.stravaToken=null; st.stravaRefreshToken=null; sv();
   stravaBackfill();
 }
