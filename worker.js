@@ -6677,6 +6677,31 @@ function getWorkoutForDate_(dateKey){
 // duration and the athlete's real FTP/weight. Falls back to the old
 // static day-type model when no workout is found for the date (e.g.
 // viewing a past/future date outside the visible plan week).
+// Ounces per logged glass — one shared constant so storage (glasses), the
+// accessor and every surface agree that oz = glasses * WATER_GLASS_OZ (this was
+// three separate literal 8s).
+var WATER_GLASS_OZ=8;
+// Training- and weather-aware daily fluid goal (oz). Scales with bodyweight
+// (baseline), ride duration + intensity (sweat during exercise), and — for
+// today only, when a recent temperature is cached from the weather fetch —
+// ambient heat. Replaces the old flat 80 / (64 + 26*hours).
+function fluidGoalOz_(dateKey, wt, workout){
+  var w=parseFloat(wt)||160;
+  var baselineOz=Math.round(w*0.5);                                    // ~half bodyweight in oz
+  var ridingOz=0;
+  if(workout && !workout.isRest && workout.minutes){
+    ridingOz=Math.round((workout.isHard?30:24)*(workout.minutes/60));  // ~24-30 oz/hr riding
+  }
+  var mult=1;
+  try{
+    var todayK=(typeof getTodayKey==='function')?getTodayKey():'';
+    if(dateKey===todayK && st.wxTempF!=null){
+      var t=st.wxTempF;                                                 // cached by the weather fetch
+      mult = t>=90?1.30 : t>=80?1.15 : t>=70?1.05 : 1;
+    }
+  }catch(e){}
+  return Math.round((baselineOz+ridingOz)*mult);
+}
 function calcTrainingAwareTargets_(dateKey){
   var wt=parseFloat(st.weight||160);
   var ftp=parseInt(st.ftp||186);
@@ -6686,7 +6711,7 @@ function calcTrainingAwareTargets_(dateKey){
     var base=MTGT[dt]||MTGT.MOD;
     return {
       cal:base.cal, pro:base.pro, carb:base.carb, fat:base.fat,
-      sodium:2300, fluidOz:80,
+      sodium:2300, fluidOz:fluidGoalOz_(dateKey, wt, workout),
       workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
       isTrainingAware:false
     };
@@ -6716,7 +6741,7 @@ function calcTrainingAwareTargets_(dateKey){
   // hydration guidance is roughly 500-700mg sodium/hr and ~24-28oz
   // fluid/hr during exercise, added to a baseline daily need.
   var sodium=Math.round(2000+(600*hours));
-  var fluidOz=Math.round(64+(26*hours));
+  var fluidOz=fluidGoalOz_(dateKey, wt, workout);
   return {
     cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz,
     workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true
@@ -6821,7 +6846,39 @@ function updWater(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
-  sv();nutRefresh();
+  sv();
+  // Update the water widget IN PLACE — do NOT rebuild the whole nutrition view
+  // on every tick. The full re-render destroyed the button mid-click and, with
+  // the old stacked listeners, produced unstable +/- (jumped +40, then dead,
+  // then negative). Full re-render only if no water widget is mounted.
+  if(!refreshWaterInPlace_()) nutRefresh();
+}
+function resetWater(){
+  if(!nutrDate)nutrDate=getTodayKey();
+  var nd=getNDay(nutrDate);
+  nd.water=0;
+  sv();
+  if(!refreshWaterInPlace_()) nutRefresh();
+}
+// In-place update of any mounted water widget. Both surfaces tag their oz label
+// with data-water-oz and their bar fill with data-water-bar, each holding the
+// day's target oz. Returns true if it updated at least one (so callers skip the
+// expensive full re-render that was the source of the instability).
+function refreshWaterInPlace_(){
+  var nd=getNDay(nutrDate);
+  var oz=(nd.water||0)*((typeof WATER_GLASS_OZ!=='undefined')?WATER_GLASS_OZ:8);
+  var labels=document.querySelectorAll('[data-water-oz]');
+  var bars=document.querySelectorAll('[data-water-bar]');
+  if(!labels.length && !bars.length) return false;
+  for(var i=0;i<labels.length;i++){
+    var lt=parseInt(labels[i].getAttribute('data-water-oz'),10)||64;
+    labels[i].textContent=oz+' / '+lt+' oz';
+  }
+  for(var j=0;j<bars.length;j++){
+    var bt=parseInt(bars[j].getAttribute('data-water-bar'),10)||64;
+    bars[j].style.width=Math.min(100,Math.round(oz/bt*100))+'%';
+  }
+  return true;
 }
 
 function nutrDelta(d){
@@ -7235,11 +7292,12 @@ function renderNutr(){
   h+='</div></div>';
   h+='<div style="display:flex;align-items:center;gap:10px">';
   h+='<button id="water-minus" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>';
-  h+='<span style="font-size:16px;font-weight:800;min-width:82px;text-align:center">'+waterOz+' / '+waterTgtOz+' oz</span>';
+  h+='<span data-water-oz="'+waterTgtOz+'" style="font-size:16px;font-weight:800;min-width:82px;text-align:center">'+waterOz+' / '+waterTgtOz+' oz</span>';
   h+='<button id="water-plus" style="background:rgba(41,128,185,.1);border:1px solid rgba(41,128,185,.2);color:#2980B9;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>';
+  h+='<button id="water-reset" title="Reset water to 0" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;padding:4px 2px">Reset</button>';
   h+='</div></div>';
   h+='<div style="height:5px;background:var(--s3);border-radius:3px;margin-top:10px">';
-  h+='<div style="height:5px;background:#2980B9;border-radius:3px;width:'+waterPctOz+'%"></div>';
+  h+='<div data-water-bar="'+waterTgtOz+'" style="height:5px;background:#2980B9;border-radius:3px;width:'+waterPctOz+'%"></div>';
   h+='</div></div>';
 
   // Build static part via innerHTML
@@ -7706,11 +7764,15 @@ function renderNutr(){
   t.appendChild(Object.assign(document.createElement('div'),{style:'height:50px'}));
 
   // Bind water and nav buttons
-  var np=document.getElementById('nutr-prev');if(np){np.onclick=null;np.addEventListener('click',function(){nutrDelta(-1);});}
-  var nn=document.getElementById('nutr-next');if(nn){nn.onclick=null;nn.addEventListener('click',function(){nutrDelta(1);});}
-  var wm=document.getElementById('water-minus');if(wm){wm.onclick=null;wm.addEventListener('click',function(){updWater(-1);});}
-  var wp=document.getElementById('water-plus');if(wp){wp.onclick=null;wp.addEventListener('click',function(){updWater(1);});}
-  var bb=document.getElementById('nutr-back');if(bb){bb.onclick=null;bb.addEventListener('click',showTrain);}
+  // .onclick assignment (idempotent) — NOT addEventListener, which stacked a new
+  // handler every time this wiring re-ran against a persistent node and made
+  // one tap fire N times.
+  var np=document.getElementById('nutr-prev');if(np){np.onclick=function(){nutrDelta(-1);};}
+  var nn=document.getElementById('nutr-next');if(nn){nn.onclick=function(){nutrDelta(1);};}
+  var wm=document.getElementById('water-minus');if(wm){wm.onclick=function(){updWater(-1);};}
+  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(){updWater(1);};}
+  var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ if(confirm('Reset today\\'s water to 0?')) resetWater(); };}
+  var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
 function openFoodForMeal(meal){
   curMeal = meal;
@@ -11516,7 +11578,7 @@ function dsShowNutrition(){
     // defaults by time of day. This is what makes desktop no longer read-only.
     var addFoodBtn=document.createElement('button');
     addFoodBtn.textContent='+ Add Food';
-    addFoodBtn.style.cssText='flex-shrink:0;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+    addFoodBtn.style.cssText='align-self:flex-end;flex-shrink:0;padding:7px 14px;background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.25);border-radius:9px;color:#2980B9;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
     addFoodBtn.onclick=function(){ nutrDate=viewKey; var hr=new Date().getHours(); openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); };
     wrap.appendChild(addFoodBtn);
 
@@ -11555,31 +11617,32 @@ function dsShowNutrition(){
         '</div>';
       macros.appendChild(row);
     });
-    // Water — consumed vs oz target (same source/units as the mobile card):
-    // nd.water is a glass count, one glass = 8oz; target from trainingTgt.fluidOz.
+    // Water — consumed vs training/weather-aware oz goal, with small inline
+    // +/- controls (shared updWater; 1 glass = WATER_GLASS_OZ oz).
     var wTgtOz=(trainingTgt&&trainingTgt.fluidOz)||64;
-    var wOz=(data.water||0)*8;
+    var wOz=(data.water||0)*WATER_GLASS_OZ;
     var wPct=Math.min(100,Math.round(wOz/wTgtOz*100));
     var waterRow=document.createElement('div');
-    waterRow.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
-      '<span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#e2e8f0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span>'+
-      '<span style="font-size:11px;color:#64748b">'+wOz+' / '+wTgtOz+' oz</span>'+
-      '</div>'+
-      '<div style="background:#1a1f2e;border-radius:4px;height:6px">'+
-        '<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>'+
-      '</div>';
+    var wHead=document.createElement('div');
+    wHead.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:3px';
+    wHead.innerHTML='<span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#e2e8f0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span>';
+    var wCtl=document.createElement('div');
+    wCtl.style.cssText='display:flex;align-items:center;gap:8px';
+    var wMinus=document.createElement('button'); wMinus.textContent='−';
+    var wVal=document.createElement('span'); wVal.textContent=wOz+' / '+wTgtOz+' oz'; wVal.setAttribute('data-water-oz',wTgtOz); wVal.style.cssText='font-size:11px;color:#64748b;min-width:66px;text-align:center';
+    var wPlus=document.createElement('button'); wPlus.textContent='+';
+    [wMinus,wPlus].forEach(function(b){ b.style.cssText='width:22px;height:22px;border-radius:6px;background:#1a1f2e;border:none;color:#22d3ee;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0'; });
+    wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
+    wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
+    var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
+    wReset.onclick=function(){ nutrDate=viewKey; if(confirm('Reset today\\'s water to 0?')) resetWater(); };
+    wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
+    wHead.appendChild(wCtl);
+    waterRow.appendChild(wHead);
+    var wBar=document.createElement('div'); wBar.style.cssText='background:#1a1f2e;border-radius:4px;height:6px';
+    wBar.innerHTML='<div data-water-bar="'+wTgtOz+'" style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>';
+    waterRow.appendChild(wBar);
     macros.appendChild(waterRow);
-    // Water +/- (shared updWater; 1 glass = 8oz) — was display-only on desktop.
-    var wCtrl=document.createElement('div');
-    wCtrl.style.cssText='display:flex;gap:6px;margin-top:5px';
-    [['− 8oz',-1],['+ 8oz',1]].forEach(function(b){
-      var wb=document.createElement('button');
-      wb.textContent=b[0];
-      wb.style.cssText='flex:1;padding:4px 0;background:#1a1f2e;border:none;border-radius:8px;color:#22d3ee;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
-      wb.onclick=(function(delta){return function(){ nutrDate=viewKey; updWater(delta); };})(b[1]);
-      wCtrl.appendChild(wb);
-    });
-    macros.appendChild(wCtrl);
     topRow.appendChild(macros);
     wrap.appendChild(topRow);
 
@@ -12726,6 +12789,7 @@ function dsShowDashboard(){
         var c=data.current;
         var dirs=['N','NE','E','SE','S','SW','W','NW'];
         var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+        if(c.temperature_2m!=null){ st.wxTempF=Math.round(c.temperature_2m); }  // cache for the training/weather-aware fluid goal
         var tmp=document.getElementById('ds-wx-temp'); if(tmp&&c.temperature_2m!=null) tmp.textContent=Math.round(c.temperature_2m)+'°F';
         var fls=document.getElementById('ds-wx-feels'); if(fls&&c.apparent_temperature!=null) fls.textContent='Feels like '+Math.round(c.apparent_temperature)+'°';
         var wnd=document.getElementById('ds-wx-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
