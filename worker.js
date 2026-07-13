@@ -3802,6 +3802,10 @@ function normalizeState_(s){
   // deep-merged by mergeState_'s object branch — never touched by
   // mergeArrays_/dedupeRides_ (those only operate on the rides array).
   if(!isPlainObj_(s.bikeAssignments)) s.bikeAssignments = {};
+  // Prune manual bike assignments that cross the indoor/outdoor line (stale
+  // pre-guard bulk stamps). Runs here so it's page-independent — every load and
+  // sync merge flows through normalizeState_, not just the Garage screen.
+  migrateGearAssignments_(s);
   return s;
 }
 
@@ -14627,28 +14631,28 @@ function deleteBike(idx){
   if(st.bikeAssignments){ Object.keys(st.bikeAssignments).forEach(function(k){ if(st.bikeAssignments[k]===b.id) delete st.bikeAssignments[k]; }); }
   sv(); toast('Bike removed');
 }
-// One-time cleanup of manual assignments that cross the indoor/outdoor line —
-// e.g. the pre-guard bulk tool stamped the road bike onto Zwift rides. The
-// symmetric resolver already ignores these entries, but they linger in synced
-// state until pruned. Runs once per load (guarded); persists only if it
-// actually removed something. Leaves entries whose ride or bike isn't in state
-// (unknown key) untouched, and never touches valid same-line assignments.
-var _gearAssignMigrated=false;
-function migrateGearAssignments_(){
-  if(_gearAssignMigrated) return;
-  if(!isPlainObj_(st.bikeAssignments)){ _gearAssignMigrated=true; return; }
-  var byId={}; (st.bikes||[]).forEach(function(b){ if(b&&b.id) byId[b.id]=b; });
+// Cleanup of manual assignments that cross the indoor/outdoor line — e.g. the
+// pre-guard bulk tool stamped the road bike onto Zwift rides. The symmetric
+// resolver already ignores these entries, but they linger in synced state
+// until pruned. Operates on the given state (default global st), returns
+// whether it removed anything, and does NOT persist itself — callers decide.
+// Page-independent: run from normalizeState_ on every load/sync merge, and
+// from ensureBikes for the client-seed path. Leaves entries whose ride or bike
+// isn't in state untouched, and never touches valid same-line assignments.
+function migrateGearAssignments_(s){
+  s = s || st;
+  if(!s || !isPlainObj_(s.bikeAssignments)) return false;
+  var byId={}; (s.bikes||[]).forEach(function(b){ if(b&&b.id) byId[b.id]=b; });
   var rideByKey={};
-  (st.rides||[]).forEach(function(r){ if(r){ try{ rideByKey[rideKey(r)]=r; }catch(e){} } });
+  (s.rides||[]).forEach(function(r){ if(r){ try{ rideByKey[rideKey(r)]=r; }catch(e){} } });
   var changed=false;
-  Object.keys(st.bikeAssignments).forEach(function(k){
-    var b=byId[st.bikeAssignments[k]];
+  Object.keys(s.bikeAssignments).forEach(function(k){
+    var b=byId[s.bikeAssignments[k]];
     var r=rideByKey[k];
     if(!b || !r) return;                         // unknown bike/ride — leave as-is
-    if(!!b.indoor !== rideIsIndoor(r)){ delete st.bikeAssignments[k]; changed=true; }
+    if(!!b.indoor !== rideIsIndoor(r)){ delete s.bikeAssignments[k]; changed=true; }
   });
-  _gearAssignMigrated=true;
-  if(changed) sv();
+  return changed;
 }
 
 // Real mileage for a single bike: sums only DEDUPED rides that actually
@@ -17284,19 +17288,27 @@ function ensureBikes(){
       // Bike missing entirely (e.g. Zwift Ride added after initial seed) - add it
       st.bikes.push(def);
       changed = true;
-    } else if(!existing.photo || existing.photo.indexOf('raw.githubusercontent.com') !== -1){
-      // Backfill photo/indoor fields onto bikes saved before this update, preserving mileage/components.
+      return;
+    }
+    // Always guarantee the indoor flag on the seeded indoor bike — the
+    // resolver's indoor/outdoor pool depends on it, so it must NOT be gated
+    // behind the photo-upgrade branch below (a Zwift bike with a good photo
+    // would otherwise never get indoor:true and no ride would resolve to it).
+    if(def.indoor && !existing.indoor){ existing.indoor = true; changed = true; }
+    if(!existing.photo || existing.photo.indexOf('raw.githubusercontent.com') !== -1){
+      // Backfill photo onto bikes saved before this update, preserving mileage/components.
       // Also upgrades bikes that got the old (CSP-blocked) GitHub-hosted photo URL to the new embedded base64 version.
       existing.photo = def.photo;
-      if(def.indoor) existing.indoor = true;
       changed = true;
     }
   });
 
   if(changed) sv();
 
-  // Bikes are now present — prune any cross-line manual assignments once.
-  migrateGearAssignments_();
+  // Bikes are now present — prune any cross-line manual assignments. Also runs
+  // from normalizeState_ on every sync; this covers the client-seed path where
+  // bikes are created after a load.
+  if(migrateGearAssignments_(st)) sv();
 }
 
 function showGarage(){ ensureBikes(); renderGarage(); showScreen('GARAGE'); }
