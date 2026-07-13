@@ -11472,7 +11472,7 @@ function dsShowWeather(){
   var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
     '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability'+
     '&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m'+
-    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,sunrise,sunset'+
+    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset'+
     '&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7';
 
   fetch(url).then(function(r){return r.json();}).then(function(data){
@@ -11550,6 +11550,7 @@ function dsShowWeather(){
         '<div style="font-size:18px;width:28px">'+wx2.icon+'</div>'+
         '<div style="font-size:12px;color:#94a3b8;flex:1">'+wx2.desc+'</div>'+
         '<div style="font-size:12px;color:#60a5fa">'+daily.precipitation_probability_max[i]+'%</div>'+
+        '<div style="font-size:12px;color:#94a3b8;width:112px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'<span style="color:#64748b"> G'+Math.round(daily.windgusts_10m_max[i])+'</span> mph</div>'+
         '<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:60px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div>';
       forecastCard.appendChild(row);
     });
@@ -19636,7 +19637,7 @@ function renderWeatherOverviewTab(body){
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
     +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m,weathercode'
     +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,precipitation_probability,weathercode'
-    +'&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max'
+    +'&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max'
     +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7')
   .then(function(r){ return r.json(); })
   .then(function(wxData){
@@ -19849,6 +19850,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
         +'<div style="display:flex;justify-content:center;margin:8px 0 4px">'+weatherIconSVG(daily.weathercode[idx],16)+'</div>'
         +'<div style="font-size:12px;color:var(--t1);font-weight:600">'+hi+'&deg;</div>'
         +'<div style="font-size:11px;color:var(--t3)">'+lo+'&deg;</div>'
+        +'<div style="font-size:10px;color:var(--t3);margin-top:3px;white-space:nowrap">'+dirArr[Math.round((daily.winddirection_10m_dominant[idx]||0)/45)%8]+' '+Math.round(daily.windspeed_10m_max[idx])+'</div>'
         +'</div>';
     });
     dayHTML+='</div>';
