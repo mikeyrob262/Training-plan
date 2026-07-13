@@ -3802,6 +3802,10 @@ function normalizeState_(s){
   // deep-merged by mergeState_'s object branch — never touched by
   // mergeArrays_/dedupeRides_ (those only operate on the rides array).
   if(!isPlainObj_(s.bikeAssignments)) s.bikeAssignments = {};
+  // Prune manual bike assignments that cross the indoor/outdoor line (stale
+  // pre-guard bulk stamps). Runs here so it's page-independent — every load and
+  // sync merge flows through normalizeState_, not just the Garage screen.
+  migrateGearAssignments_(s);
   return s;
 }
 
@@ -11226,10 +11230,14 @@ function dsShowGear(){
     if(!st.bikeAssignments) st.bikeAssignments={};
     var bikeObj=(st.bikes||[]).find(function(b){return b.id===chosen;});
     var bikeName=(bikeObj&&bikeObj.name)||'bike';
+    var chosenIndoor=!!(bikeObj&&bikeObj.indoor);
     // Build the target list first (rides with no resolvable bike), so we can
     // show an accurate count in the confirm prompt before mutating anything.
+    // Guard the indoor/outdoor line: an outdoor bike must never be stamped onto
+    // an indoor ride (and vice-versa), or bulk-assign re-creates the exact
+    // mis-attribution the symmetric resolver just fixed.
     var targets=(st.rides||[]).filter(function(r){
-      return r && !r.deleted && !resolveRideBike(r); // skip already-resolved / already-assigned
+      return r && !r.deleted && rideIsIndoor(r)===chosenIndoor && !resolveRideBike(r); // skip already-resolved / cross-line
     });
     var N=targets.length;
     if(N===0){ toast('All rides already have a bike'); return; }
@@ -14402,25 +14410,44 @@ function parseDurationToMinutes_(dur){
 // the Equipment tab and the Gear bulk-assign tool, so they can never diverge.
 // Precedence: direct gear id / Strava gear-map name / gear name, then a manual
 // st.bikeAssignments entry. Returns the bike object or null.
+// True when a ride happened indoors (smart trainer / virtual). Strava sets
+// a.trainer (captured at ingest) and marks virtual rides as sport_type
+// 'VirtualRide'; ICU CSV import carries the same trainer flag. Mirrors the
+// indoor test used by recomputeGearMileage() and the elevation split. No
+// backslash escapes: this file is served in one template literal, which would
+// strip them (see the norm() note below).
+function rideIsIndoor(r){
+  if(!r) return false;
+  return r.trainer===true || /virtual/i.test(String(r.sportType||r.type||''));
+}
 function resolveRideBike(r){
   if(!r) return null;
   // Only real (non-deleted) bikes can own a ride.
   var bikes = (st.bikes || []).filter(function(b){ return b && !b.deleted; });
+  // Indoor/outdoor symmetry: an indoor ride may ONLY be owned by an indoor
+  // bike, and an outdoor ride may NEVER be owned by an indoor bike. Restrict
+  // the candidate pool up front so no tier — gear id, gear name, manual
+  // assignment, or era window — can cross the line. This is what stops
+  // Strava's default-bike gear_id (and the bulk/era tools) from attributing
+  // Zwift rides to the road bike, and stops the Zwift bike from swallowing
+  // road rides once it has an ownedFrom.
+  var indoor = rideIsIndoor(r);
+  var pool = bikes.filter(function(b){ return !!b.indoor === indoor; });
   // NOTE: this file is served in one template literal, so \s regexes become
   // /s/ (strip the letter s). Use a literal-space collapse instead.
   var norm = function(s){ return String(s||'').toLowerCase().replace(/ +/g,' ').trim(); };
   var matchByName = function(name){
     var n = norm(name);
     if(!n) return null;
-    return bikes.find(function(b){
+    return pool.find(function(b){
       var bn = norm(b.name);
       return bn && (bn===n || n.indexOf(bn)!==-1 || bn.indexOf(n)!==-1);
     }) || null;
   };
   var bike = null;
-  // 1) Explicit Strava gear id / gear map.
+  // 1) Explicit Strava gear id / gear map (within the compatible pool).
   if(r.gearId){
-    bike = bikes.find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
+    bike = pool.find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
     if(!bike){
       var mapped = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
       if(mapped) bike = matchByName(mapped);
@@ -14428,19 +14455,22 @@ function resolveRideBike(r){
   }
   // 2) Gear name from the activity.
   if(!bike && r.gearName) bike = matchByName(r.gearName);
-  // 3) Manual per-ride assignment.
+  // 3) Manual per-ride assignment. Only honored when it points at a bike on the
+  // correct side of the indoor/outdoor line; a stale cross-line assignment
+  // (e.g. the old bulk tool stamping the road bike onto Zwift rides) is ignored
+  // here and pruned by migrateGearAssignments_().
   if(!bike){
     var assignedId = (st.bikeAssignments||{})[rideKey(r)];
-    if(assignedId) bike = bikes.find(function(b){ return b.id===assignedId && !b.deleted; }) || null;
+    if(assignedId) bike = pool.find(function(b){ return b.id===assignedId; }) || null;
   }
   // 4) Date-range (era) fallback: attribute an otherwise-unassigned ride to the
   // bike whose ownership window contains its date. Narrowest window wins on
-  // overlap. Explicit gear / manual assignment above always take precedence.
+  // overlap. Pool is already indoor/outdoor-filtered, so era can't cross either.
   if(!bike){
     var rd = parseRaceDate_(r.date);
     if(rd){
       var best=null, bestSpan=Infinity;
-      bikes.forEach(function(b){
+      pool.forEach(function(b){
         if(!b.ownedFrom) return;                 // needs a start to define an era
         var from = parseRaceDate_(b.ownedFrom); if(!from) return;
         var to = b.ownedTo ? parseRaceDate_(b.ownedTo) : new Date();
@@ -14453,6 +14483,13 @@ function resolveRideBike(r){
       if(best) bike = best;
     }
   }
+  // Indoor auto-route (required): an indoor ride ALWAYS belongs to the indoor
+  // bike. If none of the tiers above pinned a specific indoor bike, fall back
+  // to the indoor bike itself — resolving to null instead would be "less
+  // wrong", not right. Outdoor rides keep the null fallback (they need a gear
+  // match, a manual assignment, or an era window). If no indoor bike exists,
+  // this stays null rather than reaching across to an outdoor bike.
+  if(!bike && indoor) bike = pool[0] || null;
   return bike || null;
 }
 // All bikes' mileage in ONE pass over deduped rides (resolves each ride once
@@ -14593,6 +14630,29 @@ function deleteBike(idx){
   b.deleted=true;
   if(st.bikeAssignments){ Object.keys(st.bikeAssignments).forEach(function(k){ if(st.bikeAssignments[k]===b.id) delete st.bikeAssignments[k]; }); }
   sv(); toast('Bike removed');
+}
+// Cleanup of manual assignments that cross the indoor/outdoor line — e.g. the
+// pre-guard bulk tool stamped the road bike onto Zwift rides. The symmetric
+// resolver already ignores these entries, but they linger in synced state
+// until pruned. Operates on the given state (default global st), returns
+// whether it removed anything, and does NOT persist itself — callers decide.
+// Page-independent: run from normalizeState_ on every load/sync merge, and
+// from ensureBikes for the client-seed path. Leaves entries whose ride or bike
+// isn't in state untouched, and never touches valid same-line assignments.
+function migrateGearAssignments_(s){
+  s = s || st;
+  if(!s || !isPlainObj_(s.bikeAssignments)) return false;
+  var byId={}; (s.bikes||[]).forEach(function(b){ if(b&&b.id) byId[b.id]=b; });
+  var rideByKey={};
+  (s.rides||[]).forEach(function(r){ if(r){ try{ rideByKey[rideKey(r)]=r; }catch(e){} } });
+  var changed=false;
+  Object.keys(s.bikeAssignments).forEach(function(k){
+    var b=byId[s.bikeAssignments[k]];
+    var r=rideByKey[k];
+    if(!b || !r) return;                         // unknown bike/ride — leave as-is
+    if(!!b.indoor !== rideIsIndoor(r)){ delete s.bikeAssignments[k]; changed=true; }
+  });
+  return changed;
 }
 
 // Real mileage for a single bike: sums only DEDUPED rides that actually
@@ -17228,16 +17288,27 @@ function ensureBikes(){
       // Bike missing entirely (e.g. Zwift Ride added after initial seed) - add it
       st.bikes.push(def);
       changed = true;
-    } else if(!existing.photo || existing.photo.indexOf('raw.githubusercontent.com') !== -1){
-      // Backfill photo/indoor fields onto bikes saved before this update, preserving mileage/components.
+      return;
+    }
+    // Always guarantee the indoor flag on the seeded indoor bike — the
+    // resolver's indoor/outdoor pool depends on it, so it must NOT be gated
+    // behind the photo-upgrade branch below (a Zwift bike with a good photo
+    // would otherwise never get indoor:true and no ride would resolve to it).
+    if(def.indoor && !existing.indoor){ existing.indoor = true; changed = true; }
+    if(!existing.photo || existing.photo.indexOf('raw.githubusercontent.com') !== -1){
+      // Backfill photo onto bikes saved before this update, preserving mileage/components.
       // Also upgrades bikes that got the old (CSP-blocked) GitHub-hosted photo URL to the new embedded base64 version.
       existing.photo = def.photo;
-      if(def.indoor) existing.indoor = true;
       changed = true;
     }
   });
 
   if(changed) sv();
+
+  // Bikes are now present — prune any cross-line manual assignments. Also runs
+  // from normalizeState_ on every sync; this covers the client-seed path where
+  // bikes are created after a load.
+  if(migrateGearAssignments_(st)) sv();
 }
 
 function showGarage(){ ensureBikes(); renderGarage(); showScreen('GARAGE'); }
