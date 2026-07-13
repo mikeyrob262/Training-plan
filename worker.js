@@ -6846,7 +6846,39 @@ function updWater(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
-  sv();nutRefresh();
+  sv();
+  // Update the water widget IN PLACE — do NOT rebuild the whole nutrition view
+  // on every tick. The full re-render destroyed the button mid-click and, with
+  // the old stacked listeners, produced unstable +/- (jumped +40, then dead,
+  // then negative). Full re-render only if no water widget is mounted.
+  if(!refreshWaterInPlace_()) nutRefresh();
+}
+function resetWater(){
+  if(!nutrDate)nutrDate=getTodayKey();
+  var nd=getNDay(nutrDate);
+  nd.water=0;
+  sv();
+  if(!refreshWaterInPlace_()) nutRefresh();
+}
+// In-place update of any mounted water widget. Both surfaces tag their oz label
+// with data-water-oz and their bar fill with data-water-bar, each holding the
+// day's target oz. Returns true if it updated at least one (so callers skip the
+// expensive full re-render that was the source of the instability).
+function refreshWaterInPlace_(){
+  var nd=getNDay(nutrDate);
+  var oz=(nd.water||0)*((typeof WATER_GLASS_OZ!=='undefined')?WATER_GLASS_OZ:8);
+  var labels=document.querySelectorAll('[data-water-oz]');
+  var bars=document.querySelectorAll('[data-water-bar]');
+  if(!labels.length && !bars.length) return false;
+  for(var i=0;i<labels.length;i++){
+    var lt=parseInt(labels[i].getAttribute('data-water-oz'),10)||64;
+    labels[i].textContent=oz+' / '+lt+' oz';
+  }
+  for(var j=0;j<bars.length;j++){
+    var bt=parseInt(bars[j].getAttribute('data-water-bar'),10)||64;
+    bars[j].style.width=Math.min(100,Math.round(oz/bt*100))+'%';
+  }
+  return true;
 }
 
 function nutrDelta(d){
@@ -7260,11 +7292,12 @@ function renderNutr(){
   h+='</div></div>';
   h+='<div style="display:flex;align-items:center;gap:10px">';
   h+='<button id="water-minus" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>';
-  h+='<span style="font-size:16px;font-weight:800;min-width:82px;text-align:center">'+waterOz+' / '+waterTgtOz+' oz</span>';
+  h+='<span data-water-oz="'+waterTgtOz+'" style="font-size:16px;font-weight:800;min-width:82px;text-align:center">'+waterOz+' / '+waterTgtOz+' oz</span>';
   h+='<button id="water-plus" style="background:rgba(41,128,185,.1);border:1px solid rgba(41,128,185,.2);color:#2980B9;width:30px;height:30px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>';
+  h+='<button id="water-reset" title="Reset water to 0" style="background:none;border:none;color:var(--t3);font-size:11px;cursor:pointer;padding:4px 2px">Reset</button>';
   h+='</div></div>';
   h+='<div style="height:5px;background:var(--s3);border-radius:3px;margin-top:10px">';
-  h+='<div style="height:5px;background:#2980B9;border-radius:3px;width:'+waterPctOz+'%"></div>';
+  h+='<div data-water-bar="'+waterTgtOz+'" style="height:5px;background:#2980B9;border-radius:3px;width:'+waterPctOz+'%"></div>';
   h+='</div></div>';
 
   // Build static part via innerHTML
@@ -7731,11 +7764,15 @@ function renderNutr(){
   t.appendChild(Object.assign(document.createElement('div'),{style:'height:50px'}));
 
   // Bind water and nav buttons
-  var np=document.getElementById('nutr-prev');if(np){np.onclick=null;np.addEventListener('click',function(){nutrDelta(-1);});}
-  var nn=document.getElementById('nutr-next');if(nn){nn.onclick=null;nn.addEventListener('click',function(){nutrDelta(1);});}
-  var wm=document.getElementById('water-minus');if(wm){wm.onclick=null;wm.addEventListener('click',function(){updWater(-1);});}
-  var wp=document.getElementById('water-plus');if(wp){wp.onclick=null;wp.addEventListener('click',function(){updWater(1);});}
-  var bb=document.getElementById('nutr-back');if(bb){bb.onclick=null;bb.addEventListener('click',showTrain);}
+  // .onclick assignment (idempotent) — NOT addEventListener, which stacked a new
+  // handler every time this wiring re-ran against a persistent node and made
+  // one tap fire N times.
+  var np=document.getElementById('nutr-prev');if(np){np.onclick=function(){nutrDelta(-1);};}
+  var nn=document.getElementById('nutr-next');if(nn){nn.onclick=function(){nutrDelta(1);};}
+  var wm=document.getElementById('water-minus');if(wm){wm.onclick=function(){updWater(-1);};}
+  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(){updWater(1);};}
+  var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ if(confirm('Reset today\\'s water to 0?')) resetWater(); };}
+  var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
 function openFoodForMeal(meal){
   curMeal = meal;
@@ -11541,7 +11578,7 @@ function dsShowNutrition(){
     // defaults by time of day. This is what makes desktop no longer read-only.
     var addFoodBtn=document.createElement('button');
     addFoodBtn.textContent='+ Add Food';
-    addFoodBtn.style.cssText='align-self:flex-end;flex-shrink:0;padding:7px 14px;background:#1a1f2e;border:1px solid rgba(74,222,128,.35);border-radius:9px;color:#4ade80;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
+    addFoodBtn.style.cssText='align-self:flex-end;flex-shrink:0;padding:7px 14px;background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.25);border-radius:9px;color:#2980B9;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
     addFoodBtn.onclick=function(){ nutrDate=viewKey; var hr=new Date().getHours(); openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); };
     wrap.appendChild(addFoodBtn);
 
@@ -11592,16 +11629,18 @@ function dsShowNutrition(){
     var wCtl=document.createElement('div');
     wCtl.style.cssText='display:flex;align-items:center;gap:8px';
     var wMinus=document.createElement('button'); wMinus.textContent='−';
-    var wVal=document.createElement('span'); wVal.textContent=wOz+' / '+wTgtOz+' oz'; wVal.style.cssText='font-size:11px;color:#64748b;min-width:66px;text-align:center';
+    var wVal=document.createElement('span'); wVal.textContent=wOz+' / '+wTgtOz+' oz'; wVal.setAttribute('data-water-oz',wTgtOz); wVal.style.cssText='font-size:11px;color:#64748b;min-width:66px;text-align:center';
     var wPlus=document.createElement('button'); wPlus.textContent='+';
     [wMinus,wPlus].forEach(function(b){ b.style.cssText='width:22px;height:22px;border-radius:6px;background:#1a1f2e;border:none;color:#22d3ee;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0'; });
     wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
     wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
-    wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus);
+    var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
+    wReset.onclick=function(){ nutrDate=viewKey; if(confirm('Reset today\\'s water to 0?')) resetWater(); };
+    wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
     wHead.appendChild(wCtl);
     waterRow.appendChild(wHead);
     var wBar=document.createElement('div'); wBar.style.cssText='background:#1a1f2e;border-radius:4px;height:6px';
-    wBar.innerHTML='<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>';
+    wBar.innerHTML='<div data-water-bar="'+wTgtOz+'" style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>';
     waterRow.appendChild(wBar);
     macros.appendChild(waterRow);
     topRow.appendChild(macros);
