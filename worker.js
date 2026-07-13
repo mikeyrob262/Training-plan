@@ -6719,13 +6719,37 @@ function getDType(k){var d=new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return
 // goals from calcTrainingAwareTargets_. Returns rounded {consumed, goals}.
 function nutritionForDate(key){
   var k=key||((typeof nutrDate!=='undefined'&&nutrDate)?nutrDate:(typeof getTodayKey==='function'?getTodayKey():''));
-  var t=getDTots(k)||{}, g=calcTrainingAwareTargets_(k)||{};
+  var g=calcTrainingAwareTargets_(k)||{};
   var nd=(typeof getNDay==='function')?getNDay(k):null;
-  var waterOz=(nd&&nd.water)?nd.water:0;
+  var meals=(nd&&nd.meals)?nd.meals:{};
+  var buckets=(typeof MEAL_BUCKETS!=='undefined')?MEAL_BUCKETS:Object.keys(meals);
+  var cal=0,p=0,c=0,f=0,fiber=0,sodium=0,items=[];
+  buckets.forEach(function(m){
+    (meals[m]||[]).forEach(function(i){
+      if(i.deleted) return;
+      cal+=i.cal||0; p+=i.p||0; c+=i.c||0; f+=i.f||0; fiber+=i.fiber||0; sodium+=i.sodium||0;
+      items.push(i);
+    });
+  });
+  var glassOz=(typeof WATER_GLASS_OZ!=='undefined')?WATER_GLASS_OZ:8;
+  var glasses=(nd&&nd.water)?nd.water:0;   // nd.water is a GLASS COUNT, not oz
   return {
-    consumed:{ cal:Math.round(t.cal||0), pro:Math.round(t.p||0), carb:Math.round(t.c||0), fat:Math.round(t.f||0), fluidOz:Math.round(waterOz) },
-    goals:{ cal:Math.round(g.cal||0), pro:Math.round(g.pro||0), carb:Math.round(g.carb||0), fat:Math.round(g.fat||0), fluidOz:Math.round(g.fluidOz||0) }
+    consumed:{ cal:Math.round(cal), pro:Math.round(p), carb:Math.round(c), fat:Math.round(f),
+      fiber:Math.round(fiber), sodium:Math.round(sodium),
+      fluidOz:Math.round(glasses*glassOz), waterGlasses:glasses, items:items },
+    goals:{ cal:Math.round(g.cal||0), pro:Math.round(g.pro||0), carb:Math.round(g.carb||0), fat:Math.round(g.fat||0),
+      fluidOz:Math.round(g.fluidOz||0), sodium:g.sodium||0 },
+    meals:meals
   };
+}
+// Re-render whichever Nutrition surface is currently active. Shared mutation
+// actions (add food, log water, remove, edit, save meal) call this instead of
+// hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
+// action works on both mobile and desktop without a duplicated copy.
+function nutRefresh(){
+  try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
+  if(typeof renderNutr==='function') renderNutr();
+  if(typeof showScreen==='function') showScreen('NUTR');
 }
 // Round a chart-axis tick value for display, killing IEEE float noise like
 // 2.6000000000005. One shared helper for every axis so we don't grow three
@@ -6753,7 +6777,7 @@ function rmFood(meal,idx){
     if(!item.id) item.id=genEntryId_();
     item.deleted=true;
     item.deletedAt=Date.now();
-    sv();renderNutr();
+    sv();nutRefresh();
   }
 }
 
@@ -6761,7 +6785,7 @@ function updWater(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
-  sv();renderNutr();
+  sv();nutRefresh();
 }
 
 function nutrDelta(d){
@@ -6770,11 +6794,11 @@ function nutrDelta(d){
   var dt=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   dt.setDate(dt.getDate()+d);
   nutrDate=dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate();
-  renderNutr();
+  nutRefresh();
 }
 
 
-function showNutr(){try{nutrDate=getTodayKey();renderNutr();showScreen('NUTR');}catch(e){console.error('showNutr error:',e);alert('Nutrition error: '+e.message);}}
+function showNutr(){try{nutrDate=getTodayKey();nutRefresh();}catch(e){console.error('showNutr error:',e);alert('Nutrition error: '+e.message);}}
 
 
 function editFoodItem(meal, idx) {
@@ -6782,7 +6806,7 @@ function editFoodItem(meal, idx) {
   var item = nd.meals[meal][idx];
   if(!item) return;
   var modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:400;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1000;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';  // >=1000 to clear #desktop-shell (999)
   var sheet = document.createElement('div');
   sheet.style.cssText = 'background:var(--s1);border-radius:20px 20px 0 0;padding:20px 16px 36px;width:100%;max-width:480px;box-sizing:border-box';
   var qty = item._qty||1;
@@ -6820,7 +6844,7 @@ function editFoodItem(meal, idx) {
       c: Math.round(newC*qty*10)/10, f: Math.round(newF*qty*10)/10,
       fiber: item.fiber||0, satFat: item.satFat||0, sodium: item.sodium||0, sugar: item.sugar||0
     };
-    sv(); modal.remove(); renderNutr(); showScreen('NUTR');
+    sv(); modal.remove(); nutRefresh();
   };
 }
 
@@ -7502,7 +7526,7 @@ function renderNutr(){
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          sv();renderNutr();showScreen('NUTR');
+          sv();nutRefresh();
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
@@ -7517,7 +7541,7 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          sv();renderNutr();showScreen('NUTR');
+          sv();nutRefresh();
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
@@ -7660,7 +7684,7 @@ function openFoodForMeal(meal){
 
   var overlay = document.createElement('div');
   overlay.id = 'food-modal';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;z-index:300';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;z-index:1000';  // >=1000 to clear #desktop-shell (999)
 
   var modal = document.createElement('div');
   modal.style.cssText = 'background:var(--s1);border-radius:22px 22px 0 0;width:100%;max-height:88vh;display:flex;flex-direction:column;border-top:1px solid rgba(255,255,255,.14)';
@@ -7690,6 +7714,7 @@ function openFoodForMeal(meal){
   // Barcode scanner button
   var scanBtn = document.createElement('button');
   scanBtn.style.cssText = 'background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:44px;height:44px;border-radius:10px;font-size:20px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center';
+  if(typeof isDesktop==='function' && isDesktop()) scanBtn.style.display='none';  // barcode camera scanner is mobile-only (dropped on desktop)
   scanBtn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="17" y="2" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><line x1="7" y1="4.5" x2="17" y2="4.5"/><line x1="4.5" y1="7" x2="4.5" y2="17"/><line x1="19.5" y1="7" x2="19.5" y2="17"/><line x1="7" y1="19.5" x2="17" y2="19.5"/><line x1="12" y1="2" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="22"/></svg>';
   scanBtn.title = 'Scan barcode';
   scanBtn.addEventListener('click', function(){
@@ -8017,7 +8042,7 @@ function renderFoodRows(container, list){
     getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0});
     sv();
     document.getElementById('food-modal').remove();
-    renderNutr(); showScreen('NUTR');
+    nutRefresh();
   };
   wrap.appendChild(lbl); wrap.appendChild(grid); wrap.appendChild(saveBtn);
   container.appendChild(wrap);
@@ -11402,21 +11427,20 @@ function dsShowNutrition(){
 
   var now=new Date();
   var todayKey=now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate();
-  var viewKey=todayKey;
+  // Desktop shares the GLOBAL nutrDate with mobile so the shared add-food /
+  // water actions (which mutate getNDay(nutrDate)) target the day being viewed
+  // here, and nutRefresh()->dsShowNutrition() re-reads the same day.
+  if(typeof nutrDate==='undefined' || !nutrDate) nutrDate=todayKey;
+  var viewKey=nutrDate;
 
+  // Divergent local totals retired: delegate to the single-source
+  // nutritionForDate() so desktop and mobile can never disagree on consumed
+  // macros. Thin adapter keeps the shape the render code below expects.
   function getTotals(dk){
-    var nd=st.nl&&st.nl[dk];
-    if(!nd||!nd.meals) return {cal:0,p:0,c:0,f:0,fiber:0,sodium:0,water:0,items:[]};
-    var cal=0,p=0,c=0,f=0,fiber=0,sodium=0,items=[];
-    Object.values(nd.meals).forEach(function(bucket){
-      (bucket||[]).forEach(function(food){
-        if(food.deleted) return;
-        cal+=(food.cal||0); p+=(food.p||0); c+=(food.c||0); f+=(food.f||0);
-        fiber+=(food.fiber||0); sodium+=(food.sodium||0);
-        items.push(food);
-      });
-    });
-    return {cal:Math.round(cal),p:Math.round(p),c:Math.round(c),f:Math.round(f),fiber:Math.round(fiber),sodium:Math.round(sodium),water:nd.water||0,meals:nd.meals,items:items};
+    var n=nutritionForDate(dk);
+    return {cal:n.consumed.cal,p:n.consumed.pro,c:n.consumed.carb,f:n.consumed.fat,
+      fiber:n.consumed.fiber,sodium:n.consumed.sodium,water:n.consumed.waterGlasses,
+      meals:n.meals,items:n.consumed.items};
   }
 
   function render(){
@@ -11438,7 +11462,7 @@ function dsShowNutrition(){
     var dPrev=document.createElement('div');
     dPrev.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
     dPrev.textContent='‹';
-    dPrev.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()-1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();render();};
+    dPrev.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()-1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();nutrDate=viewKey;render();};
     var dTitle=document.createElement('div');
     dTitle.style.cssText='font-size:18px;font-weight:700;color:#fff';
     var vd=new Date(viewKey);
@@ -11447,9 +11471,18 @@ function dsShowNutrition(){
     var dNext=document.createElement('div');
     dNext.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
     dNext.textContent='›';
-    dNext.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()+1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();render();};
+    dNext.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()+1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();nutrDate=viewKey;render();};
     dateNav.appendChild(dPrev); dateNav.appendChild(dTitle); dateNav.appendChild(dNext);
     wrap.appendChild(dateNav);
+
+    // Add Food — opens the shared food-search modal (z-index raised to clear the
+    // desktop shell). Targets the viewed day via the global nutrDate; meal
+    // defaults by time of day. This is what makes desktop no longer read-only.
+    var addFoodBtn=document.createElement('button');
+    addFoodBtn.textContent='+ Add Food';
+    addFoodBtn.style.cssText='flex-shrink:0;padding:10px;background:#4ade80;border:none;border-radius:10px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+    addFoodBtn.onclick=function(){ nutrDate=viewKey; var hr=new Date().getHours(); openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); };
+    wrap.appendChild(addFoodBtn);
 
     // Calorie ring + macros
     var topRow=document.createElement('div');
@@ -11500,6 +11533,17 @@ function dsShowNutrition(){
         '<div style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>'+
       '</div>';
     macros.appendChild(waterRow);
+    // Water +/- (shared updWater; 1 glass = 8oz) — was display-only on desktop.
+    var wCtrl=document.createElement('div');
+    wCtrl.style.cssText='display:flex;gap:6px;margin-top:5px';
+    [['− 8oz',-1],['+ 8oz',1]].forEach(function(b){
+      var wb=document.createElement('button');
+      wb.textContent=b[0];
+      wb.style.cssText='flex:1;padding:4px 0;background:#1a1f2e;border:none;border-radius:8px;color:#22d3ee;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+      wb.onclick=(function(delta){return function(){ nutrDate=viewKey; updWater(delta); };})(b[1]);
+      wCtrl.appendChild(wb);
+    });
+    macros.appendChild(wCtrl);
     topRow.appendChild(macros);
     wrap.appendChild(topRow);
 
@@ -11549,20 +11593,34 @@ function dsShowNutrition(){
     var meals=data.meals||{};
     Object.keys(mealNames).forEach(function(key){
       var items=meals[key]||[];
-      if(!items.length) return;
-      var mealCal=items.reduce(function(s,f){return s+(f.cal||0);},0);
+      var live=items.filter(function(f){return !f.deleted;});
+      if(!live.length) return;   // hide empty buckets — the top "+ Add Food" covers those
+      var mealCal=live.reduce(function(s,f){return s+(f.cal||0);},0);
       var card=document.createElement('div');
       card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px;flex-shrink:0';
       var mHdr=document.createElement('div');
       mHdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px';
-      mHdr.innerHTML='<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+mealNames[key]+'</div>'+
-        '<div style="font-size:11px;color:#64748b">'+Math.round(mealCal)+' cal</div>';
+      var mTitle=document.createElement('div');
+      mTitle.style.cssText='font-size:12px;font-weight:700;color:#e2e8f0';
+      mTitle.textContent=mealNames[key]+' · '+Math.round(mealCal)+' cal';
+      var mAdd=document.createElement('button');
+      mAdd.textContent='+ Add';
+      mAdd.style.cssText='padding:3px 10px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:8px;color:#4ade80;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit';
+      mAdd.onclick=(function(k){return function(){ nutrDate=viewKey; openFoodForMeal(k); };})(key);
+      mHdr.appendChild(mTitle); mHdr.appendChild(mAdd);
       card.appendChild(mHdr);
-      items.forEach(function(food){
+      items.forEach(function(food,idx){
+        if(food.deleted) return;   // idx stays the real bucket index for rmFood
         var fRow=document.createElement('div');
-        fRow.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #1a1f2e';
+        fRow.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid #1a1f2e';
         fRow.innerHTML='<div style="font-size:12px;color:#94a3b8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(food.n||food.name||'Food')+'</div>'+
-          '<div style="font-size:11px;color:#64748b;flex-shrink:0;margin-left:8px">'+(food.cal||0)+' cal</div>';
+          '<div style="font-size:11px;color:#64748b;flex-shrink:0">'+(food.cal||0)+' cal</div>';
+        var rm=document.createElement('div');
+        rm.textContent='×';
+        rm.title='Remove';
+        rm.style.cssText='flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#64748b;cursor:pointer;font-size:16px;border-radius:6px';
+        rm.onclick=(function(k,i){return function(){ nutrDate=viewKey; rmFood(k,i); };})(key,idx);
+        fRow.appendChild(rm);
         card.appendChild(fRow);
       });
       wrap.appendChild(card);
@@ -11570,8 +11628,8 @@ function dsShowNutrition(){
 
     if(!data.items.length){
       var empty=document.createElement('div');
-      empty.style.cssText='text-align:center;color:#64748b;padding:40px;font-size:13px';
-      empty.textContent='No food logged for this day. Use the mobile app to log meals.';
+      empty.style.cssText='text-align:center;color:#64748b;padding:32px;font-size:13px';
+      empty.textContent='No food logged for this day. Tap "+ Add Food" to log a meal.';
       wrap.appendChild(empty);
     }
 
