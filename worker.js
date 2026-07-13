@@ -11632,7 +11632,7 @@ function dsShowNutrition(){
     ringWrap.style.cssText='position:relative;width:100px;height:100px;flex-shrink:0';
     var pct=Math.min(100,Math.round((data.cal/goals.cal)*100));
     var arc=Math.round(pct/100*251);
-    var ringColor=pct>110?'#e24b4a':pct>90?'#4ade80':'#60a5fa';
+    var ringColor=pct>110?'#e24b4a':pct>90?'#27AE60':'#60a5fa';
     ringWrap.innerHTML='<svg width="100" height="100" viewBox="0 0 100 100">'+
       '<circle cx="50" cy="50" r="40" fill="none" stroke="#1a1f2e" stroke-width="10"/>'+
       '<circle cx="50" cy="50" r="40" fill="none" stroke="'+ringColor+'" stroke-width="10" stroke-dasharray="'+arc+' 251" stroke-dashoffset="63" stroke-linecap="round" transform="rotate(-90 50 50)"/>'+
@@ -11694,7 +11694,7 @@ function dsShowNutrition(){
     knCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
     knCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Key Nutrients</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
-        [['Fiber',data.fiber,fiberTgt,'g','#4ade80'],['Sodium',data.sodium,sodiumTgt,'mg','#f59e0b']].map(function(x){
+        [['Fiber',data.fiber,fiberTgt,'g','#27AE60'],['Sodium',data.sodium,sodiumTgt,'mg','#f59e0b']].map(function(x){
           var kpct=Math.min(100,Math.round((x[1]/x[2])*100));
           return '<div style="background:#0d0f14;border-radius:10px;padding:10px 12px">'+
             '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px"><span style="font-size:12px;color:#94a3b8">'+x[0]+'</span>'+
@@ -11745,7 +11745,7 @@ function dsShowNutrition(){
       mTitle.textContent=mealNames[key]+' · '+Math.round(mealCal)+' cal';
       var mAdd=document.createElement('button');
       mAdd.textContent='+ Add';
-      mAdd.style.cssText='padding:3px 10px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:8px;color:#4ade80;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit';
+      mAdd.style.cssText='padding:3px 10px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:8px;color:#2980B9;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit';
       mAdd.onclick=(function(k){return function(){ nutrDate=viewKey; openFoodForMeal(k); };})(key);
       mHdr.appendChild(mTitle); mHdr.appendChild(mAdd);
       card.appendChild(mHdr);
