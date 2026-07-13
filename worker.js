@@ -5576,7 +5576,7 @@ function showProg(){
     // Protein chart lives in Nutrition → Progress tab
 
     var wc=document.getElementById('prog-wt-chart');
-    if(wc&&cd.wtData.length) new Chart(wc,{type:'line',data:{labels:cd.wtLabels,datasets:[{data:cd.wtData,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',borderWidth:2,fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#378ADD'}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},callback:function(v){return (Math.round(v*100)/100)+'lb';}}}})});
+    if(wc&&cd.wtData.length) new Chart(wc,{type:'line',data:{labels:cd.wtLabels,datasets:[{data:cd.wtData,borderColor:'#378ADD',backgroundColor:'rgba(55,138,221,0.08)',borderWidth:2,fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#378ADD'}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},callback:function(v){return axisNum(v)+'lb';}}}})});
 
     var lc=document.getElementById('prog-lr-chart');
     if(lc) new Chart(lc,{type:'bar',data:{labels:cd.lrLabels,datasets:[{data:cd.lrData,backgroundColor:cd.lrData.map(function(v,i){return i===cd.lrData.length-1&&v>0?'#0F6E56':'rgba(15,110,86,0.5)';}),borderRadius:4}]},options:Object.assign({},base,{scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9}},min:0}}})});
@@ -6727,6 +6727,10 @@ function nutritionForDate(key){
     goals:{ cal:Math.round(g.cal||0), pro:Math.round(g.pro||0), carb:Math.round(g.carb||0), fat:Math.round(g.fat||0), fluidOz:Math.round(g.fluidOz||0) }
   };
 }
+// Round a chart-axis tick value for display, killing IEEE float noise like
+// 2.6000000000005. One shared helper for every axis so we don't grow three
+// divergent copies of the same rounding.
+function axisNum(v){ return Math.round(v*100)/100; }
 
 
 
@@ -8981,7 +8985,7 @@ function renderPerf(container){
     var nc=document.getElementById('perf-np-chart');
     if(nc) new Chart(nc,{type:'line',data:{labels:cd.npWLabels,
       datasets:[{data:cd.npWeekly,borderColor:'#BA7517',backgroundColor:'rgba(186,117,23,0.08)',borderWidth:2,fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#BA7517',spanGaps:true}]},
-      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return (Math.round(v*100)/100)+'W';}}}}})});
+      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return axisNum(v)+'W';}}}}})});
 
     var cc=document.getElementById('perf-ctl-chart');
     if(cc) new Chart(cc,{type:'line',data:{labels:cd.ctlLabels2,
@@ -11713,7 +11717,7 @@ function dsShowAnalytics(){
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return (Math.round(v*100)/100)+' W/kg';}}}}}});
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
     }
   }
   setTimeout(drawCharts,100);
@@ -12317,12 +12321,10 @@ function dsShowDashboard(){
   var tlc=card(''); tlc.appendChild(lbl('TRAINING LOAD'));
   tlc.appendChild(div('font-size:10px;color:#64748b;margin-bottom:4px','This Week'));
   tlc.appendChild(div('font-size:22px;font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1',''+weekTSS));
-  tlc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:10px','of 650 TSS'));
-  var bb=div('background:#1a1f2e;border-radius:4px;height:6px;margin-bottom:6px');
-  var bf=div('border-radius:4px;height:6px;background:#4ade80'); bf.style.width=Math.min(100,Math.round(weekTSS/650*100))+'%';
-  bb.appendChild(bf); tlc.appendChild(bb);
-  var pct=Math.round(weekTSS/650*100);
-  tlc.appendChild(div('font-size:10px;color:'+(pct>=90?'#4ade80':'#f59e0b'),pct+'% of weekly target'));
+  // No configurable weekly-TSS target exists anywhere, so we don't invent one.
+  // Previously this showed "of 650 TSS" and a percentage measured against a
+  // hardcoded number nobody chose — the same fake-data pattern.
+  tlc.appendChild(div('font-size:11px;color:#64748b;margin-bottom:10px','TSS · no weekly target set'));
   var ctlDiv=div('margin-top:12px;padding-top:10px;border-top:1px solid #1a1f2e');
   ctlDiv.appendChild(div('font-size:10px;color:#64748b','Chronic Load'));
   ctlDiv.appendChild(div('font-size:16px;font-weight:700;color:#e2e8f0',weekTSS?''+Math.round(weekTSS/7):'—'));
@@ -21062,12 +21064,12 @@ function showCalendarTab(){
 
   // Training Load — real TSS/CTL
   var weekTSS=0; pmcData.slice(-7).forEach(function(p){ weekTSS+=(p.tss||0); });
-  weekTSS=Math.round(weekTSS)||580;
-  var tssPlanned=650;
+  weekTSS=Math.round(weekTSS)||0;
+  // No configurable weekly-TSS target exists, so we don't invent one (was a
+  // hardcoded 650 with a percentage against it, plus a fake ||580 fallback).
   h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
   h+='    <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Training Load &middot; This Week</div>';
-  h+='    <div style="font-size:32px;font-weight:800;color:var(--t1);line-height:1.1">'+weekTSS+'<span style="font-size:13px;color:var(--t3);font-weight:600"> of '+tssPlanned+' TSS</span></div>';
-  h+='    <div style="height:6px;background:var(--s3);border-radius:3px;margin:8px 0"><div style="height:6px;background:#4D9FFF;border-radius:3px;width:'+Math.min(100,Math.round(weekTSS/tssPlanned*100))+'%"></div></div>';
+  h+='    <div style="font-size:32px;font-weight:800;color:var(--t1);line-height:1.1">'+weekTSS+'<span style="font-size:13px;color:var(--t3);font-weight:600"> TSS</span></div>';
   h+='    <div style="font-size:12px;color:var(--t3);border-top:1px solid var(--b1);padding-top:8px;margin-top:2px">Chronic Load (CTL) &nbsp;<span style="color:var(--t1);font-weight:700">'+ctl+'</span></div>';
   h+='  </div>';
 
