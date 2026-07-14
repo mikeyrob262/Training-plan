@@ -12523,9 +12523,9 @@ function dsShowDashboard(){
   var pc=card(''); pc.appendChild(lbl("TODAY'S PLAN"));
   var _twk=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_((typeof getTodayKey==='function')?getTodayKey():''):null;
   var ptop=row('gap:10px;margin-bottom:6px');
-  var _isRun=!!(_twk && !_twk.isRide && /run/i.test(_twk.name||''));
-  var pico=div('width:36px;height:36px;border-radius:10px;background:rgba(252,76,2,.15);border:1px solid rgba(252,76,2,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0');
-  pico.appendChild(ico(_isRun?'ti-run':'ti-bike','#FC4C02','20'));
+  // Flat activityIcon_ (same as the mobile Today's Plan), resolved from the workout name.
+  var pico=div('width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0');
+  pico.innerHTML=activityIcon_((_twk&&_twk.name)||'Ride',36);
   var pinfo=div('');
   if(_twk && !_twk.isRest){
     var _mins=Math.round(_twk.minutes||0);
@@ -12585,18 +12585,18 @@ function dsShowDashboard(){
   vaLink.onclick=function(){dsNav('activities');};
   ahd.appendChild(vaLink);
   ac.appendChild(ahd);
-  var sportMap={'Ride':'ti-bike','Cycling':'ti-bike','Run':'ti-run','Swim':'ti-ripple','Strength':'ti-barbell'};
   recent.forEach(function(r){
     var stype=r.sportType||r.type||'Ride';
-    var ikey=Object.keys(sportMap).find(function(k){return stype.toLowerCase().indexOf(k.toLowerCase())>=0;})||'Ride';
+    if((typeof rideIsIndoor==='function'&&rideIsIndoor(r)) && /run|jog/i.test(stype)) stype='Treadmill';
     var ar=row('gap:12px;padding:8px 0;border-top:1px solid #1a1f2e;cursor:pointer');
     var ridx=(st.rides||[]).indexOf(r);
     if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
     ar.onclick=(function(i){return function(){openRideDetail(i);};})(ridx);
     ar.onmouseover=function(){this.style.background='rgba(255,255,255,.02)';};
     ar.onmouseout=function(){this.style.background='';};
-    var abox=div('width:34px;height:34px;border-radius:10px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0');
-    abox.appendChild(ico(sportMap[ikey],'#4ade80','16'));
+    // Flat, no dark chip — same activityIcon_ the mobile home + Today's Plan use.
+    var abox=div('width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0');
+    abox.innerHTML=activityIcon_(stype,34);
     var ainfo=div('flex:1;min-width:0');
     var _dn=r.name||r.sportType||'Activity'; if(_dn.indexOf(' ACTIVITY')>0&&parseInt(_dn)>0) _dn=r.sportType||r.type||'Ride';
     ainfo.appendChild(div('font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',_dn));
