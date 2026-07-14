@@ -15,6 +15,11 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- DEBUG (remove on revert): on-device console + global error capture -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});
+window.addEventListener('error',function(_e){try{console.error('[GLOBAL error]',(_e&&_e.message),'|',(_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno),'| stack:',(_e&&_e.error&&_e.error.stack));}catch(_x){}});
+window.addEventListener('unhandledrejection',function(_e){try{var _r=_e&&_e.reason;console.error('[GLOBAL unhandledrejection]',(_r&&_r.message)||_r,'| stack:',(_r&&_r.stack));}catch(_x){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -3916,7 +3921,9 @@ function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
+  try{ console.log('[applyFB] poll merge FIRING — BEFORE: '+_dmAll_()); }catch(_x){}
   st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+  try{ console.log('[applyFB] poll merge done  — AFTER:  '+_dmAll_()); }catch(_x){}
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
@@ -6888,6 +6895,9 @@ function nutritionForDate(key){
 // actions (add food, log water, remove, edit, save meal) call this instead of
 // hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
 // action works on both mobile and desktop without a duplicated copy.
+// DEBUG helpers: dump a day's meal arrays (index:name×qty(DEL)) to watch items move/leave.
+function _dm_(mn){ try{ var a=(getNDay(nutrDate).meals[mn]||[]); return mn+'=['+a.map(function(x,ix){return ix+':'+String(x.n||'?').slice(0,10)+(x._qty?'x'+x._qty:'')+(x.deleted?'(DEL)':'')}).join(' | ')+']'; }catch(e){ return mn+'=dumpfail'; } }
+function _dmAll_(){ try{ var m=getNDay(nutrDate).meals||{}; return Object.keys(m).filter(function(k){return (m[k]||[]).some(function(x){return !x.deleted});}).map(_dm_).join('  ||  ')||'(no meals)'; }catch(e){ return 'dumpfail'; } }
 function nutRefresh(){
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   // Preserve scroll across the mobile re-render. renderNutr rebuilds #NUTR via
@@ -7687,15 +7697,22 @@ function renderNutr(){
         editBtn.onclick=function(){editFoodItem(mn,i);};
         plusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
+          console.log('[qty+] ENTER i='+i+' -> '+(nd.meals[mn][i]?nd.meals[mn][i].n:'*** MISSING at ['+i+'] ***'));
+          console.log('[qty+] BEFORE  '+_dm_(mn));
+         try {
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          sv();nutRefresh();
+          console.log('[qty+] MUTATED '+_dm_(mn)); sv(); console.log('[qty+] POST-sv '+_dm_(mn)); nutRefresh(); console.log('[qty+] POST-render '+_dm_(mn));
+         } catch(e){ console.error('[qty+] THREW:', (e&&e.message)||e, '| STACK:', (e&&e.stack)); throw e; }
         };
         minusBtn.onclick=function(){
           var nd=getNDay(nutrDate);
+          console.log('[qty-] ENTER i='+i+' -> '+(nd.meals[mn][i]?nd.meals[mn][i].n:'*** MISSING at ['+i+'] ***'));
+          console.log('[qty-] BEFORE  '+_dm_(mn));
+         try {
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           if(curQty<=1){
@@ -7707,7 +7724,8 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          sv();nutRefresh();
+          console.log('[qty-] MUTATED '+_dm_(mn)); sv(); console.log('[qty-] POST-sv '+_dm_(mn)); nutRefresh(); console.log('[qty-] POST-render '+_dm_(mn));
+         } catch(e){ console.error('[qty-] THREW:', (e&&e.message)||e, '| STACK:', (e&&e.stack)); throw e; }
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
