@@ -319,7 +319,8 @@ window.parseFitFile = function(arrayBuffer, callback) {
 
         if (s.start_time) {
           var d = new Date(s.start_time);
-          result.date = d.toISOString().split('T')[0];
+          // Local calendar day, not UTC (toISOString) — UTC stamped evening rides a day ahead.
+          result.date = d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
         }
         if (s.total_timer_time != null) result.duration = Math.round(s.total_timer_time);
         if (s.total_distance != null) result.distance = parseFloat((s.total_distance/1609.344).toFixed(1)); // m -> mi (FitParser returns meters; lengthUnit:'ft' is not honored)
@@ -11610,14 +11611,14 @@ function dsShowWeather(){
 
     // 7-day forecast
     var forecastCard=document.createElement('div');
-    forecastCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+    forecastCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0;max-width:420px;margin-left:auto;margin-right:auto;width:100%';
     forecastCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">7-Day Forecast</div>';
     var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     (daily.time||[]).forEach(function(date,i){
       var d=new Date(date+'T12:00:00');
       var wx2=wCode(daily.weathercode[i]);
       var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid #1a1f2e';
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1a1f2e';
       row.innerHTML='<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:36px">'+dayNames2[d.getDay()]+'</div>'+
         '<div style="font-size:18px;width:28px">'+wx2.icon+'</div>'+
         '<div style="font-size:12px;color:#94a3b8;flex:1">'+wx2.desc+'</div>'+
@@ -13067,6 +13068,17 @@ function dsInitProfile(){
 }
 
 
+// Calories burned ~= work in kilojoules for cycling (human efficiency ~24%
+// makes it roughly 1:1). Compute from avg power x moving seconds / 1000. Strava
+// omits calories for VirtualRide, so we never chase its number. Returns null
+// (render as an em dash, never a guess) when avg power is missing.
+function rideKj_(r){
+  if(!r || r.avgPwr==null) return null;
+  var s=r.movingSecs;
+  if(!s && r.duration){ var p=String(r.duration).split(':').map(Number); if(p.length===3) s=p[0]*3600+p[1]*60+p[2]; else if(p.length===2) s=p[0]*60+p[1]; }
+  if(!s) return null;
+  return Math.round(r.avgPwr*s/1000);
+}
 function openDesktopRideDetail(idx){
   var rpEl=document.getElementById('ds-right-panel');
   if(rpEl) rpEl.style.display='flex';
@@ -13381,7 +13393,7 @@ function openDesktopRideDetail(idx){
         '<div style="padding:10px 14px">'+
           '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
           '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+(r.calories?Math.round(r.calories)+' Cal':'--')+'</div><div style="font-size:9px;color:#64748b">Consumed</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+(function(){var _k=rideKj_(r);return _k!=null?_k+' Cal':'—';})()+'</div><div style="font-size:9px;color:#64748b">Burned</div></div></div>'+
             '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
@@ -13713,13 +13725,12 @@ function openRideDetail(idx){
     heroGrid.appendChild(cell);
   });
   heroRow.appendChild(heroGrid);
-  if(r.calories){
-    var calRow=document.createElement('div');
-    calRow.style.cssText='margin-top:20px';
-    calRow.innerHTML='<div style="font-size:19px;font-weight:500;color:var(--t1)">'+r.calories+' Cal</div>'
-      +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories</div>';
-    heroRow.appendChild(calRow);
-  }
+  var _rideKj=rideKj_(r);
+  var calRow=document.createElement('div');
+  calRow.style.cssText='margin-top:20px';
+  calRow.innerHTML='<div style="font-size:19px;font-weight:500;color:var(--t1)">'+(_rideKj!=null?_rideKj+' Cal':'—')+'</div>'
+    +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories</div>';
+  heroRow.appendChild(calRow);
   var heroSpacer=document.createElement('div');
   heroSpacer.style.cssText='height:20px';
   heroRow.appendChild(heroSpacer);
@@ -21153,6 +21164,7 @@ function showCalendarTab(){
 
   // Header: title + week nav + Today
   h+='<div style="padding:16px 16px 8px;position:sticky;top:0;background:var(--bg);z-index:10">';
+  h+='  <button onclick="showHomeDash()" aria-label="Back to home" style="background:rgba(255,255,255,.2);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:600;padding:5px 10px 5px 8px;cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:4px;font-family:inherit">&#8592; Back</button>';
   h+='  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
   h+='    <div style="font-size:26px;font-weight:800;letter-spacing:-.5px;color:var(--t1)">Training Calendar</div>';
   h+='  </div>';
@@ -21896,7 +21908,9 @@ function fetchStravaPage(token, page, imported, forceAll) {
     if(!st.rides) st.rides=[];
     var newCount=0;
     acts.forEach(function(a){
-      var dateStr = (a.start_date||'').split('T')[0];
+      // Use Strava's local date, not the UTC start_date — deriving the day from
+      // UTC stamped every evening ride a day ahead (Recent Activity / Gear).
+      var dateStr = (a.start_date_local||a.start_date||'').split('T')[0];
       var distMi = a.distance ? parseFloat((a.distance/1609.344).toFixed(1)) : 0;
       var aMovingSecs = a.moving_time||a.elapsed_time||0;
       // Match precedence: an exact Strava id is always the same activity. The
