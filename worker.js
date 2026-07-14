@@ -3405,8 +3405,15 @@ function itemsMatch_(a, b){
   // mergeState_ and silently deleted it (contentFingerprint_ excludes the
   // deleted flag, so a live item and its tombstone fingerprint identically).
   if(a.id != null && b.id != null) return a.id === b.id;
-  // Only when a side is id-less (legacy data / reactive id assignment across a
-  // sync) do we fall back to content fingerprint.
+  // At least one side is id-less (legacy data / reactive id assignment across a
+  // sync): fall back to content fingerprint. But guard the one dangerous shape —
+  // an id-bearing LIVE item vs an id-less DELETED tombstone. Matching those would
+  // OR the tombstone's deleted:true onto the freshly-added live item and silently
+  // delete it. Every other shape still matches, INCLUDING an id-bearing DELETED
+  // item vs an id-less live copy (the reactive-id delete that must still sync so a
+  // deletion sticks).
+  if((a.id!=null && !a.deleted && b.id==null && !!b.deleted) ||
+     (b.id!=null && !b.deleted && a.id==null && !!a.deleted)) return false;
   return contentFingerprint_(a) === contentFingerprint_(b);
 }
 function mergeArrays_(a, b){
