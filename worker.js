@@ -6918,7 +6918,17 @@ function nutRefresh(){
   // Only navigate to Nutrition if we're not already on it — showScreen() calls
   // window.scrollTo(0,0), correct for navigation but wrong for a refresh.
   if(typeof showScreen==='function' && !_wasActive) showScreen('NUTR');
-  if(_wasActive && _sy) requestAnimationFrame(function(){ window.scrollTo(0, _sy); });
+  // Restore scroll. The earlier single-rAF restore fired before the rebuilt DOM
+  // had laid out, so the clamp toward 0 still showed through. Restore
+  // synchronously (the DOM is already rebuilt) AND again across a double rAF —
+  // a full layout/paint cycle — so a late clamp (incl. mobile Safari address-bar
+  // reflow) can't win. The >1px guard avoids fighting the browser when already
+  // correct.
+  if(_wasActive && _sy){
+    var _restore=function(){ if(Math.abs((window.scrollY||window.pageYOffset||0)-_sy)>1) window.scrollTo(0,_sy); };
+    _restore();
+    requestAnimationFrame(function(){ _restore(); requestAnimationFrame(_restore); });
+  }
 }
 // Round a chart-axis tick value for display, killing IEEE float noise like
 // 2.6000000000005. One shared helper for every axis so we don't grow three
