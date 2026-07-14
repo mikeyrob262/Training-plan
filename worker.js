@@ -8277,6 +8277,34 @@ function renderFoodRows(container, list){
 // run, barbell, yoga, heartbeat, swimming) rather than hand-drawn line
 // art, on dark circle badges with colored icon strokes, matching the
 // approved reference look.
+// Shared activity glyph — one function, resolved from r.sportType || r.type
+// (disjoint). Real Lucide paths (bike/dumbbell/activity are the exact Lucide
+// geometry; run/swim/mobility reuse the app's in-set glyphs). Returns a bare
+// <svg> with stroke set to the sport color, so the /stroke="#..."/ colour
+// extraction keeps working. VirtualRide adds a short baseline under the bike as
+// an indoor cue; Treadmill is a caller-derived rideIsIndoor()+run, not a Strava
+// type.
+function activityIcon_(sport, size){
+  size = size || 24;
+  var s = String(sport||'').toLowerCase();
+  var BIKE='<circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>';
+  var RUN='<path d="M13 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0"/><path d="M4 17l5 1l.75-1.5"/><path d="M15 21l0-4l-4-3l1-6"/><path d="M7 12l0-3l5-1l3 3l3 1"/>';
+  var DUMBBELL='<path d="M14.4 14.4 9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="m21.5 21.5-1.4-1.4"/><path d="M3.9 3.9 2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>';
+  var ACTIVITY='<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>';
+  var MOBILITY='<path d="M4 20h4l1.5-3"/><path d="M17 20l-1-5h-5l1-7"/><path d="M4 10l4-1l4-1l4 1.5l4 1.5"/><path d="M10.007 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/>';
+  var SWIM='<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>';
+  var col, path, extra='';
+  if(/treadmill/.test(s)){ col='#EF9F27'; path=RUN; }                                    // derived indoor run
+  else if(/virtual/.test(s)){ col='#3B95E8'; path=BIKE; extra='<path d="M5 22h14"/>'; }   // VirtualRide: bike + baseline
+  else if(/run|jog/.test(s)){ col='#E24B4A'; path=RUN; }
+  else if(/weight|strength|lift/.test(s)){ col='#7F77DD'; path=DUMBBELL; }
+  else if(/mobility|yoga|stretch/.test(s)){ col='#1D9E75'; path=MOBILITY; }
+  else if(/workout|hiit|conditioning|circuit|cardio/.test(s)){ col='#D4A800'; path=ACTIVITY; }
+  else if(/swim/.test(s)){ col='#0EA5E9'; path=SWIM; }
+  else if(/ride|cycl|bike/.test(s)){ col='#4ECB3C'; path=BIKE; }
+  else { col='#4ECB3C'; path=BIKE; }                                                     // fallback: bike green
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+path+extra+'</svg>';
+}
 function activityIconHTML(sessionName, size){
   size = size || 40;
   var s = (sessionName||'').toLowerCase();
@@ -8412,7 +8440,7 @@ function showHomeDash(){
     html+='<div style="font-size:13px;color:var(--t3)">No workout scheduled for today.</div>';
   } else {
     html+='<div id="home-todays-plan-row" style="display:flex;align-items:center;gap:12px;cursor:pointer">'
-      +activityIconHTML(todaysPlanInfo.sessName,40)
+      +activityIcon_(todaysPlanInfo.sessName,40)
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:15px;font-weight:700;color:var(--t1)">'+todaysPlanInfo.sessName+'</div>'
       +(todaysPlanInfo.plannedDur?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+todaysPlanInfo.plannedDur+'</div>':'')
@@ -8443,10 +8471,8 @@ function showHomeDash(){
     recent.forEach(function(r,idx){
       var realIdx=st.rides.indexOf(r);
       var sport=r.sportType||r.type||'Ride';
-      var sportLc=sport.toLowerCase();
-      var nameForIcon=(r.name||'')+' '+sportLc;
-      var iconMatch=/swim/.test(sportLc)?'swim':/run|jog/.test(sportLc)?'run':/strength|weight/.test(sportLc)?'strength':nameForIcon;
-      var iconHTML=activityIconHTML(iconMatch,36);
+      if((typeof rideIsIndoor==='function'&&rideIsIndoor(r)) && /run|jog/i.test(sport)) sport='Treadmill';
+      var iconHTML=activityIcon_(sport,36);
       var iconColorMatch=iconHTML.match(/stroke="(#[0-9A-Fa-f]{6})"/);
       var iconColor=iconColorMatch?iconColorMatch[1]:'#5DCAA5';
       // Mini route thumbnail from real GPS points, matching the reference's
