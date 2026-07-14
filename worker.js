@@ -15,6 +15,11 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- DEBUG (remove on revert): on-device console + global error capture -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});
+window.addEventListener('error',function(_e){try{console.error('[GLOBAL error]',(_e&&_e.message),'|',(_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno),'| stack:',(_e&&_e.error&&_e.error.stack));}catch(_x){}});
+window.addEventListener('unhandledrejection',function(_e){try{var _r=_e&&_e.reason;console.error('[GLOBAL unhandledrejection]',(_r&&_r.message)||_r,'| stack:',(_r&&_r.stack));}catch(_x){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -7682,15 +7687,18 @@ function renderNutr(){
         rmBtn.onclick=function(){rmFood(mn,i);};
         editBtn.onclick=function(){editFoodItem(mn,i);};
         plusBtn.onclick=function(){
+         console.log('[qty+] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          sv();nutRefresh();
+          console.log('[qty+] mutated -> sv()'); sv(); console.log('[qty+] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty+] EXIT OK');
+         } catch(e){ console.error('[qty+] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
         };
         minusBtn.onclick=function(){
+         console.log('[qty-] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
@@ -7703,7 +7711,8 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          sv();nutRefresh();
+          console.log('[qty-] mutated -> sv()'); sv(); console.log('[qty-] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty-] EXIT OK');
+         } catch(e){ console.error('[qty-] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
