@@ -15,6 +15,9 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<!-- DEBUG (remove on revert): on-device console for mobile capture -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -7827,7 +7830,7 @@ function renderNutr(){
   var np=document.getElementById('nutr-prev');if(np){np.onclick=function(){nutrDelta(-1);};}
   var nn=document.getElementById('nutr-next');if(nn){nn.onclick=function(){nutrDelta(1);};}
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=function(){updWater(-1);};}
-  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(){updWater(1);};}
+  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(ev){ console.log('[water-plus MOBILE] isTrusted='+(ev&&ev.isTrusted)+' type='+(ev&&ev.type)+' detail='+(ev&&ev.detail), (new Error('water-plus-mobile-stack')).stack); updWater(1); };}
   var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
