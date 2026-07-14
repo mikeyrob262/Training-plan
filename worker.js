@@ -3402,8 +3402,8 @@ function itemsMatch_(a, b){
   // The old fall-through (different ids, same content -> match) collapsed
   // distinct log entries AND let a freshly-added food match an old same-content
   // tombstone — whose deleted:true then OR-merged onto the live item in
-  // mergeState_ and silently deleted it (contentFingerprint_ excludes `deleted`,
-  // so a live item and its tombstone fingerprint identically).
+  // mergeState_ and silently deleted it (contentFingerprint_ excludes the
+  // deleted flag, so a live item and its tombstone fingerprint identically).
   if(a.id != null && b.id != null) return a.id === b.id;
   // Only when a side is id-less (legacy data / reactive id assignment across a
   // sync) do we fall back to content fingerprint.
