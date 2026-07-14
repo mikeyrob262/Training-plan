@@ -6574,18 +6574,6 @@ function sportKeyFor_(t){
   if(/run|jog/.test(t)) return 'run';
   return 'bike';
 }
-function actIconG(type, sz, col){
-  sz=sz||16; col=col||'#fff';
-  var t=(type||'').toLowerCase();
-  var o='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
-  if(/race|fondo|flag/.test(t)){
-    return o+'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
-  }
-  if(/threshold|interval|tempo|vo2|sweet/.test(t)){
-    return o+'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
-  }
-  return o+sportPaths_(sportKeyFor_(t))+'</svg>';
-}
 
 
 // Compute which days earlier THIS WEEK (Mon..yesterday) had a PLANNED workout
@@ -8305,33 +8293,6 @@ function activityIcon_(sport, size){
   else { col='#4ECB3C'; path=BIKE; }                                                     // fallback: bike green
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+path+extra+'</svg>';
 }
-function activityIconHTML(sessionName, size){
-  size = size || 40;
-  var s = (sessionName||'').toLowerCase();
-  var iconSize = Math.round(size*0.5);
-  var type, color, path;
-  if(/swim/.test(s)){
-    type='swim'; color='#0EA5E9';
-    path='<path d="M15 9a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" /><path d="M6 11l4 -2l3.5 3l-1.5 2" /><path d="M3 16.75a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25" />';
-  } else if(/mobility|yoga|stretch/.test(s)){
-    type='mobility'; color='#F59E0B';
-    path='<path d="M4 20h4l1.5 -3" /><path d="M17 20l-1 -5h-5l1 -7" /><path d="M4 10l4 -1l4 -1l4 1.5l4 1.5" /><path d="M10.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />';
-  } else if(/condition|core|circuit|cardio/.test(s)){
-    type='conditioning'; color='#EF4444';
-    path='<path d="M19.5 13.572l-7.5 7.428l-2.896 -2.868m-6.117 -8.104a5 5 0 0 1 9.013 -3.022a5 5 0 1 1 7.5 6.572" /><path d="M3 13h2l2 3l2 -6l1 3h3" />';
-  } else if(/strength|full body/.test(s)){
-    type='strength'; color='#7C3AED';
-    path='<path d="M2 12h1" /><path d="M6 8h-2a1 1 0 0 0 -1 1v6a1 1 0 0 0 1 1h2" /><path d="M6 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1" /><path d="M9 12h6" /><path d="M15 7v10a1 1 0 0 0 1 1h1a1 1 0 0 0 1 -1v-10a1 1 0 0 0 -1 -1h-1a1 1 0 0 0 -1 1" /><path d="M18 8h2a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-2" /><path d="M22 12h-1" />';
-  } else if(/run|jog|walk|hill repeat|track|fartlek|tempo/.test(s)){
-    type='run'; color='#FF6B35';
-    path='<path d="M11.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21v-4l-4 -3l1 -6" /><path d="M7 12v-3l5 -1l3 3l3 1" />';
-  } else {
-    type='ride'; color='#5DCAA5';
-    path='<path d="M2 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M16 18a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" /><path d="M12 19v-4l-3 -3l5 -4l2 3h3" /><path d="M13.007 5a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />';
-  }
-  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;flex-shrink:0" data-activity-type="'+type+'">'
-    +'<svg width="'+iconSize+'" height="'+iconSize+'" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">'+path+'</svg></div>';
-}
 
 function showHomeDash(){
   showScreen('HOME_DASH');
@@ -9424,18 +9385,18 @@ function renderRideList(container, limit){
     html+='</div>';
   }
   var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
-  var sportColors={Ride:'#2FA8E0',GravelRide:'#2FA8E0',MountainBikeRide:'#E24B4A',Run:'#5DCAA5',TrailRun:'#0F6E56',Strength:'#A855F7',VirtualRide:'#4D9FFF'};
   var listGroup=document.createElement('div');
   listGroup.style.cssText='margin:0 16px';
   rides.forEach(function(r,idx){
     var realIdx=st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
     var sport=r.sportType||r.type||'Ride';
-    var iconColor=sportColors[sport]||'#2FA8E0';
-    var icon=actIconG(sport,16,'#fff');
+    if(rideIsIndoor(r) && /run|jog/i.test(sport)) sport='Treadmill';
+    var icon=activityIcon_(sport,36);
+    var iconColor=(icon.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C';
     var row=document.createElement('div');
     row.style.cssText='padding:11px 4px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
-    row.innerHTML='<div style="width:36px;height:36px;border-radius:9px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+    row.innerHTML='<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:14px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
       +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+' mi &middot; ':'')+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div>'
@@ -12046,25 +12007,6 @@ function dsShowCalendar(){
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var dayNames=['S','M','T','W','T','F','S'];
 
-  // Real Lucide/Tabler glyphs (shared with the rest of the app via sportPaths_).
-  var SPORT_SVG={
-    bike:sportPaths_('bike'), run:sportPaths_('run'), swim:sportPaths_('swim'),
-    strength:sportPaths_('strength'), walk:sportPaths_('walk')
-  };
-
-  function getSportInfo(r){
-    var s=(r.sportType||r.type||'').toLowerCase();
-    if(/ride|cycling/i.test(s)) return {key:'bike',col:'#4ade80',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
-    if(/run/i.test(s)) return {key:'run',col:'#FC4C02',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
-    if(/swim/i.test(s)) return {key:'swim',col:'#60a5fa',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
-    if(/strength|weight|lift/i.test(s)) return {key:'strength',col:'#8b5cf6',val:r.duration||''};
-    if(/walk/i.test(s)) return {key:'walk',col:'#f59e0b',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':''};
-    return {key:'bike',col:'#4ade80',val:r.distance?parseFloat(r.distance).toFixed(1)+' mi':r.duration||''};
-  }
-
-  function makeSVG(key,col,size){
-    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(SPORT_SVG[key]||SPORT_SVG.bike)+'</svg>';
-  }
 
   function renderCalendar(){
     mc.innerHTML='';
@@ -12173,10 +12115,9 @@ function dsShowCalendar(){
       if(!hasActivity){
         var _pov=(typeof plannedOverrideFor_==='function')?plannedOverrideFor_(dateStr):null;
         if(_pov && _pov.name){
-          var _pk=/run/i.test(_pov.name)?'run':/swim/i.test(_pov.name)?'swim':/strength|weight|lift/i.test(_pov.name)?'strength':'bike';
           var _pd=document.createElement('div');
           _pd.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;opacity:.7';
-          _pd.innerHTML=makeSVG(_pk,'#64748b','18');
+          _pd.innerHTML=activityIcon_(_pov.name,18);
           var _pl=document.createElement('div');
           _pl.style.cssText='font-size:8px;color:#64748b;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
           _pl.textContent=_pov.name;
@@ -12186,14 +12127,18 @@ function dsShowCalendar(){
 
       // Show up to 2 activities
       dayRides.slice(0,2).forEach(function(r){
-        var info=getSportInfo(r);
+        var _asp=r.sportType||r.type||'Ride';
+        if(rideIsIndoor(r) && /run|jog/i.test(_asp)) _asp='Treadmill';
+        var _asvg=activityIcon_(_asp,22);
+        var _acol=(_asvg.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C';
+        var _aval=r.distance?parseFloat(r.distance).toFixed(1)+' mi':(r.duration||'');
         var actDiv=document.createElement('div');
         actDiv.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px';
-        actDiv.innerHTML=makeSVG(info.key,info.col,'22');
-        if(info.val){
+        actDiv.innerHTML=_asvg;
+        if(_aval){
           var valEl=document.createElement('div');
-          valEl.style.cssText='font-size:10px;font-weight:700;color:'+info.col+';text-align:center;line-height:1.3';
-          valEl.textContent=info.val;
+          valEl.style.cssText='font-size:10px;font-weight:700;color:'+_acol+';text-align:center;line-height:1.3';
+          valEl.textContent=_aval;
           actDiv.appendChild(valEl);
         }
         cell.appendChild(actDiv);
@@ -13013,12 +12958,12 @@ function dsShowRidesList(){
       row.onmouseout=function(){this.style.background='';};
       row.onclick=(function(i){return function(){ console.log('CLICK',i); try{ if(typeof isDesktop==='function'&&isDesktop()){var rp=document.getElementById('ds-right-panel');if(rp)rp.style.display='flex';openDesktopRideDetail(i);}else{openRideDetail(i);} }catch(e){console.error(e);} };})(ridx);
 
-      // Sport icon (real Lucide/Tabler glyph via actIconG)
-      var _st=(r.sportType||r.type||'').toLowerCase();
-      var _col=_st.indexOf('run')>=0?'#FC4C02':_st.indexOf('swim')>=0?'#60a5fa':(_st.indexOf('strength')>=0||_st.indexOf('weight')>=0)?'#8b5cf6':'#FC4C02';
+      // Sport glyph via the shared activityIcon_ (flat, sport-resolved).
+      var _st=r.sportType||r.type||'Ride';
+      if(rideIsIndoor(r) && /run|jog/i.test(_st)) _st='Treadmill';
       var icon=document.createElement('div');
-      icon.style.cssText='width:36px;height:36px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0';
-      icon.innerHTML=actIconG(_st,16,_col);
+      icon.style.cssText='width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0';
+      icon.innerHTML=activityIcon_(_st,34);
       row.appendChild(icon);
 
       // Name + date
