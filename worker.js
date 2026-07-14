@@ -3877,7 +3877,7 @@ function sv_impl(){
   // synchronous execution - this is what was causing app-wide input lag
   // once ride history grew into the thousands of entries.
   setTimeout(function(){
-    try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
+    try{ var _s=JSON.stringify(st); localStorage.setItem('mta2',_s); console.log('[sv->localStorage] OK bytes='+_s.length); }catch(e){ console.error('[sv->localStorage] FAILED — item NOT persisted locally:', (e&&e.name), '|', (e&&e.message)); }
   },0);
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
@@ -3888,7 +3888,9 @@ function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
+  try{ var _k=(typeof nutrDate!=='undefined'&&nutrDate)||'', _m=(typeof curMeal!=='undefined'&&curMeal)||''; var _lc=(st.nl&&st.nl[_k]&&st.nl[_k].meals&&st.nl[_k].meals[_m]&&st.nl[_k].meals[_m].length)||0; var _rm=(data.nl&&data.nl[_k]&&data.nl[_k].meals&&data.nl[_k].meals[_m]); var _rc=_rm?(_rm.length!=null?_rm.length:Object.keys(_rm).length):0; console.log('[applyFirebaseData] FIRE sinceWrite='+(Date.now()-fbWriteTs)+'ms date='+_k+' meal='+_m+' LOCAL='+_lc+' REMOTE='+_rc); window.__afdBefore=_lc; }catch(_x){ console.log('[applyFirebaseData] FIRE (count read failed)'); }
   st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+  try{ var _k2=(typeof nutrDate!=='undefined'&&nutrDate)||'', _m2=(typeof curMeal!=='undefined'&&curMeal)||''; var _mc=(st.nl&&st.nl[_k2]&&st.nl[_k2].meals&&st.nl[_k2].meals[_m2]&&st.nl[_k2].meals[_m2].length)||0; console.log('[applyFirebaseData] MERGED result='+_mc+((window.__afdBefore!=null&&_mc<window.__afdBefore)?('  <-- LOST '+(window.__afdBefore-_mc)+' item(s) in the merge!'):'')); }catch(_x){}
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
@@ -3904,7 +3906,8 @@ function applyFirebaseData(data){
 function initFirebaseSync(){
   if(fbPollTimer) clearInterval(fbPollTimer);
   fbPollTimer = setInterval(function(){
-    if(Date.now() - fbWriteTs < 3000) return;
+    if(Date.now() - fbWriteTs < 3000){ console.log('[fbPoll] SKIP (sinceWrite='+(Date.now()-fbWriteTs)+'ms < 3000)'); return; }
+    console.log('[fbPoll] FIRE (sinceWrite='+(Date.now()-fbWriteTs)+'ms)');
     ensureFbAuth_().then(function(tok){
       return fetch(fbAuthedUrl_(tok))
         .then(function(r){ return r.ok ? r.json() : null; })
@@ -3944,7 +3947,7 @@ function fbPush(silent, forceOverwrite){
   .then(function(r){ return r && r.ok ? r.json() : Promise.reject(r?r.status:'no response'); })
   .then(function(){
     st.lastUpdate = fbWriteTs;
-    try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
+    try{ var _s2=JSON.stringify(st); localStorage.setItem('mta2',_s2); console.log('[fbPush->localStorage] OK bytes='+_s2.length); }catch(e){ console.error('[fbPush->localStorage] FAILED:', (e&&e.name), '|', (e&&e.message)); }
     if(!silent) toast('Cloud Saved!');
   })
   .catch(function(e){ if(!silent) toast('! Save failed: '+e); });
@@ -3962,7 +3965,7 @@ function fbPull(silent){
       if(Array.isArray(data)) data=Object.assign({},data);
       if(Array.isArray(st)) st=Object.assign({},st);
       st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
-      try{localStorage.setItem('mta2',JSON.stringify(st));}catch(e){}
+      try{ var _s3=JSON.stringify(st); localStorage.setItem('mta2',_s3); console.log('[sync->localStorage] OK bytes='+_s3.length); }catch(e){ console.error('[sync->localStorage] FAILED:', (e&&e.name), '|', (e&&e.message)); }
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
       document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
       for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
