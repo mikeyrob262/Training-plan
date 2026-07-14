@@ -8432,8 +8432,7 @@ function showHomeDash(){
   html+='</div>';
 
   // Recent Activity (real data)
-  var sorted=rides.slice().sort(function(a,b){return new Date(b.date)-new Date(a.date);});
-  var recent=sorted.slice(0,3);
+  var recent=recentRides_(3);
   html+='<div style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Recent Activity</span>'
@@ -10851,6 +10850,23 @@ function rideKey(r){
   var dist=r.distance?Math.round(parseFloat(r.distance)):0;
   return 'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.movingSecs||r.duration||'');
 }
+// Shared Recent Activity list for both dashboards (showHomeDash + dsShowDashboard).
+// All non-deleted rides, deduped by the canonical rideKey(r) — so two distinct
+// same-day rides aren't collapsed the way the old 'd'+date+name key did —
+// preferring the copy that carries GPS, sorted newest-first. NO sport-type
+// filter: every activity type, including VirtualRide, shows.
+function recentRides_(n){
+  var seen={}, out=[];
+  (st.rides||[]).filter(function(r){return r && !r.deleted;}).forEach(function(r){
+    var k=rideKey(r), ex=seen[k];
+    if(ex===undefined){ seen[k]=r; out.push(r); }
+    else if(((r.gpsLats&&r.gpsLats.length)||0) > ((ex.gpsLats&&ex.gpsLats.length)||0)){
+      out[out.indexOf(ex)]=r; seen[k]=r;
+    }
+  });
+  out.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  return out.slice(0, n);
+}
 function isDesktop(){ return window.innerWidth >= 1024; }
 function dsShowActivities(){
   var mc = document.getElementById('ds-content');
@@ -12247,28 +12263,9 @@ function dsShowDashboard(){
   // Hide right panel on dashboard
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var rides = (st.rides||[]).slice().sort(function(a,b){ return normDate(b.date)>normDate(a.date)?1:-1; });
-  // Most recent 3 unique rides with GPS preferred
-  var _rSeen={}, _rDeduped=[];
-  (st.rides||[]).forEach(function(r){
-    var key=r.stravaId?'s'+r.stravaId:'d'+(r.date||'')+(r.name||'');
-    var ex=_rSeen[key];
-    if(!ex){_rSeen[key]=r;_rDeduped.push(r);}
-    else if((r.gpsLats&&r.gpsLats.length||0)>(ex.gpsLats&&ex.gpsLats.length||0)){
-      _rDeduped[_rDeduped.indexOf(ex)]=r;_rSeen[key]=r;
-    }
-  });
-  function _normDate(d){
-    if(!d) return '';
-    // Normalize "2026-6-7" to "2026-06-07" for correct string sort
-    var p=d.split('-');
-    if(p.length===3) return p[0]+'-'+(p[1].length===1?'0':'')+p[1]+'-'+(p[2].length===1?'0':'')+p[2];
-    return d;
-  }
-  var recent = _rDeduped.filter(function(r){
-    return !/virtual|weight|strength/i.test(r.sportType||r.type||'');
-  }).sort(function(a,b){
-    return _normDate(b.date)>_normDate(a.date)?1:-1;
-  }).slice(0,3);
+  // Most recent 3 rides — shared with showHomeDash via recentRides_ (all activity
+  // types incl. VirtualRide, deduped by rideKey, non-deleted only, newest first).
+  var recent = recentRides_(3);
   var ftp = parseInt(st.ftp||186);
   var bwt = parseFloat(st.weight||162.5);
   var now = new Date();
