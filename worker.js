@@ -11691,7 +11691,7 @@ function dsShowNutrition(){
     var wPlus=document.createElement('button'); wPlus.textContent='+';
     [wMinus,wPlus].forEach(function(b){ b.style.cssText='width:22px;height:22px;border-radius:6px;background:#1a1f2e;border:none;color:#22d3ee;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0'; });
     wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
-    wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
+    wPlus.onclick=function(ev){ console.log('[wPlus.onclick] isTrusted='+(ev&&ev.isTrusted)+' type='+(ev&&ev.type)+' detail='+(ev&&ev.detail), (new Error('wPlus.onclick-stack')).stack); nutrDate=viewKey; updWater(1); };
     var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
     wReset.onclick=function(){ nutrDate=viewKey; uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };
     wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
