@@ -46,6 +46,12 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
 @media (min-width:520px){
   body{background:var(--s3, #111)}
   #app-shell{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg);box-shadow:0 0 40px rgba(0,0,0,.25);position:relative}
+/* iOS Safari auto-zooms the viewport when a focused input has computed
+   font-size < 16px (reads as an expand + shift up-left). Force >=16px on touch
+   devices so focusing the food search / edit fields never triggers it. Desktop
+   keeps its smaller inputs. Preferred over a viewport maximum-scale=1 lock,
+   which would also disable the user's own pinch-zoom. */
+@media (pointer: coarse){ input, textarea, select { font-size: 16px !important; } }
   #app-shell .bnav{max-width:480px;left:50%;transform:translateX(-50%)}
   #app-shell .toast{max-width:480px}
 }
