@@ -15,9 +15,6 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- DEBUG (remove on revert): on-device console for mobile capture -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -6851,21 +6848,17 @@ function nutritionForDate(key){
 // actions (add food, log water, remove, edit, save meal) call this instead of
 // hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
 // action works on both mobile and desktop without a duplicated copy.
-window.addEventListener('error', function(_e){ try{ console.error('[GLOBAL error]', (_e&&_e.message), '|', (_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno), '| stack:', (_e&&_e.error&&_e.error.stack)); }catch(_x){} });
-window.addEventListener('unhandledrejection', function(_e){ try{ var _r=_e&&_e.reason; console.error('[GLOBAL unhandledrejection]', (_r&&_r.message)||_r, '| stack:', (_r&&_r.stack)); }catch(_x){} });
-var __nutRefreshN=0;
 function nutRefresh(){
-  var _n=++__nutRefreshN;
-  console.log('[nutRefresh] ENTER #'+_n+' scrollY='+window.scrollY);
-  console.trace('[nutRefresh] triggered #'+_n);
-  try { return nutRefresh_impl.apply(this, arguments); }
-  catch(e){ console.error('[nutRefresh] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
-  finally { console.log('[nutRefresh] EXIT #'+_n+' scrollY='+window.scrollY); }
-}
-function nutRefresh_impl(){
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   if(typeof renderNutr==='function') renderNutr();
-  if(typeof showScreen==='function') showScreen('NUTR');
+  // Only navigate to the Nutrition screen if we're not already on it. showScreen()
+  // calls window.scrollTo(0,0); on a refresh (after adding a food or changing
+  // water) that snapped the page to the top, which read as a freeze / vanished
+  // item. A refresh must not re-scroll.
+  if(typeof showScreen==='function'){
+    var _nutrEl=document.getElementById('NUTR');
+    if(!_nutrEl || _nutrEl.style.display!=='block') showScreen('NUTR');
+  }
 }
 // Round a chart-axis tick value for display, killing IEEE float noise like
 // 2.6000000000005. One shared helper for every axis so we don't grow three
@@ -6976,16 +6969,7 @@ function editFoodItem(meal, idx) {
   };
 }
 
-var __renderNutrN=0;
 function renderNutr(){
-  var _n=++__renderNutrN;
-  console.log('[renderNutr] ENTER #'+_n+' scrollY='+window.scrollY);
-  console.trace('[renderNutr] triggered #'+_n);
-  try { return renderNutr_impl.apply(this, arguments); }
-  catch(e){ console.error('[renderNutr] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
-  finally { console.log('[renderNutr] EXIT #'+_n+' scrollY='+window.scrollY); }
-}
-function renderNutr_impl(){
   MTGT = calcMTGT(); // recalc in case weight changed
   var nd=getNDay(nutrDate),tot=getDTots(nutrDate);
   // Training-aware targets: real calorie/carb/protein/sodium/fluid needs
@@ -7818,16 +7802,7 @@ function renderNutr_impl(){
   var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
-var __openFoodN=0;
 function openFoodForMeal(meal){
-  var _n=++__openFoodN;
-  console.log('[openFoodForMeal] ENTER #'+_n+' meal='+meal+' scrollY='+window.scrollY);
-  console.trace('[openFoodForMeal] triggered #'+_n);
-  try { return openFoodForMeal_impl.apply(this, arguments); }
-  catch(e){ console.error('[openFoodForMeal] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| STACK:', (e&&e.stack)); throw e; }
-  finally { console.log('[openFoodForMeal] EXIT #'+_n+' scrollY='+window.scrollY); setTimeout(function(){ console.log('[openFoodForMeal] POST(+50ms) #'+_n+' scrollY='+window.scrollY); },50); }
-}
-function openFoodForMeal_impl(meal){
   curMeal = meal;
   if(!nutrDate) nutrDate = getTodayKey();
   var old = document.getElementById('food-modal');
@@ -8149,7 +8124,7 @@ function renderFoodRows(container, list){
           renderNutr();
           showScreen('NUTR');
         } catch(e) {
-          console.error('[Add food TAP path] REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack));
+          console.error('Add food error:', e);
           btn.disabled = false;
           btn.textContent = 'Add';
         }
