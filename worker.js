@@ -15,11 +15,6 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- DEBUG (remove on revert): on-device console + global error capture -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});
-window.addEventListener('error',function(_e){try{console.error('[GLOBAL error]',(_e&&_e.message),'|',(_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno),'| stack:',(_e&&_e.error&&_e.error.stack));}catch(_x){}});
-window.addEventListener('unhandledrejection',function(_e){try{var _r=_e&&_e.reason;console.error('[GLOBAL unhandledrejection]',(_r&&_r.message)||_r,'| stack:',(_r&&_r.stack));}catch(_x){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -6895,15 +6890,19 @@ function nutritionForDate(key){
 // action works on both mobile and desktop without a duplicated copy.
 function nutRefresh(){
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
+  // Preserve scroll across the mobile re-render. renderNutr rebuilds #NUTR via
+  // innerHTML; as the content briefly empties, the browser clamps window scroll
+  // toward 0 — so even with showScreen skipped, a qty/food change jumped the page
+  // to the top. If we were already on Nutrition (a refresh, not a navigation),
+  // capture scroll before the render and restore it after layout.
+  var _nutrEl=document.getElementById('NUTR');
+  var _wasActive=!!(_nutrEl && _nutrEl.style.display==='block');
+  var _sy=window.scrollY||window.pageYOffset||0;
   if(typeof renderNutr==='function') renderNutr();
-  // Only navigate to the Nutrition screen if we're not already on it. showScreen()
-  // calls window.scrollTo(0,0); on a refresh (after adding a food or changing
-  // water) that snapped the page to the top, which read as a freeze / vanished
-  // item. A refresh must not re-scroll.
-  if(typeof showScreen==='function'){
-    var _nutrEl=document.getElementById('NUTR');
-    if(!_nutrEl || _nutrEl.style.display!=='block') showScreen('NUTR');
-  }
+  // Only navigate to Nutrition if we're not already on it — showScreen() calls
+  // window.scrollTo(0,0), correct for navigation but wrong for a refresh.
+  if(typeof showScreen==='function' && !_wasActive) showScreen('NUTR');
+  if(_wasActive && _sy) requestAnimationFrame(function(){ window.scrollTo(0, _sy); });
 }
 // Round a chart-axis tick value for display, killing IEEE float noise like
 // 2.6000000000005. One shared helper for every axis so we don't grow three
@@ -7687,18 +7686,15 @@ function renderNutr(){
         rmBtn.onclick=function(){rmFood(mn,i);};
         editBtn.onclick=function(){editFoodItem(mn,i);};
         plusBtn.onclick=function(){
-         console.log('[qty+] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          console.log('[qty+] mutated -> sv()'); sv(); console.log('[qty+] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty+] EXIT OK');
-         } catch(e){ console.error('[qty+] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
+          sv();nutRefresh();
         };
         minusBtn.onclick=function(){
-         console.log('[qty-] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
@@ -7711,8 +7707,7 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          console.log('[qty-] mutated -> sv()'); sv(); console.log('[qty-] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty-] EXIT OK');
-         } catch(e){ console.error('[qty-] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
+          sv();nutRefresh();
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
