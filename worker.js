@@ -6894,12 +6894,15 @@ function rmFood(meal,idx){
   }
 }
 
+window.addEventListener('error', function(_e){ try{ console.error('[GLOBAL error]', (_e&&_e.message), '|', (_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno), '| stack:', (_e&&_e.error&&_e.error.stack)); }catch(_x){} });
+window.addEventListener('unhandledrejection', function(_e){ try{ var _r=_e&&_e.reason; console.error('[GLOBAL unhandledrejection]', (_r&&_r.message)||_r, '| stack:', (_r&&_r.stack)); }catch(_x){} });
 var __updWaterN=0;
 function updWater(delta){
   var _n=++__updWaterN;
   console.log('[updWater] ENTER #'+_n+' delta='+delta);
   console.trace('[updWater] triggered #'+_n);
   try { return updWater_impl.apply(this, arguments); }
+  catch(e){ console.error('[updWater] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
   finally { console.log('[updWater] EXIT #'+_n); }
 }
 function updWater_impl(delta){
