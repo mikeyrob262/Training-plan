@@ -15,9 +15,6 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- DEBUG (remove on revert): on-device console for mobile capture -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -6851,15 +6848,7 @@ function nutritionForDate(key){
 // actions (add food, log water, remove, edit, save meal) call this instead of
 // hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
 // action works on both mobile and desktop without a duplicated copy.
-var __nutRefreshN=0;
 function nutRefresh(){
-  var _n=++__nutRefreshN;
-  console.log('[nutRefresh] ENTER #'+_n);
-  console.trace('[nutRefresh] triggered #'+_n);
-  try { return nutRefresh_impl.apply(this, arguments); }
-  finally { console.log('[nutRefresh] EXIT #'+_n); }
-}
-function nutRefresh_impl(){
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   if(typeof renderNutr==='function') renderNutr();
   if(typeof showScreen==='function') showScreen('NUTR');
@@ -6894,54 +6883,23 @@ function rmFood(meal,idx){
   }
 }
 
-window.addEventListener('error', function(_e){ try{ console.error('[GLOBAL error]', (_e&&_e.message), '|', (_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno), '| stack:', (_e&&_e.error&&_e.error.stack)); }catch(_x){} });
-window.addEventListener('unhandledrejection', function(_e){ try{ var _r=_e&&_e.reason; console.error('[GLOBAL unhandledrejection]', (_r&&_r.message)||_r, '| stack:', (_r&&_r.stack)); }catch(_x){} });
-var __updWaterN=0;
 function updWater(delta){
-  var _n=++__updWaterN;
-  console.log('[updWater] ENTER #'+_n+' delta='+delta);
-  console.trace('[updWater] triggered #'+_n);
-  try { return updWater_impl.apply(this, arguments); }
-  catch(e){ console.error('[updWater] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
-  finally { console.log('[updWater] EXIT #'+_n); }
-}
-function updWater_impl(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
   sv();
-  // Update the water widget IN PLACE — do NOT rebuild the whole nutrition view
-  // on every tick. The full re-render destroyed the button mid-click and, with
-  // the old stacked listeners, produced unstable +/- (jumped +40, then dead,
-  // then negative). Full re-render only if no water widget is mounted.
-  if(!refreshWaterInPlace_()) nutRefresh();
+  // Full re-render after a water change. The old refreshWaterInPlace_ in-place
+  // optimization was removed: it threw on the render path (masked as a
+  // cross-origin "Script error."), leaving state correct but the display
+  // stale/frozen. nutRefresh() is correct and fast enough now.
+  nutRefresh();
 }
 function resetWater(){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=0;
   sv();
-  if(!refreshWaterInPlace_()) nutRefresh();
-}
-// In-place update of any mounted water widget. Both surfaces tag their oz label
-// with data-water-oz and their bar fill with data-water-bar, each holding the
-// day's target oz. Returns true if it updated at least one (so callers skip the
-// expensive full re-render that was the source of the instability).
-function refreshWaterInPlace_(){
-  var nd=getNDay(nutrDate);
-  var oz=(nd.water||0)*((typeof WATER_GLASS_OZ!=='undefined')?WATER_GLASS_OZ:8);
-  var labels=document.querySelectorAll('[data-water-oz]');
-  var bars=document.querySelectorAll('[data-water-bar]');
-  if(!labels.length && !bars.length) return false;
-  for(var i=0;i<labels.length;i++){
-    var lt=parseInt(labels[i].getAttribute('data-water-oz'),10)||64;
-    labels[i].textContent=oz+' / '+lt+' oz';
-  }
-  for(var j=0;j<bars.length;j++){
-    var bt=parseInt(bars[j].getAttribute('data-water-bar'),10)||64;
-    bars[j].style.width=Math.min(100,Math.round(oz/bt*100))+'%';
-  }
-  return true;
+  nutRefresh();
 }
 
 function nutrDelta(d){
@@ -7833,7 +7791,7 @@ function renderNutr(){
   var np=document.getElementById('nutr-prev');if(np){np.onclick=function(){nutrDelta(-1);};}
   var nn=document.getElementById('nutr-next');if(nn){nn.onclick=function(){nutrDelta(1);};}
   var wm=document.getElementById('water-minus');if(wm){wm.onclick=function(){updWater(-1);};}
-  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(ev){ console.log('[water-plus MOBILE] isTrusted='+(ev&&ev.isTrusted)+' type='+(ev&&ev.type)+' detail='+(ev&&ev.detail), (new Error('water-plus-mobile-stack')).stack); updWater(1); };}
+  var wp=document.getElementById('water-plus');if(wp){wp.onclick=function(){updWater(1);};}
   var wr=document.getElementById('water-reset');if(wr){wr.onclick=function(){ uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };}
   var bb=document.getElementById('nutr-back');if(bb){bb.onclick=showTrain;}
 }
@@ -11697,7 +11655,7 @@ function dsShowNutrition(){
     var wPlus=document.createElement('button'); wPlus.textContent='+';
     [wMinus,wPlus].forEach(function(b){ b.style.cssText='width:22px;height:22px;border-radius:6px;background:#1a1f2e;border:none;color:#22d3ee;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0'; });
     wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
-    wPlus.onclick=function(ev){ console.log('[wPlus.onclick] isTrusted='+(ev&&ev.isTrusted)+' type='+(ev&&ev.type)+' detail='+(ev&&ev.detail), (new Error('wPlus.onclick-stack')).stack); nutrDate=viewKey; updWater(1); };
+    wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
     var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
     wReset.onclick=function(){ nutrDate=viewKey; uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };
     wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
