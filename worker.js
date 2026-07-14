@@ -6848,7 +6848,15 @@ function nutritionForDate(key){
 // actions (add food, log water, remove, edit, save meal) call this instead of
 // hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
 // action works on both mobile and desktop without a duplicated copy.
+var __nutRefreshN=0;
 function nutRefresh(){
+  var _n=++__nutRefreshN;
+  console.log('[nutRefresh] ENTER #'+_n);
+  console.trace('[nutRefresh] triggered #'+_n);
+  try { return nutRefresh_impl.apply(this, arguments); }
+  finally { console.log('[nutRefresh] EXIT #'+_n); }
+}
+function nutRefresh_impl(){
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   if(typeof renderNutr==='function') renderNutr();
   if(typeof showScreen==='function') showScreen('NUTR');
@@ -6883,7 +6891,15 @@ function rmFood(meal,idx){
   }
 }
 
+var __updWaterN=0;
 function updWater(delta){
+  var _n=++__updWaterN;
+  console.log('[updWater] ENTER #'+_n+' delta='+delta);
+  console.trace('[updWater] triggered #'+_n);
+  try { return updWater_impl.apply(this, arguments); }
+  finally { console.log('[updWater] EXIT #'+_n); }
+}
+function updWater_impl(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
