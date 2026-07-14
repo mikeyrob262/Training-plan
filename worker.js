@@ -15,9 +15,6 @@ export default {
 <meta name="theme-color" content="#FC4C02">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/mikeyrob262/Training-plan/main/icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<!-- DEBUG (remove on revert): on-device console for mobile capture -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>window.addEventListener('DOMContentLoaded',function(){try{eruda.init();}catch(e){}});</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 <script>/* fflate@0.8.2 (UMD) inlined - cdnjs path 404d, keep window.fflate reliable */
@@ -3851,16 +3848,47 @@ function normalizeState_(s){
 }
 
 // Save to localStorage, then debounce-push to Firebase after 1.5s
-window.addEventListener('error', function(_e){ try{ console.error('[GLOBAL error]', (_e&&_e.message), '|', (_e&&_e.filename)+':'+(_e&&_e.lineno)+':'+(_e&&_e.colno), '| stack:', (_e&&_e.error&&_e.error.stack)); }catch(_x){} });
-window.addEventListener('unhandledrejection', function(_e){ try{ var _r=_e&&_e.reason; console.error('[GLOBAL unhandledrejection]', (_r&&_r.message)||_r, '| stack:', (_r&&_r.stack)); }catch(_x){} });
-var __svN=0;
-function sv(){
-  var _n=++__svN;
-  console.log('[sv] ENTER #'+_n);
-  try { var _r=sv_impl.apply(this, arguments); console.log('[sv] EXIT #'+_n+' OK'); return _r; }
-  catch(e){ console.error('[sv] THREW #'+_n+' REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
+// Fields that hold a ride's heavy per-point GPS/chart streams. They live
+// authoritatively in Firebase (/data.json and /gps/{key}) and lazy-load on
+// demand, so the localStorage cache (a ~5MB-capped store) must NOT carry them.
+var STORAGE_HEAVY_FIELDS_=['lats','lons','gpsLats','gpsLons','chartPwr','chartHR','chartEle','chartCad','chartSpd','chartTime','chartDist','laps','streams'];
+// Shallow-clone st with each ride/run's heavy fields stripped, for serialization
+// only. In-memory st keeps everything; only the mta2 copy is slimmed — this is
+// what keeps mta2 (~1.5MB slimmed vs ~7.9MB full) well under the quota.
+function slimForStorage_(s){
+  if(!s||typeof s!=='object') return s;
+  var out={},k; for(k in s){ if(Object.prototype.hasOwnProperty.call(s,k)) out[k]=s[k]; }
+  ['rides','runs'].forEach(function(arrKey){
+    if(!Array.isArray(s[arrKey])) return;
+    out[arrKey]=s[arrKey].map(function(r){
+      if(!r||typeof r!=='object') return r;
+      var slim=null;
+      for(var i=0;i<STORAGE_HEAVY_FIELDS_.length;i++){
+        var f=STORAGE_HEAVY_FIELDS_[i];
+        if(r[f]!=null){ if(!slim){ slim={}; for(var kk in r){ if(Object.prototype.hasOwnProperty.call(r,kk)) slim[kk]=r[kk]; } } delete slim[f]; }
+      }
+      return slim||r;
+    });
+  });
+  return out;
 }
-function sv_impl(){
+// Single choke point for persisting st to localStorage. Slims heavy GPS out, and
+// SURFACES a failed save instead of swallowing it — a silent catch on the only
+// local-persistence path is what let a QuotaExceededError hide, so every save
+// silently failed and freshly-added items vanished on reload.
+function saveLocal_(){
+  try{
+    var _s=JSON.stringify(slimForStorage_(st));
+    localStorage.setItem('mta2',_s);
+    console.log('[save] mta2 OK bytes='+_s.length+' ('+Math.round(_s.length/1024)+' KB)');
+    return true;
+  }catch(e){
+    console.error('[save] mta2 FAILED:', (e&&e.name), (e&&e.message));
+    try{ toast('Couldn\\'t save to this device (storage full). Your data is still synced to the cloud.'); }catch(_x){}
+    return false;
+  }
+}
+function sv(){
   // Any persisted mutation may change a ride's dedup keys (date / distance /
   // movingSecs / stravaId), soft-delete one, or replace one in place without
   // changing st.rides' length or identity — all of which would leave the
@@ -3877,7 +3905,7 @@ function sv_impl(){
   // synchronous execution - this is what was causing app-wide input lag
   // once ride history grew into the thousands of entries.
   setTimeout(function(){
-    try{ var _s=JSON.stringify(st); localStorage.setItem('mta2',_s); console.log('[sv->localStorage] OK bytes='+_s.length); }catch(e){ console.error('[sv->localStorage] FAILED — item NOT persisted locally:', (e&&e.name), '|', (e&&e.message)); }
+    saveLocal_();
   },0);
   clearTimeout(svDebounce);
   svDebounce = setTimeout(function(){ fbPush(true); }, 1500);
@@ -3888,9 +3916,7 @@ function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
-  try{ var _k=(typeof nutrDate!=='undefined'&&nutrDate)||'', _m=(typeof curMeal!=='undefined'&&curMeal)||''; var _lc=(st.nl&&st.nl[_k]&&st.nl[_k].meals&&st.nl[_k].meals[_m]&&st.nl[_k].meals[_m].length)||0; var _rm=(data.nl&&data.nl[_k]&&data.nl[_k].meals&&data.nl[_k].meals[_m]); var _rc=_rm?(_rm.length!=null?_rm.length:Object.keys(_rm).length):0; console.log('[applyFirebaseData] FIRE sinceWrite='+(Date.now()-fbWriteTs)+'ms date='+_k+' meal='+_m+' LOCAL='+_lc+' REMOTE='+_rc); window.__afdBefore=_lc; }catch(_x){ console.log('[applyFirebaseData] FIRE (count read failed)'); }
   st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
-  try{ var _k2=(typeof nutrDate!=='undefined'&&nutrDate)||'', _m2=(typeof curMeal!=='undefined'&&curMeal)||''; var _mc=(st.nl&&st.nl[_k2]&&st.nl[_k2].meals&&st.nl[_k2].meals[_m2]&&st.nl[_k2].meals[_m2].length)||0; console.log('[applyFirebaseData] MERGED result='+_mc+((window.__afdBefore!=null&&_mc<window.__afdBefore)?('  <-- LOST '+(window.__afdBefore-_mc)+' item(s) in the merge!'):'')); }catch(_x){}
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
@@ -3906,8 +3932,7 @@ function applyFirebaseData(data){
 function initFirebaseSync(){
   if(fbPollTimer) clearInterval(fbPollTimer);
   fbPollTimer = setInterval(function(){
-    if(Date.now() - fbWriteTs < 3000){ console.log('[fbPoll] SKIP (sinceWrite='+(Date.now()-fbWriteTs)+'ms < 3000)'); return; }
-    console.log('[fbPoll] FIRE (sinceWrite='+(Date.now()-fbWriteTs)+'ms)');
+    if(Date.now() - fbWriteTs < 3000) return;
     ensureFbAuth_().then(function(tok){
       return fetch(fbAuthedUrl_(tok))
         .then(function(r){ return r.ok ? r.json() : null; })
@@ -3947,7 +3972,7 @@ function fbPush(silent, forceOverwrite){
   .then(function(r){ return r && r.ok ? r.json() : Promise.reject(r?r.status:'no response'); })
   .then(function(){
     st.lastUpdate = fbWriteTs;
-    try{ var _s2=JSON.stringify(st); localStorage.setItem('mta2',_s2); console.log('[fbPush->localStorage] OK bytes='+_s2.length); }catch(e){ console.error('[fbPush->localStorage] FAILED:', (e&&e.name), '|', (e&&e.message)); }
+    saveLocal_();
     if(!silent) toast('Cloud Saved!');
   })
   .catch(function(e){ if(!silent) toast('! Save failed: '+e); });
@@ -3965,7 +3990,7 @@ function fbPull(silent){
       if(Array.isArray(data)) data=Object.assign({},data);
       if(Array.isArray(st)) st=Object.assign({},st);
       st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
-      try{ var _s3=JSON.stringify(st); localStorage.setItem('mta2',_s3); console.log('[sync->localStorage] OK bytes='+_s3.length); }catch(e){ console.error('[sync->localStorage] FAILED:', (e&&e.name), '|', (e&&e.message)); }
+      saveLocal_();
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
       document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
       for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
@@ -7657,18 +7682,15 @@ function renderNutr(){
         rmBtn.onclick=function(){rmFood(mn,i);};
         editBtn.onclick=function(){editFoodItem(mn,i);};
         plusBtn.onclick=function(){
-         console.log('[qty+] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
           var newQty=curQty+1;
           var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
           nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          console.log('[qty+] mutated -> sv()'); sv(); console.log('[qty+] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty+] EXIT OK');
-         } catch(e){ console.error('[qty+] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
+          sv();nutRefresh();
         };
         minusBtn.onclick=function(){
-         console.log('[qty-] ENTER mn='+mn+' i='+i); try {
           var nd=getNDay(nutrDate);
           var cur=nd.meals[mn][i];
           var curQty=cur._qty||1;
@@ -7681,8 +7703,7 @@ function renderNutr(){
             var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
             nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
           }
-          console.log('[qty-] mutated -> sv()'); sv(); console.log('[qty-] sv() ok -> nutRefresh()'); nutRefresh(); console.log('[qty-] EXIT OK');
-         } catch(e){ console.error('[qty-] THREW REAL ERROR:', (e&&e.message)||e, '| name:', (e&&e.name), '| STACK:', (e&&e.stack)); throw e; }
+          sv();nutRefresh();
         };
       })(meal,ii,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
