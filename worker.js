@@ -12743,9 +12743,21 @@ function zoneTimeFromCurve_(pc, ftp, durSecs){
   var arr=[Math.max(0,durSecs-a55), Math.max(0,a55-a75), Math.max(0,a75-a90), Math.max(0,a90-a105), a105];
   return arr.reduce(function(s,x){return s+x;},0)>0 ? arr : null;
 }
+// Robust ride duration in seconds: numeric movingSecs > "h:m:s" duration string
+// > plain-number duration > longest powerCurve window (~ride length). Without
+// this, curve rides whose only duration is a "1:23:45" string mis-parse to ~1s
+// and drop out of the distribution — pulling the count back toward the 13.
+function _rideDurSecs_(r){
+  var m=parseFloat(r.movingSecs); if(m>0) return m;
+  var d=r.duration;
+  if(typeof d==='string' && d.indexOf(':')>=0){ var p=d.split(':'), s=0; for(var i=0;i<p.length;i++){ s=s*60+(parseInt(p[i],10)||0); } if(s>0) return s; }
+  var n=parseFloat(d); if(n>0) return n;
+  if(r.powerCurve){ var mx=0; for(var k in r.powerCurve){ var kk=parseInt(k,10); if(kk>mx) mx=kk; } if(mx>0) return mx; }
+  return 0;
+}
 function rideZoneTime_(r, ftp){
   if(!r) return null;
-  var dur=parseFloat(r.movingSecs||r.duration||0)||0;
+  var dur=_rideDurSecs_(r);
   var zsum=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
   if(zsum>0) return {z:[r.z1s||0,r.z2s||0,r.z3s||0,r.z4s||0,(r.z5s||0)+(r.z6s||0)], src:'zones'};
   if(Array.isArray(r.zoneTime) && r.zoneTime.length===5) return {z:r.zoneTime, src:'stream'};
@@ -13059,12 +13071,20 @@ function dsShowAnalytics(){
       // Full continuous 90-day lines, gradient area fills, saturated colors,
       // TSB solid green on its own right axis, a "today" dot on the last point,
       // and a subtle per-line glow. Presentation only — values unchanged.
-      var _tdDot=function(c){ return c.dataIndex===(c.dataset.data.length-1)?4:0; };
       var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.34)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
+      // PRESENTATION-ONLY line smoothing. At ~90 daily points, Chart.js tension
+      // is visually negligible and the raw 7-day ATL / TSB series genuinely
+      // sawtooth day-to-day — so tension alone (tried 0.3/0.35/0.4) can't make
+      // flowing curves. A centered ~5-day moving average of the PLOTTED line
+      // flattens the daily noise into mockup-style curves. The computed
+      // CTL/ATL/TSB scalars shown in the gauges/cards are NOT touched — this
+      // only reshapes the chart line.
+      var _smooth=function(a,w){ w=w||5; var h=(w-1)/2, out=[]; for(var i=0;i<a.length;i++){ var s=0,n=0; for(var j=Math.max(0,i-h);j<=Math.min(a.length-1,i+h);j++){ s+=a[j]; n++; } out.push(Math.round(s/n*10)/10); } return out; };
+      var ctlS=_smooth(ctlArr,7), atlS=_smooth(atlArr,7), tsbS=_smooth(tsbArr,7);
       new Chart(gc,{type:'line',data:{labels:labels,datasets:[
-        {label:'CTL',data:ctlArr,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'ATL',data:atlArr,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'TSB',data:tsbArr,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
+        {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
       ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=6; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
     }
     var dc=document.getElementById('ds-dist-chart');
