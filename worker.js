@@ -8988,6 +8988,144 @@ function fetchLiveIntervalsWellness(callback){
     });
 }
 
+// ==== ANALYTICS TEACHING LAYER (phase 1: CTL / ATL / TSB) ==================
+// Additive tap-to-teach for the Fitness/Fatigue/Form cards. Metric computation
+// is untouched — this only READS the live values and renders a teaching panel
+// (bottom-sheet on mobile / centered popover on desktop, dark to match). Copy
+// (definitions + range guides) is a static map keyed by metric so future
+// metrics (FTP, NP, IF, TSS...) drop in the same way; ONLY the "for you" line
+// is computed from the live value + real next race. HTML is built with single-
+// quoted JS strings + double-quoted attrs; teaching copy is double-quoted so
+// apostrophes need no escaping; em-dashes via — (the outer template
+// literal renders these to real chars).
+function teachPMC_(){
+  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
+    return {ctl:Math.round(window.__liveWellness.ctl||0), atl:Math.round(window.__liveWellness.atl||0), tsb:Math.round(window.__liveWellness.tsb||0)};
+  }
+  var rides=(st.rides||[]).filter(function(r){return r && !r.deleted;});
+  var pmc=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var last=pmc.length?pmc[pmc.length-1]:{ctl:0,atl:0,tsb:0};
+  return {ctl:Math.round(last.ctl||0), atl:Math.round(last.atl||0), tsb:Math.round(last.tsb||0)};
+}
+function teachRacePhrase_(race){
+  if(!race || !race.name) return "";
+  if(race.daysOut==null) return race.name;
+  if(race.daysOut===0) return race.name+" (today)";
+  if(race.daysOut===1) return race.name+" (tomorrow)";
+  return race.name+" ("+race.daysOut+" days out)";
+}
+var METRIC_TEACH={
+  ctl:{
+    name:"CTL — Chronic Training Load", aka:"Fitness",
+    oneLiner:"Your rolling 42-day average training load — basically how much fitness you have banked. The higher it is, the bigger the weeks you can handle.",
+    ranges:[
+      {c:"#64748b", label:"Under 20", desc:"Just starting, or coming back from time off. Build gradually."},
+      {c:"#FC4C02", label:"20-40", desc:"Base fitness — a real platform to build on."},
+      {c:"#4D9FFF", label:"40-60", desc:"Well-built. You can absorb harder training blocks now."},
+      {c:"#00C896", label:"60-80", desc:"Strong, race-ready fitness for most events."},
+      {c:"#00C896", label:"80+", desc:"Elite range — hard to hold without near full-time training."}
+    ],
+    forYou:function(pmc, race){
+      var v=pmc.ctl;
+      var band=v>=80?"elite territory":v>=60?"strong, race-ready fitness":v>=40?"a well-built base":v>=20?"a solid starting base":"early days, still building";
+      var s="Yours: "+v+". That is "+band+". ";
+      if(race && race.name) s+="Hold your consistent weeks and this keeps climbing toward "+teachRacePhrase_(race)+" — fitness is built by showing up, not by single big rides.";
+      else s+="Consistency is what makes this climb — steady weeks beat the occasional monster ride.";
+      return s;
+    }
+  },
+  atl:{
+    name:"ATL — Acute Training Load", aka:"Fatigue",
+    oneLiner:"Your rolling 7-day average load — how tired your legs are from recent training. It reacts fast: a couple of hard days push it up, a rest day drops it.",
+    ranges:[
+      {c:"#4D9FFF", label:"Below your CTL", desc:"Fairly rested — room to add load if you want to build."},
+      {c:"#00C896", label:"About equal to CTL", desc:"Balanced — a productive, sustainable place to train."},
+      {c:"#FF7A45", label:"Above your CTL", desc:"Loading hard — how you build, but watch the stacking."},
+      {c:"#ef4444", label:"Well above CTL", desc:"Overreaching. Fine briefly; risky if it lasts."}
+    ],
+    forYou:function(pmc, race){
+      var v=pmc.atl, diff=pmc.atl-pmc.ctl;
+      var s="Yours: "+v+". ";
+      if(diff>15) s+="That is well above your fitness — you are loading hard right now. Good for a short block, but do not stack many more hard days"+(race&&race.name?(" before "+race.name):"")+".";
+      else if(diff>5) s+="Fatigue is running a bit ahead of fitness — that is exactly how you build, as long as you recover between the hard days.";
+      else if(diff>=-5) s+="Fatigue and fitness are balanced — a sustainable place to keep training productively.";
+      else s+="You are fairly rested — there is room to add load if you want to keep fitness climbing.";
+      return s;
+    }
+  },
+  tsb:{
+    name:"TSB — Training Stress Balance", aka:"Form",
+    oneLiner:"Fitness minus fatigue — are your legs fresh or tired right now? Positive means rested; negative means you are carrying training fatigue.",
+    ranges:[
+      {c:"#00C896", label:"+10 and up", desc:"Fresh / tapered — race-ready, but hold here too long and fitness fades."},
+      {c:"#4D9FFF", label:"+10 to -5", desc:"Balanced — fresh enough to perform, loaded enough to improve."},
+      {c:"#FC4C02", label:"-10 to -30", desc:"Carrying fatigue — normal and expected inside a training block."},
+      {c:"#ef4444", label:"Below -30", desc:"Deep fatigue — legs are cooked. Fine mid-block, not before an event."}
+    ],
+    forYou:function(pmc, race){
+      var v=pmc.tsb, sign=(v>=0?"+":"")+v;
+      var s="Yours: "+sign+". ";
+      if(v<=-30) s+="You are deep in a training load — legs are cooked. Normal for a heavy block, but you would want fresher legs before anything that matters.";
+      else if(v<=-10) s+="You are carrying fatigue from recent training — expected mid-block"+(race&&race.name?(", with "+race.name+" coming up"):"")+".";
+      else if(v<10) s+="Balanced — fresh enough to train well, loaded enough to keep improving.";
+      else if(v<20) s+="Fresh legs — a good day to push a hard session"+(race&&race.name&&race.daysOut!=null&&race.daysOut<=10?(" or sharpen for "+race.name):"")+".";
+      else s+="Very fresh — peaked or tapered. Great for racing"+(race&&race.name?(", "+race.name+" if it is close."):".");
+      if(v<=-20 && race && race.name && race.daysOut!=null && race.daysOut<=21) s+=" A rest day or two would pay off before "+race.name+".";
+      return s;
+    }
+  }
+};
+// Shared teaching panel. Reused by every metric now and in later phases.
+function openMetricTeach(metric){
+  var t=METRIC_TEACH[metric]; if(!t) return;
+  var pmc=teachPMC_();
+  var race=(typeof getNextRace_==="function")?getNextRace_():null;
+  var forYouText=t.forYou(pmc, race);
+  var desktop=(typeof isDesktop==="function" && isDesktop());
+  var old=document.getElementById("metric-teach"); if(old) old.remove();
+  var ov=document.createElement("div");
+  ov.id="metric-teach";
+  ov.style.cssText="position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.55);display:flex;"+(desktop?"align-items:center;justify-content:center;padding:20px;":"align-items:flex-end;");
+  var card=document.createElement("div");
+  card.style.cssText="background:#0d1017;color:#e6e9ef;font-family:-apple-system,sans-serif;box-shadow:0 -12px 44px rgba(0,0,0,.6);overflow-y:auto;-webkit-overflow-scrolling:touch;"
+    +(desktop?"width:min(430px,94vw);max-height:84vh;border:1px solid rgba(255,255,255,.1);border-radius:18px;":"width:100%;max-height:88vh;border-top:1px solid rgba(255,255,255,.1);border-top-left-radius:20px;border-top-right-radius:20px;");
+  var h='';
+  if(!desktop) h+='<div style="display:flex;justify-content:center;padding:8px 0 2px"><div style="width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.18)"></div></div>';
+  h+='<div style="padding:'+(desktop?'18px':'10px')+' 18px 18px">';
+  h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px">';
+  h+='<div><div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7a8290">'+uiEsc_(t.aka)+'</div>';
+  h+='<div style="font-size:17px;font-weight:800;color:#fff;margin-top:2px">'+uiEsc_(t.name)+'</div></div>';
+  h+='<button id="mt-close" aria-label="Close" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cfd4dd;width:32px;height:32px;border-radius:50%;font-size:19px;line-height:1;cursor:pointer;flex-shrink:0">&times;</button>';
+  h+='</div>';
+  h+='<div style="font-size:13.5px;color:#c7ccd6;line-height:1.5;margin-bottom:16px">'+uiEsc_(t.oneLiner)+'</div>';
+  h+='<div style="background:rgba(78,203,60,.08);border:1px solid rgba(78,203,60,.3);border-radius:12px;padding:12px 13px;margin-bottom:16px">';
+  h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7fe06a;margin-bottom:5px">For you, right now</div>';
+  h+='<div id="mt-foryou" style="font-size:13.5px;color:#eafce6;line-height:1.5;font-weight:600"></div>';
+  h+='</div>';
+  h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a8290;margin-bottom:8px">What the ranges mean</div>';
+  t.ranges.forEach(function(rg){
+    h+='<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:9px">';
+    h+='<span style="width:9px;height:9px;border-radius:50%;background:'+rg.c+';flex-shrink:0;margin-top:4px"></span>';
+    h+='<div><div style="font-size:12.5px;font-weight:700;color:#e6e9ef">'+uiEsc_(rg.label)+'</div>';
+    h+='<div style="font-size:12px;color:#9aa2b1;line-height:1.45">'+uiEsc_(rg.desc)+'</div></div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  card.innerHTML=h;
+  ov.appendChild(card);
+  // Plain text (apostrophes + race name safe) — this is the ONLY computed line.
+  var fy=card.querySelector('#mt-foryou'); if(fy) fy.textContent=forYouText;
+  var cl=card.querySelector('#mt-close'); if(cl) cl.onclick=function(){ ov.remove(); };
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+// One delegated listener so any current/future [data-metric-teach] element opens
+// the shared panel (phase-2 metrics reuse this with zero new wiring).
+document.addEventListener('click', function(e){
+  var el=(e.target && e.target.closest)?e.target.closest('[data-metric-teach]'):null;
+  if(el){ openMetricTeach(el.getAttribute('data-metric-teach')); }
+});
+
 function showAnalytics(){
   showScreen('ANALYTICS');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
@@ -9293,12 +9431,15 @@ function renderPerf(container){
   // plain Fitness/Fatigue/Form number layout
   html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 16px 20px">';
   [
-    {lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
-    {lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
-    {lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null}
+    {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
+    {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
+    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null}
   ].forEach(function(card){
-    html+='<div>'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3);margin-bottom:4px">'+card.lbl+'</div>'
+    // Tappable -> shared teaching panel (openMetricTeach via the delegated
+    // [data-metric-teach] listener). Info glyph signals it is tappable.
+    html+='<div data-metric-teach="'+card.key+'" role="button" tabindex="0" aria-label="Learn about '+card.lbl+'" style="cursor:pointer;border-radius:8px;margin:-4px -4px 0;padding:4px;transition:background .12s" onmouseover="this.style.background=&#39;rgba(255,255,255,.04)&#39;" onmouseout="this.style.background=&#39;transparent&#39;">'
+      +'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3)">'+card.lbl+'</span>'
+      +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7a8290" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
       +'<div style="font-size:22px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
       +'<div style="font-size:11px;font-weight:600;color:'+card.c+';margin-top:3px">'+card.sub+'</div>'
       +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
