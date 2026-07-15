@@ -12597,6 +12597,56 @@ function dsShowNutrition(){
   render();
 }
 
+// ==== ANALYTICS DASHBOARD HELPERS (presentation; REAL data or "—" only) ====
+// Progress-ring gauge. frac 0..1; centerText pre-formatted.
+function dsGauge_(frac, color, centerText, sub, size){
+  size=size||104; var sw=9, r=(size-sw)/2-1, cx=size/2, cy=size/2, circ=Math.PI*2*r;
+  frac=Math.max(0,Math.min(1,frac||0)); var off=circ*(1-frac);
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="display:block">'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#1a1f2e" stroke-width="'+sw+'"/>'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'" stroke-dasharray="'+circ.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" stroke-linecap="round" transform="rotate(-90 '+cx+' '+cy+')"/>'
+    +'<text x="'+cx+'" y="'+(cy-1)+'" text-anchor="middle" font-size="'+Math.round(size*0.23)+'" font-weight="800" fill="#fff" font-family="-apple-system,sans-serif">'+centerText+'</text>'
+    +(sub?'<text x="'+cx+'" y="'+(cy+15)+'" text-anchor="middle" font-size="9" font-weight="700" fill="#64748b" font-family="-apple-system,sans-serif">'+sub+'</text>':'')
+    +'</svg>';
+}
+// "Top X%" of the current value within your own history. null if too few points.
+function dsPercentileTop_(vals, current){
+  var v=(vals||[]).filter(function(x){return typeof x==='number' && !isNaN(x) && x>0;});
+  if(v.length<8 || !(current>0)) return null;
+  var greater=0; v.forEach(function(x){ if(x>current) greater++; });
+  return {topPct:Math.max(1,Math.round(100*(greater+1)/(v.length+1))), n:v.length};
+}
+// Power-time distribution over rides that actually carry a power stream
+// (chartPwr). Zone edges are %FTP — FLAGGED, since FTP is a stale manual value.
+// Rides with no power are EXCLUDED, never zero-filled.
+function dsPowerDist_(rides, ftp){
+  ftp=ftp||186; var edges=[0.55,0.75,0.90,1.05], buckets=[0,0,0,0,0], total=0, nRides=0;
+  (rides||[]).forEach(function(r){
+    var p=r.chartPwr; if(!p || !p.length) return; var used=false;
+    for(var i=0;i<p.length;i++){ var w=parseFloat(p[i]); if(!(w>0)) continue;
+      var f=w/ftp, z=f<edges[0]?0:f<edges[1]?1:f<edges[2]?2:f<edges[3]?3:4; buckets[z]++; total++; used=true; }
+    if(used) nRides++;
+  });
+  if(!total) return {hasData:false, nRides:0};
+  var labels=['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2+'];
+  var cols=['#64748b','#3b82f6','#22c55e','#f59e0b','#ef4444'];
+  return {hasData:true, nRides:nRides, zones:labels.map(function(l,i){ return {label:l, pct:Math.round(buckets[i]/total*100), color:cols[i]}; })};
+}
+// Daily ride presence + intensity for the consistency heatmap. TSS guarded by
+// constRideTSS_ so a garbage import value can't max out a day; presence (n) is
+// tracked separately so a rode-but-zero-TSS day still lights up.
+function dsConsistency_(rides, days, now, normDate){
+  var m={}; (rides||[]).forEach(function(r){ if(!r.date) return; var nd=normDate(r.date);
+    var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    if(!m[nd]) m[nd]={n:0,tss:0}; m[nd].n++; m[nd].tss+=(t||0);
+  });
+  var cells=[]; for(var i=days-1;i>=0;i--){ var d=new Date(now); d.setDate(d.getDate()-i);
+    var nd=normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate());
+    cells.push({date:nd, dow:d.getDay(), n:m[nd]?m[nd].n:0, tss:m[nd]?m[nd].tss:0});
+  }
+  return cells;
+}
+
 function dsShowAnalytics(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -12674,44 +12724,77 @@ function dsShowAnalytics(){
   var wrap=document.createElement('div');
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
 
-  // Top KPI cards
-  var kpiRow=document.createElement('div');
-  kpiRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
-  // Phase-2 metrics (W/kg + power/load) join the tappable KPI block. Values from
-  // teachCtx_ so the cards and the teaching sheet always agree; np/if/tss anchor
-  // to the most recent power ride. FTP is flagged "manual" right on the card.
   var _tc=teachCtx_();
+  // Tappable teaching card builder (data-metric-teach -> the document-level
+  // listener; both renderers must carry it).
+  function teachCard_(inner, key, label){
+    var c=document.createElement('div');
+    c.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
+    if(key){
+      c.setAttribute('data-metric-teach',key);
+      c.setAttribute('role','button'); c.setAttribute('tabindex','0'); c.setAttribute('aria-label','Learn about '+(label||key));
+      c.onmouseenter=function(){ c.style.background='#161a24'; c.style.borderColor='#2a3550'; };
+      c.onmouseleave=function(){ c.style.background='#111318'; c.style.borderColor='#1a1f2e'; };
+    }
+    c.innerHTML=inner; return c;
+  }
+  var _infoGlyph='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+
+  // -- HERO: Athlete IQ (pending formula approval) + W/kg percentile
+  var hero=document.createElement('div');
+  hero.style.cssText='display:grid;grid-template-columns:1.1fr 1fr;gap:14px;flex-shrink:0';
+  // ATHLETE IQ SCORE renders "—" until the formula is approved (proposed in
+  // chat). No authoritative-looking number without an agreed computation.
+  var iqCard=document.createElement('div');
+  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center';
+  iqCard.innerHTML='<div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7a8aa8;margin-bottom:6px">Athlete IQ Score</div>'
+    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:46px;font-weight:800;color:#4b5568;line-height:1">—</div>'
+    +'<div style="font-size:11px;color:#8b93a5;line-height:1.4">Formula pending your approval<br>(proposed in chat)</div></div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5">Will blend REAL inputs only: CTL trend, ride consistency, TSB balance, recent volume vs your baseline. No FTP-derived or sleep/HRV data.</div>';
+  hero.appendChild(iqCard);
+  var _wpct=dsPercentileTop_(wkgHistory, wkgNow);
+  var wkgHero=teachCard_(
+    '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:12px;color:#64748b">W/kg</div></div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:4px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
+    +'<div style="height:7px;background:#1a1f2e;border-radius:4px;margin-top:10px"><div style="height:7px;background:linear-gradient(90deg,#3b82f6,#4ade80);border-radius:4px;width:'+Math.round(Math.min(1,wkgNow/5)*100)+'%"></div></div>'
+    +'<div style="font-size:9px;color:#64748b;margin-top:6px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
+    ,'wkg','W/kg');
+  wkgHero.style.borderRadius='16px'; wkgHero.style.padding='18px 20px';
+  hero.appendChild(wkgHero);
+  wrap.appendChild(hero);
+
+  // -- GAUGES: CTL / ATL / TSB / W-kg (tappable)
+  var gaugeRow=document.createElement('div');
+  gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
   [
-    ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days','ctl'],
-    ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days','atl'],
-    ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel,'tsb'],
-    ['W/kg',wkgNow.toFixed(2)+' W/kg',wkgNow>=3.14?'#4ade80':'#60a5fa','FTP ÷ weight · Chase 1 = 3.14','wkg'],
+    {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#60a5fa',cap:'42-day load'},
+    {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f59e0b',cap:'7-day load'},
+    {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:tsbColor,cap:tsbLabel},
+    {key:'wkg',label:'W/kg',sub:'W/kg',frac:Math.min(1,wkgNow/5),center:wkgNow.toFixed(2),color:(wkgNow>=3.14?'#4ade80':'#60a5fa'),cap:'vs 3.14 target'}
+  ].forEach(function(g){
+    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
+      +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,104)+'</div>'
+      +'<div style="text-align:center;font-size:10px;color:#64748b;margin-top:6px">'+g.cap+'</div>';
+    gaugeRow.appendChild(teachCard_(inner,g.key,g.label));
+  });
+  wrap.appendChild(gaugeRow);
+
+  // -- POWER STAT CARDS: FTP / NP / IF / TSS (tappable)
+  var statRow=document.createElement('div');
+  statRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
+  [
     ['FTP',_tc.ftp+'W','#94a3b8','Manual — may be stale','ftp'],
     ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','Last ride','np'],
     ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','Last ride','if'],
     ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','Last ride','tss']
   ].forEach(function(x){
-    var card=document.createElement('div');
-    var teach=x[4];   // metric key for the shared teaching panel (undefined = not tappable, e.g. W/kg is phase 2)
-    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px'+(teach?';cursor:pointer;transition:background .12s,border-color .12s':'');
-    if(teach){
-      // Tappable -> openMetricTeach via the document-level [data-metric-teach]
-      // listener (binds once at load, so no render-timing dependency). This is
-      // the DESKTOP renderer's copy of the cards — the mobile ones live in
-      // showAnalytics; both must carry the attribute (renderer drift is why the
-      // desktop taps were inert).
-      card.setAttribute('data-metric-teach',teach);
-      card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label','Learn about '+x[0]);
-      card.onmouseenter=function(){ card.style.background='#161a24'; card.style.borderColor='#2a3550'; };
-      card.onmouseleave=function(){ card.style.background='#111318'; card.style.borderColor='#1a1f2e'; };
-    }
-    var info=teach?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>':'';
-    card.innerHTML='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+info+'</div>'+
-      '<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'+
-      '<div style="font-size:10px;color:#64748b;margin-top:3px">'+x[3]+'</div>';
-    kpiRow.appendChild(card);
+    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+_infoGlyph+'</div>'
+      +'<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'
+      +'<div style="font-size:10px;color:#64748b;margin-top:3px">'+x[3]+'</div>';
+    statRow.appendChild(teachCard_(inner,x[4],x[0]));
   });
-  wrap.appendChild(kpiRow);
+  wrap.appendChild(statRow);
 
   // CTL/ATL/TSB chart
   var fitnessCard=document.createElement('div');
@@ -12735,6 +12818,57 @@ function dsShowAnalytics(){
       '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
     wrap.appendChild(wkgCard);
   }
+
+  // -- POWER DISTRIBUTION (real: only rides with a power stream; %FTP zones)
+  var _pd=dsPowerDist_(rides, FTP);
+  var pdCard=document.createElement('div');
+  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
+    +'<span style="font-size:9px;color:#64748b">'+(_pd.hasData?(_pd.nRides+' rides with power · zones use your (manual) FTP'):'')+'</span></div>';
+  if(_pd.hasData){
+    var pdBars=_pd.zones.map(function(z){
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        +'<span style="font-size:11px;color:#94a3b8;width:104px;flex-shrink:0">'+z.label+'</span>'
+        +'<div style="flex:1;height:12px;background:#0d0f14;border-radius:6px;overflow:hidden"><div style="height:12px;background:'+z.color+';border-radius:6px;width:'+z.pct+'%"></div></div>'
+        +'<span style="font-size:11px;font-weight:700;color:#e2e8f0;width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
+    }).join('');
+    pdCard.innerHTML=pdHead+pdBars;
+  } else {
+    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with a power stream yet — power distribution needs power-meter data, so it stays empty rather than showing a fake split.</div>';
+  }
+  wrap.appendChild(pdCard);
+
+  // -- RIDE CONSISTENCY heatmap (real: ride dates, last 26 weeks)
+  var _cells=dsConsistency_(rides, 26*7, now, normDate);
+  var _lead=_cells.length?_cells[0].dow:0;
+  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var t=c.tss||0; return t>=150?'#4ade80':t>=80?'#22c55e':t>=40?'#15803d':'#0f5132'; }
+  var cellSquares='';
+  for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
+  _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
+  var hmCard=document.createElement('div');
+  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
+    +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto">'+cellSquares+'</div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#12151d"></span><span style="width:10px;height:10px;border-radius:2px;background:#0f5132"></span><span style="width:10px;height:10px;border-radius:2px;background:#15803d"></span><span style="width:10px;height:10px;border-radius:2px;background:#22c55e"></span><span style="width:10px;height:10px;border-radius:2px;background:#4ade80"></span>More</div>';
+  wrap.appendChild(hmCard);
+
+  // -- GOAL BARS (real: miles YTD vs goal; W/kg vs Chase-1, FTP-based caveat)
+  var _yr0=new Date(now.getFullYear(),0,1), _ytd=0;
+  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); if(d>=_yr0) _ytd+=parseFloat(r.distance)||0; });
+  _ytd=Math.round(_ytd);
+  var _mgoal=parseInt(st.yearlyMileageGoal||5000)||5000;
+  var goals=[
+    {label:'Miles YTD', val:_ytd.toLocaleString()+' / '+_mgoal.toLocaleString()+' mi', frac:Math.min(1,_ytd/_mgoal), color:'#60a5fa', note:''},
+    {label:'W/kg to Chase 1', val:wkgNow.toFixed(2)+' / 3.14', frac:Math.min(1,wkgNow/3.14), color:'#4ade80', note:'FTP-based'}
+  ];
+  var goalCard=document.createElement('div');
+  goalCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  goalCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Goals</div>'
+    +goals.map(function(g){
+      return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:12px;color:#e2e8f0">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b">('+g.note+')</span>'):'')+'</span><span style="font-size:12px;font-weight:700;color:'+g.color+'">'+g.val+'</span></div>'
+        +'<div style="height:8px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:8px;background:'+g.color+';border-radius:4px;width:'+Math.round(g.frac*100)+'%"></div></div></div>';
+    }).join('');
+  wrap.appendChild(goalCard);
 
   mc.appendChild(wrap);
 
