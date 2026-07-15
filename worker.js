@@ -5529,7 +5529,7 @@ function showProg(){
   var weekStart=new Date(now); weekStart.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1)); weekStart.setHours(0,0,0,0);
 
   // Sessions across all activity types
-  var rides=(st.rides||[]).filter(function(r){return !r.deleted;}); var runs=rides.filter(function(r){return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');}).concat(st.runs||[]);
+  var rides=(st.rides||[]).filter(function(r){return !r.deleted;}); var runs=rides.filter(function(r){return /^(run|trailrun|virtualrun|treadmill)$/i.test(rideSport_(r));}).concat(st.runs||[]);
   var allSessions=[]; // {date, type}
   rides.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'ride'});});
   runs.forEach(function(r){if(r.date) allSessions.push({date:r.date,type:'run'});});
@@ -8458,7 +8458,7 @@ function showConstellation(){
   // ---- data: rides with a parseable date, oldest-first ----
   var allR=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
   var rides=[];
-  allR.forEach(function(r){ var d=parseRaceDate_(r.date); if(!d) return; rides.push({r:r, d:d, sport:(r.sportType||r.type||'')}); });
+  allR.forEach(function(r){ var d=parseRaceDate_(r.date); if(!d) return; rides.push({r:r, d:d, sport:rideSport_(r)}); });
   rides.sort(function(a,b){ return a.d.getTime()-b.d.getTime(); });
   var N=rides.length, omitted=allR.length-N;
 
@@ -9089,10 +9089,10 @@ function renderPerf(container){
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
   var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  function isRun(r){ return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||''); }
+  function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(rideSport_(r)); }
   var todayRunMi = todayRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todaySwimMi = todayRides.filter(function(r){return r.type==='swim';}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todayStrCt = todayRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length;
+  var todaySwimMi = todayRides.filter(function(r){return /swim/i.test(rideSport_(r));}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
+  var todayStrCt = todayRides.filter(function(r){return /strength|weight/i.test(rideSport_(r));}).length;
 
   // YTD stats (cycling only)
   var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
@@ -9112,7 +9112,7 @@ function renderPerf(container){
      ytdV:ytdRunMi,ytdMax:750,ytdUnit:'mi'},
     {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',color:'#a855f7',
      todayV:todayStrCt,todayMax:2,todayUnit:'x',
-     ytdV:yearRides.filter(function(r){return r.type==='strength'||r.type==='weight';}).length,ytdMax:100,ytdUnit:'x'}
+     ytdV:yearRides.filter(function(r){return /strength|weight/i.test(rideSport_(r));}).length,ytdMax:100,ytdUnit:'x'}
   ];
 
   function makeRings(defs, useYtd, label){
@@ -9667,7 +9667,7 @@ function renderRideList(container, limit){
       if(!el) return;
       var idx=monthIdx(d);
       if(idx<0||idx>=months.length) return;
-      var indoor=/virtual/i.test((r.sportType||'')+'') || r.trainer===true;
+      var indoor=/virtual/i.test(rideSport_(r)) || r.trainer===true;
       if(indoor) months[idx].ind+=el; else months[idx].out+=el;
       any=true;
     });
@@ -11222,6 +11222,15 @@ function rideKey(r){
   var dist=r.distance?Math.round(parseFloat(r.distance)):0;
   return 'k:'+normDate(r.date||'')+'_'+dist+'_'+(r.movingSecs||r.duration||'');
 }
+// Single accessor for a ride/activity's sport, reading BOTH storage conventions:
+// recent Strava rides carry only .sportType (CamelCase, e.g. "VirtualRide",
+// "WeightTraining", "Swim"); ~232 legacy imports carry only .type (lowercase,
+// e.g. "ride", "weight", "swim"). Reading one field alone is blind to half the
+// library. Returns the resolved sport as a string ('' when neither is set);
+// callers match case-insensitively (so "run"/"Run", "weight"/"WeightTraining"
+// both hit). Field-reads for filtering/counting/sorting/coloring route through
+// this so no site sees only half the rides.
+function rideSport_(r){ if(!r) return ''; var s=(r.sportType!=null&&r.sportType!=='')?r.sportType:(r.type!=null?r.type:''); return String(s); }
 // Shared Recent Activity list for both dashboards (showHomeDash + dsShowDashboard).
 // All non-deleted rides, deduped by the canonical rideKey(r) — so two distinct
 // same-day rides aren't collapsed the way the old 'd'+date+name key did —
@@ -13120,9 +13129,9 @@ function dsShowDashboard(){
   // Streaks
   var strc=card(''); strc.appendChild(lbl('STREAKS'));
   var strrow=row('gap:16px');
-  var rdys=new Set(rides.filter(function(r){return /ride|cycling/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
-  var rndys=new Set(rides.filter(function(r){return /run/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
-  var stdys=new Set(rides.filter(function(r){return /strength|weight/i.test(r.sportType||'');}).map(function(r){return r.date;})).size;
+  var rdys=new Set(rides.filter(function(r){return /ride|cycling/i.test(rideSport_(r));}).map(function(r){return r.date;})).size;
+  var rndys=new Set(rides.filter(function(r){return /run/i.test(rideSport_(r));}).map(function(r){return r.date;})).size;
+  var stdys=new Set(rides.filter(function(r){return /strength|weight/i.test(rideSport_(r));}).map(function(r){return r.date;})).size;
   [['ti-bike','#4ade80',Math.min(rdys,9),'Ride Days'],['ti-run','#FC4C02',Math.min(rndys,5),'Run Days'],['ti-barbell','#60a5fa',Math.min(stdys,4),'Strength']].forEach(function(x){
     var sc2=div('display:flex;flex-direction:column;align-items:center;text-align:center');
     sc2.appendChild(ico(x[0],x[1],'20'));
@@ -16352,7 +16361,7 @@ function showRun(){ renderRun(); }
 function getRuns(){
   var rides = st.rides||[];
   var stravaRuns = rides.filter(function(r){
-    return r.type==='run'||/^(Run|TrailRun|VirtualRun|Treadmill)$/i.test(r.sportType||'');
+    return /^(run|trailrun|virtualrun|treadmill)$/i.test(rideSport_(r));
   }).map(function(r){
     // Map Strava ride fields to run card fields
     return {
@@ -21189,7 +21198,7 @@ function showWeatherHistory(){
       if(!q){renderResults(allRoutes.slice(0,20));return;}
       var filtered=allRoutes.filter(function(r){
         return (r.name||'').toLowerCase().includes(q)
-          || (r.sportType||'').toLowerCase().includes(q)
+          || rideSport_(r).toLowerCase().includes(q)
           || (r.date||'').includes(q);
       });
       renderResults(filtered);
