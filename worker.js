@@ -13423,52 +13423,17 @@ function openDesktopRideDetail(idx){
     mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:100%"></div>';
     setTimeout(function(){
       var el=document.getElementById(mid);if(!el)return;
-      var map=L.map(mid,{zoomControl:true,scrollWheelZoom:false,tap:false});
-      addRouteBasemap_(map);
-      var SC=180/Math.pow(2,31);
-      var pts=gl.map(function(la,i){
-        var lt=la,ln=gn[i];
-        if(Math.abs(lt)>90) lt=lt*SC;
-        if(Math.abs(ln)>180) ln=ln*SC;
-        return[lt,ln];
-      }).filter(function(p){return p[0]&&p[1]&&Math.abs(p[0])>0.1&&Math.abs(p[1])>0.1&&Math.abs(p[0])<=90&&Math.abs(p[1])<=180;});
-      if(r.chartPwr&&r.chartPwr.length>5){
-        var _den=Math.max(1,pts.length-1), _pmax=r.chartPwr.length-1;
-        var cc='#FC4C02',seg=[pts[0]];
-        for(var i=1;i<pts.length;i++){
-          var pw=r.chartPwr[Math.min(Math.round(i/_den*_pmax),_pmax)]||0;
-          var col=pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
-          if(col!==cc&&seg.length>1){L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);seg=[seg[seg.length-1]];cc=col;}
-          seg.push(pts[i]);
-        }
-        if(seg.length>1)L.polyline(seg,{color:cc,weight:4,opacity:.9}).addTo(map);
-      } else {
-        L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(map);
+      // normalizeTrack_ (inside renderRideMap_) does the semicircle-convert +
+      // IQR corrupt-guard that used to live inline here.
+      var hasPwr=r.chartPwr&&r.chartPwr.length>5;
+      var map=renderRideMap_(mid, gl, gn, {
+        color:'#FC4C02', laps:r.laps, maxZoom:14,
+        colorAt: hasPwr?function(i,pts,frac){ var pw=r.chartPwr[Math.min(Math.round(frac*(r.chartPwr.length-1)),r.chartPwr.length-1)]||0; return pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8'; }:null
+      });
+      if(!map){
+        mapDiv.style.cssText='height:200px;background:#111722;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+        mapDiv.textContent='GPS data unavailable';
       }
-      L.circleMarker(pts[0],{radius:8,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      L.circleMarker(pts[pts.length-1],{radius:8,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      // Filter outliers: keep only points within 1.5x IQR of median cluster
-      var slat=pts.map(function(p){return p[0];}).sort(function(a,b){return a-b;});
-      var slon=pts.map(function(p){return p[1];}).sort(function(a,b){return a-b;});
-      var n=slat.length;
-      var medlat=slat[Math.floor(n/2)], medlon=slon[Math.floor(n/2)];
-      var q1lat=slat[Math.floor(n*0.25)],q3lat=slat[Math.floor(n*0.75)];
-      var q1lon=slon[Math.floor(n*0.25)],q3lon=slon[Math.floor(n*0.75)];
-      var thrlat=Math.max((q3lat-q1lat)*1.5, 0.05);
-      var thrlon=Math.max((q3lon-q1lon)*1.5, 0.05);
-      var cleanPts=pts.filter(function(p){return Math.abs(p[0]-medlat)<thrlat&&Math.abs(p[1]-medlon)<thrlon;});
-      if(cleanPts.length<2) cleanPts=pts;
-      var bounds=L.latLngBounds(cleanPts);
-      var sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
-      // If bounds are unreasonably large (>1.5 deg), data is corrupt - show message
-      if((ne.lat-sw.lat)>1.5||(ne.lng-sw.lng)>1.5){
-        mapDiv.style.cssText='height:200px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
-        mapDiv.textContent='GPS data unavailable';return;
-      }
-      var latPad=(ne.lat-sw.lat)*0.08, lngPad=(ne.lng-sw.lng)*0.08;
-      var tight=L.latLngBounds([sw.lat-latPad,sw.lng-lngPad],[ne.lat+latPad,ne.lng+lngPad]);
-      map.fitBounds(tight);
-      setTimeout(function(){try{map.invalidateSize();}catch(e){}},300);
     },100);
   })();
 
@@ -13926,30 +13891,13 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
   if(_gpsR.gpsLats && _gpsR.gpsLats.length>5){
     var mapWrap=document.createElement('div');
     mapWrap.style.cssText='position:relative;border-radius:16px;overflow:hidden;margin-bottom:14px';
-    mapWrap.innerHTML=buildRouteMap(_gpsR.lats||_gpsR.gpsLats, _gpsR.lons||_gpsR.gpsLons, r.chartPwr||[], FTP);
-    var previewMapId = window._lastRouteMapId;
+    mapWrap.innerHTML=buildRouteMap(_gpsR.lats||_gpsR.gpsLats, _gpsR.lons||_gpsR.gpsLons, r.chartPwr||[], FTP, r.laps);
+    // The dark/satellite toggle now lives inside the map (shared renderer's
+    // L.control.layers), so the old corner layers button is gone; only the
+    // fullscreen-expand button remains, moved to the bottom-left so it never
+    // collides with the layers control (top-right) or zoom (top-left).
     var mapTools=document.createElement('div');
-    mapTools.style.cssText='position:absolute;top:10px;right:10px;z-index:400;display:flex;flex-direction:column;gap:6px';
-    var layersBtn=document.createElement('div');
-    layersBtn.style.cssText='background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer';
-    layersBtn.title='Toggle satellite';
-    layersBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>';
-    layersBtn.onclick=function(){
-      var h=window['_routeMap_'+previewMapId];
-      if(!h || !h.map) return;
-      if(h.satOn){
-        if(h.sat){ try{h.map.removeLayer(h.sat);}catch(e){} }
-        try{h.base.addTo(h.map);}catch(e){}
-        h.satOn=false;
-      } else {
-        if(!h.sat){
-          h.sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:18,detectRetina:true,attribution:'Esri'});
-        }
-        try{h.base.remove();}catch(e){}
-        try{h.sat.addTo(h.map);}catch(e){}
-        h.satOn=true;
-      }
-    };
+    mapTools.style.cssText='position:absolute;bottom:10px;left:10px;z-index:400;display:flex;flex-direction:column;gap:6px';
     var expandBtn=document.createElement('div');
     expandBtn.style.cssText='background:rgba(20,20,22,.85);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer';
     expandBtn.title='Open full map';
@@ -13966,18 +13914,13 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
       document.body.appendChild(ov);
       document.getElementById('ride-fs-close').onclick=function(){ ov.remove(); };
       setTimeout(function(){
-        if(typeof L==='undefined') return;
-        var m=L.map(fsMapId,{zoomControl:true,scrollWheelZoom:true});
-        addRouteBasemap_(m);
-        var pts=lats.map(function(la,i){return[la,lons[i]];});
-        L.polyline(pts,{color:'#FC4C02',weight:4,opacity:.9}).addTo(m);
-        L.circleMarker(pts[0],{radius:7,fillColor:'#1D9E75',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
-        L.circleMarker(pts[pts.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(m);
-        m.fitBounds(L.latLngBounds(pts),{padding:[40,40]});
-        setTimeout(function(){ try{m.invalidateSize();}catch(e){} },250);
+        var hasPwr=r.chartPwr&&r.chartPwr.length>5;
+        renderRideMap_(fsMapId, lats, lons, {
+          color:'#FC4C02', scrollWheelZoom:true, laps:r.laps, maxZoom:16,
+          colorAt: hasPwr?function(i,pts,frac){ var pw=r.chartPwr[Math.min(Math.round(frac*(r.chartPwr.length-1)),r.chartPwr.length-1)]||0; return pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8'; }:null
+        });
       },80);
     };
-    mapTools.appendChild(layersBtn);
     mapTools.appendChild(expandBtn);
     mapWrap.appendChild(mapTools);
     wrap.appendChild(mapWrap);
@@ -14076,24 +14019,142 @@ function fetchRideCoachInsight(r, callback){
   .catch(function(){ clearTimeout(_to); callback('Could not reach the coach right now.', null); });
 }
 
-// Voyager basemap for route maps, with street labels rendered ABOVE the
-// route line so they stay legible. The base tiles carry no labels; a
-// labels-only layer sits in a dedicated high-z pane (above the polyline in
-// overlayPane, below popups) — this is the #2 legibility fix.
-function addRouteBasemap_(map){
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
-  try{
-    if(!map.getPane('routeLabels')){
-      map.createPane('routeLabels');
-      map.getPane('routeLabels').style.zIndex=650;
-      map.getPane('routeLabels').style.pointerEvents='none';
-    }
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'routeLabels'}).addTo(map);
-  }catch(e){
-    // If custom panes/labels tiles fail, fall back to the labeled base so
-    // the map never ends up with no street names at all.
-    try{ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd'}).addTo(map); }catch(e2){}
+// -------------------------------------------------------------------------
+// SHARED RIDE-DETAIL MAP RENDERER
+// Every ride-detail map — desktop overview preview (rd-map), mobile overview
+// preview + the Route tab's Power/HR/Wind recolors (buildRouteMap/HR/Wind),
+// and the fullscreen expand — routes through renderRideMap_ so the whole
+// legibility treatment lives in ONE place: a dark/satellite base toggle
+// (persisted), a dark casing under a bold sport-colored route, start/finish
+// pins, direction chevrons, and lap markers.
+// -------------------------------------------------------------------------
+
+// Persisted base-layer choice for ride maps (dark default, satellite opt-in).
+function rideMapBasePref_(){
+  try{ return localStorage.getItem('aiq_rideMapBase')==='satellite'?'satellite':'dark'; }catch(e){ return 'dark'; }
+}
+// Dark ("dark matter") + Esri satellite base layers wired into a corner
+// layers toggle. The choice persists across rides via localStorage.
+function addRideMapBase_(map){
+  var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+  var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
+  (rideMapBasePref_()==='satellite'?sat:dark).addTo(map);
+  L.control.layers({Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
+  map.on('baselayerchange',function(e){
+    try{ localStorage.setItem('aiq_rideMapBase',(e&&e.name==='Satellite')?'satellite':'dark'); }catch(err){}
+  });
+  return {dark:dark,sat:sat};
+}
+
+// Green dot at the start, checkered flag at the finish.
+function addRideEndpoints_(map,pts){
+  if(!pts||pts.length<2) return;
+  var start=L.divIcon({className:'',iconSize:[18,18],iconAnchor:[9,9],
+    html:'<div style="width:14px;height:14px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.45),0 1px 4px rgba(0,0,0,.6)"></div>'});
+  L.marker(pts[0],{icon:start,interactive:false,keyboard:false,zIndexOffset:900}).addTo(map);
+  var flag='<div style="filter:drop-shadow(0 1px 3px rgba(0,0,0,.85))"><svg width="22" height="24" viewBox="0 0 22 24">'
+    +'<rect x="3" y="2" width="2.4" height="21" rx="1" fill="#e5e7eb"/>'
+    +'<rect x="5.4" y="2" width="13" height="9" fill="#fff"/>'
+    +'<rect x="5.4" y="2" width="4.33" height="4.5" fill="#111"/>'
+    +'<rect x="14.06" y="2" width="4.33" height="4.5" fill="#111"/>'
+    +'<rect x="9.73" y="6.5" width="4.33" height="4.5" fill="#111"/>'
+    +'<rect x="5.4" y="2" width="13" height="9" fill="none" stroke="#111" stroke-width="0.6"/>'
+    +'</svg></div>';
+  var end=L.divIcon({className:'',iconSize:[22,24],iconAnchor:[4,23],html:flag});
+  L.marker(pts[pts.length-1],{icon:end,interactive:false,keyboard:false,zIndexOffset:900}).addTo(map);
+}
+
+// Directional chevrons spaced along the track, each rotated to the travel
+// bearing so the ride's direction reads at a glance. Longitude deltas are
+// scaled by cos(lat) so the on-screen (Mercator) angle is correct.
+function addRideChevrons_(map,pts){
+  var n=pts?pts.length:0;
+  if(n<10) return;
+  var count=Math.min(14,Math.max(3,Math.floor(n/25)));
+  for(var k=1;k<=count;k++){
+    var i=Math.round(k/(count+1)*(n-1));
+    if(i<1) i=1; if(i>n-1) i=n-1;
+    var p0=pts[i-1],p1=pts[i];
+    var latR=(p0[0]+p1[0])/2*Math.PI/180;
+    var dLat=p1[0]-p0[0], dLon=(p1[1]-p0[1])*Math.cos(latR);
+    if(!dLat&&!dLon) continue;
+    var brng=Math.atan2(dLon,dLat)*180/Math.PI;
+    var ic=L.divIcon({className:'',iconSize:[18,18],iconAnchor:[9,9],
+      html:'<div style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;transform:rotate('+brng.toFixed(1)+'deg)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" style="filter:drop-shadow(0 0 1.6px rgba(0,0,0,.95))"><polyline points="5 14 12 7 19 14"/></svg></div>'});
+    L.marker(pts[i],{icon:ic,interactive:false,keyboard:false,zIndexOffset:700}).addTo(map);
   }
+}
+
+// Numbered lap markers. Laps carry a per-lap distance (miles) but no GPS
+// index, so each boundary is placed by walking cumulative great-circle
+// distance along the track. When per-lap distance is missing, fall back to
+// even splits by lap count. Skips cleanly when there are 0/1 laps.
+function addRideLapMarkers_(map,pts,laps){
+  if(!laps||laps.length<2||!pts||pts.length<2) return;
+  function hav(a,b){
+    var R=3958.8, dLa=(b[0]-a[0])*Math.PI/180, dLo=(b[1]-a[1])*Math.PI/180;
+    var la1=a[0]*Math.PI/180, la2=b[0]*Math.PI/180;
+    var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1)*Math.cos(la2)*Math.sin(dLo/2)*Math.sin(dLo/2);
+    return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+  }
+  var cum=[0];
+  for(var i=1;i<pts.length;i++){ cum[i]=cum[i-1]+hav(pts[i-1],pts[i]); }
+  var total=cum[pts.length-1];
+  if(!(total>0)) return;
+  var haveDist=laps.every(function(l){ return parseFloat(l.distance)>0; });
+  var acc=0, li=0;
+  for(var l=0;l<laps.length-1;l++){
+    var target = haveDist ? (acc+=parseFloat(laps[l].distance)) : total*(l+1)/laps.length;
+    if(target>=total) break;
+    while(li<pts.length-1 && cum[li]<target) li++;
+    var ic=L.divIcon({className:'',iconSize:[16,16],iconAnchor:[8,8],
+      html:'<div style="width:15px;height:15px;border-radius:50%;background:#0b0f19;border:2px solid #fff;color:#fff;font-size:9px;font-weight:800;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.7)">'+(l+1)+'</div>'});
+    L.marker(pts[li],{icon:ic,interactive:false,keyboard:false,zIndexOffset:800}).addTo(map);
+  }
+}
+
+// The one shared renderer. Takes RAW lats/lons (normalized internally),
+// returns the Leaflet map — or null when GPS is missing/corrupt, in which
+// case the caller shows its own fallback.
+//   opts.color      base sport color for the route (default Strava orange)
+//   opts.colorAt    optional fn(i, pts, frac) -> color, for zone recoloring
+//   opts.laps       optional lap array for lap markers
+//   opts.scrollWheelZoom / opts.zoomControl / opts.maxZoom / opts.onReady
+function renderRideMap_(mapId, lats, lons, opts){
+  opts=opts||{};
+  if(typeof L==='undefined') return null;
+  if(!document.getElementById(mapId)) return null;
+  var nt=normalizeTrack_(lats,lons);
+  if(!nt.ok || nt.lats.length<2) return null;
+  var pts=nt.lats.map(function(la,i){ return [la,nt.lons[i]]; });
+  var map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
+  addRideMapBase_(map);
+  // 1) Dark casing under the whole route — the halo that keeps the line
+  //    legible over busy satellite imagery. Drawn first so it sits beneath.
+  L.polyline(pts,{color:'#0a0e17',weight:8,opacity:.6,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
+  // 2) Bold sport-colored route on top, optionally recolored per segment.
+  var sportColor=opts.color||'#FC4C02';
+  if(typeof opts.colorAt==='function'){
+    var den=Math.max(1,pts.length-1);
+    var cur=opts.colorAt(0,pts,0)||sportColor, seg=[pts[0]];
+    for(var i=1;i<pts.length;i++){
+      var col=opts.colorAt(i,pts,i/den)||sportColor;
+      if(col!==cur && seg.length>1){ L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); seg=[seg[seg.length-1]]; cur=col; }
+      seg.push(pts[i]);
+    }
+    if(seg.length>1) L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
+  } else {
+    L.polyline(pts,{color:sportColor,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
+  }
+  // 3) direction chevrons, 4) start/finish pins, 5) lap markers
+  addRideChevrons_(map,pts);
+  addRideEndpoints_(map,pts);
+  if(opts.laps && opts.laps.length) addRideLapMarkers_(map,pts,opts.laps);
+  map.fitBounds(L.latLngBounds(pts),{padding:[30,30],maxZoom:opts.maxZoom||15});
+  map.invalidateSize();
+  setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} },300);
+  if(typeof opts.onReady==='function'){ try{ opts.onReady(map,pts); }catch(e){} }
+  return map;
 }
 
 // -- ROUTE TAB: hero map (larger), toggle buttons to recolor by
@@ -14186,55 +14247,49 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
     var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
     mapCard.innerHTML=html;
     setTimeout(function(){
-      var mapEl=document.getElementById(mapId);
-      if(!mapEl||typeof L==='undefined') return;
-      var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-      addRouteBasemap_(map);
-      var pts=lats.map(function(la,i){return[la,lons[i]];});
-      if(windDeg==null){
-        L.polyline(pts,{color:'#94a3b8',weight:4,opacity:.85}).addTo(map);
-      } else {
-        var step=Math.max(1,Math.floor(pts.length/40));
-        for(var i=0;i<pts.length-step;i+=step){
-          var p1=pts[i], p2=pts[Math.min(pts.length-1,i+step)];
+      var map=renderRideMap_(mapId, lats, lons, {
+        color:'#94a3b8', laps:r.laps,
+        // Per-segment tail/head/crosswind color from the point's travel
+        // bearing vs the wind's blow-to direction. Null when wind unknown.
+        colorAt: (windDeg==null)?null:function(i,pts){
+          if(i<1) i=1;
+          var p1=pts[i-1], p2=pts[i];
           var bearing=(Math.atan2(p2[1]-p1[1],p2[0]-p1[0])*180/Math.PI+360)%360;
           var windToward=(windDeg+180)%360;
           var diff=Math.abs(((bearing-windToward+540)%360)-180);
-          var col = diff<45 ? '#1D9E75' : diff>135 ? '#E24B4A' : '#BA7517';
-          L.polyline([p1,p2],{color:col,weight:4,opacity:.85}).addTo(map);
+          return diff<45 ? '#1D9E75' : diff>135 ? '#E24B4A' : '#BA7517';
         }
-      }
-      L.circleMarker(pts[0],{radius:7,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      L.circleMarker(pts[pts.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-      map.fitBounds(L.latLngBounds(pts),{padding:[30,30]});
-      // Wind-direction compass overlay in the top-right corner of the map.
-      // winddirection is the "from" bearing; the arrow points the way the
-      // wind is blowing TO (from + 180), which is what a rider feels.
+      });
+      if(!map) return;
+      window['_wxmap_ridedetail']=map;
+      // Wind-direction compass overlay. winddirection is the "from" bearing;
+      // the arrow points the way the wind blows TO (from + 180), which is
+      // what a rider feels. Placed top-left (beside zoom) so it clears the
+      // shared renderer's layers control in the top-right.
       if(windDeg!=null){
+        var mapEl=document.getElementById(mapId);
         var dirArr=['N','NE','E','SE','S','SW','W','NW'];
         var fromLabel=dirArr[Math.round(windDeg/45)%8];
         var blowTo=(windDeg+180)%360;
         var ov=document.createElement('div');
-        ov.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(20,20,22,.82);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(4px)';
+        ov.style.cssText='position:absolute;top:10px;left:52px;z-index:500;background:rgba(20,20,22,.82);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(4px)';
         ov.innerHTML='<div style="transform:rotate('+blowTo+'deg);display:flex"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></div>'
           +'<div style="line-height:1.1"><div style="font-size:12px;font-weight:800;color:#fff">'+fromLabel+' wind</div><div style="font-size:10px;color:rgba(255,255,255,.65)">from '+Math.round(windDeg)+'&deg;</div></div>';
-        mapEl.appendChild(ov);
+        if(mapEl) mapEl.appendChild(ov);
       }
-      setTimeout(function(){ try{map.invalidateSize();}catch(e){} },300);
-      window['_wxmap_ridedetail']=map;
     },100);
   }
 
   function redrawRouteMap(){
     if(routeColorMode==='power'){
-      mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP).replace('height:260px','height:340px');
+      mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP, r.laps).replace('height:260px','height:340px');
       legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#94a3b8"></span>Z1-2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z3</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z4</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z5</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444"></span>Z6+</span>'].join('');
     } else if(routeColorMode==='hr'){
-      mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], parseInt(st.maxHR||172));
+      mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], parseInt(st.maxHR||172), r.laps);
       legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#64748b"></span>Z1</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z3</span>',
@@ -14283,48 +14338,22 @@ function normalizeTrack_(lats, lons){
   var ok=((sLa[Math.floor(n*0.75)]-sLa[Math.floor(n*0.25)])<=1.5 && (sLo[Math.floor(n*0.75)]-sLo[Math.floor(n*0.25)])<=1.5);
   return {lats:oLa, lons:oLo, ok:ok};
 }
-function buildRouteMapHR(lats, lons, hrData, maxHR){
+function buildRouteMapHR(lats, lons, hrData, maxHR, laps){
   if(!lats||!lats.length) return '';
   if(lons && lons.length!==lats.length){
     var minLen=Math.min(lats.length,lons.length);
     lats=lats.slice(0,minLen); lons=lons.slice(0,minLen);
   }
   var _ntHR=normalizeTrack_(lats,lons);
-  if(!_ntHR.ok) return '<div style="width:100%;height:340px;display:flex;align-items:center;justify-content:center;background:#1c2535;color:#64748b;font-size:13px">GPS data unavailable</div>';
-  lats=_ntHR.lats; lons=_ntHR.lons;
+  if(!_ntHR.ok) return '<div style="width:100%;height:340px;display:flex;align-items:center;justify-content:center;background:#111722;color:#64748b;font-size:13px">GPS data unavailable</div>';
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId='leaflet-map-hr-'+window._mapCount;
   var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
   setTimeout(function(){
-    var mapEl=document.getElementById(mapId);
-    if(!mapEl||typeof L==='undefined') return;
-    var map=L.map(mapId,{zoomControl:true,scrollWheelZoom:false});
-    addRouteBasemap_(map);
-    if(hrData && hrData.length>5){
-      var currentColor='#64748b';
-      var segPoints=[[lats[0],lons[0]]];
-      var _den=Math.max(1,lats.length-1), _hmax=hrData.length-1;
-      for(var i=1;i<lats.length;i++){
-        var pIdx=Math.round(i/_den*_hmax);
-        var hr=hrData[Math.min(pIdx,_hmax)]||0;
-        var pct=hr/maxHR;
-        var col=pct>=.9?'#ef4444':pct>=.8?'#f59e0b':pct>=.7?'#22c55e':pct>=.6?'#3b82f6':'#64748b';
-        if(col!==currentColor && segPoints.length>1){
-          L.polyline(segPoints,{color:currentColor,weight:4,opacity:.85}).addTo(map);
-          segPoints=[segPoints[segPoints.length-1]];
-          currentColor=col;
-        }
-        segPoints.push([lats[i],lons[i]]);
-      }
-      if(segPoints.length>1) L.polyline(segPoints,{color:currentColor,weight:4,opacity:.85}).addTo(map);
-    } else {
-      var coords=lats.map(function(lat,i){return[lat,lons[i]];});
-      L.polyline(coords,{color:'#ef4444',weight:4,opacity:.9}).addTo(map);
-    }
-    var coords2=lats.map(function(lat,i){return[lat,lons[i]];});
-    L.circleMarker(coords2[0],{radius:7,fillColor:'#27AE60',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-    L.circleMarker(coords2[coords2.length-1],{radius:7,fillColor:'#FC4C02',color:'#fff',weight:2,fillOpacity:1}).addTo(map);
-    map.fitBounds(L.latLngBounds(coords2),{padding:[30,30]});
-    setTimeout(function(){ try{map.invalidateSize();}catch(e){} },300);
+    var hasHR=hrData && hrData.length>5;
+    renderRideMap_(mapId, lats, lons, {
+      color:'#ef4444', laps:laps,
+      colorAt: hasHR?function(i,pts,frac){ var hr=hrData[Math.min(Math.round(frac*(hrData.length-1)),hrData.length-1)]||0; var pct=hr/maxHR; return pct>=.9?'#ef4444':pct>=.8?'#f59e0b':pct>=.7?'#22c55e':pct>=.6?'#3b82f6':'#64748b'; }:null
+    });
   },100);
   return html;
 }
@@ -15358,7 +15387,7 @@ function openRideDetailMoreMenu(idx){
   document.body.appendChild(overlay);
 }
 
-function buildRouteMap(lats, lons, pwrData, FTP){
+function buildRouteMap(lats, lons, pwrData, FTP, laps){
   if(!lats||!lats.length) return '';
   // Defensive guard against already-corrupted data (mismatched lat/lon
   // array lengths from before this was fixed at the merge level) - an
@@ -15371,90 +15400,26 @@ function buildRouteMap(lats, lons, pwrData, FTP){
   }
   if(!lats.length) return '';
   var _ntPM=normalizeTrack_(lats,lons);
-  if(!_ntPM.ok) return '<div style="width:100%;height:260px;display:flex;align-items:center;justify-content:center;background:#1c2535;color:#64748b;font-size:13px;border-radius:16px">GPS data unavailable</div>';
-  lats=_ntPM.lats; lons=_ntPM.lons;
+  if(!_ntPM.ok) return '<div style="width:100%;height:260px;display:flex;align-items:center;justify-content:center;background:#111722;color:#64748b;font-size:13px;border-radius:16px">GPS data unavailable</div>';
   // Generate unique map ID
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
   window._lastRouteMapId = mapId;
   var html = '<div id="'+mapId+'" style="width:100%;height:260px;border-radius:16px;overflow:hidden"></div>';
 
-  // Initialize map after DOM insertion
+  // Initialize map after DOM insertion, through the single shared renderer.
   setTimeout(function(){
-    var mapEl = document.getElementById(mapId);
-    if(!mapEl) return;
-
-    // Center on route
-    var centerLat = (Math.min.apply(null,lats)+Math.max.apply(null,lats))/2;
-    var centerLon = (Math.min.apply(null,lons)+Math.max.apply(null,lons))/2;
-
-    var map = L.map(mapId, {
-      zoomControl: true,
-      scrollWheelZoom: false,
-      tap: false
+    var hasPwr = pwrData && pwrData.length > 5;
+    var map = renderRideMap_(mapId, lats, lons, {
+      color:'#FC4C02', laps:laps, maxZoom:14,
+      // Map each GPS point to the power sample by FRACTION of the route (the
+      // power stream is downsampled while GPS is full-res).
+      colorAt: hasPwr?function(i,pts,frac){ var pw=pwrData[Math.min(Math.round(frac*(pwrData.length-1)),pwrData.length-1)]||0; return pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8'; }:null
     });
-
-    // OpenStreetMap tiles
-    var baseOSM = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      attribution: '© OpenStreetMap contributors © CARTO',
-      detectRetina: true,
-      subdomains: 'abcd',
-      maxZoom: 20
-    }).addTo(map);
-    // Expose this map + its base layer so external controls (e.g. the
-    // Overview preview's layers button) can toggle satellite/street.
-    window['_routeMap_'+mapId] = { map: map, base: baseOSM, sat: null, satOn: false };
-
-    // Build color-coded polyline segments. Map each GPS point to the power
-    // sample by FRACTION of the route, not floor(i/step): the power stream is
-    // downsampled to ~200 points while GPS is full-res, so the old step math
-    // collapsed to 1 and overshot the array, clamping the route tail to the
-    // last (cooldown) sample — the whole middle rendered grey.
-    if(pwrData && pwrData.length > 5){
-      var currentColor = '#94a3b8';
-      var segPoints = [[lats[0], lons[0]]];
-      var _den = Math.max(1, lats.length-1), _pmax = pwrData.length-1;
-
-      for(var i=1; i<lats.length; i++){
-        var pIdx = Math.round(i/_den*_pmax);
-        var pw = pwrData[Math.min(pIdx, _pmax)] || 0;
-        var col = pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8';
-
-        if(col !== currentColor && segPoints.length > 1){
-          L.polyline(segPoints, {color:currentColor, weight:4, opacity:0.85}).addTo(map);
-          segPoints = [segPoints[segPoints.length-1]];
-          currentColor = col;
-        }
-        segPoints.push([lats[i], lons[i]]);
-      }
-      if(segPoints.length > 1){
-        L.polyline(segPoints, {color:currentColor, weight:4, opacity:0.85}).addTo(map);
-      }
-    } else {
-      // Single orange line
-      var coords = lats.map(function(lat,i){ return [lat, lons[i]]; });
-      L.polyline(coords, {color:'#FC4C02', weight:4, opacity:0.9}).addTo(map);
-    }
-
-    // Start marker (green)
-    L.circleMarker([lats[0], lons[0]], {
-      radius:8, fillColor:'#27AE60', color:'white', weight:2, fillOpacity:1
-    }).addTo(map);
-
-    // End marker (orange)
-    var le = lats.length-1;
-    L.circleMarker([lats[le], lons[le]], {
-      radius:8, fillColor:'#FC4C02', color:'white', weight:2, fillOpacity:1
-    }).addTo(map);
-
-    // Fit map to route
-    var coords2 = lats.map(function(lat,i){return [lat,lons[i]];});
-    var bounds = L.latLngBounds(coords2);
-    map.invalidateSize();
-    map.fitBounds(bounds, {padding:[30,30], maxZoom:14});
-    // Re-invalidate shortly after too, in case the container's layout was
-    // still settling (e.g. modal transition/animation) at the first check
-    setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 300);
-
+    // Preserve the legacy handle external overlays read (weather-history /
+    // route-planner previews add wind-colored segments onto this instance
+    // via window['_routeMap_'+mapId].map). Base/sat toggling now lives in the
+    // shared renderer's own layers control, so those fields are left null.
+    if(map) window['_routeMap_'+mapId] = { map: map, base: null, sat: null, satOn: false };
   }, 100);
 
   return html;
