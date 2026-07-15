@@ -8421,6 +8421,20 @@ function constSportLabel_(sport){
   var pretty=s.replace(/([a-z])([A-Z])/g,'$1 $2');
   return pretty.charAt(0).toUpperCase()+pretty.slice(1);
 }
+function constAllDigits_(s){ if(!s.length) return false; for(var i=0;i<s.length;i++){ var ch=s.charCodeAt(i); if(ch<48||ch>57) return false; } return true; }
+// Clean display name. Raw FIT/GPX/TCX filenames and all-digit ids (e.g.
+// "16153052294.fit") are not names — fall back to "<Sport> · <dist> mi". No
+// backslash regexes (the template literal strips them). Returns {text,isFallback}
+// so callers can drop the redundant dist/sport columns when it fell back.
+function constNameInfo_(r, sportLabel){
+  var nm=String(r.name||'').trim(), low=nm.toLowerCase();
+  var isFile=(low.indexOf('.fit')>=0 || low.indexOf('.gpx')>=0 || low.indexOf('.tcx')>=0);
+  var base=nm, dot=nm.lastIndexOf('.'); if(dot>0) base=nm.slice(0,dot);
+  var bad=(!nm) || isFile || constAllDigits_(nm) || constAllDigits_(base);
+  if(!bad) return {text:nm, isFallback:false};
+  var dist=parseFloat(r.distance)||0, MID=String.fromCharCode(0xB7);
+  return {text: sportLabel + (dist?(' '+MID+' '+(Math.round(dist*10)/10)+' mi'):''), isFallback:true};
+}
 function constStarPath_(cx,cy,rO){
   var out=''; for(var k=0;k<10;k++){ var rr=(k%2===0)?rO:rO*0.46; var a=-Math.PI/2+k*Math.PI/5; out+=(k?'L':'M')+(cx+rr*Math.cos(a)).toFixed(1)+' '+(cy+rr*Math.sin(a)).toFixed(1); } return out+'Z';
 }
@@ -8481,8 +8495,10 @@ function showConstellation(){
     +'<filter id="cnstGlow" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
     +'</defs><rect x="0" y="0" width="1000" height="1000" fill="url(#cnstBg)"/><g id="cnstStars">';
   var buf=[];
-  for(var i2=0;i2<N;i2++){ var p=pts[i2]; buf.push('<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+p.r.toFixed(2)+'" fill="'+p.col+'" fill-opacity="0.82"/>'); }
-  svgStr+=buf.join('')+'</g><g id="cnstCrowns"></g></svg>';
+  for(var i2=0;i2<N;i2++){ var p=pts[i2]; buf.push('<circle data-i="'+i2+'" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+p.r.toFixed(2)+'" fill="'+p.col+'" fill-opacity="0.82" style="cursor:pointer"/>'); }
+  // Crowns painted ON TOP get pointer-events:none so hover/click fall through to
+  // the star beneath them.
+  svgStr+=buf.join('')+'</g><g id="cnstCrowns" style="pointer-events:none"></g></svg>';
   fieldWrap.innerHTML=svgStr;
   var fieldSvg=fieldWrap.querySelector('svg');
   var crownsG=fieldSvg.querySelector('#cnstCrowns');
@@ -8551,10 +8567,14 @@ function showConstellation(){
       var card=document.createElement('div');
       card.style.cssText='padding:9px 11px;border-radius:10px;margin-bottom:7px;background:rgba(255,255,255,.03);border:1px solid '+(crowned?'#F5C518':'rgba(255,255,255,.07)')+(crowned?';box-shadow:0 0 14px rgba(245,197,24,.18)':'');
       var dist=parseFloat(r.distance)||0, distStr=dist?((Math.round(dist*10)/10)+' mi'):'';
+      var sportLabel=constSportLabel_(x.sport), ni=constNameInfo_(r, sportLabel);
       var sep=' <span style="color:#404755">&middot;</span> ';
+      // A filename/all-digit fallback already embeds sport + distance, so don't
+      // repeat the dist/sport columns after it.
+      var tail=ni.isFallback ? '' : ((distStr?(sep+distStr):'')+sep+uiEsc_(sportLabel));
       var line=document.createElement('div'); line.style.cssText='font-size:12.5px;color:#d7dbe3;line-height:1.4';
       line.innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+constSportColor_(x.sport)+';margin-right:8px;vertical-align:middle"></span>'
-        +'<b style="color:#fff">'+yr+'</b>'+sep+uiEsc_(r.name||'Untitled')+(distStr?(sep+distStr):'')+sep+uiEsc_(constSportLabel_(x.sport));
+        +'<b style="color:#fff">'+yr+'</b>'+sep+uiEsc_(ni.text)+tail;
       card.appendChild(line);
       if(crowned){ var tag=document.createElement('div'); tag.style.cssText='font-size:10.5px;color:#F5C518;font-weight:700;margin-top:4px'; tag.innerHTML='&#9733; best '+crowned.year+' &middot; '+CONST_METRICS[curMetric].label; card.appendChild(tag); }
       otdList.appendChild(card);
@@ -8603,6 +8623,45 @@ function showConstellation(){
   }
   var _rz; function onRz(){ clearTimeout(_rz); _rz=setTimeout(layout,120); }
   window.addEventListener('resize', onRz);
+
+  // ---- hover tooltip + click -> EXISTING ride-detail open path -------------
+  // One delegated listener on the stars group (not 3.6k per-dot handlers). Each
+  // circle carries data-i into rides[], whose .r is the real st.rides object;
+  // click resolves that back to its st.rides index and opens via the same
+  // openDesktopRideDetail/openRideDetail path Activities uses. Flare + crowns
+  // are untouched.
+  var starsG=fieldSvg.querySelector('#cnstStars');
+  var tip=document.createElement('div');
+  tip.style.cssText='position:fixed;z-index:3100;pointer-events:none;display:none;background:rgba(5,6,12,.97);border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:8px 11px;box-shadow:0 10px 34px rgba(0,0,0,.65);max-width:240px';
+  ov.appendChild(tip);
+  function dotIdx(e){ var el=e.target; if(!el||el.tagName!=='circle') return -1; var v=el.getAttribute('data-i'); return v==null?-1:(+v); }
+  function fillTip(idx){
+    var x=rides[idx]; if(!x) return; var r=x.r, sportLabel=constSportLabel_(x.sport), ni=constNameInfo_(r,sportLabel);
+    var dist=parseFloat(r.distance)||0, load=parseFloat(r.tss)||0;
+    tip.innerHTML='<div style="font-weight:800;color:#fff;font-size:12.5px;margin-bottom:3px">'+uiEsc_(ni.text)+'</div>'
+      +'<div style="font-size:11px;color:#aab0bd;line-height:1.55">'+MONTHS[x.d.getMonth()]+' '+x.d.getDate()+', '+x.d.getFullYear()+(dist?(' &middot; '+(Math.round(dist*10)/10)+' mi'):'')+'</div>'
+      +'<div style="font-size:11px;line-height:1.55"><span style="color:'+constSportColor_(x.sport)+';font-weight:700">'+uiEsc_(sportLabel)+'</span>'+(load?('<span style="color:#aab0bd"> &middot; '+Math.round(load)+' TSS</span>'):'')+'</div>';
+  }
+  function posTip(px,py){
+    var vw=window.innerWidth, vh=window.innerHeight, tw=tip.offsetWidth||200, th=tip.offsetHeight||60;
+    var x=px+15, y=py+15; if(x+tw>vw-8) x=px-tw-15; if(y+th>vh-8) y=py-th-15;
+    tip.style.left=Math.max(6,x)+'px'; tip.style.top=Math.max(6,y)+'px';
+  }
+  starsG.addEventListener('mouseover', function(e){ var i=dotIdx(e); if(i<0) return; fillTip(i); tip.style.display='block'; posTip(e.clientX,e.clientY); });
+  starsG.addEventListener('mousemove', function(e){ if(tip.style.display==='block') posTip(e.clientX,e.clientY); });
+  starsG.addEventListener('mouseout', function(e){ if(e.target && e.target.tagName==='circle') tip.style.display='none'; });
+  function openRide(i){
+    var x=rides[i]; if(!x||!x.r) return; var ride=x.r, arr=st.rides||[], sIdx=arr.indexOf(ride);
+    if(sIdx<0){ var rk=rideKey(ride); for(var j=0;j<arr.length;j++){ if(arr[j] && rideKey(arr[j])===rk){ sIdx=j; break; } } }
+    if(sIdx<0) return;
+    tip.style.display='none';
+    ov.remove(); window.removeEventListener('resize', onRz);   // free the overlay so the detail view (rendered beneath it) is visible
+    try{
+      if(typeof isDesktop==='function' && isDesktop() && typeof openDesktopRideDetail==='function') openDesktopRideDetail(sIdx);
+      else openRideDetail(sIdx);
+    }catch(err){ try{ openRideDetail(sIdx); }catch(e2){} }
+  }
+  starsG.addEventListener('click', function(e){ var i=dotIdx(e); if(i<0) return; openRide(i); });
 
   document.body.appendChild(ov);
   layout(); recomputeCrowns(); applyOTD();
