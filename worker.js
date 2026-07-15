@@ -9025,7 +9025,7 @@ var METRIC_TEACH={
       {c:"#00C896", label:"60-80", desc:"Strong, race-ready fitness for most events."},
       {c:"#00C896", label:"80+", desc:"Elite range — hard to hold without near full-time training."}
     ],
-    forYou:function(pmc, race){
+    forYou:function(ctx){ var pmc=ctx.pmc, race=ctx.race;
       var v=pmc.ctl;
       var band=v>=80?"elite territory":v>=60?"strong, race-ready fitness":v>=40?"a well-built base":v>=20?"a solid starting base":"early days, still building";
       var s="Yours: "+v+". That is "+band+". ";
@@ -9043,7 +9043,7 @@ var METRIC_TEACH={
       {c:"#FF7A45", label:"Above your CTL", desc:"Loading hard — how you build, but watch the stacking."},
       {c:"#ef4444", label:"Well above CTL", desc:"Overreaching. Fine briefly; risky if it lasts."}
     ],
-    forYou:function(pmc, race){
+    forYou:function(ctx){ var pmc=ctx.pmc, race=ctx.race;
       var v=pmc.atl, diff=pmc.atl-pmc.ctl;
       var s="Yours: "+v+". ";
       if(diff>15) s+="That is well above your fitness — you are loading hard right now. Good for a short block, but do not stack many more hard days"+(race&&race.name?(" before "+race.name):"")+".";
@@ -9062,7 +9062,7 @@ var METRIC_TEACH={
       {c:"#FC4C02", label:"-10 to -30", desc:"Carrying fatigue — normal and expected inside a training block."},
       {c:"#ef4444", label:"Below -30", desc:"Deep fatigue — legs are cooked. Fine mid-block, not before an event."}
     ],
-    forYou:function(pmc, race){
+    forYou:function(ctx){ var pmc=ctx.pmc, race=ctx.race;
       var v=pmc.tsb, sign=(v>=0?"+":"")+v;
       var s="Yours: "+sign+". ";
       if(v<=-30) s+="You are deep in a training load — legs are cooked. Normal for a heavy block, but you would want fresher legs before anything that matters.";
@@ -9073,14 +9073,115 @@ var METRIC_TEACH={
       if(v<=-20 && race && race.name && race.daysOut!=null && race.daysOut<=21) s+=" A rest day or two would pay off before "+race.name+".";
       return s;
     }
+  },
+  wkg:{
+    name:"W/kg — Power-to-Weight Ratio", aka:"Watts per Kilo",
+    oneLiner:"Your threshold power divided by your bodyweight — the best single predictor of how you climb and hold a hard pace. More watts or less weight both move it.",
+    ranges:[
+      {c:"#64748b", label:"Under 2.5", desc:"Recreational / building. Everyone starts here."},
+      {c:"#FC4C02", label:"2.5-3.0", desc:"Club-level engine — you can hang on most group rides."},
+      {c:"#FFB938", label:"3.0-3.5", desc:"Strong amateur. Climbs start to feel good."},
+      {c:"#00C896", label:"3.5-4.0", desc:"Cat 2-ish — genuinely quick."},
+      {c:"#00C896", label:"4.0+", desc:"Cat 1 / elite territory."}
+    ],
+    forYou:function(ctx){
+      var w=ctx.wkg||0, band=w>=4?"elite territory":w>=3.5?"a genuinely quick engine":w>=3.14?"past your Chase-1 target":w>=3?"strong club-racer range":w>=2.5?"a solid trained base":"still building";
+      var s="Yours: "+w.toFixed(2)+" W/kg — "+band+". ";
+      s+="One honest caveat: this is FTP / weight, and your FTP is a manual number that looks stale — so treat the W/kg figure as a rough placeholder until FTP is re-anchored.";
+      return s;
+    }
+  },
+  ftp:{
+    name:"FTP — Functional Threshold Power", aka:"Threshold",
+    oneLiner:"The highest power you could hold for about an hour. Every training zone, %FTP, IF and TSS is calculated from it — so if FTP is wrong, everything downstream is wrong too.",
+    ranges:[
+      {c:"#64748b", label:"How it is set", desc:"Ideally from a recent test (20-min or ramp) or auto-estimated from your best efforts."},
+      {c:"#FFB938", label:"Why it drifts", desc:"Fitness moves; a number entered months ago quietly goes stale."},
+      {c:"#00C896", label:"When it is right", desc:"Threshold efforts land near 100% and the zones feel correct."}
+    ],
+    forYou:function(ctx){
+      var f=ctx.ftp||0;
+      var s="Yours is set to "+f+"W — but this is a MANUAL entry, and it looks low: recent efforts are coming out at implausibly high %FTP, the classic tell that FTP is stale. ";
+      s+="Auto-FTP is not built yet, so until you re-anchor it (a 20-min or ramp test) take your zones, IF and TSS as rough rather than gospel. I am deliberately not coaching off this number.";
+      return s;
+    }
+  },
+  np:{
+    name:"NP — Normalized Power", aka:"Normalized Power",
+    oneLiner:"An adjusted average that weights the surges — a stop-start ride costs more than its plain average suggests, and NP captures that. It is a directly measured wattage, no FTP guesswork.",
+    ranges:[
+      {c:"#4D9FFF", label:"NP near average power", desc:"You rode steady — even, controlled effort."},
+      {c:"#FC4C02", label:"NP above average", desc:"Surgey, variable ride — punches, climbs, stop-start."},
+      {c:"#00C896", label:"Rising NP over weeks", desc:"You are holding more real power — genuine fitness."}
+    ],
+    forYou:function(ctx){
+      var lr=ctx.lr, np=ctx.np||0;
+      if(!lr || !np) return "No recent ride with power data to read NP from — log a ride with a power meter and this fills in. NP is the one power number here that does not depend on your (stale) FTP.";
+      var avg=parseInt(lr.avgPwr)||0;
+      var s="Your last ride"+(lr.date?(" ("+lr.date+")"):"")+" held NP "+np+"W. That is a real measured number, no FTP in it. ";
+      if(avg) s+="Its plain average was "+avg+"W: "+((np-avg)>=25?"a big gap, so it was a surgey, variable ride.":"close together, so you rode nice and steady.");
+      else s+="Compare it to the ride average to see how variable the effort was.";
+      return s;
+    }
+  },
+  if:{
+    name:"IF — Intensity Factor", aka:"Intensity",
+    oneLiner:"How hard a ride was relative to your threshold — NP / FTP. 1.0 means you basically rode at threshold the whole time; 0.7 is a steady endurance pace.",
+    ranges:[
+      {c:"#4D9FFF", label:"Under 0.75", desc:"Endurance / recovery pace."},
+      {c:"#22c55e", label:"0.75-0.85", desc:"Tempo / sweet spot — productive and repeatable."},
+      {c:"#f59e0b", label:"0.85-0.95", desc:"Threshold work — hard, focused."},
+      {c:"#ef4444", label:"0.95+", desc:"Race / very hard, usually shorter."}
+    ],
+    forYou:function(ctx){
+      var lr=ctx.lr, iv=ctx.ifv||0;
+      if(!lr || !iv) return "No recent power ride to read IF from yet. IF is NP / FTP, so it inherits your FTP — which currently looks stale.";
+      var s="Your last ride came out at IF "+iv.toFixed(2)+". ";
+      s+="But IF is NP / FTP, and your FTP is a manual value that looks too low — when FTP is set low, IF reads too high, which is exactly why some efforts look implausibly hard. Treat it as a rough guide until FTP is re-anchored.";
+      return s;
+    }
+  },
+  tss:{
+    name:"TSS — Training Stress Score", aka:"Training Stress",
+    oneLiner:"One number for how much a ride cost you — it blends how long and how hard. One hour at threshold = 100 TSS by definition; easier or shorter scores less. TSS is what feeds CTL/ATL/TSB.",
+    ranges:[
+      {c:"#4D9FFF", label:"Under 50", desc:"Easy / recovery ride."},
+      {c:"#22c55e", label:"50-100", desc:"Moderate — a solid training day."},
+      {c:"#f59e0b", label:"100-150", desc:"Hard day — real load."},
+      {c:"#ef4444", label:"150+", desc:"Very hard / long — plan recovery after."}
+    ],
+    forYou:function(ctx){
+      var lr=ctx.lr, tv=ctx.tss;
+      var s=(lr && tv!=null)?("Your last ride scored "+tv+" TSS. "):("No recent power ride to read a clean TSS from yet. ");
+      s+="Heads up: TSS is calculated from FTP, and your FTP looks stale — a low FTP inflates TSS. The SHAPE of your TSS week to week (hard blocks vs easy weeks) is still useful; the absolute number is only as trustworthy as your FTP.";
+      return s;
+    }
   }
 };
+// Live context every forYou() reads. Additive readers only — no metric
+// computation touched. np/if/tss anchor to the most recent power ride (the
+// freshest "right now" data point); wkg/ftp come from the same values the
+// Analytics cards show. constRideTSS_ guards the TSS ceiling.
+function teachCtx_(){
+  var pmc=teachPMC_();
+  var race=(typeof getNextRace_==="function")?getNextRace_():null;
+  var ftp=parseInt((typeof st!=="undefined"&&st.ftp)||186)||186;
+  var wkg=(typeof currentWkg_==="function")?(currentWkg_()||0):0;
+  var lr=null;
+  try{
+    var rr=(st.rides||[]).filter(function(r){return r && !r.deleted && (r.np||r.avgPwr);});
+    rr.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+    lr=rr.length?rr[0]:null;
+  }catch(e){}
+  var np=lr?(parseInt(lr.np||lr.avgPwr)||0):0;
+  var ifv=lr?(lr.ifPct?(Math.round(lr.ifPct)/100):(np&&ftp?(Math.round(np/ftp*100)/100):0)):0;
+  var tss=(lr && typeof constRideTSS_==="function")?constRideTSS_(lr):null;
+  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss};
+}
 // Shared teaching panel. Reused by every metric now and in later phases.
 function openMetricTeach(metric){
   var t=METRIC_TEACH[metric]; if(!t) return;
-  var pmc=teachPMC_();
-  var race=(typeof getNextRace_==="function")?getNextRace_():null;
-  var forYouText=t.forYou(pmc, race);
+  var forYouText=t.forYou(teachCtx_());
   var desktop=(typeof isDesktop==="function" && isDesktop());
   var old=document.getElementById("metric-teach"); if(old) old.remove();
   var ov=document.createElement("div");
@@ -9371,7 +9472,7 @@ function renderPerf(container){
   window._peakChartData={labels:peakLabelsArr,watts:peakWattsArr,colors:peakColorsArr};
 
   // -- FITNESS FATIGUE FORM (redesigned)
-  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Fitness · Fatigue · Form</div>';
+  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Your Metrics · tap any to learn</div>';
 
   // Prefer live Intervals.icu wellness (same cache Home's Readiness card
   // and the AI Coach prompt already use) over the CSV-derived pmcData,
@@ -9430,10 +9531,18 @@ function renderPerf(container){
   // Three metric cards - flat, no box background, matching the reference's
   // plain Fitness/Fatigue/Form number layout
   html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 16px 20px">';
+  // Phase-2 metrics join the same tappable grid. Values from teachCtx_ so cards
+  // and the teaching sheet agree; np/if/tss anchor to the most recent power ride.
+  var _tc=teachCtx_();
   [
     {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
     {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
-    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null}
+    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null},
+    {key:'wkg',lbl:'W/kg',v:_tc.wkg.toFixed(2),sub:'FTP-based',c:'#FC4C02',desc:'watts / kg',barW:null},
+    {key:'ftp',lbl:'FTP',v:_tc.ftp+'W',sub:'Manual',c:'#94a3b8',desc:'may be stale',barW:null},
+    {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'measured',c:'#60a5fa',desc:'last ride',barW:null},
+    {key:'if',lbl:'IF',v:(_tc.ifv?_tc.ifv.toFixed(2):'—'),sub:'vs FTP',c:'#f59e0b',desc:'last ride',barW:null},
+    {key:'tss',lbl:'TSS',v:(_tc.tss!=null?_tc.tss:'—'),sub:'load',c:'#4ade80',desc:'last ride',barW:null}
   ].forEach(function(card){
     // Tappable -> shared teaching panel (openMetricTeach via the delegated
     // [data-metric-teach] listener). Info glyph signals it is tappable.
@@ -12568,11 +12677,19 @@ function dsShowAnalytics(){
   // Top KPI cards
   var kpiRow=document.createElement('div');
   kpiRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
+  // Phase-2 metrics (W/kg + power/load) join the tappable KPI block. Values from
+  // teachCtx_ so the cards and the teaching sheet always agree; np/if/tss anchor
+  // to the most recent power ride. FTP is flagged "manual" right on the card.
+  var _tc=teachCtx_();
   [
     ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days','ctl'],
     ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days','atl'],
     ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel,'tsb'],
-    ['W/kg',wkgNow.toFixed(2)+' W/kg',wkgNow>=3.14?'#4ade80':'#60a5fa','FTP ÷ weight · Chase 1 = 3.14']
+    ['W/kg',wkgNow.toFixed(2)+' W/kg',wkgNow>=3.14?'#4ade80':'#60a5fa','FTP ÷ weight · Chase 1 = 3.14','wkg'],
+    ['FTP',_tc.ftp+'W','#94a3b8','Manual — may be stale','ftp'],
+    ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','Last ride','np'],
+    ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','Last ride','if'],
+    ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','Last ride','tss']
   ].forEach(function(x){
     var card=document.createElement('div');
     var teach=x[4];   // metric key for the shared teaching panel (undefined = not tappable, e.g. W/kg is phase 2)
