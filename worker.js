@@ -12845,9 +12845,9 @@ function dsShowAnalytics(){
   miniGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px';
   [
     {key:'ftp',label:'FTP',val:_tc.ftp+'W',color:'#94a3b8'},
-    {key:'ctl',label:'CTL',val:''+Math.round(lastCTL),color:'#60a5fa'},
-    {key:'atl',label:'ATL',val:''+Math.round(lastATL),color:'#f59e0b'},
-    {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:tsbColor}
+    {key:'ctl',label:'CTL',val:''+Math.round(lastCTL),color:'#3b82f6'},
+    {key:'atl',label:'ATL',val:''+Math.round(lastATL),color:'#f97316'},
+    {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e'}
   ].forEach(function(m){
     var mini=document.createElement('div');
     mini.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
@@ -12866,10 +12866,10 @@ function dsShowAnalytics(){
   var gaugeRow=document.createElement('div');
   gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
   [
-    {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#60a5fa',cap:'42-day load'},
-    {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f59e0b',cap:'7-day load'},
-    {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:tsbColor,cap:tsbLabel},
-    {key:'wkg',label:'W/kg',sub:'W/kg',frac:Math.min(1,wkgNow/5),center:wkgNow.toFixed(2),color:(wkgNow>=3.14?'#4ade80':'#60a5fa'),cap:'vs 3.14 target'}
+    {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#3b82f6',cap:'42-day load'},
+    {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f97316',cap:'7-day load'},
+    {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e',cap:tsbLabel},
+    {key:'wkg',label:'W/kg',sub:'W/kg',frac:Math.min(1,wkgNow/5),center:wkgNow.toFixed(2),color:'#a855f7',cap:'vs 3.14 target'}
   ].forEach(function(g){
     var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
       +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,104)+'</div>'
@@ -12983,19 +12983,24 @@ function dsShowAnalytics(){
     if(typeof Chart==='undefined'){ setTimeout(drawCharts,200); return; }
     var gc=document.getElementById('ds-fitness-chart');
     if(gc&&typeof Chart!=='undefined'){
-      new Chart(gc,{type:'line',data:{labels:labels.filter(function(_,i){return i%7===0;}),datasets:[
-        {label:'CTL',data:ctlArr.filter(function(_,i){return i%7===0;}),borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:0},
-        {label:'ATL',data:atlArr.filter(function(_,i){return i%7===0;}),borderColor:'#f59e0b',backgroundColor:'transparent',borderWidth:2,fill:false,tension:0.3,pointRadius:0},
-        {label:'TSB',data:tsbArr.filter(function(_,i){return i%7===0;}),borderColor:'#60a5fa',backgroundColor:'transparent',borderWidth:1.5,fill:false,tension:0.3,pointRadius:0,borderDash:[4,4]}
-      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:true,labels:{color:'#64748b',font:{size:10},boxWidth:12}}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0}}}});
+      // Full continuous 90-day lines, gradient area fills, saturated colors,
+      // TSB solid green on its own right axis, a "today" dot on the last point,
+      // and a subtle per-line glow. Presentation only — values unchanged.
+      var _tdDot=function(c){ return c.dataIndex===(c.dataset.data.length-1)?4:0; };
+      var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.34)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
+      new Chart(gc,{type:'line',data:{labels:labels,datasets:[
+        {label:'CTL',data:ctlArr,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'ATL',data:atlArr,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'TSB',data:tsbArr,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
+      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=6; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
     }
     var dc=document.getElementById('ds-dist-chart');
     if(dc&&typeof Chart!=='undefined'){
-      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#60a5fa':'rgba(96,165,250,.4)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
+      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#3b82f6':'rgba(59,130,246,.45)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#60a5fa',backgroundColor:'rgba(96,165,250,.1)',borderWidth:2,fill:true,tension:0.3,pointRadius:2,pointBackgroundColor:'#60a5fa'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#a855f7',backgroundColor:'rgba(168,85,247,.16)',borderWidth:2.5,fill:true,tension:0.35,pointRadius:2,pointBackgroundColor:'#a855f7'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
     }
   }
   setTimeout(drawCharts,100);
