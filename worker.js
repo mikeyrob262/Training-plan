@@ -9232,7 +9232,22 @@ function teachCtx_(){
   var ifv=lr?(lr.ifPct?(Math.round(lr.ifPct)/100):(np&&ftp?(Math.round(np/ftp*100)/100):0)):0;
   var tss=(lr && typeof constRideTSS_==="function")?constRideTSS_(lr):null;
   var iq=(typeof athleteIQ_==="function")?athleteIQ_():null;
-  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss, iq:iq};
+  // Period averages (last 90 days) for the NP/IF/TSS cards' sub-line. Uses
+  // SUMMARY power (avgPwr/np/ifPct/tss), which survives storage slimming, so it
+  // spans the whole library — not just rides that still hold a per-second stream.
+  var _aN=[], _aI=[], _aT=[];
+  try{
+    var _now=new Date(), _cut=new Date(_now); _cut.setDate(_cut.getDate()-90);
+    (st.rides||[]).forEach(function(r){
+      if(!r || r.deleted || !r.date) return; var d=new Date(normDate(r.date)); if(isNaN(d)||d<_cut) return;
+      var pnp=parseInt(r.np||r.avgPwr)||0; if(pnp>0) _aN.push(pnp);
+      var pif=r.ifPct?(r.ifPct/100):(pnp&&ftp?(pnp/ftp):0); if(pif>0) _aI.push(pif);
+      var pt=(typeof constRideTSS_==="function")?constRideTSS_(r):null; if(pt!=null) _aT.push(pt);
+    });
+  }catch(e){}
+  function _avg(a){ return a.length?(a.reduce(function(s,x){return s+x;},0)/a.length):null; }
+  var avg={days:90, np:_avg(_aN), ifv:_avg(_aI), tss:_avg(_aT)};
+  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss, iq:iq, avg:avg};
 }
 // Shared teaching panel. Reused by every metric now and in later phases.
 function openMetricTeach(metric){
@@ -9605,9 +9620,9 @@ function renderPerf(container){
     {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null},
     {key:'wkg',lbl:'W/kg',v:_tc.wkg.toFixed(2),sub:'FTP-based',c:'#FC4C02',desc:'watts / kg',barW:null},
     {key:'ftp',lbl:'FTP',v:_tc.ftp+'W',sub:'Manual',c:'#94a3b8',desc:'may be stale',barW:null},
-    {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'measured',c:'#60a5fa',desc:'last ride',barW:null},
-    {key:'if',lbl:'IF',v:(_tc.ifv?_tc.ifv.toFixed(2):'—'),sub:'vs FTP',c:'#f59e0b',desc:'last ride',barW:null},
-    {key:'tss',lbl:'TSS',v:(_tc.tss!=null?_tc.tss:'—'),sub:'load',c:'#4ade80',desc:'last ride',barW:null}
+    {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'last ride',c:'#60a5fa',desc:'avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)',barW:null},
+    {key:'if',lbl:'IF',v:(_tc.ifv?_tc.ifv.toFixed(2):'—'),sub:'last ride',c:'#f59e0b',desc:'avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)',barW:null},
+    {key:'tss',lbl:'TSS',v:(_tc.tss!=null?_tc.tss:'—'),sub:'last ride',c:'#4ade80',desc:'avg '+(_tc.avg.tss!=null?Math.round(_tc.avg.tss):'—')+' (90d)',barW:null}
   ].forEach(function(card){
     // Tappable -> shared teaching panel (openMetricTeach via the delegated
     // [data-metric-teach] listener). Info glyph signals it is tappable.
@@ -12883,9 +12898,9 @@ function dsShowAnalytics(){
   statRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
   [
     ['FTP',_tc.ftp+'W','#94a3b8','Manual — may be stale','ftp'],
-    ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','Last ride','np'],
-    ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','Last ride','if'],
-    ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','Last ride','tss']
+    ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','last ride · avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)','np'],
+    ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','last ride · avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)','if'],
+    ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','last ride · avg '+(_tc.avg.tss!=null?Math.round(_tc.avg.tss):'—')+' (90d)','tss']
   ].forEach(function(x){
     var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+_infoGlyph+'</div>'
       +'<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'
