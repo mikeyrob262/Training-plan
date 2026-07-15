@@ -15044,24 +15044,26 @@ function resolveRideBike(r){
     }) || null;
   };
   var bike = null;
-  // 1) Explicit Strava gear id / gear map (within the compatible pool).
-  if(r.gearId){
+  // 1) MANUAL per-ride assignment WINS — it must OVERRIDE Strava's gear id, not
+  // just fill in when unresolved. Strava default-bike stamping (e.g. today's BMC
+  // ride tagged as the Dogma) is exactly what an explicit ride-detail assignment
+  // exists to override. Because the assignment lives in st.bikeAssignments keyed
+  // by the stable rideKey (s+stravaId), it persists across a Strava re-sync that
+  // re-stamps r.gearId — same "manual overrides survive sync" guarantee as the
+  // rename bug. Still confined to the compatible indoor/outdoor pool so a stale
+  // cross-line assignment can't win (those are pruned by migrateGearAssignments_).
+  var assignedId = (st.bikeAssignments||{})[rideKey(r)];
+  if(assignedId) bike = pool.find(function(b){ return b.id===assignedId; }) || null;
+  // 2) Explicit Strava gear id / gear map (within the compatible pool).
+  if(!bike && r.gearId){
     bike = pool.find(function(b){ return b.id===r.gearId || b.stravaGearId===r.gearId; });
     if(!bike){
       var mapped = (st.stravaGearMap && st.stravaGearMap[r.gearId]) || null;
       if(mapped) bike = matchByName(mapped);
     }
   }
-  // 2) Gear name from the activity.
+  // 3) Gear name from the activity.
   if(!bike && r.gearName) bike = matchByName(r.gearName);
-  // 3) Manual per-ride assignment. Only honored when it points at a bike on the
-  // correct side of the indoor/outdoor line; a stale cross-line assignment
-  // (e.g. the old bulk tool stamping the road bike onto Zwift rides) is ignored
-  // here and pruned by migrateGearAssignments_().
-  if(!bike){
-    var assignedId = (st.bikeAssignments||{})[rideKey(r)];
-    if(assignedId) bike = pool.find(function(b){ return b.id===assignedId; }) || null;
-  }
   // 4) Date-range (era) fallback: attribute an otherwise-unassigned ride to the
   // bike whose ownership window contains its date. Narrowest window wins on
   // overlap. Pool is already indoor/outdoor-filtered, so era can't cross either.
