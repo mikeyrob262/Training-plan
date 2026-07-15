@@ -12805,35 +12805,61 @@ function dsShowAnalytics(){
   }
   var _infoGlyph='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
 
-  // -- HERO: Athlete IQ (pending formula approval) + W/kg percentile
+  // -- HERO STRIP (mockup): compact IQ (~25%) | W/kg centerpiece (~45%) |
+  //    2x2 mini-stat grid FTP·CTL·ATL·TSB (~30%). Layout only; values/caveats
+  //    unchanged, everything stays tappable to its teaching sheet.
   var hero=document.createElement('div');
-  hero.style.cssText='display:grid;grid-template-columns:1.1fr 1fr;gap:14px;flex-shrink:0';
-  // ATHLETE IQ SCORE — live (approved formula). "—" when < 28 days of history.
-  // Tappable -> the teaching sheet, which shows the exact formula + weights.
+  hero.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr) minmax(0,1.2fr);gap:14px;flex-shrink:0;align-items:stretch';
+  // LEFT — Athlete IQ (compact). Live (approved formula); "—" when <28 days.
   var _iq=_tc.iq;
   var _iqNull=(!_iq || _iq.score==null);
   var _iqColor=_iqNull?'#4b5568':(_iq.score>=80?'#4ade80':_iq.score>=60?'#60a5fa':_iq.score>=40?'#f59e0b':'#94a3b8');
   var iqCard=document.createElement('div');
-  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
+  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
   iqCard.setAttribute('data-metric-teach','iq');
   iqCard.setAttribute('role','button'); iqCard.setAttribute('tabindex','0'); iqCard.setAttribute('aria-label','Learn about the Athlete IQ Score');
   iqCard.onmouseenter=function(){ iqCard.style.borderColor='#3a4a70'; };
   iqCard.onmouseleave=function(){ iqCard.style.borderColor='#2a3550'; };
-  iqCard.innerHTML='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7a8aa8">Athlete IQ Score</span>'+_infoGlyph+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:46px;font-weight:800;color:'+_iqColor+';line-height:1">'+(_iqNull?'—':_iq.score)+'</div>'
-    +'<div style="font-size:11px;color:#8b93a5;line-height:1.4">'+(_iqNull?'Need ~4 weeks<br>of ride history':'out of 100')+'</div></div>'
-    +'<div style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5">Real inputs only: CTL trend, consistency, TSB (productive zone), volume vs baseline. Tap for the formula.</div>';
+  iqCard.innerHTML='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ</span>'+_infoGlyph+'</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:'+_iqColor+';line-height:1">'+(_iqNull?'—':_iq.score)+'</div>'
+    +'<div style="font-size:10px;color:#8b93a5;line-height:1.3">'+(_iqNull?'need ~4 wks<br>of history':'out of 100')+'</div></div>'
+    +'<div style="font-size:9px;color:#64748b;margin-top:8px;line-height:1.5">Real inputs only. Tap for the formula.</div>';
   hero.appendChild(iqCard);
+  // CENTER — W/kg centerpiece: value + 0-4.0 gradient scale with a marker dot,
+  // then the "Top X%" line beneath. Same value, percentile and caveat as shipped.
   var _wpct=dsPercentileTop_(wkgHistory, wkgNow);
+  var _wm=Math.max(0,Math.min(100, wkgNow/4*100));
   var wkgHero=teachCard_(
     '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:12px;color:#64748b">W/kg</div></div>'
-    +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:4px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
-    +'<div style="height:7px;background:#1a1f2e;border-radius:4px;margin-top:10px"><div style="height:7px;background:linear-gradient(90deg,#3b82f6,#4ade80);border-radius:4px;width:'+Math.round(Math.min(1,wkgNow/5)*100)+'%"></div></div>'
-    +'<div style="font-size:9px;color:#64748b;margin-top:6px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:13px;color:#64748b">W/kg</div></div>'
+    +'<div style="position:relative;height:8px;margin-top:14px"><div style="height:8px;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#4ade80);border-radius:4px"></div>'
+    +'<div style="position:absolute;top:-3px;left:'+_wm.toFixed(1)+'%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #0d1017;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-top:4px"><span>0</span><span>2.0</span><span>4.0</span></div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
+    +'<div style="font-size:9px;color:#64748b;margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
     ,'wkg','W/kg');
   wkgHero.style.borderRadius='16px'; wkgHero.style.padding='18px 20px';
   hero.appendChild(wkgHero);
+  // RIGHT — compact 2x2 mini-stat grid (FTP | CTL / ATL | TSB), each tappable.
+  var miniGrid=document.createElement('div');
+  miniGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px';
+  [
+    {key:'ftp',label:'FTP',val:_tc.ftp+'W',color:'#94a3b8'},
+    {key:'ctl',label:'CTL',val:''+Math.round(lastCTL),color:'#60a5fa'},
+    {key:'atl',label:'ATL',val:''+Math.round(lastATL),color:'#f59e0b'},
+    {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:tsbColor}
+  ].forEach(function(m){
+    var mini=document.createElement('div');
+    mini.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
+    mini.setAttribute('data-metric-teach',m.key);
+    mini.setAttribute('role','button'); mini.setAttribute('tabindex','0'); mini.setAttribute('aria-label','Learn about '+m.label);
+    mini.onmouseenter=function(){ mini.style.background='#161a24'; mini.style.borderColor='#2a3550'; };
+    mini.onmouseleave=function(){ mini.style.background='#111318'; mini.style.borderColor='#1a1f2e'; };
+    mini.innerHTML='<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+m.label+'</div>'
+      +'<div style="font-size:20px;font-weight:800;color:'+m.color+';line-height:1">'+m.val+'</div>';
+    miniGrid.appendChild(mini);
+  });
+  hero.appendChild(miniGrid);
   wrap.appendChild(hero);
 
   // -- GAUGES: CTL / ATL / TSB / W-kg (tappable)
