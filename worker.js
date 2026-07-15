@@ -8422,6 +8422,13 @@ function constSportLabel_(sport){
   return pretty.charAt(0).toUpperCase()+pretty.slice(1);
 }
 function constAllDigits_(s){ if(!s.length) return false; for(var i=0;i<s.length;i++){ var ch=s.charCodeAt(i); if(ch<48||ch>57) return false; } return true; }
+// Canonical ride TSS for display: the stored r.tss guarded by the app's
+// TSS_CEILING (600), so a garbage import value (e.g. 144647) reads as "no TSS"
+// rather than an impossible number. Returns a rounded number, or null when
+// absent/garbage — callers render "—", never a raw fallback. The ride-detail
+// TRAINING STRESS card reads the same r.tss field, so a valid ride (Gaines ~50)
+// matches; only implausible values diverge (to "—").
+function constRideTSS_(r){ var v=parseFloat(r && r.tss); if(!(v>0) || v>600) return null; return Math.round(v); }
 // Clean display name. Raw FIT/GPX/TCX filenames and all-digit ids (e.g.
 // "16153052294.fit") are not names — fall back to "<Sport> · <dist> mi". No
 // backslash regexes (the template literal strips them). Returns {text,isFallback}
@@ -8442,7 +8449,7 @@ function constStarPath_(cx,cy,rO){
 // Zwift/virtual rides are never wrongly crowned or shown as zero).
 var CONST_METRICS=[
   {key:'dist', label:'Longest',       unit:'mi',  get:function(r){return parseFloat(r.distance)||0;}},
-  {key:'tss',  label:'Most TSS',      unit:'TSS', get:function(r){return parseFloat(r.tss)||0;}},
+  {key:'tss',  label:'Most TSS',      unit:'TSS', get:function(r){return constRideTSS_(r)||0;}},
   {key:'elev', label:'Most Climbing', unit:'ft',  get:function(r){return parseFloat(r.elev)||0;}}
 ];
 function showConstellation(){
@@ -8456,7 +8463,7 @@ function showConstellation(){
   var N=rides.length, omitted=allR.length-N;
 
   // ---- load -> size ----
-  var loads=rides.map(function(x){ return parseFloat(x.r.tss)||0; }).sort(function(a,b){return a-b;});
+  var loads=rides.map(function(x){ return constRideTSS_(x.r)||0; }).sort(function(a,b){return a-b;});
   var cap=loads.length?(loads[Math.floor(loads.length*0.92)]||loads[loads.length-1]||1):1; if(!(cap>0)) cap=1;
 
   // ---- positions: golden-angle phyllotaxis in a 1000x1000 viewBox ----
@@ -8465,7 +8472,7 @@ function showConstellation(){
   for(var i=0;i<N;i++){
     var frac=N>1?(i/(N-1)):0, rad=maxR*Math.sqrt(frac), ang=i*GA;
     var jit=((((i*2654435761)>>>0)%1000)/1000)-0.5, rr=rad+jit*9;
-    var load=parseFloat(rides[i].r.tss)||0;
+    var load=constRideTSS_(rides[i].r)||0;
     pts[i]={ x:cx+rr*Math.cos(ang), y:cy+rr*Math.sin(ang), r:2.0+5.0*Math.min(1,Math.sqrt(load/cap)), col:constSportColor_(rides[i].sport) };
   }
 
@@ -8637,10 +8644,10 @@ function showConstellation(){
   function dotIdx(e){ var el=e.target; if(!el||el.tagName!=='circle') return -1; var v=el.getAttribute('data-i'); return v==null?-1:(+v); }
   function fillTip(idx){
     var x=rides[idx]; if(!x) return; var r=x.r, sportLabel=constSportLabel_(x.sport), ni=constNameInfo_(r,sportLabel);
-    var dist=parseFloat(r.distance)||0, load=parseFloat(r.tss)||0;
+    var dist=parseFloat(r.distance)||0, tss=constRideTSS_(r);
     tip.innerHTML='<div style="font-weight:800;color:#fff;font-size:12.5px;margin-bottom:3px">'+uiEsc_(ni.text)+'</div>'
       +'<div style="font-size:11px;color:#aab0bd;line-height:1.55">'+MONTHS[x.d.getMonth()]+' '+x.d.getDate()+', '+x.d.getFullYear()+(dist?(' &middot; '+(Math.round(dist*10)/10)+' mi'):'')+'</div>'
-      +'<div style="font-size:11px;line-height:1.55"><span style="color:'+constSportColor_(x.sport)+';font-weight:700">'+uiEsc_(sportLabel)+'</span>'+(load?('<span style="color:#aab0bd"> &middot; '+Math.round(load)+' TSS</span>'):'')+'</div>';
+      +'<div style="font-size:11px;line-height:1.55"><span style="color:'+constSportColor_(x.sport)+';font-weight:700">'+uiEsc_(sportLabel)+'</span><span style="color:#aab0bd"> &middot; '+(tss!=null?(tss+' TSS'):'&mdash;')+'</span></div>';
   }
   function posTip(px,py){
     var vw=window.innerWidth, vh=window.innerHeight, tw=tip.offsetWidth||200, th=tip.offsetHeight||60;
