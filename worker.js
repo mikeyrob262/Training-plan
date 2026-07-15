@@ -8572,7 +8572,12 @@ function showConstellation(){
     matches.slice().sort(function(a,b){ return rides[b].d.getFullYear()-rides[a].d.getFullYear(); }).forEach(function(idx){
       var x=rides[idx], r=x.r, yr=x.d.getFullYear(), crowned=crownedByIdx[idx];
       var card=document.createElement('div');
-      card.style.cssText='padding:9px 11px;border-radius:10px;margin-bottom:7px;background:rgba(255,255,255,.03);border:1px solid '+(crowned?'#F5C518':'rgba(255,255,255,.07)')+(crowned?';box-shadow:0 0 14px rgba(245,197,24,.18)':'');
+      card.style.cssText='padding:9px 11px;border-radius:10px;margin-bottom:7px;background:rgba(255,255,255,.03);border:1px solid '+(crowned?'#F5C518':'rgba(255,255,255,.07)')+(crowned?';box-shadow:0 0 14px rgba(245,197,24,.18)':'')+';cursor:pointer;transition:background .12s';
+      // Row opens the ride via the SAME openRide() path the star dots use (idx
+      // is this ride's index into rides[]). Hover affordance so it reads clickable.
+      card.onmouseenter=function(){ card.style.background='rgba(255,255,255,.08)'; };
+      card.onmouseleave=function(){ card.style.background='rgba(255,255,255,.03)'; };
+      card.onclick=function(){ openRide(idx); };
       var dist=parseFloat(r.distance)||0, distStr=dist?((Math.round(dist*10)/10)+' mi'):'';
       var sportLabel=constSportLabel_(x.sport), ni=constNameInfo_(r, sportLabel);
       var sep=' <span style="color:#404755">&middot;</span> ';
