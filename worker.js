@@ -476,63 +476,18 @@ window.parseFitFile = function(arrayBuffer, callback) {
 // threshold isDesktop() uses (shared via AIQ_DESKTOP_MIN) plus a persisted
 // manual override (aiq_layout: 'desktop' | 'mobile' | absent=auto). The app's
 // isDesktop() / applyLayout_() re-assert this on load and on every resize.
+// Note: at high OS display scaling the CSS viewport can be well under the
+// physical pixels (e.g. dpr 4.5 -> a 1280px window is 853 CSS px), so a
+// genuinely wide screen can read as mobile — the manual override in Settings
+// is the intended escape hatch, not a lower threshold.
 window.AIQ_DESKTOP_MIN=1024;
-
-// --- LAYOUT DIAGNOSTIC (temporary) --------------------------------------
-// The mobile-on-desktop bug is viewport-dependent and CANNOT be read from the
-// console, because opening DevTools changes the viewport and masks it. So we
-// capture innerWidth / isDesktop() at every phase (starting BEFORE first
-// paint) and paint the readings ON THE PAGE. Enable by loading the URL with
-// ?layoutdebug — no DevTools needed. Removed once the root cause is confirmed.
-window.__layoutDiag={min:1024,events:[]};
-window.__recordLayout=function(phase){
-  try{
-    var s=window.screen||{};
-    window.__layoutDiag.events.push({
-      phase:phase, t:Date.now(),
-      innerW:window.innerWidth, outerW:window.outerWidth,
-      screenW:s.width, availW:s.availWidth, dpr:window.devicePixelRatio,
-      docClientW:(document.documentElement&&document.documentElement.clientWidth),
-      mq1024:(window.matchMedia?window.matchMedia('(min-width:1024px)').matches:null),
-      override:(function(){try{return localStorage.getItem('aiq_layout')||'(auto)';}catch(e){return 'ERR';}})(),
-      widthGE1024:(window.innerWidth>=(window.AIQ_DESKTOP_MIN||1024)),
-      realIsDesktop:(typeof isDesktop==='function'?isDesktop():'n/a'),
-      htmlClass:(document.documentElement&&document.documentElement.className)||'(none)'
-    });
-  }catch(e){}
-};
-window.__renderLayoutDiag=function(){
-  if(location.search.indexOf('layoutdebug')<0) return;
-  var d=window.__layoutDiag; if(!d) return;
-  var el=document.getElementById('__layoutdiag');
-  if(!el){
-    el=document.createElement('div'); el.id='__layoutdiag';
-    el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgba(10,12,16,.97);color:#e2e8f0;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;padding:8px 10px;border-bottom:2px solid #FC4C02;max-height:60vh;overflow:auto;white-space:pre-wrap;word-break:break-word';
-    (document.body||document.documentElement).appendChild(el);
-    el.onclick=function(){ el.remove(); };
-  }
-  // Build newlines via fromCharCode: a backslash-n escape here would be turned
-  // into a real newline by the outer template literal and break the string.
-  var NL=String.fromCharCode(10);
-  var rows=d.events.map(function(e){
-    return e.phase+NL+'   innerW='+e.innerW+' outerW='+e.outerW+' screenW='+e.screenW+' availW='+e.availW+' dpr='+e.dpr
-      +NL+'   docClientW='+e.docClientW+' mq(min-width:1024)='+e.mq1024+' width>=1024='+e.widthGE1024+' isDesktop()='+e.realIsDesktop
-      +NL+'   override='+e.override+' html class="'+e.htmlClass+'"';
-  }).join(NL+NL);
-  el.textContent='LAYOUT DIAG (threshold='+d.min+')  — tap to dismiss'+NL+NL+rows;
-};
-
 (function(){
   var o=null; try{ o=localStorage.getItem('aiq_layout'); }catch(e){}
   var d = o==='desktop' ? true : (o==='mobile' ? false : (window.innerWidth>=window.AIQ_DESKTOP_MIN));
   var r=document.documentElement;
   r.classList.add(d?'aiq-desktop':'aiq-mobile');
   r.classList.remove(d?'aiq-mobile':'aiq-desktop');
-  window.__recordLayout('1. head bootstrap (BEFORE first paint) — stamped '+(d?'DESKTOP':'MOBILE'));
 })();
-document.addEventListener('DOMContentLoaded',function(){ window.__recordLayout('2. DOMContentLoaded'); window.__renderLayoutDiag(); });
-window.addEventListener('load',function(){ window.__recordLayout('3. load'); setTimeout(function(){ window.__recordLayout('4. load + 400ms (settled)'); window.__renderLayoutDiag(); },400); });
-window.addEventListener('resize',function(){ window.__recordLayout('resize'); window.__renderLayoutDiag(); });
 </script>
 </head>
 <body>
@@ -5867,8 +5822,14 @@ function showSet(){
   var ghToken = st.ghToken||'';
 
 
+  // Display mode (Auto/Desktop/Mobile) override. Populated as a DOM node after
+  // innerHTML is set (buildLayoutToggle_ wires its own handlers, which avoids
+  // inline-onclick escaping inside the template literal). This is the escape
+  // hatch when OS display scaling makes a wide screen read as mobile.
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);padding:14px 16px"><div id="set-display-mode"></div></div>';
   html+='<div style="height:50px"></div>';
   document.getElementById('SET').innerHTML=html;
+  var _dm=document.getElementById('set-display-mode'); if(_dm) _dm.appendChild(buildLayoutToggle_());
 
   // Wire export/import buttons
   var expBtn=document.getElementById('export-data-btn');
@@ -19412,10 +19373,6 @@ function showMoreSheet(){
   h+='</div>';
 
   card.innerHTML=h;
-  // Display-mode override (Auto/Desktop/Mobile) — reachable here so a user
-  // stuck in the wrong layout can always force it. Sits below the header,
-  // above the icon grid.
-  try{ card.insertBefore(buildLayoutToggle_(), card.children[1]||null); }catch(e){}
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
   overlay.appendChild(card);document.body.appendChild(overlay);
 }
