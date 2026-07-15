@@ -63,6 +63,22 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
   #desktop-shell{display:flex!important;position:absolute;inset:0;z-index:999}
   #mobile-content{display:none!important}
 }
+/* JS-authoritative layout: <html> gets aiq-desktop / aiq-mobile from
+   isDesktop() (width threshold + manual override). These mirror the
+   min-width:1024px block but win via higher specificity, in BOTH directions,
+   so the layout can never diverge from the detection the way the width media
+   query alone did — and a manual Mobile/Desktop override holds regardless of
+   window width. */
+html.aiq-desktop body{background:#0a0c10;overflow:hidden}
+html.aiq-desktop #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:#0d0f14!important;display:block!important;height:100vh;overflow:hidden;position:relative}
+html.aiq-desktop #app-shell .bnav{display:none!important}
+html.aiq-desktop #app-shell .hdr{display:none!important}
+html.aiq-desktop #desktop-shell{display:flex!important;position:absolute;inset:0;z-index:999}
+html.aiq-desktop #mobile-content{display:none!important}
+html.aiq-mobile #desktop-shell{display:none!important}
+html.aiq-mobile #mobile-content{display:block!important}
+html.aiq-mobile body{background:var(--s3,#111)!important;overflow:auto!important}
+html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;height:auto!important;overflow:visible!important;background:var(--bg)!important;display:block!important;position:relative}
 .ds{display:none;flex:1;height:100vh;overflow:hidden;background:#0d0f14;color:#e2e8f0}
 .ds-sidebar{width:152px;flex-shrink:0;background:#111318;border-right:1px solid #1e2130;display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .ds-sb-top{padding:14px 14px 0}
@@ -453,6 +469,22 @@ window.parseFitFile = function(arrayBuffer, callback) {
   }
 };
 
+</script>
+<script>
+// LAYOUT SOURCE OF TRUTH. Stamp desktop/mobile on <html> BEFORE the shell
+// paints, so there is never a flash of the wrong layout. Uses the SAME
+// threshold isDesktop() uses (shared via AIQ_DESKTOP_MIN) plus a persisted
+// manual override (aiq_layout: 'desktop' | 'mobile' | absent=auto). The app's
+// isDesktop() / applyLayout_() re-assert this on load and on every resize, so
+// the CSS media query and the JS detection can no longer diverge.
+window.AIQ_DESKTOP_MIN=1024;
+(function(){
+  var o=null; try{ o=localStorage.getItem('aiq_layout'); }catch(e){}
+  var d = o==='desktop' ? true : (o==='mobile' ? false : (window.innerWidth>=window.AIQ_DESKTOP_MIN));
+  var r=document.documentElement;
+  r.classList.add(d?'aiq-desktop':'aiq-mobile');
+  r.classList.remove(d?'aiq-mobile':'aiq-desktop');
+})();
 </script>
 </head>
 <body>
@@ -10854,7 +10886,69 @@ function recentRides_(n){
   out.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
   return out.slice(0, n);
 }
-function isDesktop(){ return window.innerWidth >= 1024; }
+// Single source of truth for the layout decision: a persisted manual override
+// wins, otherwise the width threshold (shared with the head bootstrap via
+// AIQ_DESKTOP_MIN). Every layout branch in the app routes through this, and
+// the desktop/mobile shell is driven by the html.aiq-desktop / .aiq-mobile
+// class that syncLayoutClass_() stamps from it — so detection and layout can
+// no longer diverge.
+function isDesktop(){
+  var o=null; try{ o=localStorage.getItem('aiq_layout'); }catch(e){}
+  if(o==='desktop') return true;
+  if(o==='mobile') return false;
+  return window.innerWidth >= (window.AIQ_DESKTOP_MIN||1024);
+}
+// Stamp the layout class on <html> from isDesktop(). Cheap; safe to call on
+// every resize and immediately at parse time.
+function syncLayoutClass_(){
+  var d=isDesktop(), r=document.documentElement;
+  if(r){ r.classList.toggle('aiq-desktop', d); r.classList.toggle('aiq-mobile', !d); }
+  return d;
+}
+var _layoutApplied=null;
+// Sync the class AND (when desktop) populate the desktop shell — but only the
+// first time we enter desktop, so resizing within desktop doesn't re-render.
+function applyLayout_(){
+  var d=syncLayoutClass_();
+  if(d && _layoutApplied!==true){ try{ dsInitProfile(); dsNav((typeof _dsCurView!=='undefined'&&_dsCurView)||'dashboard'); }catch(e){} }
+  _layoutApplied=d;
+}
+// Manual override: 'auto' clears it, 'desktop'/'mobile' force it. Persisted so
+// the choice survives reloads. Applies immediately (no reload needed).
+function setLayoutOverride_(mode){
+  try{ if(mode==='auto'){ localStorage.removeItem('aiq_layout'); } else { localStorage.setItem('aiq_layout',mode); } }catch(e){}
+  _layoutApplied=null;
+  applyLayout_();
+}
+// Shared Auto/Desktop/Mobile segmented control (built as DOM to avoid inline-
+// onclick escaping inside the template literal). Used in the mobile More sheet
+// and the desktop Settings screen.
+function buildLayoutToggle_(){
+  var cur='auto'; try{ cur=localStorage.getItem('aiq_layout')||'auto'; }catch(e){}
+  var wrap=document.createElement('div');
+  wrap.style.cssText='margin-bottom:14px';
+  var lbl=document.createElement('div');
+  lbl.style.cssText='font-size:10px;font-weight:700;color:var(--t3,#64748b);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px';
+  lbl.textContent='Display mode';
+  wrap.appendChild(lbl);
+  var seg=document.createElement('div');
+  seg.style.cssText='display:flex;gap:4px;background:var(--s2,#1a1f2e);border:1px solid var(--b1,#252d40);border-radius:10px;padding:3px';
+  [['auto','Auto'],['desktop','Desktop'],['mobile','Mobile']].forEach(function(o){
+    var b=document.createElement('button');
+    var on=(cur===o[0]);
+    b.textContent=o[1];
+    b.style.cssText='flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:7px 4px;border-radius:8px;border:none;cursor:pointer;'+(on?'background:#FC4C02;color:#fff':'background:transparent;color:var(--t2,#94a3b8)');
+    b.onclick=function(){ setLayoutOverride_(o[0]); var m=document.getElementById('more-sheet'); if(m) m.remove(); try{ toast('Display: '+o[1]); }catch(e){} };
+    seg.appendChild(b);
+  });
+  wrap.appendChild(seg);
+  return wrap;
+}
+// Keep the class correct from the moment this script runs, and on resize
+// (debounced) so dragging a window across the 1024px line switches layouts.
+syncLayoutClass_();
+var _layoutRz;
+window.addEventListener('resize', function(){ clearTimeout(_layoutRz); _layoutRz=setTimeout(applyLayout_, 150); });
 function dsShowActivities(){
   var mc = document.getElementById('ds-content');
   if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>';
@@ -10931,6 +11025,12 @@ function dsShowSettings(){
     +'<div id="backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Patch June 27 Ride</button>'
     +'</div>';
+  // Display-mode override (Auto/Desktop/Mobile), same control as the mobile
+  // More sheet, wrapped in a settings card.
+  var dmCard=document.createElement('div');
+  dmCard.style.cssText='background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px';
+  dmCard.appendChild(buildLayoutToggle_());
+  wrap.appendChild(dmCard);
   mc.appendChild(wrap);
 }
 
@@ -13556,13 +13656,11 @@ function openDesktopRideDetail(idx){
 // Intercept openRideDetail on desktop
 var _origOpenRideDetail = null;
 window.addEventListener('load', function(){
-  dsInitProfile();
-  if(isDesktop()){
-    dsInitProfile();
-    dsNav('dashboard');
-    // Backup in case st.rides wasn't ready yet
-    setTimeout(function(){ if(isDesktop()){ dsInitProfile(); dsNav('dashboard'); } }, 2000);
-  }
+  // Route the layout decision through the single source of truth. applyLayout_
+  // stamps the html class from isDesktop() and populates the desktop shell when
+  // desktop. Re-run once after data settles in case st.rides wasn't ready yet.
+  applyLayout_();
+  setTimeout(function(){ _layoutApplied=null; applyLayout_(); }, 2000);
   _origOpenRideDetail = openRideDetail;
   openRideDetail = function(idx){
     if(isDesktop()){
@@ -19266,6 +19364,10 @@ function showMoreSheet(){
   h+='</div>';
 
   card.innerHTML=h;
+  // Display-mode override (Auto/Desktop/Mobile) — reachable here so a user
+  // stuck in the wrong layout can always force it. Sits below the header,
+  // above the icon grid.
+  try{ card.insertBefore(buildLayoutToggle_(), card.children[1]||null); }catch(e){}
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
   overlay.appendChild(card);document.body.appendChild(overlay);
 }
