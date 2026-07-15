@@ -12569,14 +12569,27 @@ function dsShowAnalytics(){
   var kpiRow=document.createElement('div');
   kpiRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
   [
-    ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days'],
-    ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days'],
-    ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel],
+    ['Fitness (CTL)',Math.round(lastCTL),'#60a5fa','Training load over 42 days','ctl'],
+    ['Fatigue (ATL)',Math.round(lastATL),'#f59e0b','Training load over 7 days','atl'],
+    ['Form (TSB)',lastTSB>0?'+'+Math.round(lastTSB):Math.round(lastTSB),tsbColor,tsbLabel,'tsb'],
     ['W/kg',wkgNow.toFixed(2)+' W/kg',wkgNow>=3.14?'#4ade80':'#60a5fa','FTP ÷ weight · Chase 1 = 3.14']
   ].forEach(function(x){
     var card=document.createElement('div');
-    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px';
-    card.innerHTML='<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">'+x[0]+'</div>'+
+    var teach=x[4];   // metric key for the shared teaching panel (undefined = not tappable, e.g. W/kg is phase 2)
+    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px'+(teach?';cursor:pointer;transition:background .12s,border-color .12s':'');
+    if(teach){
+      // Tappable -> openMetricTeach via the document-level [data-metric-teach]
+      // listener (binds once at load, so no render-timing dependency). This is
+      // the DESKTOP renderer's copy of the cards — the mobile ones live in
+      // showAnalytics; both must carry the attribute (renderer drift is why the
+      // desktop taps were inert).
+      card.setAttribute('data-metric-teach',teach);
+      card.setAttribute('role','button'); card.setAttribute('tabindex','0'); card.setAttribute('aria-label','Learn about '+x[0]);
+      card.onmouseenter=function(){ card.style.background='#161a24'; card.style.borderColor='#2a3550'; };
+      card.onmouseleave=function(){ card.style.background='#111318'; card.style.borderColor='#1a1f2e'; };
+    }
+    var info=teach?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>':'';
+    card.innerHTML='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+info+'</div>'+
       '<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'+
       '<div style="font-size:10px;color:#64748b;margin-top:3px">'+x[3]+'</div>';
     kpiRow.appendChild(card);
