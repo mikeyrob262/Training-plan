@@ -9156,8 +9156,63 @@ var METRIC_TEACH={
       s+="Heads up: TSS is calculated from FTP, and your FTP looks stale — a low FTP inflates TSS. The SHAPE of your TSS week to week (hard blocks vs easy weeks) is still useful; the absolute number is only as trustworthy as your FTP.";
       return s;
     }
+  },
+  iq:{
+    name:"Athlete IQ Score", aka:"Training-quality composite",
+    oneLiner:"A 0-100 read on how smart your training has been lately — built ONLY from real ride data (no FTP, no sleep or HRV). It blends four signals, weighted:",
+    ranges:[
+      {c:"#60a5fa", label:"Fitness trend · 30%", desc:"Is your CTL (42-day fitness) rising vs 4 weeks ago?"},
+      {c:"#4ade80", label:"Consistency · 30%", desc:"How many days you rode in the last 4 weeks (16 = full marks)."},
+      {c:"#f59e0b", label:"Freshness / TSB · 20%", desc:"Productive-training curve: TSB about -20 to +15 is ideal; only genuine overreaching (below -30) or being too fresh (well above +15) docks it."},
+      {c:"#a855f7", label:"Volume vs baseline · 20%", desc:"Last 7 days' miles vs your rolling 12-week average week."}
+    ],
+    forYou:function(ctx){
+      var iq=ctx.iq;
+      if(!iq || iq.score==null) return "Not enough history yet — this needs about 4 weeks of logged rides. Keep riding and it fills in.";
+      var p=iq.parts;
+      return "Yours: "+iq.score+" / 100. Breakdown (each 0-100, then weighted 30/30/20/20): fitness trend "+Math.round(p.trend)+", consistency "+Math.round(p.consist)+", freshness "+Math.round(p.fresh)+", volume "+Math.round(p.volume)+". It rewards building fitness, showing up, and training in a productive TSB zone — so a deep-block TSB like -25 scores WELL here, because this measures training quality, not daily readiness. Nothing in it uses your (stale) FTP.";
+    }
   }
 };
+// ATHLETE IQ SCORE — 0..100 training-QUALITY composite from REAL inputs only
+// (CTL trend, ride consistency, TSB productive-zone, volume vs baseline). No
+// FTP-derived, no sleep/HRV. Weights 30/30/20/20 (approved 2026-07-15). Returns
+// {score:null} when there is < 28 days of ride history. Self-contained so the
+// desktop card, the mobile card and the teaching sheet all read the same value.
+function athleteIQ_(){
+  var rides; try{ rides=dedupeRides_(st.rides||[]).kept.filter(function(r){return r&&!r.deleted;}); }catch(e){ rides=(st.rides||[]).filter(function(r){return r&&!r.deleted;}); }
+  var now=new Date(), rode={}, tssBy={}, dates=[];
+  rides.forEach(function(r){ if(!r.date) return; var nd=normDate(r.date); rode[nd]=true; dates.push(nd);
+    var t=(typeof constRideTSS_==="function")?constRideTSS_(r):(parseFloat(r.tss)||0); tssBy[nd]=(tssBy[nd]||0)+(t||0); });
+  if(!dates.length) return {score:null, reason:"no rides"};
+  dates.sort();
+  if(Math.round((now-new Date(dates[0]))/86400000)<28) return {score:null, reason:"<28 days"};
+  var ctl=0,atl=0,series=[];
+  for(var i=89;i>=0;i--){ var d=new Date(now); d.setDate(d.getDate()-i);
+    var nd=normDate(d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate());
+    var tss=tssBy[nd]||0; ctl=ctl+(tss-ctl)/42; atl=atl+(tss-atl)/7; series.push(ctl); }
+  var n=series.length, ctlNow=series[n-1], idx28=n-1-28, ctl28=(idx28>=0)?series[idx28]:series[0], tsbNow=ctlNow-atl;
+  // 1) fitness trend (is CTL rising vs 4 weeks ago)
+  var trend=Math.max(0,Math.min(100, 50+(ctlNow-ctl28)*8));
+  // 2) consistency (distinct ride-days in last 28)
+  var rideDays=0; for(var k=0;k<28;k++){ var dd=new Date(now); dd.setDate(dd.getDate()-k);
+    if(rode[normDate(dd.getFullYear()+"-"+(dd.getMonth()+1)+"-"+dd.getDate())]) rideDays++; }
+  var consist=Math.max(0,Math.min(100, rideDays/16*100));
+  // 3) freshness — PRODUCTIVE-TRAINING curve (approved): TSB -20..+15 = full
+  // marks; below -20 tapers to 0 at -50 (genuine overreaching); above +15
+  // tapers to 0 at +45 (detraining/too fresh). A deep-build -25 still scores well.
+  var fresh = (tsbNow>=-20 && tsbNow<=15) ? 100
+    : (tsbNow<-20) ? Math.max(0, 100-(-tsbNow-20)/30*100)
+    : Math.max(0, 100-(tsbNow-15)/30*100);
+  // 4) volume vs baseline (last 7d miles / 12-week average week)
+  var last7=0,last84=0;
+  rides.forEach(function(r){ if(!r.date) return; var ago=(now-new Date(normDate(r.date)))/86400000, mi=parseFloat(r.distance)||0;
+    if(ago>=0&&ago<=7) last7+=mi; if(ago>=0&&ago<=84) last84+=mi; });
+  var baseWk=last84/12, ratio=baseWk>0?(last7/baseWk):(last7>0?1:0);
+  var volume=Math.max(0,Math.min(100, ratio*60));
+  var score=Math.round(0.30*trend+0.30*consist+0.20*fresh+0.20*volume);
+  return {score:score, parts:{trend:trend,consist:consist,fresh:fresh,volume:volume}, tsbNow:Math.round(tsbNow), rideDays:rideDays};
+}
 // Live context every forYou() reads. Additive readers only — no metric
 // computation touched. np/if/tss anchor to the most recent power ride (the
 // freshest "right now" data point); wkg/ftp come from the same values the
@@ -9176,7 +9231,8 @@ function teachCtx_(){
   var np=lr?(parseInt(lr.np||lr.avgPwr)||0):0;
   var ifv=lr?(lr.ifPct?(Math.round(lr.ifPct)/100):(np&&ftp?(Math.round(np/ftp*100)/100):0)):0;
   var tss=(lr && typeof constRideTSS_==="function")?constRideTSS_(lr):null;
-  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss};
+  var iq=(typeof athleteIQ_==="function")?athleteIQ_():null;
+  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss, iq:iq};
 }
 // Shared teaching panel. Reused by every metric now and in later phases.
 function openMetricTeach(metric){
@@ -9530,6 +9586,15 @@ function renderPerf(container){
 
   // Three metric cards - flat, no box background, matching the reference's
   // plain Fitness/Fatigue/Form number layout
+  // ATHLETE IQ SCORE — live (approved formula), tappable -> teaching sheet.
+  // Mobile parity with the desktop hero card. "—" when < 28 days of history.
+  var _iqM=(typeof athleteIQ_==='function')?athleteIQ_():null;
+  var _iqMnull=(!_iqM||_iqM.score==null);
+  var _iqMc=_iqMnull?'#4b5568':(_iqM.score>=80?'#4ade80':_iqM.score>=60?'#60a5fa':_iqM.score>=40?'#f59e0b':'#94a3b8');
+  html+='<div data-metric-teach="iq" role="button" tabindex="0" aria-label="Learn about the Athlete IQ Score" style="cursor:pointer;background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:16px;margin:0 16px 14px">'
+    +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ Score</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
+    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:40px;font-weight:800;color:'+_iqMc+';line-height:1">'+(_iqMnull?'—':_iqM.score)+'</div><div style="font-size:11px;color:#8b93a5;line-height:1.4">'+(_iqMnull?'Need ~4 weeks of ride history':'out of 100 · tap for the formula')+'</div></div>'
+    +'</div>';
   html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 16px 20px">';
   // Phase-2 metrics join the same tappable grid. Values from teachCtx_ so cards
   // and the teaching sheet agree; np/if/tss anchor to the most recent power ride.
@@ -12743,14 +12808,21 @@ function dsShowAnalytics(){
   // -- HERO: Athlete IQ (pending formula approval) + W/kg percentile
   var hero=document.createElement('div');
   hero.style.cssText='display:grid;grid-template-columns:1.1fr 1fr;gap:14px;flex-shrink:0';
-  // ATHLETE IQ SCORE renders "—" until the formula is approved (proposed in
-  // chat). No authoritative-looking number without an agreed computation.
+  // ATHLETE IQ SCORE — live (approved formula). "—" when < 28 days of history.
+  // Tappable -> the teaching sheet, which shows the exact formula + weights.
+  var _iq=_tc.iq;
+  var _iqNull=(!_iq || _iq.score==null);
+  var _iqColor=_iqNull?'#4b5568':(_iq.score>=80?'#4ade80':_iq.score>=60?'#60a5fa':_iq.score>=40?'#f59e0b':'#94a3b8');
   var iqCard=document.createElement('div');
-  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center';
-  iqCard.innerHTML='<div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7a8aa8;margin-bottom:6px">Athlete IQ Score</div>'
-    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:46px;font-weight:800;color:#4b5568;line-height:1">—</div>'
-    +'<div style="font-size:11px;color:#8b93a5;line-height:1.4">Formula pending your approval<br>(proposed in chat)</div></div>'
-    +'<div style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5">Will blend REAL inputs only: CTL trend, ride consistency, TSB balance, recent volume vs your baseline. No FTP-derived or sleep/HRV data.</div>';
+  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
+  iqCard.setAttribute('data-metric-teach','iq');
+  iqCard.setAttribute('role','button'); iqCard.setAttribute('tabindex','0'); iqCard.setAttribute('aria-label','Learn about the Athlete IQ Score');
+  iqCard.onmouseenter=function(){ iqCard.style.borderColor='#3a4a70'; };
+  iqCard.onmouseleave=function(){ iqCard.style.borderColor='#2a3550'; };
+  iqCard.innerHTML='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7a8aa8">Athlete IQ Score</span>'+_infoGlyph+'</div>'
+    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:46px;font-weight:800;color:'+_iqColor+';line-height:1">'+(_iqNull?'—':_iq.score)+'</div>'
+    +'<div style="font-size:11px;color:#8b93a5;line-height:1.4">'+(_iqNull?'Need ~4 weeks<br>of ride history':'out of 100')+'</div></div>'
+    +'<div style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5">Real inputs only: CTL trend, consistency, TSB (productive zone), volume vs baseline. Tap for the formula.</div>';
   hero.appendChild(iqCard);
   var _wpct=dsPercentileTop_(wkgHistory, wkgNow);
   var wkgHero=teachCard_(
