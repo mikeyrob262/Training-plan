@@ -517,6 +517,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('weather')"><i class="ti ti-cloud"></i>Weather</div>
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
+      <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
       <div class="ds-ni" onclick="dsNav('settings')"><i class="ti ti-settings"></i>Settings</div>
@@ -8390,6 +8391,221 @@ function activityIcon_(sport, size){
   else if(/ride|cycl|bike/.test(s)){ col='#4ECB3C'; path=BIKE; }
   else { col='#4ECB3C'; path=BIKE; }                                                     // fallback: bike green
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+path+extra+'</svg>';
+}
+
+// ==== CONSTELLATION =======================================================
+// Full-screen star map of the whole ride library. Reads st.rides ONLY; fully
+// additive — no shared renderer touched. Each ride is a star:
+//   position = chronological golden-angle spiral (oldest at the core, newest at
+//              the rim). This is the ONE place position carries time, so the
+//              run->ride era shift reads as color changing outward. [FLAGGED]
+//   size     = training load (TSS, capped at ~92nd pct so monsters don't flatten)
+//   color    = sport, via the activityIcon_ palette (replicated below so the
+//              shared icon fn stays untouched). Sport is resolved as
+//              sportType || type so both recent (sportType-only) and legacy
+//              (type-only) rides colour correctly.
+function constSportColor_(sport){
+  var s=String(sport||'').toLowerCase();
+  if(/treadmill/.test(s)) return '#EF9F27';
+  if(/virtual/.test(s)) return '#3B95E8';
+  if(/run|jog/.test(s)) return '#E24B4A';
+  if(/weight|strength|lift/.test(s)) return '#7F77DD';
+  if(/mobility|yoga|stretch/.test(s)) return '#1D9E75';
+  if(/workout|hiit|conditioning|circuit|cardio/.test(s)) return '#D4A800';
+  if(/swim/.test(s)) return '#0EA5E9';
+  if(/ride|cycl|bike/.test(s)) return '#4ECB3C';
+  return '#4ECB3C';
+}
+function constSportLabel_(sport){
+  var s=String(sport||''); if(!s) return 'Ride';
+  var pretty=s.replace(/([a-z])([A-Z])/g,'$1 $2');
+  return pretty.charAt(0).toUpperCase()+pretty.slice(1);
+}
+function constStarPath_(cx,cy,rO){
+  var out=''; for(var k=0;k<10;k++){ var rr=(k%2===0)?rO:rO*0.46; var a=-Math.PI/2+k*Math.PI/5; out+=(k?'L':'M')+(cx+rr*Math.cos(a)).toFixed(1)+' '+(cy+rr*Math.sin(a)).toFixed(1); } return out+'Z';
+}
+// Crown metrics — summary scalars present on every ride (no power streams, so
+// Zwift/virtual rides are never wrongly crowned or shown as zero).
+var CONST_METRICS=[
+  {key:'dist', label:'Longest',       unit:'mi',  get:function(r){return parseFloat(r.distance)||0;}},
+  {key:'tss',  label:'Most TSS',      unit:'TSS', get:function(r){return parseFloat(r.tss)||0;}},
+  {key:'elev', label:'Most Climbing', unit:'ft',  get:function(r){return parseFloat(r.elev)||0;}}
+];
+function showConstellation(){
+  var old=document.getElementById('CONSTELLATION'); if(old) old.remove();
+
+  // ---- data: rides with a parseable date, oldest-first ----
+  var allR=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
+  var rides=[];
+  allR.forEach(function(r){ var d=parseRaceDate_(r.date); if(!d) return; rides.push({r:r, d:d, sport:(r.sportType||r.type||'')}); });
+  rides.sort(function(a,b){ return a.d.getTime()-b.d.getTime(); });
+  var N=rides.length, omitted=allR.length-N;
+
+  // ---- load -> size ----
+  var loads=rides.map(function(x){ return parseFloat(x.r.tss)||0; }).sort(function(a,b){return a-b;});
+  var cap=loads.length?(loads[Math.floor(loads.length*0.92)]||loads[loads.length-1]||1):1; if(!(cap>0)) cap=1;
+
+  // ---- positions: golden-angle phyllotaxis in a 1000x1000 viewBox ----
+  var cx=500, cy=500, maxR=468, GA=Math.PI*(3-Math.sqrt(5));
+  var pts=new Array(N);
+  for(var i=0;i<N;i++){
+    var frac=N>1?(i/(N-1)):0, rad=maxR*Math.sqrt(frac), ang=i*GA;
+    var jit=((((i*2654435761)>>>0)%1000)/1000)-0.5, rr=rad+jit*9;
+    var load=parseFloat(rides[i].r.tss)||0;
+    pts[i]={ x:cx+rr*Math.cos(ang), y:cy+rr*Math.sin(ang), r:2.0+5.0*Math.min(1,Math.sqrt(load/cap)), col:constSportColor_(rides[i].sport) };
+  }
+
+  // ---- shell ----
+  var ov=document.createElement('div');
+  ov.id='CONSTELLATION';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#03040a;display:flex;flex-direction:column;overflow:hidden;color:#e6e9ef;font-family:-apple-system,sans-serif';
+  var hdr=document.createElement('div');
+  hdr.style.cssText='flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 16px 10px 18px';
+  var yrsSpan=N?(rides[N-1].d.getFullYear()-rides[0].d.getFullYear()+1):0;
+  hdr.innerHTML='<div><div style="font-size:19px;font-weight:800;letter-spacing:.02em;color:#fff">Constellation</div>'
+    +'<div style="font-size:11px;color:#7a8290;margin-top:2px">'+N.toLocaleString()+' rides &middot; '+yrsSpan+' years'+(omitted>0?(' &middot; '+omitted+' undated hidden'):'')+'</div></div>';
+  var closeBtn=document.createElement('button');
+  closeBtn.setAttribute('aria-label','Close'); closeBtn.innerHTML='&times;';
+  closeBtn.style.cssText='background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cfd4dd;width:38px;height:38px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;flex-shrink:0';
+  closeBtn.onclick=function(){ ov.remove(); window.removeEventListener('resize', onRz); };
+  hdr.appendChild(closeBtn); ov.appendChild(hdr);
+
+  var body=document.createElement('div');
+  body.style.cssText='flex:1;display:flex;min-height:0;min-width:0'; ov.appendChild(body);
+  var fieldWrap=document.createElement('div');
+  fieldWrap.style.cssText='flex:1;position:relative;min-height:0;min-width:0'; body.appendChild(fieldWrap);
+
+  var svgStr='<svg viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" style="display:block">'
+    +'<defs>'
+    +'<radialGradient id="cnstBg" cx="50%" cy="46%" r="72%"><stop offset="0%" stop-color="#0c1226"/><stop offset="55%" stop-color="#070a16"/><stop offset="100%" stop-color="#02030a"/></radialGradient>'
+    +'<filter id="cnstGlow" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+    +'</defs><rect x="0" y="0" width="1000" height="1000" fill="url(#cnstBg)"/><g id="cnstStars">';
+  var buf=[];
+  for(var i2=0;i2<N;i2++){ var p=pts[i2]; buf.push('<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+p.r.toFixed(2)+'" fill="'+p.col+'" fill-opacity="0.82"/>'); }
+  svgStr+=buf.join('')+'</g><g id="cnstCrowns"></g></svg>';
+  fieldWrap.innerHTML=svgStr;
+  var fieldSvg=fieldWrap.querySelector('svg');
+  var crownsG=fieldSvg.querySelector('#cnstCrowns');
+  var circleEls=fieldSvg.querySelectorAll('#cnstStars circle');   // O(1) access by index
+
+  var panel=document.createElement('div');
+  panel.style.cssText='flex-shrink:0;display:flex;flex-direction:column;background:#070810;min-height:0'; body.appendChild(panel);
+
+  // -- On This Day --
+  var otd=document.createElement('div');
+  otd.style.cssText='display:flex;flex-direction:column;min-height:0;flex:1;padding:14px 15px 8px';
+  otd.innerHTML='<div style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6b7382;margin-bottom:9px">On This Day</div>';
+  var ctrlRow=document.createElement('div');
+  ctrlRow.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:11px';
+  function navBtn(lbl){ var b=document.createElement('button'); b.innerHTML=lbl; b.style.cssText='background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#cfd4dd;width:34px;height:34px;border-radius:9px;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;font-family:inherit'; return b; }
+  var prevB=navBtn('&lsaquo;'), nextB=navBtn('&rsaquo;');
+  var dateLbl=document.createElement('div'); dateLbl.style.cssText='flex:1;text-align:center;font-size:16px;font-weight:800;color:#fff';
+  var todayB=document.createElement('button'); todayB.textContent='Today';
+  todayB.style.cssText='background:rgba(78,203,60,.1);border:1px solid rgba(78,203,60,.3);color:#7fe06a;font-size:11px;font-weight:700;padding:0 11px;height:34px;border-radius:9px;cursor:pointer;flex-shrink:0;font-family:inherit';
+  ctrlRow.appendChild(prevB); ctrlRow.appendChild(dateLbl); ctrlRow.appendChild(nextB); ctrlRow.appendChild(todayB);
+  otd.appendChild(ctrlRow);
+  var otdList=document.createElement('div'); otdList.style.cssText='flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0';
+  otd.appendChild(otdList); panel.appendChild(otd);
+
+  // -- Standouts (CUSTOM dropdown, opens upward) --
+  var stand=document.createElement('div');
+  stand.style.cssText='flex-shrink:0;border-top:1px solid rgba(255,255,255,.06);padding:12px 15px calc(12px + env(safe-area-inset-bottom));position:relative';
+  stand.innerHTML='<div style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#6b7382;margin-bottom:9px;display:flex;align-items:center;gap:6px"><span style="color:#F5C518">&#9733;</span> Standouts &middot; a crown per year</div>';
+  var ddBtn=document.createElement('button');
+  ddBtn.style.cssText='width:100%;display:flex;align-items:center;gap:9px;background:#0c0e18;border:1px solid rgba(255,255,255,.12);border-radius:11px;padding:11px 13px;cursor:pointer;font-family:inherit;color:#fff';
+  var ddDot=document.createElement('span'); ddDot.style.cssText='width:8px;height:8px;border-radius:50%;background:#F5C518;flex-shrink:0;box-shadow:0 0 6px rgba(245,197,24,.8)';
+  var ddLabel=document.createElement('span'); ddLabel.style.cssText='flex:1;text-align:left;font-size:13.5px;font-weight:700';
+  var ddChev=document.createElement('span'); ddChev.innerHTML='&#9650;'; ddChev.style.cssText='font-size:9px;color:#7a8290';
+  ddBtn.appendChild(ddDot); ddBtn.appendChild(ddLabel); ddBtn.appendChild(ddChev); stand.appendChild(ddBtn);
+  var ddPanel=document.createElement('div');
+  ddPanel.style.cssText='display:none;position:absolute;left:15px;right:15px;bottom:calc(100% - 6px);background:#05060c;border:1px solid rgba(255,255,255,.14);border-radius:13px;padding:6px;box-shadow:0 -18px 50px rgba(0,0,0,.7);z-index:5';
+  ddPanel.addEventListener('click', function(e){ e.stopPropagation(); });
+  stand.appendChild(ddPanel); panel.appendChild(stand);
+
+  // ---- state ----
+  var curMetric=0;                                       // default Longest (distance is on every ride)
+  var curDate=new Date(); curDate.setHours(12,0,0,0);
+  var crownedByIdx={}, flared=[];
+  var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function clearFlares(){ flared.forEach(function(o){ o.el.setAttribute('r',o.r); o.el.setAttribute('fill',o.fill); o.el.setAttribute('fill-opacity','0.82'); o.el.removeAttribute('filter'); }); flared=[]; }
+  function applyOTD(){
+    clearFlares();
+    var m=curDate.getMonth(), d=curDate.getDate(), matches=[];
+    for(var i=0;i<N;i++){ if(rides[i].d.getMonth()===m && rides[i].d.getDate()===d) matches.push(i); }
+    matches.forEach(function(idx){
+      var el=circleEls[idx]; if(!el) return;
+      flared.push({el:el, r:el.getAttribute('r'), fill:el.getAttribute('fill')});
+      el.setAttribute('fill','#ffffff'); el.setAttribute('fill-opacity','1');
+      el.setAttribute('r', Math.max(5, pts[idx].r*1.7).toFixed(2));
+      el.setAttribute('filter','url(#cnstGlow)');
+    });
+    dateLbl.textContent=MONTHS[m]+' '+d;
+    renderOTDList(matches);
+  }
+  function renderOTDList(matches){
+    otdList.innerHTML='';
+    if(!matches.length){ var e=document.createElement('div'); e.style.cssText='color:#565f6d;font-size:12px;padding:12px 2px;line-height:1.5'; e.textContent='No rides on this day across your library. Step to another day.'; otdList.appendChild(e); return; }
+    matches.slice().sort(function(a,b){ return rides[b].d.getFullYear()-rides[a].d.getFullYear(); }).forEach(function(idx){
+      var x=rides[idx], r=x.r, yr=x.d.getFullYear(), crowned=crownedByIdx[idx];
+      var card=document.createElement('div');
+      card.style.cssText='padding:9px 11px;border-radius:10px;margin-bottom:7px;background:rgba(255,255,255,.03);border:1px solid '+(crowned?'#F5C518':'rgba(255,255,255,.07)')+(crowned?';box-shadow:0 0 14px rgba(245,197,24,.18)':'');
+      var dist=parseFloat(r.distance)||0, distStr=dist?((Math.round(dist*10)/10)+' mi'):'';
+      var sep=' <span style="color:#404755">&middot;</span> ';
+      var line=document.createElement('div'); line.style.cssText='font-size:12.5px;color:#d7dbe3;line-height:1.4';
+      line.innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+constSportColor_(x.sport)+';margin-right:8px;vertical-align:middle"></span>'
+        +'<b style="color:#fff">'+yr+'</b>'+sep+uiEsc_(r.name||'Untitled')+(distStr?(sep+distStr):'')+sep+uiEsc_(constSportLabel_(x.sport));
+      card.appendChild(line);
+      if(crowned){ var tag=document.createElement('div'); tag.style.cssText='font-size:10.5px;color:#F5C518;font-weight:700;margin-top:4px'; tag.innerHTML='&#9733; best '+crowned.year+' &middot; '+CONST_METRICS[curMetric].label; card.appendChild(tag); }
+      otdList.appendChild(card);
+    });
+  }
+  function recomputeCrowns(){
+    crownedByIdx={};
+    var metric=CONST_METRICS[curMetric], best={};
+    for(var i=0;i<N;i++){ var v=metric.get(rides[i].r); if(!(v>0)) continue; var y=rides[i].d.getFullYear(); if(!best[y] || v>best[y].v){ best[y]={idx:i,v:v}; } }
+    Object.keys(best).forEach(function(y){ crownedByIdx[best[y].idx]={year:y, v:best[y].v}; });
+    var cg='';
+    Object.keys(crownedByIdx).forEach(function(idxStr){
+      var idx=+idxStr, p=pts[idx], ring=Math.max(6, p.r*1.6);
+      cg+='<circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+ring.toFixed(1)+'" fill="none" stroke="#F5C518" stroke-width="1.3" opacity="0.9"/>';
+      cg+='<path d="'+constStarPath_(p.x, p.y-ring-5, 5)+'" fill="#F5C518" opacity="0.95"/>';
+    });
+    crownsG.innerHTML=cg;
+    ddLabel.textContent=metric.label;
+  }
+  function buildDD(){
+    ddPanel.innerHTML='';
+    CONST_METRICS.forEach(function(mt,i){
+      var on=(i===curMetric), row=document.createElement('button');
+      row.style.cssText='width:100%;display:flex;align-items:center;gap:10px;background:'+(on?'rgba(78,203,60,.12)':'transparent')+';border:1px solid '+(on?'rgba(78,203,60,.4)':'transparent')+';border-radius:9px;padding:10px 11px;cursor:pointer;font-family:inherit;text-align:left;margin:2px 0;'+(on?'box-shadow:0 0 12px rgba(78,203,60,.18)':'');
+      var dot=document.createElement('span'); dot.style.cssText='width:8px;height:8px;border-radius:50%;flex-shrink:0;background:'+(on?'#F5C518':'rgba(255,255,255,.16)')+(on?';box-shadow:0 0 6px rgba(245,197,24,.8)':'');
+      var lbl=document.createElement('span'); lbl.style.cssText='flex:1;font-size:13.5px;font-weight:700;color:'+(on?'#eafce6':'#cfd4dd'); lbl.textContent=mt.label;
+      var unit=document.createElement('span'); unit.style.cssText='font-size:10.5px;color:#6b7382'; unit.textContent=mt.unit;
+      row.appendChild(dot); row.appendChild(lbl); row.appendChild(unit);
+      row.onclick=function(){ curMetric=i; ddPanel.style.display='none'; ddOpen=false; ddChev.innerHTML='&#9650;'; recomputeCrowns(); applyOTD(); };
+      ddPanel.appendChild(row);
+    });
+  }
+  var ddOpen=false;
+  ddBtn.onclick=function(e){ e.stopPropagation(); ddOpen=!ddOpen; if(ddOpen){ buildDD(); ddPanel.style.display='block'; ddChev.innerHTML='&#9660;'; } else { ddPanel.style.display='none'; ddChev.innerHTML='&#9650;'; } };
+  ov.addEventListener('click', function(){ if(ddOpen){ ddOpen=false; ddPanel.style.display='none'; ddChev.innerHTML='&#9650;'; } });
+
+  prevB.onclick=function(){ curDate.setDate(curDate.getDate()-1); applyOTD(); };
+  nextB.onclick=function(){ curDate.setDate(curDate.getDate()+1); applyOTD(); };
+  todayB.onclick=function(){ curDate=new Date(); curDate.setHours(12,0,0,0); applyOTD(); };
+
+  // ---- responsive: side panel on wide/landscape, bottom panel on tall/narrow. [FLAGGED] ----
+  function layout(){
+    var wide=window.innerWidth>=880 && window.innerWidth>window.innerHeight*1.05;
+    if(wide){ body.style.flexDirection='row'; panel.style.width='340px'; panel.style.height='auto'; panel.style.borderTop='none'; panel.style.borderLeft='1px solid rgba(255,255,255,.06)'; }
+    else { body.style.flexDirection='column'; panel.style.width='auto'; panel.style.height='47%'; panel.style.borderLeft='none'; panel.style.borderTop='1px solid rgba(255,255,255,.06)'; }
+  }
+  var _rz; function onRz(){ clearTimeout(_rz); _rz=setTimeout(layout,120); }
+  window.addEventListener('resize', onRz);
+
+  document.body.appendChild(ov);
+  layout(); recomputeCrowns(); applyOTD();
 }
 
 function showHomeDash(){
@@ -19451,6 +19667,7 @@ function showMoreSheet(){
   overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
+    {n:'Constellation', i:'M12 2l2.4 5.9 6.4.5-4.9 4.1 1.5 6.2L12 17l-5.8 3.7 1.5-6.2-4.9-4.1 6.4-.5z',                            fn:'showConstellation', c:'#F5C518'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
