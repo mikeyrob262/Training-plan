@@ -12122,6 +12122,18 @@ function dsShowCalendar(){
     var wrap=document.createElement('div');
     wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:18px 20px;box-sizing:border-box;overflow:hidden';
 
+    // Back to dashboard — the desktop Calendar is a drill-in view but had no
+    // back affordance; reuse the same back-button pattern the other screens use.
+    var backRow=document.createElement('div');
+    backRow.style.cssText='margin-bottom:12px;flex-shrink:0';
+    var backBtn=document.createElement('button');
+    backBtn.setAttribute('aria-label','Back to dashboard');
+    backBtn.innerHTML='&#8592; Dashboard';
+    backBtn.style.cssText='background:#1a1f2e;border:1px solid #252d40;color:#94a3b8;font-size:12px;font-weight:600;padding:6px 12px 6px 10px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit';
+    backBtn.onclick=function(){ dsNav('dashboard'); };
+    backRow.appendChild(backBtn);
+    wrap.appendChild(backRow);
+
     // Header
     var hdr=document.createElement('div');
     hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0';
@@ -20211,7 +20223,7 @@ function renderMapSelectors(body, routes, hourlyData){
   routes.forEach(function(r){
     var o=document.createElement('option');
     o.value=r._mapRouteId;
-    o.textContent=(r.name||'Ride')+' &middot; '+(r.date||'');
+    o.textContent=(r.name||'Ride')+' · '+(r.date||'');
     o.selected = r._mapRouteId===weatherMapSelectedRouteId;
     routeSelect.appendChild(o);
   });
@@ -20373,8 +20385,7 @@ function renderMapContent(body, ride, wind, forTime){
       var comp=document.createElement('div');
       comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(20,20,22,.85);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;align-items:center;gap:2px;backdrop-filter:blur(4px)';
       comp.innerHTML='<div style="transform:rotate('+blowTo+'deg);display:flex"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="21" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
-        +'<div style="font-size:12px;font-weight:800;color:#fff;margin-top:2px">'+fromLabel+' wind</div>'
-        +'<div style="font-size:10px;color:rgba(255,255,255,.7)">'+Math.round(wind.windspeed_10m)+'mph &middot; from '+Math.round(wind.winddirection_10m)+'&deg;</div>'
+        +'<div style="font-size:12px;font-weight:800;color:#fff;margin-top:2px">'+fromLabel+' wind &middot; '+Math.round(wind.windspeed_10m)+'mph</div>'
         +(isGusty?'<div style="font-size:10px;color:#C79BFF;font-weight:700;margin-top:2px">gusts '+Math.round(wind.windgusts_10m)+'mph</div>':'');
       mapCard.appendChild(comp);
     }
@@ -20596,7 +20607,7 @@ function showWeatherHistory(){
       var subEl=document.getElementById('rw-sub');
       var hourlyEl=document.getElementById('rw-hourly');
       if(tempEl) tempEl.textContent=temp+'\u00b0';
-      if(subEl) subEl.textContent='Feels '+feels+'\u00b0 &middot; H'+hi+'\u00b0 L'+lo+'\u00b0';
+      if(subEl) subEl.textContent='Feels '+feels+'\u00b0 \u00b7 H'+hi+'\u00b0 L'+lo+'\u00b0';
       var now=new Date();
       if(hourlyEl){
         hourlyEl.innerHTML='';
