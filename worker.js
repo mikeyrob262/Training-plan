@@ -3831,6 +3831,56 @@ function runNutritionCleanup(){
   toast('Removed '+result.totalRemoved+' duplicate food entries');
   try{ renderNutr(); }catch(e){}
 }
+
+// Race duplicate cleanup — collapse races that share a NORMALIZED name +
+// calendar day (e.g. the same event seeded into both st.races and the old
+// st.events). Returns the removal PLAN without mutating, so the caller can
+// report exactly what it will remove before writing. Keeps the most-complete
+// entry (then the earliest); the extras are the losers. Date is normalized via
+// parseRaceDate_ so format variants (padding / T00:00:00 / unpadded) count as
+// the same day. No backslash regex — the template literal would strip it.
+function planRaceDedupe_(){
+  var races=st.races||[];
+  var norm=function(s){ return String(s||'').toLowerCase().replace(/ +/g,' ').trim(); };
+  var keyOf=function(r){ var d=parseRaceDate_(r.date); var dk=d?(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()):String(r.date||''); return norm(r.name)+'|'+dk; };
+  var groups={};
+  races.forEach(function(r,i){ if(!r||r.deleted) return; var k=keyOf(r); (groups[k]=groups[k]||[]).push(i); });
+  var removals=[];
+  Object.keys(groups).forEach(function(k){
+    var idxs=groups[k]; if(idxs.length<2) return;
+    idxs.sort(function(a,b){
+      var ra=races[a], rb=races[b];
+      var sa=Object.keys(ra).filter(function(f){return ra[f]!=null&&ra[f]!=='';}).length;
+      var sb=Object.keys(rb).filter(function(f){return rb[f]!=null&&rb[f]!=='';}).length;
+      if(sb!==sa) return sb-sa;   // keep the most-complete entry…
+      return a-b;                  // …then the earliest.
+    });
+    idxs.slice(1).forEach(function(i){ removals.push({race:races[i], name:races[i].name||'Race', date:races[i].date||'?'}); });
+  });
+  return removals;
+}
+// One-time race dedupe: report the exact duplicates first (a confirm listing
+// each one), and only tombstone on approval. Tombstones (deleted:true) rather
+// than splicing so the merge-safe sync can't resurrect them. Re-plans inside
+// the confirm so it acts on the live state, not a stale pre-confirm snapshot.
+function runRaceCleanup(){
+  migrateRaces_();
+  var plan=planRaceDedupe_();
+  if(!plan.length){ toast('No duplicate races found'); return; }
+  try{ console.log('[race dedupe] would remove:', plan.map(function(x){return x.name+' ('+x.date+')';})); }catch(e){}
+  var NL=String.fromCharCode(10);
+  var listStr=plan.map(function(x){ return '• '+x.name+' ('+x.date+')'; }).join(NL);
+  uiConfirm('Remove '+plan.length+' duplicate race'+(plan.length===1?'':'s')+'? Keeping one of each.'+NL+NL+listStr, {danger:true, okText:'Remove'}).then(function(ok){
+    if(!ok) return;
+    var toRemove=planRaceDedupe_();   // re-plan against current state
+    toRemove.forEach(function(x){ if(x.race){ if(!x.race.id) x.race.id='race-'+(x.race.date||'x')+'-'+Math.round(Math.random()*1e6); x.race.deleted=true; x.race.deletedAt=Date.now(); } });
+    sv(); try{ fbPush(false, true); }catch(e){}
+    toast('Removed '+toRemove.length+' duplicate race'+(toRemove.length===1?'':'s'));
+    try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowDashboard==='function') dsShowDashboard(); }catch(e){}
+    try{ if(typeof showHomeDash==='function' && !(typeof isDesktop==='function'&&isDesktop())) showHomeDash(); }catch(e){}
+    try{ if(typeof renderGoals==='function' && document.getElementById('GOALS')) renderGoals(); }catch(e){}
+  });
+}
 // Collapse duplicate runs by activity identity (date + rounded distance +
 // duration). Runs carry no stravaId/id, so the generic union-merge dedups
 // them by JSON.stringify — which Firebase defeats by returning object keys
@@ -6996,6 +7046,37 @@ function rmFood(meal,idx){
   }
 }
 
+// ---- Shared logged-food row actions -------------------------------------
+// Used by BOTH the mobile (renderNutr) and desktop (dsShowNutrition) food rows
+// so the qty stepper / edit / remove behave identically and can't drift. Each
+// resolves the item by its stable id at click time — never a captured render-
+// time index, which a soft-delete tombstone or the 5s merge reorder would
+// invalidate. nd.meals is the same array object nutritionForDate() hands the
+// desktop, so a lazily-assigned id persists on the real item.
+function nutResolveIdx_(meal, id){
+  if(!nutrDate) nutrDate=getTodayKey();
+  var a=getNDay(nutrDate).meals[meal]||[];
+  for(var j=0;j<a.length;j++){ if(a[j] && a[j].id===id && !a[j].deleted) return j; }
+  return -1;
+}
+function nutStepFood_(meal, id, delta){
+  var i=nutResolveIdx_(meal,id); if(i<0) return;
+  var nd=getNDay(nutrDate);
+  var cur=nd.meals[meal][i];
+  var curQty=cur._qty||1;
+  if(delta<0 && curQty<=1){
+    if(!cur.id) cur.id=genEntryId_();
+    cur.deleted=true; cur.deletedAt=Date.now();
+    sv(); nutRefresh(); return;
+  }
+  var newQty=curQty+delta;
+  var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
+  nd.meals[meal][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
+  sv(); nutRefresh();
+}
+function nutEditFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) editFoodItem(meal,i); }
+function nutRemoveFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) rmFood(meal,i); }
+
 function updWater(delta){
   if(!nutrDate)nutrDate=getTodayKey();
   var nd=getNDay(nutrDate);
@@ -7745,41 +7826,17 @@ function renderNutr(){
       rmBtn.style.cssText='background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;padding:0 4px;line-height:1';
       rmBtn.textContent='×';
       (function(mn,it){
-        // Resolve the CURRENT array index by the item's stable id at click time.
-        // Never index by render-time position: soft-delete tombstones stay in
-        // the array and the 5s merge reorders it, so a captured position drifts
-        // and points at the wrong item — or past the end (cur undefined -> throw).
+        // Stable id at wire time; the shared actions re-resolve the live index
+        // by this id at click time (tombstones + the 5s merge reorder the array,
+        // so a captured position would drift). it is the real getNDay item, so
+        // the id persists. Logic lives once in nutStepFood_/nutEditFoodById_/
+        // nutRemoveFoodById_, shared with the desktop rows.
         if(!it.id) it.id=genEntryId_();
         var _id=it.id;
-        function _idx(){ var a=(getNDay(nutrDate).meals[mn]||[]); for(var j=0;j<a.length;j++){ if(a[j] && a[j].id===_id && !a[j].deleted) return j; } return -1; }
-        rmBtn.onclick=function(){ var i=_idx(); if(i>=0) rmFood(mn,i); };
-        editBtn.onclick=function(){ var i=_idx(); if(i>=0) editFoodItem(mn,i); };
-        plusBtn.onclick=function(){
-          var i=_idx(); if(i<0) return;
-          var nd=getNDay(nutrDate);
-          var cur=nd.meals[mn][i];
-          var curQty=cur._qty||1;
-          var newQty=curQty+1;
-          var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
-          nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          sv();nutRefresh();
-        };
-        minusBtn.onclick=function(){
-          var i=_idx(); if(i<0) return;
-          var nd=getNDay(nutrDate);
-          var cur=nd.meals[mn][i];
-          var curQty=cur._qty||1;
-          if(curQty<=1){
-            if(!cur.id) cur.id=genEntryId_();
-            cur.deleted=true;
-            cur.deletedAt=Date.now();
-          } else {
-            var newQty=curQty-1;
-            var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
-            nd.meals[mn][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
-          }
-          sv();nutRefresh();
-        };
+        rmBtn.onclick=function(){ nutRemoveFoodById_(mn,_id); };
+        editBtn.onclick=function(){ nutEditFoodById_(mn,_id); };
+        plusBtn.onclick=function(){ nutStepFood_(mn,_id,1); };
+        minusBtn.onclick=function(){ nutStepFood_(mn,_id,-1); };
       })(meal,item);
       rDiv.appendChild(editBtn);rDiv.appendChild(minusBtn);rDiv.appendChild(calEl);rDiv.appendChild(plusBtn);rDiv.appendChild(rmBtn);
       row.appendChild(iconWrap);row.appendChild(info);row.appendChild(rDiv);
@@ -11033,6 +11090,11 @@ function dsShowSettings(){
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Patch a ride with elevation, HR, power streams parsed from a FIT file.</div>'
     +'<div id="backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Patch June 27 Ride</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Clean Race Duplicates</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Collapse races that share a name and calendar day (keeps one). Lists what it will remove before deleting.</div>'
+    +'<button onclick="runRaceCleanup()" style="background:#a855f7;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Clean Race Dupes</button>'
     +'</div>';
   // Display-mode override (Auto/Desktop/Mobile), same control as the mobile
   // More sheet, wrapped in a settings card.
@@ -11935,18 +11997,43 @@ function dsShowNutrition(){
       mAdd.onclick=(function(k){return function(){ nutrDate=viewKey; openFoodForMeal(k); };})(key);
       mHdr.appendChild(mTitle); mHdr.appendChild(mAdd);
       card.appendChild(mHdr);
-      items.forEach(function(food,idx){
-        if(food.deleted) return;   // idx stays the real bucket index for rmFood
+      items.forEach(function(food){
+        if(food.deleted) return;
+        // Stable id so the shared stepper/edit/remove resolve the live item at
+        // click time. food is the real getNDay ref (nutritionForDate hands back
+        // nd.meals), so this id persists.
+        if(!food.id) food.id=genEntryId_();
+        var _fid=food.id;
+        var qty=food._qty||1;
         var fRow=document.createElement('div');
-        fRow.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid #1a1f2e';
-        fRow.innerHTML='<div style="font-size:12px;color:#94a3b8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(food.n||food.name||'Food')+'</div>'+
-          '<div style="font-size:11px;color:#64748b;flex-shrink:0">'+(food.cal||0)+' cal</div>';
-        var rm=document.createElement('div');
-        rm.textContent='×';
-        rm.title='Remove';
-        rm.style.cssText='flex-shrink:0;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#64748b;cursor:pointer;font-size:16px;border-radius:6px';
-        rm.onclick=(function(k,i){return function(){ nutrDate=viewKey; rmFood(k,i); };})(key,idx);
-        fRow.appendChild(rm);
+        fRow.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #1a1f2e';
+        var nameEl=document.createElement('div');
+        nameEl.style.cssText='font-size:12px;color:#94a3b8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer';
+        nameEl.textContent=qty>1 ? (food._baseName||food.n||food.name||'Food')+' ×'+qty : (food.n||food.name||'Food');
+        nameEl.title='Edit';
+        nameEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutEditFoodById_(k,id); };})(key,_fid);
+        // Edit (pencil), minus, cal, plus, remove — same controls/order as the
+        // mobile food rows, wired to the shared actions.
+        var editEl=document.createElement('button');
+        editEl.textContent='✎'; editEl.title='Edit';
+        editEl.style.cssText='background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0';
+        editEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutEditFoodById_(k,id); };})(key,_fid);
+        var minusEl=document.createElement('button');
+        minusEl.textContent='−';
+        minusEl.style.cssText='width:22px;height:22px;border-radius:50%;background:#1a1f2e;border:none;color:#94a3b8;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0;flex-shrink:0';
+        minusEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutStepFood_(k,id,-1); };})(key,_fid);
+        var calEl=document.createElement('div');
+        calEl.style.cssText='font-size:11px;color:#64748b;flex-shrink:0;min-width:46px;text-align:center';
+        calEl.textContent=(food.cal||0)+' cal';
+        var plusEl=document.createElement('button');
+        plusEl.textContent='+';
+        plusEl.style.cssText='width:22px;height:22px;border-radius:50%;background:rgba(41,128,185,.15);border:1px solid rgba(41,128,185,.3);color:#2980B9;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0;flex-shrink:0';
+        plusEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutStepFood_(k,id,1); };})(key,_fid);
+        var rmEl=document.createElement('button');
+        rmEl.textContent='×'; rmEl.title='Remove';
+        rmEl.style.cssText='background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0';
+        rmEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutRemoveFoodById_(k,id); };})(key,_fid);
+        fRow.appendChild(nameEl); fRow.appendChild(editEl); fRow.appendChild(minusEl); fRow.appendChild(calEl); fRow.appendChild(plusEl); fRow.appendChild(rmEl);
         card.appendChild(fRow);
       });
       wrap.appendChild(card);
@@ -13477,7 +13564,10 @@ function openDesktopRideDetail(idx){
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
           (bike
             ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+_bikeMi+' mi total</div>'
-            :'<div style="font-size:11px;color:#64748b">No equipment logged</div>')+
+            :'')+
+          // Real bike-assignment control (populated in the wire-up below). Same
+          // mechanism as the mobile equipment tab + bulk tool: st.bikeAssignments.
+          '<div id="rd-bike-assign-slot" style="margin-top:7px"></div>'+
         '</div>'+
         '<div style="padding:10px 14px">'+
           '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
@@ -13496,6 +13586,26 @@ function openDesktopRideDetail(idx){
   setTimeout(function(){
     var bb=document.getElementById('rd-back');
     if(bb) bb.onclick=function(){dsNav('activities');};
+    // Bike-assignment dropdown in the Equipment cell — assign/change the bike
+    // right here. Writes st.bikeAssignments[rideKey] (the shared manual-
+    // assignment mechanism), then re-renders so the cell reflects the choice.
+    var _bikeSlot=document.getElementById('rd-bike-assign-slot');
+    if(_bikeSlot){
+      var _sel=document.createElement('select');
+      _sel.style.cssText='width:100%;padding:6px 8px;background:#0d0f14;color:#e2e8f0;border:1px solid #1e2130;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
+      var _o0=document.createElement('option'); _o0.value=''; _o0.textContent='Unassigned'; _sel.appendChild(_o0);
+      (st.bikes||[]).filter(function(b){return b && !b.deleted;}).forEach(function(b){
+        var o=document.createElement('option'); o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:''); _sel.appendChild(o);
+      });
+      _sel.value=(st.bikeAssignments||{})[rideKey(r)] || (bike?bike.id:'');
+      _sel.onchange=function(){
+        if(!st.bikeAssignments) st.bikeAssignments={};
+        if(_sel.value) st.bikeAssignments[rideKey(r)]=_sel.value; else delete st.bikeAssignments[rideKey(r)];
+        sv();
+        openDesktopRideDetail(idx);
+      };
+      _bikeSlot.appendChild(_sel);
+    }
     // Previously-dead "View All" links: jump to the matching detail tab.
     var vaLaps=document.getElementById('rd-viewall-laps');
     if(vaLaps) vaLaps.onclick=function(){ var t=main.querySelector('[data-rdtab="laps"]'); if(t) t.click(); };
@@ -19353,6 +19463,7 @@ function showMoreSheet(){
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
     {n:'Clean Ride Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
     {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
+    {n:'Clean Race Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRaceCleanup',   c:'#a855f7'},
     {n:'AI Coach',      i:'M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z',       fn:'showAICoach',      c:'#a855f7'},
     {n:'Garage',        i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'showGarage',       c:'#0F6E56'},
     {n:'Goals',         i:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z', fn:'showGoals',        c:'#4D9FFF'},
