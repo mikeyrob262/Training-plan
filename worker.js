@@ -12868,35 +12868,37 @@ function dsShowAnalytics(){
   });
   wrap.appendChild(statRow);
 
-  // CTL/ATL/TSB chart
+  // ==== LAYOUT BELOW GAUGES — mockup grid (layout only; card contents unchanged) ====
+  // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
   var fitnessCard=document.createElement('div');
-  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
   fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — Last 90 Days</div>'+
     '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
-  wrap.appendChild(fitnessCard);
-
-  // Weekly distance chart
   var distCard=document.createElement('div');
-  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
   distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last 12 Weeks</div>'+
     '<div style="position:relative;height:140px"><canvas id="ds-dist-chart"></canvas></div>';
-  wrap.appendChild(distCard);
+  var rowA=document.createElement('div');
+  rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:14px;flex-shrink:0';
+  rowA.appendChild(fitnessCard); rowA.appendChild(distCard);
+  wrap.appendChild(rowA);
 
-  // W/kg trend
+  // ROW B: W/kg Trend + Power Distribution + Ride Consistency, equal columns.
+  var rowBcards=[];
+  var wkgCard=null;
   if(wkgHistory.length>2){
-    var wkgCard=document.createElement('div');
-    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+    wkgCard=document.createElement('div');
+    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
     wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">W/kg Trend</div>'+
       '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
-    wrap.appendChild(wkgCard);
+    rowBcards.push(wkgCard);
   }
-
-  // -- POWER DISTRIBUTION (real: only rides with a power stream; %FTP zones)
+  // Power Distribution (real: only rides with a power stream; %FTP zones)
   var _pd=dsPowerDist_(rides, FTP);
   var pdCard=document.createElement('div');
-  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
-  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
-    +'<span style="font-size:9px;color:#64748b">'+(_pd.hasData?(_pd.nRides+' rides with power · zones use your (manual) FTP'):'')+'</span></div>';
+  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
+    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?(_pd.nRides+' rides with power · zones use your (manual) FTP'):'')+'</span></div>';
   if(_pd.hasData){
     var pdBars=_pd.zones.map(function(z){
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
@@ -12908,9 +12910,8 @@ function dsShowAnalytics(){
   } else {
     pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with a power stream yet — power distribution needs power-meter data, so it stays empty rather than showing a fake split.</div>';
   }
-  wrap.appendChild(pdCard);
-
-  // -- RIDE CONSISTENCY heatmap (real: ride dates, last 26 weeks)
+  rowBcards.push(pdCard);
+  // Ride Consistency heatmap (real: ride dates, last 26 weeks)
   var _cells=dsConsistency_(rides, 26*7, now, normDate);
   var _lead=_cells.length?_cells[0].dow:0;
   function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var t=c.tss||0; return t>=150?'#4ade80':t>=80?'#22c55e':t>=40?'#15803d':'#0f5132'; }
@@ -12918,13 +12919,17 @@ function dsShowAnalytics(){
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
   var hmCard=document.createElement('div');
-  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
+  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
   hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
     +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto">'+cellSquares+'</div>'
     +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#12151d"></span><span style="width:10px;height:10px;border-radius:2px;background:#0f5132"></span><span style="width:10px;height:10px;border-radius:2px;background:#15803d"></span><span style="width:10px;height:10px;border-radius:2px;background:#22c55e"></span><span style="width:10px;height:10px;border-radius:2px;background:#4ade80"></span>More</div>';
-  wrap.appendChild(hmCard);
+  rowBcards.push(hmCard);
+  var rowB=document.createElement('div');
+  rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:14px;flex-shrink:0';
+  rowBcards.forEach(function(c){ rowB.appendChild(c); });
+  wrap.appendChild(rowB);
 
-  // -- GOAL BARS (real: miles YTD vs goal; W/kg vs Chase-1, FTP-based caveat)
+  // ROW C: Goals as a horizontal row of cards (values/caveats unchanged).
   var _yr0=new Date(now.getFullYear(),0,1), _ytd=0;
   rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); if(d>=_yr0) _ytd+=parseFloat(r.distance)||0; });
   _ytd=Math.round(_ytd);
@@ -12933,14 +12938,17 @@ function dsShowAnalytics(){
     {label:'Miles YTD', val:_ytd.toLocaleString()+' / '+_mgoal.toLocaleString()+' mi', frac:Math.min(1,_ytd/_mgoal), color:'#60a5fa', note:''},
     {label:'W/kg to Chase 1', val:wkgNow.toFixed(2)+' / 3.14', frac:Math.min(1,wkgNow/3.14), color:'#4ade80', note:'FTP-based'}
   ];
-  var goalCard=document.createElement('div');
-  goalCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;flex-shrink:0';
-  goalCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Goals</div>'
-    +goals.map(function(g){
-      return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:12px;color:#e2e8f0">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b">('+g.note+')</span>'):'')+'</span><span style="font-size:12px;font-weight:700;color:'+g.color+'">'+g.val+'</span></div>'
-        +'<div style="height:8px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:8px;background:'+g.color+';border-radius:4px;width:'+Math.round(g.frac*100)+'%"></div></div></div>';
-    }).join('');
-  wrap.appendChild(goalCard);
+  var rowC=document.createElement('div');
+  rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:14px;flex-shrink:0';
+  goals.forEach(function(g){
+    var gc=document.createElement('div');
+    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+    gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
+      +'<div style="font-size:18px;font-weight:800;color:'+g.color+';margin-bottom:8px">'+g.val+'</div>'
+      +'<div style="height:8px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:8px;background:'+g.color+';border-radius:4px;width:'+Math.round(g.frac*100)+'%"></div></div>';
+    rowC.appendChild(gc);
+  });
+  wrap.appendChild(rowC);
 
   mc.appendChild(wrap);
 
