@@ -14035,13 +14035,39 @@ function rideMapBasePref_(){
 }
 // Dark ("dark matter") + Esri satellite base layers wired into a corner
 // layers toggle. The choice persists across rides via localStorage.
+// Each base carries a matching STREET-LABELS overlay — Esri imagery is
+// imagery-only and CARTO dark_all's labels sit under the route — rendered
+// in a dedicated high-z pane so names stay legible ABOVE the route line.
+// The labels layer follows the base toggle so you never get dark labels
+// over satellite imagery.
 function addRideMapBase_(map){
   var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
-  (rideMapBasePref_()==='satellite'?sat:dark).addTo(map);
+  // High-z pane (above the overlayPane where the route polylines live) so
+  // labels paint over the route, not under it. pointer-events off so the
+  // overlay never eats map interactions.
+  try{
+    if(!map.getPane('routeLabels')){
+      map.createPane('routeLabels');
+      map.getPane('routeLabels').style.zIndex=650;
+      map.getPane('routeLabels').style.pointerEvents='none';
+    }
+  }catch(e){}
+  var darkLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
+  var satLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,pane:'routeLabels'});
+  function showLabels(which){
+    try{ map.removeLayer(darkLabels); }catch(e){}
+    try{ map.removeLayer(satLabels); }catch(e){}
+    try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){}
+  }
+  var pref=rideMapBasePref_();
+  (pref==='satellite'?sat:dark).addTo(map);
+  showLabels(pref);
   L.control.layers({Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',function(e){
-    try{ localStorage.setItem('aiq_rideMapBase',(e&&e.name==='Satellite')?'satellite':'dark'); }catch(err){}
+    var v=(e&&e.name==='Satellite')?'satellite':'dark';
+    showLabels(v);
+    try{ localStorage.setItem('aiq_rideMapBase',v); }catch(err){}
   });
   return {dark:dark,sat:sat};
 }
