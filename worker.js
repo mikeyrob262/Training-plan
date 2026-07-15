@@ -3362,7 +3362,15 @@ function fetchStravaStreams_(r, ds, maxOf){
           r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
           if(!r.maxElev){ var _ma=maxOf(alt,10000); if(_ma!=null) r.maxElev=Math.round(_ma*3.28084); } // highest point, m -> ft (was never computed anywhere)
         }
-        if(pwr){ r.chartPwr=ds(pwr,200); if(!r.maxPwr) r.maxPwr=maxOf(pwr,2000); }
+        if(pwr){ r.chartPwr=ds(pwr,200); if(!r.maxPwr) r.maxPwr=maxOf(pwr,2000);
+          // Real time-in-zone (5 numbers, seconds) from the full 1Hz stream, so
+          // it survives slimForStorage_ stripping chartPwr. Powers the Power
+          // Distribution panel long after the per-second stream is gone.
+          try{ var _zf=parseInt(st.ftp||186)||186, _zb=[0,0,0,0,0], _zn=0;
+            for(var _zi=0;_zi<pwr.length;_zi++){ var _zw=+pwr[_zi]; if(!(_zw>=0)) continue; _zn++;
+              var _zr=_zw/_zf; _zb[_zr<0.55?0:_zr<0.75?1:_zr<0.90?2:_zr<1.05?3:4]++; }
+            if(_zn) r.zoneTime=_zb; }catch(_ze){}
+        }
         if(hr){ r.chartHR=ds(hr,200); if(!r.maxHR) r.maxHR=maxOf(hr,250); }
         if(cad){ r.chartCad=ds(cad,200); if(!r.maxCadence) r.maxCadence=maxOf(cad,255); }
         if(vel && !r.maxSpeed){ var mv=maxOf(vel,50); if(mv) r.maxSpeed=Math.round(mv*2.23694*10)/10; } // m/s -> mph (display expects mph when >10)
@@ -12680,7 +12688,7 @@ function dsShowNutrition(){
 // ==== ANALYTICS DASHBOARD HELPERS (presentation; REAL data or "—" only) ====
 // Progress-ring gauge. frac 0..1; centerText pre-formatted.
 function dsGauge_(frac, color, centerText, sub, size){
-  size=size||104; var sw=9, r=(size-sw)/2-1, cx=size/2, cy=size/2, circ=Math.PI*2*r;
+  size=size||84; var sw=11, r=(size-sw)/2-1, cx=size/2, cy=size/2, circ=Math.PI*2*r;
   frac=Math.max(0,Math.min(1,frac||0)); var off=circ*(1-frac);
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="display:block">'
     +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#1a1f2e" stroke-width="'+sw+'"/>'
@@ -12696,21 +12704,71 @@ function dsPercentileTop_(vals, current){
   var greater=0; v.forEach(function(x){ if(x>current) greater++; });
   return {topPct:Math.max(1,Math.round(100*(greater+1)/(v.length+1))), n:v.length};
 }
-// Power-time distribution over rides that actually carry a power stream
-// (chartPwr). Zone edges are %FTP — FLAGGED, since FTP is a stale manual value.
-// Rides with no power are EXCLUDED, never zero-filled.
+// ---- Per-ride time-in-zone, richest real signal first --------------------
+// The Power Distribution panel used to read ONLY r.chartPwr (the per-second
+// stream), which slimForStorage_ strips for the localStorage quota — so it
+// starved on the ~13 rides whose stream was still in memory, even though
+// hundreds of rides carry REAL power-zone seconds (z1s..z6s, from intervals.icu
+// z*_secs imports + computed streams — NOT in STORAGE_HEAVY_FIELDS_, so they
+// survive). rideZoneTime_ picks the richest signal each ride actually has:
+//   1 z1s..z6s  — real Strava/intervals zone-seconds (best; survives slimming)
+//   2 zoneTime  — 5-bucket seconds we computed from a stream at sync (real)
+//   3 chartPwr  — live per-second stream still in memory (real)
+//   4 powerCurve— ESTIMATE (mean-max "time held >= W"; biased low up-zone)
+// A ride with ONLY a single avg/NP number returns null and is EXCLUDED — a
+// true Z1-Z5 split is not derivable from one average, so we don't fabricate it.
+var ZONE_EDGES_=[0.55,0.75,0.90,1.05];   // %FTP: Z1<55 Z2<75 Z3<90 Z4<105 Z5+
+function zoneTimeFromStream_(pwr, ftp, durSecs){
+  if(!pwr || !pwr.length || !(ftp>0)) return null;
+  var b=[0,0,0,0,0], n=0;
+  for(var i=0;i<pwr.length;i++){ var w=parseFloat(pwr[i]); if(!(w>=0)) continue; n++;
+    var f=w/ftp, z=f<ZONE_EDGES_[0]?0:f<ZONE_EDGES_[1]?1:f<ZONE_EDGES_[2]?2:f<ZONE_EDGES_[3]?3:4; b[z]++; }
+  if(!n) return null;
+  var per=(durSecs>0?durSecs:n)/n;               // stream is downsampled -> scale to real seconds
+  return b.map(function(c){ return Math.round(c*per); });
+}
+function zoneTimeFromCurve_(pc, ftp, durSecs){
+  if(!pc || !(ftp>0) || !(durSecs>0)) return null;
+  var durs=Object.keys(pc).map(function(k){return parseInt(k,10);})
+    .filter(function(t){return t>0 && pc[String(t)]!=null;}).sort(function(a,b){return a-b;});
+  if(durs.length<2) return null;
+  function timeAtLeast(W){                        // longest window whose best power >= W
+    var best=0, i;
+    for(i=0;i<durs.length;i++){ if(parseFloat(pc[String(durs[i])])>=W) best=durs[i]; }
+    for(i=0;i<durs.length-1;i++){ var p1=parseFloat(pc[String(durs[i])]), p2=parseFloat(pc[String(durs[i+1])]);
+      if(p1>=W && p2<W){ best=Math.round(durs[i]+(durs[i+1]-durs[i])*((p1-W)/((p1-p2)||1))); break; } }
+    return Math.min(best, durSecs);
+  }
+  var a55=timeAtLeast(ftp*0.55), a75=timeAtLeast(ftp*0.75), a90=timeAtLeast(ftp*0.90), a105=timeAtLeast(ftp*1.05);
+  var arr=[Math.max(0,durSecs-a55), Math.max(0,a55-a75), Math.max(0,a75-a90), Math.max(0,a90-a105), a105];
+  return arr.reduce(function(s,x){return s+x;},0)>0 ? arr : null;
+}
+function rideZoneTime_(r, ftp){
+  if(!r) return null;
+  var dur=parseFloat(r.movingSecs||r.duration||0)||0;
+  var zsum=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
+  if(zsum>0) return {z:[r.z1s||0,r.z2s||0,r.z3s||0,r.z4s||0,(r.z5s||0)+(r.z6s||0)], src:'zones'};
+  if(Array.isArray(r.zoneTime) && r.zoneTime.length===5) return {z:r.zoneTime, src:'stream'};
+  if(r.chartPwr && r.chartPwr.length){ var zs=zoneTimeFromStream_(r.chartPwr, ftp, dur); if(zs) return {z:zs, src:'stream'}; }
+  if(r.powerCurve){ var zc=zoneTimeFromCurve_(r.powerCurve, ftp, dur); if(zc) return {z:zc, src:'curve'}; }
+  return null;
+}
+// Power-time distribution aggregated across every ride that has real (or, as a
+// last resort, curve-estimated) time-in-zone. Zone edges are %FTP — FLAGGED,
+// since FTP is a stale manual value. Rides with no power are EXCLUDED.
 function dsPowerDist_(rides, ftp){
-  ftp=ftp||186; var edges=[0.55,0.75,0.90,1.05], buckets=[0,0,0,0,0], total=0, nRides=0;
+  ftp=ftp||186; var buckets=[0,0,0,0,0], nRides=0, nMeas=0, nEst=0;
   (rides||[]).forEach(function(r){
-    var p=r.chartPwr; if(!p || !p.length) return; var used=false;
-    for(var i=0;i<p.length;i++){ var w=parseFloat(p[i]); if(!(w>0)) continue;
-      var f=w/ftp, z=f<edges[0]?0:f<edges[1]?1:f<edges[2]?2:f<edges[3]?3:4; buckets[z]++; total++; used=true; }
-    if(used) nRides++;
+    var zt=rideZoneTime_(r, ftp); if(!zt) return;
+    for(var i=0;i<5;i++) buckets[i]+=(zt.z[i]||0);
+    nRides++; if(zt.src==='curve') nEst++; else nMeas++;
   });
+  var total=buckets.reduce(function(s,x){return s+x;},0);
   if(!total) return {hasData:false, nRides:0};
   var labels=['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2+'];
   var cols=['#64748b','#3b82f6','#22c55e','#f59e0b','#ef4444'];
-  return {hasData:true, nRides:nRides, zones:labels.map(function(l,i){ return {label:l, pct:Math.round(buckets[i]/total*100), color:cols[i]}; })};
+  return {hasData:true, nRides:nRides, nMeas:nMeas, nEst:nEst,
+    zones:labels.map(function(l,i){ return {label:l, pct:Math.round(buckets[i]/total*100), color:cols[i]}; })};
 }
 // Daily ride presence + intensity for the consistency heatmap. TSS guarded by
 // constRideTSS_ so a garbage import value can't max out a day; presence (n) is
@@ -12802,14 +12860,14 @@ function dsShowAnalytics(){
 
   mc.innerHTML='';
   var wrap=document.createElement('div');
-  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:12px 16px;box-sizing:border-box;gap:10px';
 
   var _tc=teachCtx_();
   // Tappable teaching card builder (data-metric-teach -> the document-level
   // listener; both renderers must carry it).
   function teachCard_(inner, key, label){
     var c=document.createElement('div');
-    c.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
+    c.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
     if(key){
       c.setAttribute('data-metric-teach',key);
       c.setAttribute('role','button'); c.setAttribute('tabindex','0'); c.setAttribute('aria-label','Learn about '+(label||key));
@@ -12824,7 +12882,7 @@ function dsShowAnalytics(){
   //    2x2 mini-stat grid FTP·CTL·ATL·TSB (~30%). Layout only; values/caveats
   //    unchanged, everything stays tappable to its teaching sheet.
   var hero=document.createElement('div');
-  hero.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr) minmax(0,1.2fr);gap:14px;flex-shrink:0;align-items:stretch';
+  hero.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr) minmax(0,1.2fr);gap:10px;flex-shrink:0;align-items:stretch';
   // LEFT — Athlete IQ (compact). Live (approved formula); "—" when <28 days.
   var _iq=_tc.iq;
   var _iqNull=(!_iq || _iq.score==null);
@@ -12879,7 +12937,7 @@ function dsShowAnalytics(){
 
   // -- GAUGES: CTL / ATL / TSB / W-kg (tappable)
   var gaugeRow=document.createElement('div');
-  gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
+  gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
   [
     {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#3b82f6',cap:'42-day load'},
     {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f97316',cap:'7-day load'},
@@ -12887,15 +12945,15 @@ function dsShowAnalytics(){
     {key:'wkg',label:'W/kg',sub:'W/kg',frac:Math.min(1,wkgNow/5),center:wkgNow.toFixed(2),color:'#a855f7',cap:'vs 3.14 target'}
   ].forEach(function(g){
     var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
-      +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,104)+'</div>'
-      +'<div style="text-align:center;font-size:10px;color:#64748b;margin-top:6px">'+g.cap+'</div>';
+      +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,84)+'</div>'
+      +'<div style="text-align:center;font-size:9px;color:#64748b;margin-top:4px">'+g.cap+'</div>';
     gaugeRow.appendChild(teachCard_(inner,g.key,g.label));
   });
   wrap.appendChild(gaugeRow);
 
   // -- POWER STAT CARDS: FTP / NP / IF / TSS (tappable)
   var statRow=document.createElement('div');
-  statRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex-shrink:0';
+  statRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
   [
     ['FTP',_tc.ftp+'W','#94a3b8','Manual — may be stale','ftp'],
     ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','last ride · avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)','np'],
@@ -12912,15 +12970,15 @@ function dsShowAnalytics(){
   // ==== LAYOUT BELOW GAUGES — mockup grid (layout only; card contents unchanged) ====
   // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
   var fitnessCard=document.createElement('div');
-  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — Last 90 Days</div>'+
     '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
   var distCard=document.createElement('div');
-  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last 12 Weeks</div>'+
     '<div style="position:relative;height:140px"><canvas id="ds-dist-chart"></canvas></div>';
   var rowA=document.createElement('div');
-  rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:14px;flex-shrink:0';
+  rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:10px;flex-shrink:0';
   rowA.appendChild(fitnessCard); rowA.appendChild(distCard);
   wrap.appendChild(rowA);
 
@@ -12929,7 +12987,7 @@ function dsShowAnalytics(){
   var wkgCard=null;
   if(wkgHistory.length>2){
     wkgCard=document.createElement('div');
-    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
     wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">W/kg Trend</div>'+
       '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
     rowBcards.push(wkgCard);
@@ -12937,9 +12995,9 @@ function dsShowAnalytics(){
   // Power Distribution (real: only rides with a power stream; %FTP zones)
   var _pd=dsPowerDist_(rides, FTP);
   var pdCard=document.createElement('div');
-  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
-    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?(_pd.nRides+' rides with power · zones use your (manual) FTP'):'')+'</span></div>';
+    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?('Based on '+_pd.nRides+' rides with power'+(_pd.nEst?(' · '+_pd.nEst+' estimated from power curves'):'')+' · zones use your (manual) FTP'):'')+'</span></div>';
   if(_pd.hasData){
     var pdBars=_pd.zones.map(function(z){
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
@@ -12949,7 +13007,7 @@ function dsShowAnalytics(){
     }).join('');
     pdCard.innerHTML=pdHead+pdBars;
   } else {
-    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with a power stream yet — power distribution needs power-meter data, so it stays empty rather than showing a fake split.</div>';
+    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with power-zone data yet — power distribution needs power-meter data, so it stays empty rather than showing a fake split.</div>';
   }
   rowBcards.push(pdCard);
   // Ride Consistency heatmap (real: ride dates, last 26 weeks)
@@ -12960,13 +13018,13 @@ function dsShowAnalytics(){
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
   var hmCard=document.createElement('div');
-  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
     +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto">'+cellSquares+'</div>'
     +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#12151d"></span><span style="width:10px;height:10px;border-radius:2px;background:#0f5132"></span><span style="width:10px;height:10px;border-radius:2px;background:#15803d"></span><span style="width:10px;height:10px;border-radius:2px;background:#22c55e"></span><span style="width:10px;height:10px;border-radius:2px;background:#4ade80"></span>More</div>';
   rowBcards.push(hmCard);
   var rowB=document.createElement('div');
-  rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:14px;flex-shrink:0';
+  rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   rowBcards.forEach(function(c){ rowB.appendChild(c); });
   wrap.appendChild(rowB);
 
@@ -12980,10 +13038,10 @@ function dsShowAnalytics(){
     {label:'W/kg to Chase 1', val:wkgNow.toFixed(2)+' / 3.14', frac:Math.min(1,wkgNow/3.14), color:'#4ade80', note:'FTP-based'}
   ];
   var rowC=document.createElement('div');
-  rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:14px;flex-shrink:0';
+  rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   goals.forEach(function(g){
     var gc=document.createElement('div');
-    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:14px;min-width:0';
+    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
     gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
       +'<div style="font-size:18px;font-weight:800;color:'+g.color+';margin-bottom:8px">'+g.val+'</div>'
       +'<div style="height:8px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:8px;background:'+g.color+';border-radius:4px;width:'+Math.round(g.frac*100)+'%"></div></div>';
@@ -13004,9 +13062,9 @@ function dsShowAnalytics(){
       var _tdDot=function(c){ return c.dataIndex===(c.dataset.data.length-1)?4:0; };
       var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.34)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
       new Chart(gc,{type:'line',data:{labels:labels,datasets:[
-        {label:'CTL',data:ctlArr,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'ATL',data:atlArr,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'TSB',data:tsbArr,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.35,pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
+        {label:'CTL',data:ctlArr,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'ATL',data:atlArr,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'TSB',data:tsbArr,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.4,cubicInterpolationMode:'monotone',pointRadius:_tdDot,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
       ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=6; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
     }
     var dc=document.getElementById('ds-dist-chart');
@@ -13715,28 +13773,28 @@ function dsShowDashboard(){
   // Power Zones card
   var pzc=card('');
   pzc.appendChild(lbl('POWER ZONES'));
-  var allRidesForZones=(st.rides||[]);
+  // Aggregate REAL power-zone seconds across ALL rides. Prefer stored z1s..z6s
+  // (intervals/Strava zone-seconds, survive slimming); fall back to a live
+  // chartPwr stream where present. No fake defaults — an empty panel reads "—".
   var z1=0,z2=0,z3=0,z4=0,z5=0,z6=0,zTotal=0;
-  allRidesForZones.slice(-20).forEach(function(r){
-    if(!r.chartPwr) return;
-    r.chartPwr.forEach(function(w){
-      if(!w) return; zTotal++;
-      var pct=w/ftp;
-      if(pct<0.56) z1++;
-      else if(pct<0.76) z2++;
-      else if(pct<0.91) z3++;
-      else if(pct<1.06) z4++;
-      else if(pct<1.21) z5++;
-      else z6++;
-    });
+  (st.rides||[]).forEach(function(r){
+    if(!r||r.deleted) return;
+    var zsum=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
+    if(zsum>0){ z1+=r.z1s||0; z2+=r.z2s||0; z3+=r.z3s||0; z4+=r.z4s||0; z5+=r.z5s||0; z6+=r.z6s||0; zTotal+=zsum; return; }
+    if(r.chartPwr && r.chartPwr.length){
+      r.chartPwr.forEach(function(w){ if(!(w>0)) return; zTotal++;
+        var pct=w/ftp;
+        if(pct<0.56) z1++; else if(pct<0.76) z2++; else if(pct<0.91) z3++;
+        else if(pct<1.06) z4++; else if(pct<1.21) z5++; else z6++; });
+    }
   });
   var zBars=[
-    ['Z1','Recovery','#94a3b8',zTotal?Math.round(z1/zTotal*100):15],
-    ['Z2','Endurance','#4ade80',zTotal?Math.round(z2/zTotal*100):35],
-    ['Z3','Tempo','#f59e0b',zTotal?Math.round(z3/zTotal*100):25],
-    ['Z4','Threshold','#f97316',zTotal?Math.round(z4/zTotal*100):15],
-    ['Z5','VO2 Max','#e24b4a',zTotal?Math.round(z5/zTotal*100):7],
-    ['Z6','Anaerobic','#8b5cf6',zTotal?Math.round(z6/zTotal*100):3]
+    ['Z1','Recovery','#94a3b8',zTotal?Math.round(z1/zTotal*100):null],
+    ['Z2','Endurance','#4ade80',zTotal?Math.round(z2/zTotal*100):null],
+    ['Z3','Tempo','#f59e0b',zTotal?Math.round(z3/zTotal*100):null],
+    ['Z4','Threshold','#f97316',zTotal?Math.round(z4/zTotal*100):null],
+    ['Z5','VO2 Max','#e24b4a',zTotal?Math.round(z5/zTotal*100):null],
+    ['Z6','Anaerobic','#8b5cf6',zTotal?Math.round(z6/zTotal*100):null]
   ];
   zBars.forEach(function(z){
     var zr=row('gap:5px;margin-bottom:4px;align-items:center');
@@ -13744,9 +13802,9 @@ function dsShowDashboard(){
     zlbl.style.color=z[2]; zlbl.textContent=z[0];
     var zbar=div('flex:1;height:6px;background:#1a1f2e;border-radius:3px;overflow:hidden');
     var zfill=div('height:6px;border-radius:3px');
-    zfill.style.cssText='width:'+z[3]+'%;background:'+z[2];
+    zfill.style.cssText='width:'+(z[3]==null?0:z[3])+'%;background:'+z[2];
     zbar.appendChild(zfill);
-    var zpct=div('font-size:8px;color:#64748b;width:22px;text-align:right;flex-shrink:0',z[3]+'%');
+    var zpct=div('font-size:8px;color:#64748b;width:22px;text-align:right;flex-shrink:0',z[3]==null?'—':(z[3]+'%'));
     zr.appendChild(zlbl); zr.appendChild(zbar); zr.appendChild(zpct);
     pzc.appendChild(zr);
   });
