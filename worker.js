@@ -14274,7 +14274,9 @@ function dsRenderAttention_(el, d){
   if(d.state==='green' || !items.length){
     H+='<div style="display:flex;align-items:flex-start;gap:12px">';
     H+='<div style="width:34px;height:34px;border-radius:50%;background:rgba(74,222,128,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
-    H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:#4ade80;line-height:1.15">Nothing To See Here!</div>';
+    var _gm=['Nothing To See Here!','All Clear — Go Ride!','You are Good — Let us Go!','Green Light — Send It!'];
+    var _gh=_gm[Math.floor(Date.now()/86400000)%_gm.length];
+    H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:#4ade80;line-height:1.15">'+_gh+'</div>';
     H+='<div style="font-size:12.5px;color:#94a3b8;margin:3px 0 10px">Everything looks great.</div>';
     (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#cbd5e1;margin-bottom:7px">'+CK+'<span>'+p+'</span></div>'; });
     H+='<div style="font-size:12px;color:#64748b;margin-top:8px">Enjoy the ride.</div></div></div>';
@@ -14460,7 +14462,7 @@ function dsShowDashboard(){
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
 
   // ===== ROW 1 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 1 0;min-height:0">';
   // -- Athlete IQ --
   var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
@@ -14491,7 +14493,7 @@ function dsShowDashboard(){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px;width:66%"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:8px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
+  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:70%;text-align:center;background:'+ACC.orange+';border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
@@ -14554,7 +14556,7 @@ function dsShowDashboard(){
   if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:#64748b">Fiber <b style="color:#e8edf5">'+nf.consumed.fiber+'g</b></div>'; }
   H+=card(nu);
   // Weather
-  var wea=lbl('WEATHER');
+  var wea=lbl('WEATHER',link('View Forecast','weather'));
   wea+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Grand Rapids, MI</div>';
   wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:#64748b;margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
   wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;margin-top:auto">';
@@ -14571,9 +14573,9 @@ function dsShowDashboard(){
   bikes.forEach(function(b,bi){
     var ch=(typeof bikeChain_==='function')?bikeChain_(b):null;
     var sub=b.wheelset||b.groupset||(b.miles!=null?Math.round(b.miles)+' mi':'');
-    bk+='<div data-act="gear" style="display:flex;gap:12px;align-items:center;padding:8px 0;'+(bi>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    if(b.photo) bk+='<img src="'+b.photo+'" style="width:130px;height:82px;object-fit:cover;border-radius:9px;flex-shrink:0;border:1px solid #1c2130;filter:brightness(1.06)">';
-    bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:3px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'% &middot; '+Math.max(0,Math.round(ch.life-ch.milesSince))+' mi left</div>':'')+'</div>';
+    bk+='<div data-act="gear" style="'+(bi>0?'border-top:1px solid #1c2130;margin-top:9px;padding-top:9px;':'')+'cursor:pointer">';
+    if(b.photo) bk+='<img src="'+b.photo+'" style="width:100%;height:94px;object-fit:cover;border-radius:9px;border:1px solid #1c2130;filter:brightness(1.06);display:block">';
+    bk+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px"><div style="min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div></div>'+(ch?'<div style="font-size:11px;font-weight:700;text-align:right;flex-shrink:0;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
     bk+='</div>';
   });
   H+=card(bk);
@@ -14581,18 +14583,36 @@ function dsShowDashboard(){
 
   // ===== ROW 3 =====
   H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
-  // Training Load
+  // Training Load — narrow gradient daily bars, right y-axis, and a CTL-derived
+  // "Optimal Range" marker (real: CTL is your sustainable daily load), plus the
+  // real week-over-week change. Matches the reference chart.
   var maxDay=Math.max.apply(null,tssSeries.concat([1]));
+  var lastWeekTSS=0; (function(){ var c0=new Date(); c0.setHours(0,0,0,0); c0.setDate(c0.getDate()-7); var c1=new Date(c0); c1.setDate(c1.getDate()-7); var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10); (st.rides||[]).forEach(function(r){ if(r&&!r.deleted&&r.date){ var kk=normDate(r.date); if(kk>s1&&kk<=s0) lastWeekTSS+=parseFloat(r.tss)||0; } }); })();
+  lastWeekTSS=Math.round(lastWeekTSS);
+  var tlPct=lastWeekTSS>0?Math.round((weekTSS-lastWeekTSS)/lastWeekTSS*100):null;
+  var optTarget=Math.round((fit.ctl||0)*1.3);
+  var tlTop=Math.max(maxDay,optTarget,50);
+  var niceMax=Math.ceil(tlTop*1.12/100)*100; if(niceMax<100) niceMax=100;
+  var optY=optTarget>0?(1-Math.min(1,optTarget/niceMax))*100:-1;
   var tl=lbl('TRAINING LOAD');
-  tl+='<div style="font-size:10px;color:#64748b;margin:-6px 0 4px">This Week</div>';
-  tl+='<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:#64748b">TSS</span></div>';
-  tl+='<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-top:10px">';
-  var dowL=['S','M','T','W','T','F','S'];
-  days7.forEach(function(k,di){ var v=tssByDay[k]; var bh=Math.max(3,Math.round(v/maxDay*52)); var isToday=di===6;
-    tl+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+bh+'px;background:'+(isToday?'#3b82f6':'#1e3a8a')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+dowL[new Date(k+'T00:00:00').getDay()]+'</span></div>';
+  tl+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">This Week</div>';
+  tl+='<div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:27px;font-weight:800;color:#fff;letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:#64748b">TSS</span></div>';
+  tl+='<div style="margin:4px 0 2px">'+(tlPct!=null?'<span style="font-size:14px;font-weight:800;color:'+(tlPct>=0?ACC.green:ACC.red)+'">'+(tlPct>=0?'+':'')+tlPct+'%</span> <span style="font-size:11px;color:#64748b">vs last 7 days</span>':'<span style="font-size:11px;color:#64748b">no prior week to compare</span>')+'</div>';
+  tl+='<div style="flex:1;min-height:0;display:flex;gap:7px;margin-top:8px">';
+  tl+='<div style="flex:1;position:relative;min-height:98px">';
+  [0,0.25,0.5,0.75,1].forEach(function(fr){ tl+='<div style="position:absolute;left:0;right:0;top:'+((1-fr)*100)+'%;height:1px;background:#171c2b"></div>'; });
+  if(optY>=0){ tl+='<div style="position:absolute;left:0;right:0;top:'+optY.toFixed(1)+'%;border-top:1.5px dashed rgba(74,222,128,.6)"></div><div style="position:absolute;right:2px;top:'+Math.max(0,optY-15).toFixed(1)+'%;font-size:8.5px;font-weight:600;color:#7ee29a">Optimal Range</div>'; }
+  tl+='<div style="position:absolute;inset:0;display:flex;align-items:flex-end">';
+  days7.forEach(function(k,di){ var v=tssByDay[k]; var hp=Math.max(2,Math.min(100,v/niceMax*100)); var isToday=di===6;
+    tl+='<div style="flex:1;display:flex;justify-content:center;align-items:flex-end;height:100%"><div style="width:11px;height:'+hp.toFixed(1)+'%;background:linear-gradient(180deg,'+(isToday?'#60a5fa':'#3b82f6')+',#1e3a8a);border-radius:3px 3px 0 0"></div></div>';
   });
-  tl+='</div>';
-  tl+='<div style="font-size:11px;color:#64748b;margin-top:auto;padding-top:10px;border-top:1px solid #1c2130">Daily average: <b style="color:#e2e8f0">'+(weekTSS?Math.round(weekTSS/7):0)+' TSS</b></div>';
+  tl+='</div></div>';
+  tl+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;padding:1px 0;min-height:98px">';
+  [niceMax,niceMax*0.75,niceMax*0.5,niceMax*0.25,0].forEach(function(v){ tl+='<div>'+Math.round(v)+'</div>'; });
+  tl+='</div></div>';
+  tl+='<div style="display:flex;gap:7px;margin-top:5px"><div style="flex:1;display:flex">';
+  days7.forEach(function(k){ tl+='<div style="flex:1;text-align:center;font-size:9px;color:#5b6678">'+['S','M','T','W','T','F','S'][new Date(k+"T00:00:00").getDay()]+'</div>'; });
+  tl+='</div><div style="width:22px"></div></div>';
   H+=card(tl);
   // Recovery — TSB-based readiness gauge (real) + manual HRV / Resting HR (editable).
   var rC=2*Math.PI*30;
@@ -24590,7 +24610,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-fill-enlarge';
+window.__BUILD__ = '2026-07-16-dashboard-trainingload-polish';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
