@@ -12838,17 +12838,23 @@ function dsPowerDist_(rides, ftp){
   if(rTot>0) out.zones=labels.map(function(l,i){ return {label:l, pct:Math.round(real[i]/rTot*100), color:cols[i]}; });
   return out;
 }
-// Daily ride presence + intensity for the consistency heatmap. TSS guarded by
-// constRideTSS_ so a garbage import value can't max out a day; presence (n) is
-// tracked separately so a rode-but-zero-TSS day still lights up.
+// Daily ride presence + intensity for the consistency heatmap. Two signals per
+// day: tss (real, guarded by constRideTSS_, for the tooltip) and load (a ROBUST
+// intensity for the shade — real TSS where valid, else a moving-time proxy).
+// Coloring by tss alone made the grid one flat green: constRideTSS_ returns null
+// for garbage (>600) / missing TSS, so this athlete's many inflated-TSS rides
+// collapsed to tss=0 and every ride-day shaded the same darkest green.
 function dsConsistency_(rides, days, now, normDate){
   var m={}; (rides||[]).forEach(function(r){ if(!r.date) return; var nd=normDate(r.date);
-    var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
-    if(!m[nd]) m[nd]={n:0,tss:0}; m[nd].n++; m[nd].tss+=(t||0);
+    if(!m[nd]) m[nd]={n:0,tss:0,load:0}; m[nd].n++;
+    var real=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    if(real>0) m[nd].tss+=real;
+    var secs=parseFloat(r.movingSecs)||0;
+    m[nd].load += (real>0 ? real : (secs>0 ? Math.min(240, Math.round(secs/60)) : 40));
   });
   var cells=[]; for(var i=days-1;i>=0;i--){ var d=new Date(now); d.setDate(d.getDate()-i);
     var nd=normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate());
-    cells.push({date:nd, dow:d.getDay(), n:m[nd]?m[nd].n:0, tss:m[nd]?m[nd].tss:0});
+    cells.push({date:nd, dow:d.getDay(), n:m[nd]?m[nd].n:0, tss:m[nd]?m[nd].tss:0, load:m[nd]?m[nd].load:0});
   }
   return cells;
 }
@@ -13132,13 +13138,14 @@ function dsShowAnalytics(){
   // Ride Consistency heatmap (real: ride dates, last 26 weeks)
   var _cells=dsConsistency_(rides, 26*7, now, normDate);
   var _lead=_cells.length?_cells[0].dow:0;
-  // Shade relative to the athlete's 85th-percentile day (NOT the single max):
-  // shading to the max meant one outlier/garbage day pushed every real ~52-TSS
-  // day into r<0.25 -> all the same darkest green (the "flat" bug). A percentile
-  // reference spreads typical days across the full Less->More gradient.
-  var _tv=_cells.map(function(c){return c.tss||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
+  // Shade by each day's ROBUST load (real TSS or moving-time proxy), relative to
+  // the athlete's 85th-percentile active day. Coloring by real TSS alone made it
+  // one flat green — garbage/missing TSS collapsed most ride-days to 0. Using
+  // load (never 0 on a ride-day) + a percentile reference spreads typical days
+  // across the full Less->More gradient regardless of an outlier day.
+  var _tv=_cells.map(function(c){return c.load||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
   var _ref=_tv.length?_tv[Math.min(_tv.length-1,Math.floor(_tv.length*0.85))]:0; if(!(_ref>0)) _ref=1;
-  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.tss||0)/_ref;
+  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.load||0)/_ref;
     return r>=0.85?'#4ade80':r>=0.55?'#22c55e':r>=0.28?'#15803d':'#0f5132'; }
   var cellSquares='';
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
@@ -23934,7 +23941,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-ctl-guard+heatmap-fix';
+window.__BUILD__ = '2026-07-16-heatmap-load-shade';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
