@@ -3297,13 +3297,32 @@ function gpsGet(key){
     return fetch(fbGpsUrl_(key, token));
   }).then(function(r){ return (r && r.ok) ? r.json() : null; }).catch(function(){ return null; });
 }
+// Resolve a ride's GPS by the key it ACTUALLY has, tolerating legacy key formats.
+// The canonical key is rideKey(r) = 's'+stravaId, and writes use it — but if any
+// track was ever stored under a bare stravaId or 'strava_<id>', this finds it so
+// a format drift can't blank every map. Tries alternates only if the first is
+// empty, so matching keys stay a single read. Returns the first payload with
+// actual data (lats/streams), else null.
+function gpsGetAny_(r){
+  if(!r) return Promise.resolve(null);
+  var keys=[], rk=rideKey(r); if(rk) keys.push(rk);
+  if(r.stravaId!=null){ ['s'+r.stravaId, ''+r.stravaId, 'strava_'+r.stravaId].forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); }); }
+  var i=0;
+  function next(){
+    if(i>=keys.length) return Promise.resolve(null);
+    return gpsGet(keys[i++]).then(function(p){
+      return (p && (p.lats || p.gpsLats || p.chartEle || p.chartPwr || p.chartHR)) ? p : next();
+    });
+  }
+  return next();
+}
 // Lazy-load a ride's heavy GPS/chart streams from /gps/{rideKey} onto the ride
 // object. Resolves once populated (or confirmed unavailable). No-op if the ride
 // already carries GPS in-blob (legacy rides / freshly imported this session).
 function ensureRideGps(r){
   if(!r) return Promise.resolve(r);
   if((r.lats && r.lats.length) || (r.gpsLats && r.gpsLats.length)) return Promise.resolve(r);
-  return gpsGet(rideKey(r)).then(function(p){
+  return gpsGetAny_(r).then(function(p){
     if(p){
       if(p.lats) r.lats = p.lats;
       if(p.lons) r.lons = p.lons;
@@ -3329,7 +3348,7 @@ function ensureRideStreams(r){
   function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
   function maxOf(arr,cap){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v<cap && v>m) m=v; } return m||null; }
   // 1) Cache: streams may already sit in /gps from a prior session/device.
-  return gpsGet(rideKey(r)).then(function(p){
+  return gpsGetAny_(r).then(function(p){
     if(p){
       if(p.lats && !(r.lats&&r.lats.length)) r.lats=p.lats;
       if(p.lons && !(r.lons&&r.lons.length)) r.lons=p.lons;
@@ -24032,7 +24051,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-patch-merge';
+window.__BUILD__ = '2026-07-16-gps-key-fallback';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
