@@ -3309,7 +3309,7 @@ function deglitchTrack_(ll){
     var dab=Math.hypot(b[0]-a[0], b[1]-a[1]);
     var dbc=Math.hypot(c[0]-b[0], c[1]-b[1]);
     var dac=Math.hypot(c[0]-a[0], c[1]-a[1]);
-    // spike: b is far from both a and c, but a and c are near each other
+    // single-point spike: b is far from both a and c, but a and c are near
     if(dab>0.0006 && dbc>0.0006 && dac < 0.4*(dab+dbc)) continue;
     out.push(b);
   }
@@ -3612,12 +3612,18 @@ function runZoneBackfill(){
 // Fetches only the latlng stream (1 call/ride), downsamples, writes to
 // /gps/s<stravaId>. Skips indoor + non-GPS sports. Firebase reads (does the
 // track already exist?) are unlimited; only the Strava fetches are rate-limited.
+// A ride is GPS-drawable if Strava can return a latlng track for it. That
+// INCLUDES virtual rides (Zwift renders a Watopia/route track) — so they draw
+// consistently instead of some showing a map and some "No GPS data". Excludes
+// only genuinely track-less sports (weights/workout/etc) and real indoor-trainer
+// rides (non-virtual, no GPS).
 function rideMayHaveGps_(r){
   if(!r || r.deleted || !r.stravaId) return false;
-  if(typeof rideIsIndoor==='function' && rideIsIndoor(r)) return false;
   var s=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||'')).toLowerCase();
-  if(/virtual|weight|workout|yoga|crossfit|elliptical|stair|strength|pilates|swim|rockclimb|lifting/.test(s)) return false;
-  return true;   // Ride/Run/Hike/Walk/Gravel/MTB/etc — GPS-capable
+  if(/weight|workout|yoga|crossfit|elliptical|stair|strength|pilates|swim|rockclimb|lifting/.test(s)) return false;
+  if(/virtual/.test(s)) return true;                         // Zwift etc — has a virtual track
+  if(typeof rideIsIndoor==='function' && rideIsIndoor(r)) return false;  // real trainer ride, no GPS
+  return true;
 }
 var _gpsBackfill={running:false, stop:false};
 function gpsBackfillCandidates_(){ return (st.rides||[]).filter(rideMayHaveGps_); }
@@ -3648,29 +3654,35 @@ function runGpsBackfill(force){
       var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl);
       return true;
     }
-    function fetchAndWrite(r){
+    var _429=0;                                             // consecutive rate-limit hits (reset on success)
+    function fetchAndWrite(r){                               // resolves after advancing i; throws 'rl'/'auth'
       var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true';
       return fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
-        if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
-        if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
+        if(x.status===429){ throw 'rl'; }
+        if(x.status===401){ throw 'auth'; }
         return x.ok?x.json():null;
       }).then(function(j){
+        _429=0;
         var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
         if(ll && writeTrack(r, ll)) healed++; else noTrack++;
         if(healed && healed%20===0){ try{ sv(); }catch(e){} }
-        setTimeout(step, 1100);                             // rate-limit spacing between Strava fetches
+        i++; setTimeout(step, 1100);                         // rate-limit spacing between Strava fetches
       });
     }
     function step(){
       if(_gpsBackfill.stop) return finish('Stopped');
       if(i>=list.length) return finish('Complete');
-      var r=list[i++];
-      say('Checking '+i+'/'+total+'… '+(force?'re-drew ':'healed ')+healed+(noTrack?(', '+noTrack+' no-track'):''));
-      if(force){ fetchAndWrite(r).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); }); return; }
-      gpsGetAny_(r).then(function(p){                       // already has a track? (free Firebase read)
-        if(p && p.lats && p.lats.length){ already++; setTimeout(step, 0); return null; }
-        return fetchAndWrite(r);
-      }).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); });
+      var r=list[i];
+      say('Checking '+(i+1)+'/'+total+'… '+(force?'re-drew ':'healed ')+healed+(noTrack?(', '+noTrack+' no-track'):''));
+      var run = force ? fetchAndWrite(r)
+        : gpsGetAny_(r).then(function(p){ if(p && p.lats && p.lats.length){ already++; i++; setTimeout(step, 0); return; } return fetchAndWrite(r); });
+      run.catch(function(e){
+        if(e==='auth'){ finish('Strava auth expired (reconnect)'); return; }
+        if(e==='rl'){ _429++;                                // retry-on-429: back off 60s and retry the SAME ride
+          if(_429>20){ finish('Repeated rate limits — paused'); return; }
+          say('Strava rate limit at '+(i+1)+'/'+total+' — waiting 60s (retry '+_429+'), or Stop.'); setTimeout(step, 60000); return; }
+        err++; i++; setTimeout(step, 1100);
+      });
     }
     step();
   });
@@ -14677,20 +14689,18 @@ function openDesktopRideDetail(idx, _noFetch){
   if(rpEl) rpEl.style.display='flex';
   var r=st.rides[idx];
   if(!r) return;
-  // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
-  if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openDesktopRideDetail(idx); }); return; }
-  // Strava-synced rides have summary scalars but no streams — fetch altitude/
-  // watts/HR/cadence/velocity + laps on demand, cache to /gps, then re-open.
-  // Re-fetch streams/GPS if missing. GPS is gated on SUCCESS, not attempt: only
-  // mark _gpsTried once a track actually landed, so an empty re-fetch retries on
-  // the NEXT (fresh) open — not in a rapid loop. The re-open passes _noFetch=true
-  // to render with whatever landed without re-triggering the guard. Skip indoor
-  // rides (no GPS to fetch).
+  // Re-fetch streams/GPS if missing. The GPS decision keys off r.lats being EMPTY
+  // — NOT a _gpsTried/_streamsTried flag — so a ride that fetched streams
+  // (HR/power) but got no track (e.g. was fetched before latlng was in the
+  // request) still re-fetches the track. ensureRideStreams reads /gps first, then
+  // pulls the latlng-bearing Strava streams. The re-open passes _noFetch=true to
+  // render with whatever landed without a rapid loop; a fresh user open
+  // re-attempts. Indoor rides are skipped (no GPS to fetch).
   var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
-  var _wantGps=!(r.lats&&r.lats.length) && !r._gpsTried && (typeof rideIsIndoor!=='function' || !rideIsIndoor(r));
+  var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
   if(!_noFetch && r.stravaId && (_wantStr || _wantGps)){
     if(_wantStr) r._streamsTried=true;
-    ensureRideStreams(r).then(function(){ if(r.lats&&r.lats.length) r._gpsTried=true; openDesktopRideDetail(idx, true); });
+    ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx, true); });
     return;
   }
   var FTP=parseInt(st.ftp||186);
@@ -15237,17 +15247,15 @@ window.addEventListener('load', function(){
 function openRideDetail(idx, _noFetch){
   var r = st.rides[idx];
   if(!r) return;
-  // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
-  if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openRideDetail(idx); }); return; }
-  // Strava-synced rides: lazy-fetch streams + laps on demand (cached to /gps).
-  // GPS gated on SUCCESS (only lock _gpsTried once a track landed) so an empty
-  // re-fetch retries on the next fresh open; re-open passes _noFetch to avoid a
-  // rapid loop. Skip indoor rides.
+  // GPS re-fetch keys off r.lats being EMPTY (not a _gpsTried flag), so a ride
+  // that fetched streams but no track still re-fetches latlng. ensureRideStreams
+  // reads /gps then pulls the latlng-bearing streams; re-open passes _noFetch to
+  // avoid a rapid loop. Skip indoor rides.
   var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
-  var _wantGps=!(r.lats&&r.lats.length) && !r._gpsTried && (typeof rideIsIndoor!=='function' || !rideIsIndoor(r));
+  var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
   if(!_noFetch && r.stravaId && (_wantStr || _wantGps)){
     if(_wantStr) r._streamsTried=true;
-    ensureRideStreams(r).then(function(){ if(r.lats&&r.lats.length) r._gpsTried=true; openRideDetail(idx, true); });
+    ensureRideStreams(r).then(function(){ openRideDetail(idx, true); });
     return;
   }
   var old = document.getElementById('ride-detail-modal');
@@ -15821,22 +15829,35 @@ function renderRideMap_(mapId, lats, lons, opts){
   var pts=nt.lats.map(function(la,i){ return [la,nt.lons[i]]; });
   var map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
   addRideMapBase_(map);
-  // 1) Dark casing under the whole route — the halo that keeps the line
-  //    legible over busy satellite imagery. Drawn first so it sits beneath.
-  L.polyline(pts,{color:'#0a0e17',weight:8,opacity:.6,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  // 2) Bold sport-colored route on top, optionally recolored per segment.
+  // Split the track at RECORDING GAPS (pause/resume, lap-restart) — draw each run
+  // as its own polyline so we lift the pen instead of chording across the gap.
+  // A jump counts as a gap only if it dwarfs the track's own typical step, so
+  // DP's legitimate long straights are NOT split. Both endpoints stay (no data
+  // removed — this is purely how the line is drawn).
+  var _sl=[]; for(var _i=1;_i<pts.length;_i++) _sl.push(Math.hypot(pts[_i][0]-pts[_i-1][0], pts[_i][1]-pts[_i-1][1]));
+  var _ss=_sl.slice().sort(function(a,b){return a-b;}); var _med=_ss.length?_ss[Math.floor(_ss.length/2)]:0;
+  var _gapTh=Math.max(0.005, _med*12);
+  var runs=[], _rs=0;
+  for(var i=1;i<pts.length;i++){ if(Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1])>_gapTh){ if(i-1>_rs) runs.push([_rs,i-1]); _rs=i; } }
+  if(pts.length-1>_rs) runs.push([_rs,pts.length-1]);
+  if(!runs.length) runs=[[0,pts.length-1]];
+  // 1) Dark casing under each run — halo that keeps the line legible.
+  runs.forEach(function(rr){ if(rr[1]>rr[0]) L.polyline(pts.slice(rr[0],rr[1]+1),{color:'#0a0e17',weight:8,opacity:.6,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map); });
+  // 2) Bold sport-colored route on top, per run, optionally recolored per segment.
   var sportColor=opts.color||'#FC4C02';
+  var den=Math.max(1,pts.length-1);
   if(typeof opts.colorAt==='function'){
-    var den=Math.max(1,pts.length-1);
-    var cur=opts.colorAt(0,pts,0)||sportColor, seg=[pts[0]];
-    for(var i=1;i<pts.length;i++){
-      var col=opts.colorAt(i,pts,i/den)||sportColor;
-      if(col!==cur && seg.length>1){ L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); seg=[seg[seg.length-1]]; cur=col; }
-      seg.push(pts[i]);
-    }
-    if(seg.length>1) L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
+    runs.forEach(function(rr){
+      var cur=opts.colorAt(rr[0],pts,rr[0]/den)||sportColor, seg=[pts[rr[0]]];
+      for(var i=rr[0]+1;i<=rr[1];i++){
+        var col=opts.colorAt(i,pts,i/den)||sportColor;
+        if(col!==cur && seg.length>1){ L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); seg=[seg[seg.length-1]]; cur=col; }
+        seg.push(pts[i]);
+      }
+      if(seg.length>1) L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
+    });
   } else {
-    L.polyline(pts,{color:sportColor,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
+    runs.forEach(function(rr){ if(rr[1]>rr[0]) L.polyline(pts.slice(rr[0],rr[1]+1),{color:sportColor,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); });
   }
   // 3) direction chevrons, 4) start/finish pins, 5) lap markers
   addRideChevrons_(map,pts);
@@ -17777,7 +17798,7 @@ function renderRun(){
         }
         var have=(rr.gpsLats&&rr.gpsLats.length>5)||(rr.lats&&rr.lats.length>5);
         if(have){ drawMap(); }
-        else if(typeof ensureRideGps==='function' && !rr._gpsTried){ rr._gpsTried=true; ensureRideGps(rr).then(drawMap); }
+        else if(rr.stravaId && typeof ensureRideStreams==='function'){ ensureRideStreams(rr).then(drawMap); }  // keyed off empty track, fetches latlng
       })(r, mapSlot);
 
       // HR warning
@@ -24317,7 +24338,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-wkg-movable-marker';
+window.__BUILD__ = '2026-07-16-gap-split-renderer';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
