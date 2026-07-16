@@ -13152,19 +13152,31 @@ function dsShowAnalytics(){
       // only reshapes the chart line.
       var _smooth=function(a,w){ w=w||5; var h=(w-1)/2, out=[]; for(var i=0;i<a.length;i++){ var s=0,n=0; for(var j=Math.max(0,i-h);j<=Math.min(a.length-1,i+h);j++){ s+=a[j]; n++; } out.push(Math.round(s/n*10)/10); } return out; };
       var ctlS=_smooth(ctlArr,7), atlS=_smooth(atlArr,7), tsbS=_smooth(tsbArr,7);
+      // Destroy any prior chart bound to this canvas id — otherwise Chart.js
+      // throws "Canvas is already in use" on every re-render (nav away + back),
+      // which aborted drawCharts before the smoothed config ever applied.
+      try{ var _exF=Chart.getChart&&Chart.getChart(gc); if(_exF) _exF.destroy(); }catch(e){}
+      try{
       new Chart(gc,{type:'line',data:{labels:labels,datasets:[
         {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
       ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=6; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
+      }catch(e){ try{ console.error('fitness chart draw failed', e); }catch(_){} }
     }
     var dc=document.getElementById('ds-dist-chart');
     if(dc&&typeof Chart!=='undefined'){
+      try{ var _exD=Chart.getChart&&Chart.getChart(dc); if(_exD) _exD.destroy(); }catch(e){}
+      try{
       new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#3b82f6':'rgba(59,130,246,.45)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
+      }catch(e){ try{ console.error('dist chart draw failed', e); }catch(_){} }
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
+      try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
+      try{
       new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#a855f7',backgroundColor:'rgba(168,85,247,.16)',borderWidth:2.5,fill:true,tension:0.35,pointRadius:2,pointBackgroundColor:'#a855f7'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
+      }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
     }
   }
   setTimeout(drawCharts,100);
@@ -23856,7 +23868,11 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
+window.__BUILD__ = '2026-07-16-goals+canvas-destroy';
+try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
+  // Build stamp — read window.__BUILD__ in the console to confirm you are on
+  // the latest deploy (settles "is it serving stale code?" instantly).
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
