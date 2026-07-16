@@ -14218,23 +14218,51 @@ function dsAttentionState_(d){
   var maxSev=(d.items||[]).reduce(function(m,it){return Math.max(m,it.sev);},0);
   d.state=maxSev>=2?'red':(maxSev>=1?'yellow':'green');
 }
-// Weather signals are async — fetch, append real items, re-classify, then re-render.
+// Weather + equipment signals are async — fetch, append REAL items, re-classify,
+// then re-render. UV comes from the forecast; air quality (US AQI) from open-meteo
+// air-quality API; both are real, not invented. Equipment reads live chain wear
+// (bike odometer vs a user-recorded wax mileage) — only fires when tracking is on.
 function dsAttentionWeather_(d, cb){
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=apparent_temperature,windspeed_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-    .then(function(r){return r.json();})
-    .then(function(w){
-      var c=w&&w.current, calm=true;
-      if(c){
-        var feels=Math.round(c.apparent_temperature), wind=Math.round(c.windspeed_10m), pop=c.precipitation_probability;
-        if(feels>=100){ d.items.push({sev:2,cat:'env',text:'Extreme heat — feels like '+feels+'. Heat this high sharply cuts sustainable power; move the ride earlier, shorten it, or take it indoors.'}); calm=false; }
-        else if(feels>=90){ d.items.push({sev:1,cat:'env',text:'High heat — feels like '+feels+'. Expect it to shave noticeable watts; start conservative and hydrate early.'}); calm=false; }
-        if(wind>=16){ d.items.push({sev:1,cat:'env',text:'Strong winds ('+wind+' mph) — plan the return leg into the headwind and avoid chasing power on the exposed roads.'}); calm=false; }
-        if(pop!=null && pop>=55){ d.items.push({sev:1,cat:'env',text:'Rain likely ('+pop+' percent) — pack a shell and mind wet corners, or consider the trainer.'}); calm=false; }
-      }
-      if(calm) d.positives.push('Weather looks good');
-      dsAttentionState_(d);
-      if(cb) cb(d);
-    }).catch(function(){ if(cb) cb(d); });
+  var wxUrl='https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=apparent_temperature,windspeed_10m,precipitation_probability,uv_index&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1';
+  var aqUrl='https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681&current=us_aqi&timezone=America%2FChicago';
+  Promise.all([
+    fetch(wxUrl).then(function(r){return r.json();}).catch(function(){return null;}),
+    fetch(aqUrl).then(function(r){return r.json();}).catch(function(){return null;})
+  ]).then(function(res){
+    var c=res[0]&&res[0].current, aq=res[1]&&res[1].current, calm=true;
+    if(c){
+      var feels=Math.round(c.apparent_temperature), wind=Math.round(c.windspeed_10m), pop=c.precipitation_probability, uv=(c.uv_index!=null?Math.round(c.uv_index):null);
+      if(feels>=100){ d.items.push({sev:2,cat:'env',text:'Extreme heat — feels like '+feels+'. Heat this high sharply cuts sustainable power; move the ride earlier, shorten it, or take it indoors.'}); calm=false; }
+      else if(feels>=90){ d.items.push({sev:1,cat:'env',text:'High heat — feels like '+feels+'. Expect it to shave noticeable watts; start conservative and hydrate early.'}); calm=false; }
+      if(wind>=16){ d.items.push({sev:1,cat:'env',text:'Strong winds ('+wind+' mph) — plan the return leg into the headwind and avoid chasing power on the exposed roads.'}); calm=false; }
+      if(pop!=null && pop>=55){ d.items.push({sev:1,cat:'env',text:'Rain likely ('+pop+' percent) — pack a shell and mind wet corners, or consider the trainer.'}); calm=false; }
+      if(uv!=null && uv>=8){ d.items.push({sev:1,cat:'env',text:'UV index is very high ('+uv+') — cover up, sunscreen early, and take extra care on long exposed climbs.'}); calm=false; }
+    }
+    if(aq && aq.us_aqi!=null){
+      var aqi=Math.round(aq.us_aqi);
+      if(aqi>=150){ d.items.push({sev:2,cat:'env',text:'Air quality is unhealthy (AQI '+aqi+') — hard efforts outdoors are not worth it today; take it indoors or go very easy.'}); calm=false; }
+      else if(aqi>=100){ d.items.push({sev:1,cat:'env',text:'Air quality is elevated (AQI '+aqi+') — fine for easy riding, but back off hard intervals and watch for irritation.'}); calm=false; }
+    }
+    if(calm) d.positives.push('Weather looks good');
+    // Equipment — live chain wear per bike (only if the user recorded a wax mileage).
+    try{
+      (st.bikes||[]).forEach(function(b){
+        var ch=bikeChain_(b); if(!ch) return;
+        if(ch.pct>=1.0) d.items.push({sev:2,cat:'equip',text:b.name+' chain is past its interval ('+ch.milesSince+' of '+ch.life+' mi) — re-wax or replace before the next hard ride.'});
+        else if(ch.pct>=0.8) d.items.push({sev:1,cat:'equip',text:b.name+' chain is at '+Math.round(ch.pct*100)+' percent of its wax interval — about '+Math.max(0,ch.life-ch.milesSince)+' mi left; plan a re-wax soon.'});
+      });
+    }catch(e){}
+    dsAttentionState_(d);
+    if(cb) cb(d);
+  }).catch(function(){ if(cb) cb(d); });
+}
+// Live chain wear from the bike odometer vs a user-recorded wax mileage. Returns
+// null when tracking is not set up (so we never surface seeded/fake wear numbers).
+function bikeChain_(b){
+  if(!b || b.chainWaxedAtMi==null || b.miles==null) return null;
+  var life=parseFloat(b.chainLifeMi)||1500;
+  var milesSince=Math.max(0, Math.round((parseFloat(b.miles)-parseFloat(b.chainWaxedAtMi))*10)/10);
+  return {milesSince:milesSince, life:life, pct:(life>0?milesSince/life:0)};
 }
 // Renderer — green / yellow / red, capped at 5, most-severe first. Self-contained
 // (no dashboard-local helpers) so async callbacks can re-render the same node.
@@ -14690,6 +14718,12 @@ function dsShowDashboard(){
   var whum=div(''); whum.appendChild(div('font-size:10px;color:#64748b','Humidity'));
   var whv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); whv.id='ds-wx-hum';
   whum.appendChild(whv); wgrid.appendChild(whum);
+  var wuv=div(''); wuv.appendChild(div('font-size:10px;color:#64748b','UV Index'));
+  var wuvv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); wuvv.id='ds-wx-uv';
+  wuv.appendChild(wuvv); wgrid.appendChild(wuv);
+  var waq=div(''); waq.appendChild(div('font-size:10px;color:#64748b','Air Quality'));
+  var waqv=div('font-size:11px;font-weight:600;color:#e2e8f0','--'); waqv.id='ds-wx-aqi';
+  waq.appendChild(waqv); wgrid.appendChild(waq);
 
   wc.appendChild(wgrid); r3.appendChild(wc);
   body.appendChild(r3);
@@ -14939,8 +14973,8 @@ function dsShowDashboard(){
   mc.innerHTML='';
   mc.appendChild(shell);
 
-  // Live weather
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,windspeed_10m,relativehumidity_2m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+  // Live weather (now incl. real UV index) + real US air-quality index.
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,windspeed_10m,relativehumidity_2m,winddirection_10m,uv_index&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
     .then(function(r){return r.json();})
     .then(function(data){
       if(data&&data.current){
@@ -14952,7 +14986,16 @@ function dsShowDashboard(){
         var fls=document.getElementById('ds-wx-feels'); if(fls&&c.apparent_temperature!=null) fls.textContent='Feels like '+Math.round(c.apparent_temperature)+'°';
         var wnd=document.getElementById('ds-wx-wind'); if(wnd) wnd.textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
         var hum=document.getElementById('ds-wx-hum'); if(hum) hum.textContent=Math.round(c.relativehumidity_2m)+'%';
+        var uvEl=document.getElementById('ds-wx-uv');
+        if(uvEl && c.uv_index!=null){ var uvv=Math.round(c.uv_index); uvEl.textContent=uvv+' ('+(uvv>=8?'Very High':uvv>=6?'High':uvv>=3?'Moderate':'Low')+')'; uvEl.style.color=uvv>=8?'#ef4444':uvv>=6?'#f59e0b':'#e2e8f0'; }
       }
+    }).catch(function(){});
+  fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681&current=us_aqi&timezone=America%2FChicago')
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var aqi=data&&data.current&&data.current.us_aqi;
+      var el=document.getElementById('ds-wx-aqi');
+      if(el && aqi!=null){ aqi=Math.round(aqi); el.textContent=aqi+' ('+(aqi>=150?'Unhealthy':aqi>=100?'Moderate':'Good')+')'; el.style.color=aqi>=150?'#ef4444':aqi>=100?'#f59e0b':'#4ade80'; }
     }).catch(function(){});
 }
 
@@ -17059,11 +17102,17 @@ function openBikeEditor(idx, onSaved){
     +'<div style="flex:1"><div style="'+lc+'">Power meter</div><input id="bk-power" type="text" placeholder="e.g. Assioma DUO" value="'+(existing?esc(existing.power):'')+'" style="'+fc+'"></div></div>'
     +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Owned from</div><input id="bk-from" type="date" value="'+(existing?esc(existing.ownedFrom):'')+'" style="'+fc+'"></div>'
     +'<div style="flex:1"><div style="'+lc+'">Owned to <span style="text-transform:none;font-weight:400;color:#64748b">(blank = current)</span></div><input id="bk-to" type="date" value="'+(existing?esc(existing.ownedTo):'')+'" style="'+fc+'"></div></div>'
+    +'<div style="'+lc+'">Drivetrain</div>'
+    +'<div style="display:flex;gap:10px;margin-bottom:6px"><div style="flex:1"><div style="font-size:10px;color:#64748b;margin-bottom:4px">Chain waxed at (odometer mi)</div><input id="bk-chainwax" type="number" placeholder="'+(existing&&existing.miles!=null?Math.round(existing.miles):'e.g. 3200')+'" value="'+(existing&&existing.chainWaxedAtMi!=null?esc(existing.chainWaxedAtMi):'')+'" style="'+fc+'"></div>'
+    +'<div style="flex:1"><div style="font-size:10px;color:#64748b;margin-bottom:4px">Chain life (mi)</div><input id="bk-chainlife" type="number" placeholder="1500" value="'+(existing&&existing.chainLifeMi!=null?esc(existing.chainLifeMi):'')+'" style="'+fc+'"></div></div>'
+    +(existing&&existing.miles!=null?'<div id="bk-usecurrent" style="font-size:10px;color:#4ade80;margin:0 0 16px;cursor:pointer">Odometer now: '+Math.round(existing.miles)+' mi &middot; tap to mark waxed at current mileage</div>':'<div style="font-size:10px;color:#64748b;margin:0 0 16px">Set a wax mileage to track live chain wear.</div>')
     +'<div style="margin-bottom:16px"><div style="'+lc+'">Photo</div>'
     +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:#0d0f14;background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,#252d40);margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px">'+(photoData?'':'No photo')+'</div>'
     +'<input id="bk-photo" type="file" accept="image/*" style="font-size:12px;color:var(--t2,#94a3b8)"></div>';
 
   setTimeout(function(){
+    var uc=document.getElementById('bk-usecurrent');
+    if(uc && existing && existing.miles!=null) uc.onclick=function(){ var w=document.getElementById('bk-chainwax'); if(w){ w.value=Math.round(existing.miles); toast('Chain marked waxed at '+Math.round(existing.miles)+' mi'); } };
     var pf=document.getElementById('bk-photo');
     if(pf) pf.addEventListener('change',function(){
       var f=pf.files&&pf.files[0]; if(!f) return;
@@ -17098,6 +17147,12 @@ function openBikeEditor(idx, onSaved){
       components:(existing&&existing.components)||[]
     };
     if(existing){ ['stravaGearId','miles','elevationFt','longestMi','avgSpeed'].forEach(function(k){ if(existing[k]!=null && bike[k]==null) bike[k]=existing[k]; }); }
+    // Live chain-wear tracking (real: bike odometer vs the wax mileage). Empty
+    // waxed-at field = tracking off (so no fake/seeded wear ever shows).
+    var _cwEl=document.getElementById('bk-chainwax'), _clEl=document.getElementById('bk-chainlife');
+    var _cw=_cwEl?parseFloat(_cwEl.value):NaN, _cl=_clEl?parseFloat(_clEl.value):NaN;
+    if(!isNaN(_cw)) bike.chainWaxedAtMi=_cw;
+    if(!isNaN(_cl) && _cl>0) bike.chainLifeMi=_cl;
     if(idx!==undefined && idx!==null) st.bikes[idx]=bike; else st.bikes.push(bike);
     sv(); modal.remove(); refresh(); toast('Bike saved');
   };
@@ -24846,7 +24901,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-attention-ai-narration';
+window.__BUILD__ = '2026-07-16-layer3-uv-aqi-gear';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
