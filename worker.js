@@ -12816,18 +12816,27 @@ function rideZoneTime_(r, ftp){
 // last resort, curve-estimated) time-in-zone. Zone edges are %FTP — FLAGGED,
 // since FTP is a stale manual value. Rides with no power are EXCLUDED.
 function dsPowerDist_(rides, ftp){
-  ftp=ftp||186; var buckets=[0,0,0,0,0], nRides=0, nMeas=0, nEst=0;
+  ftp=ftp||186;
+  var real=[0,0,0,0,0], curve=[0,0,0,0,0], nReal=0, nCurve=0;
   (rides||[]).forEach(function(r){
     var zt=rideZoneTime_(r, ftp); if(!zt) return;
-    for(var i=0;i<5;i++) buckets[i]+=(zt.z[i]||0);
-    nRides++; if(zt.src==='curve') nEst++; else nMeas++;
+    var tgt=(zt.src==='curve')?curve:real;
+    for(var i=0;i<5;i++) tgt[i]+=(zt.z[i]||0);
+    if(zt.src==='curve') nCurve++; else nReal++;
   });
-  var total=buckets.reduce(function(s,x){return s+x;},0);
-  if(!total) return {hasData:false, nRides:0};
+  var rTot=real.reduce(function(s,x){return s+x;},0), cTot=curve.reduce(function(s,x){return s+x;},0);
+  var _p=function(a,t){ return t>0?a.map(function(x){return Math.round(x/t*100);}):null; };
   var labels=['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2+'];
   var cols=['#64748b','#3b82f6','#22c55e','#f59e0b','#ef4444'];
-  return {hasData:true, nRides:nRides, nMeas:nMeas, nEst:nEst,
-    zones:labels.map(function(l,i){ return {label:l, pct:Math.round(buckets[i]/total*100), color:cols[i]}; })};
+  // Display REAL zone-seconds (z1s..z6s / stream) ONLY. A mean-max power curve
+  // cannot recover time-in-zone — it dumps a >1h ride's excess into Z1 and a
+  // <1h ride into Z4/Z5 — so curve-estimate rides are EXCLUDED from the split
+  // rather than fabricating a distribution. realPct/curvePct exposed for the
+  // diagnosis (they diverge hard, which is the proof the estimate was the bug).
+  var out={hasData:rTot>0, nRides:nReal, nReal:nReal, nCurve:nCurve,
+    realPct:_p(real,rTot), curvePct:_p(curve,cTot)};
+  if(rTot>0) out.zones=labels.map(function(l,i){ return {label:l, pct:Math.round(real[i]/rTot*100), color:cols[i]}; });
+  return out;
 }
 // Daily ride presence + intensity for the consistency heatmap. TSS guarded by
 // constRideTSS_ so a garbage import value can't max out a day; presence (n) is
@@ -12874,13 +12883,12 @@ function dsShowAnalytics(){
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||162.5);
 
-  // Compute last 90 days of data
+  // ---- Range selector (7D/4W/12W/6M/1Y) drives the time-windowed views -------
+  var RANGE=(st.anRange&&/^(7D|4W|12W|6M|1Y)$/.test(st.anRange))?st.anRange:'12W';
+  var RDAYS={'7D':7,'4W':28,'12W':84,'6M':182,'1Y':365}[RANGE];
+  var RLABEL={'7D':'Last 7 Days','4W':'Last 4 Weeks','12W':'Last 12 Weeks','6M':'Last 6 Months','1Y':'Last Year'}[RANGE];
+  var CMP=!!st.anCompare;
   var now=new Date();
-  var days90=[];
-  for(var i=89;i>=0;i--){
-    var d=new Date(now); d.setDate(d.getDate()-i);
-    days90.push(normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()));
-  }
 
   // TSS by date
   var tssByDate={};
@@ -12890,23 +12898,31 @@ function dsShowAnalytics(){
     tssByDate[nd]=(tssByDate[nd]||0)+(parseFloat(r.tss)||0);
   });
 
-  // Compute CTL/ATL/TSB
-  var ctl=0,atl=0;
-  var ctlArr=[],atlArr=[],tsbArr=[],labels=[];
-  days90.forEach(function(d){
-    var tss=tssByDate[d]||0;
-    ctl=ctl+(tss-ctl)/42;
-    atl=atl+(tss-atl)/7;
-    ctlArr.push(Math.round(ctl*10)/10);
-    atlArr.push(Math.round(atl*10)/10);
-    tsbArr.push(Math.round((ctl-atl)*10)/10);
-    labels.push(d.slice(5)); // MM-DD
-  });
+  // CTL/ATL/TSB — seed the EMA over RDAYS+42 days of history, then DISPLAY only
+  // the selected window, so a short range (7D) still shows correctly-seeded
+  // fitness instead of an EMA restarting from zero.
+  // Fixed long seed (>=220d) so the 42-day EMA is fully converged and today's
+  // CTL/ATL/TSB are the SAME regardless of the selected range — only the visible
+  // slice changes, never the values.
+  var SEED=Math.max(RDAYS+42, 220), ctl=0,atl=0, ctlAll=[],atlAll=[],tsbAll=[],labAll=[];
+  for(var _i=SEED-1;_i>=0;_i--){
+    var _d=new Date(now); _d.setDate(_d.getDate()-_i);
+    var _nd=normDate(_d.getFullYear()+'-'+(_d.getMonth()+1)+'-'+_d.getDate());
+    var _t=tssByDate[_nd]||0;
+    ctl=ctl+(_t-ctl)/42; atl=atl+(_t-atl)/7;
+    ctlAll.push(Math.round(ctl*10)/10); atlAll.push(Math.round(atl*10)/10);
+    tsbAll.push(Math.round((ctl-atl)*10)/10); labAll.push(_nd.slice(5));
+  }
+  var ctlArr=ctlAll.slice(-RDAYS), atlArr=atlAll.slice(-RDAYS), tsbArr=tsbAll.slice(-RDAYS), labels=labAll.slice(-RDAYS);
 
-  // Weekly distance last 12 weeks
-  var weekDist=[];
-  var weekLabels=[];
-  for(var w=11;w>=0;w--){
+  // Rides within the selected window — drives Power Distribution.
+  var _rcut=new Date(now); _rcut.setDate(_rcut.getDate()-RDAYS);
+  var rangeRides=rides.filter(function(r){ if(!r||!r.date) return false; var _rd=new Date(normDate(r.date)); return !isNaN(_rd) && _rd>=_rcut; });
+
+  // Weekly distance — number of weeks follows the range (1..52).
+  var _nWk=Math.min(52,Math.max(1,Math.ceil(RDAYS/7)));
+  var weekDist=[], weekLabels=[];
+  for(var w=_nWk-1;w>=0;w--){
     var wStart=new Date(now); wStart.setDate(wStart.getDate()-w*7-6);
     var wEnd=new Date(now); wEnd.setDate(wEnd.getDate()-w*7);
     var wDist=0;
@@ -12916,7 +12932,7 @@ function dsShowAnalytics(){
       if(rd>=wStart&&rd<=wEnd) wDist+=parseFloat(r.distance)||0;
     });
     weekDist.push(Math.round(wDist));
-    weekLabels.push('W'+(12-w));
+    weekLabels.push('W'+(_nWk-w));
   }
 
   // W/kg — the KPI is the category metric FTP ÷ weight (Chase 1 = 3.14), which
@@ -12937,6 +12953,22 @@ function dsShowAnalytics(){
   mc.innerHTML='';
   var wrap=document.createElement('div');
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:12px 16px;box-sizing:border-box;gap:10px';
+
+  // -- RANGE TOOLBAR (mockup top-right): date-window label + Compare toggle +
+  //    7D/4W/12W/6M/1Y segmented control. Selecting a range persists st.anRange
+  //    and re-renders; the window drives Training Load, Weekly Distance and
+  //    Power Distribution.
+  var _rbtns=['7D','4W','12W','6M','1Y'].map(function(rk){ var on=(rk===RANGE);
+    return '<button onclick="st.anRange=&#39;'+rk+'&#39;;sv();dsShowAnalytics()" style="background:'+(on?'#f97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+';border:none;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">'+rk+'</button>';
+  }).join('');
+  var toolbar=document.createElement('div');
+  toolbar.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0';
+  toolbar.innerHTML='<div style="font-size:12px;color:#94a3b8;font-weight:600">'+RLABEL+'</div>'
+    +'<div style="display:flex;align-items:center;gap:10px">'
+    +'<button onclick="st.anCompare=!st.anCompare;sv();dsShowAnalytics()" title="Show change over the selected window" style="display:flex;align-items:center;gap:5px;background:'+(CMP?'#f97316':'transparent')+';color:'+(CMP?'#fff':'#94a3b8')+';border:1px solid '+(CMP?'#f97316':'#2a3550')+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'
+    +'<div style="display:flex;gap:2px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:9px;padding:2px">'+_rbtns+'</div>'
+    +'</div>';
+  wrap.appendChild(toolbar);
 
   var _tc=teachCtx_();
   // Tappable teaching card builder (data-metric-teach -> the document-level
@@ -13047,11 +13079,13 @@ function dsShowAnalytics(){
   // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
   var fitnessCard=document.createElement('div');
   fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
-  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — Last 90 Days</div>'+
+  var _ctlDelta=(ctlArr.length?ctlArr[ctlArr.length-1]-ctlArr[0]:0), _up=_ctlDelta>=0;
+  var _cmpBadge=CMP?(' <span style="font-size:10px;font-weight:700;text-transform:none;color:'+(_up?'#22c55e':'#ef4444')+'">'+(_up?'\\u25b2':'\\u25bc')+' '+Math.abs(Math.round(_ctlDelta*10)/10)+' CTL vs start</span>'):'';
+  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — '+RLABEL+_cmpBadge+'</div>'+
     '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
   var distCard=document.createElement('div');
   distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
-  distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last 12 Weeks</div>'+
+  distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</div>'+
     '<div style="position:relative;height:140px"><canvas id="ds-dist-chart"></canvas></div>';
   var rowA=document.createElement('div');
   rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:10px;flex-shrink:0';
@@ -13068,28 +13102,35 @@ function dsShowAnalytics(){
       '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
     rowBcards.push(wkgCard);
   }
-  // Power Distribution (real: only rides with a power stream; %FTP zones)
-  var _pd=dsPowerDist_(rides, FTP);
+  // Power Distribution — REAL zone-seconds only (curve estimates excluded, they
+  // can't recover time-in-zone). %FTP zones use the current manual FTP.
+  var _pd=dsPowerDist_(rangeRides, FTP);
+  try{ console.log('[power-dist] real rides='+_pd.nReal+' split='+JSON.stringify(_pd.realPct)+' | curve rides='+_pd.nCurve+' split='+JSON.stringify(_pd.curvePct)+' (curve EXCLUDED — mean-max curve can\\u2019t derive time-in-zone) | FTP='+FTP); }catch(e){}
   var pdCard=document.createElement('div');
   pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
-    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?('Based on '+_pd.nRides+' rides with power'+(_pd.nEst?(' · '+_pd.nEst+' estimated from power curves'):'')+' · zones use your (manual) FTP'):'')+'</span></div>';
+    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?('Based on '+_pd.nReal+' rides with real zone data · zones use your (manual) FTP'):'')+'</span></div>';
   if(_pd.hasData){
     var pdBars=_pd.zones.map(function(z){
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
         +'<span style="font-size:11px;color:#94a3b8;width:104px;flex-shrink:0">'+z.label+'</span>'
-        +'<div style="flex:1;height:12px;background:#0d0f14;border-radius:6px;overflow:hidden"><div style="height:12px;background:'+z.color+';border-radius:6px;width:'+z.pct+'%"></div></div>'
+        +'<div style="flex:1;height:7px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
         +'<span style="font-size:11px;font-weight:700;color:#e2e8f0;width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
     }).join('');
     pdCard.innerHTML=pdHead+pdBars;
   } else {
-    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with power-zone data yet — power distribution needs power-meter data, so it stays empty rather than showing a fake split.</div>';
+    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with real power-zone data yet'+(_pd.nCurve?(' ('+_pd.nCurve+' rides have only a power curve, which can\\u2019t be split into real zone time)'):'')+' — stays empty rather than showing a fabricated split.</div>';
   }
   rowBcards.push(pdCard);
   // Ride Consistency heatmap (real: ride dates, last 26 weeks)
   var _cells=dsConsistency_(rides, 26*7, now, normDate);
   var _lead=_cells.length?_cells[0].dow:0;
-  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var t=c.tss||0; return t>=150?'#4ade80':t>=80?'#22c55e':t>=40?'#15803d':'#0f5132'; }
+  // Shade RELATIVE to this athlete's own busiest day, so a high-volume rider
+  // still gets a Less->More gradient instead of every ride-day pinning to the
+  // brightest green. Absolute TSS thresholds made it read as one flat green.
+  var _maxT=1; _cells.forEach(function(c){ if((c.tss||0)>_maxT) _maxT=c.tss; });
+  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.tss||0)/_maxT;
+    return r>=0.75?'#4ade80':r>=0.5?'#22c55e':r>=0.25?'#15803d':'#0f5132'; }
   var cellSquares='';
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
@@ -13124,10 +13165,10 @@ function dsShowAnalytics(){
   rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   goals.forEach(function(g){
     var gc=document.createElement('div');
-    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
-    gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
-      +'<div style="font-size:18px;font-weight:800;color:'+g.color+';margin-bottom:8px">'+g.val+'</div>'
-      +'<div style="height:8px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:8px;background:'+g.color+';border-radius:4px;width:'+Math.round(g.frac*100)+'%"></div></div>';
+    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0;min-height:82px;display:flex;flex-direction:column';
+    gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
+      +'<div style="font-size:15px;font-weight:800;line-height:1.1;color:'+g.color+';margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.val+'</div>'
+      +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden;margin-top:auto"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+Math.round(g.frac*100)+'%"></div></div>';
     rowC.appendChild(gc);
   });
   wrap.appendChild(rowC);
@@ -13151,31 +13192,32 @@ function dsShowAnalytics(){
       // CTL/ATL/TSB scalars shown in the gauges/cards are NOT touched — this
       // only reshapes the chart line.
       var _smooth=function(a,w){ w=w||5; var h=(w-1)/2, out=[]; for(var i=0;i<a.length;i++){ var s=0,n=0; for(var j=Math.max(0,i-h);j<=Math.min(a.length-1,i+h);j++){ s+=a[j]; n++; } out.push(Math.round(s/n*10)/10); } return out; };
-      var ctlS=_smooth(ctlArr,7), atlS=_smooth(atlArr,7), tsbS=_smooth(tsbArr,7);
+      var _sw=(RDAYS<=14?1:RDAYS<=42?3:7);   // adapt smoothing to the window
+      var ctlS=_smooth(ctlArr,_sw), atlS=_smooth(atlArr,_sw), tsbS=_smooth(tsbArr,_sw);
       // Destroy any prior chart bound to this canvas id — otherwise Chart.js
       // throws "Canvas is already in use" on every re-render (nav away + back),
       // which aborted drawCharts before the smoothed config ever applied.
       try{ var _exF=Chart.getChart&&Chart.getChart(gc); if(_exF) _exF.destroy(); }catch(e){}
       try{
       new Chart(gc,{type:'line',data:{labels:labels,datasets:[
-        {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:2.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:2.5,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
-      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=6; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
+        {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
+        {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:1.75,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
+      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=3; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
       }catch(e){ try{ console.error('fitness chart draw failed', e); }catch(_){} }
     }
     var dc=document.getElementById('ds-dist-chart');
     if(dc&&typeof Chart!=='undefined'){
       try{ var _exD=Chart.getChart&&Chart.getChart(dc); if(_exD) _exD.destroy(); }catch(e){}
       try{
-      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#3b82f6':'rgba(59,130,246,.45)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
+      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#f97316':'rgba(59,130,246,.5)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
       }catch(e){ try{ console.error('dist chart draw failed', e); }catch(_){} }
     }
     var wc=document.getElementById('ds-wkg-chart');
     if(wc&&typeof Chart!=='undefined'){
       try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
       try{
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#a855f7',backgroundColor:'rgba(168,85,247,.16)',borderWidth:2.5,fill:true,tension:0.35,pointRadius:2,pointBackgroundColor:'#a855f7'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#a855f7',backgroundColor:'rgba(168,85,247,.14)',borderWidth:1.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:3,pointBackgroundColor:'#a855f7'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
       }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
     }
   }
@@ -13413,10 +13455,25 @@ function currentWkg_(){
 function wkgTrend_(){
   var ftp=parseFloat(st.ftp||186), kg=parseFloat(st.weight||162.5)/2.20462;
   var list; try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
-  var peaks=list.filter(function(r){return r&&!r.deleted&&r.date&&(r.peak20||(r.powerCurve&&r.powerCurve[1200]));})
-    .map(function(r){var p=r.peak20||r.powerCurve[1200];return {date:normDate(r.date), wkg:Math.round((p/kg)*100)/100};})
+  var raw=list.filter(function(r){return r&&!r.deleted&&r.date&&(r.peak20||(r.powerCurve&&r.powerCurve[1200]));})
+    .map(function(r){var p=r.peak20||r.powerCurve[1200];return {date:normDate(r.date), p:p};})
     .sort(function(a,b){return a.date>b.date?1:-1;});
-  if(peaks.length>=3) return {source:'best 20-min power', pts:peaks.slice(-10)};
+  if(raw.length>=3){
+    // Rolling BEST 20-min power over a trailing 42-day window, sampled weekly.
+    // Plotting each ride's raw 20-min power made the line swing 1.4-2.6 — a
+    // recovery ride's low effort cratered it, an interval ride spiked it. The
+    // trailing max tracks sustainable-power CAPABILITY (rises with fitness),
+    // which is what "W/kg trend" should show — a tight band, not effort noise.
+    var lastD=new Date(raw[raw.length-1].date), pts=[];
+    for(var w=9; w>=0; w--){
+      var end=new Date(lastD); end.setDate(end.getDate()-w*7);
+      var start=new Date(end); start.setDate(start.getDate()-42);
+      var best=0;
+      for(var i=0;i<raw.length;i++){ var d=new Date(raw[i].date); if(d>start && d<=end && raw[i].p>best) best=raw[i].p; }
+      if(best>0) pts.push({date:end.toISOString().slice(0,10), wkg:Math.round((best/kg)*100)/100});
+    }
+    if(pts.length>=2) return {source:'best 20-min power (42-day rolling)', pts:pts};
+  }
   var wl=(st.weightLog||[]).filter(function(w){return w&&w.date&&w.weight;})
     .map(function(w){return {date:normDate(w.date), wkg:Math.round((ftp/(parseFloat(w.weight)/2.20462))*100)/100};})
     .sort(function(a,b){return a.date>b.date?1:-1;});
