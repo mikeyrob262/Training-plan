@@ -520,6 +520,10 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
+      <div class="ds-ni" id="ds-theme-toggle" onclick="toggleDark()" style="justify-content:space-between" title="Toggle light / dark mode">
+        <span style="display:flex;align-items:center;gap:9px"><span id="ds-theme-ic" style="display:inline-flex;width:16px;height:16px;align-items:center;justify-content:center"></span><span id="ds-theme-label">Dark Mode</span></span>
+        <span id="ds-theme-sw" style="width:32px;height:18px;border-radius:9px;background:#3a4560;position:relative;flex-shrink:0;transition:background .15s"><span id="ds-theme-knob" style="position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s"></span></span>
+      </div>
       <div class="ds-ni" onclick="dsNav('settings')"><i class="ti ti-settings"></i>Settings</div>
       <div class="ds-ni" onclick="dsNav('help')"><i class="ti ti-help-circle"></i>Help</div>
     </div>
@@ -24042,6 +24046,24 @@ function toggleDark(){
   document.body.classList.toggle('dark', isDark);
   localStorage.setItem('darkMode', isDark ? '1' : '0');
   var ms = document.getElementById('more-sheet'); if(ms) ms.remove();
+  // Keep any visible theme control in sync — this is the single source of truth,
+  // so BOTH the mobile Settings item and the desktop sidebar toggle flow through
+  // here and never drift.
+  if(typeof syncThemeToggle_==='function') syncThemeToggle_();
+}
+// Reflect the CURRENT darkMode state on the desktop sidebar toggle (icon, label,
+// switch position). Called on load and after every toggle. No-ops if the control
+// isn't present (mobile).
+function syncThemeToggle_(){
+  var dark=document.body.classList.contains('dark');
+  var ic=document.getElementById('ds-theme-ic'), lb=document.getElementById('ds-theme-label'),
+      sw=document.getElementById('ds-theme-sw'), kn=document.getElementById('ds-theme-knob');
+  var MOON='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
+  var SUN='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>';
+  if(ic) ic.innerHTML=dark?MOON:SUN;
+  if(lb) lb.textContent=dark?'Dark Mode':'Light Mode';
+  if(sw) sw.style.background=dark?'#FC4C02':'#3a4560';
+  if(kn) kn.style.left=dark?'16px':'2px';
 }
 
 var LOCAL_FOODS = [
@@ -24676,7 +24698,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-day-editor-select';
+window.__BUILD__ = '2026-07-16-desktop-theme-toggle';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
@@ -24685,8 +24707,9 @@ window.onload = function(){
   // the _gpsMigrated guard makes it run once). Delayed so st is populated.
   setTimeout(function(){ try{ if(typeof migrateCorruptTracks_==='function') migrateCorruptTracks_(); }catch(e){} }, 6000);
   // Settings wired via More sheet
-  // Dark mode - apply saved preference
+  // Dark mode - apply saved preference, then reflect it on the desktop toggle.
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
+  if(typeof syncThemeToggle_==='function') syncThemeToggle_();
   var pvBtn=document.getElementById('btn-pv'); if(pvBtn) pvBtn.setAttribute('onclick', 'GW(cw-1, true)');
   var nxBtn=document.getElementById('btn-nx'); if(nxBtn) nxBtn.setAttribute('onclick', 'GW(cw+1, true)');
   // Jump to current plan week after Firebase loads
