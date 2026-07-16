@@ -3356,7 +3356,13 @@ function gpsGetAny_(r){
 // already carries GPS in-blob (legacy rides / freshly imported this session).
 function ensureRideGps(r){
   if(!r) return Promise.resolve(r);
-  if((r.lats && r.lats.length) || (r.gpsLats && r.gpsLats.length)) return Promise.resolve(r);
+  if((r.lats && r.lats.length) || (r.gpsLats && r.gpsLats.length)){
+    // Inline track present but maybe never written to /gps (or only under a
+    // legacy key) — persist it under the canonical rideKey so it survives
+    // slimForStorage_/reload. Fire-and-forget, once per ride per session.
+    if(r.lats && r.lats.length && !r._gpsPersisted){ r._gpsPersisted=true; try{ var _pl=gpsPayload_(r); if(_pl) gpsPut(rideKey(r), _pl); }catch(e){} }
+    return Promise.resolve(r);
+  }
   return gpsGetAny_(r).then(function(p){
     if(p){
       if(p.lats) r.lats = p.lats;
@@ -3378,7 +3384,10 @@ function ensureRideGps(r){
 // cached to /gps after the first fetch so it never re-fetches. Never rejects.
 function ensureRideStreams(r){
   if(!r || !r.stravaId) return Promise.resolve(r);
-  if(r.chartEle && r.chartEle.length) return Promise.resolve(r);
+  // Require BOTH streams and GPS before treating the ride as complete — a ride
+  // with chartEle but no lats (its /gps entry was never written, or streams were
+  // fetched before latlng was added) must still re-fetch to recover the track.
+  if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)) return Promise.resolve(r);
   // Downsample to n points for charts; compute maxes on the FULL-res stream.
   function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
   function maxOf(arr,cap){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v<cap && v>m) m=v; } return m||null; }
@@ -3393,7 +3402,7 @@ function ensureRideStreams(r){
       if(p.chartCad) r.chartCad=p.chartCad;
       if(p.laps) r.laps=p.laps;
     }
-    if(r.chartEle && r.chartEle.length) return r; // cache hit — no API call
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)) return r; // cache hit (streams + GPS) — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
@@ -3408,14 +3417,22 @@ function fetchStravaStreams_(r, ds, maxOf){
     var done=function(){ resolve(r); };
     var run=function(token){
       var base='https://www.strava.com/api/v3/activities/'+r.stravaId;
-      var sUrl=base+'/streams?keys=altitude,watts,heartrate,cadence,velocity_smooth,distance&key_by_type=true';
+      var sUrl=base+'/streams?keys=altitude,watts,heartrate,cadence,velocity_smooth,distance,latlng&key_by_type=true';
       Promise.all([
         fetch(sUrl,{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;}),
         fetch(base+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;})
       ]).then(function(arr){
         var s=arr[0]||{}, a=arr[1]||{};
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
-        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth');
+        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), ll=g('latlng');
+        // GPS track (decimal-degree [lat,lon] pairs) — recovers rides whose /gps
+        // entry was never written. normalizeTrack_ leaves <90 floats as-is. Only
+        // set if the ride doesn't already carry a track.
+        if(ll && ll.length>1 && !(r.lats&&r.lats.length)){
+          var _dll=ds(ll,600)||ll;
+          r.lats=_dll.map(function(p){ return Math.round(p[0]*1e5)/1e5; });
+          r.lons=_dll.map(function(p){ return Math.round(p[1]*1e5)/1e5; });
+        }
         if(alt){
           r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
           if(!r.maxElev){ var _ma=maxOf(alt,10000); if(_ma!=null) r.maxElev=Math.round(_ma*3.28084); } // highest point, m -> ft (was never computed anywhere)
@@ -13364,7 +13381,20 @@ function dsShowAnalytics(){
         {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:1.75,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
-      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=4; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
+      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=4; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }},{id:'todayLine',afterDraw:function(ch){
+        var meta=ch.getDatasetMeta(0); if(!meta||!meta.data||!meta.data.length) return;
+        var pt=meta.data[meta.data.length-1]; if(!pt) return;
+        var x=pt.x, a=ch.chartArea, cx=ch.ctx;
+        cx.save();
+        cx.strokeStyle='rgba(148,163,184,.5)'; cx.lineWidth=1; cx.setLineDash([4,4]);
+        cx.beginPath(); cx.moveTo(x, a.top); cx.lineTo(x, a.bottom); cx.stroke();
+        cx.setLineDash([]);
+        cx.fillStyle='rgba(148,163,184,.9)';
+        cx.beginPath(); cx.moveTo(x, a.bottom-4); cx.lineTo(x+4, a.bottom); cx.lineTo(x, a.bottom+4); cx.lineTo(x-4, a.bottom); cx.closePath(); cx.fill();
+        cx.fillStyle='rgba(148,163,184,.85)'; cx.font='9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-20?'right':'center');
+        cx.fillText('Today', Math.min(x, a.right-1), a.top+8);
+        cx.restore();
+      }}]});
       }catch(e){ try{ console.error('fitness chart draw failed', e); }catch(_){} }
     }
     var dc=document.getElementById('ds-dist-chart');
@@ -14470,7 +14500,7 @@ function openDesktopRideDetail(idx){
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   // Strava-synced rides have summary scalars but no streams — fetch altitude/
   // watts/HR/cadence/velocity + laps on demand, cache to /gps, then re-open.
-  if(r.stravaId && !(r.chartEle&&r.chartEle.length) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx); }); return; }
+  if(r.stravaId && (!(r.chartEle&&r.chartEle.length) || !(r.lats&&r.lats.length)) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
   var NL=String.fromCharCode(10);
@@ -15018,7 +15048,7 @@ function openRideDetail(idx){
   // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openRideDetail(idx); }); return; }
   // Strava-synced rides: lazy-fetch streams + laps on demand (cached to /gps).
-  if(r.stravaId && !(r.chartEle&&r.chartEle.length) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openRideDetail(idx); }); return; }
+  if(r.stravaId && (!(r.chartEle&&r.chartEle.length) || !(r.lats&&r.lats.length)) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openRideDetail(idx); }); return; }
   var old = document.getElementById('ride-detail-modal');
   if(old) old.remove();
 
@@ -24086,7 +24116,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-legacy-kkey';
+window.__BUILD__ = '2026-07-16-gps-refetch+today-line';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
