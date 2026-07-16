@@ -23462,21 +23462,35 @@ function openDayEditor(dateKey){
   closeBtn.onclick=function(){ modal.remove(); };
   hdr.appendChild(ttl); hdr.appendChild(closeBtn); sheet.appendChild(hdr);
 
-  // Workout name (spans both, editable — saves to plan session name)
+  // Workout name — a populated <select> ("Other" reveals a free-text field).
+  // Options = common defaults ∪ distinct sport/activity categories already in the
+  // user's data (via rideSport_) ∪ previously-scheduled custom names — so a name
+  // typed once via "Other" (planned override) reappears next time. Shared editor,
+  // so this covers BOTH the desktop and mobile calendars.
   var nameWrap=document.createElement('div'); nameWrap.style.cssText='margin:8px 0 16px';
   var nameLbl=document.createElement('div'); nameLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; nameLbl.textContent='Workout';
-  var nameRow=document.createElement('div'); nameRow.style.cssText='display:flex;gap:8px';
-  var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='e.g. Threshold Intervals';
-  nameInp.value=(o&&o.name)?o.name:(plan?plan.name:'');
-  nameInp.style.cssText='flex:1;min-width:0;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
-  // Quick-pick dropdown of common workout types — includes a "Rest" option so a
-  // rest day can be scheduled (saves as a planned override -> shows Rest Day).
-  var presetSel=document.createElement('select');
-  presetSel.style.cssText='flex-shrink:0;padding:10px 8px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:13px;font-family:inherit;cursor:pointer';
-  ['Quick pick','Rest','Recovery Ride','Endurance Ride','Tempo Ride','Threshold Intervals','VO2 Max','Long Ride','Easy Run','Long Run','Tempo Run','Strength','Swim'].forEach(function(p,pi){ var op=document.createElement('option'); op.value=(pi===0?'':p); op.textContent=p; presetSel.appendChild(op); });
-  presetSel.onchange=function(){ if(presetSel.value){ nameInp.value=presetSel.value; presetSel.selectedIndex=0; } };
-  nameRow.appendChild(nameInp); nameRow.appendChild(presetSel);
-  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameRow); sheet.appendChild(nameWrap);
+  var _optMap={}, _opts=[];
+  function _addOpt(v){ if(v==null) return; v=String(v).trim(); if(!v) return; var k=v.toLowerCase(); if(_optMap[k]) return; _optMap[k]=1; _opts.push(v); }
+  ['Ride','Run','Strength','Swim','Yoga','Walk','Hike','Row','Rest'].forEach(_addOpt);
+  try{ (typeof allRidesDeduped_==='function'?allRidesDeduped_():((st.rides||[]).filter(function(r){return r&&!r.deleted;}))).forEach(function(r){ _addOpt((typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type)); }); }catch(e){}
+  try{ var _pw=st.plannedWorkouts||{}; Object.keys(_pw).forEach(function(k){ _addOpt(_pw[k]&&_pw[k].name); }); }catch(e){}
+  _opts.sort(function(a,b){ return a.toLowerCase()<b.toLowerCase()?-1:(a.toLowerCase()>b.toLowerCase()?1:0); });
+  var curName=(o&&o.name!=null)?String(o.name):(plan?String(plan.name||''):'');
+  var _matched=null; for(var _oi=0;_oi<_opts.length;_oi++){ if(_opts[_oi].toLowerCase()===curName.toLowerCase()){ _matched=_opts[_oi]; break; } }
+  var nameSel=document.createElement('select');
+  nameSel.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box;cursor:pointer';
+  var _selList=[''].concat(_opts).concat(['Other']);
+  _selList.forEach(function(op){ var o2=document.createElement('option'); o2.value=op; o2.textContent=(op===''?'Select workout…':op); nameSel.appendChild(o2); });
+  var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='Custom workout name';
+  nameInp.style.cssText='width:100%;margin-top:8px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  // Preserve value on edit: a matching option is selected; an unmatched legacy
+  // custom value selects "Other" and pre-fills the text field (never lost).
+  if(_matched){ nameSel.value=_matched; nameInp.style.display='none'; }
+  else if(curName){ nameSel.value='Other'; nameInp.value=curName; nameInp.style.display='block'; }
+  else { nameSel.value=''; nameInp.style.display='none'; }
+  nameSel.onchange=function(){ if(nameSel.value==='Other'){ nameInp.style.display='block'; try{ nameInp.focus(); }catch(e){} } else { nameInp.style.display='none'; } };
+  function effectiveName(){ return nameSel.value==='Other'?nameInp.value.trim():(nameSel.value||'').trim(); }
+  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameSel); nameWrap.appendChild(nameInp); sheet.appendChild(nameWrap);
 
   // Column headers
   var colH=document.createElement('div'); colH.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px';
@@ -23514,9 +23528,10 @@ function openDayEditor(dateKey){
   save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
   save.onclick=function(){
     function num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
+    var _nm=effectiveName();
     // Completed side -> recorded activity (create-on-save is out of scope; edit if exists)
     if(o){
-      if(nameInp.value.trim()) o.name=nameInp.value.trim();
+      if(_nm) o.name=_nm;
       var dv=num(distR.completed.value); if(dv!=null) o.distance=dv;
       var uv=num(durR.completed.value);  if(uv!=null) o.duration=uv;
       var sv2=num(paceR.completed.value);if(sv2!=null) o.avgSpeed=sv2;
@@ -23529,7 +23544,7 @@ function openDayEditor(dateKey){
     // Planned side -> plan session name + duration text back into the plan DOM
     if(plan && plan.week){
       var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
-      if(el && nameInp.value.trim()) el.textContent=nameInp.value.trim();
+      if(el && _nm) el.textContent=_nm;
       var card2=document.getElementById('wc'+plan.week+'_'+plan.dayIdx);
       var plEl2=card2?card2.querySelector('.wof-pl'):null;
       if(plEl2 && durR.planned.value.trim()) plEl2.textContent=durR.planned.value.trim();
@@ -23537,8 +23552,8 @@ function openDayEditor(dateKey){
     // Persist the planned workout for this date so it survives reload/sync and
     // feeds Today's Plan + the AI Coach. Only when scheduling a plan (no
     // recorded activity being edited on this day).
-    if(!o && nameInp.value.trim()){
-      setPlannedOverride_(dateKey, nameInp.value.trim(), durR.planned.value.trim());
+    if(!o && _nm){
+      setPlannedOverride_(dateKey, _nm, durR.planned.value.trim());
     }
     try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
@@ -24661,7 +24676,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-calendar-filter-elev-planned';
+window.__BUILD__ = '2026-07-16-day-editor-select';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
