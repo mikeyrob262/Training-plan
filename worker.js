@@ -12002,13 +12002,14 @@ function recentRides_(n){
 // so they can never diverge. Sums ALL activity types (Miles + TSS include Zwift/
 // VirtualRide); rideCount stays type-scoped for the "Rides" label only.
 function calRollup_(list){
-  var miles=0, tss=0, rc=0;
+  var miles=0, tss=0, rc=0, elev=0;
   (list||[]).forEach(function(r){
     miles+=parseFloat(r.distance)||0;
     tss+=parseFloat(r.tss)||0;
+    elev+=parseFloat(r.elev)||0;
     if(/ride|cycl/i.test(rideSport_(r))) rc++;
   });
-  return {miles:Math.round(miles), tss:Math.round(tss), acts:(list||[]).length, rideCount:rc};
+  return {miles:Math.round(miles), tss:Math.round(tss), elev:Math.round(elev), acts:(list||[]).length, rideCount:rc};
 }
 // Single source of truth for the layout decision: a persisted manual override
 // wins, otherwise the width threshold (shared with the head bootstrap via
@@ -13745,6 +13746,15 @@ function dsShowCalendar(){
   var now=new Date();
   var viewYear=now.getFullYear(), viewMonth=now.getMonth();
   var calView='month';
+  // Filter state (persisted): which completed activity TYPES show/count, and
+  // whether Planned workouts + Completed activities + Rest days are shown.
+  var calFilter;
+  try{ calFilter=JSON.parse(localStorage.getItem('aiq_cal_filter')||'null'); }catch(e){ calFilter=null; }
+  if(!calFilter) calFilter={ride:true,run:true,workout:true,swim:true,rest:true,planned:true,completed:true};
+  var calFilterOpen=false;
+  function saveCalFilter(){ try{ localStorage.setItem('aiq_cal_filter', JSON.stringify(calFilter)); }catch(e){} }
+  function passType(r){ var c=actClass(r); return calFilter[c]!==false; }
+  function filterActive(){ return !(calFilter.ride&&calFilter.run&&calFilter.workout&&calFilter.swim&&calFilter.rest&&calFilter.planned&&calFilter.completed); }
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var dayNamesFull=['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
@@ -13778,9 +13788,12 @@ function dsShowCalendar(){
     for(var i=0;i<n;i++){ var x=(n===1?0:(i/(n-1))*w); var y=h-((vals[i]/max)*(h-4))-2; pts.push(x.toFixed(1)+' '+y.toFixed(1)); }
     var line='M'+pts.join(' L');
     var area=line+' L'+w+' '+h+' L0 '+h+' Z';
-    return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
-      +'<path d="'+area+'" fill="'+color+'" opacity="0.13"/>'
-      +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    // vector-effect keeps the stroke a constant 1.4px even though preserveAspectRatio
+    // "none" stretches the 120-wide viewBox to full width — without it the line
+    // gets horizontally smeared/blurry. shape-rendering sharpens it further.
+    return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision">'
+      +'<path d="'+area+'" fill="'+color+'" opacity="0.10"/>'
+      +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
   function statCard(icon,iconCol,big,label,right,rightCol){
     return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:14px">'
@@ -13797,11 +13810,13 @@ function dsShowCalendar(){
   function renderCalendar(){
     mc.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:16px 22px 16px;box-sizing:border-box;overflow:hidden;gap:12px';
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:16px 22px 26px;box-sizing:border-box;overflow:hidden;gap:12px';
 
-    // ---- data (deduped, all activity types) ----
+    // ---- data (deduped, all activity types; honors the type + completed filter) ----
     var ridesByDate={};
-    allRidesDeduped_().forEach(function(r){ if(!r||!r.date) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
+    if(calFilter.completed){
+      allRidesDeduped_().forEach(function(r){ if(!r||!r.date||!passType(r)) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
+    }
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
     var firstDow=new Date(viewYear,viewMonth,1).getDay();
     var prevDays=new Date(viewYear,viewMonth,0).getDate();
@@ -13847,7 +13862,31 @@ function dsShowCalendar(){
       H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
     });
     H+='  </div>';
-    H+='  <div style="width:38px;height:38px;border-radius:10px;background:#0e1220;border:1px solid #1a2030;display:flex;align-items:center;justify-content:center;color:#94a3b8"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></div>';
+    // Filter button (active) — toggles a popover; glows orange when a filter is on.
+    var _fa=filterActive();
+    H+='  <div style="position:relative">';
+    H+='    <div data-cal="filter" style="width:38px;height:38px;border-radius:10px;background:'+(_fa?'rgba(249,115,22,.14)':'#0e1220')+';border:1px solid '+(_fa?'#F97316':'#1a2030')+';display:flex;align-items:center;justify-content:center;color:'+(_fa?'#F97316':'#94a3b8')+';cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></div>';
+    if(calFilterOpen){
+      H+='<div style="position:absolute;right:0;top:44px;z-index:50;width:210px;background:#0e1220;border:1px solid #232b3d;border-radius:12px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.5)">';
+      function _frow(key,label,dot){ var on=calFilter[key]!==false;
+        return '<div data-cal="filt" data-key="'+key+'" style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer">'
+          +'<div style="width:16px;height:16px;border-radius:5px;border:1.5px solid '+(on?'#F97316':'#39424f')+';background:'+(on?'#F97316':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(on?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'')+'</div>'
+          +(dot?'<span style="width:8px;height:8px;border-radius:50%;background:'+dot+';flex-shrink:0"></span>':'')
+          +'<span style="font-size:13px;color:#cbd5e1;font-weight:600">'+label+'</span></div>';
+      }
+      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678;padding:2px 4px 4px">SHOW</div>';
+      H+=_frow('completed','Completed',null);
+      H+=_frow('planned','Planned',null);
+      H+='<div style="height:1px;background:#1a2030;margin:6px 2px"></div>';
+      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678;padding:2px 4px 4px">TYPES</div>';
+      H+=_frow('ride','Rides',sportColor_('Ride'));
+      H+=_frow('run','Runs',sportColor_('Run'));
+      H+=_frow('workout','Workouts',sportColor_('Strength'));
+      H+=_frow('swim','Swims',sportColor_('Swim'));
+      H+=_frow('rest','Rest days','#4ade80');
+      H+='</div>';
+    }
+    H+='  </div>';
     H+='</div>';
     H+='</div>';
 
@@ -13890,8 +13929,12 @@ function dsShowCalendar(){
         wk.forEach(function(c){
           var isToday=c.inMonth && c.date===todayStr;
           var dl=c.inMonth?(ridesByDate[c.date]||[]):[];
-          var plan=(c.inMonth && !dl.length && typeof plannedOverrideFor_==='function')?plannedOverrideFor_(c.date):null;
-          var isRest=plan && /rest|recovery|off/i.test(plan.name||'');
+          // Planned workout for this date (persisted override) — shown on ALL days,
+          // alongside any completed activity, gated by the Planned/Rest filters.
+          var planRaw=(c.inMonth && calFilter.planned && typeof plannedOverrideFor_==='function')?(plannedOverrideFor_(c.date)||null):null;
+          var restPlan=planRaw && /rest|recovery|off/i.test(planRaw.name||'');
+          if(restPlan && !calFilter.rest){ planRaw=null; restPlan=false; }
+          var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
           var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
           var attrs=' data-cal="cell"'+(c.inMonth?(' data-date="'+c.date+'"'):'')+(idx>=0?(' data-idx="'+idx+'"'):'');
@@ -13905,7 +13948,7 @@ function dsShowCalendar(){
           }
           if(isRest){
             H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
-          } else if(dl.length){
+          } else {
             dl.slice(0,2).forEach(function(r){
               var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=Math.round(parseFloat(r.tss)||0);
               var main=dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec);
@@ -13918,8 +13961,15 @@ function dsShowCalendar(){
                 +'<div style="font-size:10px;color:#5f6b7e;margin-top:1px;white-space:nowrap">'+sub+'</div></div>';
             });
             if(dl.length>2){ H+='<div style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600">+'+(dl.length-2)+' more</div>'; }
-          } else if(plan && plan.name){
-            H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.75">'+activityIcon_(plan.name,18)+'<div style="font-size:9px;color:#64748b;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+plan.name+'</div></div>';
+            // Planned marker — compact dashed chip when there is ALSO a completed
+            // activity, or the centered icon+name on an otherwise-empty day.
+            if(planRaw && planRaw.name){
+              if(dl.length){
+                H+='<div style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span><span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planRaw.name+'</span></div>';
+              } else {
+                H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(planRaw.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+planRaw.name+'</div></div>';
+              }
+            }
           }
           H+='</div>';
         });
@@ -13932,11 +13982,12 @@ function dsShowCalendar(){
         if(roll.acts===0){ H+='<div></div>'; return; }
         var ratio=Math.min(1,roll.tss/maxWkTSS);
         var bc=ratio>=0.66?'#F97316':ratio>=0.33?'#F59E0B':'#4ade80';
-        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:4px;padding:12px 15px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
+        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:11px 15px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
           +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678">WEEK '+(wi+1)+'</div>'
-          +'<div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1">'+roll.miles+'<span style="font-size:12px;font-weight:600;color:#5b6678;margin-left:3px">mi</span></div>'
+          +'<div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+roll.miles+'<span style="font-size:12px;font-weight:600;color:#5b6678;margin-left:3px">mi</span></div>'
           +'<div style="font-size:14px;font-weight:800;color:'+bc+';line-height:1">'+roll.tss+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:2px">TSS</span></div>'
-          +'<div style="height:4px;border-radius:2px;background:#1a2030;margin-top:4px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(ratio*100))+'%;background:'+bc+';border-radius:2px"></div></div>'
+          +'<div style="font-size:11px;font-weight:700;color:#8592a6;line-height:1;display:flex;align-items:center;gap:3px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8592a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20l6-14 6 14"/></svg>'+(roll.elev||0)+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:1px">ft</span></div>'
+          +'<div style="height:4px;border-radius:2px;background:#1a2030;margin-top:3px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(ratio*100))+'%;background:'+bc+';border-radius:2px"></div></div>'
           +'</div>';
       });
       H+='</div>';
@@ -13969,11 +14020,13 @@ function dsShowCalendar(){
     wrap.addEventListener('click',function(e){
       var t=e.target.closest('[data-cal]'); if(!t) return;
       var a=t.getAttribute('data-cal');
-      if(a==='prev'){ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); }
-      else if(a==='next'){ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); }
-      else if(a==='today'){ viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
-      else if(a==='view'){ calView=t.getAttribute('data-view'); renderCalendar(); }
-      else if(a==='cell'){ var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
+      if(a==='prev'){ calFilterOpen=false; viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); }
+      else if(a==='next'){ calFilterOpen=false; viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); }
+      else if(a==='today'){ calFilterOpen=false; viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
+      else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
+      else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
+      else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
+      else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
         if(idx!=null) openRideDetail(parseInt(idx,10));
         else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
       }
@@ -23150,6 +23203,7 @@ function showCalendarTab(){
         h+='<div style="display:flex;flex-direction:column;justify-content:center;gap:2px;border-radius:9px;background:var(--s2);border:1px solid var(--b1);padding:4px 5px;overflow:hidden">'
           +'<div style="font-size:12px;font-weight:800;color:var(--t1);line-height:1">'+mr.miles+'<span style="font-size:8px;font-weight:600;color:var(--t3);margin-left:1px">mi</span></div>'
           +'<div style="font-size:10px;font-weight:800;color:'+mbar+';line-height:1">'+mr.tss+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">TSS</span></div>'
+          +'<div style="font-size:9px;font-weight:700;color:var(--t2);line-height:1">'+(mr.elev||0)+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">ft</span></div>'
           +'<div style="height:3px;border-radius:2px;background:var(--s3);margin-top:1px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(mratio*100))+'%;background:'+mbar+';border-radius:2px"></div></div>'
           +'</div>';
       }
@@ -23411,10 +23465,18 @@ function openDayEditor(dateKey){
   // Workout name (spans both, editable — saves to plan session name)
   var nameWrap=document.createElement('div'); nameWrap.style.cssText='margin:8px 0 16px';
   var nameLbl=document.createElement('div'); nameLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; nameLbl.textContent='Workout';
+  var nameRow=document.createElement('div'); nameRow.style.cssText='display:flex;gap:8px';
   var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='e.g. Threshold Intervals';
   nameInp.value=(o&&o.name)?o.name:(plan?plan.name:'');
-  nameInp.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
-  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameInp); sheet.appendChild(nameWrap);
+  nameInp.style.cssText='flex:1;min-width:0;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  // Quick-pick dropdown of common workout types — includes a "Rest" option so a
+  // rest day can be scheduled (saves as a planned override -> shows Rest Day).
+  var presetSel=document.createElement('select');
+  presetSel.style.cssText='flex-shrink:0;padding:10px 8px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:13px;font-family:inherit;cursor:pointer';
+  ['Quick pick','Rest','Recovery Ride','Endurance Ride','Tempo Ride','Threshold Intervals','VO2 Max','Long Ride','Easy Run','Long Run','Tempo Run','Strength','Swim'].forEach(function(p,pi){ var op=document.createElement('option'); op.value=(pi===0?'':p); op.textContent=p; presetSel.appendChild(op); });
+  presetSel.onchange=function(){ if(presetSel.value){ nameInp.value=presetSel.value; presetSel.selectedIndex=0; } };
+  nameRow.appendChild(nameInp); nameRow.appendChild(presetSel);
+  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameRow); sheet.appendChild(nameWrap);
 
   // Column headers
   var colH=document.createElement('div'); colH.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px';
@@ -24599,7 +24661,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-calendar-run-color-consistent';
+window.__BUILD__ = '2026-07-16-calendar-filter-elev-planned';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
