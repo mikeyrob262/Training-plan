@@ -3296,13 +3296,34 @@ function dpDownsample_(pts, eps){
     if(maxD>eps && idx>0){ keep[idx]=1; stack.push([a,idx]); stack.push([idx,b]); } }
   var out=[]; for(var j=0;j<n;j++) if(keep[j]) out.push(pts[j]); return out;
 }
-// Build stored lats/lons from a Strava latlng stream ([lat,lon] pairs): simplify
-// with Douglas-Peucker (keeps the route shape), hard-cap the point count as a
-// backstop, round to 5 dp (~1 m). Shared by fetchStravaStreams_ and the bulk
-// GPS backfill so both write road-following tracks.
+// Drop spurious GPS fixes ("spikes") from a raw [lat,lon] track: a point that
+// juts out from BOTH neighbours while those neighbours stay close is a teleport
+// glitch, not a real corner. This MUST run before Douglas-Peucker — DP treats a
+// spike as a sharp corner and KEEPS it, scribbling the line out to the noise and
+// back (the crisscross tangle). The old maps came from Strava's smoothed
+// summary_polyline; the raw latlng stream is noisier, so it needs de-glitching.
+function deglitchTrack_(ll){
+  if(!ll || ll.length<3) return ll ? ll.slice() : [];
+  var out=[ll[0]];
+  for(var i=1;i<ll.length-1;i++){ var a=ll[i-1], b=ll[i], c=ll[i+1];
+    var dab=Math.hypot(b[0]-a[0], b[1]-a[1]);
+    var dbc=Math.hypot(c[0]-b[0], c[1]-b[1]);
+    var dac=Math.hypot(c[0]-a[0], c[1]-a[1]);
+    // spike: b is far from both a and c, but a and c are near each other
+    if(dab>0.0006 && dbc>0.0006 && dac < 0.4*(dab+dbc)) continue;
+    out.push(b);
+  }
+  out.push(ll[ll.length-1]);
+  return out;
+}
+// Build stored lats/lons from a Strava latlng stream ([lat,lon] pairs): de-glitch
+// first, then simplify with Douglas-Peucker (keeps the route shape), hard-cap the
+// point count as a backstop, round to 5 dp (~1 m). Shared by fetchStravaStreams_
+// and the bulk GPS backfill so both write clean, road-following tracks.
 function trackFromLatlng_(ll){
   if(!ll || ll.length<2) return null;
-  var dl=dpDownsample_(ll, 0.00003);
+  var clean=deglitchTrack_(ll);
+  var dl=dpDownsample_(clean, 0.00003);
   if(dl.length>2500){ var s=Math.ceil(dl.length/2000), d2=[]; for(var k=0;k<dl.length;k+=s) d2.push(dl[k]); dl=d2; }
   return { lats: dl.map(function(p){ return Math.round(p[0]*1e5)/1e5; }),
            lons: dl.map(function(p){ return Math.round(p[1]*1e5)/1e5; }) };
@@ -13450,24 +13471,29 @@ function dsShowAnalytics(){
     var ago=(now-d)/86400000; if(ago>=0&&ago<7) _last7+=parseFloat(r.distance)||0; });
   _ytd=Math.round(_ytd); _last7=Math.round(_last7);
   var _G=_goalTargets_();
-  // Weight is lower-is-better, so its bar is target/current (closeness from
-  // above); the rest are current/target. All values live, all targets stored.
+  // Goal cards match the mockup: label + info glyph, big live value + small unit
+  // on the left, % on the right, thin colored bar, "Goal X" beneath. Weight is
+  // lower-is-better (bar = target/current); the rest are current/target.
   var goals=[
-    {label:'FTP', val:FTP+' / '+_G.ftpW+' W', frac:Math.min(1,FTP/_G.ftpW), color:'#f59e0b', note:''},
-    {label:'Weight', val:BWT.toFixed(1)+' / '+_G.weightLb+' lb', frac:Math.min(1,_G.weightLb/Math.max(BWT,1)), color:'#22c55e', note:'lower is better'},
-    {label:'W/kg', val:wkgNow.toFixed(2)+' / '+_G.wkg.toFixed(2), frac:Math.min(1,wkgNow/_G.wkg), color:'#a855f7', note:'FTP-based'},
-    {label:'Weekly Miles', val:_last7+' / '+_G.weeklyMi+' mi', frac:Math.min(1,_last7/_G.weeklyMi), color:'#3b82f6', note:'last 7 days'},
-    {label:'Miles YTD', val:_ytd.toLocaleString()+' / '+_G.annualMi.toLocaleString()+' mi', frac:Math.min(1,_ytd/_G.annualMi), color:'#60a5fa', note:''},
-    {label:'CTL', val:Math.round(lastCTL)+' / '+_G.ctl, frac:Math.min(1,lastCTL/_G.ctl), color:'#3b82f6', note:''}
+    {label:'FTP', value:''+FTP, unit:'W', frac:Math.min(1,FTP/_G.ftpW), goal:'Goal '+_G.ftpW+'W', color:'#a855f7'},
+    {label:'Weight', value:BWT.toFixed(1), unit:'lbs', frac:Math.min(1,_G.weightLb/Math.max(BWT,1)), goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e'},
+    {label:'W/kg', value:wkgNow.toFixed(2), unit:'W/kg', frac:Math.min(1,wkgNow/_G.wkg), goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7'},
+    {label:'Weekly Distance', value:''+_last7, unit:'mi', frac:Math.min(1,_last7/_G.weeklyMi), goal:'Goal '+_G.weeklyMi+' mi', color:'#3b82f6'},
+    {label:'CTL', value:''+Math.round(lastCTL), unit:'', frac:Math.min(1,lastCTL/_G.ctl), goal:'Goal '+_G.ctl, color:'#f97316'}
   ];
   var rowC=document.createElement('div');
   rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   goals.forEach(function(g){
+    var _pc=Math.round(g.frac*100);
     var gc=document.createElement('div');
-    gc.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;min-height:82px;display:flex;flex-direction:column';
-    gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
-      +'<div style="font-size:15px;font-weight:800;line-height:1.1;color:#f1f5f9;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.val+'</div>'
-      +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden;margin-top:auto"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+Math.round(g.frac*100)+'%"></div></div>';
+    gc.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px';
+    gc.innerHTML='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+'</span>'+_infoGlyph+'</div>'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">'
+        +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:#94a3b8;margin-left:3px">'+g.unit+'</span>':'')+'</div>'
+        +'<span style="font-size:12px;font-weight:700;color:#94a3b8;flex-shrink:0">'+_pc+'%</span>'
+      +'</div>'
+      +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+_pc+'%"></div></div>'
+      +'<div style="font-size:10px;color:#64748b">'+g.goal+'</div>';
     rowC.appendChild(gc);
   });
   wrap.appendChild(rowC);
@@ -24265,7 +24291,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-analytics-match-mockup';
+window.__BUILD__ = '2026-07-16-gps-deglitch+goal-cards';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
