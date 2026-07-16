@@ -3279,6 +3279,34 @@ function gpsPayload_(r){
   if(r.laps && r.laps.length) p.laps = r.laps;
   return Object.keys(p).length ? p : null;
 }
+// Douglas-Peucker: simplify a [lat,lon] track by KEEPING the points that carry
+// its shape (corners) and dropping redundant points on straights — so the drawn
+// line follows the road instead of chording across every corner. eps is in
+// degrees (~0.00003 ≈ 3 m). The old every-Nth stride cut corners because it's
+// blind to curvature; this isn't. Iterative (no deep recursion on long tracks).
+function dpDownsample_(pts, eps){
+  var n=pts.length; if(n<3) return pts.slice();
+  function perp(p,a,b){ var x=p[0],y=p[1],x1=a[0],y1=a[1],x2=b[0],y2=b[1],dx=x2-x1,dy=y2-y1;
+    if(dx===0&&dy===0) return Math.hypot(x-x1,y-y1);
+    var t=((x-x1)*dx+(y-y1)*dy)/(dx*dx+dy*dy); t=t<0?0:t>1?1:t;
+    return Math.hypot(x-(x1+t*dx), y-(y1+t*dy)); }
+  var keep=new Uint8Array(n); keep[0]=1; keep[n-1]=1; var stack=[[0,n-1]];
+  while(stack.length){ var seg=stack.pop(), a=seg[0], b=seg[1], maxD=0, idx=-1;
+    for(var i=a+1;i<b;i++){ var d=perp(pts[i],pts[a],pts[b]); if(d>maxD){ maxD=d; idx=i; } }
+    if(maxD>eps && idx>0){ keep[idx]=1; stack.push([a,idx]); stack.push([idx,b]); } }
+  var out=[]; for(var j=0;j<n;j++) if(keep[j]) out.push(pts[j]); return out;
+}
+// Build stored lats/lons from a Strava latlng stream ([lat,lon] pairs): simplify
+// with Douglas-Peucker (keeps the route shape), hard-cap the point count as a
+// backstop, round to 5 dp (~1 m). Shared by fetchStravaStreams_ and the bulk
+// GPS backfill so both write road-following tracks.
+function trackFromLatlng_(ll){
+  if(!ll || ll.length<2) return null;
+  var dl=dpDownsample_(ll, 0.00003);
+  if(dl.length>2500){ var s=Math.ceil(dl.length/2000), d2=[]; for(var k=0;k<dl.length;k+=s) d2.push(dl[k]); dl=d2; }
+  return { lats: dl.map(function(p){ return Math.round(p[0]*1e5)/1e5; }),
+           lons: dl.map(function(p){ return Math.round(p[1]*1e5)/1e5; }) };
+}
 // Merge one ride's GPS/stream payload into /gps/{key}. Uses Firebase PATCH (not
 // PUT) so writing freshly-fetched streams (which omit lats/lons — the stream
 // endpoint returns altitude/watts/hr/cadence, NOT latlng) can never REPLACE the
@@ -3429,9 +3457,7 @@ function fetchStravaStreams_(r, ds, maxOf){
         // entry was never written. normalizeTrack_ leaves <90 floats as-is. Only
         // set if the ride doesn't already carry a track.
         if(ll && ll.length>1 && !(r.lats&&r.lats.length)){
-          var _dll=ds(ll,600)||ll;
-          r.lats=_dll.map(function(p){ return Math.round(p[0]*1e5)/1e5; });
-          r.lons=_dll.map(function(p){ return Math.round(p[1]*1e5)/1e5; });
+          var _trk=trackFromLatlng_(ll); if(_trk){ r.lats=_trk.lats; r.lons=_trk.lons; }
         }
         if(alt){
           r.chartEle = ds(alt.map(function(m){return Math.round(m*3.28084);}),200); // m -> ft
@@ -3575,7 +3601,10 @@ function rideMayHaveGps_(r){
 var _gpsBackfill={running:false, stop:false};
 function gpsBackfillCandidates_(){ return (st.rides||[]).filter(rideMayHaveGps_); }
 function stopGpsBackfill(){ _gpsBackfill.stop=true; }
-function runGpsBackfill(){
+// force=true re-fetches and OVERWRITES every outdoor ride's track, even ones
+// that already have GPS — needed to replace the corner-chorded tracks the old
+// every-Nth downsample wrote. Normal mode skips rides that already have a track.
+function runGpsBackfill(force){
   var el=document.getElementById('gps-backfill-status');
   function say(t){ if(el) el.textContent=t; }
   if(_gpsBackfill.running){ say('Already running…'); return; }
@@ -3584,39 +3613,42 @@ function runGpsBackfill(){
   if(!st.stravaToken && !st.stravaRefreshToken){ say('Connect Strava first (Reconnect), then run this.'); return; }
   _gpsBackfill.running=true; _gpsBackfill.stop=false;
   var i=0, healed=0, already=0, noTrack=0, err=0, total=list.length;
-  say('Starting… '+total+' outdoor rides to check (Strava-limited, ~90 fetches/run).');
+  say('Starting'+(force?' (re-fetch ALL)':'')+'… '+total+' outdoor rides (Strava-limited, ~90 fetches/run).');
   withStravaToken_(function(token){
     if(!token){ _gpsBackfill.running=false; say('No Strava token — reconnect Strava and retry.'); return; }
     function finish(msg){
       _gpsBackfill.running=false;
       try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
-      say(msg+' — healed '+healed+' rides'+(already?(', '+already+' already had GPS'):'')+(noTrack?(', '+noTrack+' had no track on Strava'):'')+(err?(', '+err+' errors'):'')+(i<list.length?('. Stopped at '+i+'/'+total+' — run again to continue.'):'. Done!')+' Reopen a ride to see its map.');
+      say(msg+' — '+(force?'re-drew ':'healed ')+healed+' tracks'+(already?(', '+already+' already had GPS'):'')+(noTrack?(', '+noTrack+' had no track on Strava'):'')+(err?(', '+err+' errors'):'')+(i<list.length?('. Stopped at '+i+'/'+total+' — run again to continue.'):'. Done!')+' Reopen a ride to see its map.');
+    }
+    function writeTrack(r, ll){                             // DP-simplify (follows roads) + store
+      var trk=trackFromLatlng_(ll); if(!trk) return false;
+      r.lats=trk.lats; r.lons=trk.lons; r._gpsTried=true;
+      var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl);
+      return true;
+    }
+    function fetchAndWrite(r){
+      var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true';
+      return fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
+        if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
+        if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
+        return x.ok?x.json():null;
+      }).then(function(j){
+        var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
+        if(ll && writeTrack(r, ll)) healed++; else noTrack++;
+        if(healed && healed%20===0){ try{ sv(); }catch(e){} }
+        setTimeout(step, 1100);                             // rate-limit spacing between Strava fetches
+      });
     }
     function step(){
       if(_gpsBackfill.stop) return finish('Stopped');
       if(i>=list.length) return finish('Complete');
       var r=list[i++];
-      say('Checking '+i+'/'+total+'… healed '+healed+(noTrack?(', '+noTrack+' no-track'):''));
-      gpsGetAny_(r).then(function(p){                       // already has a track? (Firebase read)
+      say('Checking '+i+'/'+total+'… '+(force?'re-drew ':'healed ')+healed+(noTrack?(', '+noTrack+' no-track'):''));
+      if(force){ fetchAndWrite(r).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); }); return; }
+      gpsGetAny_(r).then(function(p){                       // already has a track? (free Firebase read)
         if(p && p.lats && p.lats.length){ already++; setTimeout(step, 0); return null; }
-        var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true';
-        return fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
-          if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
-          if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
-          return x.ok?x.json():null;
-        }).then(function(j){
-          var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
-          if(ll){
-            var s=Math.ceil(ll.length/600), dl=[]; for(var k=0;k<ll.length;k+=s) dl.push(ll[k]);
-            r.lats=dl.map(function(pp){return Math.round(pp[0]*1e5)/1e5;});
-            r.lons=dl.map(function(pp){return Math.round(pp[1]*1e5)/1e5;});
-            r._gpsTried=true;
-            var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl);
-            healed++;
-          } else { noTrack++; }
-          if(healed && healed%20===0){ try{ sv(); }catch(e){} }
-          setTimeout(step, 1100);                            // rate-limit spacing between Strava fetches
-        });
+        return fetchAndWrite(r);
       }).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); });
     }
     step();
@@ -11983,6 +12015,7 @@ function dsShowSettings(){
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Re-fetches each outdoor Strava ride&#39;s GPS track (latlng) and writes it to /gps so every ride map draws. Skips indoor + non-GPS sports, and rides that already have a track. Ignores the on-open retry flags. Rate-limited (~90 fetches/run), resumable. '+_gpsbCount+' outdoor rides to check.</div>'
     +'<div id="gps-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runGpsBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill GPS Tracks</button>'
+    +' <button onclick="runGpsBackfill(true)" style="background:#f97316;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Re-fetch &amp; Fix All</button>'
     +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
@@ -24207,7 +24240,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-bulk-gps-backfill';
+window.__BUILD__ = '2026-07-16-gps-douglas-peucker';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
