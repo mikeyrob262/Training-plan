@@ -13556,14 +13556,40 @@ function dsShowAnalytics(){
       try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
       try{
       var _wkgBest=Math.max.apply(null, wkgHistory), _wkgGoalV=parseFloat(_goalTargets_().wkg)||0, _wkgCurV=wkgHistory[wkgHistory.length-1];
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.75,fill:true,tension:0.4,pointRadius:2,pointHoverRadius:4,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:34}},plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}},plugins:[{id:'wkgRefs',afterDraw:function(ch){ var a=ch.chartArea, cx=ch.ctx, ys=ch.scales.y;
+      var _wkgChart=new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.75,fill:true,tension:0.4,pointRadius:2,pointHoverRadius:4,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:34}},plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}},plugins:[{id:'wkgRefs',afterDraw:function(ch){ var a=ch.chartArea, cx=ch.ctx, ys=ch.scales.y;
         function refln(val,col,lab){ if(val==null||isNaN(val)) return; var y=ys.getPixelForValue(val); if(y<a.top-1||y>a.bottom+1) return;
           cx.save(); cx.strokeStyle=col; cx.setLineDash([4,3]); cx.lineWidth=1; cx.globalAlpha=.85; cx.beginPath(); cx.moveTo(a.left,y); cx.lineTo(a.right,y); cx.stroke();
           cx.setLineDash([]); cx.globalAlpha=1; cx.fillStyle=col; cx.font='8px -apple-system,sans-serif'; cx.textAlign='right'; cx.fillText(lab, a.right+32, y+3); cx.restore(); }
         refln(_wkgBest,'#22c55e','Best '+_wkgBest.toFixed(2));
         refln(_wkgGoalV,'#3b82f6','Goal '+_wkgGoalV.toFixed(2));
         refln(_wkgCurV,'#c084fc','Current '+_wkgCurV.toFixed(2));
+      }},{id:'wkgMark',afterDraw:function(ch){
+        var dd=ch.data.datasets[0].data, n=dd.length; if(!n) return;
+        var idx=(window._wkgMarkIdx!=null && window._wkgMarkIdx<n && window._wkgMarkIdx>=0)?window._wkgMarkIdx:(n-1);
+        var meta=ch.getDatasetMeta(0), pt=meta&&meta.data&&meta.data[idx]; if(!pt) return;
+        var x=pt.x, a=ch.chartArea, cx=ch.ctx;
+        cx.save();
+        cx.strokeStyle='rgba(203,213,225,.9)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);
+        cx.beginPath(); cx.moveTo(x,a.top+2); cx.lineTo(x,a.bottom); cx.stroke(); cx.setLineDash([]);
+        cx.fillStyle='#e2e8f0';
+        cx.beginPath(); cx.moveTo(x,a.bottom-5); cx.lineTo(x+5,a.bottom); cx.lineTo(x,a.bottom+5); cx.lineTo(x-5,a.bottom); cx.closePath(); cx.fill();
+        cx.beginPath(); cx.arc(x, pt.y, 3.5, 0, 6.2832); cx.fill();
+        var lab=(ch.data.labels[idx]||'')+' \\u00b7 '+(dd[idx]!=null?(+dd[idx]).toFixed(2):'')+' W/kg';
+        cx.font='700 9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-70?'right':'left');
+        cx.fillText(lab, x>a.right-70?x-6:x+6, a.top+8);
+        cx.restore();
       }}]});
+      // Movable demarcation — drag or click anywhere on the chart to snap the
+      // dashed line to any date; it shows that point's date + W/kg.
+      wc.style.cursor='ew-resize';
+      var _wkgDrag=false;
+      function _wkgSet(ev){ try{ var rc=wc.getBoundingClientRect(), px=((ev.touches&&ev.touches[0])?ev.touches[0].clientX:ev.clientX)-rc.left;
+        var md=_wkgChart.getDatasetMeta(0).data; if(!md||!md.length) return;
+        var best=0,bd=Infinity; for(var k=0;k<md.length;k++){ var dx=Math.abs(md[k].x-px); if(dx<bd){ bd=dx; best=k; } }
+        window._wkgMarkIdx=best; _wkgChart.update('none'); }catch(e){} }
+      wc.addEventListener('pointerdown',function(ev){ _wkgDrag=true; _wkgSet(ev); });
+      wc.addEventListener('pointermove',function(ev){ if(_wkgDrag) _wkgSet(ev); });
+      window.addEventListener('pointerup',function(){ _wkgDrag=false; });
       }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
     }
   }
@@ -24291,7 +24317,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-deglitch+goal-cards';
+window.__BUILD__ = '2026-07-16-wkg-movable-marker';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
