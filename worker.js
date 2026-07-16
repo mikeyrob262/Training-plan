@@ -3727,7 +3727,13 @@ function migrateCorruptTracks_(){
   if(!bad.length) return;
   _gpsMigrated=true;
   try{ sv(); }catch(e){}
-  try{ console.log('[gps-migrate] cleared '+bad.length+' mismatched-length tracks; re-fetching paired tracks…'); }catch(e){}
+  // OVERWRITE REMOTE NOW with the nulled state, independent of any re-fetch. The
+  // corrupt 596/740 lives in the remote /data blob and re-seeds every pull; the
+  // end-of-chain fbPush(true) only fires after ~56s of re-fetches (and never if
+  // the Strava token flow bails), so remote could sit corrupt for the whole
+  // session. A force-push here writes null for every mismatched pair immediately,
+  // so remote can't re-seed while the re-fetch below fills clean pairs back in.
+  try{ if(typeof fbPush==='function'){ fbPush(true); console.log('[gps-migrate] force-pushed nulled state to remote ('+bad.length+' rides) — remote 596/740 overwritten'); } }catch(e){}
   if(!st.stravaToken && !st.stravaRefreshToken) return;
   withStravaToken_(function(token){
     if(!token) return;
@@ -24418,7 +24424,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-normalize-sweep-gps';
+window.__BUILD__ = '2026-07-16-force-push-nulled-remote';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
