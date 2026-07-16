@@ -3297,24 +3297,59 @@ function gpsGet(key){
     return fetch(fbGpsUrl_(key, token));
   }).then(function(r){ return (r && r.ok) ? r.json() : null; }).catch(function(){ return null; });
 }
-// Resolve a ride's GPS by the key it ACTUALLY has, tolerating legacy key formats.
-// The canonical key is rideKey(r) = 's'+stravaId, and writes use it — but if any
-// track was ever stored under a bare stravaId or 'strava_<id>', this finds it so
-// a format drift can't blank every map. Tries alternates only if the first is
-// empty, so matching keys stay a single read. Returns the first payload with
-// actual data (lats/streams), else null.
-function gpsGetAny_(r){
-  if(!r) return Promise.resolve(null);
+// Shallow list of /gps keys, fetched ONCE per session and cached — lets the
+// resolver match legacy k:<date>_<dist>_<secs> tracks by prefix when the exact
+// derived key drifted (movingSecs/distance re-synced to a slightly different
+// value). ~2k keys, one small request.
+var _gpsKeyCache=null;
+function gpsKeyList_(){
+  if(_gpsKeyCache) return Promise.resolve(_gpsKeyCache);
+  return ensureFbAuth_().then(function(tok){
+    return fetch(FB_URL.replace('/data.json','')+'/gps.json?shallow=true&auth='+encodeURIComponent(tok));
+  }).then(function(r){ return r&&r.ok?r.json():null; }).then(function(j){
+    _gpsKeyCache = j&&typeof j==='object' ? Object.keys(j) : [];
+    return _gpsKeyCache;
+  }).catch(function(){ _gpsKeyCache=[]; return _gpsKeyCache; });
+}
+// Exact candidate keys for a ride, covering BOTH storage conventions: current
+// s<stravaId> AND legacy k:<date>_<roundedDist>_<movingSecs|duration> (older
+// tracks were keyed this way BEFORE the ride gained a stravaId; rideKey(r) now
+// returns s<id> and misses them). Includes movingSecs/duration variants.
+function gpsCandidateKeys_(r){
   var keys=[], rk=rideKey(r); if(rk) keys.push(rk);
   if(r.stravaId!=null){ ['s'+r.stravaId, ''+r.stravaId, 'strava_'+r.stravaId].forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); }); }
-  var i=0;
-  function next(){
-    if(i>=keys.length) return Promise.resolve(null);
-    return gpsGet(keys[i++]).then(function(p){
-      return (p && (p.lats || p.gpsLats || p.chartEle || p.chartPwr || p.chartHR)) ? p : next();
+  if(r.date){
+    var nd=normDate(r.date), dist=r.distance?Math.round(parseFloat(r.distance)):0;
+    ['k:'+nd+'_'+dist+'_'+(r.movingSecs||r.duration||''), 'k:'+nd+'_'+dist+'_'+(r.duration||''), 'k:'+nd+'_'+dist+'_'+(r.movingSecs||'')]
+      .forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
+  }
+  return keys;
+}
+// Resolve a ride's GPS by the key it ACTUALLY has. Tries exact candidate keys
+// first (single read when the canonical s<id> matches), then, for legacy tracks
+// whose derived k: key drifted, searches the cached /gps key list by
+// k:<date>_<dist>_ prefix (then k:<date>_ as a last resort). Returns the first
+// payload with real data (lats/streams), else null.
+function gpsGetAny_(r){
+  if(!r) return Promise.resolve(null);
+  function hasData(p){ return p && (p.lats || p.gpsLats || p.chartEle || p.chartPwr || p.chartHR); }
+  var keys=gpsCandidateKeys_(r), i=0;
+  function tryNext(){
+    if(i>=keys.length) return searchByPrefix();
+    return gpsGet(keys[i++]).then(function(p){ return hasData(p)?p:tryNext(); });
+  }
+  function searchByPrefix(){
+    if(!r.date) return Promise.resolve(null);
+    return gpsKeyList_().then(function(list){
+      if(!list || !list.length) return null;
+      var nd=normDate(r.date), dist=r.distance?Math.round(parseFloat(r.distance)):0;
+      var pref1='k:'+nd+'_'+dist+'_', pref2='k:'+nd+'_', cand=null, j;
+      for(j=0;j<list.length;j++){ if(list[j].indexOf(pref1)===0){ cand=list[j]; break; } }
+      if(!cand){ for(j=0;j<list.length;j++){ if(list[j].indexOf(pref2)===0){ cand=list[j]; break; } } }
+      return cand ? gpsGet(cand).then(function(p){ return hasData(p)?p:null; }) : null;
     });
   }
-  return next();
+  return tryNext();
 }
 // Lazy-load a ride's heavy GPS/chart streams from /gps/{rideKey} onto the ride
 // object. Resolves once populated (or confirmed unavailable). No-op if the ride
@@ -24051,7 +24086,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-key-fallback';
+window.__BUILD__ = '2026-07-16-gps-legacy-kkey';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
