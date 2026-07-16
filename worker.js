@@ -14573,9 +14573,9 @@ function dsShowDashboard(){
   bikes.forEach(function(b,bi){
     var ch=(typeof bikeChain_==='function')?bikeChain_(b):null;
     var sub=b.wheelset||b.groupset||(b.miles!=null?Math.round(b.miles)+' mi':'');
-    bk+='<div data-act="gear" style="'+(bi>0?'border-top:1px solid #1c2130;margin-top:9px;padding-top:9px;':'')+'cursor:pointer">';
-    if(b.photo) bk+='<img src="'+b.photo+'" style="width:100%;height:62px;object-fit:cover;border-radius:9px;border:1px solid #1c2130;filter:brightness(1.06);display:block">';
-    bk+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:7px"><div style="min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div></div>'+(ch?'<div style="font-size:11px;font-weight:700;text-align:right;flex-shrink:0;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
+    bk+='<div data-act="gear" style="display:flex;gap:11px;align-items:center;padding:7px 0;'+(bi>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid #1c2130;filter:brightness(1.06)">';
+    bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:2px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
     bk+='</div>';
   });
   H+=card(bk);
@@ -24610,7 +24610,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-smaller-bikes';
+window.__BUILD__ = '2026-07-16-dashboard-bikes-revert';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
