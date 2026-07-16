@@ -12912,7 +12912,9 @@ function dsPowerDist_(rides, ftp){
   var rTot=real.reduce(function(s,x){return s+x;},0), cTot=curve.reduce(function(s,x){return s+x;},0);
   var _p=function(a,t){ return t>0?a.map(function(x){return Math.round(x/t*100);}):null; };
   var labels=['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2+'];
-  var cols=['#64748b','#3b82f6','#22c55e','#f59e0b','#ef4444'];
+  // Mockup zone palette: Z1 blue, Z2 green, Z3 amber, Z4 orange, Z5 red (was
+  // shifted a slot, with a dull slate Z1).
+  var cols=['#3b82f6','#22c55e','#f59e0b','#f97316','#ef4444'];
   // Display REAL zone-seconds (z1s..z6s / stream) ONLY. A mean-max power curve
   // cannot recover time-in-zone — it dumps a >1h ride's excess into Z1 and a
   // <1h ride into Z4/Z5 — so curve-estimate rides are EXCLUDED from the split
@@ -13230,8 +13232,8 @@ function dsShowAnalytics(){
   // across the full Less->More gradient regardless of an outlier day.
   var _tv=_cells.map(function(c){return c.load||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
   var _ref=_tv.length?_tv[Math.min(_tv.length-1,Math.floor(_tv.length*0.85))]:0; if(!(_ref>0)) _ref=1;
-  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.load||0)/_ref;
-    return r>=0.85?'#4ade80':r>=0.55?'#22c55e':r>=0.28?'#15803d':'#0f5132'; }
+  function _cellColor(c){ if(!c || c.n===0) return '#161b22'; var r=(c.load||0)/_ref;
+    return r>=0.85?'#39d353':r>=0.55?'#26a641':r>=0.28?'#006d32':'#0e4429'; }
   var cellSquares='';
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
@@ -13239,7 +13241,7 @@ function dsShowAnalytics(){
   hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
   hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
     +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto">'+cellSquares+'</div>'
-    +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#12151d"></span><span style="width:10px;height:10px;border-radius:2px;background:#0f5132"></span><span style="width:10px;height:10px;border-radius:2px;background:#15803d"></span><span style="width:10px;height:10px;border-radius:2px;background:#22c55e"></span><span style="width:10px;height:10px;border-radius:2px;background:#4ade80"></span>More</div>';
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#161b22"></span><span style="width:10px;height:10px;border-radius:2px;background:#0e4429"></span><span style="width:10px;height:10px;border-radius:2px;background:#006d32"></span><span style="width:10px;height:10px;border-radius:2px;background:#26a641"></span><span style="width:10px;height:10px;border-radius:2px;background:#39d353"></span>More</div>';
   rowBcards.push(hmCard);
   var rowB=document.createElement('div');
   rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
@@ -13268,7 +13270,7 @@ function dsShowAnalytics(){
     var gc=document.createElement('div');
     gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0;min-height:82px;display:flex;flex-direction:column';
     gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
-      +'<div style="font-size:15px;font-weight:800;line-height:1.1;color:'+g.color+';margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.val+'</div>'
+      +'<div style="font-size:15px;font-weight:800;line-height:1.1;color:#f1f5f9;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.val+'</div>'
       +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden;margin-top:auto"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+Math.round(g.frac*100)+'%"></div></div>';
     rowC.appendChild(gc);
   });
@@ -13284,7 +13286,7 @@ function dsShowAnalytics(){
       // Full continuous 90-day lines, gradient area fills, saturated colors,
       // TSB solid green on its own right axis, a "today" dot on the last point,
       // and a subtle per-line glow. Presentation only — values unchanged.
-      var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.34)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
+      var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.42)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
       // PRESENTATION-ONLY line smoothing. At ~90 daily points, Chart.js tension
       // is visually negligible and the raw 7-day ATL / TSB series genuinely
       // sawtooth day-to-day — so tension alone (tried 0.3/0.35/0.4) can't make
@@ -13304,7 +13306,7 @@ function dsShowAnalytics(){
         {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
         {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:1.75,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
-      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=3; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
+      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=4; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }}]});
       }catch(e){ try{ console.error('fitness chart draw failed', e); }catch(_){} }
     }
     var dc=document.getElementById('ds-dist-chart');
@@ -13318,7 +13320,7 @@ function dsShowAnalytics(){
     if(wc&&typeof Chart!=='undefined'){
       try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
       try{
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#a855f7',backgroundColor:'rgba(168,85,247,.14)',borderWidth:1.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:3,pointBackgroundColor:'#a855f7'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:3,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
       }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
     }
   }
@@ -24026,7 +24028,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-power-zone-backfill';
+window.__BUILD__ = '2026-07-16-color-saturation-pass';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
