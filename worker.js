@@ -3988,8 +3988,8 @@ function mergeItemFast_(a, b){
   // LatLng object: (lat, undefined)" crash, not a hypothetical risk.
   var gpsWinner = ((b.gpsLats && b.gpsLats.length) || 0) > ((a.gpsLats && a.gpsLats.length) || 0) ? b : a;
   var aNoGps = {}, bNoGps = {};
-  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') aNoGps[k]=a[k]; });
-  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality') bNoGps[k]=b[k]; });
+  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons') aNoGps[k]=a[k]; });
+  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
   // EDIT-WINS: a ride the user manually edited must beat a stale remote copy.
   // The generic merge above resolves numbers with Math.max, which silently
@@ -4009,6 +4009,16 @@ function mergeItemFast_(a, b){
     merged.gpsLats = gpsWinner.gpsLats;
     merged.gpsLons = gpsWinner.gpsLons;
     if(gpsWinner.gpsQuality) merged.gpsQuality = gpsWinner.gpsQuality;
+  }
+  // lats/lons resolved as an ATOMIC PAIR (same rule as gpsLats/gpsLons) — never
+  // take lat from one side and lon from the other, and prefer a VALID
+  // equal-length pair so a freshly-healed local track can't be clobbered by a
+  // stale corrupt remote copy (that regression made the migration's fix vanish).
+  if(a.lats!==undefined || b.lats!==undefined){
+    var _vp=function(o){ return !!(o && o.lats && o.lons && o.lats.length===o.lons.length && o.lats.length>1); };
+    var _av=_vp(a), _bv=_vp(b);
+    var _lw = (_av&&_bv) ? ((b.lats.length>a.lats.length)?b:a) : (_av?a:(_bv?b:null));
+    if(_lw){ merged.lats=_lw.lats; merged.lons=_lw.lons; } else { merged.lats=null; merged.lons=null; }
   }
   return merged;
 }
@@ -24386,7 +24396,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-corrupt-track-migration';
+window.__BUILD__ = '2026-07-16-merge-pair-latlon';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
