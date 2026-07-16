@@ -14441,7 +14441,7 @@ function dsShowDashboard(){
     var line='M'+pts.join(' L'), area=line+' L'+w+' '+h+' L0 '+h+' Z';
     return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision"><path d="'+area+'" fill="'+color+'" opacity="0.10"/><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
-  function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;'+(extra||'')+'">'+inner+'</div>'; }
+  function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
   function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
   function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
@@ -14462,7 +14462,7 @@ function dsShowDashboard(){
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
 
   // ===== ROW 1 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 1 0;min-height:0">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 0 auto">';
   // -- Athlete IQ --
   var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
@@ -14493,7 +14493,7 @@ function dsShowDashboard(){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:70%;text-align:center;background:'+ACC.orange+';border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div></div>';
+  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
@@ -14513,7 +14513,7 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 2 =====
-  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
+  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
   if(!recent.length){ ra+='<div style="font-size:12px;color:#64748b;padding:12px 0">No activities yet.</div>'; }
@@ -14582,7 +14582,7 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 3 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Training Load — narrow gradient daily bars, right y-axis, and a CTL-derived
   // "Optimal Range" marker (real: CTL is your sustainable daily load), plus the
   // real week-over-week change. Matches the reference chart.
@@ -24610,7 +24610,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-trainingload-polish';
+window.__BUILD__ = '2026-07-16-dashboard-fix-overlap';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
