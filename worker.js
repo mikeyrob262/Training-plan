@@ -14252,18 +14252,55 @@ function dsRenderAttention_(el, d){
     H+='<div style="font-size:11px;color:#64748b;margin-top:7px">Enjoy the ride.</div></div></div>';
   } else {
     var red=d.state==='red', accent=red?'#ef4444':'#f59e0b';
-    H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><span style="font-size:15px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:14px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span></div>';
-    items.forEach(function(it){
-      var dot=it.sev>=2?'#ef4444':'#f59e0b';
-      H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+it.text+'</span></div>';
-    });
+    var narr=(d.narrated && d.narrated.bullets && d.narrated.bullets.length)?d.narrated.bullets:null;
+    H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><span style="font-size:15px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:14px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span>'
+      +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:#64748b;border:1px solid #2a3550;border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
+    if(narr){
+      // AI-narrated: dot color follows the day state (per-item severity is not
+      // preserved through narration, so we do not fake it).
+      narr.forEach(function(t){ H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+t+'</span></div>'; });
+    } else {
+      items.forEach(function(it){
+        var dot=it.sev>=2?'#ef4444':'#f59e0b';
+        H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+it.text+'</span></div>';
+      });
+    }
     if(red){
       var top=items[0]||{cat:''};
-      var rec=d.rec || (top.cat==='env'?'Move the ride earlier, shorten it, or take it indoors — then reassess.':'Swap today for an easy Zone 1 spin or full rest, and let form recover before the next hard day.');
+      var rec=(d.narrated && d.narrated.rec) || d.rec || (top.cat==='env'?'Move the ride earlier, shorten it, or take it indoors — then reassess.':'Swap today for an easy Zone 1 spin or full rest, and let form recover before the next hard day.');
       H+='<div style="margin-top:8px;padding:9px 11px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:9px;font-size:11.5px;color:#fca5a5;line-height:1.45"><b style="color:#ef4444">Recommendation:</b> '+rec+'</div>';
     }
   }
   el.innerHTML=H;
+}
+// Layer 2 — AI NARRATION. The rules already picked the real facts; the model only
+// rephrases them (strictly: never add a signal/metric not in the list). Rule text
+// renders instantly as the fallback; this swaps in nicer copy + a red-day rec when
+// it returns. Cached 3h keyed by the facts so it is not an API call every render.
+// (\\n for newlines and double-quotes-in-single-quotes are deliberate — the file
+// is served inside one template literal.)
+function dsAttentionNarrate_(d, cb){
+  var items=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;}).slice(0,5);
+  if(!items.length){ if(cb) cb(null); return; }
+  var key=d.state+'|'+items.map(function(i){return i.text;}).join('~');
+  try{ if(window._dsAttnNarr && window._dsAttnNarr.key===key && (Date.now()-window._dsAttnNarr.ts)<10800000){ if(cb) cb(window._dsAttnNarr.val); return; } }catch(e){}
+  var lines=items.map(function(i){return '- ['+(i.sev>=2?'ACTION':'WATCH')+'] '+i.text;}).join('\\n');
+  var prompt='You are a professional cycling coach writing a one-glance briefing for a single athlete today. Below are the ONLY real, already-verified signals detected for today. Rephrase them into sharp, second-person coaching language focused on how each affects TODAY riding. Rules: use ONLY the signals listed; do NOT add, infer, or invent any metric, number, or signal that is not present (never mention HRV, sleep, resting heart rate, batteries, or equipment unless it appears below). Keep each bullet under about 22 words. Do not use apostrophes.\\n\\nDAY STATE: '+String(d.state||'').toUpperCase()+'\\nSIGNALS:\\n'+lines+'\\n\\nReturn ONLY valid JSON and nothing else, exactly: {"bullets":["...","..."],"rec":"..."} with at most 5 bullets in priority order. If DAY STATE is RED, rec must be one concrete action sentence for today; otherwise rec must be an empty string.';
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-6', max_tokens:400, messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(resp){
+    var txt=resp && resp.content && resp.content[0] && resp.content[0].text;
+    if(!txt){ if(cb) cb(null); return; }
+    var s=txt.indexOf('{'), e=txt.lastIndexOf('}');
+    if(s<0 || e<=s){ if(cb) cb(null); return; }
+    var parsed=null; try{ parsed=JSON.parse(txt.slice(s,e+1)); }catch(_){ if(cb) cb(null); return; }
+    if(!parsed || !Array.isArray(parsed.bullets)){ if(cb) cb(null); return; }
+    var val={bullets:parsed.bullets.filter(function(b){return typeof b==='string' && b.trim();}).slice(0,5), rec:(typeof parsed.rec==='string'?parsed.rec:'')};
+    if(!val.bullets.length){ if(cb) cb(null); return; }
+    try{ window._dsAttnNarr={key:key, ts:Date.now(), val:val}; }catch(e){}
+    if(cb) cb(val);
+  }).catch(function(){ if(cb) cb(null); });
 }
 
 function dsShowDashboard(){
@@ -14546,7 +14583,16 @@ function dsShowDashboard(){
   r2.appendChild(cc);
   body.appendChild(r2);
   // Weather signals are async — append + re-render when they land.
-  if(typeof dsAttentionWeather_==='function') setTimeout(function(){ dsAttentionWeather_(_att, function(d){ dsRenderAttention_(cc, d); }); }, 0);
+  // Weather signals land async; then, if the day is not green, the AI narrates the
+  // real facts and we swap in the nicer copy (rule text already shown as fallback).
+  if(typeof dsAttentionWeather_==='function') setTimeout(function(){
+    dsAttentionWeather_(_att, function(d){
+      dsRenderAttention_(cc, d);
+      if(d.state!=='green' && typeof dsAttentionNarrate_==='function'){
+        dsAttentionNarrate_(d, function(val){ if(val){ d.narrated=val; dsRenderAttention_(cc, d); } });
+      }
+    });
+  }, 0);
 
   // ROW 3
   var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
@@ -24800,7 +24846,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-attention-panel-rules';
+window.__BUILD__ = '2026-07-16-attention-ai-narration';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
