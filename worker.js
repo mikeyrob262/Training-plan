@@ -3267,15 +3267,15 @@ function fbGpsUrl_(key, token){
   return FB_URL.replace('/data.json','') + '/gps/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(token);
 }
 // The heavy fields that should live in /gps/{key}, not in the st blob.
-// lats and lons MUST stay the same length — the renderer pairs lats[i]/lons[i],
-// so a mismatch mis-pairs every point from the drift onward and garbles the map.
-// Truncate both to the shorter (last-resort guard; the real guarantee is that
-// every writer builds both from the same pair array). Mutates r in place.
+// lats and lons MUST stay the same length — the renderer pairs lats[i]/lons[i].
+// A length mismatch means the two arrays came from DIFFERENT samplings (cross-
+// source), so every point past the drift is mis-paired and truncating can't
+// un-cross them. DROP the corrupt track entirely so the empty-track guard
+// re-fetches a fresh, guaranteed-paired one. Mutates r in place.
 function evenTrack_(r){
   if(!r) return;
-  var la=r.lats, lo=r.lons;
-  if(la && lo && la.length!==lo.length){ var n=Math.min(la.length, lo.length); r.lats=la.slice(0,n); r.lons=lo.slice(0,n); }
-  if(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length){ var m=Math.min(r.gpsLats.length, r.gpsLons.length); r.gpsLats=r.gpsLats.slice(0,m); r.gpsLons=r.gpsLons.slice(0,m); }
+  if(r.lats && r.lons && r.lats.length!==r.lons.length){ r.lats=null; r.lons=null; }
+  if(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length){ r.gpsLats=null; r.gpsLons=null; }
 }
 function gpsPayload_(r){
   if(!r) return null;
@@ -3490,9 +3490,11 @@ function fetchStravaStreams_(r, ds, maxOf){
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
         var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), ll=g('latlng');
         // GPS track (decimal-degree [lat,lon] pairs) — recovers rides whose /gps
-        // entry was never written. normalizeTrack_ leaves <90 floats as-is. Only
-        // set if the ride doesn't already carry a track.
-        if(ll && ll.length>1 && !(r.lats&&r.lats.length)){
+        // entry was never written. normalizeTrack_ leaves <90 floats as-is. The
+        // fresh latlng IS authoritative — OVERWRITE r.lats/r.lons in place (both
+        // from the same pairs) even if the ride already carries a track, so a
+        // corrupt/mismatched existing track is replaced, not kept.
+        if(ll && ll.length>1){
           var _trk=trackFromLatlng_(ll); if(_trk){ r.lats=_trk.lats; r.lons=_trk.lons; }
         }
         if(alt){
@@ -24344,7 +24346,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-latlon-pairing';
+window.__BUILD__ = '2026-07-16-overwrite-corrupt-track';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
