@@ -14500,7 +14500,10 @@ function openDesktopRideDetail(idx){
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   // Strava-synced rides have summary scalars but no streams — fetch altitude/
   // watts/HR/cadence/velocity + laps on demand, cache to /gps, then re-open.
-  if(r.stravaId && (!(r.chartEle&&r.chartEle.length) || !(r.lats&&r.lats.length)) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx); }); return; }
+  // Re-fetch if streams OR GPS are missing. GPS uses its OWN _gpsTried flag so a
+  // ride whose _streamsTried was set by the pre-latlng build (streams fetched, no
+  // track) still gets one fresh attempt now that fetchStravaStreams_ pulls latlng.
+  if(r.stravaId && ((!(r.chartEle&&r.chartEle.length) && !r._streamsTried) || (!(r.lats&&r.lats.length) && !r._gpsTried))){ r._streamsTried=true; r._gpsTried=true; ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx); }); return; }
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
   var NL=String.fromCharCode(10);
@@ -15048,7 +15051,9 @@ function openRideDetail(idx){
   // Lazy-load GPS from /gps/{rideKey} (kept out of the st blob), then re-open.
   if(!r.lats && !r.gpsLats && !r._gpsTried){ r._gpsTried = true; ensureRideGps(r).then(function(){ openRideDetail(idx); }); return; }
   // Strava-synced rides: lazy-fetch streams + laps on demand (cached to /gps).
-  if(r.stravaId && (!(r.chartEle&&r.chartEle.length) || !(r.lats&&r.lats.length)) && !r._streamsTried){ r._streamsTried = true; ensureRideStreams(r).then(function(){ openRideDetail(idx); }); return; }
+  // Re-fetch if streams OR GPS are missing; GPS uses _gpsTried so a ride whose
+  // _streamsTried was set pre-latlng still gets one fresh GPS attempt now.
+  if(r.stravaId && ((!(r.chartEle&&r.chartEle.length) && !r._streamsTried) || (!(r.lats&&r.lats.length) && !r._gpsTried))){ r._streamsTried=true; r._gpsTried=true; ensureRideStreams(r).then(function(){ openRideDetail(idx); }); return; }
   var old = document.getElementById('ride-detail-modal');
   if(old) old.remove();
 
@@ -24116,7 +24121,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-refetch+today-line';
+window.__BUILD__ = '2026-07-16-gps-refetch-guard';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
