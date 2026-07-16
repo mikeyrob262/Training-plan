@@ -3719,7 +3719,10 @@ function migrateCorruptTracks_(){
     var gm=(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length);
     if(mm){ r.lats=null; r.lons=null; }
     if(gm){ r.gpsLats=null; r.gpsLons=null; }
-    if((mm||gm) && r.stravaId) bad.push(r);
+    // normalizeState_'s sweep already nulled + flagged wholesale-injected
+    // corruption before we ran, so trust _gpsCorrupt too — the length check
+    // above can't see an already-nulled pair.
+    if((mm||gm||r._gpsCorrupt) && r.stravaId) bad.push(r);
   });
   if(!bad.length) return;
   _gpsMigrated=true;
@@ -3735,7 +3738,7 @@ function migrateCorruptTracks_(){
       fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true',{headers:{'Authorization':'Bearer '+token}})
         .then(function(x){ if(x.status===429){ i--; setTimeout(step, 60000); throw 'rl'; } return x.ok?x.json():null; })
         .then(function(j){ var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
-          if(ll){ var trk=trackFromLatlng_(ll); if(trk){ r.lats=trk.lats; r.lons=trk.lons; r._gpsTried=true; var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl); healed++; } }
+          if(ll){ var trk=trackFromLatlng_(ll); if(trk){ r.lats=trk.lats; r.lons=trk.lons; r._gpsTried=true; delete r._gpsCorrupt; var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl); healed++; } }
           if(healed && healed%15===0){ try{ sv(); }catch(e){} }
           setTimeout(step, 1200); })
         .catch(function(e){ if(e==='rl') return; setTimeout(step, 1200); });
@@ -4307,6 +4310,25 @@ function normalizeState_(s){
   // pre-guard bulk stamps). Runs here so it's page-independent — every load and
   // sync merge flows through normalizeState_, not just the Garage screen.
   migrateGearAssignments_(s);
+  // GPS PAIR INTEGRITY — the single choke point. EVERY merge (fbPull AND fbPush)
+  // ends with normalizeState_, so a mismatched-length lats/lons pair is nulled
+  // HERE before it can (a) render a crossed track or (b) get written back to
+  // remote. This is what finally breaks the heal->remote-re-seeds->re-heal loop:
+  //  - mergeItemFast_'s pair rule only fires when BOTH sides share a stravaId;
+  //    a ride local LACKED (localStorage quota failures) is injected WHOLESALE
+  //    from remote by mergeArrays_ (byId[k]=item), skipping that rule entirely.
+  //    This sweep catches the wholesale-injected 596/740 that slips past it.
+  //  - On PUSH, the merged st is normalized before the PUT, so a corrupt pair is
+  //    written to remote as null (self-cleaning) instead of re-seeding 596/740.
+  // _gpsCorrupt marks the ride so migrateCorruptTracks_ can still re-fetch a
+  // clean paired track — once nulled here the length check alone can't find it.
+  if(Array.isArray(s.rides)){
+    s.rides.forEach(function(r){
+      if(!r) return;
+      if(r.lats && r.lons && r.lats.length!==r.lons.length){ r.lats=null; r.lons=null; r._gpsCorrupt=1; }
+      if(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length){ r.gpsLats=null; r.gpsLons=null; }
+    });
+  }
   return s;
 }
 
@@ -24396,7 +24418,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-merge-pair-latlon';
+window.__BUILD__ = '2026-07-16-normalize-sweep-gps';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
