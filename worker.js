@@ -13744,250 +13744,289 @@ function dsShowCalendar(){
 
   var now=new Date();
   var viewYear=now.getFullYear(), viewMonth=now.getMonth();
+  var calView='month';
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var dayNames=['S','M','T','W','T','F','S'];
+  var dayNamesFull=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+  // ---- shared helpers (real data only) ----
+  var CAL={ride:'#4ECB3C', run:'#3B95E8', workout:'#A855F7', swim:'#0EA5E9', tss:'#F97316', time:'#2DD4BF', act:'#A855F7', dist:'#3B95E8'};
+  function pad2(n){ return (n<10?'0':'')+n; }
+  function durSecs(r){ if(r&&r.movingSecs) return parseFloat(r.movingSecs)||0; return Math.round(parseDurToMin(r&&r.duration)*60); }
+  function actClass(r){ var s=rideSport_(r).toLowerCase();
+    if(/run|jog|treadmill/.test(s)) return 'run';
+    if(/swim/.test(s)) return 'swim';
+    if(/weight|strength|lift|workout|hiit|core|gym|mobility|yoga|circuit|conditioning|cardio/.test(s)) return 'workout';
+    return 'ride';
+  }
+  function calColor(r){ var c=actClass(r); return CAL[c]||CAL.ride; }
+  function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
+  function fmtHMS(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h>0?(h+':'+pad2(m)+':'+pad2(s)):(m+':'+pad2(s)); }
+  function fmtFull(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h+':'+pad2(m)+':'+pad2(s); }
+  function fmtHM(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.round((secs%3600)/60); return h>0?(h+'h '+pad2(m)+'m'):(m+'m'); }
+  var FLAME='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="'+CAL.tss+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>';
+  var PULSE='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="'+CAL.time+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>';
+  var MOON='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>';
+  // Small sparkline: line + faint area, scaled to its own max. Real daily series.
+  function sparkSVG(vals, color, w, h){
+    vals=vals||[]; if(!vals.length) vals=[0,0];
+    var max=Math.max.apply(null, vals.concat([0])); if(max<=0) max=1;
+    var n=vals.length, pts=[];
+    for(var i=0;i<n;i++){ var x=(n===1?0:(i/(n-1))*w); var y=h-((vals[i]/max)*(h-4))-2; pts.push(x.toFixed(1)+' '+y.toFixed(1)); }
+    var line='M'+pts.join(' L');
+    var area=line+' L'+w+' '+h+' L0 '+h+' Z';
+    return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">'
+      +'<path d="'+area+'" fill="'+color+'" opacity="0.13"/>'
+      +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
+  function statCard(icon,iconCol,big,label,right,rightCol){
+    return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:14px">'
+      +'<div style="width:44px;height:44px;flex-shrink:0;border-radius:11px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="display:flex;align-items:baseline;gap:7px">'
+      +'<span style="font-size:23px;font-weight:800;color:#e8edf5;line-height:1">'+big+'</span>'
+      +'<span style="font-size:12.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span>'
+      +(right?'<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:'+(rightCol||'#94a3b8')+';white-space:nowrap">'+right+'</span>':'')
+      +'</div></div></div>';
+  }
 
 
   function renderCalendar(){
     mc.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:18px 20px;box-sizing:border-box;overflow:hidden';
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:16px 22px 16px;box-sizing:border-box;overflow:hidden;gap:12px';
 
-    // Back to dashboard — the desktop Calendar is a drill-in view but had no
-    // back affordance; reuse the same back-button pattern the other screens use.
-    var backRow=document.createElement('div');
-    backRow.style.cssText='margin-bottom:12px;flex-shrink:0';
-    var backBtn=document.createElement('button');
-    backBtn.setAttribute('aria-label','Back to dashboard');
-    backBtn.innerHTML='&#8592; Dashboard';
-    backBtn.style.cssText='background:#1a1f2e;border:1px solid #252d40;color:#94a3b8;font-size:12px;font-weight:600;padding:6px 12px 6px 10px;border-radius:9px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:inherit';
-    backBtn.onclick=function(){ dsNav('dashboard'); };
-    backRow.appendChild(backBtn);
-    wrap.appendChild(backRow);
-
-    // Header — a real header with hierarchy: a bold month/year title (the month
-    // select styled AS the title so it stays a jump control), subtle circular
-    // month-paging arrows, an orange accent tick, and a Today jump. Mirrors the
-    // Analytics redesign direction (flat, strong type scale, one accent hue).
-    var hdr=document.createElement('div');
-    hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-shrink:0;padding-bottom:14px;border-bottom:1px solid #1a1f2e';
-    var left=document.createElement('div');
-    left.style.cssText='display:flex;align-items:center;gap:12px';
-    var navL=document.createElement('div');
-    navL.style.cssText='width:30px;height:30px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:19px;user-select:none;transition:background .12s';
-    navL.textContent='‹';
-    navL.onmouseover=function(){this.style.background='#232b3d';}; navL.onmouseout=function(){this.style.background='#1a1f2e';};
-    navL.onclick=function(){viewMonth--;if(viewMonth<0){viewMonth=11;viewYear--;}renderCalendar();};
-    // Month + Year selects styled as the title itself (borderless, large) so the
-    // jump-without-paging affordance is preserved but reads as a heading.
-    var titleWrap=document.createElement('div');
-    titleWrap.style.cssText='display:flex;align-items:baseline;gap:6px;position:relative';
-    var accent=document.createElement('div');
-    accent.style.cssText='width:4px;height:26px;border-radius:2px;background:#FC4C02;margin-right:2px;align-self:center';
-    var moSel=document.createElement('select');
-    moSel.style.cssText='background:transparent;color:#f1f5f9;border:none;font-size:27px;font-weight:800;letter-spacing:-.6px;font-family:inherit;cursor:pointer;padding:0;-webkit-appearance:none;appearance:none';
-    monthNames.forEach(function(nm,mi){ var op=document.createElement('option'); op.value=mi; op.textContent=nm; if(mi===viewMonth) op.selected=true; moSel.appendChild(op); });
-    moSel.onchange=function(){ viewMonth=parseInt(moSel.value,10); renderCalendar(); };
-    var yrSel=document.createElement('select');
-    yrSel.style.cssText='background:transparent;color:#64748b;border:none;font-size:20px;font-weight:600;font-family:inherit;cursor:pointer;padding:0;-webkit-appearance:none;appearance:none';
-    // Year range is computed from the data so it extends itself and never needs
-    // editing: min = earliest activity/race year; max = later of (this year + 3)
-    // or the furthest-out future race.
-    var _nowY=new Date().getFullYear();
-    var _yrOf=function(d){ var y=parseInt(String(d||'').slice(0,4),10); return (y>1990&&y<3000)?y:null; };
-    var _yrs=[], _futureRaceMax=0;
-    (st.rides||[]).forEach(function(r){ if(r){ var y=_yrOf(r.date); if(y) _yrs.push(y); } });
-    (st.runs||[]).forEach(function(r){ if(r){ var y=_yrOf(r.date); if(y) _yrs.push(y); } });
-    (st.races||[]).forEach(function(r){ if(r&&!r.deleted){ var y=_yrOf(r.date); if(y){ _yrs.push(y); if(y>_futureRaceMax) _futureRaceMax=y; } } });
-    var _minY=Math.min(_yrs.length?Math.min.apply(null,_yrs):_nowY, viewYear, _nowY);
-    var _maxY=Math.max(_nowY+3, _futureRaceMax, viewYear);
-    for(var _yy=_minY; _yy<=_maxY; _yy++){ var op2=document.createElement('option'); op2.value=_yy; op2.textContent=_yy; if(_yy===viewYear) op2.selected=true; yrSel.appendChild(op2); }
-    yrSel.onchange=function(){ viewYear=parseInt(yrSel.value,10); renderCalendar(); };
-    titleWrap.appendChild(accent); titleWrap.appendChild(moSel); titleWrap.appendChild(yrSel);
-    var navR=document.createElement('div');
-    navR.style.cssText='width:30px;height:30px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:19px;user-select:none;transition:background .12s';
-    navR.textContent='›';
-    navR.onmouseover=function(){this.style.background='#232b3d';}; navR.onmouseout=function(){this.style.background='#1a1f2e';};
-    navR.onclick=function(){viewMonth++;if(viewMonth>11){viewMonth=0;viewYear++;}renderCalendar();};
-    left.appendChild(navL); left.appendChild(titleWrap); left.appendChild(navR);
-    // Today jump — snaps the view back to the current month.
-    var todayBtn=document.createElement('button');
-    todayBtn.textContent='Today';
-    todayBtn.style.cssText='background:none;border:1px solid #FC4C02;color:#FC4C02;font-size:12px;font-weight:700;border-radius:9px;padding:6px 14px;cursor:pointer;font-family:inherit;transition:background .12s';
-    todayBtn.onmouseover=function(){this.style.background='rgba(252,76,2,.1)';}; todayBtn.onmouseout=function(){this.style.background='none';};
-    todayBtn.onclick=function(){ viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); };
-    hdr.appendChild(left); hdr.appendChild(todayBtn);
-    wrap.appendChild(hdr);
-
-    // Day headers — 8 columns: Sun..Sat + a per-week WEEK summary column. The
-    // header MUST carry the 8th label or it misaligns with the grid below.
-    var COLS='repeat(7,1fr) 0.94fr';
-    var dayHdr=document.createElement('div');
-    dayHdr.style.cssText='display:grid;grid-template-columns:'+COLS+';gap:4px;margin-bottom:6px;flex-shrink:0';
-    dayNames.forEach(function(d){
-      var dh=document.createElement('div');
-      dh.style.cssText='text-align:center;font-size:11px;font-weight:600;color:#64748b;padding:3px 0';
-      dh.textContent=d; dayHdr.appendChild(dh);
-    });
-    var wkHdr=document.createElement('div');
-    wkHdr.style.cssText='text-align:center;font-size:10px;font-weight:700;letter-spacing:.07em;color:#FC4C02;padding:3px 0';
-    wkHdr.textContent='WEEK';
-    dayHdr.appendChild(wkHdr);
-    wrap.appendChild(dayHdr);
-
-    // Ride lookup — DEDUPED, ALL activity types (allRidesDeduped_/rideSport_), so
-    // weekly + monthly Miles/TSS include Zwift/VirtualRide and never double-count.
+    // ---- data (deduped, all activity types) ----
     var ridesByDate={};
-    allRidesDeduped_().forEach(function(r){
-      if(!r.date) return;
-      var nd=normDate(r.date);
-      if(!ridesByDate[nd]) ridesByDate[nd]=[];
-      ridesByDate[nd].push(r);
-    });
-
-    var firstDay=new Date(viewYear,viewMonth,1).getDay();
+    allRidesDeduped_().forEach(function(r){ if(!r||!r.date) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
+    var firstDow=new Date(viewYear,viewMonth,1).getDay();
+    var prevDays=new Date(viewYear,viewMonth,0).getDate();
     var todayStr=normDate(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
+    var isCurMonth=(viewYear===now.getFullYear()&&viewMonth===now.getMonth());
 
-    // Lay days into week ROWS: leading blanks + days + trailing blanks so every
-    // row is exactly 7 slots. Blank days hold no rides, so a week's rollup counts
-    // ONLY that row's real activities (padding contributes nothing naturally).
-    var slots=[]; for(var i=0;i<firstDay;i++) slots.push(null);
-    for(var dd=1;dd<=daysInMonth;dd++) slots.push(dd);
-    while(slots.length%7!==0) slots.push(null);
-    var weeks=[]; for(var si=0;si<slots.length;si+=7) weeks.push(slots.slice(si,si+7));
-
-    // Per-week rollup (the SAME calRollup_ the month footer uses) + the month's
-    // peak week TSS, so each week's load bar scales against the busiest week.
-    var weekRoll=weeks.map(function(wk){
-      var wr=[]; wk.forEach(function(dn){ if(dn){ var nd=normDate(viewYear+'-'+(viewMonth+1)+'-'+dn); (ridesByDate[nd]||[]).forEach(function(rr){ wr.push(rr); }); } });
-      return calRollup_(wr);
+    // month activities + per-day series for the summary sparklines
+    var monthRides=[], distSeries=[], tssSeries=[], timeSeries=[], actSeries=[];
+    for(var _dd=1;_dd<=daysInMonth;_dd++){ var nd2=normDate(viewYear+'-'+(viewMonth+1)+'-'+_dd); var dl0=ridesByDate[nd2]||[];
+      var ds0=0,ts0=0,tm0=0; dl0.forEach(function(r){ monthRides.push(r); ds0+=parseFloat(r.distance)||0; ts0+=parseFloat(r.tss)||0; tm0+=durSecs(r); });
+      distSeries.push(ds0); tssSeries.push(ts0); timeSeries.push(tm0); actSeries.push(dl0.length);
+    }
+    // stats
+    var nRide=0,nRun=0,nWk=0,mRide=0,mRun=0,mTot=0,wkSecs=0,totSecs=0,totTSS=0,longRide=0,longRun=0;
+    monthRides.forEach(function(r){ var c=actClass(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=parseFloat(r.tss)||0;
+      totTSS+=t; totSecs+=sec; mTot+=dist;
+      if(c==='run'){ nRun++; mRun+=dist; if(dist>longRun) longRun=dist; }
+      else if(c==='workout'){ nWk++; wkSecs+=sec; }
+      else if(c==='ride'){ nRide++; mRide+=dist; if(dist>longRide) longRide=dist; }
     });
-    var maxWkTSS=Math.max(1, Math.max.apply(null, weekRoll.map(function(x){return x.tss;}).concat([0])));
+    var totAct=monthRides.length;
+    // consistency: active days vs expected training days at the cadence goal
+    var activeDays={}; monthRides.forEach(function(r){ activeDays[normDate(r.date)]=1; });
+    var nActive=Object.keys(activeDays).length;
+    var wkGoal=parseInt(st.daysPerWeek||st.trainingDays||st.planDaysPerWeek||0,10)||5;
+    var elapsed=isCurMonth?now.getDate():daysInMonth;
+    var expected=Math.max(1,Math.round(elapsed*wkGoal/7));
+    var consist10=Math.max(0,Math.min(10,Math.round(nActive/expected*10)));
 
-    var grid=document.createElement('div');
-    grid.style.cssText='display:grid;grid-template-columns:'+COLS+';gap:4px;flex:1;min-height:0';
+    var H='';
+    // ---- top bar ----
+    H+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">';
+    H+='<div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:#f1f5f9">Calendar</div>';
+    H+='<div style="display:flex;align-items:center;background:#0e1220;border:1px solid #1a2030;border-radius:10px;overflow:hidden">';
+    H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8249;</div>';
+    H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:#f1f5f9;min-width:118px;text-align:center">'+monthNames[viewMonth]+' '+viewYear+'</div>';
+    H+='<div data-cal="next" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8250;</div>';
+    H+='</div>';
+    H+='<div data-cal="today" style="padding:8px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#cbd5e1">Today</div>';
+    H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
+    H+='  <div style="display:inline-flex;background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:3px">';
+    ['week','month','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
+      H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
+    });
+    H+='  </div>';
+    H+='  <div style="width:38px;height:38px;border-radius:10px;background:#0e1220;border:1px solid #1a2030;display:flex;align-items:center;justify-content:center;color:#94a3b8"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></div>';
+    H+='</div>';
+    H+='</div>';
 
-    weeks.forEach(function(wk, wkIdx){
-      wk.forEach(function(dnum){
-        if(!dnum){ grid.appendChild(document.createElement('div')); return; }
-        var dateStr=normDate(viewYear+'-'+(viewMonth+1)+'-'+dnum);
-        var dayRides=ridesByDate[dateStr]||[];
-        var isToday=dateStr===todayStr;
-        var hasActivity=dayRides.length>0;
+    // ---- stats strip ----
+    H+='<div style="display:flex;gap:10px;flex-shrink:0">';
+    H+=statCard(calIcon('Ride',24,CAL.ride),CAL.ride,nRide,'Rides',Math.round(mRide)+' mi',CAL.ride);
+    H+=statCard(calIcon('Run',24,CAL.run),CAL.run,nRun,'Runs',(Math.round(mRun*10)/10)+' mi',CAL.run);
+    H+=statCard(calIcon('Strength',24,CAL.workout),CAL.workout,nWk,'Workouts',fmtFull(wkSecs),CAL.workout);
+    H+=statCard(FLAME,CAL.tss,totTSS,'TSS','This Month',CAL.tss);
+    H+=statCard(PULSE,CAL.time,totAct,'Total Activities','This Month','#64748b');
+    H+='</div>';
 
-        var cell=document.createElement('div');
-        cell.style.cssText='display:flex;flex-direction:column;align-items:center;border-radius:10px;padding:6px 4px;min-height:90px;background:'+(isToday?'rgba(74,222,128,.09)':'#111318')+';border:1px solid '+(isToday?'rgba(74,222,128,.55)':'#1a1f2e')+';overflow:hidden;transition:border-color .12s'+(isToday?';box-shadow:inset 0 0 0 1px rgba(74,222,128,.15)':'');
-        // Every day is clickable: activity days open the ride; empty days open
-        // the scheduler so a planned workout can be added.
-        cell.style.cursor='pointer';
-        cell.onmouseover=function(){this.style.borderColor='#4ade80';};
-        cell.onmouseout=(function(it){return function(){this.style.borderColor=it?'rgba(74,222,128,.55)':'#1a1f2e';};})(isToday);
-        if(hasActivity){
-          (function(rides){
-            cell.onclick=function(){
-              var r=rides[0];
-              var idx=(st.rides||[]).indexOf(r);
-              if(idx<0) idx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
-              if(idx>=0) openRideDetail(idx);
-            };
-          })(dayRides);
-        } else {
-          (function(ds){ cell.onclick=function(){ if(typeof openDayEditor==='function') openDayEditor(ds); }; })(dateStr);
-        }
+    // ---- build week rows (prev/next month days shown faint) ----
+    var cells=[];
+    for(var i=0;i<firstDow;i++){ cells.push({d:prevDays-firstDow+1+i,inMonth:false}); }
+    for(var d=1;d<=daysInMonth;d++){ cells.push({d:d,inMonth:true,date:normDate(viewYear+'-'+(viewMonth+1)+'-'+d)}); }
+    var nx=1; while(cells.length%7!==0){ cells.push({d:nx++,inMonth:false}); }
+    var weeks=[]; for(var s2=0;s2<cells.length;s2+=7) weeks.push(cells.slice(s2,s2+7));
+    var N=weeks.length;
+    var weekRoll=weeks.map(function(wk){ var wr=[]; wk.forEach(function(c){ if(c.inMonth){ (ridesByDate[c.date]||[]).forEach(function(r){ wr.push(r); }); } }); return calRollup_(wr); });
+    var maxWkTSS=Math.max(1,Math.max.apply(null,weekRoll.map(function(x){return x.tss;}).concat([0])));
 
-        // Day number — today reads as an Apple-Health filled green circle.
-        var dayNum=document.createElement('div');
-        if(isToday){
-          dayNum.style.cssText='font-size:12px;font-weight:800;color:#0b0e14;background:#4ade80;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:4px;flex-shrink:0';
-        } else {
-          dayNum.style.cssText='font-size:12px;font-weight:'+(hasActivity?'600':'500')+';color:'+(hasActivity?'#e2e8f0':'#475569')+';margin-bottom:4px;text-align:center';
-        }
-        dayNum.textContent=dnum;
-        cell.appendChild(dayNum);
-
-        // Scheduled (user-planned) workout indicator on days with no activity.
-        if(!hasActivity){
-          var _pov=(typeof plannedOverrideFor_==='function')?plannedOverrideFor_(dateStr):null;
-          if(_pov && _pov.name){
-            var _pd=document.createElement('div');
-            _pd.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;opacity:.7';
-            _pd.innerHTML=activityIcon_(_pov.name,18);
-            var _pl=document.createElement('div');
-            _pl.style.cssText='font-size:8px;color:#64748b;text-align:center;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-            _pl.textContent=_pov.name;
-            _pd.appendChild(_pl); cell.appendChild(_pd);
+    if(calView==='agenda'){
+      H+=calAgenda(monthRides);
+    } else if(calView==='week'){
+      H+=calWeekView(ridesByDate);
+    } else {
+      // ---- month grid header (SUN..SAT + WEEK) ----
+      H+='<div style="display:flex;gap:12px;flex-shrink:0">';
+      H+='  <div style="flex:1;display:grid;grid-template-columns:repeat(7,1fr)">';
+      dayNamesFull.forEach(function(dn){ H+='<div style="padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#5b6678">'+dn+'</div>'; });
+      H+='  </div>';
+      H+='  <div style="width:176px;padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#5b6678">WEEK</div>';
+      H+='</div>';
+      // ---- month grid body + week rail ----
+      H+='<div style="display:flex;gap:12px;flex:1;min-height:0">';
+      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat('+N+',1fr);border:1px solid #171c2b;border-radius:12px;overflow:hidden">';
+      weeks.forEach(function(wk){
+        wk.forEach(function(c){
+          var isToday=c.inMonth && c.date===todayStr;
+          var dl=c.inMonth?(ridesByDate[c.date]||[]):[];
+          var plan=(c.inMonth && !dl.length && typeof plannedOverrideFor_==='function')?plannedOverrideFor_(c.date):null;
+          var isRest=plan && /rest|recovery|off/i.test(plan.name||'');
+          var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
+          var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
+          var attrs=' data-cal="cell"'+(c.inMonth?(' data-date="'+c.date+'"'):'')+(idx>=0?(' data-idx="'+idx+'"'):'');
+          H+='<div'+attrs+' style="position:relative;border-right:1px solid #171c2b;border-bottom:1px solid #171c2b;padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
+          if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
+          var complete=c.inMonth && typeof isDayComplete==='function' && isDayComplete(c.date);
+          if((isRest||complete) && c.inMonth){
+            H+='<div style="position:relative;width:22px;height:22px;border-radius:50%;background:#4ade80;color:#08210f;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">'+c.d+'</div>';
+          } else {
+            H+='<div style="position:relative;font-size:12.5px;font-weight:'+(isToday?'800':'600')+';color:'+(!c.inMonth?'#39424f':(isToday?'#4ade80':'#c7d0dd'))+'">'+c.d+'</div>';
           }
-        }
-
-        // Activities as sport-colored CHIPS (icon + value on a tinted pill). The
-        // hue is activityIcon_'s stroke color — Ride green / Run red / Strength
-        // purple — via #RRGGBBAA suffixes, so no new palette is invented.
-        dayRides.slice(0,2).forEach(function(r){
-          var _asp=rideSport_(r)||'Ride';
-          if(rideIsIndoor(r) && /run|jog/i.test(_asp)) _asp='Treadmill';
-          var _asvg=activityIcon_(_asp,16);
-          var _acol=(_asvg.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C';
-          var _aval=r.distance?parseFloat(r.distance).toFixed(1)+' mi':(r.duration||'');
-          var chip=document.createElement('div');
-          chip.style.cssText='display:flex;align-items:center;gap:3px;margin-top:3px;padding:2px 6px;border-radius:8px;background:'+_acol+'1f;border:1px solid '+_acol+'40;max-width:100%';
-          chip.innerHTML=_asvg;
-          if(_aval){
-            var valEl=document.createElement('span');
-            valEl.style.cssText='font-size:9.5px;font-weight:800;color:'+_acol+';white-space:nowrap';
-            valEl.textContent=_aval;
-            chip.appendChild(valEl);
+          if(isRest){
+            H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
+          } else if(dl.length){
+            dl.slice(0,2).forEach(function(r){
+              var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=Math.round(parseFloat(r.tss)||0);
+              var main=dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec);
+              var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+              if(nm.length>20) nm=nm.slice(0,19)+'…';
+              var sub=fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'');
+              H+='<div style="margin-top:5px;padding:6px 8px;border-radius:8px;background:'+col+'14;border:1px solid '+col+'33;overflow:hidden">'
+                +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',14,col)+'<span style="font-size:12.5px;font-weight:800;color:#e8edf5;white-space:nowrap">'+main+'</span></div>'
+                +'<div style="font-size:11px;color:#9aa7bd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+                +'<div style="font-size:10px;color:#5f6b7e;margin-top:1px;white-space:nowrap">'+sub+'</div></div>';
+            });
+            if(dl.length>2){ H+='<div style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600">+'+(dl.length-2)+' more</div>'; }
+          } else if(plan && plan.name){
+            H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.75">'+activityIcon_(plan.name,18)+'<div style="font-size:9px;color:#64748b;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+plan.name+'</div></div>';
           }
-          cell.appendChild(chip);
+          H+='</div>';
         });
-
-        if(dayRides.length>2){
-          var more=document.createElement('div');
-          more.style.cssText='font-size:8px;color:#64748b;margin-top:3px;font-weight:600';
-          more.textContent='+'+(dayRides.length-2);
-          cell.appendChild(more);
-        }
-
-        grid.appendChild(cell);
       });
+      H+='</div>';
+      // week rail
+      H+='<div style="width:176px;display:grid;grid-template-rows:repeat('+N+',1fr);gap:8px">';
+      weeks.forEach(function(wk,wi){
+        var roll=weekRoll[wi];
+        if(roll.acts===0){ H+='<div></div>'; return; }
+        var ratio=Math.min(1,roll.tss/maxWkTSS);
+        var bc=ratio>=0.66?'#F97316':ratio>=0.33?'#F59E0B':'#4ade80';
+        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:4px;padding:12px 15px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
+          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678">WEEK '+(wi+1)+'</div>'
+          +'<div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1">'+roll.miles+'<span style="font-size:12px;font-weight:600;color:#5b6678;margin-left:3px">mi</span></div>'
+          +'<div style="font-size:14px;font-weight:800;color:'+bc+';line-height:1">'+roll.tss+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:2px">TSS</span></div>'
+          +'<div style="height:4px;border-radius:2px;background:#1a2030;margin-top:4px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(ratio*100))+'%;background:'+bc+';border-radius:2px"></div></div>'
+          +'</div>';
+      });
+      H+='</div>';
+      H+='</div>';
+    }
 
-      // WEEK summary cell — Miles + TSS for this row's real activities, with a
-      // load bar colored by TSS intensity relative to the month's busiest week.
-      var roll=weekRoll[wkIdx];
-      var ratio=roll.tss>0?Math.min(1,roll.tss/maxWkTSS):0;
-      var barCol=ratio>=0.66?'#FC4C02':ratio>=0.33?'#f59e0b':'#4ade80';
-      var sumCell=document.createElement('div');
-      sumCell.style.cssText='display:flex;flex-direction:column;justify-content:center;gap:4px;border-radius:10px;padding:8px 9px;min-height:90px;background:#0e1220;border:1px solid #1a1f2e;overflow:hidden';
-      if(roll.acts===0){
-        sumCell.innerHTML='<div style="font-size:13px;color:#33405c;text-align:center;font-weight:700">—</div>';
-      } else {
-        sumCell.innerHTML=
-          '<div style="font-size:16px;font-weight:800;color:#e2e8f0;line-height:1">'+roll.miles+'<span style="font-size:9px;font-weight:600;color:#64748b;margin-left:2px">mi</span></div>'
-         +'<div style="font-size:12px;font-weight:800;color:'+barCol+';line-height:1;margin-top:1px">'+roll.tss+'<span style="font-size:8px;font-weight:600;color:#64748b;margin-left:2px">TSS</span></div>'
-         +'<div style="height:4px;border-radius:2px;background:#1a1f2e;margin-top:3px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(ratio*100))+'%;background:'+barCol+';border-radius:2px"></div></div>';
+    // ---- month summary footer ----
+    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:16px;padding:14px 20px;display:flex;align-items:center;gap:26px">';
+    H+='<div style="flex:1;min-width:0">';
+    H+='  <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#5b6678;margin-bottom:10px">MONTH SUMMARY</div>';
+    H+='  <div style="display:flex;gap:26px;align-items:flex-end">';
+    H+=sumBlock(Math.round(mTot)+' <span style="font-size:12px;color:#5b6678;font-weight:600">mi</span>','Distance','#e8edf5',sparkSVG(distSeries,CAL.dist,120,32));
+    H+=sumBlock(totTSS+' <span style="font-size:12px;color:#5b6678;font-weight:600">TSS</span>','Training Load',CAL.tss,sparkSVG(tssSeries,CAL.tss,120,32));
+    H+=sumBlock(fmtHM(totSecs),'Total Time',CAL.time,sparkSVG(timeSeries,CAL.time,120,32));
+    H+=sumBlock(String(totAct),'Activities',CAL.act,sparkSVG(actSeries,CAL.act,120,32));
+    H+='  </div>';
+    H+='</div>';
+    H+='<div style="display:flex;gap:24px;flex-shrink:0">';
+    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Ride</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Ride',18,CAL.ride)+'<span style="font-size:16px;font-weight:800;color:'+CAL.ride+'">'+(Math.round(longRide*10)/10)+' mi</span></div></div>';
+    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Run</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Run',18,CAL.run)+'<span style="font-size:16px;font-weight:800;color:'+CAL.run+'">'+(Math.round(longRun*10)/10)+' mi</span></div></div>';
+    H+='</div>';
+    var _R=26,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
+    H+='<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center">';
+    H+='  <svg width="72" height="72" viewBox="0 0 72 72"><circle cx="36" cy="36" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="6"/><circle cx="36" cy="36" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 36 36)"/><text x="36" y="41" text-anchor="middle" font-size="15" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
+    H+='  <div style="font-size:11px;color:#8592a6;margin-top:2px">Consistency</div>';
+    H+='</div>';
+    H+='</div>';
+
+    wrap.innerHTML=H;
+    wrap.addEventListener('click',function(e){
+      var t=e.target.closest('[data-cal]'); if(!t) return;
+      var a=t.getAttribute('data-cal');
+      if(a==='prev'){ viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); }
+      else if(a==='next'){ viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); }
+      else if(a==='today'){ viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
+      else if(a==='view'){ calView=t.getAttribute('data-view'); renderCalendar(); }
+      else if(a==='cell'){ var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
+        if(idx!=null) openRideDetail(parseInt(idx,10));
+        else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
       }
-      grid.appendChild(sumCell);
     });
-    wrap.appendChild(grid);
-
-    // Monthly summary — SAME calRollup_ computation, reused for the whole month.
-    var monthRides=[];
-    var _mprefix=viewYear+'-'+(viewMonth<9?'0':'')+(viewMonth+1);
-    Object.keys(ridesByDate).forEach(function(nd){ if(nd.indexOf(_mprefix)===0) ridesByDate[nd].forEach(function(r){ monthRides.push(r); }); });
-    var mroll=calRollup_(monthRides);
-    var totalDist=mroll.miles, totalTSS=mroll.tss, rideCount=mroll.rideCount;
-
-    var summary=document.createElement('div');
-    summary.style.cssText='display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #1a1f2e;flex-shrink:0';
-    [['Rides',rideCount,'#4ade80'],['Distance',totalDist+' mi','#60a5fa'],['Load',totalTSS+' TSS','#f59e0b'],['Total',monthRides.length+' acts','#94a3b8']].forEach(function(x){
-      var s=document.createElement('div');
-      s.style.cssText='flex:1;background:#111318;border-radius:10px;padding:8px;text-align:center';
-      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+x[2]+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+x[0]+'</div>';
-      summary.appendChild(s);
-    });
-    wrap.appendChild(summary);
     mc.appendChild(wrap);
   }
+
+  function sumBlock(big,label,color,spark){
+    return '<div style="flex:1;min-width:0">'
+      +'<div style="font-size:20px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</div>'
+      +'<div style="font-size:11px;color:#8592a6;margin:2px 0 6px">'+label+'</div>'
+      +'<div style="height:32px">'+spark+'</div></div>';
+  }
+
+  // Agenda view — chronological list of the month's activities.
+  function calAgenda(monthRides){
+    var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
+    var H='<div style="flex:1;min-height:0;overflow-y:auto;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:6px 4px">';
+    if(!list.length){ H+='<div style="padding:44px;text-align:center;color:#5b6678;font-size:13px">No activities this month.</div>'; }
+    list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
+      var idx=(st.rides||[]).indexOf(r);
+      var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+      var dObj=new Date(normDate(r.date)+'T00:00:00');
+      var dstr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dObj.getDay()]+' '+(dObj.getMonth()+1)+'/'+dObj.getDate();
+      H+='<div data-cal="cell"'+(idx>=0?(' data-idx="'+idx+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
+        +'<div style="width:54px;font-size:11px;color:#8592a6;font-weight:600">'+dstr+'</div>'
+        +'<div style="width:36px;height:36px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center">'+calIcon(rideSport_(r)||'Ride',20,col)+'</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+        +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div></div>';
+    });
+    H+='</div>';
+    return H;
+  }
+  // Week view — the current week as tall day columns with activity cards.
+  function calWeekView(ridesByDate){
+    var mon=new Date(now); mon.setDate(now.getDate()-now.getDay());
+    var today=normDate(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
+    var H='<div style="flex:1;min-height:0;overflow-y:auto"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px">';
+    for(var i=0;i<7;i++){ var dt=new Date(mon); dt.setDate(mon.getDate()+i);
+      var nd=normDate(dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate());
+      var dl=ridesByDate[nd]||[]; var isToday=nd===today;
+      var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
+      H+='<div data-cal="cell" data-date="'+nd+'"'+(idx>=0?(' data-idx="'+idx+'"'):'')+' style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
+      H+='<div style="font-size:11px;color:#8592a6;font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
+      H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
+      dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
+        var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+        H+='<div style="margin-top:5px;padding:6px 8px;border-radius:8px;background:'+col+'14;border:1px solid '+col+'33">'
+          +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:#e8edf5">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
+          +'<div style="font-size:10px;color:#9aa7bd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+          +'<div style="font-size:9px;color:#5f6b7e">'+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div>';
+      });
+      H+='</div>';
+    }
+    H+='</div></div>';
+    return H;
+  }
+
   renderCalendar();
 }
 
@@ -24555,7 +24594,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-calendar-weekcol-restyle';
+window.__BUILD__ = '2026-07-16-calendar-mockup-redesign';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
