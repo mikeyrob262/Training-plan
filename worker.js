@@ -3279,11 +3279,15 @@ function gpsPayload_(r){
   if(r.laps && r.laps.length) p.laps = r.laps;
   return Object.keys(p).length ? p : null;
 }
-// Write one ride's GPS payload to /gps/{key}. Resolves true/false, never rejects.
+// Merge one ride's GPS/stream payload into /gps/{key}. Uses Firebase PATCH (not
+// PUT) so writing freshly-fetched streams (which omit lats/lons — the stream
+// endpoint returns altitude/watts/hr/cadence, NOT latlng) can never REPLACE the
+// node and wipe an existing GPS track. PATCH only sets the fields present in the
+// payload; any lats/lons already in /gps survive. Resolves true/false, never rejects.
 function gpsPut(key, payload){
   if(!key || !payload) return Promise.resolve(false);
   return ensureFbAuth_().then(function(token){
-    return fetch(fbGpsUrl_(key, token), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    return fetch(fbGpsUrl_(key, token), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   }).then(function(r){ return !!(r && r.ok); }).catch(function(){ return false; });
 }
 // Fetch one ride's GPS payload from /gps/{key}. Resolves the object or null.
@@ -24028,7 +24032,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-color-saturation-pass';
+window.__BUILD__ = '2026-07-16-gps-patch-merge';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
