@@ -3980,6 +3980,37 @@ function mergeState_(a, b){
 // shortcut, since arbitrary nested objects (like the top-level state or
 // a {rides:[...]} wrapper) would still stringify all nested GPS data
 // just to decide whether to skip, defeating the purpose entirely.
+// ===== Manual-edit protection (survives sync) =====================
+// Central mechanism: any field the user edits by hand is recorded in a per-ride
+// _edited mask. No sync/import may overwrite a masked field, and the mask itself
+// is part of the ride object so it propagates across devices (pushed with the
+// full unslimmed state). Same "fix once at the source" principle as _gpsCorrupt.
+// NB: gear/bike assignment has its OWN tier-1 override (st.bikeAssignments), so it
+// is deliberately NOT covered here — one precedence system per concern.
+function markRideEdited_(r, fields){
+  if(!r||!fields) return r;
+  if(!r._edited || typeof r._edited!=='object') r._edited={};
+  (Array.isArray(fields)?fields:[fields]).forEach(function(f){ if(f) r._edited[f]=1; });
+  r.editedAt=Date.now();
+  return r;
+}
+// Apply an incoming (sync/import) ride onto an existing one WITHOUT clobbering any
+// field the user manually edited. Non-edited fields take the incoming value;
+// fields the incoming omits are preserved (so a summary-only re-sync cannot drop
+// GPS/streams); the edit mask + editedAt carry forward. Use at EVERY import-apply.
+function applyRideSync_(existing, incoming){
+  if(!existing) return incoming;
+  if(!incoming) return existing;
+  var ed=(existing._edited && typeof existing._edited==='object')?existing._edited:{};
+  var out={}, k;
+  for(k in incoming){ if(Object.prototype.hasOwnProperty.call(incoming,k)) out[k]=incoming[k]; }
+  for(k in existing){ if(Object.prototype.hasOwnProperty.call(existing,k) && out[k]===undefined) out[k]=existing[k]; }
+  Object.keys(ed).forEach(function(f){ if(existing[f]!==undefined) out[f]=existing[f]; });
+  var em=Object.assign({}, (incoming._edited||{}), ed);
+  if(Object.keys(em).length) out._edited=em;
+  var eAt=Math.max(existing.editedAt||0, incoming.editedAt||0); if(eAt) out.editedAt=eAt;
+  return out;
+}
 function mergeItemFast_(a, b){
   if(a == null) return b;
   if(b == null) return a;
@@ -4019,12 +4050,21 @@ function mergeItemFast_(a, b){
   // most-recently-edited side's user-editable fields override that merge. a is
   // always the local side and b the remote (see mergeArrays_/fbPush).
   var aEdit = a.editedAt||0, bEdit = b.editedAt||0;
-  if(aEdit || bEdit){
+  // Per-field user-edited mask: union both sides; every masked field takes its
+  // value from the side that carries the edit (later editedAt wins a tie). This is
+  // what makes a manual edit (e.g. a renamed ride) survive a merge with a stale
+  // remote/Strava copy, and the mask propagates across devices (it rides on the
+  // object). The fixed list below still covers rides edited before the mask existed.
+  var aM=(a._edited&&typeof a._edited==='object')?a._edited:{}, bM=(b._edited&&typeof b._edited==='object')?b._edited:{};
+  var _mask=Object.assign({}, aM, bM), _mk=Object.keys(_mask);
+  if(aEdit || bEdit || _mk.length){
     var win = (aEdit>=bEdit) ? a : b;
     ['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed','avgHR','hr','calories','sportType','type'].forEach(function(f){
       if(win[f]!==undefined) merged[f]=win[f];
     });
-    merged.editedAt = Math.max(aEdit,bEdit);
+    _mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
+    if(_mk.length) merged._edited=_mask;
+    if(aEdit||bEdit) merged.editedAt = Math.max(aEdit,bEdit);
   }
   if(gpsWinner.gpsLats !== undefined){
     merged.gpsLats = gpsWinner.gpsLats;
@@ -11409,7 +11449,7 @@ function importRideFile(input){
           if(!st.rides) st.rides=[];
           // Avoid duplicates by id
           var existing = ride.id ? function(){for(var _i=0;_i<st.rides.length;_i++){if(st.rides[_i].id===ride.id)return _i;}return -1;}() : -1;
-          if(existing >= 0) st.rides[existing] = ride;
+          if(existing >= 0) st.rides[existing] = applyRideSync_(st.rides[existing], ride);
           else st.rides.push(ride);
           imported++;
         }
@@ -11945,6 +11985,7 @@ function renameRide(idx){
   newName = newName.trim();
   if(!newName) return;
   st.rides[idx].name = newName;
+  markRideEdited_(st.rides[idx], ['name']);   // survives Strava/Intervals sync + cross-device
   sv();
   var el = document.getElementById('ride-detail-name');
   if(el) el.textContent = newName;
@@ -17237,18 +17278,19 @@ function editRideData(idx){
   save.textContent='Save changes';
   save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
   save.onclick=function(){
-    if(nameI.value.trim()) r.name=nameI.value.trim();
-    if(distI.value!=='') r.distance=parseFloat(distI.value);
-    if(durI.value!=='') r.duration=parseFloat(durI.value);
-    if(tssI.value!=='') r.tss=parseFloat(tssI.value);
-    if(npI.value!=='') r.np=parseFloat(npI.value);
-    if(apI.value!=='') r.avgPwr=parseFloat(apI.value);
-    if(elevI.value!=='') r.elev=parseFloat(elevI.value);
+    var _ef=[];
+    if(nameI.value.trim()){ r.name=nameI.value.trim(); _ef.push('name'); }
+    if(distI.value!==''){ r.distance=parseFloat(distI.value); _ef.push('distance'); }
+    if(durI.value!==''){ r.duration=parseFloat(durI.value); _ef.push('duration'); }
+    if(tssI.value!==''){ r.tss=parseFloat(tssI.value); _ef.push('tss'); }
+    if(npI.value!==''){ r.np=parseFloat(npI.value); _ef.push('np'); }
+    if(apI.value!==''){ r.avgPwr=parseFloat(apI.value); _ef.push('avgPwr'); }
+    if(elevI.value!==''){ r.elev=parseFloat(elevI.value); _ef.push('elev'); }
     // Recompute avg speed from the corrected distance + duration if both present.
-    if(r.distance && r.duration){ r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10; }
-    // Stamp the edit so the sync merge lets this manual correction win over a
-    // stale remote copy instead of Math.max-ing it away.
-    r.editedAt=Date.now();
+    if(r.distance && r.duration){ r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10; _ef.push('avgSpeed'); }
+    // Record each manually-changed field so the sync merge lets these corrections
+    // win over a stale remote/Strava copy (and so the mask propagates to devices).
+    markRideEdited_(r, _ef);
     try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Ride updated'); }catch(e){}
     overlay.remove();
@@ -23447,15 +23489,16 @@ function openDayEditor(dateKey){
     var _nm=effectiveName();
     // Completed side -> recorded activity (create-on-save is out of scope; edit if exists)
     if(o){
-      if(_nm) o.name=_nm;
-      var dv=num(distR.completed.value); if(dv!=null) o.distance=dv;
-      var uv=num(durR.completed.value);  if(uv!=null) o.duration=uv;
-      var sv2=num(paceR.completed.value);if(sv2!=null) o.avgSpeed=sv2;
-      var tv=num(tssR.completed.value);  if(tv!=null) o.tss=tv;
-      var pv=num(pwrR.completed.value);  if(pv!=null) o.np=pv;
-      var ev=num(elevR.completed.value); if(ev!=null) o.elev=ev;
+      var _ef2=[];
+      if(_nm){ o.name=_nm; _ef2.push('name'); }
+      var dv=num(distR.completed.value); if(dv!=null){ o.distance=dv; _ef2.push('distance'); }
+      var uv=num(durR.completed.value);  if(uv!=null){ o.duration=uv; _ef2.push('duration'); }
+      var sv2=num(paceR.completed.value);if(sv2!=null){ o.avgSpeed=sv2; _ef2.push('avgSpeed'); }
+      var tv=num(tssR.completed.value);  if(tv!=null){ o.tss=tv; _ef2.push('tss'); }
+      var pv=num(pwrR.completed.value);  if(pv!=null){ o.np=pv; _ef2.push('np'); }
+      var ev=num(elevR.completed.value); if(ev!=null){ o.elev=ev; _ef2.push('elev'); }
       if(o.distance&&o.duration&&!paceR.completed.value){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
-      o.editedAt=Date.now();
+      markRideEdited_(o, _ef2);
     }
     // Planned side -> plan session name + duration text back into the plan DOM
     if(plan && plan.week){
@@ -23879,7 +23922,10 @@ function fetchStravaPage(token, page, imported, forceAll) {
       // hide the freshly re-synced ride all over again.
       var existingDeleted = st.rides.find(function(r){ return r.deleted && r.stravaId===a.id; });
       if(existingDeleted){
-        Object.keys(newRideData).forEach(function(k){ existingDeleted[k]=newRideData[k]; });
+        // Respect any manual edits made before this ride was deleted (applyRideSync_
+        // preserves _edited fields), then revive it in place.
+        var _revived = applyRideSync_(existingDeleted, newRideData);
+        Object.keys(_revived).forEach(function(k){ existingDeleted[k]=_revived[k]; });
         existingDeleted.deleted = false;
         existingDeleted.deletedAt = null;
       } else {
@@ -24610,7 +24656,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-bikes-revert';
+window.__BUILD__ = '2026-07-16-edited-mask-survives-sync';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
