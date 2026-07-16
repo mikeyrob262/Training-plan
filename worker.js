@@ -13090,7 +13090,7 @@ function dsPowerDist_(rides, ftp){
   });
   var rTot=real.reduce(function(s,x){return s+x;},0), cTot=curve.reduce(function(s,x){return s+x;},0);
   var _p=function(a,t){ return t>0?a.map(function(x){return Math.round(x/t*100);}):null; };
-  var labels=['Z1 Recovery','Z2 Endurance','Z3 Tempo','Z4 Threshold','Z5 VO2+'];
+  var labels=['Z1 0-55%','Z2 56-75%','Z3 76-90%','Z4 91-105%','Z5 106%+'];
   // Mockup zone palette: Z1 blue, Z2 green, Z3 amber, Z4 orange, Z5 red (was
   // shifted a slot, with a dull slate Z1).
   var cols=['#3b82f6','#22c55e','#f59e0b','#f97316','#ef4444'];
@@ -13254,7 +13254,7 @@ function dsShowAnalytics(){
   // listener; both renderers must carry it).
   function teachCard_(inner, key, label){
     var c=document.createElement('div');
-    c.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
+    c.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
     if(key){
       c.setAttribute('data-metric-teach',key);
       c.setAttribute('role','button'); c.setAttribute('tabindex','0'); c.setAttribute('aria-label','Learn about '+(label||key));
@@ -13357,15 +13357,24 @@ function dsShowAnalytics(){
   // ==== LAYOUT BELOW GAUGES — mockup grid (layout only; card contents unchanged) ====
   // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
   var fitnessCard=document.createElement('div');
-  fitnessCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
+  fitnessCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
   var _ctlDelta=(ctlArr.length?ctlArr[ctlArr.length-1]-ctlArr[0]:0), _up=_ctlDelta>=0;
   var _cmpBadge=CMP?(' <span style="font-size:10px;font-weight:700;text-transform:none;color:'+(_up?'#22c55e':'#ef4444')+'">'+(_up?'\\u25b2':'\\u25bc')+' '+Math.abs(Math.round(_ctlDelta*10)/10)+' CTL vs start</span>'):'';
   fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — '+RLABEL+_cmpBadge+'</div>'+
     '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
   var distCard=document.createElement('div');
-  distCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
-  distCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</div>'+
-    '<div style="position:relative;height:140px"><canvas id="ds-dist-chart"></canvas></div>';
+  distCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+  var _thisWk=0,_lastWk=0;
+  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); var ago=(now-d)/86400000;
+    if(ago>=0&&ago<7) _thisWk+=parseFloat(r.distance)||0; else if(ago>=7&&ago<14) _lastWk+=parseFloat(r.distance)||0; });
+  _thisWk=Math.round(_thisWk); _lastWk=Math.round(_lastWk);
+  var _wkD=(_lastWk>0)?Math.round((_thisWk-_lastWk)/_lastWk*100):null;
+  distCard.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px">'
+      +'<span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</span>'
+      +(_wkD!=null?'<span style="font-size:11px;font-weight:700;color:'+(_wkD>=0?'#22c55e':'#ef4444')+';white-space:nowrap">'+(_wkD>=0?'\\u25b2':'\\u25bc')+' '+Math.abs(_wkD)+'% vs last week</span>':'')
+    +'</div>'
+    +'<div style="margin-bottom:4px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1">'+_thisWk.toLocaleString()+'</span><span style="font-size:13px;color:#94a3b8;margin-left:4px">mi</span></div>'
+    +'<div style="position:relative;height:118px"><canvas id="ds-dist-chart"></canvas></div>';
   var rowA=document.createElement('div');
   rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:10px;flex-shrink:0';
   rowA.appendChild(fitnessCard); rowA.appendChild(distCard);
@@ -13376,9 +13385,14 @@ function dsShowAnalytics(){
   var wkgCard=null;
   if(wkgHistory.length>2){
     wkgCard=document.createElement('div');
-    wkgCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
-    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">W/kg Trend</div>'+
-      '<div style="position:relative;height:120px"><canvas id="ds-wkg-chart"></canvas></div>';
+    wkgCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+    var _wkgD=(wkgHistory.length>=2)?(Math.round((wkgHistory[wkgHistory.length-1]-wkgHistory[wkgHistory.length-2])*100)/100):0;
+    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">W/kg Trend</div>'
+      +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
+        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgNow.toFixed(2)+'</span><span style="font-size:12px;color:#94a3b8">W/kg</span>'
+        +(_wkgD!==0?'<span style="font-size:10px;font-weight:700;color:'+(_wkgD>=0?'#22c55e':'#ef4444')+'">'+(_wkgD>=0?'\\u2191':'\\u2193')+' '+Math.abs(_wkgD).toFixed(2)+' vs last week</span>':'')
+      +'</div>'
+      +'<div style="position:relative;height:104px"><canvas id="ds-wkg-chart"></canvas></div>';
     rowBcards.push(wkgCard);
   }
   // Power Distribution — REAL zone-seconds only (curve estimates excluded, they
@@ -13386,13 +13400,14 @@ function dsShowAnalytics(){
   var _pd=dsPowerDist_(rangeRides, FTP);
   try{ console.log('[power-dist] real rides='+_pd.nReal+' split='+JSON.stringify(_pd.realPct)+' | curve rides='+_pd.nCurve+' split='+JSON.stringify(_pd.curvePct)+' (curve EXCLUDED — mean-max curve can\\u2019t derive time-in-zone) | FTP='+FTP); }catch(e){}
   var pdCard=document.createElement('div');
-  pdCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
+  pdCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
   var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
     +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?('Based on '+_pd.nReal+' rides with real zone data · zones use your (manual) FTP'):'')+'</span></div>';
   if(_pd.hasData){
     var pdBars=_pd.zones.map(function(z){
-      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
-        +'<span style="font-size:11px;color:#94a3b8;width:104px;flex-shrink:0">'+z.label+'</span>'
+      var _zp=z.label.split(' ');
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
+        +'<span style="font-size:11px;width:96px;flex-shrink:0"><span style="color:'+z.color+';font-weight:700">'+_zp[0]+'</span> <span style="color:#8b97a8">'+_zp.slice(1).join(' ')+'</span></span>'
         +'<div style="flex:1;height:7px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
         +'<span style="font-size:11px;font-weight:700;color:#e2e8f0;width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
     }).join('');
@@ -13411,16 +13426,18 @@ function dsShowAnalytics(){
   // across the full Less->More gradient regardless of an outlier day.
   var _tv=_cells.map(function(c){return c.load||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
   var _ref=_tv.length?_tv[Math.min(_tv.length-1,Math.floor(_tv.length*0.85))]:0; if(!(_ref>0)) _ref=1;
-  function _cellColor(c){ if(!c || c.n===0) return '#161b22'; var r=(c.load||0)/_ref;
-    return r>=0.85?'#39d353':r>=0.55?'#26a641':r>=0.28?'#006d32':'#0e4429'; }
+  // Categorical intensity (mockup): None grey, Low red, Moderate amber, High green.
+  function _cellColor(c){ if(!c || c.n===0) return '#30363d'; var r=(c.load||0)/_ref;
+    return r>=0.66?'#26a641':r>=0.33?'#eab308':'#ef4444'; }
   var cellSquares='';
-  for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
-  _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
+  for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:13px;height:13px"></div>'; }
+  _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:13px;height:13px;border-radius:3px;background:'+_cellColor(c)+'"></div>'; });
+  function _lg(col,lab){ return '<span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:11px;border-radius:3px;background:'+col+'"></span>'+lab+'</span>'; }
   var hmCard=document.createElement('div');
-  hmCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0';
+  hmCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
   hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
-    +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto">'+cellSquares+'</div>'
-    +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:9px;color:#64748b">Less<span style="width:10px;height:10px;border-radius:2px;background:#161b22"></span><span style="width:10px;height:10px;border-radius:2px;background:#0e4429"></span><span style="width:10px;height:10px;border-radius:2px;background:#006d32"></span><span style="width:10px;height:10px;border-radius:2px;background:#26a641"></span><span style="width:10px;height:10px;border-radius:2px;background:#39d353"></span>More</div>';
+    +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,13px);gap:4px;overflow-x:auto">'+cellSquares+'</div>'
+    +'<div style="display:flex;align-items:center;gap:12px;margin-top:12px;font-size:9px;color:#94a3b8">'+_lg('#26a641','High')+_lg('#eab308','Moderate')+_lg('#ef4444','Low')+_lg('#30363d','None')+'</div>';
   rowBcards.push(hmCard);
   var rowB=document.createElement('div');
   rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
@@ -13447,7 +13464,7 @@ function dsShowAnalytics(){
   rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   goals.forEach(function(g){
     var gc=document.createElement('div');
-    gc.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:11px;min-width:0;min-height:82px;display:flex;flex-direction:column';
+    gc.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;min-height:82px;display:flex;flex-direction:column';
     gc.innerHTML='<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+(g.note?(' <span style="font-size:9px;color:#64748b;text-transform:none">('+g.note+')</span>'):'')+'</div>'
       +'<div style="font-size:15px;font-weight:800;line-height:1.1;color:#f1f5f9;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.val+'</div>'
       +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden;margin-top:auto"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+Math.round(g.frac*100)+'%"></div></div>';
@@ -13490,12 +13507,12 @@ function dsShowAnalytics(){
         var pt=meta.data[meta.data.length-1]; if(!pt) return;
         var x=pt.x, a=ch.chartArea, cx=ch.ctx;
         cx.save();
-        cx.strokeStyle='rgba(148,163,184,.5)'; cx.lineWidth=1; cx.setLineDash([4,4]);
-        cx.beginPath(); cx.moveTo(x, a.top); cx.lineTo(x, a.bottom); cx.stroke();
+        cx.strokeStyle='rgba(203,213,225,.85)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);
+        cx.beginPath(); cx.moveTo(x, a.top+2); cx.lineTo(x, a.bottom); cx.stroke();
         cx.setLineDash([]);
-        cx.fillStyle='rgba(148,163,184,.9)';
-        cx.beginPath(); cx.moveTo(x, a.bottom-4); cx.lineTo(x+4, a.bottom); cx.lineTo(x, a.bottom+4); cx.lineTo(x-4, a.bottom); cx.closePath(); cx.fill();
-        cx.fillStyle='rgba(148,163,184,.85)'; cx.font='9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-20?'right':'center');
+        cx.fillStyle='#e2e8f0';
+        cx.beginPath(); cx.moveTo(x, a.bottom-5); cx.lineTo(x+5, a.bottom); cx.lineTo(x, a.bottom+5); cx.lineTo(x-5, a.bottom); cx.closePath(); cx.fill();
+        cx.fillStyle='#e2e8f0'; cx.font='700 9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-24?'right':'center');
         cx.fillText('Today', Math.min(x, a.right-1), a.top+8);
         cx.restore();
       }}]});
@@ -13512,7 +13529,15 @@ function dsShowAnalytics(){
     if(wc&&typeof Chart!=='undefined'){
       try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
       try{
-      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.5,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:3,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}}});
+      var _wkgBest=Math.max.apply(null, wkgHistory), _wkgGoalV=parseFloat(_goalTargets_().wkg)||0, _wkgCurV=wkgHistory[wkgHistory.length-1];
+      new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.75,fill:true,tension:0.4,pointRadius:2,pointHoverRadius:4,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:34}},plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}},plugins:[{id:'wkgRefs',afterDraw:function(ch){ var a=ch.chartArea, cx=ch.ctx, ys=ch.scales.y;
+        function refln(val,col,lab){ if(val==null||isNaN(val)) return; var y=ys.getPixelForValue(val); if(y<a.top-1||y>a.bottom+1) return;
+          cx.save(); cx.strokeStyle=col; cx.setLineDash([4,3]); cx.lineWidth=1; cx.globalAlpha=.85; cx.beginPath(); cx.moveTo(a.left,y); cx.lineTo(a.right,y); cx.stroke();
+          cx.setLineDash([]); cx.globalAlpha=1; cx.fillStyle=col; cx.font='8px -apple-system,sans-serif'; cx.textAlign='right'; cx.fillText(lab, a.right+32, y+3); cx.restore(); }
+        refln(_wkgBest,'#22c55e','Best '+_wkgBest.toFixed(2));
+        refln(_wkgGoalV,'#3b82f6','Goal '+_wkgGoalV.toFixed(2));
+        refln(_wkgCurV,'#c084fc','Current '+_wkgCurV.toFixed(2));
+      }}]});
       }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
     }
   }
@@ -24240,7 +24265,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-douglas-peucker';
+window.__BUILD__ = '2026-07-16-analytics-match-mockup';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
