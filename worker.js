@@ -14155,6 +14155,117 @@ function wkgTrend_(){
   return {source:null, pts:[]};
 }
 
+// ===== "What Needs Attention" — rules DETECT from real data, AI (Layer 2) will
+// NARRATE. Every signal below is backed by a real source; nothing is invented.
+// Severity: 2=action(red), 1=watch(yellow), 0=info. Day state = highest severity.
+// NOTE: all copy is apostrophe-free on purpose — this file is served inside one
+// template literal, which collapses a backslash-apostrophe and breaks the script.
+function dsAttention_(){
+  var out={items:[], positives:[], state:'green', rec:''};
+  function push(sev,cat,text){ out.items.push({sev:sev,cat:cat,text:text}); }
+  var fit=(typeof getDesktopFitness_==='function')?getDesktopFitness_():{ctl:0,atl:0,tsb:0};
+  var tsb=Math.round(fit.tsb||0);
+  // CTL ramp from a local PMC series (real): CTL now vs 7 days back.
+  var ramp=null;
+  try{
+    var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
+      .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe};}));
+    a.forEach(function(x){ x.load=unifiedLoad(x); });
+    var wl=a.filter(function(x){return x.load>0;});
+    var pmc=wl.length?computePMC(wl):null;
+    if(pmc && pmc.length>8) ramp=Math.round((pmc[pmc.length-1].ctl - pmc[pmc.length-8].ctl)*10)/10;
+  }catch(e){}
+  // Weekly TSS this vs last (real).
+  function tssWin(d0,d1){ var c0=new Date(); c0.setDate(c0.getDate()-d0); var c1=new Date(); c1.setDate(c1.getDate()-d1);
+    var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10);
+    return Math.round((st.rides||[]).filter(function(r){return r&&!r.deleted&&r.date&&r.date>s1&&r.date<=s0;}).reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0)); }
+  var wkThis=tssWin(0,7), wkLast=tssWin(7,14);
+  // Recovery / fatigue (TSB).
+  if(tsb<=-25) push(2,'recovery','Form is deep in the red ('+tsb+'). A hard session today only digs the hole deeper — swap to an easy Zone 1 spin or take the rest.');
+  else if(tsb<=-15) push(1,'recovery','Fatigue is accumulating (form '+tsb+'). Fine mid-build, but guard your recovery and sleep this week.');
+  // Training load.
+  if(ramp!=null && ramp>=8) push(1,'training','Fitness is ramping fast (CTL up '+ramp+' per week). Strong progress, but overtraining and injury risk climb past about 8 per week.');
+  else if(ramp!=null && ramp<=-6) push(1,'training','Fitness is sliding (CTL down '+Math.abs(ramp)+' per week). You are detraining faster than ideal — get an easy ride in.');
+  if(wkLast>=150 && wkThis < wkLast*0.5) push(1,'training','This week is well below last ('+wkThis+' vs '+wkLast+' TSS). If it is not a planned rest week, you are leaving fitness on the table.');
+  // Goals — next race + annual mileage pace.
+  try{
+    var races=(typeof upcomingRaces_==='function')?upcomingRaces_():[];
+    var race=races && races.length?races[0]:null;
+    if(race){
+      if(race.daysOut<=3) push(1,'goals',race.name+' is in '+race.daysOut+' day'+(race.daysOut===1?'':'s')+' — ease off volume, keep any intensity short and sharp.');
+      else if(race.daysOut<=21) out.positives.push(race.name+' in '+race.daysOut+' days');
+    }
+  }catch(e){}
+  try{
+    var goal=parseFloat(st.yearlyMileageGoal||0);
+    if(goal>0){
+      var yr=new Date().getFullYear();
+      var ytd=(st.rides||[]).filter(function(r){return r&&!r.deleted&&/ride|cycl/i.test(rideSport_(r))&&String(r.date||'').slice(0,4)==String(yr);}).reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
+      var doy=Math.floor((new Date()-new Date(yr,0,0))/86400000);
+      var expected=goal*(doy/365);
+      if(expected>50 && ytd<expected*0.85) push(1,'goals','You are behind your '+Math.round(goal)+' mi goal — about '+Math.round(ytd)+' logged vs roughly '+Math.round(expected)+' expected by now.');
+      else if(expected>50 && ytd>expected*1.1) out.positives.push('Ahead of your annual mileage goal');
+    }
+  }catch(e){}
+  // Positives for the green-day checklist.
+  if(tsb>-15 && tsb<15) out.positives.unshift('Recovery is on track');
+  else if(tsb>=15) out.positives.unshift('Well recovered and fresh');
+  if(ramp==null || (ramp<8 && ramp>-6)) out.positives.push('Training load is balanced');
+  dsAttentionState_(out);
+  return out;
+}
+function dsAttentionState_(d){
+  var maxSev=(d.items||[]).reduce(function(m,it){return Math.max(m,it.sev);},0);
+  d.state=maxSev>=2?'red':(maxSev>=1?'yellow':'green');
+}
+// Weather signals are async — fetch, append real items, re-classify, then re-render.
+function dsAttentionWeather_(d, cb){
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=apparent_temperature,windspeed_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+    .then(function(r){return r.json();})
+    .then(function(w){
+      var c=w&&w.current, calm=true;
+      if(c){
+        var feels=Math.round(c.apparent_temperature), wind=Math.round(c.windspeed_10m), pop=c.precipitation_probability;
+        if(feels>=100){ d.items.push({sev:2,cat:'env',text:'Extreme heat — feels like '+feels+'. Heat this high sharply cuts sustainable power; move the ride earlier, shorten it, or take it indoors.'}); calm=false; }
+        else if(feels>=90){ d.items.push({sev:1,cat:'env',text:'High heat — feels like '+feels+'. Expect it to shave noticeable watts; start conservative and hydrate early.'}); calm=false; }
+        if(wind>=16){ d.items.push({sev:1,cat:'env',text:'Strong winds ('+wind+' mph) — plan the return leg into the headwind and avoid chasing power on the exposed roads.'}); calm=false; }
+        if(pop!=null && pop>=55){ d.items.push({sev:1,cat:'env',text:'Rain likely ('+pop+' percent) — pack a shell and mind wet corners, or consider the trainer.'}); calm=false; }
+      }
+      if(calm) d.positives.push('Weather looks good');
+      dsAttentionState_(d);
+      if(cb) cb(d);
+    }).catch(function(){ if(cb) cb(d); });
+}
+// Renderer — green / yellow / red, capped at 5, most-severe first. Self-contained
+// (no dashboard-local helpers) so async callbacks can re-render the same node.
+function dsRenderAttention_(el, d){
+  if(!el) return;
+  var CK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+  var H='<div style="font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:9px">WHAT NEEDS ATTENTION</div>';
+  var items=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;}).slice(0,5);
+  if(d.state==='green' || !items.length){
+    H+='<div style="display:flex;align-items:flex-start;gap:12px">';
+    H+='<div style="width:34px;height:34px;border-radius:50%;background:rgba(74,222,128,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
+    H+='<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;color:#4ade80;line-height:1.15">Nothing To See Here!</div>';
+    H+='<div style="font-size:11px;color:#94a3b8;margin:2px 0 8px">Everything looks great.</div>';
+    (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:#cbd5e1;margin-bottom:5px">'+CK+'<span>'+p+'</span></div>'; });
+    H+='<div style="font-size:11px;color:#64748b;margin-top:7px">Enjoy the ride.</div></div></div>';
+  } else {
+    var red=d.state==='red', accent=red?'#ef4444':'#f59e0b';
+    H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><span style="font-size:15px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:14px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span></div>';
+    items.forEach(function(it){
+      var dot=it.sev>=2?'#ef4444':'#f59e0b';
+      H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+it.text+'</span></div>';
+    });
+    if(red){
+      var top=items[0]||{cat:''};
+      var rec=d.rec || (top.cat==='env'?'Move the ride earlier, shorten it, or take it indoors — then reassess.':'Swap today for an easy Zone 1 spin or full rest, and let form recover before the next hard day.');
+      H+='<div style="margin-top:8px;padding:9px 11px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:9px;font-size:11.5px;color:#fca5a5;line-height:1.45"><b style="color:#ef4444">Recommendation:</b> '+rec+'</div>';
+    }
+  }
+  el.innerHTML=H;
+}
+
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -14426,25 +14537,16 @@ function dsShowDashboard(){
   pc.appendChild(vwb);
   r2.appendChild(pc);
 
-  // Coach Note — real AI coach decision (live weather + fetchTodaysDecision,
-  // the same source the mobile Coach card and AI Coach screen use).
+  // What Needs Attention — rule-detected from REAL signals (TSB, CTL ramp, weekly
+  // load, race timing, mileage-goal pace, live weather), prioritized + capped 3-5,
+  // green/yellow/red. AI narration is Layer 2. Replaces the old Coach Note card.
   var cc=card('');
-  var chd=row('justify-content:space-between;margin-bottom:10px');
-  chd.appendChild(lbl('COACH NOTE'));
-  chd.appendChild(navlink('font-size:10px;color:#4ade80;cursor:pointer','View All','aicoach'));
-  cc.appendChild(chd);
-  var crow=row('gap:10px');
-  var cbox=div('width:36px;height:36px;border-radius:10px;background:#1a1f2e;display:flex;align-items:center;justify-content:center;flex-shrink:0');
-  cbox.appendChild(ico('ti-brain','#8b5cf6','18'));
-  var ctxt=div('flex:1;min-width:0');
-  var coachId='ds-coach-note-'+Date.now();
-  var coachTextEl=div('font-size:12px;color:#94a3b8;line-height:1.5'); coachTextEl.id=coachId; coachTextEl.textContent='Thinking…';
-  ctxt.appendChild(coachTextEl);
-  crow.appendChild(cbox); crow.appendChild(ctxt);
-  cc.appendChild(crow);
+  var _att=dsAttention_();
+  dsRenderAttention_(cc, _att);
   r2.appendChild(cc);
   body.appendChild(r2);
-  if(typeof fetchCoachNote==='function') setTimeout(function(){ fetchCoachNote(coachId); }, 0);
+  // Weather signals are async — append + re-render when they land.
+  if(typeof dsAttentionWeather_==='function') setTimeout(function(){ dsAttentionWeather_(_att, function(d){ dsRenderAttention_(cc, d); }); }, 0);
 
   // ROW 3
   var r3=div('display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;min-width:0;flex-shrink:0;align-items:stretch');
@@ -24698,7 +24800,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-desktop-theme-toggle';
+window.__BUILD__ = '2026-07-16-attention-panel-rules';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
