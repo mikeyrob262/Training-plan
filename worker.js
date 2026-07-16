@@ -3267,11 +3267,21 @@ function fbGpsUrl_(key, token){
   return FB_URL.replace('/data.json','') + '/gps/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(token);
 }
 // The heavy fields that should live in /gps/{key}, not in the st blob.
+// lats and lons MUST stay the same length — the renderer pairs lats[i]/lons[i],
+// so a mismatch mis-pairs every point from the drift onward and garbles the map.
+// Truncate both to the shorter (last-resort guard; the real guarantee is that
+// every writer builds both from the same pair array). Mutates r in place.
+function evenTrack_(r){
+  if(!r) return;
+  var la=r.lats, lo=r.lons;
+  if(la && lo && la.length!==lo.length){ var n=Math.min(la.length, lo.length); r.lats=la.slice(0,n); r.lons=lo.slice(0,n); }
+  if(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length){ var m=Math.min(r.gpsLats.length, r.gpsLons.length); r.gpsLats=r.gpsLats.slice(0,m); r.gpsLons=r.gpsLons.slice(0,m); }
+}
 function gpsPayload_(r){
   if(!r) return null;
+  evenTrack_(r);
   var p = {};
-  if(r.lats) p.lats = r.lats;
-  if(r.lons) p.lons = r.lons;
+  if(r.lats && r.lons && r.lats.length===r.lons.length){ p.lats = r.lats; p.lons = r.lons; }  // store as a matched pair only
   if(r.chartPwr) p.chartPwr = r.chartPwr;
   if(r.chartHR)  p.chartHR  = r.chartHR;
   if(r.chartEle) p.chartEle = r.chartEle;
@@ -3325,8 +3335,12 @@ function trackFromLatlng_(ll){
   var clean=deglitchTrack_(ll);
   var dl=dpDownsample_(clean, 0.00003);
   if(dl.length>2500){ var s=Math.ceil(dl.length/2000), d2=[]; for(var k=0;k<dl.length;k+=s) d2.push(dl[k]); dl=d2; }
-  return { lats: dl.map(function(p){ return Math.round(p[0]*1e5)/1e5; }),
-           lons: dl.map(function(p){ return Math.round(p[1]*1e5)/1e5; }) };
+  // Build lats and lons in ONE pass from the same pair array, pushing both or
+  // neither — they can never drift to different lengths.
+  var lats=[], lons=[];
+  for(var m=0;m<dl.length;m++){ var p=dl[m]; if(!p || p[0]==null || p[1]==null) continue;
+    lats.push(Math.round(p[0]*1e5)/1e5); lons.push(Math.round(p[1]*1e5)/1e5); }
+  return (lats.length>1) ? { lats:lats, lons:lons } : null;
 }
 // Merge one ride's GPS/stream payload into /gps/{key}. Uses Firebase PATCH (not
 // PUT) so writing freshly-fetched streams (which omit lats/lons — the stream
@@ -3422,6 +3436,7 @@ function ensureRideGps(r){
       if(p.chartCad) r.chartCad = p.chartCad;
       if(p.laps) r.laps = p.laps;
     }
+    evenTrack_(r);                                          // never let lats/lons drift
     return r;
   });
 }
@@ -3443,14 +3458,14 @@ function ensureRideStreams(r){
   // 1) Cache: streams may already sit in /gps from a prior session/device.
   return gpsGetAny_(r).then(function(p){
     if(p){
-      if(p.lats && !(r.lats&&r.lats.length)) r.lats=p.lats;
-      if(p.lons && !(r.lons&&r.lons.length)) r.lons=p.lons;
+      if(!(r.lats&&r.lats.length) && p.lats && p.lons) { r.lats=p.lats; r.lons=p.lons; }  // restore as a PAIR
       if(p.chartPwr) r.chartPwr=p.chartPwr;
       if(p.chartHR)  r.chartHR=p.chartHR;
       if(p.chartEle) r.chartEle=p.chartEle;
       if(p.chartCad) r.chartCad=p.chartCad;
       if(p.laps) r.laps=p.laps;
     }
+    evenTrack_(r);                                          // never let lats/lons drift
     if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)) return r; // cache hit (streams + GPS) — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
@@ -11796,7 +11811,7 @@ function importRideFile(input){
                 calories:ride2.calories||ex2.calories,
                 workKj:ride2.workKj||ex2.workKj,
                 ifPct:ride2.ifPct||ex2.ifPct,
-                lats:ride2.lats||ex2.lats, lons:ride2.lons||ex2.lons,
+                lats:(ride2.lats&&ride2.lats.length)?ride2.lats:ex2.lats, lons:(ride2.lats&&ride2.lats.length)?ride2.lons:ex2.lons,  // paired: both from the SAME ride
                 avgHR:ride2.avgHR||ex2.avgHR,
                 maxHR:ride2.maxHR||ex2.maxHR, cadence:ride2.cadence||ex2.cadence
               });
@@ -14688,6 +14703,7 @@ function openDesktopRideDetail(idx, _noFetch){
   var rpEl=document.getElementById('ds-right-panel');
   if(rpEl) rpEl.style.display='flex';
   var r=st.rides[idx];
+  if(typeof evenTrack_==='function') evenTrack_(r);          // guard mismatched lats/lons before drawing
   if(!r) return;
   // Re-fetch streams/GPS if missing. The GPS decision keys off r.lats being EMPTY
   // — NOT a _gpsTried/_streamsTried flag — so a ride that fetched streams
@@ -15247,6 +15263,7 @@ window.addEventListener('load', function(){
 function openRideDetail(idx, _noFetch){
   var r = st.rides[idx];
   if(!r) return;
+  if(typeof evenTrack_==='function') evenTrack_(r);          // guard mismatched lats/lons before drawing
   // GPS re-fetch keys off r.lats being EMPTY (not a _gpsTried flag), so a ride
   // that fetched streams but no track still re-fetches latlng. ensureRideStreams
   // reads /gps then pulls the latlng-bearing streams; re-open passes _noFetch to
@@ -24327,7 +24344,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-revert-gap-split';
+window.__BUILD__ = '2026-07-16-latlon-pairing';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
