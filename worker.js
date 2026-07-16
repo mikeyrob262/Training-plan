@@ -3713,18 +3713,25 @@ function runGpsBackfill(force){
 var _gpsMigrated=false;
 function migrateCorruptTracks_(){
   if(_gpsMigrated || !st || !Array.isArray(st.rides)) return;
-  var bad=[];
+  var bad=[], anyCorrupt=false;
   st.rides.forEach(function(r){ if(!r) return;
     var mm=(r.lats && r.lons && r.lats.length!==r.lons.length);
     var gm=(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length);
     if(mm){ r.lats=null; r.lons=null; }
     if(gm){ r.gpsLats=null; r.gpsLons=null; }
-    // normalizeState_'s sweep already nulled + flagged wholesale-injected
-    // corruption before we ran, so trust _gpsCorrupt too — the length check
-    // above can't see an already-nulled pair.
-    if((mm||gm||r._gpsCorrupt) && r.stravaId) bad.push(r);
+    // Detect corruption three ways, because the merge/sweep may already have
+    // ERASED the local length-mismatch evidence: a live mismatch (mm/gm), OR the
+    // _gpsCorrupt flag set by mergeItemFast_/normalizeState_ when they discarded a
+    // mismatched pair from remote. Re-fetch needs a stravaId, but the REMOTE
+    // CLEANUP does not — so track anyCorrupt separately.
+    if(mm||gm||r._gpsCorrupt){ anyCorrupt=true; if(r.stravaId) bad.push(r); }
   });
-  if(!bad.length) return;
+  // Gate the remote cleanup on anyCorrupt, NOT on bad.length. The whole reason
+  // remote sat corrupt: my merge-pair fix nulls the corrupt pair during the merge,
+  // so local looks clean, bad was empty, and the migration returned BEFORE the
+  // force-push — while remote's 596/740 kept re-seeding. Now any corruption seen
+  // (even one already nulled by the merge, flagged via _gpsCorrupt) triggers it.
+  if(!anyCorrupt) return;
   _gpsMigrated=true;
   try{ sv(); }catch(e){}
   // OVERWRITE REMOTE NOW with the nulled state, independent of any re-fetch. The
@@ -3733,7 +3740,8 @@ function migrateCorruptTracks_(){
   // the Strava token flow bails), so remote could sit corrupt for the whole
   // session. A force-push here writes null for every mismatched pair immediately,
   // so remote can't re-seed while the re-fetch below fills clean pairs back in.
-  try{ if(typeof fbPush==='function'){ fbPush(true); console.log('[gps-migrate] force-pushed nulled state to remote ('+bad.length+' rides) — remote 596/740 overwritten'); } }catch(e){}
+  try{ if(typeof fbPush==='function'){ fbPush(true); console.log('[gps-migrate] force-pushed nulled state to remote (corrupt rides: refetchable='+bad.length+') — remote 596/740 overwritten'); } }catch(e){}
+  if(!bad.length) return; // remote cleaned; nothing has a stravaId to re-fetch
   if(!st.stravaToken && !st.stravaRefreshToken) return;
   withStravaToken_(function(token){
     if(!token) return;
@@ -4028,6 +4036,13 @@ function mergeItemFast_(a, b){
     var _av=_vp(a), _bv=_vp(b);
     var _lw = (_av&&_bv) ? ((b.lats.length>a.lats.length)?b:a) : (_av?a:(_bv?b:null));
     if(_lw){ merged.lats=_lw.lats; merged.lons=_lw.lons; } else { merged.lats=null; merged.lons=null; }
+    // If EITHER side carried a mismatched pair we just discarded, FLAG the ride.
+    // The corrupt pair is now gone from local, so a later length check can't see
+    // it — but the remote blob still holds it. migrateCorruptTracks_ keys off
+    // _gpsCorrupt to force-push the cleaned state to remote (overwriting the
+    // stale 596/740) and re-fetch a clean paired track. Without this flag the
+    // merge silently erases the only local evidence and the force-push never fires.
+    if((a.lats&&a.lons&&a.lats.length!==a.lons.length)||(b.lats&&b.lons&&b.lats.length!==b.lons.length)) merged._gpsCorrupt=1;
   }
   return merged;
 }
@@ -24424,7 +24439,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-force-push-nulled-remote';
+window.__BUILD__ = '2026-07-16-flag-corrupt-in-merge';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
