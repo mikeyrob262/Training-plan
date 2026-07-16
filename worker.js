@@ -3408,6 +3408,83 @@ function fetchStravaStreams_(r, ds, maxOf){
   });
 }
 // --------------------------------------------------------------------------
+// POWER-ZONE BACKFILL — populate real time-in-zone for the Power Distribution
+// panel. For each ride with a Strava activity id and no zone data yet, fetch
+// ONLY the watts stream (1 lightweight call/ride), compute z1..z5 seconds vs
+// FTP, and store r.zoneTime (5 numbers — NOT in STORAGE_HEAVY_FIELDS_, so it
+// survives slimForStorage_). Sequential + rate-limited; resumable (candidates
+// exclude rides already done); honest about rides Strava no longer has streams
+// for. Zone edges match rideZoneTime_/dsPowerDist_ (%FTP: <55 <75 <90 <105 105+).
+var _zoneBackfill={running:false, stop:false};
+function zoneBackfillCandidates_(){
+  return (st.rides||[]).filter(function(r){
+    if(!r || r.deleted || !r.stravaId) return false;
+    if(Array.isArray(r.zoneTime) && r.zoneTime.length===5) return false;
+    var zsum=(r.z1s||0)+(r.z2s||0)+(r.z3s||0)+(r.z4s||0)+(r.z5s||0)+(r.z6s||0);
+    return !(zsum>0);
+  });
+}
+function zoneFromWatts_(pwr, ftp, durSecs){
+  if(!pwr || !pwr.length || !(ftp>0)) return null;
+  var b=[0,0,0,0,0], n=0;
+  for(var i=0;i<pwr.length;i++){ var w=+pwr[i]; if(!(w>=0)) continue; n++;
+    var f=w/ftp; b[f<0.55?0:f<0.75?1:f<0.90?2:f<1.05?3:4]++; }
+  if(!n) return null;
+  var per=(durSecs>0?durSecs:n)/n;               // watts stream ~1Hz -> real seconds
+  return b.map(function(c){ return Math.round(c*per); });
+}
+function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
+  if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
+  if(st.stravaRefreshToken){
+    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+      .then(function(x){return x.json();}).then(function(d){
+        if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; try{sv();}catch(e){} cb(d.access_token); }
+        else cb(st.stravaToken||null);
+      }).catch(function(){ cb(st.stravaToken||null); });
+  } else cb(st.stravaToken);
+}
+function stopZoneBackfill(){ _zoneBackfill.stop=true; }
+function runZoneBackfill(){
+  var el=document.getElementById('zone-backfill-status');
+  function say(t){ if(el) el.textContent=t; }
+  if(_zoneBackfill.running){ say('Already running…'); return; }
+  var list=zoneBackfillCandidates_();
+  if(!list.length){ say('Every ride with a Strava ID already has real zone data — nothing to backfill.'); return; }
+  if(!st.stravaToken && !st.stravaRefreshToken){ say('Connect Strava first (Reconnect), then run this.'); return; }
+  _zoneBackfill.running=true; _zoneBackfill.stop=false;
+  var ftp=parseInt(st.ftp||186)||186, i=0, got=0, noStream=0, err=0, total=list.length;
+  say('Starting… '+total+' rides to check (this is rate-limited by Strava, ~90/run).');
+  withStravaToken_(function(token){
+    if(!token){ _zoneBackfill.running=false; say('No Strava token — reconnect Strava and retry.'); return; }
+    function finish(msg){
+      _zoneBackfill.running=false;
+      try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      var left=zoneBackfillCandidates_().length;
+      say(msg+' — '+got+' rides now have real zone data'+(noStream?(', '+noStream+' had no power stream on Strava'):'')+(err?(', '+err+' errors'):'')+(left?('. '+left+' still to do — run again to continue.'):'. All done!')+' Reopen Analytics to see Power Distribution fill.');
+    }
+    function step(){
+      if(_zoneBackfill.stop) return finish('Stopped');
+      if(i>=list.length) return finish('Complete');
+      var r=list[i++];
+      say('Backfilling '+i+'/'+total+'… '+got+' with data'+(noStream?(', '+noStream+' no-stream'):''));
+      var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=watts&key_by_type=true';
+      fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
+        if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
+        if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
+        return x.ok?x.json():null;
+      }).then(function(j){
+        var pwr=(j&&j.watts&&j.watts.data&&j.watts.data.length>1)?j.watts.data:null;
+        if(pwr){ var z=zoneFromWatts_(pwr, ftp, parseFloat(r.movingSecs)||0); if(z){ r.zoneTime=z; got++; } else noStream++; }
+        else noStream++;                           // ride has no watts stream on Strava (old/indoor/deleted)
+        if(got && got%25===0){ try{ sv(); }catch(e){} }
+        setTimeout(step, 1100);                     // spacing; 429 handler backs off on the burst limit
+      }).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); });
+    }
+    step();
+  });
+}
+// --------------------------------------------------------------------------
 
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
@@ -11728,6 +11805,7 @@ function dsShowSettings(){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;height:100%;box-sizing:border-box';
   var _G=_goalTargets_();
+  var _zbCount=(typeof zoneBackfillCandidates_==='function')?zoneBackfillCandidates_().length:0;
   function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Settings</div>'
@@ -11753,6 +11831,13 @@ function dsShowSettings(){
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Patch a ride with elevation, HR, power streams parsed from a FIT file.</div>'
     +'<div id="backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Patch June 27 Ride</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Power-Zone Backfill</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches each Strava ride&#39;s power stream and stores real time-in-zone so Power Distribution fills with real data (not curve estimates). Rate-limited by Strava (~90 rides/run) and resumable — run again to continue. Rides Strava no longer has streams for are skipped honestly. '+_zbCount+' rides need it.</div>'
+    +'<div id="zone-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
+    +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Clean Race Duplicates</div>'
@@ -23941,7 +24026,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-heatmap-load-shade';
+window.__BUILD__ = '2026-07-16-power-zone-backfill';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
