@@ -5847,6 +5847,20 @@ function showSet(){
     +'<div style="padding:0 16px 14px;display:flex;gap:8px">'
     +'<button onclick="saveProfile()" style="background:linear-gradient(135deg,#FC4C02,#FF7043);border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Profile</button>'
     +'</div></div>';
+  // -- Goals (real editable targets, shared st.goalTargets; same gt-* ids as desktop)
+  var _Gm=_goalTargets_();
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);padding:14px 16px">'
+    +'<div class="ci-lbl" style="margin-bottom:10px;font-weight:700">Goals</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 12px">'
+    +'<div><div class="ci-lbl">FTP (W)</div><input class="ci-in" type="number" value="'+_Gm.ftpW+'" id="gt-ftpW"></div>'
+    +'<div><div class="ci-lbl">Weight (lb)</div><input class="ci-in" type="number" value="'+_Gm.weightLb+'" id="gt-weightLb"></div>'
+    +'<div><div class="ci-lbl">W/kg</div><input class="ci-in" type="number" step="0.01" value="'+_Gm.wkg+'" id="gt-wkg"></div>'
+    +'<div><div class="ci-lbl">Weekly miles</div><input class="ci-in" type="number" value="'+_Gm.weeklyMi+'" id="gt-weeklyMi"></div>'
+    +'<div><div class="ci-lbl">Annual miles</div><input class="ci-in" type="number" value="'+_Gm.annualMi+'" id="gt-annualMi"></div>'
+    +'<div><div class="ci-lbl">CTL</div><input class="ci-in" type="number" value="'+_Gm.ctl+'" id="gt-ctl"></div>'
+    +'</div>'
+    +'<div style="margin-top:12px"><button onclick="saveGoalTargets_()" style="background:#22c55e;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Goals</button></div>'
+    +'</div>';
   // -- Cloud Sync + Data Backup combined, compact
   var autoSync = st.autoSync || false;
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
@@ -11713,11 +11727,26 @@ function dsShowSettings(){
   mc.innerHTML='';
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;height:100%;box-sizing:border-box';
+  var _G=_goalTargets_();
+  function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
+    +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Settings</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:8px">FTP</div>'
     +'<div style="display:flex;gap:8px;align-items:center"><input id="ftp-input" type="number" value="'+(window.st&&window.st.ftp?window.st.ftp:186)+'" style="width:80px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px">'
     +'<button onclick="if(window.st){window.st.ftp=parseInt(document.getElementById(&#39;ftp-input&#39;).value)||186;sv();fbPush(true);toast(&#39;FTP saved&#39;);}" style="background:#FC4C02;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save</button></div>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Goals</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">'
+    +_gInput('gt-ftpW','FTP (W)',_G.ftpW)
+    +_gInput('gt-weightLb','Weight (lb)',_G.weightLb)
+    +_gInput('gt-wkg','W/kg',_G.wkg,'0.01')
+    +_gInput('gt-weeklyMi','Weekly miles',_G.weeklyMi)
+    +_gInput('gt-annualMi','Annual miles',_G.annualMi)
+    +_gInput('gt-ctl','CTL',_G.ctl)
+    +'</div>'
+    +'<button onclick="saveGoalTargets_()" style="margin-top:12px;background:#22c55e;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save Goals</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">FIT Stream Backfill</div>'
@@ -11738,6 +11767,24 @@ function dsShowSettings(){
   wrap.appendChild(dmCard);
   mc.appendChild(wrap);
 }
+
+// Read the goal inputs (id prefix gt-) into st.goalTargets, mirror annualMi back
+// to the legacy st.yearlyMileageGoal, persist, and re-render analytics if open.
+// Shared by the desktop settings card and the mobile SET screen (same ids).
+window.saveGoalTargets_ = function(){
+  var g=_goalTargets_();
+  function _n(id,dflt){ var el=document.getElementById(id); if(!el||el.value==='') return dflt; var v=parseFloat(el.value); return isNaN(v)?dflt:v; }
+  g.ftpW=Math.round(_n('gt-ftpW',g.ftpW));
+  g.weightLb=_n('gt-weightLb',g.weightLb);
+  g.wkg=_n('gt-wkg',g.wkg);
+  g.weeklyMi=_n('gt-weeklyMi',g.weeklyMi);
+  g.annualMi=Math.round(_n('gt-annualMi',g.annualMi));
+  g.ctl=Math.round(_n('gt-ctl',g.ctl));
+  st.yearlyMileageGoal=g.annualMi;            // keep legacy readers (mobile rings, Miles-YTD) in sync
+  sv(); try{ fbPush(true); }catch(e){}
+  try{ toast('Goals saved'); }catch(e){}
+  try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowAnalytics==='function'){ /* refresh cards if on analytics */ var c=document.getElementById('ds-content'); if(c && /Training Load/.test(c.textContent||'')) dsShowAnalytics(); } }catch(e){}
+};
 
 window.runBackfill = function(){
   var streams = {"date": "2026-06-27", "calories": 2343, "elev": 2280, "np": 159, "avgPwr": 124, "tss": 300, "chartEle": [615, 617, 625, 616, 620, 673, 731, 701, 748, 743, 732, 741, 712, 692, 685, 735, 713, 676, 696, 716, 707, 692, 695, 657, 698, 742, 741, 709, 633, 608, 645, 654, 657, 648, 638, 621, 606, 600, 618, 626, 608, 645, 649, 648, 647, 648, 641, 610, 631, 629, 594, 621, 629, 619, 602, 624, 608, 609, 595, 605, 599, 592, 587, 591, 590, 591, 589, 615, 591, 596, 627, 630, 620, 613, 623, 648, 626, 602, 600, 602, 593, 610, 608, 633, 625, 615, 615, 600, 619, 624, 626, 629, 617, 619, 595, 625, 640, 647, 652, 640, 632, 633, 629, 629, 639, 653, 638, 641, 636, 634, 632, 639, 636, 596, 619, 633, 636, 617, 625, 642, 643, 644, 646, 646, 654, 646, 647, 646, 645, 656, 645, 629, 634, 640, 649, 651, 662, 673, 691, 658, 644, 641, 658, 665, 664, 662, 653, 659, 654, 665, 668, 667, 690, 699, 714, 719, 709, 709, 690, 682, 688, 705, 716, 718, 706, 711, 701, 691, 671, 688, 696, 696, 705, 719, 734, 737, 745, 747, 734, 734, 719, 756, 783, 810, 799, 781, 747, 736, 748, 747, 743, 723, 681, 707, 735, 697, 624, 625, 616, 610], "chartPwr": [198, 92, 116, 201, 241, 442, 218, 202, 347, 305, 282, 138, 434, 114, 348, 146, 77, 116, 138, 281, 152, 188, 36, 223, 190, 130, 327, 45, 141, 87, 400, 14, 62, 293, 172, 154, 150, 430, 135, 4, 252, 348, 141, 139, 379, 129, 21, 167, 83, 272, 170, 127, 234, 234, 256, 137, 11, 145, 129, 115, 24, 131, 153, 14, 302, 291, 177, 25, 159, 216, 8, 474, 287, 238, 205, 313, 243, 153, 303, 159, 233, 339, 251, 100, 196, 153, 171, 220, 4, 159, 286, 198, 159, 132, 2, 150, 163, 144, 134, 299, 246, 150, 147, 149, 182, 86, 128, 149, 268, 151, 195, 6, 164, 148, 142, 145, 140, 187, 379, 125, 157, 165, 40, 236, 48, 90, 40, 204, 193, 33, 95, 147, 153, 176, 133, 180, 152, 16, 11, 15, 162, 154, 73, 195, 181, 174, 200, 183, 165, 190, 151, 161, 120, 140, 143, 147, 30, 190, 138, 145, 189, 47, 158, 165, 127, 154, 115, 128, 155, 161, 152, 157, 191, 117, 78, 167, 22, 232, 163, 242, 267, 186, 184, 196, 169, 114, 199, 197, 306, 193, 307, 100, 294, 181, 149, 280, 183, 5, 52, 155], "chartHR": [101, 139, 143, 150, 156, 157, 159, 144, 154, 146, 147, 159, 156, 157, 160, 164, 160, 151, 152, 151, 146, 154, 159, 139, 160, 160, 157, 144, 128, 145, 158, 155, 147, 138, 155, 156, 158, 160, 159, 155, 155, 158, 151, 152, 157, 152, 149, 147, 153, 146, 134, 160, 158, 148, 141, 156, 153, 145, 137, 149, 144, 147, 154, 147, 157, 151, 150, 161, 162, 161, 162, 155, 150, 147, 141, 153, 155, 155, 155, 157, 148, 160, 155, 159, 155, 153, 152, 149, 149, 156, 156, 155, 149, 153, 138, 155, 154, 153, 154, 152, 150, 152, 147, 149, 150, 144, 145, 149, 147, 148, 146, 136, 145, 136, 148, 151, 147, 139, 144, 150, 146, 144, 144, 144, 145, 148, 150, 148, 148, 149, 148, 141, 150, 150, 150, 150, 155, 160, 161, 153, 149, 147, 150, 154, 126, 128, 131, 130, 115, 128, 131, 133, 139, 133, 142, 129, 136, 134, 135, 135, 139, 139, 143, 144, 138, 142, 139, 138, 130, 140, 141, 141, 146, 141, 150, 141, 148, 145, 138, 141, 137, 148, 150, 150, 135, 138, 139, 135, 142, 139, 143, 135, 144, 150, 150, 143, 135, 152, 148, 150], "lats": [512571128, 512572803, 512564661, 512529081, 512512130, 512508926, 512497508, 512494744, 512495997, 512496898, 512498509, 512499535, 512500264, 512501198, 512502348, 512503563, 512505158, 512505808, 512506787, 512504656, 512480279, 512460314, 512431380, 512424610, 512482568, 512551414, 512618114, 512667543, 512711706, 512763011, 512818776, 512858948, 512859596, 512868429, 512890506, 512919301, 512944944, 512944675, 512954403, 512989799, 512995339, 512990665, 512990908, 513021115, 513053119, 513070062, 513087714, 513105468, 513122449, 513140934, 513168048, 513190694, 513203385, 513205253, 513207060, 513209420, 513209392, 513204589, 513186584, 513183937, 513183244, 513208414, 513239784, 513276122, 513313227, 513353010, 513397073, 513438113, 513479155, 513519338, 513566607, 513602660, 513636788, 513682658, 513732591, 513763965, 513774213, 513782060, 513775072, 513754285, 513728777, 513702646, 513713425, 513741295, 513753472, 513718552, 513718086, 513718894, 513719457, 513719515, 513719962, 513719887, 513728362, 513781912, 513835944, 513850771, 513878817, 513901478, 513923126, 513925566, 513921869, 513955161, 513986522, 514018119, 514019977, 514019994, 514016644, 514011627, 513988766, 513988651, 513989850, 513984980, 514002739, 514015064, 514018664, 514019171, 514017994, 514016256, 514055377, 514102315, 514149446, 514195162, 514237933, 514239346, 514240191, 514241671, 514241536, 514240620, 514240116, 514279376, 514326904, 514375466, 514413623, 514444829, 514475907, 514497594, 514499716, 514499424, 514494585, 514494415, 514489357, 514442019, 514403812, 514371125, 514350020, 514330486, 514309771, 514288779, 514265877, 514242833, 514221416, 514199821, 514178700, 514160171, 514138983, 514117321, 514091391, 514079127, 514066613, 514045961, 514025988, 514005791, 513985001, 513957393, 513920962, 513896371, 513868160, 513848565, 513801992, 513756770, 513738297, 513713996, 513682794, 513646422, 513620427, 513596374, 513570059, 513539244, 513513443, 513481992, 513450978, 513419354, 513388770, 513354802, 513322929, 513312698, 513358656, 513405663, 513452409, 513499991, 513547511, 513594075, 513644826, 513692991, 513738549, 513787219, 513842753, 513888086, 513898669, 513899518, 513899272, 513898471, 513898823, 513899425, 513899823, 513900238, 513900296, 513900081, 513899690, 513899638, 513899444, 513899340, 513899611, 513899948, 513900538, 513901168, 513896862, 513901670, 513902162, 513903195, 513902570, 513893758, 513901004, 513902015, 513902632, 513902721, 513901959, 513901067, 513900299, 513899410, 513898494, 513898778, 513899157, 513899689, 513900220, 513900489, 513900586, 513900468, 513900329, 513900113, 513900077, 513900086, 513900218, 513900177, 513900147, 513874694, 513829997, 513783134, 513738537, 513691650, 513645778, 513600169, 513554072, 513552867, 513552558, 513552259, 513551923, 513551443, 513551291, 513551096, 513550919, 513550811, 513550530, 513550081, 513549565, 513549018, 513548064, 513525909, 513483615, 513440251, 513403137, 513373137, 513372950, 513372502, 513371623, 513370809, 513370064, 513368516, 513366996, 513355423, 513318874, 513287111, 513262761, 513233201, 513194872, 513144238, 513093160, 513032285, 512979159, 512946481, 512920704, 512892043, 512853621, 512811711, 512785739, 512755972, 512719487, 512678413, 512644784, 512595357], "lons": [-1022117696, -1022171192, -1022239589, -1022273647, -1022352292, -1022437610, -1022511579, -1022558909, -1022615332, -1022662540, -1022742628, -1022807519, -1022865321, -1022936674, -1023016394, -1023106785, -1023200680, -1023274613, -1023362991, -1023448729, -1023497374, -1023572654, -1023611661, -1023677513, -1023681471, -1023684208, -1023686661, -1023688787, -1023690429, -1023692593, -1023695261, -1023722183, -1023805710, -1023884407, -1023961380, -1024045182, -1024090458, -1024146611, -1024186937, -1024218114, -1024310089, -1024412483, -1024512747, -1024596447, -1024678716, -1024739047, -1024803032, -1024873811, -1024950063, -1025027383, -1025117933, -1025172765, -1025250846, -1025333877, -1025421262, -1025494789, -1025575733, -1025647766, -1025722649, -1025794444, -1025881211, -1025943518, -1025995631, -1026054838, -1026114079, -1026176177, -1026237741, -1026302413, -1026365386, -1026428002, -1026490266, -1026561154, -1026627238, -1026683144, -1026735173, -1026815521, -1026882811, -1026957453, -1027039405, -1027121896, -1027203026, -1027283124, -1027355751, -1027428685, -1027510212, -1027577531, -1027657250, -1027741769, -1027818797, -1027904066, -1027989506, -1028070935, -1028159674, -1028191760, -1028212842, -1028282870, -1028318840, -1028361869, -1028393086, -1028468942, -1028552219, -1028579142, -1028650016, -1028692016, -1028774798, -1028845030, -1028923212, -1028988604, -1029033100, -1029037278, -1029040527, -1029028785, -1028995013, -1028935333, -1028861869, -1028791976, -1028722586, -1028660212, -1028653075, -1028652329, -1028650498, -1028647317, -1028640573, -1028583263, -1028535444, -1028485034, -1028420114, -1028356612, -1028296712, -1028293892, -1028295074, -1028294286, -1028294877, -1028248090, -1028201160, -1028154875, -1028098507, -1028039105, -1027976356, -1027918094, -1027873994, -1027873981, -1027869961, -1027845240, -1027806239, -1027758627, -1027708070, -1027656893, -1027600751, -1027544702, -1027492317, -1027439656, -1027388651, -1027343091, -1027291555, -1027239717, -1027200171, -1027160758, -1027115360, -1027065092, -1027016295, -1026967396, -1026916641, -1026872858, -1026846713, -1026822842, -1026820662, -1026820606, -1026820319, -1026803266, -1026749076, -1026716814, -1026684662, -1026645886, -1026598383, -1026550055, -1026498531, -1026462077, -1026419808, -1026371089, -1026323544, -1026274846, -1026225913, -1026179699, -1026131190, -1026094000, -1026096241, -1026097581, -1026098021, -1026098488, -1026098978, -1026099564, -1026100481, -1026101619, -1026102687, -1026103016, -1026103313, -1026103611, -1026057644, -1026000475, -1025940058, -1025886054, -1025827372, -1025765954, -1025705775, -1025650287, -1025600145, -1025551879, -1025483440, -1025419945, -1025357072, -1025292508, -1025236243, -1025180151, -1025117449, -1025068410, -1025056337, -1025031244, -1024987608, -1024965800, -1025015886, -1025057278, -1025054409, -1025005477, -1024952082, -1024905525, -1024858028, -1024809765, -1024768405, -1024727821, -1024683589, -1024644048, -1024599845, -1024546053, -1024496409, -1024451930, -1024388676, -1024329130, -1024278087, -1024228468, -1024181212, -1024131470, -1024082426, -1024032436, -1023985120, -1023965031, -1023965158, -1023965550, -1023966296, -1023966064, -1023965589, -1023966065, -1023964381, -1023910997, -1023861858, -1023813053, -1023769680, -1023712069, -1023669066, -1023628022, -1023576421, -1023530887, -1023491802, -1023436439, -1023380071, -1023328801, -1023272588, -1023235567, -1023202284, -1023197687, -1023198058, -1023189355, -1023148689, -1023111796, -1023071740, -1023029818, -1022972352, -1022913545, -1022847872, -1022798269, -1022777021, -1022758591, -1022750241, -1022740749, -1022728420, -1022711121, -1022693849, -1022662905, -1022662866, -1022654093, -1022619639, -1022589030, -1022546708, -1022486483, -1022406487, -1022347814, -1022299261, -1022265528, -1022234300, -1022232469], "powerCurve": {"5": 596, "15": 448, "30": 365, "60": 306, "120": 268, "300": 241, "600": 225, "1200": 205, "1800": 196, "3600": 186}};
@@ -12797,6 +12844,23 @@ function dsConsistency_(rides, days, now, normDate){
   return cells;
 }
 
+// Real, editable goal targets (Mikey-confirmed 2026-07-15). Stored on
+// st.goalTargets — NOT st.goals, which is already the race-goals ARRAY. annualMi
+// migrates from the legacy st.yearlyMileageGoal and is kept mirrored back to it
+// so the mobile rings / Miles-YTD readers stay in sync. Lazily seeds defaults;
+// persists on the next sv().
+function _goalTargets_(){
+  if(!st.goalTargets || typeof st.goalTargets!=='object' || Array.isArray(st.goalTargets)) st.goalTargets={};
+  var g=st.goalTargets;
+  if(g.ftpW==null) g.ftpW=200;
+  if(g.wkg==null) g.wkg=3.14;
+  if(g.weightLb==null) g.weightLb=150;
+  if(g.weeklyMi==null) g.weeklyMi=100;
+  if(g.annualMi==null) g.annualMi=parseInt(st.yearlyMileageGoal)||5000;
+  if(g.ctl==null) g.ctl=65;
+  return g;
+}
+
 function dsShowAnalytics(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -13040,14 +13104,21 @@ function dsShowAnalytics(){
   rowBcards.forEach(function(c){ rowB.appendChild(c); });
   wrap.appendChild(rowB);
 
-  // ROW C: Goals as a horizontal row of cards (values/caveats unchanged).
-  var _yr0=new Date(now.getFullYear(),0,1), _ytd=0;
-  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); if(d>=_yr0) _ytd+=parseFloat(r.distance)||0; });
-  _ytd=Math.round(_ytd);
-  var _mgoal=parseInt(st.yearlyMileageGoal||5000)||5000;
+  // ROW C: Goals as a horizontal row of cards — real live value vs stored target.
+  var _yr0=new Date(now.getFullYear(),0,1), _ytd=0, _last7=0;
+  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); if(d>=_yr0) _ytd+=parseFloat(r.distance)||0;
+    var ago=(now-d)/86400000; if(ago>=0&&ago<7) _last7+=parseFloat(r.distance)||0; });
+  _ytd=Math.round(_ytd); _last7=Math.round(_last7);
+  var _G=_goalTargets_();
+  // Weight is lower-is-better, so its bar is target/current (closeness from
+  // above); the rest are current/target. All values live, all targets stored.
   var goals=[
-    {label:'Miles YTD', val:_ytd.toLocaleString()+' / '+_mgoal.toLocaleString()+' mi', frac:Math.min(1,_ytd/_mgoal), color:'#60a5fa', note:''},
-    {label:'W/kg to Chase 1', val:wkgNow.toFixed(2)+' / 3.14', frac:Math.min(1,wkgNow/3.14), color:'#4ade80', note:'FTP-based'}
+    {label:'FTP', val:FTP+' / '+_G.ftpW+' W', frac:Math.min(1,FTP/_G.ftpW), color:'#f59e0b', note:''},
+    {label:'Weight', val:BWT.toFixed(1)+' / '+_G.weightLb+' lb', frac:Math.min(1,_G.weightLb/Math.max(BWT,1)), color:'#22c55e', note:'lower is better'},
+    {label:'W/kg', val:wkgNow.toFixed(2)+' / '+_G.wkg.toFixed(2), frac:Math.min(1,wkgNow/_G.wkg), color:'#a855f7', note:'FTP-based'},
+    {label:'Weekly Miles', val:_last7+' / '+_G.weeklyMi+' mi', frac:Math.min(1,_last7/_G.weeklyMi), color:'#3b82f6', note:'last 7 days'},
+    {label:'Miles YTD', val:_ytd.toLocaleString()+' / '+_G.annualMi.toLocaleString()+' mi', frac:Math.min(1,_ytd/_G.annualMi), color:'#60a5fa', note:''},
+    {label:'CTL', val:Math.round(lastCTL)+' / '+_G.ctl, frac:Math.min(1,lastCTL/_G.ctl), color:'#3b82f6', note:''}
   ];
   var rowC=document.createElement('div');
   rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
