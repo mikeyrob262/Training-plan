@@ -15820,22 +15820,6 @@ function addRideLapMarkers_(map,pts,laps){
 //   opts.colorAt    optional fn(i, pts, frac) -> color, for zone recoloring
 //   opts.laps       optional lap array for lap markers
 //   opts.scrollWheelZoom / opts.zoomControl / opts.maxZoom / opts.onReady
-// Split a [lat,lon] track into contiguous index runs [start,end], breaking at
-// RECORDING GAPS (pause/resume, lap-restart) so callers can lift the pen instead
-// of chording across the gap. Threshold is CAPPED (444m..890m) so it always sits
-// well under a real gap (e.g. the 1850m Cutlerville gap) yet above typical DP
-// straight segments — an uncapped med-multiple could exceed the gap and never
-// split. Removes no points; purely how the line is drawn.
-function splitTrackRuns_(pts){
-  if(!pts || pts.length<2) return [[0, pts?pts.length-1:0]];
-  var sl=[]; for(var i=1;i<pts.length;i++) sl.push(Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
-  var ss=sl.slice().sort(function(a,b){return a-b;}); var med=ss.length?ss[Math.floor(ss.length/2)]:0;
-  var gapTh=Math.max(0.004, Math.min(med*8, 0.008));        // ~444m..890m, always < a real gap
-  var runs=[], rs=0;
-  for(var j=1;j<pts.length;j++){ if(Math.hypot(pts[j][0]-pts[j-1][0], pts[j][1]-pts[j-1][1])>gapTh){ if(j-1>rs) runs.push([rs,j-1]); rs=j; } }
-  if(pts.length-1>rs) runs.push([rs,pts.length-1]);
-  return runs.length?runs:[[0,pts.length-1]];
-}
 function renderRideMap_(mapId, lats, lons, opts){
   opts=opts||{};
   if(typeof L==='undefined') return null;
@@ -15845,26 +15829,24 @@ function renderRideMap_(mapId, lats, lons, opts){
   var pts=nt.lats.map(function(la,i){ return [la,nt.lons[i]]; });
   var map=L.map(mapId,{zoomControl:opts.zoomControl!==false,scrollWheelZoom:!!opts.scrollWheelZoom,tap:false});
   addRideMapBase_(map);
-  // Split the track at RECORDING GAPS (pause/resume, lap-restart) so we lift the
-  // pen instead of chording across the gap. Shared with buildRouteMap(HR).
-  var runs=splitTrackRuns_(pts);
-  // 1) Dark casing under each run — halo that keeps the line legible.
-  runs.forEach(function(rr){ if(rr[1]>rr[0]) L.polyline(pts.slice(rr[0],rr[1]+1),{color:'#0a0e17',weight:8,opacity:.6,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map); });
-  // 2) Bold sport-colored route on top, per run, optionally recolored per segment.
+  // REVERTED: gap-split removed — draw the whole track as one polyline (chord
+  // present but coordinates correct). Do not re-add a split until the index math
+  // is proven against the raw dump.
+  // 1) Dark casing under the whole route.
+  L.polyline(pts,{color:'#0a0e17',weight:8,opacity:.6,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
+  // 2) Bold sport-colored route on top, optionally recolored per segment.
   var sportColor=opts.color||'#FC4C02';
-  var den=Math.max(1,pts.length-1);
   if(typeof opts.colorAt==='function'){
-    runs.forEach(function(rr){
-      var cur=opts.colorAt(rr[0],pts,rr[0]/den)||sportColor, seg=[pts[rr[0]]];
-      for(var i=rr[0]+1;i<=rr[1];i++){
-        var col=opts.colorAt(i,pts,i/den)||sportColor;
-        if(col!==cur && seg.length>1){ L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); seg=[seg[seg.length-1]]; cur=col; }
-        seg.push(pts[i]);
-      }
-      if(seg.length>1) L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
-    });
+    var den=Math.max(1,pts.length-1);
+    var cur=opts.colorAt(0,pts,0)||sportColor, seg=[pts[0]];
+    for(var i=1;i<pts.length;i++){
+      var col=opts.colorAt(i,pts,i/den)||sportColor;
+      if(col!==cur && seg.length>1){ L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); seg=[seg[seg.length-1]]; cur=col; }
+      seg.push(pts[i]);
+    }
+    if(seg.length>1) L.polyline(seg,{color:cur,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
   } else {
-    runs.forEach(function(rr){ if(rr[1]>rr[0]) L.polyline(pts.slice(rr[0],rr[1]+1),{color:sportColor,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map); });
+    L.polyline(pts,{color:sportColor,weight:5,opacity:1,lineCap:'round',lineJoin:'round'}).addTo(map);
   }
   // 3) direction chevrons, 4) start/finish pins, 5) lap markers
   addRideChevrons_(map,pts);
@@ -24345,7 +24327,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gap-split-capped';
+window.__BUILD__ = '2026-07-16-revert-gap-split';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
