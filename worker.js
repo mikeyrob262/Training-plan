@@ -3704,6 +3704,45 @@ function runGpsBackfill(force){
     step();
   });
 }
+// One-time-per-load migration: heal rides whose stored lats/lons have DIFFERENT
+// lengths (cross-source corruption — the map garble). Nulls the corrupt pair so
+// nothing draws the crossed track, then re-fetches a fresh PAIRED latlng track
+// straight from Strava and overwrites BOTH st.rides[i].lats/.lons AND /gps in
+// place. Independent of opening each ride, so it can't be defeated by a fragile
+// on-open chain. Idempotent — once a ride is equal-length it's skipped.
+var _gpsMigrated=false;
+function migrateCorruptTracks_(){
+  if(_gpsMigrated || !st || !Array.isArray(st.rides)) return;
+  var bad=[];
+  st.rides.forEach(function(r){ if(!r) return;
+    var mm=(r.lats && r.lons && r.lats.length!==r.lons.length);
+    var gm=(r.gpsLats && r.gpsLons && r.gpsLats.length!==r.gpsLons.length);
+    if(mm){ r.lats=null; r.lons=null; }
+    if(gm){ r.gpsLats=null; r.gpsLons=null; }
+    if((mm||gm) && r.stravaId) bad.push(r);
+  });
+  if(!bad.length) return;
+  _gpsMigrated=true;
+  try{ sv(); }catch(e){}
+  try{ console.log('[gps-migrate] cleared '+bad.length+' mismatched-length tracks; re-fetching paired tracks…'); }catch(e){}
+  if(!st.stravaToken && !st.stravaRefreshToken) return;
+  withStravaToken_(function(token){
+    if(!token) return;
+    var i=0, healed=0;
+    function step(){
+      if(i>=bad.length){ try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){} try{ console.log('[gps-migrate] done — healed '+healed+' tracks'); }catch(e){} return; }
+      var r=bad[i++];
+      fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true',{headers:{'Authorization':'Bearer '+token}})
+        .then(function(x){ if(x.status===429){ i--; setTimeout(step, 60000); throw 'rl'; } return x.ok?x.json():null; })
+        .then(function(j){ var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
+          if(ll){ var trk=trackFromLatlng_(ll); if(trk){ r.lats=trk.lats; r.lons=trk.lons; r._gpsTried=true; var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl); healed++; } }
+          if(healed && healed%15===0){ try{ sv(); }catch(e){} }
+          setTimeout(step, 1200); })
+        .catch(function(e){ if(e==='rl') return; setTimeout(step, 1200); });
+    }
+    step();
+  });
+}
 // --------------------------------------------------------------------------
 
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
@@ -4405,6 +4444,7 @@ function fbPull(silent){
       if(Array.isArray(st)) st=Object.assign({},st);
       st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
       saveLocal_();
+      try{ if(typeof migrateCorruptTracks_==='function') migrateCorruptTracks_(); }catch(e){}  // heal mismatched lats/lons
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
       document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
       for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
@@ -24346,11 +24386,14 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-overwrite-corrupt-track';
+window.__BUILD__ = '2026-07-16-corrupt-track-migration';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
   // the latest deploy (settles "is it serving stale code?" instantly).
+  // Heal mismatched-length GPS tracks once st is loaded (fbPull also calls it;
+  // the _gpsMigrated guard makes it run once). Delayed so st is populated.
+  setTimeout(function(){ try{ if(typeof migrateCorruptTracks_==='function') migrateCorruptTracks_(); }catch(e){} }, 6000);
   // Settings wired via More sheet
   // Dark mode - apply saved preference
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
