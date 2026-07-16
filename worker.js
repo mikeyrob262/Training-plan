@@ -3560,6 +3560,69 @@ function runZoneBackfill(){
   });
 }
 // --------------------------------------------------------------------------
+// BULK GPS BACKFILL — heal every outdoor Strava ride that has no /gps track,
+// IGNORING the stale _gpsTried/_streamsTried flags that block on-open retries.
+// Fetches only the latlng stream (1 call/ride), downsamples, writes to
+// /gps/s<stravaId>. Skips indoor + non-GPS sports. Firebase reads (does the
+// track already exist?) are unlimited; only the Strava fetches are rate-limited.
+function rideMayHaveGps_(r){
+  if(!r || r.deleted || !r.stravaId) return false;
+  if(typeof rideIsIndoor==='function' && rideIsIndoor(r)) return false;
+  var s=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||'')).toLowerCase();
+  if(/virtual|weight|workout|yoga|crossfit|elliptical|stair|strength|pilates|swim|rockclimb|lifting/.test(s)) return false;
+  return true;   // Ride/Run/Hike/Walk/Gravel/MTB/etc — GPS-capable
+}
+var _gpsBackfill={running:false, stop:false};
+function gpsBackfillCandidates_(){ return (st.rides||[]).filter(rideMayHaveGps_); }
+function stopGpsBackfill(){ _gpsBackfill.stop=true; }
+function runGpsBackfill(){
+  var el=document.getElementById('gps-backfill-status');
+  function say(t){ if(el) el.textContent=t; }
+  if(_gpsBackfill.running){ say('Already running…'); return; }
+  var list=gpsBackfillCandidates_();
+  if(!list.length){ say('No outdoor Strava rides to check.'); return; }
+  if(!st.stravaToken && !st.stravaRefreshToken){ say('Connect Strava first (Reconnect), then run this.'); return; }
+  _gpsBackfill.running=true; _gpsBackfill.stop=false;
+  var i=0, healed=0, already=0, noTrack=0, err=0, total=list.length;
+  say('Starting… '+total+' outdoor rides to check (Strava-limited, ~90 fetches/run).');
+  withStravaToken_(function(token){
+    if(!token){ _gpsBackfill.running=false; say('No Strava token — reconnect Strava and retry.'); return; }
+    function finish(msg){
+      _gpsBackfill.running=false;
+      try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      say(msg+' — healed '+healed+' rides'+(already?(', '+already+' already had GPS'):'')+(noTrack?(', '+noTrack+' had no track on Strava'):'')+(err?(', '+err+' errors'):'')+(i<list.length?('. Stopped at '+i+'/'+total+' — run again to continue.'):'. Done!')+' Reopen a ride to see its map.');
+    }
+    function step(){
+      if(_gpsBackfill.stop) return finish('Stopped');
+      if(i>=list.length) return finish('Complete');
+      var r=list[i++];
+      say('Checking '+i+'/'+total+'… healed '+healed+(noTrack?(', '+noTrack+' no-track'):''));
+      gpsGetAny_(r).then(function(p){                       // already has a track? (Firebase read)
+        if(p && p.lats && p.lats.length){ already++; setTimeout(step, 0); return null; }
+        var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true';
+        return fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
+          if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
+          if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
+          return x.ok?x.json():null;
+        }).then(function(j){
+          var ll=(j&&j.latlng&&j.latlng.data&&j.latlng.data.length>1)?j.latlng.data:null;
+          if(ll){
+            var s=Math.ceil(ll.length/600), dl=[]; for(var k=0;k<ll.length;k+=s) dl.push(ll[k]);
+            r.lats=dl.map(function(pp){return Math.round(pp[0]*1e5)/1e5;});
+            r.lons=dl.map(function(pp){return Math.round(pp[1]*1e5)/1e5;});
+            r._gpsTried=true;
+            var pl=(typeof gpsPayload_==='function')?gpsPayload_(r):null; if(pl) gpsPut(rideKey(r), pl);
+            healed++;
+          } else { noTrack++; }
+          if(healed && healed%20===0){ try{ sv(); }catch(e){} }
+          setTimeout(step, 1100);                            // rate-limit spacing between Strava fetches
+        });
+      }).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); });
+    }
+    step();
+  });
+}
+// --------------------------------------------------------------------------
 
 var fbWriteTs  = 0;   // ms timestamp of our last successful push
 var fbPollTimer = null;
@@ -11881,6 +11944,7 @@ function dsShowSettings(){
   wrap.style.cssText='padding:20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;height:100%;box-sizing:border-box';
   var _G=_goalTargets_();
   var _zbCount=(typeof zoneBackfillCandidates_==='function')?zoneBackfillCandidates_().length:0;
+  var _gpsbCount=(typeof gpsBackfillCandidates_==='function')?gpsBackfillCandidates_().length:0;
   function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Settings</div>'
@@ -11913,6 +11977,13 @@ function dsShowSettings(){
     +'<div id="zone-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
     +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">GPS Track Backfill</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Re-fetches each outdoor Strava ride&#39;s GPS track (latlng) and writes it to /gps so every ride map draws. Skips indoor + non-GPS sports, and rides that already have a track. Ignores the on-open retry flags. Rate-limited (~90 fetches/run), resumable. '+_gpsbCount+' outdoor rides to check.</div>'
+    +'<div id="gps-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="runGpsBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill GPS Tracks</button>'
+    +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Clean Race Duplicates</div>'
@@ -24136,7 +24207,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-gps-retry-on-success';
+window.__BUILD__ = '2026-07-16-bulk-gps-backfill';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
