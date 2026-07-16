@@ -13749,7 +13749,11 @@ function dsShowCalendar(){
   var dayNamesFull=['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
   // ---- shared helpers (real data only) ----
-  var CAL={ride:'#4ECB3C', run:'#3B95E8', workout:'#A855F7', swim:'#0EA5E9', tss:'#F97316', time:'#2DD4BF', act:'#A855F7', dist:'#3B95E8'};
+  // Metric accents only. SPORT colors come STRAIGHT from activityIcon_ (below) so
+  // the calendar can never drift from the rest of the app — Ride green, Run RED,
+  // Strength purple, VirtualRide blue, Treadmill orange, etc.
+  var CAL={tss:'#F97316', time:'#2DD4BF', act:'#A855F7', dist:'#3B95E8'};
+  function sportColor_(sport){ var svg=activityIcon_(sport||'Ride',10); return (svg.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C'; }
   function pad2(n){ return (n<10?'0':'')+n; }
   function durSecs(r){ if(r&&r.movingSecs) return parseFloat(r.movingSecs)||0; return Math.round(parseDurToMin(r&&r.duration)*60); }
   function actClass(r){ var s=rideSport_(r).toLowerCase();
@@ -13758,7 +13762,7 @@ function dsShowCalendar(){
     if(/weight|strength|lift|workout|hiit|core|gym|mobility|yoga|circuit|conditioning|cardio/.test(s)) return 'workout';
     return 'ride';
   }
-  function calColor(r){ var c=actClass(r); return CAL[c]||CAL.ride; }
+  function calColor(r){ return sportColor_(rideSport_(r)); }
   function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
   function fmtHMS(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h>0?(h+':'+pad2(m)+':'+pad2(s)):(m+':'+pad2(s)); }
   function fmtFull(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h+':'+pad2(m)+':'+pad2(s); }
@@ -13849,9 +13853,10 @@ function dsShowCalendar(){
 
     // ---- stats strip ----
     H+='<div style="display:flex;gap:10px;flex-shrink:0">';
-    H+=statCard(calIcon('Ride',24,CAL.ride),CAL.ride,nRide,'Rides',Math.round(mRide)+' mi',CAL.ride);
-    H+=statCard(calIcon('Run',24,CAL.run),CAL.run,nRun,'Runs',(Math.round(mRun*10)/10)+' mi',CAL.run);
-    H+=statCard(calIcon('Strength',24,CAL.workout),CAL.workout,nWk,'Workouts',fmtFull(wkSecs),CAL.workout);
+    var C_RIDE=sportColor_('Ride'), C_RUN=sportColor_('Run'), C_WORK=sportColor_('Strength');
+    H+=statCard(calIcon('Ride',24,C_RIDE),C_RIDE,nRide,'Rides',Math.round(mRide)+' mi',C_RIDE);
+    H+=statCard(calIcon('Run',24,C_RUN),C_RUN,nRun,'Runs',(Math.round(mRun*10)/10)+' mi',C_RUN);
+    H+=statCard(calIcon('Strength',24,C_WORK),C_WORK,nWk,'Workouts',fmtFull(wkSecs),C_WORK);
     H+=statCard(FLAME,CAL.tss,totTSS,'TSS','This Month',CAL.tss);
     H+=statCard(PULSE,CAL.time,totAct,'Total Activities','This Month','#64748b');
     H+='</div>';
@@ -13950,8 +13955,8 @@ function dsShowCalendar(){
     H+='  </div>';
     H+='</div>';
     H+='<div style="display:flex;gap:24px;flex-shrink:0">';
-    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Ride</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Ride',18,CAL.ride)+'<span style="font-size:16px;font-weight:800;color:'+CAL.ride+'">'+(Math.round(longRide*10)/10)+' mi</span></div></div>';
-    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Run</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Run',18,CAL.run)+'<span style="font-size:16px;font-weight:800;color:'+CAL.run+'">'+(Math.round(longRun*10)/10)+' mi</span></div></div>';
+    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Ride</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Ride',18,C_RIDE)+'<span style="font-size:16px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div></div>';
+    H+='  <div><div style="font-size:11px;color:#8592a6;margin-bottom:6px">Longest Run</div><div style="display:flex;align-items:center;gap:6px">'+calIcon('Run',18,C_RUN)+'<span style="font-size:16px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div></div>';
     H+='</div>';
     var _R=26,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
     H+='<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center">';
@@ -24594,7 +24599,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-calendar-mockup-redesign';
+window.__BUILD__ = '2026-07-16-calendar-run-color-consistent';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
