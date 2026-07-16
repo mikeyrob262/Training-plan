@@ -14269,28 +14269,28 @@ function bikeChain_(b){
 function dsRenderAttention_(el, d){
   if(!el) return;
   var CK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
-  var H='<div style="font-size:8px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:9px">WHAT NEEDS ATTENTION</div>';
+  var H='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em;margin-bottom:11px">WHAT NEEDS ATTENTION</div>';
   var items=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;}).slice(0,5);
   if(d.state==='green' || !items.length){
     H+='<div style="display:flex;align-items:flex-start;gap:12px">';
     H+='<div style="width:34px;height:34px;border-radius:50%;background:rgba(74,222,128,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
-    H+='<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;color:#4ade80;line-height:1.15">Nothing To See Here!</div>';
-    H+='<div style="font-size:11px;color:#94a3b8;margin:2px 0 8px">Everything looks great.</div>';
-    (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:7px;font-size:11px;color:#cbd5e1;margin-bottom:5px">'+CK+'<span>'+p+'</span></div>'; });
-    H+='<div style="font-size:11px;color:#64748b;margin-top:7px">Enjoy the ride.</div></div></div>';
+    H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:#4ade80;line-height:1.15">Nothing To See Here!</div>';
+    H+='<div style="font-size:12.5px;color:#94a3b8;margin:3px 0 10px">Everything looks great.</div>';
+    (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#cbd5e1;margin-bottom:7px">'+CK+'<span>'+p+'</span></div>'; });
+    H+='<div style="font-size:12px;color:#64748b;margin-top:8px">Enjoy the ride.</div></div></div>';
   } else {
     var red=d.state==='red', accent=red?'#ef4444':'#f59e0b';
     var narr=(d.narrated && d.narrated.bullets && d.narrated.bullets.length)?d.narrated.bullets:null;
-    H+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px"><span style="font-size:15px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:14px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span>'
+    H+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:17px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:16px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span>'
       +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:#64748b;border:1px solid #2a3550;border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
     if(narr){
       // AI-narrated: dot color follows the day state (per-item severity is not
       // preserved through narration, so we do not fake it).
-      narr.forEach(function(t){ H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+t+'</span></div>'; });
+      narr.forEach(function(t){ H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.5">'+t+'</span></div>'; });
     } else {
       items.forEach(function(it){
         var dot=it.sev>=2?'#ef4444':'#f59e0b';
-        H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:5px"></span><span style="font-size:11.5px;color:#cbd5e1;line-height:1.45">'+it.text+'</span></div>';
+        H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.5">'+it.text+'</span></div>';
       });
     }
     if(red){
@@ -14460,7 +14460,7 @@ function dsShowDashboard(){
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
 
   // ===== ROW 1 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
   // -- Athlete IQ --
   var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
@@ -14491,7 +14491,7 @@ function dsShowDashboard(){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:8px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
+  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px;width:66%"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:8px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
@@ -14511,7 +14511,7 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 2 =====
-  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
   if(!recent.length){ ra+='<div style="font-size:12px;color:#64748b;padding:12px 0">No activities yet.</div>'; }
@@ -14521,14 +14521,14 @@ function dsShowDashboard(){
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=Math.round(parseFloat(r.tss)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
-    ra+='<div data-ride="'+ridx+'" style="display:flex;align-items:center;gap:12px;padding:9px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    ra+='<div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,32)+'</div>';
-    ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:#64748b">'+dstr+'</div></div>';
-    ra+='<div style="display:flex;gap:16px;flex-shrink:0;text-align:right">';
-    if(dist>0) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:8px;color:#5b6678">Distance</div></div>';
-    if(r.duration) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+r.duration+'</div><div style="font-size:8px;color:#5b6678">Time</div></div>';
-    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:8px;color:#5b6678">TSS</div></div>';
-    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:8px;color:#5b6678">IF</div></div>';
+    ra+='<div data-ride="'+ridx+'" style="display:flex;align-items:center;gap:13px;padding:12px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    ra+='<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,38)+'</div>';
+    ra+='<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:11px;color:#64748b;margin-top:1px">'+dstr+'</div></div>';
+    ra+='<div style="display:flex;gap:22px;flex-shrink:0;text-align:right">';
+    if(dist>0) ra+='<div><div style="font-size:14px;font-weight:700;color:#e8edf5">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:9px;color:#5b6678">Distance</div></div>';
+    if(r.duration) ra+='<div><div style="font-size:14px;font-weight:700;color:#e8edf5">'+r.duration+'</div><div style="font-size:9px;color:#5b6678">Time</div></div>';
+    ra+='<div><div style="font-size:14px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:9px;color:#5b6678">TSS</div></div>';
+    ra+='<div><div style="font-size:14px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:9px;color:#5b6678">IF</div></div>';
     ra+='</div></div>';
   });
   H+=card(ra);
@@ -14545,23 +14545,23 @@ function dsShowDashboard(){
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
   var nu=lbl('NUTRITION',link('View','nutrition'));
   nu+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Today</div>';
-  nu+='<div style="display:flex;gap:14px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:16px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:#5b6678">kcal</div></div></div>';
-  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">';
+  nu+='<div style="display:flex;gap:16px;align-items:center"><div style="position:relative;width:90px;height:90px;flex-shrink:0"><svg width="90" height="90" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:20px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:9px;color:#5b6678">kcal</div></div></div>';
+  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
-    nu+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+'"></span><span style="font-size:11px;color:#94a3b8">'+m[1]+'</span></span><span style="font-size:11px;color:#e2e8f0;font-weight:600">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
+    nu+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;background:'+m[0]+'"></span><span style="font-size:13px;color:#cbd5e1">'+m[1]+'</span></span><span style="font-size:13px;color:#e8edf5;font-weight:700">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
   });
   nu+='</div></div>';
-  if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:10px;font-size:11px;color:#64748b">Fiber <b style="color:#e2e8f0">'+nf.consumed.fiber+'g</b></div>'; }
+  if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:#64748b">Fiber <b style="color:#e8edf5">'+nf.consumed.fiber+'g</b></div>'; }
   H+=card(nu);
   // Weather
   var wea=lbl('WEATHER');
   wea+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Grand Rapids, MI</div>';
-  wea+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:20px;font-weight:800;color:#fff" id="ds-wx-temp">—°F</div><div style="font-size:10px;color:#64748b" id="ds-wx-feels">Feels like —°</div></div></div>';
-  wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 4px">';
-  wea+='<div><div style="font-size:9px;color:#64748b">Humidity</div><div style="font-size:11px;font-weight:600;color:#e2e8f0" id="ds-wx-hum">—</div></div>';
-  wea+='<div><div style="font-size:9px;color:#64748b">Wind</div><div style="font-size:11px;font-weight:600;color:#e2e8f0" id="ds-wx-wind">—</div></div>';
-  wea+='<div><div style="font-size:9px;color:#64748b">UV Index</div><div style="font-size:11px;font-weight:600;color:#e2e8f0" id="ds-wx-uv">—</div></div>';
-  wea+='<div><div style="font-size:9px;color:#64748b">Air Quality</div><div style="font-size:11px;font-weight:600;color:#e2e8f0" id="ds-wx-aqi">—</div></div>';
+  wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:#64748b;margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
+  wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;margin-top:auto">';
+  wea+='<div><div style="font-size:10px;color:#64748b">Humidity</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-hum">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:#64748b">Wind</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-wind">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:#64748b">UV Index</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-uv">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:#64748b">Air Quality</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-aqi">—</div></div>';
   wea+='</div>';
   H+=card(wea);
   // My Bikes (both)
@@ -14580,7 +14580,7 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 3 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch;flex:1 1 0;min-height:0">';
   // Training Load
   var maxDay=Math.max.apply(null,tssSeries.concat([1]));
   var tl=lbl('TRAINING LOAD');
@@ -14589,7 +14589,7 @@ function dsShowDashboard(){
   tl+='<div style="display:flex;align-items:flex-end;gap:4px;height:56px;margin-top:10px">';
   var dowL=['S','M','T','W','T','F','S'];
   days7.forEach(function(k,di){ var v=tssByDay[k]; var bh=Math.max(3,Math.round(v/maxDay*52)); var isToday=di===6;
-    tl+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+bh+'px;background:'+(isToday?ACC.blue:'#2a3550')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+dowL[new Date(k+'T00:00:00').getDay()]+'</span></div>';
+    tl+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+bh+'px;background:'+(isToday?'#3b82f6':'#1e3a8a')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+dowL[new Date(k+'T00:00:00').getDay()]+'</span></div>';
   });
   tl+='</div>';
   tl+='<div style="font-size:11px;color:#64748b;margin-top:auto;padding-top:10px;border-top:1px solid #1c2130">Daily average: <b style="color:#e2e8f0">'+(weekTSS?Math.round(weekTSS/7):0)+' TSS</b></div>';
@@ -14599,7 +14599,7 @@ function dsShowDashboard(){
   var hrv=(st.hrv!=null)?st.hrv:null, rhr=(st.restingHR!=null)?st.restingHR:null;
   var rd=lbl('RECOVERY','<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
   rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">Readiness from form (TSB '+(fit.tsb>=0?'+':'')+fit.tsb+')</div>';
-  rd+='<div style="display:flex;justify-content:center"><div style="position:relative;width:104px;height:62px;overflow:hidden"><svg width="104" height="104" viewBox="0 0 104 104" style="position:absolute;top:0"><circle cx="52" cy="52" r="30" fill="none" stroke="#1c2130" stroke-width="9" stroke-dasharray="'+(rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/><circle cx="52" cy="52" r="30" fill="none" stroke="'+rdy.color+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+(rdy.score/100*rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/></svg><div style="position:absolute;top:24px;left:0;right:0;text-align:center"><div style="font-size:23px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+'">'+rdy.label+'</div></div></div></div>';
+  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+rdy.color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-rdy.score/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+';margin-top:2px">'+rdy.label+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">HRV ms</div></div>';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Rest HR bpm</div></div>';
@@ -14613,7 +14613,7 @@ function dsShowDashboard(){
   cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:#fff">'+activeDays+'</span><span style="font-size:12px;color:#94a3b8">of '+elapsed+' days active</span></div>';
   cs+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
   for(var wk=0;wk<2;wk++){ for(var dd2=0;dd2<7;dd2++){ var cd=new Date(monS); cd.setDate(monS.getDate()+(wk*7)+dd2); var ck=normDate(cd.getFullYear()+'-'+(cd.getMonth()+1)+'-'+cd.getDate()); var on=!!activeSet[ck]; var fut=cd>now;
-    cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:#5b6678">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?ACC.green:fut?'#171c2b':'#2a3550')+'"></span></div>';
+    cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:#5b6678">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?'#facc15':fut?'#171c2b':'#2a3550')+'"></span></div>';
   }}
   cs+='</div>';
   cs+='<div style="font-size:11px;color:'+ACC.green+';text-align:center;margin-top:auto;padding-top:11px;font-weight:600">'+(activeDays>=elapsed*0.6?'Great consistency!':activeDays>=elapsed*0.4?'Solid rhythm.':'Keep showing up.')+'</div>';
@@ -24590,7 +24590,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-balance-hrv';
+window.__BUILD__ = '2026-07-16-dashboard-fill-enlarge';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
