@@ -14417,8 +14417,8 @@ function dsShowDashboard(){
     var line='M'+pts.join(' L'), area=line+' L'+w+' '+h+' L0 '+h+' Z';
     return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision"><path d="'+area+'" fill="'+color+'" opacity="0.10"/><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
-  function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 15px;min-width:0;'+(extra||'')+'">'+inner+'</div>'; }
-  function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px"><span style="font-size:9px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
+  function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;'+(extra||'')+'">'+inner+'</div>'; }
+  function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
   function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
   var durStr=mins>=60?(Math.floor(mins/60)+'h'+(mins%60?' '+(mins%60)+'m':'')):(mins+' min');
@@ -14435,10 +14435,10 @@ function dsShowDashboard(){
   H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:#111318;border:1px solid #1c2130;border-radius:9px;padding:7px 13px;font-size:12px;color:#cbd5e1;font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
   H+='</div></div>';
 
-  H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:12px;min-width:0">';
+  H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
 
   // ===== ROW 1 =====
-  H+='<div style="display:grid;grid-template-columns:1.35fr 1fr 1.25fr;gap:12px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.35fr 1fr 1.25fr;gap:10px;min-width:0;align-items:stretch">';
   // -- Athlete IQ --
   var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
@@ -14446,16 +14446,16 @@ function dsShowDashboard(){
   var ringPct=iq.score==null?0:iq.score;
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
   var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
-  iqInner+='<div style="display:flex;gap:16px;align-items:center">';
-  iqInner+='<div style="position:relative;width:96px;height:96px;flex-shrink:0"><svg width="96" height="96" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:28px;font-weight:800;color:#fff;line-height:1">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:10px;color:#5b6678">/100</div></div></div>';
-  iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px"><span style="font-size:19px;font-weight:800;color:'+ACC.green+'">'+trend+'</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg></div>';
-  iqInner+='<div style="font-size:12px;color:#94a3b8;margin-top:3px">'+trendNote+'</div>';
-  iqInner+='<div style="display:flex;gap:14px;margin-top:12px;flex-wrap:wrap">';
+  iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
+  iqInner+='<div style="position:relative;width:140px;height:140px;flex-shrink:0"><svg width="140" height="140" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:48px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:#5b6678;margin-top:2px">/100</div></div></div>';
+  iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+ACC.green+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg></div>';
+  iqInner+='<div style="font-size:13px;color:#94a3b8;margin-top:4px">'+trendNote+'</div>';
+  iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
   [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',Math.round(lastWt*10)/10,wtChange]].forEach(function(s){
-    iqInner+='<div style="min-width:0"><div style="font-size:9px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap">'+s[0]+'</div><div style="font-size:17px;font-weight:800;color:#e8edf5;line-height:1.1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
+    iqInner+='<div style="min-width:0"><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
   });
   iqInner+='</div></div></div>';
-  iqInner+='<div style="display:flex;align-items:center;gap:10px;margin-top:13px;padding-top:11px;border-top:1px solid #1c2130"><span style="font-size:10px;font-weight:700;color:'+ACC.green+';background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:7px;padding:3px 9px">Training Load: '+loadState+'</span><span style="font-size:11px;color:#64748b">Keep monitoring recovery and fuel.</span></div>';
+  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130"><span style="font-size:11px;font-weight:700;color:'+ACC.green+';background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:#64748b">Keep monitoring recovery and fuel.</span></div>';
   H+=card(iqInner);
 
   // -- Today's Plan --
@@ -14463,20 +14463,20 @@ function dsShowDashboard(){
   var planIcon=activityIcon_((twk&&twk.name)||'Ride',38);
   var focus=twk?(twk.isRest?'Recovery':twk.isHard?'Intensity / threshold':twk.isRide?'Aerobic endurance':'General'):'—';
   var pInner=lbl("TODAY'S PLAN");
-  pInner+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div style="width:48px;height:48px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+planIcon+'</div><div style="min-width:0"><div style="font-size:16px;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:#94a3b8;margin-top:1px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
+  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:56px;height:56px;border-radius:14px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',42)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
-      pInner+='<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid #1c2130"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:11px;color:#64748b;width:64px">'+rw[0]+'</span><span style="font-size:12px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
+      pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div data-act="plan" style="margin-top:12px;display:inline-flex;align-items:center;justify-content:center;width:100%;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:11px;font-size:13px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div>';
+  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
-  var rc='<div style="display:flex;flex-direction:column;gap:12px;min-width:0">';
+  var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   rc+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:11px 13px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div><div style="flex:1;text-align:right;font-size:19px;font-weight:800;color:#f1f5f9;line-height:1">'+val+'</div></div><div style="font-size:11px;color:#94a3b8">'+label+'</div><div style="font-size:9px;color:#5b6678;margin-bottom:4px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
+    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:12px 14px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="width:34px;height:34px;border-radius:9px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div><div style="flex:1;text-align:right;font-size:26px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em">'+val+'</div></div><div style="font-size:13px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:10px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:24px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkg.toFixed(2),'W/kg','FTP + weight',spark(wkgSeries.length>1?wkgSeries:[wkg,wkg],ACC.blue,100,22));
@@ -14489,7 +14489,7 @@ function dsShowDashboard(){
   H+='</div>';
 
   // ===== ROW 2 =====
-  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:12px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
   if(!recent.length){ ra+='<div style="font-size:12px;color:#64748b;padding:12px 0">No activities yet.</div>'; }
@@ -14514,21 +14514,22 @@ function dsShowDashboard(){
   var hdCol=Math.abs(hdDrift)<3?ACC.green:Math.abs(hdDrift)<6?ACC.amber:ACC.red;
   var hd=lbl('HR DRIFT');
   hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride</div>';
-  hd+='<div style="font-size:30px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(hdDrift>=0?'+':'')+hdDrift+'%</div>';
-  hd+='<div style="font-size:11px;font-weight:600;color:'+hdCol+';margin:3px 0 8px">'+(Math.abs(hdDrift)<3?'Excellent efficiency':Math.abs(hdDrift)<6?'Moderate — check fuel':'High — review pacing')+'</div>';
-  hd+='<div style="height:34px">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,34):'<div style="font-size:10px;color:#5b6678">No HR stream on the last ride.</div>')+'</div>';
+  hd+='<div style="font-size:38px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(hdDrift>=0?'+':'')+hdDrift+'%</div>';
+  hd+='<div style="font-size:12px;font-weight:600;color:'+hdCol+';margin:4px 0 8px">'+(Math.abs(hdDrift)<3?'Excellent efficiency':Math.abs(hdDrift)<6?'Moderate — check fuel':'High — review pacing')+'</div>';
+  hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,56):'<div style="font-size:10px;color:#5b6678">No HR stream on the last ride.</div>')+'</div>';
   H+=card(hd);
   // Nutrition
   var calPct=nf.goals.cal?Math.min(1,nf.consumed.cal/nf.goals.cal):0;
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
   var nu=lbl('NUTRITION',link('View','nutrition'));
   nu+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Today</div>';
-  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:60px;height:60px;flex-shrink:0"><svg width="60" height="60" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:12px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:7px;color:#5b6678">kcal</div></div></div>';
-  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">';
+  nu+='<div style="display:flex;gap:14px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:16px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:#5b6678">kcal</div></div></div>';
+  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
-    nu+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:'+m[0]+'"></span><span style="font-size:10px;color:#94a3b8">'+m[1]+'</span></span><span style="font-size:10px;color:#e2e8f0;font-weight:600">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
+    nu+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+'"></span><span style="font-size:11px;color:#94a3b8">'+m[1]+'</span></span><span style="font-size:11px;color:#e2e8f0;font-weight:600">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
   });
   nu+='</div></div>';
+  if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:10px;font-size:11px;color:#64748b">Fiber <b style="color:#e2e8f0">'+nf.consumed.fiber+'g</b></div>'; }
   H+=card(nu);
   // Weather
   var wea=lbl('WEATHER');
@@ -14548,16 +14549,16 @@ function dsShowDashboard(){
   bikes.forEach(function(b,bi){
     var ch=(typeof bikeChain_==='function')?bikeChain_(b):null;
     var sub=b.wheelset||b.groupset||(b.miles!=null?Math.round(b.miles)+' mi':'');
-    bk+='<div data-act="gear" style="display:flex;gap:10px;align-items:center;padding:6px 0;'+(bi>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid #1c2130;filter:brightness(1.06)">';
-    bk+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+sub+'</div>'+(ch?'<div style="font-size:9px;margin-top:2px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'% &middot; '+Math.max(0,Math.round(ch.life-ch.milesSince))+' mi left</div>':'')+'</div>';
+    bk+='<div data-act="gear" style="display:flex;gap:12px;align-items:center;padding:8px 0;'+(bi>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    if(b.photo) bk+='<img src="'+b.photo+'" style="width:130px;height:82px;object-fit:cover;border-radius:9px;flex-shrink:0;border:1px solid #1c2130;filter:brightness(1.06)">';
+    bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:3px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'% &middot; '+Math.max(0,Math.round(ch.life-ch.milesSince))+' mi left</div>':'')+'</div>';
     bk+='</div>';
   });
   H+=card(bk);
   H+='</div>';
 
   // ===== ROW 3 =====
-  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:12px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 1fr 1.1fr 1.25fr;gap:10px;min-width:0;align-items:stretch">';
   // Training Load
   var maxDay=Math.max.apply(null,tssSeries.concat([1]));
   var tl=lbl('TRAINING LOAD');
@@ -14569,14 +14570,14 @@ function dsShowDashboard(){
     tl+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+bh+'px;background:'+(isToday?ACC.blue:'#2a3550')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+dowL[new Date(k+'T00:00:00').getDay()]+'</span></div>';
   });
   tl+='</div>';
-  tl+='<div style="font-size:10px;color:#64748b;margin-top:8px;padding-top:8px;border-top:1px solid #1c2130">Daily average: <b style="color:#e2e8f0">'+(weekTSS?Math.round(weekTSS/7):0)+' TSS</b></div>';
+  tl+='<div style="font-size:11px;color:#64748b;margin-top:auto;padding-top:10px;border-top:1px solid #1c2130">Daily average: <b style="color:#e2e8f0">'+(weekTSS?Math.round(weekTSS/7):0)+' TSS</b></div>';
   H+=card(tl);
   // Readiness (honest — no HRV)
   var rC=2*Math.PI*30, rOff=rC*(1-rdy.score/100);
   var rd=lbl('READINESS');
   rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">From training form (TSB '+(fit.tsb>=0?'+':'')+fit.tsb+')</div>';
   rd+='<div style="display:flex;justify-content:center"><div style="position:relative;width:104px;height:64px;overflow:hidden"><svg width="104" height="104" viewBox="0 0 104 104" style="position:absolute;top:0"><circle cx="52" cy="52" r="30" fill="none" stroke="#1c2130" stroke-width="9" stroke-dasharray="'+(rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/><circle cx="52" cy="52" r="30" fill="none" stroke="'+rdy.color+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+(rdy.score/100*rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/></svg><div style="position:absolute;top:26px;left:0;right:0;text-align:center"><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+'">'+rdy.label+'</div></div></div></div>';
-  rd+='<div style="font-size:10px;color:#64748b;text-align:center;margin-top:8px">'+(rdy.score>=75?'Fresh legs — good to push.':rdy.score>=50?'Moderate — train as planned.':'Prioritize easy riding and sleep.')+'</div>';
+  rd+='<div style="font-size:11px;color:#64748b;text-align:center;margin-top:auto;padding-top:10px">'+(rdy.score>=75?'Fresh legs — good to push.':rdy.score>=50?'Moderate — train as planned.':'Prioritize easy riding and sleep.')+'</div>';
   H+=card(rd);
   // Consistency
   var wd=['M','T','W','T','F','S','S'];
@@ -14589,7 +14590,7 @@ function dsShowDashboard(){
     cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:#5b6678">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?ACC.green:fut?'#171c2b':'#2a3550')+'"></span></div>';
   }}
   cs+='</div>';
-  cs+='<div style="font-size:10px;color:'+ACC.green+';text-align:center;margin-top:9px;font-weight:600">'+(activeDays>=elapsed*0.6?'Great consistency!':activeDays>=elapsed*0.4?'Solid rhythm.':'Keep showing up.')+'</div>';
+  cs+='<div style="font-size:11px;color:'+ACC.green+';text-align:center;margin-top:auto;padding-top:11px;font-weight:600">'+(activeDays>=elapsed*0.6?'Great consistency!':activeDays>=elapsed*0.4?'Solid rhythm.':'Keep showing up.')+'</div>';
   H+=card(cs);
   // Upcoming Events
   var _mon=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
@@ -24562,7 +24563,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-restyle';
+window.__BUILD__ = '2026-07-16-dashboard-tighten';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
