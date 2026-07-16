@@ -14331,6 +14331,28 @@ function dsAttentionNarrate_(d, cb){
   }).catch(function(){ if(cb) cb(null); });
 }
 
+// Manual daily recovery inputs (HRV + Resting HR). The app has no wearable feed,
+// so these are user-entered — real values you record, not fabricated. Shown on the
+// dashboard Recovery card; editable here.
+function openRecoveryEditor_(){
+  var old=document.getElementById('recov-editor'); if(old) old.remove();
+  var m=document.createElement('div'); m.id='recov-editor';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
+  m.onclick=function(e){ if(e.target===m) m.remove(); };
+  var fc='width:100%;padding:11px 12px;background:#1a1f2e;border:1px solid #252d40;border-radius:10px;color:#e8edf5;font-size:15px;font-family:inherit;box-sizing:border-box';
+  var s=document.createElement('div');
+  s.style.cssText='background:#111318;border:1px solid #1c2130;border-radius:16px;padding:20px;width:100%;max-width:340px';
+  s.innerHTML='<div style="font-size:16px;font-weight:800;color:#f1f5f9;margin-bottom:4px">Recovery metrics</div>'
+    +'<div style="font-size:11px;color:#64748b;margin-bottom:16px">Enter todays morning readings.</div>'
+    +'<div style="margin-bottom:12px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">HRV (ms)</div><input id="rec-hrv" type="number" inputmode="numeric" placeholder="e.g. 47" value="'+(st.hrv!=null?st.hrv:'')+'" style="'+fc+'"></div>'
+    +'<div style="margin-bottom:18px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">Resting HR (bpm)</div><input id="rec-rhr" type="number" inputmode="numeric" placeholder="e.g. 58" value="'+(st.restingHR!=null?st.restingHR:'')+'" style="'+fc+'"></div>';
+  var save=document.createElement('button'); save.textContent='Save';
+  save.style.cssText='width:100%;padding:12px;background:#4ade80;border:none;border-radius:11px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+  save.onclick=function(){ var h=parseFloat(document.getElementById('rec-hrv').value), r=parseFloat(document.getElementById('rec-rhr').value);
+    st.hrv=isNaN(h)?null:h; st.restingHR=isNaN(r)?null:r; try{sv();}catch(e){} m.remove(); if(typeof dsShowDashboard==='function') dsShowDashboard(); try{toast('Recovery saved');}catch(e){} };
+  s.appendChild(save); m.appendChild(s); (document.getElementById('app-shell')||document.body).appendChild(m);
+}
+
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -14438,7 +14460,7 @@ function dsShowDashboard(){
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
 
   // ===== ROW 1 =====
-  H+='<div style="display:grid;grid-template-columns:1.35fr 1fr 1.25fr;gap:10px;min-width:0;align-items:stretch">';
+  H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch">';
   // -- Athlete IQ --
   var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
@@ -14447,7 +14469,7 @@ function dsShowDashboard(){
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
   var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
-  iqInner+='<div style="position:relative;width:140px;height:140px;flex-shrink:0"><svg width="140" height="140" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:48px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:#5b6678;margin-top:2px">/100</div></div></div>';
+  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:#5b6678;margin-top:2px">/100</div></div></div>';
   iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+ACC.green+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg></div>';
   iqInner+='<div style="font-size:13px;color:#94a3b8;margin-top:4px">'+trendNote+'</div>';
   iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
@@ -14463,20 +14485,20 @@ function dsShowDashboard(){
   var planIcon=activityIcon_((twk&&twk.name)||'Ride',38);
   var focus=twk?(twk.isRest?'Recovery':twk.isHard?'Intensity / threshold':twk.isRide?'Aerobic endurance':'General'):'—';
   var pInner=lbl("TODAY'S PLAN");
-  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:56px;height:56px;border-radius:14px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',42)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
+  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:10px;font-size:13px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
+  pInner+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:14px"><div data-act="plan" style="flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:'+ACC.orange+';border-radius:10px;padding:8px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div><div data-act="analytics" style="width:40px;flex-shrink:0;border-radius:10px;background:#171c2b;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12v6M8 8v10M13 4v14M18 10v8"/></svg></div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
-  rc+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+  rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:12px 14px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="width:34px;height:34px;border-radius:9px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div><div style="flex:1;text-align:right;font-size:26px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em">'+val+'</div></div><div style="font-size:13px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:10px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:24px">'+sparkHtml+'</div></div>';
+    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:12px 14px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="width:34px;height:34px;border-radius:9px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div><div style="flex:1;text-align:right;font-size:21px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em">'+val+'</div></div><div style="font-size:13px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:10px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:24px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkg.toFixed(2),'W/kg','FTP + weight',spark(wkgSeries.length>1?wkgSeries:[wkg,wkg],ACC.blue,100,22));
@@ -14572,12 +14594,16 @@ function dsShowDashboard(){
   tl+='</div>';
   tl+='<div style="font-size:11px;color:#64748b;margin-top:auto;padding-top:10px;border-top:1px solid #1c2130">Daily average: <b style="color:#e2e8f0">'+(weekTSS?Math.round(weekTSS/7):0)+' TSS</b></div>';
   H+=card(tl);
-  // Readiness (honest — no HRV)
-  var rC=2*Math.PI*30, rOff=rC*(1-rdy.score/100);
-  var rd=lbl('READINESS');
-  rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">From training form (TSB '+(fit.tsb>=0?'+':'')+fit.tsb+')</div>';
-  rd+='<div style="display:flex;justify-content:center"><div style="position:relative;width:104px;height:64px;overflow:hidden"><svg width="104" height="104" viewBox="0 0 104 104" style="position:absolute;top:0"><circle cx="52" cy="52" r="30" fill="none" stroke="#1c2130" stroke-width="9" stroke-dasharray="'+(rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/><circle cx="52" cy="52" r="30" fill="none" stroke="'+rdy.color+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+(rdy.score/100*rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/></svg><div style="position:absolute;top:26px;left:0;right:0;text-align:center"><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+'">'+rdy.label+'</div></div></div></div>';
-  rd+='<div style="font-size:11px;color:#64748b;text-align:center;margin-top:auto;padding-top:10px">'+(rdy.score>=75?'Fresh legs — good to push.':rdy.score>=50?'Moderate — train as planned.':'Prioritize easy riding and sleep.')+'</div>';
+  // Recovery — TSB-based readiness gauge (real) + manual HRV / Resting HR (editable).
+  var rC=2*Math.PI*30;
+  var hrv=(st.hrv!=null)?st.hrv:null, rhr=(st.restingHR!=null)?st.restingHR:null;
+  var rd=lbl('RECOVERY','<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
+  rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">Readiness from form (TSB '+(fit.tsb>=0?'+':'')+fit.tsb+')</div>';
+  rd+='<div style="display:flex;justify-content:center"><div style="position:relative;width:104px;height:62px;overflow:hidden"><svg width="104" height="104" viewBox="0 0 104 104" style="position:absolute;top:0"><circle cx="52" cy="52" r="30" fill="none" stroke="#1c2130" stroke-width="9" stroke-dasharray="'+(rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/><circle cx="52" cy="52" r="30" fill="none" stroke="'+rdy.color+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+(rdy.score/100*rC/2).toFixed(1)+' '+rC.toFixed(1)+'" transform="rotate(180 52 52)"/></svg><div style="position:absolute;top:24px;left:0;right:0;text-align:center"><div style="font-size:23px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+'">'+rdy.label+'</div></div></div></div>';
+  rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">HRV ms</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Rest HR bpm</div></div>';
+  rd+='</div>';
   H+=card(rd);
   // Consistency
   var wd=['M','T','W','T','F','S','S'];
@@ -14636,6 +14662,7 @@ function dsShowDashboard(){
     if(t.hasAttribute('data-teach')){ if(typeof openMetricTeach==='function') openMetricTeach(t.getAttribute('data-teach')); return; }
     var a=t.getAttribute('data-act');
     if(a==='plan'){ if(typeof openDayEditor==='function' && typeof getTodayKey==='function') openDayEditor(getTodayKey()); }
+    else if(a==='recovery'){ if(typeof openRecoveryEditor_==='function') openRecoveryEditor_(); }
     else if(a==='sync'){ if(typeof fbPull==='function') fbPull(false); }
     else if(a==='gear'){ if(typeof dsShowGear==='function') dsShowGear(); else dsNav('gear'); }
     else if(a==='addrace'){ if(typeof openRaceEditor==='function') openRaceEditor(undefined, dsShowDashboard); }
@@ -24563,7 +24590,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dashboard-tighten';
+window.__BUILD__ = '2026-07-16-dashboard-balance-hrv';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
