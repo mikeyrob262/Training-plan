@@ -12890,12 +12890,19 @@ function dsShowAnalytics(){
   var CMP=!!st.anCompare;
   var now=new Date();
 
-  // TSS by date
+  // TSS by date — GUARDED by constRideTSS_ (ceiling 600), same as the rest of
+  // the app. Raw r.tss includes garbage import values (thousands/day); the old
+  // 90-day-from-zero window accidentally excluded that older history, but the
+  // range work's longer seed pulled it in and CTL's slow 42-day decay left a
+  // ~20x-inflated residual (CTL 1122, ATL fine, TSB +1070). Guarding caps the
+  // garbage so CTL/ATL read real values (~52) on every range.
   var tssByDate={};
   rides.forEach(function(r){
-    if(!r.date||!r.tss) return;
+    if(!r.date) return;
+    var _rt=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    if(!(_rt>0)) return;
     var nd=normDate(r.date);
-    tssByDate[nd]=(tssByDate[nd]||0)+(parseFloat(r.tss)||0);
+    tssByDate[nd]=(tssByDate[nd]||0)+_rt;
   });
 
   // CTL/ATL/TSB — seed the EMA over RDAYS+42 days of history, then DISPLAY only
@@ -13125,12 +13132,14 @@ function dsShowAnalytics(){
   // Ride Consistency heatmap (real: ride dates, last 26 weeks)
   var _cells=dsConsistency_(rides, 26*7, now, normDate);
   var _lead=_cells.length?_cells[0].dow:0;
-  // Shade RELATIVE to this athlete's own busiest day, so a high-volume rider
-  // still gets a Less->More gradient instead of every ride-day pinning to the
-  // brightest green. Absolute TSS thresholds made it read as one flat green.
-  var _maxT=1; _cells.forEach(function(c){ if((c.tss||0)>_maxT) _maxT=c.tss; });
-  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.tss||0)/_maxT;
-    return r>=0.75?'#4ade80':r>=0.5?'#22c55e':r>=0.25?'#15803d':'#0f5132'; }
+  // Shade relative to the athlete's 85th-percentile day (NOT the single max):
+  // shading to the max meant one outlier/garbage day pushed every real ~52-TSS
+  // day into r<0.25 -> all the same darkest green (the "flat" bug). A percentile
+  // reference spreads typical days across the full Less->More gradient.
+  var _tv=_cells.map(function(c){return c.tss||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
+  var _ref=_tv.length?_tv[Math.min(_tv.length-1,Math.floor(_tv.length*0.85))]:0; if(!(_ref>0)) _ref=1;
+  function _cellColor(c){ if(!c || c.n===0) return '#12151d'; var r=(c.tss||0)/_ref;
+    return r>=0.85?'#4ade80':r>=0.55?'#22c55e':r>=0.28?'#15803d':'#0f5132'; }
   var cellSquares='';
   for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:11px;height:11px"></div>'; }
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:11px;height:11px;border-radius:2px;background:'+_cellColor(c)+'"></div>'; });
@@ -23925,7 +23934,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-goals+canvas-destroy';
+window.__BUILD__ = '2026-07-16-ctl-guard+heatmap-fix';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
