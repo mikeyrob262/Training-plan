@@ -15977,7 +15977,12 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
   var wrap=document.createElement('div');
   wrap.style.cssText='padding:14px 16px';
 
-  if(!r.gpsLats || r.gpsLats.length<=5){
+  // Read GPS from the SAME source the draw code below uses (r.lats||r.gpsLats).
+  // Healed/Strava tracks live in r.lats; only legacy FIT imports use r.gpsLats.
+  // Guarding on gpsLats ALONE rejected every healed ride ("No GPS route recorded"
+  // on all mobile rides while desktop drew fine) — a desktop/mobile drift.
+  var _routeLat=r.lats||r.gpsLats;
+  if(!_routeLat || _routeLat.length<=5){
     wrap.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--t3);font-size:13px">No GPS route recorded for this ride.</div>';
     body.appendChild(wrap);
     return;
@@ -16497,7 +16502,8 @@ function renderRideWeatherContent(wrap, r, hourly){
   // route timing lined up minute-by-minute - a reasonable first pass,
   // not pretending to be more precise than the data actually supports.
   var windPct = {tail:0, head:0, cross:0};
-  if(r.gpsLats && r.gpsLats.length>5){
+  var _wLat=r.lats||r.gpsLats;
+  if(_wLat && _wLat.length>5){
     var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
     var overallBearing=(Math.atan2(lons[lons.length-1]-lons[0], lats[lats.length-1]-lats[0])*180/Math.PI+360)%360;
     var avgDir=dirs.reduce(function(a,b){return a+b;},0)/dirs.length;
@@ -24439,7 +24445,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-flag-corrupt-in-merge';
+window.__BUILD__ = '2026-07-16-mobile-gps-guard';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
