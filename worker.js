@@ -12590,6 +12590,46 @@ function aiLossVerify_(){
     console.log('[verify]   group has a non-dupe dead copy = ' + Number(c_nondupe));
   }catch(e){ console.log('[verify] error ' + (e&&e.message)); }
 }
+// Backup reconciliation DRY-RUN. Opens a file picker for the pristine 8.8MB backup,
+// dedupes it cross-source (date+distance, duration within 90s) to unique real rides,
+// and reports how many of those have a LIVE local copy vs are MISSING (dead/absent)
+// — a clean, well-defined recovery target against the pre-churn source of truth.
+// Reads only; NO mutation, NO save, NO push. Type aiBackupCompare_() to run.
+function aiBackupCompare_(){
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='application/json,.json';
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0]; if(!f){ console.log('[bcmp] no file chosen'); return; }
+    var rd=new FileReader();
+    rd.onload=function(){
+      var backup;
+      try{ var p=JSON.parse(rd.result); backup=Array.isArray(p)?p:(p&&Array.isArray(p.rides)?p.rides:null); }catch(e){ console.log('[bcmp] backup not valid JSON'); return; }
+      if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
+      var DUR_TOL=90;
+      var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
+      var dur_=function(r){ return r.movingSecs||r.duration||0; };
+      var live=(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+      var liveDD={}; live.forEach(function(r){ var k=key_(r); (liveDD[k]=liveDD[k]||[]).push(dur_(r)); });
+      var bGroups={}; backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); } });
+      var uniqueBackup=0, covered=0, missing=0;
+      Object.keys(bGroups).forEach(function(k){
+        var gr=bGroups[k], used=[];
+        for(var i=0;i<gr.length;i++){
+          if(used[i]) continue; used[i]=1;
+          for(var j=i+1;j<gr.length;j++){ if(!used[j] && Math.abs(dur_(gr[i])-dur_(gr[j]))<=DUR_TOL) used[j]=1; }
+          uniqueBackup++;
+          var durs=liveDD[k]||[], d=dur_(gr[i]), hit=false;
+          for(var m=0;m<durs.length;m++){ if(Math.abs(durs[m]-d)<=DUR_TOL){ hit=true; break; } }
+          if(hit) covered++; else missing++;
+        }
+      });
+      console.log('[bcmp] backup-rows=' + Number(backup.length) + ' backup-UNIQUE-rides=' + Number(uniqueBackup) + ' (deduped cross-source)');
+      console.log('[bcmp] live-local=' + Number(live.length) + ' | backup rides WITH a live local copy=' + Number(covered) + ' | MISSING locally=' + Number(missing));
+      console.log('[bcmp] projected-live-after-backup-recovery=' + Number(live.length + missing) + ' (NO CHANGES MADE)');
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
