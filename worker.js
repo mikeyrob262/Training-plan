@@ -12549,6 +12549,47 @@ function aiLossReport_(){
     Object.keys(dayDist).sort().forEach(function(d){ console.log('[loss]   ' + d + ' = ' + Number(dayDist[d])); });
   }catch(e){ console.log('[loss] error ' + (e&&e.message)); }
 }
+// Self-cross-checking verification. Recomputes WITHOUT-live-twin two independent ways
+// (liveKeys hash vs a direct per-ride scan) so a construction bug can't hide, reports
+// the UNIQUE-key count (the real recovery number, vs the tombstone count 1844), and
+// splits the 07-17 deleted copies by why their group is not a clean 2-row-07-17 pair.
+function aiLossVerify_(){
+  try{
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var isDupe=function(r){ return String(r.deleteReason||'').indexOf('dupe')>=0; };
+    var dayOf=function(r){ return r.deletedAt?String(new Date(r.deletedAt).toISOString()).slice(0,10):'?'; };
+    var liveKeys={}, liveByKey={}; live.forEach(function(r){ var k=_aiKey_(r); liveKeys[k]=1; liveByKey[k]=(liveByKey[k]||0)+1; });
+    var byKey={}; all.forEach(function(r){ if(r){ var k=_aiKey_(r); (byKey[k]=byKey[k]||[]).push(r); } });
+    var dupes=all.filter(function(r){ return r&&r.deleted&&isDupe(r); });
+    var withTwin=dupes.filter(function(r){ return liveKeys[_aiKey_(r)]; });
+    var noTwin=dupes.filter(function(r){ return !liveKeys[_aiKey_(r)]; });
+    var noTwinScan=dupes.filter(function(r){ return !(liveByKey[_aiKey_(r)]>0); });      // independent recompute
+    var keys={}; noTwin.forEach(function(r){ keys[_aiKey_(r)]=1; });
+    var uniq=Object.keys(keys);
+    var c_clean=0,c_older=0,c_single=0,c_nondupe=0,d0717=0;
+    uniq.forEach(function(k){
+      var grp=byKey[k]||[], del=grp.filter(function(x){return x&&x.deleted;});
+      var n0717=del.filter(function(x){return dayOf(x)==='2026-07-17';}).length; d0717+=n0717;
+      var allDupe=grp.every(function(x){return x&&isDupe(x);});
+      var all0717=grp.every(function(x){return x&&dayOf(x)==='2026-07-17';});
+      var hasOlder=del.some(function(x){var d=dayOf(x);return d!=='2026-07-17'&&d!=='?';});
+      if(grp.length<2) c_single+=n0717;
+      else if(!allDupe) c_nondupe+=n0717;
+      else if(all0717) c_clean+=n0717;
+      else if(hasOlder) c_older+=n0717;
+    });
+    console.log('[verify] live=' + Number(live.length));
+    console.log('[verify] xsrc-dupe-tombstones=' + Number(dupes.length) + ' with-live-twin=' + Number(withTwin.length) + ' WITHOUT-live-twin=' + Number(noTwin.length));
+    console.log('[verify] independent recompute (per-ride scan) WITHOUT-live-twin=' + Number(noTwinScan.length) + ' (MUST equal the line above)');
+    console.log('[verify] UNIQUE date|dist keys among no-twin dupes = ' + Number(uniq.length) + ' <-- recovery count (rides), NOT the 1844 tombstones');
+    console.log('[verify] 07-17 deleted copies inside no-twin groups = ' + Number(d0717) + ':');
+    console.log('[verify]   clean 2-row all-07-17 (our merge killed both today) = ' + Number(c_clean));
+    console.log('[verify]   group ALSO has a pre-07-17 dead copy (twin died earlier) = ' + Number(c_older));
+    console.log('[verify]   single-copy group (no pair at this key) = ' + Number(c_single));
+    console.log('[verify]   group has a non-dupe dead copy = ' + Number(c_nondupe));
+  }catch(e){ console.log('[verify] error ' + (e&&e.message)); }
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
