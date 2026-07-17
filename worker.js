@@ -12326,8 +12326,9 @@ function aiRideScore_(wind, temp, precip){
 // Fatigue decomposition = the app's own PMC (CTL fitness / ATL fatigue / TSB form)
 // over the full loaded library. Deterministic — reuses computePMC + unifiedLoad,
 // the exact pipeline the desktop dashboard runs (see dsShowDashboard).
-function aiFatigue_(){
-  var items=allRidesDeduped_().concat((st.runs||[]).map(function(r){return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe};}));
+function aiFatigue_(ridesOpt){
+  var rides=ridesOpt||allRidesDeduped_();
+  var items=rides.concat((st.runs||[]).map(function(r){return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe};}));
   items.forEach(function(x){ x.load=unifiedLoad(x); });
   var withLoad=items.filter(function(x){ return x.load>0; });
   if(withLoad.length<8) return { ok:false, value:null, drivers:[], sampleSize:withLoad.length };
@@ -12378,15 +12379,16 @@ function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;j
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ---- Performance Momentum (deterministic PMC, no fake confidence %) ----
-function aiCardMomentum_(){
-  var f=aiFatigue_();
+function aiCardMomentum_(ded){
+  var f=aiFatigue_(ded);
   if(!f.ok) return '';
   var ramp=(f.ramp&&f.ramp.ctl!=null)?f.ramp.ctl:0;
   var trend=ramp>=2?['Improving','#4ade80']:ramp<=-2?['Easing','#f59e0b']:['Steady','#60a5fa'];
   var arrow=ramp>=2?'M3 17l6-6 4 4 8-8M14 7h6v6':(ramp<=-2?'M3 7l6 6 4-4 8 8M14 17h6v-6':'M3 12h18');
   var inner=aiLbl_('PERFORMANCE MOMENTUM');
   inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
-  inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days, from '+f.sampleSize+' loaded rides.</div>';
+  inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days.</div>';
+  inner+='<div style="font-size:11px;color:#5b6678;margin-top:3px">CTL/ATL/TSB from your training-load history ('+f.sampleSize.toLocaleString()+' rides + runs carrying a load).</div>';
   inner+='<div style="display:flex;gap:22px;margin-top:16px">';
   f.drivers.forEach(function(d){ inner+='<div><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+aiEsc_(d.label)+'</div><div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1">'+d.value+'</div></div>'; });
   inner+='</div>';
@@ -12410,8 +12412,8 @@ function aiCardWatchlist_(){
 }
 
 // ---- Your Athletic Story (real milestones from the full library) ----
-function aiCardStory_(){
-  var rides=allRidesDeduped_().filter(function(r){return r&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+function aiCardStory_(ded){
+  var rides=(ded||allRidesDeduped_()).filter(function(r){return r&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
   if(rides.length<10) return '';
   var first=rides[0], firstYr=new Date(first.date).getFullYear(), nowYr=new Date().getFullYear();
   var century=null; for(var i=0;i<rides.length;i++){ if((parseFloat(rides[i].distance)||0)>=100){ century=rides[i]; break; } }
@@ -12424,15 +12426,15 @@ function aiCardStory_(){
   nodes.push([bigYear, Math.round(byYear[bigYear]).toLocaleString()+' mi — biggest year']);
   var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:#5b6678">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
   inner+='<div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">';
-  nodes.forEach(function(n){ inner+='<div style="flex:0 0 auto;text-align:center;min-width:88px"><div style="width:46px;height:46px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:14px;font-weight:800;color:#60a5fa">'+String(n[0]).slice(2)+'</span></div><div style="font-size:11px;color:#94a3b8;line-height:1.3">'+aiEsc_(n[1])+'</div></div>'; });
+  nodes.forEach(function(n){ inner+='<div style="flex:0 0 auto;text-align:center;min-width:98px"><div style="width:58px;height:58px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:15px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div><div style="font-size:11px;color:#94a3b8;line-height:1.3">'+aiEsc_(n[1])+'</div></div>'; });
   inner+='</div>';
   inner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;font-size:12px;color:#94a3b8">Longest ride: <span style="color:#e8edf5;font-weight:700">'+Math.round(parseFloat(longest.distance)||0)+' mi</span> ('+new Date(longest.date).getFullYear()+')</div>';
   return aiCard_(inner);
 }
 
 // ---- What Changed This Month (real deltas + transparent grade) ----
-function aiCardWhatChanged_(){
-  var rides=allRidesDeduped_();
+function aiCardWhatChanged_(ded){
+  var rides=ded||allRidesDeduped_();
   function inMonth(r,back){ var d=new Date(); d.setMonth(d.getMonth()-back); var y=d.getFullYear(), m=d.getMonth();
     var rd=r&&r.date?new Date(r.date):null; return rd && rd.getFullYear()===y && rd.getMonth()===m; }
   var thisR=rides.filter(function(r){return inMonth(r,0);}), lastR=rides.filter(function(r){return inMonth(r,1);});
@@ -12468,12 +12470,12 @@ function aiCardRecords_(){
 }
 
 // ---- tab body ----
-function aiRenderTab_(tab){
+function aiRenderTab_(tab, ded){
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
   }
-  var cards=[aiCardMomentum_(), aiCardWatchlist_(), aiCardWhatChanged_(), aiCardRecords_(), aiCardStory_()].filter(function(h){return h;});
+  var cards=[aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
   if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
 }
@@ -12483,6 +12485,9 @@ function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
   var rides=allRidesDeduped_();
+  // DIAGNOSTIC (temporary): one line that breaks down where the count goes, so we
+  // can tell a stale/partial load from tombstone-inflation from a dedup collapse.
+  try{ var _raw=(st.rides||[]).length, _live=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length; console.log('[ai] counts raw(st.rides)='+_raw+' live(non-deleted)='+_live+' deduped='+rides.length+' tombstoned='+(_raw-_live)+' runs='+((st.runs||[]).length)); }catch(e){}
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
@@ -12494,7 +12499,7 @@ function aiRenderOverview_(container){
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
   H+='</div>';
-  H+='<div id="ai-tab-body">'+aiRenderTab_(_aiTab)+'</div>';
+  H+='<div id="ai-tab-body">'+aiRenderTab_(_aiTab, rides)+'</div>';
   H+='</div>';
   container.innerHTML=H;
   // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
