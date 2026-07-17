@@ -4605,11 +4605,21 @@ function sv(){
 }
 
 // Merge remote snapshot into local state - never discards data on either side
+var _durLogN=0;
 function applyFirebaseData(data){
   try{ if(!data||typeof data!=='object'||!Object.keys(data).length) return; }catch(e){ return; }
   if(Array.isArray(data)) data=Object.assign({},data);
   if(Array.isArray(st)) st=Object.assign({},st);
+  // DURABILITY DIAGNOSTIC (temp, non-mutating): does the REMOTE blob carry the <null>
+  // tombstones, and does this merge re-apply them onto local (mergeState_ deletions-win)?
+  // Logged for the first few merges only (boot + first polls) to avoid 5s spam.
+  var _rn=0,_ln=0;
+  if(_durLogN<4){
+    var _dc=function(a){ if(!a) return 0; var L=Array.isArray(a)?a:Object.keys(a).map(function(k){return a[k];}); var n=0; L.forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; };
+    try{ _rn=_dc(data.rides); _ln=_dc(st.rides); }catch(e){}
+  }
   st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+  if(_durLogN<4){ _durLogN++; try{ var _la=(function(a){ var n=0; (a||[]).forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; })(st.rides); console.log('[dur] merge remote-null-tomb='+Number(_rn)+' local-before='+Number(_ln)+' local-after='+Number(_la)); }catch(e){} }
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
