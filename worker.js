@@ -12372,7 +12372,32 @@ function aiFtpChange_(fromW, toW){
 // calls isDesktop() itself — parity by injection, like the ride-detail tab bodies.
 // Every card gates on real data: a card with nothing honest to show returns '' and
 // is omitted (pattern #2 — suppress, never placeholder a fake).
-var _aiMount=null, _aiTab='overview';
+var _aiMount=null, _aiTab='overview', _aiTombLogged=false;
+// TEMP diagnostic: tally every tombstoned ride by its actual deleteReason (null/empty
+// included) plus how many are genuinely revivable (no live twin), so revival is driven
+// by counted reasons, not an estimate. Prints flat, one line per reason. Callable from
+// the console as aiTombBreakdown_() to re-check after a restore.
+function aiTombBreakdown_(){
+  try{
+    var all=(st.rides||[]);
+    var tomb=all.filter(function(r){return r&&r.deleted;});
+    var liveKeys={};
+    all.forEach(function(r){ if(r&&!r.deleted) liveKeys[rideKey(r)]=1; });
+    var by={}, revivableRows=0, revivableKeys={};
+    tomb.forEach(function(r){
+      var reason=(r.deleteReason==null||r.deleteReason==='')?'<null>':String(r.deleteReason);
+      by[reason]=(by[reason]||0)+1;
+      var k=rideKey(r);
+      if(!liveKeys[k]){ revivableRows++; revivableKeys[k]=1; }
+    });
+    console.log('[tomb] total=' + Number(tomb.length));
+    Object.keys(by).sort(function(a,b){return by[b]-by[a];}).forEach(function(k){
+      console.log('[tomb] reason=' + k + ' count=' + Number(by[k]));
+    });
+    console.log('[tomb] revivable-rows=' + Number(revivableRows));
+    console.log('[tomb] revivable-unique-keys=' + Number(Object.keys(revivableKeys).length));
+  }catch(e){ console.log('[tomb] error ' + (e&&e.message)); }
+}
 var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
@@ -12485,6 +12510,7 @@ function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
   var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
+  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiTombBreakdown_(); }catch(e){} }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
