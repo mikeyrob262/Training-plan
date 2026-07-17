@@ -12493,7 +12493,11 @@ function aiRenderOverview_(container){
     var dedupedN=rides.length;
     var tombN=rawN-liveN;
     var runsN=(st.runs||[]).length;
-    console.log('[ai] counts raw=' + rawN + ' live=' + liveN + ' deduped=' + dedupedN + ' tombstoned=' + tombN + ' runs=' + runsN);
+    console.log('[ai] raw=' + Number(rawN));
+    console.log('[ai] live=' + Number(liveN));
+    console.log('[ai] deduped=' + Number(dedupedN));
+    console.log('[ai] tombstoned=' + Number(tombN));
+    console.log('[ai] runs=' + Number(runsN));
   }catch(e){}
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
