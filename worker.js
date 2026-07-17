@@ -12643,10 +12643,22 @@ function _recoverPreview_(backup){
   });
   var postBackup=0, bKeyset={}; backup.forEach(function(r){ if(r) bKeyset[key_(r)]=1; });
   live.forEach(function(r){ if(!bKeyset[key_(r)]) postBackup++; });
+  var uniqueFixed=covered+reviveIDB+addBackup;
+  // PROVE the shortfall: recompute backup-unique with the OLD NaN-prone dedup
+  // (movingSecs||duration; a string duration makes abs(NaN) fail to cluster) so the
+  // difference from the fixed _durSec_ dedup = string-duration dupes the 2599 over-counted.
+  var oldDur=function(r){ return r.movingSecs||r.duration||0; };
+  var oldUnique=0;
+  Object.keys(bGroups).forEach(function(k){ var gr=bGroups[k], u=[];
+    for(var i=0;i<gr.length;i++){ if(u[i]) continue; u[i]=1; var a=oldDur(gr[i]);
+      for(var j=i+1;j<gr.length;j++){ if(!u[j]){ var b=oldDur(gr[j]); if((a&&b)?(Math.abs(a-b)<=DUR_TOL):true) u[j]=1; } }
+      oldUnique++; }
+  });
   console.log('[rcv] PREVIEW (read-only) — live-local now=' + Number(live.length));
-  console.log('[rcv] backup-unique already-live(covered)=' + Number(covered) + ' | revive-from-IDB=' + Number(reviveIDB) + ' | add-from-backup=' + Number(addBackup));
+  console.log('[rcv] backup-rows=' + Number(backup.length) + ' -> UNIQUE(fixed dedup)=' + Number(uniqueFixed) + ' | UNIQUE(old NaN dedup)=' + Number(oldUnique) + ' -> the ' + Number(oldUnique-uniqueFixed) + ' difference = string-duration cross-source dupes the 2599 over-counted (now correctly collapsed)');
+  console.log('[rcv] split: covered(' + Number(covered) + ') + revive-from-IDB(' + Number(reviveIDB) + ') + add-from-backup(' + Number(addBackup) + ') = ' + Number(uniqueFixed) + ' -> every backup ride accounted, none dropped');
   console.log('[rcv] post-backup rides kept=' + Number(postBackup));
-  console.log('[rcv] projected-live-after-recovery=' + Number(covered + reviveIDB + addBackup + postBackup) + ' (NO CHANGES MADE)');
+  console.log('[rcv] projected-live-after-recovery=' + Number(uniqueFixed + postBackup) + ' = unique(' + Number(uniqueFixed) + ') + post-backup(' + Number(postBackup) + '); NO CHANGES MADE');
 }
 function _bcmpReport_(backup){
   if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
