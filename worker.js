@@ -14637,7 +14637,7 @@ function dsShowDashboard(){
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:12px 14px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="width:34px;height:34px;border-radius:9px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div><div style="flex:1;text-align:right;font-size:21px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em">'+val+'</div></div><div style="font-size:13px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:10px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:24px">'+sparkHtml+'</div></div>';
+    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:16px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:9px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkg.toFixed(2),'W/kg','FTP + weight',spark(wkgSeries.length>1?wkgSeries:[wkg,wkg],ACC.blue,100,22));
@@ -14660,14 +14660,14 @@ function dsShowDashboard(){
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=Math.round(parseFloat(r.tss)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
-    ra+='<div data-ride="'+ridx+'" style="display:flex;align-items:center;gap:13px;padding:12px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    ra+='<div style="width:40px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,38)+'</div>';
-    ra+='<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:11px;color:#64748b;margin-top:1px">'+dstr+'</div></div>';
-    ra+='<div style="display:flex;gap:22px;flex-shrink:0;text-align:right">';
-    if(dist>0) ra+='<div><div style="font-size:14px;font-weight:700;color:#e8edf5">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:9px;color:#5b6678">Distance</div></div>';
-    if(r.duration) ra+='<div><div style="font-size:14px;font-weight:700;color:#e8edf5">'+r.duration+'</div><div style="font-size:9px;color:#5b6678">Time</div></div>';
-    ra+='<div><div style="font-size:14px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:9px;color:#5b6678">TSS</div></div>';
-    ra+='<div><div style="font-size:14px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:9px;color:#5b6678">IF</div></div>';
+    ra+='<div data-ride="'+ridx+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    ra+='<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,30)+'</div>';
+    ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:#64748b;margin-top:1px">'+dstr+'</div></div>';
+    ra+='<div style="display:flex;gap:13px;flex-shrink:0;text-align:right">';
+    if(dist>0) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:8px;color:#5b6678">Distance</div></div>';
+    if(r.duration) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+r.duration+'</div><div style="font-size:8px;color:#5b6678">Time</div></div>';
+    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:8px;color:#5b6678">TSS</div></div>';
+    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:8px;color:#5b6678">IF</div></div>';
     ra+='</div></div>';
   });
   H+=card(ra);
@@ -14675,7 +14675,7 @@ function dsShowDashboard(){
   var hdCol=Math.abs(hdDrift)<3?ACC.green:Math.abs(hdDrift)<6?ACC.amber:ACC.red;
   var hd=lbl('HR DRIFT');
   hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride</div>';
-  hd+='<div style="font-size:38px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(hdDrift>=0?'+':'')+hdDrift+'%</div>';
+  hd+='<div style="font-size:30px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(hdDrift>=0?'+':'')+hdDrift+'%</div>';
   hd+='<div style="font-size:12px;font-weight:600;color:'+hdCol+';margin:4px 0 8px">'+(Math.abs(hdDrift)<3?'Excellent efficiency':Math.abs(hdDrift)<6?'Moderate — check fuel':'High — review pacing')+'</div>';
   hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,56):'<div style="font-size:10px;color:#5b6678">No HR stream on the last ride.</div>')+'</div>';
   H+=card(hd);
@@ -14684,10 +14684,10 @@ function dsShowDashboard(){
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
   var nu=lbl('NUTRITION',link('View','nutrition'));
   nu+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Today</div>';
-  nu+='<div style="display:flex;gap:16px;align-items:center"><div style="position:relative;width:90px;height:90px;flex-shrink:0"><svg width="90" height="90" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:20px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:9px;color:#5b6678">kcal</div></div></div>';
-  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">';
+  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:#5b6678">kcal</div></div></div>';
+  nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
-    nu+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="display:flex;align-items:center;gap:7px"><span style="width:10px;height:10px;border-radius:50%;background:'+m[0]+'"></span><span style="font-size:13px;color:#cbd5e1">'+m[1]+'</span></span><span style="font-size:13px;color:#e8edf5;font-weight:700">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
+    nu+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+';flex-shrink:0"></span><span style="font-size:12px;color:#cbd5e1;white-space:nowrap">'+m[1]+'</span></span><span style="font-size:12px;color:#e8edf5;font-weight:700;white-space:nowrap;flex-shrink:0">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
   });
   nu+='</div></div>';
   if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:#64748b">Fiber <b style="color:#e8edf5">'+nf.consumed.fiber+'g</b></div>'; }
@@ -24789,7 +24789,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-cal-summary-thin';
+window.__BUILD__ = '2026-07-16-dash-fit-fonts';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
