@@ -3715,6 +3715,7 @@ function runGpsBackfill(force){
 // place. Independent of opening each ride, so it can't be defeated by a fragile
 // on-open chain. Idempotent — once a ride is equal-length it's skipped.
 var _gpsMigrated=false;
+var _datePadMigrated=false;
 function migrateCorruptTracks_(){
   if(_gpsMigrated || !st || !Array.isArray(st.rides)) return;
   var bad=[], anyCorrupt=false;
@@ -3763,6 +3764,44 @@ function migrateCorruptTracks_(){
     }
     step();
   });
+}
+// --------------------------------------------------------------------------
+
+// Pad every stored ride/run date to YYYY-MM-DD, then force-push so the fix
+// PROPAGATES cross-device. Background: the manual/FIT save path used to write
+// unpadded YYYY-M-D (fixed at the write source in getTodayKey/normDate), but a
+// device that already has unpadded dates keeps them — mergeState_ keeps local
+// non-empty strings on conflict, so an unmigrated device's '2026-6-7' beats a
+// migrated device's '2026-06-07' and the sort bug persists per-device. Padding
+// is FULLY IDEMPOTENT (padding an already-padded date is a no-op), so unlike a
+// UTC day-shift this is always safe to re-run. Modeled on migrateCorruptTracks_:
+// boot-time, flag-guarded, force-pushes ONLY if it actually changed something
+// (a true no-op on already-clean devices — no needless remote write). The
+// UTC-day-shift half is deliberately NOT done here: it is not idempotent without
+// re-deriving from a stored source date, so it stays a per-device console op.
+function migrateDatePadding_(){
+  if(_datePadMigrated || !st) return;
+  _datePadMigrated = true;
+  var changed = 0;
+  var pad_ = function(d){
+    if(!d || typeof d !== 'string') return d;
+    var p = d.split('-');
+    if(p.length !== 3) return d;
+    return p[0]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[2]).slice(-2);
+  };
+  var fixArr_ = function(arr){
+    if(!Array.isArray(arr)) return;
+    arr.forEach(function(r){
+      if(!r || typeof r.date !== 'string') return;
+      var nd = pad_(r.date);
+      if(nd !== r.date){ r.date = nd; changed++; }
+    });
+  };
+  try{ fixArr_(st.rides); }catch(e){}
+  try{ fixArr_(st.runs); }catch(e){}
+  if(!changed) return; // already clean on this device — no write, true no-op
+  try{ sv(); }catch(e){}
+  try{ if(typeof fbPush==='function'){ fbPush(true); console.log('[date-pad-migrate] padded '+changed+' date(s) to YYYY-MM-DD and force-pushed — cross-device sort fix propagated'); } }catch(e){}
 }
 // --------------------------------------------------------------------------
 
@@ -25115,6 +25154,7 @@ window.onload = function(){
   // Heal mismatched-length GPS tracks once st is loaded (fbPull also calls it;
   // the _gpsMigrated guard makes it run once). Delayed so st is populated.
   setTimeout(function(){ try{ if(typeof migrateCorruptTracks_==='function') migrateCorruptTracks_(); }catch(e){} }, 6000);
+  setTimeout(function(){ try{ if(typeof migrateDatePadding_==='function') migrateDatePadding_(); }catch(e){} }, 6500);
   // Settings wired via More sheet
   // Dark mode - apply saved preference, then reflect it on the desktop toggle.
   if(localStorage.getItem('darkMode') === '1') document.body.classList.add('dark');
