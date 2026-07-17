@@ -12460,21 +12460,29 @@ function aiMergeAudit_(n){
 // to revive. All raw-IDB reads — nothing is lost, just tombstoned. Non-mutating.
 function _aiKey_(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); }
 function _aiRich_(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length))s+=500; if(r.streams)s+=250; return s+Object.keys(r).length; }
-function _aiOrphanKeys_(){
+// day defaults to the merge day 2026-07-17. An orphan group must (1) have ZERO live
+// copies AND (2) have EVERY copy tombstoned on that day — so we isolate the rides OUR
+// 07-17 merge fully killed, and exclude old over-collapses whose rich copy died in
+// the 07-11 quota event (those belong to the null-reason revival path, not this one).
+function _aiOrphanKeys_(day){
+  day=day||'2026-07-17';
   var all=(st.rides||[]), byKey={};
   all.forEach(function(r){ if(!r) return; var k=_aiKey_(r); (byKey[k]=byKey[k]||[]).push(r); });
   var seen={}, keys=[];
   all.forEach(function(r){
     if(!(r&&r.deleted&&String(r.deleteReason||'').indexOf('dupe')>=0)) return;
     var k=_aiKey_(r); if(seen[k]) return; seen[k]=1;
-    if((byKey[k]||[]).filter(function(x){return x&&!x.deleted;}).length===0) keys.push(k);
+    var grp=byKey[k]||[];
+    if(grp.filter(function(x){return x&&!x.deleted;}).length!==0) return;                 // (1) zero live
+    var allOnDay=grp.length>0 && grp.every(function(x){ return x&&x.deleted&&x.deletedAt&&String(new Date(x.deletedAt).toISOString()).slice(0,10)===day; }); // (2) all copies killed on the day
+    if(allOnDay) keys.push(k);
   });
   return {keys:keys, byKey:byKey};
 }
-function aiOrphanAudit_(){
+function aiOrphanAudit_(day){
   try{
-    var o=_aiOrphanKeys_();
-    console.log('[orphan] orphaned date+distance groups (a dupe tombstone but 0 live copies) = ' + Number(o.keys.length));
+    var o=_aiOrphanKeys_(day);
+    console.log('[orphan] fully-killed groups (0 live, ALL copies tombstoned on ' + (day||'2026-07-17') + ') = ' + Number(o.keys.length));
     console.log('[orphan] each is one real ride the merge fully killed; all recoverable from raw IDB');
     var rows=[];
     o.keys.forEach(function(k){ (o.byKey[k]||[]).forEach(function(r){ var p=k.split('|');
@@ -12486,9 +12494,9 @@ function aiOrphanAudit_(){
 // each lost ride comes back live exactly once. Does NOT run the merge afterwards
 // (one live copy per group means no new pair to collapse). aiReviveOrphans_() dry-runs;
 // aiReviveOrphans_(true) flips + persists + force-pushes.
-function aiReviveOrphans_(execute){
+function aiReviveOrphans_(execute, day){
   try{
-    var o=_aiOrphanKeys_(), picks=[];
+    var o=_aiOrphanKeys_(day), picks=[];
     o.keys.forEach(function(k){ var dead=(o.byKey[k]||[]).filter(function(x){return x&&x.deleted;}); if(!dead.length) return; dead.sort(function(a,b){return _aiRich_(b)-_aiRich_(a);}); picks.push(dead[0]); });
     if(execute!==true){
       console.log('[orphan-revive] DRY-RUN would-revive=' + Number(picks.length) + ' (richest dead copy per orphaned group; leaves true dupes dead). NO CHANGES MADE.');
