@@ -12614,6 +12614,40 @@ function aiPauseSync_(){
 function aiResumeSync_(){
   try{ if(typeof initFirebaseSync==='function'){ initFirebaseSync(); console.log('[sync] RESUMED — Firebase poll restarted.'); } }catch(e){ console.log('[sync] resume error '+(e&&e.message)); }
 }
+// Recovery PREVIEW from the backup. For each backup-unique ride not live locally,
+// decide the source: revive a tombstoned IDB copy at its date+dist (preferred — keeps
+// GPS/streams), else add it from the backup. Keeps post-backup live rides. Read-only.
+function _recoverPreview_(backup){
+  if(!backup||!backup.length){ console.log('[rcv] no rides in backup file'); return; }
+  var DUR_TOL=90;
+  var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
+  var durClose=function(a,b){ return (a>0&&b>0)?(Math.abs(a-b)<=DUR_TOL):true; };
+  var rich_=function(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length))s+=500; if(r.streams)s+=250; return s+Object.keys(r).length; };
+  var all=(st.rides||[]);
+  var live=all.filter(function(r){return r&&!r.deleted;});
+  var liveKeyset={}; live.forEach(function(r){ liveKeyset[key_(r)]=1; });
+  var deadByKey={}; all.forEach(function(r){ if(r&&r.deleted){ var k=key_(r); (deadByKey[k]=deadByKey[k]||[]).push(r); } });
+  var bGroups={}; backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); } });
+  var covered=0, reviveIDB=0, addBackup=0, usedDeadKey={};
+  Object.keys(bGroups).forEach(function(k){
+    var gr=bGroups[k], used=[];
+    for(var i=0;i<gr.length;i++){
+      if(used[i]) continue; used[i]=1;
+      var bd=_durSec_(gr[i]);
+      for(var j=i+1;j<gr.length;j++){ if(!used[j] && durClose(bd, _durSec_(gr[j]))) used[j]=1; }
+      if(liveKeyset[k]){ covered++; continue; }               // already live
+      var dead=deadByKey[k]||[];
+      if(dead.length && !usedDeadKey[k]){ reviveIDB++; usedDeadKey[k]=1; }   // un-tombstone IDB copy
+      else addBackup++;                                                       // add from backup file
+    }
+  });
+  var postBackup=0, bKeyset={}; backup.forEach(function(r){ if(r) bKeyset[key_(r)]=1; });
+  live.forEach(function(r){ if(!bKeyset[key_(r)]) postBackup++; });
+  console.log('[rcv] PREVIEW (read-only) — live-local now=' + Number(live.length));
+  console.log('[rcv] backup-unique already-live(covered)=' + Number(covered) + ' | revive-from-IDB=' + Number(reviveIDB) + ' | add-from-backup=' + Number(addBackup));
+  console.log('[rcv] post-backup rides kept=' + Number(postBackup));
+  console.log('[rcv] projected-live-after-recovery=' + Number(covered + reviveIDB + addBackup + postBackup) + ' (NO CHANGES MADE)');
+}
 function _bcmpReport_(backup){
   if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
   var DUR_TOL=90;
@@ -12648,15 +12682,15 @@ function _bcmpReport_(backup){
   console.log('[bcmp] (a) live NOT-in-backup (no backup at that date+dist) = ' + Number(notInBackup) + '  <- want this SMALL; these are post-backup rides');
   console.log('[bcmp] projected=' + Number(live.length + missing) + ' = backup-unique(' + Number(uniqueBackup) + ') + live-not-in-backup(' + Number(notInBackup) + '); NO CHANGES MADE');
 }
-// Backup reconciliation DRY-RUN. A programmatic file picker is blocked from the
-// console (no user gesture), so this puts a visible box at the top of the page: DROP
-// the 8.8MB backup on it, or CLICK Choose File (a real gesture). Read-only — no
-// mutation/save/push. Type aiBackupCompare_() to show the box.
-function aiBackupCompare_(){
+// Shared drop-box for handing the 8.8MB backup file to a callback. A programmatic
+// file picker is blocked from the console (no user gesture), so this shows a visible
+// box: DROP the file, or CLICK Choose File (a real gesture). cb receives the parsed
+// rides array. Read-only unless cb mutates.
+function _bcmpBox_(title, tag, cb){
   var old=document.getElementById('bcmp-zone'); if(old) old.remove();
   var z=document.createElement('div'); z.id='bcmp-zone';
   z.style.cssText='position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99999;background:#111318;border:2px dashed #3a4560;border-radius:12px;padding:16px 20px;color:#e8edf5;font:14px system-ui,sans-serif;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.6)';
-  z.innerHTML='<div style="font-weight:700;margin-bottom:6px">Backup compare (read-only)</div><div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Drop your 8.8MB backup JSON here, or click Choose File:</div>';
+  z.innerHTML='<div style="font-weight:700;margin-bottom:6px">'+title+'</div><div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Drop your 8.8MB backup JSON here, or click Choose File:</div>';
   var inp=document.createElement('input'); inp.type='file'; inp.accept='application/json,.json'; inp.style.cssText='display:block;margin:0 auto';
   z.appendChild(inp);
   var cancel=document.createElement('div'); cancel.textContent='cancel'; cancel.style.cssText='margin-top:10px;font-size:11px;color:#64748b;cursor:pointer'; cancel.onclick=function(){ z.remove(); };
@@ -12665,15 +12699,17 @@ function aiBackupCompare_(){
   function handle(file){
     if(!file){ return; }
     var rd=new FileReader();
-    rd.onload=function(){ var b; try{ var p=JSON.parse(rd.result); b=Array.isArray(p)?p:(p&&Array.isArray(p.rides)?p.rides:null); }catch(e){ console.log('[bcmp] backup not valid JSON'); z.remove(); return; } _bcmpReport_(b); z.remove(); };
+    rd.onload=function(){ var b; try{ var p=JSON.parse(rd.result); b=Array.isArray(p)?p:(p&&Array.isArray(p.rides)?p.rides:null); }catch(e){ console.log(tag+' backup not valid JSON'); z.remove(); return; } z.remove(); cb(b); };
     rd.readAsText(file);
   }
   inp.onchange=function(){ handle(inp.files&&inp.files[0]); };
   z.addEventListener('dragover', function(e){ e.preventDefault(); z.style.borderColor='#4ade80'; });
   z.addEventListener('dragleave', function(){ z.style.borderColor='#3a4560'; });
   z.addEventListener('drop', function(e){ e.preventDefault(); handle(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]); });
-  console.log('[bcmp] a box appeared at the TOP of the page — drop the 8.8MB backup on it, or click Choose File');
+  console.log(tag+' box appeared at the TOP of the page — drop the 8.8MB backup on it, or click Choose File');
 }
+function aiBackupCompare_(){ _bcmpBox_('Backup compare (read-only)', '[bcmp]', _bcmpReport_); }
+function aiRecoverPreview_(){ _bcmpBox_('Recovery preview (read-only)', '[rcv]', _recoverPreview_); }
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
