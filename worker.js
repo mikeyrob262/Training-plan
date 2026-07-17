@@ -12484,6 +12484,59 @@ function aiRevivePreview_(){
     console.log('[revive-dry] projected-live-after=' + Number(live.length + wouldRevive - internalPairs) + ' (NO CHANGES MADE)');
   }catch(e){ console.log('[revive-dry] error ' + (e&&e.message)); }
 }
+// Reason-scoped revival of quota-bug tombstones. deleteReason=<null> ONLY, with the
+// xsrc-aware live-twin guard. Two stages: aiReviveNulls_() prints a final dry-run +
+// a deletedAt distribution (bulk quota event vs scattered manual deletes — since a
+// hand-deleted ride ALSO has a null reason and must not be blindly revived) and does
+// NOT mutate; aiReviveNulls_(true) flips, persists to IDB, force-pushes, then runs the
+// interactive mergeCrossSourceDupes_ to collapse any internal cross-source pair.
+function aiReviveNulls_(execute){
+  try{
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var DUR_TOL=90, liveKeys={}, liveDD={};
+    live.forEach(function(r){ liveKeys[rideKey(r)]=1; var ddk=(r.date||'')+'|'+Math.round((+r.distance||0)*10); (liveDD[ddk]=liveDD[ddk]||[]).push(r.movingSecs||r.duration||0); });
+    function hasLiveTwin(r){
+      if(liveKeys[rideKey(r)]) return true;
+      if(Math.round((+r.distance||0)*10)===0) return false;
+      var durs=liveDD[(r.date||'')+'|'+Math.round((+r.distance||0)*10)]; if(!durs) return false;
+      var d=(r.movingSecs||r.duration||0);
+      for(var i=0;i<durs.length;i++){ if(Math.abs(durs[i]-d)<=DUR_TOL) return true; }
+      return false;
+    }
+    // STRICT scope: null/empty reason ONLY. Any reason string (cross-source-dupe,
+    // user-delete, anything) is excluded.
+    var candidates=all.filter(function(r){ return r&&r.deleted && (r.deleteReason==null||r.deleteReason===''); });
+    var toRevive=candidates.filter(function(r){ return !hasLiveTwin(r); });
+    var excluded=candidates.length-toRevive.length;
+    if(execute!==true){
+      // deletedAt distribution — bulk quota event clusters; manual deletes scatter.
+      var noDelAt=0, dayCount={};
+      candidates.forEach(function(r){ if(r.deletedAt==null){ noDelAt++; return; } var day=String(new Date(r.deletedAt).toISOString()).slice(0,10); dayCount[day]=(dayCount[day]||0)+1; });
+      var days=Object.keys(dayCount).sort(function(a,b){return dayCount[b]-dayCount[a];});
+      console.log('[revive] DRY-RUN scope=deleteReason<null> candidates=' + Number(candidates.length) + ' excluded-live-twin=' + Number(excluded) + ' WOULD-UN-DELETE=' + Number(toRevive.length));
+      console.log('[revive] projected-live-after-flip=' + Number(live.length + toRevive.length) + ' (before the cross-source merge)');
+      console.log('[revive] deletedAt: none=' + Number(noDelAt) + ' distinct-days=' + Number(days.length) + ' (few days / mostly none = bulk quota event; many scattered days = manual deletes mixed in)');
+      days.slice(0,6).forEach(function(d){ console.log('[revive] deletedAt-day ' + d + ' count=' + Number(dayCount[d])); });
+      console.log('[revive] to EXECUTE after approval, run: aiReviveNulls_(true)');
+      return toRevive.length;
+    }
+    // EXECUTE.
+    var flipped=0;
+    toRevive.forEach(function(r){ delete r.deleted; try{delete r.deletedAt;}catch(e){} try{delete r.deleteReason;}catch(e){} flipped++; });
+    try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+    var liveAfter=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+    // Persist + force-push NOW so the 5s Firebase poll can't re-apply the tombstones
+    // (deleted OR-merges to true — deletions win — so an un-pushed revival gets clobbered).
+    try{ saveLocal_(); }catch(e){ console.log('[revive] saveLocal error ' + (e&&e.message)); }
+    try{ if(typeof fbPush==='function') fbPush(true, true); }catch(e){ console.log('[revive] fbPush error ' + (e&&e.message)); }
+    console.log('[revive] DONE flipped=' + Number(flipped) + ' live-after=' + Number(liveAfter) + ' — saved to IDB + force-pushed. Now confirm the cross-source merge prompt to collapse any internal pair.');
+    try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){}
+    // Interactive: prompts, then tombstones the pair + its own saveLocal_/fbPush.
+    try{ if(typeof mergeCrossSourceDupes_==='function') mergeCrossSourceDupes_(); }catch(e){ console.log('[revive] merge error ' + (e&&e.message)); }
+    return flipped;
+  }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
+}
 var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
