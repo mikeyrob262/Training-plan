@@ -12400,6 +12400,59 @@ function _aiCounts_(){
   });
   return {live:live, nullTomb:nullTomb, xsrc:xsrc, raw:all.length};
 }
+// Dry-run of mergeCrossSourceDupes_: how many cross-source pairs would it collapse
+// NOW? 0 = fully collapsed / idempotent (a re-trigger tombstones nothing more).
+// Mirrors the real merge's detection exactly (date+distance group, duration within
+// 90s, DIFFERENT source). No mutation. Call aiMergePreview_() from the console.
+function aiMergePreview_(){
+  try{
+    var DUR_TOL=90;
+    var dur_=function(r){ return r.movingSecs||r.duration||0; };
+    var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
+    var live=(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+    var groups={}; live.forEach(function(r){ var k=key_(r); (groups[k]=groups[k]||[]).push(r); });
+    var toTomb=0, groupsHit=0;
+    Object.keys(groups).forEach(function(k){
+      var gr=groups[k]; if(gr.length<2) return;
+      if(Math.round((+gr[0].distance||0)*10)===0) return;
+      var used=[];
+      for(var i=0;i<gr.length;i++){
+        if(used[i]) continue; var cl=1; used[i]=1;
+        for(var j=i+1;j<gr.length;j++){
+          if(used[j]) continue;
+          var a=dur_(gr[i]), b=dur_(gr[j]);
+          var durClose=(a&&b)?(Math.abs(a-b)<=DUR_TOL):true;
+          var diffSource=((gr[i].source||'')!==(gr[j].source||''));
+          if(durClose && diffSource){ cl++; used[j]=1; }
+        }
+        if(cl>1){ toTomb+=(cl-1); groupsHit++; }
+      }
+    });
+    console.log('[merge-dry] would-tombstone=' + Number(toTomb) + ' from-groups=' + Number(groupsHit) + ' (0 = idempotent, nothing left to collapse)');
+  }catch(e){ console.log('[merge-dry] error ' + (e&&e.message)); }
+}
+// One-shot audit of the most-recent cross-source-dupe tombstones (the batches our
+// merges created). For each: date / distance / source + whether a LIVE ride shares
+// its date+distance (its surviving twin). WITHOUT a live twin = possible over-collapse
+// of a real ride. Renders as a table (not folded). Call aiMergeAudit_() [or (n)].
+function aiMergeAudit_(n){
+  try{
+    n=n||90;
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var liveDD={}; live.forEach(function(r){ var k=(r.date||'')+'|'+Math.round((+r.distance||0)*10); (liveDD[k]=liveDD[k]||[]).push(r); });
+    var dupes=all.filter(function(r){ return r&&r.deleted&&String(r.deleteReason||'').indexOf('dupe')>=0; });
+    dupes.sort(function(a,b){ return (b.deletedAt||0)-(a.deletedAt||0); });
+    var batch=dupes.slice(0, n), noTwin=0;
+    var rows=batch.map(function(r){
+      var k=(r.date||'')+'|'+Math.round((+r.distance||0)*10);
+      var tw=liveDD[k]||[]; if(!tw.length) noTwin++;
+      return { date:(r.date||'?'), dist:(Math.round((+r.distance||0)*10)/10), src:(r.source||'?'), liveTwin:(tw.length?('YES '+tw.map(function(t){return t.source||'?';}).join('/')):'NO'), delAt:(r.deletedAt?String(new Date(r.deletedAt).toISOString()).slice(0,10):'?') };
+    });
+    console.log('[merge-audit] most-recent ' + Number(batch.length) + ' cross-source-dupe tombstones; WITHOUT-live-twin(over-collapse risk)=' + Number(noTwin));
+    try{ console.table(rows); }catch(e){ rows.forEach(function(x){ console.log('[merge-audit] '+x.date+' dist='+x.dist+' src='+x.src+' twin='+x.liveTwin+' delAt='+x.delAt); }); }
+  }catch(e){ console.log('[merge-audit] error ' + (e&&e.message)); }
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
@@ -12673,7 +12726,7 @@ function aiRenderOverview_(container){
   _aiMount=container;
   var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
   if(!_aiTombLogged){ _aiTombLogged=true;
-    try{ var _c=_aiCounts_(); console.log('[stab] render live=' + Number(_c.live) + ' null-tomb=' + Number(_c.nullTomb) + ' xsrc-dupe=' + Number(_c.xsrc) + ' raw=' + Number(_c.raw)); }catch(e){}
+    try{ var _c=_aiCounts_(); setTimeout(function(){ console.log('[stab] render live=' + Number(_c.live) + ' null-tomb=' + Number(_c.nullTomb) + ' xsrc-dupe=' + Number(_c.xsrc) + ' raw=' + Number(_c.raw)); }, 400); }catch(e){}
     try{ setTimeout(function(){ var _c2=_aiCounts_(); console.log('[stab] +8s live=' + Number(_c2.live) + ' null-tomb=' + Number(_c2.nullTomb) + ' xsrc-dupe=' + Number(_c2.xsrc) + ' raw=' + Number(_c2.raw)); }, 8000); }catch(e){}
   }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
