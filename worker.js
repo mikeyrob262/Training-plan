@@ -12514,6 +12514,41 @@ function aiReviveOrphans_(execute, day){
     return n;
   }catch(e){ console.log('[orphan-revive] error ' + (e&&e.message)); }
 }
+// ONE authoritative reconciliation. No sample limit, no date filter baked into the
+// count. Reports: xsrc-dupe tombstones total and WITHOUT-a-live-twin (the audit number
+// with NO 90-cap), the unique fully-dead date+distance groups that hold a dupe
+// tombstone (the true recovery count), how many of those are clean two-row all-07-17
+// pairs (our merge) vs older/mixed (quota-era), and the deletedAt-day histogram so the
+// 83/213/930 all reconcile against one view. Non-mutating.
+function aiLossReport_(){
+  try{
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var liveKeys={}; live.forEach(function(r){ liveKeys[_aiKey_(r)]=1; });
+    var byKey={}; all.forEach(function(r){ if(r){ var k=_aiKey_(r); (byKey[k]=byKey[k]||[]).push(r); } });
+    var isDupe=function(r){ return String(r.deleteReason||'').indexOf('dupe')>=0; };
+    var dayOf=function(r){ return r.deletedAt?String(new Date(r.deletedAt).toISOString()).slice(0,10):'?'; };
+    var dupes=all.filter(function(r){ return r&&r.deleted&&isDupe(r); });
+    var dupeNoTwin=dupes.filter(function(r){ return !liveKeys[_aiKey_(r)]; });
+    var seen={}, groups=[];
+    dupeNoTwin.forEach(function(r){ var k=_aiKey_(r); if(seen[k]) return; seen[k]=1; groups.push(k); });
+    var cleanPair=0, other=0, dayDist={};
+    groups.forEach(function(k){
+      var grp=byKey[k]||[];
+      grp.forEach(function(r){ if(r&&r.deleted){ var d=dayOf(r); dayDist[d]=(dayDist[d]||0)+1; } });
+      var allDeleted=grp.every(function(r){return r&&r.deleted;});
+      var allDupe=grp.every(function(r){return r&&isDupe(r);});
+      var all0717=grp.every(function(r){return r&&dayOf(r)==='2026-07-17';});
+      if(grp.length>=2 && allDeleted && allDupe && all0717) cleanPair++; else other++;
+    });
+    console.log('[loss] raw=' + Number(all.length) + ' live=' + Number(live.length) + ' deleted=' + Number(all.length-live.length));
+    console.log('[loss] xsrc-dupe-total=' + Number(dupes.length) + ' WITHOUT-live-twin=' + Number(dupeNoTwin.length) + ' (audit number, NO 90-cap)');
+    console.log('[loss] unique fully-dead groups holding a dupe tombstone = ' + Number(groups.length) + ' (recovery count)');
+    console.log('[loss]   clean two-row all-07-17 (our merge) = ' + Number(cleanPair) + ' | older/mixed (quota-era) = ' + Number(other));
+    console.log('[loss] over-collapse tombstone copies by deletedAt-day:');
+    Object.keys(dayDist).sort().forEach(function(d){ console.log('[loss]   ' + d + ' = ' + Number(dayDist[d])); });
+  }catch(e){ console.log('[loss] error ' + (e&&e.message)); }
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
