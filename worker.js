@@ -12878,110 +12878,183 @@ function dsShowGear(){
 function dsShowWeather(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
-
   mc.innerHTML='';
   var wrap=document.createElement('div');
-  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:12px';
-
-  // Loading state
-  var loading=document.createElement('div');
-  loading.style.cssText='text-align:center;color:#64748b;padding:40px;font-size:13px';
-  loading.textContent='Loading weather...';
-  wrap.appendChild(loading);
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
+  wrap.innerHTML='<div style="text-align:center;color:#64748b;padding:60px;font-size:13px">Loading weather…</div>';
   mc.appendChild(wrap);
-
-  // Fetch current + hourly + daily forecast for Grand Rapids
   var lat=42.9634, lon=-85.6681;
   var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
-    '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability'+
+    '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability,uv_index'+
     '&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m'+
-    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset'+
+    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max'+
     '&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7';
+  var aqUrl='https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+lat+'&longitude='+lon+'&current=us_aqi&timezone=America%2FChicago';
 
-  fetch(url).then(function(r){return r.json();}).then(function(data){
-    wrap.innerHTML='';
-    var c=data.current;
-    var daily=data.daily;
-    var hourly=data.hourly;
+  Promise.all([
+    fetch(url).then(function(r){return r.json();}).catch(function(){return null;}),
+    fetch(aqUrl).then(function(r){return r.json();}).catch(function(){return null;})
+  ]).then(function(res){
+    var data=res[0], aqData=res[1];
+    if(!data || !data.current){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Weather unavailable</div>'; return; }
+    var c=data.current, daily=data.daily||{}, hourly=data.hourly||{};
+    var aqi=(aqData&&aqData.current&&aqData.current.us_aqi!=null)?Math.round(aqData.current.us_aqi):null;
 
-    function wCode(code){
-      if(code===0) return {icon:'☀️',desc:'Clear'};
-      if(code<=2) return {icon:'⛅',desc:'Partly Cloudy'};
-      if(code<=3) return {icon:'☁️',desc:'Overcast'};
-      if(code<=48) return {icon:'🌫️',desc:'Fog'};
-      if(code<=55) return {icon:'🌦️',desc:'Drizzle'};
-      if(code<=65) return {icon:'🌧️',desc:'Rain'};
-      if(code<=77) return {icon:'❄️',desc:'Snow'};
-      if(code<=82) return {icon:'🌧️',desc:'Showers'};
-      return {icon:'⛈️',desc:'Thunderstorm'};
-    }
+    // ---- helpers ----
+    function wDesc(code){ if(code===0) return 'Clear'; if(code<=2) return 'Partly Cloudy'; if(code<=3) return 'Overcast'; if(code<=48) return 'Fog'; if(code<=55) return 'Drizzle'; if(code<=65) return 'Rain'; if(code<=77) return 'Snow'; if(code<=82) return 'Showers'; return 'Thunderstorms'; }
+    function wIcon(code,sz){ sz=sz||40; var s='<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 64 64" style="display:block">';
+      if(code===0){ var rays=[0,45,90,135,180,225,270,315].map(function(a){var r=a*Math.PI/180;return '<line x1="'+(32+Math.cos(r)*19).toFixed(1)+'" y1="'+(32+Math.sin(r)*19).toFixed(1)+'" x2="'+(32+Math.cos(r)*26).toFixed(1)+'" y2="'+(32+Math.sin(r)*26).toFixed(1)+'" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>';}).join(''); return s+rays+'<circle cx="32" cy="32" r="13" fill="#fbbf24"/></svg>'; }
+      if(code<=2) return s+'<circle cx="25" cy="24" r="9" fill="#fbbf24"/><path d="M20 46a11 11 0 0 1 1-20 13 13 0 0 1 25 3 8 8 0 0 1-1 17z" fill="#8a97ad"/></svg>';
+      if(code<=48) return s+'<path d="M18 46a12 12 0 0 1 1-23 15 15 0 0 1 28 3 10 10 0 0 1-1 20z" fill="#8a97ad"/></svg>';
+      if(code<=82) return s+'<path d="M18 40a12 12 0 0 1 1-23 15 15 0 0 1 28 3 10 10 0 0 1-1 20z" fill="#8a97ad"/><line x1="24" y1="48" x2="22" y2="56" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/><line x1="34" y1="48" x2="32" y2="56" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="48" x2="42" y2="56" stroke="#60a5fa" stroke-width="3" stroke-linecap="round"/></svg>';
+      if(code<=77) return s+'<path d="M18 42a12 12 0 0 1 1-23 15 15 0 0 1 28 3 10 10 0 0 1-1 20z" fill="#8a97ad"/><circle cx="24" cy="52" r="2.2" fill="#cbd5e1"/><circle cx="34" cy="54" r="2.2" fill="#cbd5e1"/><circle cx="44" cy="52" r="2.2" fill="#cbd5e1"/></svg>';
+      return s+'<path d="M18 38a12 12 0 0 1 1-23 15 15 0 0 1 28 3 10 10 0 0 1-1 20z" fill="#7c6f9c"/><path d="M33 40l-7 11h6l-4 9 11-13h-6z" fill="#a855f7"/></svg>'; }
+    function windDir(deg){ return ['N','NE','E','SE','S','SW','W','NW'][Math.round((deg||0)/45)%8]; }
+    function rate(pct){ return pct>=88?['Excellent','#4ade80']:pct>=72?['Very Good','#4ade80']:pct>=58?['Good','#84cc16']:pct>=40?['Fair','#f59e0b']:['Poor','#e24b4a']; }
+    function fmtClock(iso){ if(!iso) return '—'; var d=new Date(iso); var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12||12; return h12+':'+(m<10?'0':'')+m+' '+ap; }
+    function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 17px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 
-    function windDir(deg){
-      var dirs=['N','NE','E','SE','S','SW','W','NW'];
-      return dirs[Math.round(deg/45)%8];
-    }
+    var temp=Math.round(c.temperature_2m), feels=Math.round(c.apparent_temperature), hum=Math.round(c.relativehumidity_2m), wind=Math.round(c.windspeed_10m), precip=Math.round(c.precipitation_probability||0), uv=(c.uv_index!=null?Math.round(c.uv_index):null);
+    var desc=wDesc(c.weathercode);
 
-    // Current conditions hero
-    var hero=document.createElement('div');
-    hero.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:16px;padding:20px 24px;flex-shrink:0';
-    var wx=wCode(c.weathercode);
-    hero.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Grand Rapids, MI — Now</div>'+
-      '<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">'+
-        '<div style="font-size:52px;line-height:1">'+wx.icon+'</div>'+
-        '<div>'+
-          '<div style="font-size:48px;font-weight:800;color:#fff;letter-spacing:-.04em;line-height:1">'+Math.round(c.temperature_2m)+'°</div>'+
-          '<div style="font-size:14px;color:#94a3b8;margin-top:4px">Feels like '+Math.round(c.apparent_temperature)+'° · '+wx.desc+'</div>'+
-        '</div>'+
-      '</div>'+
-      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">'+
-        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#e2e8f0">'+Math.round(c.windspeed_10m)+'</div><div style="font-size:10px;color:#64748b">'+windDir(c.winddirection_10m)+' mph</div></div>'+
-        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#60a5fa">'+c.relativehumidity_2m+'%</div><div style="font-size:10px;color:#64748b">Humidity</div></div>'+
-        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#4ade80">'+(c.precipitation_probability||0)+'%</div><div style="font-size:10px;color:#64748b">Precip</div></div>'+
-        '<div style="text-align:center"><div style="font-size:18px;font-weight:700;color:#f59e0b">'+(c.windspeed_10m>15?'Hard':'Good')+'</div><div style="font-size:10px;color:#64748b">Ride Cond.</div></div>'+
-      '</div>';
-    wrap.appendChild(hero);
-
-    // Ride quality score
-    var windScore=c.windspeed_10m<10?100:c.windspeed_10m<20?70:40;
-    var tempScore=c.temperature_2m>45&&c.temperature_2m<85?100:c.temperature_2m>35&&c.temperature_2m<95?70:40;
-    var rainScore=(c.precipitation_probability||0)<20?100:(c.precipitation_probability||0)<50?60:20;
+    // ride score (unchanged rule from the existing page)
+    var windScore=wind<10?100:wind<20?70:40;
+    var tempScore=(temp>45&&temp<85)?100:(temp>35&&temp<95)?70:40;
+    var rainScore=precip<20?100:precip<50?60:20;
+    var humScore=hum<50?100:hum<65?80:hum<80?55:30;
+    var aqiScore=aqi==null?null:(aqi<50?100:aqi<100?70:aqi<150?45:20);
     var rideScore=Math.round((windScore+tempScore+rainScore)/3);
-    var rideColor=rideScore>=80?'#4ade80':rideScore>=60?'#f59e0b':'#e24b4a';
+    var rideCol=rideScore>=80?'#4ade80':rideScore>=60?'#f59e0b':'#e24b4a';
+    var scoreBand=rideScore>=85?'Excellent':rideScore>=70?'Very Good':rideScore>=55?'Good':rideScore>=40?'Fair':'Poor';
     var rideLabel=rideScore>=80?'Great day to ride!':rideScore>=60?'Decent conditions':'Tough conditions';
+    var uvRate=uv==null?['—','#5b6678']:uv<3?['Low','#4ade80']:uv<6?['Moderate','#f59e0b']:uv<8?['High','#f97316']:['Very High','#e24b4a'];
+    var aqiRate=aqi==null?['—','#5b6678']:aqi<50?['Good','#4ade80']:aqi<100?['Moderate','#f59e0b']:aqi<150?['Unhealthy-S','#f97316']:['Unhealthy','#e24b4a'];
 
-    var rideCard=document.createElement('div');
-    rideCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0';
-    rideCard.innerHTML='<div style="position:relative;width:56px;height:56px;flex-shrink:0">'+
-      '<svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="22" fill="none" stroke="#1a1f2e" stroke-width="6"/><circle cx="28" cy="28" r="22" fill="none" stroke="'+rideColor+'" stroke-width="6" stroke-dasharray="'+Math.round(rideScore/100*138)+' 138" stroke-dashoffset="35" stroke-linecap="round" transform="rotate(-90 28 28)"/></svg>'+
-      '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:'+rideColor+'">'+rideScore+'</div>'+
-      '</div>'+
-      '<div><div style="font-size:14px;font-weight:700;color:#fff">Ride Score</div><div style="font-size:12px;color:'+rideColor+';margin-top:2px">'+rideLabel+'</div>'+
-      '<div style="font-size:11px;color:#64748b;margin-top:4px">Wind: '+Math.round(c.windspeed_10m)+' mph · Temp: '+Math.round(c.temperature_2m)+'°F · Rain: '+(c.precipitation_probability||0)+'%</div></div>';
-    wrap.appendChild(rideCard);
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var now=new Date();
+    var dateLabel='Today, '+months[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();
 
-    // 7-day forecast
-    var forecastCard=document.createElement('div');
-    forecastCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0;max-width:420px;margin-left:auto;margin-right:auto;width:100%';
-    forecastCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">7-Day Forecast</div>';
-    var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    (daily.time||[]).forEach(function(date,i){
-      var d=new Date(date+'T12:00:00');
-      var wx2=wCode(daily.weathercode[i]);
-      var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1a1f2e';
-      row.innerHTML='<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:36px">'+dayNames2[d.getDay()]+'</div>'+
-        '<div style="font-size:18px;width:28px">'+wx2.icon+'</div>'+
-        '<div style="font-size:12px;color:#94a3b8;flex:1">'+wx2.desc+'</div>'+
-        '<div style="font-size:12px;color:#60a5fa">'+daily.precipitation_probability_max[i]+'%</div>'+
-        '<div style="font-size:12px;color:#94a3b8;width:112px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'<span style="color:#64748b"> G'+Math.round(daily.windgusts_10m_max[i])+'</span> mph</div>'+
-        '<div style="font-size:12px;font-weight:600;color:#e2e8f0;width:60px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div>';
-      forecastCard.appendChild(row);
+    var H='';
+    // ===== HEADER =====
+    H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
+    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:#64748b;margin-top:1px">Plan smarter. Ride safer. Perform better.</div></div>';
+    H+='<div style="display:flex;align-items:center;gap:10px">';
+    H+='<div style="display:flex;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:#f1f5f9;min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
+    H+='</div></div>';
+
+    // ===== ROW 1 =====
+    H+='<div style="display:grid;grid-template-columns:1.5fr 1.3fr 1fr;gap:12px;flex-shrink:0">';
+    // Current Conditions
+    var cc=lbl('CURRENT CONDITIONS','<span style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:'+rideCol+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="'+rideCol+'"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>'+rideLabel+'</span>');
+    cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:#fff;line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:#94a3b8;font-weight:600">°F</span></div><div style="font-size:13px;color:#94a3b8;margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:#94a3b8">'+desc+'</div></div></div>';
+    cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #1c2130">';
+    [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/></svg>',wind+' mph',windDir(c.winddirection_10m)+' Wind','#e8edf5'],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',hum+'%','Humidity','#60a5fa'],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',precip+'%','Precip','#4ade80'],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+rideCol+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>',rate(rideScore)[0],'Ride Cond.',rideCol]].forEach(function(x){
+      cc+='<div style="text-align:center"><div style="display:flex;justify-content:center;margin-bottom:4px">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[3]+';line-height:1">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[2]+'</div></div>';
     });
-    wrap.appendChild(forecastCard);
+    cc+='</div>';
+    H+=card(cc);
+    // Ride Conditions Score
+    var _rc=2*Math.PI*46, _roff=_rc*(1-rideScore/100);
+    var rs=lbl('RIDE CONDITIONS SCORE');
+    rs+='<div style="display:flex;gap:18px;align-items:center">';
+    rs+='<div style="position:relative;width:118px;height:118px;flex-shrink:0"><svg width="118" height="118" viewBox="0 0 118 118" style="filter:drop-shadow(0 0 10px '+rideCol+'44)"><circle cx="59" cy="59" r="46" fill="none" stroke="#161b28" stroke-width="9"/><circle cx="59" cy="59" r="46" fill="none" stroke="'+rideCol+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+_rc.toFixed(1)+'" stroke-dashoffset="'+_roff.toFixed(1)+'" transform="rotate(-90 59 59)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+rideScore+'</div><div style="font-size:10px;color:#5b6678">/100</div></div><div style="text-align:center;font-size:12px;font-weight:800;color:'+rideCol+';margin-top:6px">'+scoreBand+'</div></div>';
+    rs+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
+    [['Temperature',rate(tempScore)],['Wind',rate(windScore)],['Humidity',rate(humScore)],['Precipitation',rate(rainScore)],['Air Quality',aqiScore==null?['—','#5b6678']:rate(aqiScore)],['UV Index',uvRate]].forEach(function(x){
+      rs+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#94a3b8">'+x[0]+'</span><span style="font-size:12px;font-weight:700;color:'+x[1][1]+'">'+x[1][0]+'</span></div>';
+    });
+    rs+='</div></div>';
+    H+=card(rs);
+    // At A Glance
+    var sunrise=daily.sunrise&&daily.sunrise[0], sunset=daily.sunset&&daily.sunset[0];
+    var ag=lbl('AT A GLANCE');
+    ag+='<div style="flex:1;display:flex;flex-direction:column;gap:12px">';
+    [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M8 6l4-4 4 4"/></svg>','Sunrise',fmtClock(sunrise),'#e8edf5'],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>','Sunset',fmtClock(sunset),'#e8edf5'],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+uvRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>','UV Index',(uv==null?'—':uv+' '+uvRate[0]),uvRate[1]],
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+aqiRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/></svg>','Air Quality',(aqi==null?'—':aqi+' '+aqiRate[0]),aqiRate[1]]].forEach(function(x){
+      ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:#94a3b8">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
+    });
+    ag+='</div>';
+    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid #1c2130;text-align:center;font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer">Details &#8594;</div>';
+    H+=card(ag);
+    H+='</div>';
 
-  }).catch(function(e){
-    wrap.innerHTML='<div style="padding:40px;text-align:center;color:#64748b">Weather unavailable</div>';
-  });
+    // ===== ROW 2: Hourly =====
+    var hi0=0; var nowIso=(hourly.time||[]).findIndex(function(t){ return new Date(t)>=now; }); if(nowIso>1) hi0=nowIso-1; else if(nowIso>=0) hi0=nowIso;
+    var hrs=[]; for(var k=hi0;k<Math.min((hourly.time||[]).length, hi0+14);k++) hrs.push(k);
+    var hf=lbl('HOURLY FORECAST');
+    hf+='<div style="display:flex;gap:2px;overflow-x:auto;padding-bottom:4px">';
+    hrs.forEach(function(k){ var d=new Date(hourly.time[k]); var h=d.getHours(); var ap=h>=12?'PM':'AM'; var h12=h%12||12;
+      hf+='<div style="flex:1;min-width:62px;text-align:center;padding:6px 2px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">'+h12+' '+ap+'</div><div style="display:flex;justify-content:center;margin-bottom:5px">'+wIcon(hourly.weathercode[k],30)+'</div><div style="font-size:16px;font-weight:800;color:#e8edf5">'+Math.round(hourly.temperature_2m[k])+'°</div><div style="font-size:9px;color:#64748b;margin-top:4px">'+Math.round(hourly.windspeed_10m[k])+' mph</div><div style="font-size:9px;color:#60a5fa">'+Math.round(hourly.precipitation_probability[k]||0)+'%</div></div>';
+    });
+    hf+='</div>';
+    // dual-axis chart temp + wind
+    var ht=hrs.map(function(k){return hourly.temperature_2m[k];}), hw=hrs.map(function(k){return hourly.windspeed_10m[k];});
+    var tMin=Math.floor(Math.min.apply(null,ht)/10)*10, tMax=Math.ceil(Math.max.apply(null,ht)/10)*10; if(tMax<=tMin) tMax=tMin+20;
+    var wMax=Math.max(20,Math.ceil(Math.max.apply(null,hw)/5)*5), cw=280, ch=70;
+    function poly(arr,mn,mx){ var n=arr.length; return arr.map(function(v,ix){ var x=(n>1?ix/(n-1):0)*cw; var y=ch-((v-mn)/(mx-mn))*(ch-8)-4; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L'); }
+    hf+='<div style="display:flex;align-items:stretch;gap:6px;margin-top:6px"><div style="width:26px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;text-align:right;padding:2px 0"><div>'+tMax+'</div><div>'+Math.round((tMax+tMin)/2)+'</div><div>'+tMin+'</div></div>';
+    hf+='<div style="flex:1"><svg width="100%" height="'+ch+'" viewBox="0 0 '+cw+' '+ch+'" preserveAspectRatio="none" style="display:block"><path d="M'+poly(ht,tMin,tMax)+'" fill="none" stroke="#f97316" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/><path d="M'+poly(hw,0,wMax)+'" fill="none" stroke="#60a5fa" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+    hf+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;padding:2px 0"><div>'+wMax+'</div><div>'+Math.round(wMax/2)+'</div><div>0</div></div></div>';
+    hf+='<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:10px;color:#94a3b8"><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#f97316"></span>Temperature (°F)</span><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#60a5fa"></span>Wind (mph)</span></div>';
+    H+=card(hf,'flex-shrink:0');
+
+    // ===== ROW 3: 7-day + Insight + Alerts =====
+    H+='<div style="display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:12px;flex-shrink:0">';
+    // 7-day
+    var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var fc=lbl('7-DAY FORECAST');
+    (daily.time||[]).forEach(function(date,i){ var d=new Date(date+'T12:00:00'); var pp=daily.precipitation_probability_max[i]||0;
+      fc+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="font-size:12px;font-weight:700;color:#e2e8f0;width:34px">'+dayNames2[d.getDay()]+'</div><div style="width:30px;display:flex;justify-content:center">'+wIcon(daily.weathercode[i],26)+'</div><div style="font-size:12px;color:#94a3b8;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+wDesc(daily.weathercode[i])+'</div><div style="font-size:12px;font-weight:600;color:'+(pp>=40?'#60a5fa':'#64748b')+';width:38px;text-align:right">'+pp+'%</div><div style="font-size:11px;color:#64748b;width:96px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'-'+Math.round(daily.windgusts_10m_max[i])+' mph</div><div style="font-size:12px;font-weight:700;color:#e8edf5;width:66px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div></div>';
+    });
+    H+=card(fc);
+    // Weather Insight (rule-based from real data — NOT AI; the app's AI is untouched)
+    var checks=[];
+    if(precip<20) checks.push('Low rain risk — no need for wet gear.');
+    else if(precip>=50) checks.push('Rain likely ('+precip+'%) — pack a shell.');
+    if(temp>85) checks.push('Stay hydrated — temps above 85°F.');
+    else if(temp<45) checks.push('Dress warm — temps below 45°F.');
+    if(uv!=null && uv>=5) checks.push('Use sunscreen — UV index '+uv+' ('+uvRate[0].toLowerCase()+').');
+    if(wind<12) checks.push('Calm winds — good for steady efforts.');
+    else checks.push('Winds up to '+wind+' mph — plan the return leg.');
+    if(rideScore>=80) checks.unshift('Ideal conditions for high performance.');
+    var headline = rideScore>=80 ? ('Warm and dry conditions make this a strong window for a hard effort.'.replace('Warm and dry', (temp>82?'Warm and dry':temp<55?'Cool and calm':'Mild and dry')))
+      : rideScore>=60 ? 'Rideable conditions — manageable with the right gear and pacing.'
+      : 'Tough conditions today — keep efforts easy or consider the trainer.';
+    var wi=lbl('WEATHER INSIGHT');
+    wi+='<div style="display:flex;gap:12px;margin-bottom:12px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div><div style="font-size:12.5px;color:#cbd5e1;line-height:1.45">'+headline+'</div></div>';
+    wi+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 9px">What this means for you</div>';
+    wi+='<div style="flex:1;min-height:0">';
+    checks.slice(0,4).forEach(function(t){ wi+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:12px;color:#cbd5e1;line-height:1.4">'+t+'</span></div>'; });
+    wi+='</div>';
+    H+=card(wi);
+    // Alerts (derived from real data)
+    var alerts=[];
+    if(uv!=null && uv>=5) alerts.push(['#f59e0b','uv','UV Index '+uvRate[0]+' ('+uv+')','Wear sunscreen and eye protection.']);
+    // wind increasing: compare next-few-hours max wind vs current
+    var futureWindMax=0; hrs.forEach(function(k){ if(hourly.windspeed_10m[k]>futureWindMax) futureWindMax=hourly.windspeed_10m[k]; });
+    if(futureWindMax>=15 && futureWindMax>=wind+5) alerts.push(['#60a5fa','wind','Wind Increasing','Sustained winds up to '+Math.round(futureWindMax)+' mph later today.']);
+    // thunderstorm in the 7-day
+    var stormDay=-1; (daily.weathercode||[]).forEach(function(code,i){ if(stormDay<0 && code>=95){ stormDay=i; } });
+    if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','storm','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
+    var al=lbl('ALERTS');
+    if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#64748b"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
+    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':'<path d="M18 38a12 12 0 0 1 1-23 15 15 0 0 1 28 3" transform="scale(0.5)"/><path d="M13 10l-3 5h3l-2 5 5-7h-3z"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+x[2]+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+x[3]+'</div></div></div>'; });
+    H+=card(al);
+    H+='</div>';
+
+    wrap.innerHTML=H;
+    wrap.addEventListener('click',function(e){ var t=e.target.closest('[data-act]'); if(!t) return; var a=t.getAttribute('data-act');
+      if(a==='refresh') dsShowWeather();
+      else if(a==='details') dsNav('aicoach');
+    });
+  }).catch(function(){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Weather unavailable</div>'; });
 }
 
 function dsShowNutrition(){
@@ -24680,7 +24753,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-macro-ring-hero';
+window.__BUILD__ = '2026-07-16-weather-rich-redesign';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
