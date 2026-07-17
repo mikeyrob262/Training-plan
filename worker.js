@@ -6803,8 +6803,12 @@ var CF=[...RESTAURANT_FOODS,
   {n:"Magnesium Glycinate",cal:0,p:0,c:0,f:0,srv:"1 capsule"},
   {n:"Vitamin D3",cal:0,p:0,c:0,f:0,srv:"1 softgel"},
   {n:"Multivitamin",cal:0,p:0,c:0,f:0,srv:"1 tablet"},
-  {n:"Electrolyte Powder",cal:15,p:0,c:4,f:0,srv:"1 packet"},
-  {n:"Nuun Hydration Tablet",cal:15,p:0,c:4,f:0,srv:"1 tablet"},
+  {n:"Magnesium Glycinate 200mg",cal:0,p:0,c:0,f:0,magnesium:200,srv:"1 capsule"},
+  {n:"Magnesium Glycinate 400mg",cal:0,p:0,c:0,f:0,magnesium:400,srv:"1 serving"},
+  {n:"Magnesium Citrate 250mg",cal:0,p:0,c:0,f:0,magnesium:250,srv:"1 capsule"},
+  {n:"Magnesium Malate 425mg",cal:0,p:0,c:0,f:0,magnesium:425,srv:"1 serving"},
+  {n:"Electrolyte Powder",cal:15,p:0,c:4,f:0,magnesium:50,srv:"1 packet"},
+  {n:"Nuun Hydration Tablet",cal:15,p:0,c:4,f:0,magnesium:25,srv:"1 tablet"},
   {n:"SIS Beta Fuel Drink Mix",cal:222,p:0,c:55,f:0,srv:"1 serving (82g)"},
   {n:"SIS GO Isotonic Gel",cal:87,p:0,c:22,f:0,srv:"1 gel (60ml)"},
   {n:"Maurten Gel 100",cal:100,p:0,c:25,f:0,srv:"1 gel"},
@@ -7352,6 +7356,7 @@ function calcTrainingAwareTargets_(dateKey){
     return {
       cal:base.cal, pro:base.pro, carb:base.carb, fat:base.fat,
       sodium:2300, fluidOz:fluidGoalOz_(dateKey, wt, workout),
+      mag:parseInt(st.magBase||400),   // light/rest-day magnesium baseline (editable)
       workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
       isTrainingAware:false
     };
@@ -7382,8 +7387,12 @@ function calcTrainingAwareTargets_(dateKey){
   // fluid/hr during exercise, added to a baseline daily need.
   var sodium=Math.round(2000+(600*hours));
   var fluidOz=fluidGoalOz_(dateKey, wt, workout);
+  // Magnesium scales with sweat loss (duration x intensity), same as sodium/fluid:
+  // a light/rest baseline up to a hard-day peak. Base + peak are editable
+  // (st.magBase 400, st.magPeak 1000). Hard days ramp faster than moderate.
+  var mag=Math.min(parseInt(st.magPeak||1000), Math.round(parseInt(st.magBase||400) + hours*(workout.isHard?250:150)));
   return {
-    cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz,
+    cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz, mag:mag,
     workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true
   };
 }
@@ -7527,8 +7536,10 @@ function nutStepFood_(meal, id, delta){
     sv(); nutRefresh(); return;
   }
   var newQty=curQty+delta;
-  var base={cal:Math.round((cur.cal||0)/curQty),p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty};
-  nd.meals[meal][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10};
+  // Scale ALL nutrients by the new quantity — including the scanned micros
+  // (potassium/calcium/iron/magnesium), which the old rebuild silently dropped.
+  var base={cal:(cur.cal||0)/curQty,p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty,potassium:(cur.potassium||0)/curQty,calcium:(cur.calcium||0)/curQty,iron:(cur.iron||0)/curQty,magnesium:(cur.magnesium||0)/curQty};
+  nd.meals[meal][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10,potassium:Math.round(base.potassium*newQty),calcium:Math.round(base.calcium*newQty),iron:Math.round(base.iron*newQty*10)/10,magnesium:Math.round(base.magnesium*newQty)};
   sv(); nutRefresh();
 }
 function nutEditFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) editFoodItem(meal,i); }
@@ -7794,7 +7805,7 @@ function renderNutr(){
   // wired to a nutrient source too. Magnesium is intentionally omitted -
   // Open Food Facts doesn't reliably report it, so showing a number here
   // would mean guessing rather than measuring.)
-  var fiberTot=0, sodiumTot=0, potassiumTot=0, calciumTot=0, ironTot=0;
+  var fiberTot=0, sodiumTot=0, potassiumTot=0, calciumTot=0, ironTot=0, magnesiumTot=0;
   MEAL_BUCKETS.forEach(function(m){
     (nd.meals[m]||[]).forEach(function(i){
       if(i.deleted) return;
@@ -7803,14 +7814,19 @@ function renderNutr(){
       potassiumTot+=i.potassium||0;
       calciumTot+=i.calcium||0;
       ironTot+=i.iron||0;
+      magnesiumTot+=i.magnesium||0;
     });
   });
-  var fiberTgt=38, sodiumTgt=trainingTgt.sodium||2300, potassiumTgt=3400, calciumTgt=1000, ironTgt=18;
+  // Magnesium target is training-aware (scales 400 light -> up to 1000 hard, same
+  // engine as sodium/fluid). Only shows a tile when logged foods actually report Mg
+  // (OFF is inconsistent) — a magnesium supplement gives an accurate number.
+  var fiberTgt=38, sodiumTgt=trainingTgt.sodium||2300, potassiumTgt=3400, calciumTgt=1000, ironTgt=18, magnesiumTgt=trainingTgt.mag||400;
   var fiberPct=Math.min(100,Math.round(fiberTot/fiberTgt*100));
   var sodiumPct=Math.min(100,Math.round(sodiumTot/sodiumTgt*100));
   var potassiumPct=Math.min(100,Math.round(potassiumTot/potassiumTgt*100));
   var calciumPct=Math.min(100,Math.round(calciumTot/calciumTgt*100));
   var ironPct=Math.min(100,Math.round(ironTot/ironTgt*100));
+  var magnesiumPct=Math.min(100,Math.round(magnesiumTot/magnesiumTgt*100));
   h+='<div style="background:var(--s1);margin:10px 16px 0;border-radius:16px;border:1px solid var(--b1);padding:16px">';
   h+='<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Key Nutrients</div>';
   var nutrientTiles=[
@@ -7818,7 +7834,8 @@ function renderNutr(){
     {lbl:'Sodium',val:Math.round(sodiumTot)+'mg',pct:sodiumPct,col: sodiumPct>100?'#E24B4A':'#EF9F27',show:true},
     {lbl:'Potassium',val:Math.round(potassiumTot)+'mg',pct:potassiumPct,col:'#639922',show:potassiumTot>0},
     {lbl:'Calcium',val:Math.round(calciumTot)+'mg',pct:calciumPct,col:'#378ADD',show:calciumTot>0},
-    {lbl:'Iron',val:Math.round(ironTot*10)/10+'mg',pct:ironPct,col:'#E24B4A',show:ironTot>0}
+    {lbl:'Iron',val:Math.round(ironTot*10)/10+'mg',pct:ironPct,col:'#E24B4A',show:ironTot>0},
+    {lbl:'Magnesium',val:Math.round(magnesiumTot)+'mg',pct:magnesiumPct,col:'#7F77DD',show:magnesiumTot>0}
   ].filter(function(n){return n.show;});
   h+='<div style="display:flex;flex-wrap:wrap;gap:16px 12px">';
   nutrientTiles.forEach(function(n){
@@ -8561,6 +8578,7 @@ function openFoodForMeal(meal){
                             potassium:Math.round((nu['potassium_serving']||nu['potassium_100g']||0)*1000),
                             calcium:Math.round((nu['calcium_serving']||nu['calcium_100g']||0)*1000),
                             iron:Math.round((nu['iron_serving']||nu['iron_100g']||0)*1000),
+                            magnesium:Math.round((nu['magnesium_serving']||nu['magnesium_100g']||0)*1000),  // OFF reports it only sometimes -> honest "no data" when absent
                             srv:p.serving_size||'1 serving'
                           };
                           renderFoodRows(foodList,[item]);
@@ -8742,7 +8760,11 @@ function renderFoodRows(container, list){
             fiber: Math.round((f.fiber||0)*q*10)/10,
             satFat: Math.round((f.satFat||0)*q*10)/10,
             sodium: Math.round((f.sodium||0)*q),
-            sugar: Math.round((f.sugar||0)*q*10)/10
+            sugar: Math.round((f.sugar||0)*q*10)/10,
+            potassium: Math.round((f.potassium||0)*q),
+            calcium: Math.round((f.calcium||0)*q),
+            iron: Math.round((f.iron||0)*q*10)/10,
+            magnesium: Math.round((f.magnesium||0)*q)
           });
           if(!st.recentFoods) st.recentFoods=[];
           if(!st.recentFoods.find(function(r){return r.n===f.n;})) st.recentFoods.unshift(f);
@@ -8794,7 +8816,7 @@ function renderFoodRows(container, list){
     if(!st.cf)st.cf=[];
     st.cf.push(food);
     if(!nutrDate) nutrDate=getTodayKey();
-    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0});
+    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
     sv();
     document.getElementById('food-modal').remove();
     nutRefresh();
@@ -12971,7 +12993,7 @@ function dsShowNutrition(){
   var viewKey=nutrDate;
   var C={p:'#FC4C02',c:'#60a5fa',f:'#8b5cf6',w:'#22d3ee',cal:'#f59e0b',green:'#4ade80',amber:'#f59e0b',red:'#e24b4a',grey:'#5b6678',purple:'#a855f7'};
   function keyOf(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
-  function microsOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var t={fiber:0,sodium:0,potassium:0,calcium:0,iron:0}; MEAL_BUCKETS.forEach(function(m){ (nd.meals[m]||[]).forEach(function(i){ if(i.deleted) return; t.fiber+=i.fiber||0; t.sodium+=i.sodium||0; t.potassium+=i.potassium||0; t.calcium+=i.calcium||0; t.iron+=i.iron||0; }); }); return t; }
+  function microsOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var t={fiber:0,sodium:0,potassium:0,calcium:0,iron:0,magnesium:0}; MEAL_BUCKETS.forEach(function(m){ (nd.meals[m]||[]).forEach(function(i){ if(i.deleted) return; t.fiber+=i.fiber||0; t.sodium+=i.sodium||0; t.potassium+=i.potassium||0; t.calcium+=i.calcium||0; t.iron+=i.iron||0; t.magnesium+=i.magnesium||0; }); }); return t; }
   function waterOzOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{water:0}; return (nd.water||0)*WATER_GLASS_OZ; }
   function calByMeal(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var out={}; MEAL_BUCKETS.forEach(function(m){ var s=0; (nd.meals[m]||[]).forEach(function(i){ if(!i.deleted) s+=i.cal||0; }); out[m]=Math.round(s); }); return out; }
 
@@ -13067,11 +13089,19 @@ function dsShowNutrition(){
     });
     kn+='</div>';
     kn+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Micronutrient Status</div>';
-    kn+='<div style="display:flex;gap:8px;justify-content:space-between">';
-    // Only nutrients this app actually tracks (Fiber/Sodium always; K/Ca/Fe when scanned).
-    [['Fe','Iron',mic.iron,18],['K','Potas.',mic.potassium,3400],['Ca','Calc.',mic.calcium,1000],['Na','Sodium',sodium,goals.sodium],['Fbr','Fiber',fiber,goals.fiber]].forEach(function(x){
-      var p=x[3]>0?x[2]/x[3]:0; var status=p>=0.7?'Good':p>=0.4?'Fair':'Low'; var col=p>=0.7?C.green:p>=0.4?C.amber:C.red;
-      kn+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="position:relative;width:44px;height:44px"><svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#1a2030" stroke-width="3.5"/><circle cx="22" cy="22" r="18" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*18).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*18)*(1-Math.min(1,p))).toFixed(1)+'" transform="rotate(-90 22 22)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#e8edf5">'+x[0]+'</div></div><div style="font-size:9px;color:#94a3b8">'+x[1]+'</div><div style="font-size:9px;font-weight:700;color:'+col+'">'+status+'</div></div>';
+    kn+='<div style="display:flex;gap:6px;justify-content:space-between">';
+    // Nutrients this app actually measures. Magnesium (training-aware target that
+    // ramps 400 light -> up to 1000 on hard days) shows a "No data" state instead
+    // of a false "Low" when logged foods do not report it (OFF only reports Mg
+    // sometimes) — log a magnesium supplement for an accurate number.
+    var magTgt=goals.mag||400;
+    [['Fe','Iron',mic.iron,18,0],['Mg','Magn.',mic.magnesium,magTgt,1],['K','Potas.',mic.potassium,3400,0],['Ca','Calc.',mic.calcium,1000,0],['Na','Sodium',sodium,goals.sodium,0],['Fbr','Fiber',fiber,goals.fiber,0]].forEach(function(x){
+      var noData=x[4] && !(x[2]>0);
+      var p=x[3]>0?x[2]/x[3]:0;
+      var status=noData?'No data':(p>=0.7?'Good':p>=0.4?'Fair':'Low');
+      var col=noData?'#5b6678':(p>=0.7?C.green:p>=0.4?C.amber:C.red);
+      var drawP=noData?0:Math.min(1,p);
+      kn+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="position:relative;width:42px;height:42px"><svg width="42" height="42" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#1a2030" stroke-width="3.5"/><circle cx="22" cy="22" r="18" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*18).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*18)*(1-drawP)).toFixed(1)+'" transform="rotate(-90 22 22)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#e8edf5">'+x[0]+'</div></div><div style="font-size:9px;color:#94a3b8">'+x[1]+'</div><div style="font-size:8.5px;font-weight:700;color:'+col+'">'+status+'</div></div>';
     });
     kn+='</div>';
     H+=card(kn);
@@ -19228,7 +19258,7 @@ function renderMyFoods(container){
         addBtn.disabled=true;
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
-        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0});
+        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
         sv();
         renderNutr();
         showScreen('NUTR');
@@ -19282,7 +19312,7 @@ function renderMyMeals(container){
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
-          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0});
+          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
         });
         sv();
         renderNutr();
@@ -24639,7 +24669,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-nutrition-rich-redesign';
+window.__BUILD__ = '2026-07-16-magnesium-training-aware';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
