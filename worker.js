@@ -12453,6 +12453,59 @@ function aiMergeAudit_(n){
     try{ console.table(rows); }catch(e){ rows.forEach(function(x){ console.log('[merge-audit] '+x.date+' dist='+x.dist+' src='+x.src+' twin='+x.liveTwin+' delAt='+x.delAt); }); }
   }catch(e){ console.log('[merge-audit] error ' + (e&&e.message)); }
 }
+// Over-collapse forensics + recovery. Finds date+distance groups where a
+// cross-source-dupe tombstone exists but ZERO copies are live (the merge killed the
+// whole ride). Dumps every copy per orphaned group (reason / deletedAt / richness /
+// GPS) so the exact kill sequence is visible, and identifies the richest dead copy
+// to revive. All raw-IDB reads — nothing is lost, just tombstoned. Non-mutating.
+function _aiKey_(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); }
+function _aiRich_(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length))s+=500; if(r.streams)s+=250; return s+Object.keys(r).length; }
+function _aiOrphanKeys_(){
+  var all=(st.rides||[]), byKey={};
+  all.forEach(function(r){ if(!r) return; var k=_aiKey_(r); (byKey[k]=byKey[k]||[]).push(r); });
+  var seen={}, keys=[];
+  all.forEach(function(r){
+    if(!(r&&r.deleted&&String(r.deleteReason||'').indexOf('dupe')>=0)) return;
+    var k=_aiKey_(r); if(seen[k]) return; seen[k]=1;
+    if((byKey[k]||[]).filter(function(x){return x&&!x.deleted;}).length===0) keys.push(k);
+  });
+  return {keys:keys, byKey:byKey};
+}
+function aiOrphanAudit_(){
+  try{
+    var o=_aiOrphanKeys_();
+    console.log('[orphan] orphaned date+distance groups (a dupe tombstone but 0 live copies) = ' + Number(o.keys.length));
+    console.log('[orphan] each is one real ride the merge fully killed; all recoverable from raw IDB');
+    var rows=[];
+    o.keys.forEach(function(k){ (o.byKey[k]||[]).forEach(function(r){ var p=k.split('|');
+      rows.push({ date:p[0], dist10:p[1], src:(r.source||'?'), deleted:!!r.deleted, reason:(r.deleteReason==null?'<null>':(r.deleteReason||'<empty>')), delAt:(r.deletedAt?String(new Date(r.deletedAt).toISOString()).slice(0,10):'?'), rich:_aiRich_(r), gps:!!((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length)) }); }); });
+    try{ console.table(rows); }catch(e){ rows.forEach(function(x){ console.log('[orphan] '+x.date+' d='+x.dist10+' src='+x.src+' reason='+x.reason+' delAt='+x.delAt+' rich='+x.rich+' gps='+x.gps); }); }
+  }catch(e){ console.log('[orphan] error ' + (e&&e.message)); }
+}
+// Targeted recovery: revive ONLY the richest dead copy of each fully-killed group, so
+// each lost ride comes back live exactly once. Does NOT run the merge afterwards
+// (one live copy per group means no new pair to collapse). aiReviveOrphans_() dry-runs;
+// aiReviveOrphans_(true) flips + persists + force-pushes.
+function aiReviveOrphans_(execute){
+  try{
+    var o=_aiOrphanKeys_(), picks=[];
+    o.keys.forEach(function(k){ var dead=(o.byKey[k]||[]).filter(function(x){return x&&x.deleted;}); if(!dead.length) return; dead.sort(function(a,b){return _aiRich_(b)-_aiRich_(a);}); picks.push(dead[0]); });
+    if(execute!==true){
+      console.log('[orphan-revive] DRY-RUN would-revive=' + Number(picks.length) + ' (richest dead copy per orphaned group; leaves true dupes dead). NO CHANGES MADE.');
+      console.log('[orphan-revive] projected-live-after=' + Number((st.rides||[]).filter(function(r){return r&&!r.deleted;}).length + picks.length));
+      console.log('[orphan-revive] to EXECUTE after approval, run: aiReviveOrphans_(true)');
+      return picks.length;
+    }
+    var n=0; picks.forEach(function(r){ delete r.deleted; try{delete r.deletedAt;}catch(e){} try{delete r.deleteReason;}catch(e){} n++; });
+    try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+    var liveNow=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+    try{ saveLocal_(); }catch(e){ console.log('[orphan-revive] saveLocal error '+(e&&e.message)); }
+    try{ if(typeof fbPush==='function') fbPush(true, true); }catch(e){ console.log('[orphan-revive] fbPush error '+(e&&e.message)); }
+    console.log('[orphan-revive] DONE revived=' + Number(n) + ' live-now=' + Number(liveNow) + ' — saved to IDB + force-pushed. (No merge run.)');
+    try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){}
+    return n;
+  }catch(e){ console.log('[orphan-revive] error ' + (e&&e.message)); }
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
