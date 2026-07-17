@@ -12604,6 +12604,16 @@ function _durSec_(r){
     if(ok) return s; }
   return 0;
 }
+// Stop-the-bleeding: pause the 5s Firebase poll so remote's stale tombstones can't be
+// re-merged onto local (mergeState_ deletions-win). Runtime only — NO data mutation.
+// NOTE: a page RELOAD re-runs the boot fetch and will re-clobber again until REMOTE is
+// cleaned; this only freezes the current session. Run aiResumeSync_() to restart.
+function aiPauseSync_(){
+  try{ if(typeof fbPollTimer!=='undefined' && fbPollTimer){ clearInterval(fbPollTimer); fbPollTimer=null; console.log('[sync] PAUSED — 5s poll stopped; remote can no longer re-tombstone local this session. Do NOT reload (boot re-merges). aiResumeSync_() to restart.'); } else { console.log('[sync] no active poll timer found'); } }catch(e){ console.log('[sync] pause error '+(e&&e.message)); }
+}
+function aiResumeSync_(){
+  try{ if(typeof initFirebaseSync==='function'){ initFirebaseSync(); console.log('[sync] RESUMED — Firebase poll restarted.'); } }catch(e){ console.log('[sync] resume error '+(e&&e.message)); }
+}
 function _bcmpReport_(backup){
   if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
   var DUR_TOL=90;
