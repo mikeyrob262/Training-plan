@@ -7294,7 +7294,7 @@ function downsampleG(arr, n){
   return out.slice(0,n);
 }
 
-function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 
 // ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
 // Photo is stored in localStorage as a downscaled 200x200 JPEG data URL so it
@@ -11029,7 +11029,7 @@ function openManualActivity(){
       if(secs && np && FTP) tss = Math.round((secs * np * (np/FTP)) / (FTP * 3600) * 100);
     }
 
-    var ride = {name:name,date:date,duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev,editedAt:Date.now()};
+    var ride = {name:name,date:(typeof normDate==='function'?normDate(date):date),duration:dur,distance:dist,avgPwr:avg,np:np,tss:tss,hr:hr,elev:elev,editedAt:Date.now()};
     if(!st.rides) st.rides=[];
     st.rides.push(ride);
     sv();
@@ -11518,7 +11518,7 @@ function importRideFile(input){
           var ride = {
             id: getCol(row,'id'),
             name: getCol(row,'name')||'Activity',
-            date: dateParts,
+            date: (typeof normDate==='function'?normDate(dateParts):dateParts),
             type: getCol(row,'type'),
             duration: durStr,
             movingSecs: movingSecs,
