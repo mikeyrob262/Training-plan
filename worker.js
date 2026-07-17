@@ -12388,7 +12388,7 @@ function aiCardMomentum_(ded){
   var inner=aiLbl_('PERFORMANCE MOMENTUM');
   inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
   inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days.</div>';
-  inner+='<div style="font-size:11px;color:#5b6678;margin-top:3px">CTL/ATL/TSB from your training-load history ('+f.sampleSize.toLocaleString()+' rides + runs carrying a load).</div>';
+  inner+='<div style="font-size:11px;color:#5b6678;margin-top:3px">From your full training-load history (rides + runs).</div>';
   inner+='<div style="display:flex;gap:22px;margin-top:16px">';
   f.drivers.forEach(function(d){ inner+='<div><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+aiEsc_(d.label)+'</div><div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1">'+d.value+'</div></div>'; });
   inner+='</div>';
@@ -12484,21 +12484,7 @@ function aiRenderTab_(tab, ded){
 function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
-  var rides=allRidesDeduped_();
-  // DIAGNOSTIC (temporary): one line that breaks down where the count goes, so we
-  // can tell a stale/partial load from tombstone-inflation from a dedup collapse.
-  try{
-    var rawN=(st.rides||[]).length;
-    var liveN=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
-    var dedupedN=rides.length;
-    var tombN=rawN-liveN;
-    var runsN=(st.runs||[]).length;
-    console.log('[ai] raw=' + Number(rawN));
-    console.log('[ai] live=' + Number(liveN));
-    console.log('[ai] deduped=' + Number(dedupedN));
-    console.log('[ai] tombstoned=' + Number(tombN));
-    console.log('[ai] runs=' + Number(runsN));
-  }catch(e){}
+  var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
