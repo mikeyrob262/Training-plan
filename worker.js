@@ -9274,6 +9274,67 @@ function showConstellation(){
   layout(); recomputeCrowns(); applyOTD();
 }
 
+// Consecutive-weeks activity streak (Strava's rule: a week counts if it has >=1
+// activity). Reads BOTH st.rides AND st.runs — runs live in a separate array, so
+// a run-only week must still count. Counts back from the current week; an empty
+// CURRENT week does not break the streak (matches Strava showing an unbroken
+// streak mid-week before you've trained) — we skip it and count from last week.
+// Uses the same non-type-filtered, non-deleted basis as recentRides_.
+function computeStreak_(now){
+  now = now || new Date();
+  var acts = [];
+  (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) acts.push(r.date); });
+  (st.runs||[]).forEach(function(r){ if(r && !r.deleted && r.date) acts.push(r.date); });
+  if(!acts.length) return 0;
+  function weekStart(offset){
+    var d = new Date(now);
+    d.setDate(d.getDate() - offset*7);
+    var dow = d.getDay();
+    d.setDate(d.getDate() - (dow===0 ? 6 : dow-1));  // back to Monday
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function hasActivity(ws){
+    var we = new Date(ws); we.setDate(ws.getDate()+7);
+    return acts.some(function(ds){ var d=new Date(ds); return d>=ws && d<we; });
+  }
+  var streak=0, wi=0;
+  if(!hasActivity(weekStart(0))) wi=1;   // empty current week: don't penalize
+  for(; wi<520; wi++){
+    if(hasActivity(weekStart(wi))) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// Shared Streaks card (both dashboards, so they can't drift). Flat Apple-Health
+// style: big count + flame SVG, one honest sub-line. Flame fills warm when the
+// streak is alive (>=1), goes muted grey at 0. SVG icon, not an emoji.
+function streakCardHTML_(){
+  var n = computeStreak_();
+  var alive = n >= 1;
+  var flame = alive ? '#FF8A3D' : 'var(--t3)';
+  var flameGlow = alive ? '#FFD08A' : 'var(--b1)';
+  var sub = n===0 ? 'Train this week to start a streak'
+          : n===1 ? 'week in a row — keep it going'
+          : n+' weeks in a row — keep it going';
+  var flameSvg =
+    '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" style="flex:none">'
+    +'<path d="M12 2c1 3-1.5 4.5-1.5 7 0 1.4 1 2.5 2.3 2.5 1.1 0 1.8-.7 2-1.6C16.5 12.7 18 14.9 18 17.3 18 20.4 15.3 22 12 22S6 20.4 6 17.3c0-2.6 1.7-4.6 3-6.3.9-1.2 1.5-2.4 1.5-4C10.5 5 11 3.3 12 2z" fill="'+flameGlow+'"/>'
+    +'<path d="M12 5c.5 2-1 3-1 5 0 1 .8 1.8 1.8 1.8.7 0 1.2-.4 1.5-1C16 13 16.5 14.6 16.5 16.5 16.5 19 14.5 20.3 12 20.3S7.5 19 7.5 16.5c0-1.9 1.2-3.4 2.2-4.7C10.4 10.9 11 10 11 8.7 11 7.3 11.3 6.1 12 5z" fill="'+flame+'"/>'
+    +'</svg>';
+  return '<div style="margin:0 16px 20px;background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:space-between">'
+    +'<div style="display:flex;align-items:center;gap:14px">'
+    +flameSvg
+    +'<div>'
+    +'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3)">Activity Streak</div>'
+    +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+sub+'</div>'
+    +'</div></div>'
+    +'<div style="text-align:right"><span style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+n+'</span>'
+    +'<span style="font-size:13px;color:var(--t3);margin-left:4px">'+(n===1?'wk':'wks')+'</span></div>'
+    +'</div>';
+}
+
 function showHomeDash(){
   showScreen('HOME_DASH');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
@@ -9354,6 +9415,9 @@ function showHomeDash(){
     +'</div></div>'
     +'<div id="home-readiness-freshness" style="font-size:10px;color:var(--t3);margin-top:8px;text-align:right"></div>'
     +'</div>';
+
+  // Activity streak card (shared renderer, both dashboards)
+  html+=streakCardHTML_();
 
   // Today's Plan - reads the real scheduled workout for today directly
   // from the training plan's rendered DOM (week/day workout cards),
