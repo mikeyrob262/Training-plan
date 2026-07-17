@@ -12387,6 +12387,21 @@ var _aiMount=null, _aiTab='overview', _aiTombLogged=false;
 // included) plus how many are genuinely revivable (no live twin), so revival is driven
 // by counted reasons, not an estimate. Prints flat, one line per reason. Callable from
 // the console as aiTombBreakdown_() to re-check after a restore.
+// Per-load stability line — watch live + null-tomb + xsrc-dupe + raw across reloads
+// to detect drift. Non-mutating. Logged at render and again 8s later (after async
+// boot merges / gps-migrate settle) so intra-load drift shows too.
+function aiStabilityLog_(tag){
+  try{
+    var all=(st.rides||[]);
+    var live=0,nullTomb=0,xsrc=0;
+    all.forEach(function(r){ if(!r) return;
+      if(!r.deleted){ live++; return; }
+      var rs=String(r.deleteReason||'');
+      if(rs==='') nullTomb++; else if(rs.indexOf('dupe')>=0) xsrc++;
+    });
+    console.log('[stab] '+tag+' live='+Number(live)+' null-tomb='+Number(nullTomb)+' xsrc-dupe='+Number(xsrc)+' raw='+Number(all.length));
+  }catch(e){ console.log('[stab] error '+(e&&e.message)); }
+}
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
@@ -12659,7 +12674,7 @@ function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
   var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
-  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiTombBreakdown_(); aiTombWhy_(); aiRevivePreview_(); }catch(e){} }
+  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiStabilityLog_('render'); setTimeout(function(){ aiStabilityLog_('+8s'); }, 8000); }catch(e){} }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
