@@ -12599,8 +12599,10 @@ function _bcmpReport_(backup){
   var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
   var dur_=function(r){ return r.movingSecs||r.duration||0; };
   var live=(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+  var bGroups={}, bKeyset={};
+  backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); bKeyset[k]=1; } });
   var liveDD={}; live.forEach(function(r){ var k=key_(r); (liveDD[k]=liveDD[k]||[]).push(dur_(r)); });
-  var bGroups={}; backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); } });
+  // (b) dedupe backup to unique real rides, then covered/missing vs live
   var uniqueBackup=0, covered=0, missing=0;
   Object.keys(bGroups).forEach(function(k){
     var gr=bGroups[k], used=[];
@@ -12613,9 +12615,17 @@ function _bcmpReport_(backup){
       if(hit) covered++; else missing++;
     }
   });
-  console.log('[bcmp] backup-rows=' + Number(backup.length) + ' backup-UNIQUE-rides=' + Number(uniqueBackup) + ' (deduped cross-source)');
-  console.log('[bcmp] live-local=' + Number(live.length) + ' | backup rides WITH a live local copy=' + Number(covered) + ' | MISSING locally=' + Number(missing));
-  console.log('[bcmp] projected-live-after-backup-recovery=' + Number(live.length + missing) + ' (NO CHANGES MADE)');
+  // (a) live rides with no backup match — post-backup additions vs possible match-miss
+  var liveNotInBackup=0, liveNIB_keyInBackup=0;
+  live.forEach(function(r){
+    var k=key_(r), d=dur_(r), durs=(bGroups[k]||[]).map(dur_), hit=false;
+    for(var m=0;m<durs.length;m++){ if(Math.abs(durs[m]-d)<=DUR_TOL){ hit=true; break; } }
+    if(!hit){ liveNotInBackup++; if(bKeyset[k]) liveNIB_keyInBackup++; }
+  });
+  console.log('[bcmp] backup-rows=' + Number(backup.length) + ' -> UNIQUE-rides=' + Number(uniqueBackup) + ' (collapsed ' + Number(backup.length-uniqueBackup) + ' cross-source dupe copies)');
+  console.log('[bcmp] (b) backup-unique = covered(' + Number(covered) + ') + MISSING(' + Number(missing) + ') = ' + Number(covered+missing) + '  -> MISSING is on UNIQUE rides; internal dupe pairs already collapsed');
+  console.log('[bcmp] (a) live-local=' + Number(live.length) + ' = in-backup(' + Number(live.length-liveNotInBackup) + ') + NOT-in-backup(' + Number(liveNotInBackup) + '); of not-in-backup, share-a-backup-date+dist=' + Number(liveNIB_keyInBackup) + ' (rest = post-backup additions)');
+  console.log('[bcmp] projected=' + Number(live.length + missing) + ' = backup-unique(' + Number(uniqueBackup) + ') + live-not-in-backup(' + Number(liveNotInBackup) + '); NO CHANGES MADE');
 }
 // Backup reconciliation DRY-RUN. A programmatic file picker is blocked from the
 // console (no user gesture), so this puts a visible box at the top of the page: DROP
