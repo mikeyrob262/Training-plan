@@ -13952,7 +13952,7 @@ function dsShowCalendar(){
   function renderCalendar(){
     mc.innerHTML='';
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:16px 22px 26px;box-sizing:border-box;overflow:hidden;gap:12px';
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;padding:16px 22px 26px;box-sizing:border-box;overflow-x:hidden;overflow-y:auto;gap:12px';
 
     // ---- data (deduped, all activity types; honors the type + completed filter) ----
     var ridesByDate={};
@@ -14065,8 +14065,8 @@ function dsShowCalendar(){
       H+='  <div style="width:176px;padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#5b6678">WEEK</div>';
       H+='</div>';
       // ---- month grid body + week rail ----
-      H+='<div style="display:flex;gap:12px;flex:1;min-height:0">';
-      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(0,1fr));border:1px solid #171c2b;border-radius:12px;overflow:hidden">';
+      H+='<div style="display:flex;gap:12px;flex:1 0 auto">';
+      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid #171c2b;border-radius:12px;overflow:hidden">';
       weeks.forEach(function(wk){
         wk.forEach(function(c){
           var isToday=c.inMonth && c.date===todayStr;
@@ -14118,7 +14118,7 @@ function dsShowCalendar(){
       });
       H+='</div>';
       // week rail
-      H+='<div style="width:176px;display:grid;grid-template-rows:repeat('+N+',minmax(0,1fr));gap:8px;overflow:hidden">';
+      H+='<div style="width:176px;display:grid;grid-template-rows:repeat('+N+',minmax(160px,1fr));gap:8px;overflow:hidden">';
       weeks.forEach(function(wk,wi){
         var roll=weekRoll[wi];
         if(roll.acts===0){ H+='<div></div>'; return; }
@@ -24787,7 +24787,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-mob-cal-wk-col';
+window.__BUILD__ = '2026-07-16-desk-cal-scroll';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
