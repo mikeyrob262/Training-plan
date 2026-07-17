@@ -12380,22 +12380,36 @@ var _aiMount=null, _aiTab='overview', _aiTombLogged=false;
 function aiTombBreakdown_(){
   try{
     var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
     var tomb=all.filter(function(r){return r&&r.deleted;});
-    var liveKeys={};
-    all.forEach(function(r){ if(r&&!r.deleted) liveKeys[rideKey(r)]=1; });
-    var by={}, revivableRows=0, revivableKeys={};
+    // Exact-key live index — the SAME check rideKey/restoreFromBackup_ uses. This is
+    // BLIND to cross-source pairs (Strava copy 's'+id vs FIT copy 'k:date_dist_dur'
+    // are different keys), which is why it marked all dupes revivable.
+    var liveKeys={}; live.forEach(function(r){ liveKeys[rideKey(r)]=1; });
+    // Cross-source-aware live index, mirroring mergeCrossSourceDupes_: group by
+    // date + distance(0.1mi), twin if a live ride shares the group AND its duration
+    // is within DUR_TOL=90s. This is the CORRECT notion of "already have it live".
+    var DUR_TOL=90, liveDD={};
+    live.forEach(function(r){ var k=(r.date||'')+'|'+Math.round((+r.distance||0)*10); (liveDD[k]=liveDD[k]||[]).push(r.movingSecs||r.duration||0); });
+    function hasXsrcTwin(r){
+      if(liveKeys[rideKey(r)]) return true;
+      if(Math.round((+r.distance||0)*10)===0) return false; // 0-distance never merged
+      var durs=liveDD[(r.date||'')+'|'+Math.round((+r.distance||0)*10)]; if(!durs) return false;
+      var d=(r.movingSecs||r.duration||0);
+      for(var i=0;i<durs.length;i++){ if(Math.abs(durs[i]-d)<=DUR_TOL) return true; }
+      return false;
+    }
+    var by={}, revExact={}, revXsrc={};
     tomb.forEach(function(r){
       var reason=(r.deleteReason==null||r.deleteReason==='')?'<null>':String(r.deleteReason);
       by[reason]=(by[reason]||0)+1;
-      var k=rideKey(r);
-      if(!liveKeys[k]){ revivableRows++; revivableKeys[k]=1; }
+      if(!liveKeys[rideKey(r)]) revExact[reason]=(revExact[reason]||0)+1;
+      if(!hasXsrcTwin(r)) revXsrc[reason]=(revXsrc[reason]||0)+1;
     });
     console.log('[tomb] total=' + Number(tomb.length));
     Object.keys(by).sort(function(a,b){return by[b]-by[a];}).forEach(function(k){
-      console.log('[tomb] reason=' + k + ' count=' + Number(by[k]));
+      console.log('[tomb] reason=' + k + ' count=' + Number(by[k]) + ' revivable-exactkey=' + Number(revExact[k]||0) + ' revivable-xsrc-aware=' + Number(revXsrc[k]||0));
     });
-    console.log('[tomb] revivable-rows=' + Number(revivableRows));
-    console.log('[tomb] revivable-unique-keys=' + Number(Object.keys(revivableKeys).length));
   }catch(e){ console.log('[tomb] error ' + (e&&e.message)); }
 }
 var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
