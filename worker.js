@@ -19037,9 +19037,42 @@ var curCoreW = 1;
 
 function showCore(){ renderCore(); }
 
+function coreExDone_(ei){
+  var s = ws(cw);
+  if(!(s.core && s.core[ei])) return false;
+  var sets = parseInt(CORE_EX[ei][1]) || 3;
+  for(var si=0; si<sets; si++){ if(!s.core[ei][si] || !s.core[ei][si].done) return false; }
+  return true;
+}
+function toggleCoreExDone_(ei){
+  var s = ws(cw);
+  if(!s.core) s.core = {};
+  if(!s.core[ei]) s.core[ei] = {};
+  var ex = CORE_EX[ei];
+  var sets = parseInt(ex[1]) || 3;
+  var target = !coreExDone_(ei);
+  for(var si=0; si<sets; si++){
+    var cur = s.core[ei][si] || {};
+    s.core[ei][si] = { v: cur.v || '', note: cur.note || '', done: target };
+  }
+  if(typeof sv==='function') sv();
+  if(typeof toast==='function') toast(target ? (ex[0]+' logged') : (ex[0]+' cleared'));
+  renderCore();
+}
+function coreGroupIcon_(k){
+  var p = {
+    obliques:'<path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 9 16 9"/>',
+    tva:'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+    back:'<line x1="12" y1="3" x2="12" y2="21"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="17" x2="15" y2="17"/>',
+    cycling:'<circle cx="6" cy="16" r="3.2"/><circle cx="18" cy="16" r="3.2"/><path d="M6 16l4-7h4M10 9l4 7"/>'
+  }[k] || '';
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">' + p + '</svg>';
+}
+
 function openCore(w){
   curCoreW = w;
   var modal = document.getElementById('mod-CORE');
+  if(!modal) return;
   var s = ws(w);
   if(!s.core) s.core = {};
 
@@ -19060,10 +19093,10 @@ function openCore(w){
 
   // Group labels
   var groups = [
-    {label:'🌀 Obliques', range:[0,5]},
-    {label:'🔒 Deep Core / TVA', range:[6,8]},
-    {label:'🦴 Lower Back', range:[9,11]},
-    {label:'🚴 Cycling Core', range:[12,13]}
+    {label:'Obliques', ic:'obliques', range:[0,5]},
+    {label:'Deep Core / TVA', ic:'tva', range:[6,8]},
+    {label:'Lower Back', ic:'back', range:[9,11]},
+    {label:'Cycling Core', ic:'cycling', range:[12,13]}
   ];
 
   CORE_EX.forEach(function(ex, ei){
@@ -19071,8 +19104,8 @@ function openCore(w){
     groups.forEach(function(g){
       if(ei === g.range[0]){
         var glbl = document.createElement('div');
-        glbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;padding:14px 16px 6px';
-        glbl.textContent = g.label;
+        glbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;padding:14px 16px 6px;display:flex;align-items:center;gap:6px';
+        glbl.innerHTML = coreGroupIcon_(g.ic) + '<span>' + g.label + '</span>';
         sheet.appendChild(glbl);
       }
     });
@@ -19150,6 +19183,7 @@ function openCore(w){
   sheet.appendChild(finbtn);
 
   modal.appendChild(sheet);
+  modal.style.zIndex = '400';
   modal.classList.add('open');
   document.body.style.overflow = 'hidden';
 }
@@ -19190,8 +19224,10 @@ function finCore(){
 }
 
 function closeCore(){
-  document.getElementById('mod-CORE').classList.remove('open');
+  var m = document.getElementById('mod-CORE');
+  if(m){ m.classList.remove('open'); m.style.zIndex = ''; }
   document.body.style.overflow = '';
+  if(document.getElementById('CORE-SCREEN')) renderCore();
 }
 
 function renderCore(){
@@ -19218,36 +19254,37 @@ function renderCore(){
 
   // Exercise list preview
   var groups = [
-    {label:'🌀 Obliques', exs:[0,1,2,3,4,5]},
-    {label:'🔒 Deep Core / TVA', exs:[6,7,8]},
-    {label:'🦴 Lower Back', exs:[9,10,11]},
-    {label:'🚴 Cycling Core', exs:[12,13]}
+    {label:'Obliques', ic:'obliques', exs:[0,1,2,3,4,5]},
+    {label:'Deep Core / TVA', ic:'tva', exs:[6,7,8]},
+    {label:'Lower Back', ic:'back', exs:[9,10,11]},
+    {label:'Cycling Core', ic:'cycling', exs:[12,13]}
   ];
 
   groups.forEach(function(g){
     var sec = document.createElement('div');
     sec.style.cssText = 'padding:0 16px';
     var glbl = document.createElement('div');
-    glbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;padding:12px 0 8px';
-    glbl.textContent = g.label;
+    glbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;padding:12px 0 8px;display:flex;align-items:center;gap:6px';
+    glbl.innerHTML = coreGroupIcon_(g.ic) + '<span>' + g.label + '</span>';
     sec.appendChild(glbl);
 
     g.exs.forEach(function(ei){
       var ex = CORE_EX[ei];
-      var done = false;
-      var s = ws(cw);
-      if(s.core && s.core[ei]){
-        var sets = parseInt(ex[1])||3;
-        var allDone = true;
-        for(var si=0;si<sets;si++){ if(!s.core[ei][si]||!s.core[ei][si].done) allDone=false; }
-        done = allDone;
-      }
+      var done = coreExDone_(ei);
       var card = document.createElement('div');
       card.style.cssText = 'background:var(--s2);border-radius:12px;padding:12px 14px;margin-bottom:6px;border:1px solid '+(done?'rgba(0,200,150,.3)':'var(--b2)')+';display:flex;align-items:center;gap:10px';
-      card.innerHTML = '<div style="width:22px;height:22px;border-radius:50%;background:'+(done?'var(--green)':'var(--s3)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'
-        +(done?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':'')+'</div>'
-        +'<div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' exercise tutorial')+'" target="_blank" style="font-size:10px;color:#FF0000;text-decoration:none;font-weight:600">▶</a></div>'
-        +'<div style="font-size:11px;color:var(--t3)">'+ex[1]+' sets · '+ex[2]+(ex[4]?' hold':' reps')+'</div></div>';
+      var circle = document.createElement('button');
+      circle.type = 'button';
+      circle.setAttribute('aria-label', done ? 'Mark not done' : 'Mark all sets done');
+      circle.title = done ? 'Logged — tap to clear' : 'Tap to log all sets';
+      circle.style.cssText = 'width:24px;height:24px;border-radius:50%;background:'+(done?'var(--green)':'var(--s3)')+';border:'+(done?'none':'1px solid var(--b2)')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;padding:0';
+      circle.innerHTML = done?'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':'';
+      (function(capEi){ circle.addEventListener('click', function(){ toggleCoreExDone_(capEi); }); })(ei);
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1';
+      info.innerHTML = '<div style="font-size:13px;font-weight:700;color:var(--t1);display:flex;align-items:center;gap:6px">'+ex[0]+'<a href="https://www.youtube.com/results?search_query='+encodeURIComponent(ex[0]+' exercise tutorial')+'" target="_blank" rel="noopener" title="Watch tutorial" style="color:var(--t3);text-decoration:none;display:inline-flex;align-items:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></a></div>'
+        +'<div style="font-size:11px;color:var(--t3)">'+ex[1]+' sets · '+ex[2]+(ex[4]?' hold':' reps')+'</div>';
+      card.appendChild(circle); card.appendChild(info);
       sec.appendChild(card);
     });
     scr.appendChild(sec);
@@ -24753,7 +24790,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-weather-rich-redesign';
+window.__BUILD__ = '2026-07-16-core-log-fix';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
