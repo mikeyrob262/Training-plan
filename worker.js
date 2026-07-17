@@ -13047,8 +13047,19 @@ function dsShowNutrition(){
     // Macro Targets
     var calPct=goals.cal>0?Math.min(100,Math.round(cal/goals.cal*100)):0;
     var mt=lbl('MACRO TARGETS');
-    mt+='<div style="display:flex;gap:18px;align-items:center">';
-    mt+=ringHtml(calPct, calPct>110?C.red:calPct>90?C.green:C.c, cal, 'of '+goals.cal+' cal', 104);
+    mt+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
+    // Hero calorie ring — the visual anchor of the screen.
+    var heroCol=calPct>110?C.red:calPct>90?C.green:C.c;
+    var _hs=158,_hr=66,_hc=2*Math.PI*_hr,_hoff=_hc*(1-Math.min(1,calPct/100));
+    mt+='<div style="position:relative;width:'+_hs+'px;height:'+_hs+'px;flex-shrink:0">'
+      +'<svg width="'+_hs+'" height="'+_hs+'" viewBox="0 0 '+_hs+' '+_hs+'" style="filter:drop-shadow(0 0 12px '+heroCol+'55)">'
+      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="#161b28" stroke-width="12"/>'
+      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="'+heroCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+_hc.toFixed(1)+'" stroke-dashoffset="'+_hoff.toFixed(1)+'" transform="rotate(-90 '+(_hs/2)+' '+(_hs/2)+')"/></svg>'
+      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
+      +'<div style="font-size:44px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.03em">'+cal+'</div>'
+      +'<div style="font-size:11px;color:#64748b;margin-top:3px">of '+goals.cal+' cal</div>'
+      +'<div style="font-size:12px;font-weight:800;color:'+heroCol+';margin-top:6px;background:'+heroCol+'1f;border-radius:20px;padding:2px 11px">'+calPct+'%</div>'
+      +'</div></div>';
     mt+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:11px">';
     [['Protein',pro,goals.p,C.p],['Carbs',carb,goals.c,C.c],['Fat',fat,goals.f,C.f]].forEach(function(x){
       var pc=x[2]>0?Math.round(x[1]/x[2]*100):0;
@@ -24669,7 +24680,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-magnesium-training-aware';
+window.__BUILD__ = '2026-07-16-macro-ring-hero';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
