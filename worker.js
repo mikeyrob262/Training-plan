@@ -12412,6 +12412,78 @@ function aiTombBreakdown_(){
     });
   }catch(e){ console.log('[tomb] error ' + (e&&e.message)); }
 }
+// TEMP: decompose WHY cross-source-dupe tombstones are not matched to a live twin —
+// is it "twin also tombstoned" (expected, given only 713 live rides) or a real
+// matching failure (distance-unit / rounding / date / duration)? Buckets are
+// mutually exclusive per ride so they sum to the dupe total.
+function aiTombWhy_(){
+  try{
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var dead=all.filter(function(r){return r&&r.deleted;});
+    var DUR_TOL=90;
+    var liveKeys={}, liveByDate={}, liveDD={};
+    live.forEach(function(r){
+      liveKeys[rideKey(r)]=1;
+      var dk=(r.date||''); liveByDate[dk]=(liveByDate[dk]||0)+1;
+      var ddk=dk+'|'+Math.round((+r.distance||0)*10); (liveDD[ddk]=liveDD[ddk]||[]).push(r.movingSecs||r.duration||0);
+    });
+    var deadDD={};
+    dead.forEach(function(r){ var ddk=(r.date||'')+'|'+Math.round((+r.distance||0)*10); (deadDD[ddk]=deadDD[ddk]||[]).push(r.movingSecs||r.duration||0); });
+    var dupes=dead.filter(function(r){ return String(r.deleteReason||'').indexOf('dupe')>=0; });
+    var b_live=0, b_noDate=0, b_dateNoDist=0, b_distDurOff=0, b_twinDead=0;
+    dupes.forEach(function(r){
+      var dk=(r.date||''), ddk=dk+'|'+Math.round((+r.distance||0)*10), d=(r.movingSecs||r.duration||0);
+      var durs=liveDD[ddk], hasLive=!!liveKeys[rideKey(r)];
+      if(!hasLive && durs){ for(var i=0;i<durs.length;i++){ if(Math.abs(durs[i]-d)<=DUR_TOL){ hasLive=true; break; } } }
+      if(hasLive){ b_live++; return; }
+      if(!liveByDate[dk]) b_noDate++;
+      else if(!durs) b_dateNoDist++;
+      else b_distDurOff++;
+      var dd=deadDD[ddk]; if(dd){ var n=0; for(var j=0;j<dd.length;j++){ if(Math.abs(dd[j]-d)<=DUR_TOL) n++; } if(n>=2) b_twinDead++; }
+    });
+    console.log('[tomb-why] dupe-tombstones=' + Number(dupes.length));
+    console.log('[tomb-why] has-live-twin=' + Number(b_live));
+    console.log('[tomb-why] undetected:no-live-ride-same-date=' + Number(b_noDate));
+    console.log('[tomb-why] undetected:live-same-date-no-distance-match=' + Number(b_dateNoDist));
+    console.log('[tomb-why] undetected:date+distance-match-but-duration-over-90s=' + Number(b_distDurOff));
+    console.log('[tomb-why] (of undetected) twin-is-also-tombstoned=' + Number(b_twinDead));
+  }catch(e){ console.log('[tomb-why] error ' + (e&&e.message)); }
+}
+// TEMP dry-run: what a deleteReason=<null>-scoped revival WOULD do. Counts only —
+// no mutation, no save, no push. Excludes any <null> that has a live twin (should be
+// 0) and flags internal cross-source pairs among the revived set (a post-revival
+// mergeCrossSourceDupes_ would collapse those). Callable as aiRevivePreview_().
+function aiRevivePreview_(){
+  try{
+    var all=(st.rides||[]);
+    var live=all.filter(function(r){return r&&!r.deleted;});
+    var DUR_TOL=90, liveKeys={}, liveDD={};
+    live.forEach(function(r){ liveKeys[rideKey(r)]=1; var ddk=(r.date||'')+'|'+Math.round((+r.distance||0)*10); (liveDD[ddk]=liveDD[ddk]||[]).push(r.movingSecs||r.duration||0); });
+    function hasLiveTwin(r){
+      if(liveKeys[rideKey(r)]) return true;
+      if(Math.round((+r.distance||0)*10)===0) return false;
+      var durs=liveDD[(r.date||'')+'|'+Math.round((+r.distance||0)*10)]; if(!durs) return false;
+      var d=(r.movingSecs||r.duration||0);
+      for(var i=0;i<durs.length;i++){ if(Math.abs(durs[i]-d)<=DUR_TOL) return true; }
+      return false;
+    }
+    var nulls=all.filter(function(r){ return r&&r.deleted && (r.deleteReason==null||r.deleteReason===''); });
+    var wouldRevive=0, excludedLiveTwin=0, internalPairs=0, nullDD={};
+    nulls.forEach(function(r){
+      if(hasLiveTwin(r)){ excludedLiveTwin++; return; }
+      wouldRevive++;
+      var ddk=(r.date||'')+'|'+Math.round((+r.distance||0)*10), d=(r.movingSecs||r.duration||0), arr=(nullDD[ddk]=nullDD[ddk]||[]);
+      for(var i=0;i<arr.length;i++){ if(Math.abs(arr[i]-d)<=DUR_TOL){ internalPairs++; break; } }
+      arr.push(d);
+    });
+    console.log('[revive-dry] scope=deleteReason<null> null-tombstones=' + Number(nulls.length));
+    console.log('[revive-dry] excluded-has-live-twin=' + Number(excludedLiveTwin));
+    console.log('[revive-dry] WOULD-UN-DELETE=' + Number(wouldRevive));
+    console.log('[revive-dry] internal-cross-source-pairs-among-them=' + Number(internalPairs));
+    console.log('[revive-dry] projected-live-after=' + Number(live.length + wouldRevive - internalPairs) + ' (NO CHANGES MADE)');
+  }catch(e){ console.log('[revive-dry] error ' + (e&&e.message)); }
+}
 var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
@@ -12524,7 +12596,7 @@ function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
   var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
-  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiTombBreakdown_(); }catch(e){} }
+  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiTombBreakdown_(); aiTombWhy_(); aiRevivePreview_(); }catch(e){} }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
