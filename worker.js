@@ -4402,6 +4402,66 @@ function normalizeState_(s){
 // authoritatively in Firebase (/data.json and /gps/{key}) and lazy-load on
 // demand, so the localStorage cache (a ~5MB-capped store) must NOT carry them.
 var STORAGE_HEAVY_FIELDS_=['lats','lons','gpsLats','gpsLons','chartPwr','chartHR','chartEle','chartCad','chartSpd','chartTime','chartDist','laps','streams'];
+
+// ===== IndexedDB durable store =====================================================
+// localStorage caps at ~5MB. The full ride library (live + tombstoned) serializes to
+// ~8.8MB, so it CANNOT fit in localStorage — which is why the slim path silently
+// tombstoned old rides to stay under quota. IndexedDB has no ~5MB cap (hundreds of MB),
+// so it holds the FULL state. Design: in-memory st stays the single source of truth
+// the whole synchronous app reads; IDB is the durable backing store, written async on
+// every save and read once (async) at boot. localStorage is kept as a fast-boot cache
+// (slim copy) that paints instantly before IDB resolves, and as a fallback if IDB is
+// unavailable (private mode / old browser).
+var IDB_NAME='aiq', IDB_STORE='kv', IDB_KEY='state', _idbConn=null;
+function idbOpen_(){
+  if(_idbConn) return _idbConn;
+  _idbConn=new Promise(function(res,rej){
+    var req=indexedDB.open(IDB_NAME,1);
+    req.onupgradeneeded=function(){ var db=req.result; if(!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE); };
+    req.onsuccess=function(){ res(req.result); };
+    req.onerror=function(){ rej(req.error); };
+  });
+  return _idbConn;
+}
+function idbGet_(){
+  return idbOpen_().then(function(db){ return new Promise(function(res,rej){
+    var tx=db.transaction(IDB_STORE,'readonly'), st2=tx.objectStore(IDB_STORE), rq=st2.get(IDB_KEY);
+    rq.onsuccess=function(){ res(rq.result||null); };
+    rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+function idbSet_(obj){
+  return idbOpen_().then(function(db){ return new Promise(function(res,rej){
+    var tx=db.transaction(IDB_STORE,'readwrite'), st2=tx.objectStore(IDB_STORE), rq=st2.put(obj,IDB_KEY);
+    rq.onsuccess=function(){ res(true); };
+    rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+// Called once at boot AFTER the synchronous localStorage paint. If IDB holds a fuller
+// state than what localStorage gave us (it will, once migrated — IDB keeps tombstones
+// and GPS that the slim localStorage copy drops), swap it in and re-render. Never blocks
+// first paint; the app is already usable from the localStorage cache when this resolves.
+function idbBootLoad_(){
+  try{
+    if(!('indexedDB' in window)) return;
+    idbGet_().then(function(full){
+      if(!full||typeof full!=='object') return;
+      var idbRides=Array.isArray(full.rides)?full.rides.length:0;
+      var curRides=Array.isArray(st.rides)?st.rides.length:0;
+      // Only swap if IDB is at least as complete — guards against an empty/older IDB
+      // clobbering a good localStorage state.
+      if(idbRides>=curRides){
+        st=full;
+        try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+        try{ if(typeof renderActive_==='function') renderActive_(); else if(typeof showDashboard==='function') showDashboard(); }catch(e){}
+        try{ var pb=document.getElementById('perf-body'); if(pb&&(st.rides||[]).length>0) renderPerf(pb); }catch(e){}
+        console.log('[idb] loaded full state — rides='+idbRides+' (localStorage had '+curRides+')');
+      }
+    }).catch(function(e){ console.warn('[idb] boot load failed:', e&&e.message); });
+  }catch(e){}
+}
+// ==================================================================================
+
 // Shallow-clone st with each ride/run's heavy fields stripped, for serialization
 // only. In-memory st keeps everything; only the mta2 copy is slimmed — this is
 // what keeps mta2 (~1.5MB slimmed vs ~7.9MB full) well under the quota.
@@ -4427,16 +4487,34 @@ function slimForStorage_(s){
 // local-persistence path is what let a QuotaExceededError hide, so every save
 // silently failed and freshly-added items vanished on reload.
 function saveLocal_(){
+  // Durable write: FULL state (tombstones + GPS included) to IndexedDB, which has no
+  // ~5MB cap. This is the real persistence path now.
+  var idbOk=false;
+  try{
+    if('indexedDB' in window){
+      idbSet_(st).then(function(){
+        try{ var n=Array.isArray(st.rides)?st.rides.length:0; console.log('[save] idb OK rides='+n); }catch(e){}
+      }).catch(function(e){ console.error('[save] idb FAILED:', e&&e.message); });
+      idbOk=true;
+    }
+  }catch(e){ console.error('[save] idb threw:', e&&e.message); }
+  // Fast-boot cache: slim copy to localStorage for instant first paint before IDB
+  // resolves. If it blows quota that's fine now — IDB holds the full truth — so we log
+  // quietly and DON'T alarm the user (the old toast fired on every save once the
+  // library outgrew 5MB).
   try{
     var _s=JSON.stringify(slimForStorage_(st));
     localStorage.setItem('mta2',_s);
-    console.log('[save] mta2 OK bytes='+_s.length+' ('+Math.round(_s.length/1024)+' KB)');
-    return true;
+    console.log('[save] mta2 cache OK bytes='+_s.length+' ('+Math.round(_s.length/1024)+' KB)');
   }catch(e){
-    console.error('[save] mta2 FAILED:', (e&&e.name), (e&&e.message));
-    try{ toast('Couldn\\'t save to this device (storage full). Your data is still synced to the cloud.'); }catch(_x){}
-    return false;
+    if(!idbOk){
+      console.error('[save] mta2 FAILED and no IDB:', (e&&e.name), (e&&e.message));
+      try{ toast('Couldn\\'t save to this device (storage full). Your data is still synced to the cloud.'); }catch(_x){}
+      return false;
+    }
+    console.warn('[save] mta2 cache skipped ('+(e&&e.name)+') — full state is in IndexedDB');
   }
+  return true;
 }
 function sv(){
   // Any persisted mutation may change a ride's dedup keys (date / distance /
@@ -21408,6 +21486,7 @@ function showMoreSheet(){
     {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
     {n:'Sync Gear',     i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'syncStravaGear',   c:'#0F6E56'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
+    {n:'Restore Backup', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',                                     fn:'restoreFromBackup_', c:'#22c55e'},
     {n:'Reconnect',     i:'M9 17H7A5 5 0 0 1 7 7h2 M15 7h2a5 5 0 0 1 0 10h-2 M8 12h8',                                          fn:'reconnectStrava',  c:'#FC4C02'},
     {n:'Elev Stats',    i:'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M3 17l4-4',                                           fn:'fetchStravaElevStats', c:'#27AE60'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
@@ -23988,6 +24067,65 @@ function showCal(){
 }
 
 
+// ===== One-time restore of tombstoned rides from the 8.8MB backup file ==============
+// The full ride library (3,686) was mass-tombstoned down to ~1,187 live under
+// localStorage quota pressure. Now that IndexedDB holds the full state, we can restore
+// the real rides. Reads the downloaded backup JSON (the pristine full st.rides), then
+// for each backup ride that is currently tombstoned locally AND has no LIVE twin, flips
+// deleted off — leaving the ~100 legitimate dupes dead. Writes to IDB and force-pushes
+// to Firebase so a remote poll can't re-apply the tombstones (the sync-clobber class).
+function restoreFromBackup_(){
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='application/json,.json';
+  inp.onchange=function(){
+    var f=inp.files&&inp.files[0]; if(!f){ return; }
+    var rd=new FileReader();
+    rd.onload=function(){
+      var backupRides;
+      try{
+        var parsed=JSON.parse(rd.result);
+        // Accept either a bare array (the st.rides download) or a full state object.
+        backupRides = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.rides) ? parsed.rides : null);
+      }catch(e){ try{toast('Backup file is not valid JSON');}catch(_){}; return; }
+      if(!backupRides||!backupRides.length){ try{toast('No rides found in backup file');}catch(_){}; return; }
+      if(!Array.isArray(st.rides)) st.rides=[];
+      // Keys of rides that are currently LIVE locally — a backup ride matching one of
+      // these already has a living copy, so we must NOT resurrect a duplicate.
+      var liveKeys={};
+      st.rides.forEach(function(r){ if(r&&!r.deleted){ liveKeys[rideKey(r)]=1; } });
+      // Index local rides by key so we can flip the matching tombstone in place.
+      var localByKey={};
+      st.rides.forEach(function(r){ if(r){ var k=rideKey(r); if(!(k in localByKey)) localByKey[k]=r; } });
+      var restored=0, addedBack=0;
+      backupRides.forEach(function(br){
+        if(!br) return;
+        var k=rideKey(br);
+        if(liveKeys[k]) return;            // already have a live copy — skip (the ~100 dupes)
+        var local=localByKey[k];
+        if(local){
+          if(local.deleted){ delete local.deleted; try{delete local.deletedAt;}catch(e){} try{delete local.deleteReason;}catch(e){} restored++; liveKeys[k]=1; }
+        } else {
+          // In the backup but absent locally entirely — add it back, un-deleted.
+          var copy=JSON.parse(JSON.stringify(br)); delete copy.deleted; try{delete copy.deletedAt;}catch(e){} try{delete copy.deleteReason;}catch(e){}
+          st.rides.push(copy); addedBack++; liveKeys[k]=1;
+        }
+      });
+      var liveNow=st.rides.filter(function(r){return r&&!r.deleted;}).length;
+      try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+      // Persist to IndexedDB (full state) then FORCE-push to Firebase so the restored
+      // rides overwrite any remote tombstones and survive the next poll.
+      try{ saveLocal_(); }catch(e){}
+      try{ fbPush(true, true); }catch(e){}
+      try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+      console.log('[restore] un-tombstoned='+restored+' added-back='+addedBack+' live now='+liveNow);
+      try{ toast('Restored '+(restored+addedBack)+' rides — '+liveNow+' live. Syncing…'); }catch(e){}
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+// ==================================================================================
+
 function stravaFullResync() {
   // Clear the last sync timestamp so fetchStravaPage pulls everything
   if(!st.stravaRefreshToken && !st.stravaToken) {
@@ -24939,12 +25077,31 @@ window.onload = function(){
   // just no longer shown by default.
   try{ showHomeDash(); }catch(e){ console.error('showHomeDash on load:', e); }
   try{ renderAllAvatars(); }catch(e){}
-  // Auto-pull from GitHub on load if token exists
-  // Start Firebase SSE real-time sync
-  initFirebaseSync();
-  ensureFbAuth_().then(function(tok){
-    return fetch(fbAuthedUrl_(tok)).then(function(r){return r.ok?r.json():null;});
-  }).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
+  // Load the FULL state from IndexedDB (tombstones + GPS) over the slim localStorage
+  // cache, THEN start Firebase — so remote merges into the complete local library
+  // instead of the ~1,187-ride slim subset. idbBootLoad_ swaps st in place; we run
+  // Firebase after it settles so a remote poll can't merge into a half-loaded state.
+  var _idbReady = ('indexedDB' in window)
+    ? idbGet_().then(function(full){
+        if(full&&typeof full==='object'){
+          var idbRides=Array.isArray(full.rides)?full.rides.length:0;
+          var curRides=Array.isArray(st.rides)?st.rides.length:0;
+          if(idbRides>=curRides){
+            st=full;
+            try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+            try{ showHomeDash(); }catch(e){}
+            console.log('[idb] loaded full state — rides='+idbRides+' (localStorage had '+curRides+')');
+          }
+        }
+      }).catch(function(e){ console.warn('[idb] boot load failed:', e&&e.message); })
+    : Promise.resolve();
+  // Start Firebase SSE real-time sync AFTER the IDB full-state load settles
+  _idbReady.then(function(){
+    initFirebaseSync();
+    return ensureFbAuth_().then(function(tok){
+      return fetch(fbAuthedUrl_(tok)).then(function(r){return r.ok?r.json():null;});
+    }).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
+  });
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 
