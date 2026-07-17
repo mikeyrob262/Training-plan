@@ -12487,7 +12487,14 @@ function aiRenderOverview_(container){
   var rides=allRidesDeduped_();
   // DIAGNOSTIC (temporary): one line that breaks down where the count goes, so we
   // can tell a stale/partial load from tombstone-inflation from a dedup collapse.
-  try{ var _raw=(st.rides||[]).length, _live=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length; console.log('[ai] counts raw(st.rides)='+_raw+' live(non-deleted)='+_live+' deduped='+rides.length+' tombstoned='+(_raw-_live)+' runs='+((st.runs||[]).length)); }catch(e){}
+  try{
+    var rawN=(st.rides||[]).length;
+    var liveN=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+    var dedupedN=rides.length;
+    var tombN=rawN-liveN;
+    var runsN=(st.runs||[]).length;
+    console.log('[ai] counts raw=' + rawN + ' live=' + liveN + ' deduped=' + dedupedN + ' tombstoned=' + tombN + ' runs=' + runsN);
+  }catch(e){}
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
