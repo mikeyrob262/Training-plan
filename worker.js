@@ -4499,6 +4499,31 @@ function idbBootLoad_(){
     }).catch(function(e){ console.warn('[idb] boot load failed:', e&&e.message); });
   }catch(e){}
 }
+// Ensure the in-memory st holds the FULL ride library from IndexedDB before a
+// data-heavy page computes stats. The synchronous boot paints from the slim
+// localStorage cache (which freezes stale/smaller after a quota-skip in
+// saveLocal_), and the boot-time IDB swap only re-renders the Home dashboard —
+// so any OTHER page (e.g. Athlete Intelligence) can be left computing off a
+// truncated st.rides and show a wrong count (the "656 vs 3,678" bug). This reads
+// IDB once and, only if it is strictly fuller than what is in memory, swaps it in
+// and invokes cb to re-render. cb runs at most once; if IDB is unavailable or not
+// fuller, cb is not called (the caller has already painted from the current st).
+function aiEnsureFullLibrary_(cb){
+  try{
+    if(!('indexedDB' in window)) return;
+    idbGet_().then(function(full){
+      if(!full || typeof full!=='object' || !Array.isArray(full.rides)) return;
+      var idbRides=full.rides.length;
+      var curRides=Array.isArray(st.rides)?st.rides.length:0;
+      if(idbRides>curRides){
+        st=full;
+        try{ dedupeInvalidate_ && dedupeInvalidate_(); }catch(e){}
+        console.log('[ai] swapped in full IDB library — rides='+idbRides+' (was '+curRides+')');
+        try{ if(typeof cb==='function') cb(); }catch(e){ console.error('[ai] re-render after full load failed:', e&&e.message); }
+      }
+    }).catch(function(e){ console.warn('[ai] full library load failed:', e&&e.message); });
+  }catch(e){}
+}
 // ==================================================================================
 
 // Shallow-clone st with each ride/run's heavy fields stripped, for serialization
@@ -12251,6 +12276,93 @@ function recentRides_(n){
   out.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
   return out.slice(0, n);
 }
+// ==================== Athlete Intelligence — shared insight engine ====================
+// ONE place that decomposes each metric into its real drivers, so every surface
+// (What Changed, DNA, Compare, the Why? teaching buttons) reads the SAME
+// computation instead of re-deriving it per surface. Only DETERMINISTIC
+// decompositions live here — each explains a formula the app already runs, so it
+// cannot fabricate. Every result is {ok, value, drivers:[{label,value,note}],
+// sampleSize}. ok:false means "suppress this surface" (pattern #2 — never a fake).
+
+// Sample-size floor. A bucketed/compared insight is only honest when BOTH sides of
+// a split carry enough rides; below the floor we suppress rather than show a
+// number built on a handful of rides. Callers surface sampleSize ("based on N").
+var AI_MIN_SAMPLE=20;
+function aiGate_(nLeft, nRight, min){
+  min=(min==null)?AI_MIN_SAMPLE:min;
+  var a=nLeft||0, b=(nRight==null)?a:(nRight||0);
+  return { ok:(a>=min && b>=min), min:min, nLeft:a, nRight:b };
+}
+
+// Ride-conditions score, extracted verbatim from the weather renderer's rule so
+// there is exactly ONE formula. Pure function of (wind mph, temp F, precip %).
+// windScore/tempScore/rainScore are the three real sub-scores; rideScore is their
+// mean (0-100), identical to what the Weather page shows.
+function aiRideConditionsScore_(wind, temp, precip){
+  var windScore = wind<10?100:wind<20?70:40;
+  var tempScore = (temp>45&&temp<85)?100:(temp>35&&temp<95)?70:40;
+  var rainScore = precip<20?100:precip<50?60:20;
+  var rideScore = Math.round((windScore+tempScore+rainScore)/3);
+  return { rideScore:rideScore, windScore:windScore, tempScore:tempScore, rainScore:rainScore };
+}
+// Decompose a ride-conditions score into its drivers for a Why? button — the PoC
+// "77 = wind 70/100, temp 100/100, rain 60/100 -> mean 77". Reads the real
+// sub-scores; no new math.
+function aiRideScore_(wind, temp, precip){
+  var s=aiRideConditionsScore_(wind, temp, precip);
+  return {
+    ok:true,
+    value:s.rideScore,
+    drivers:[
+      {label:'Wind', value:s.windScore, note:Math.round(wind)+' mph'},
+      {label:'Temperature', value:s.tempScore, note:Math.round(temp)+String.fromCharCode(176)+'F'},
+      {label:'Precipitation', value:s.rainScore, note:Math.round(precip)+'% chance'}
+    ],
+    sampleSize:null
+  };
+}
+
+// Fatigue decomposition = the app's own PMC (CTL fitness / ATL fatigue / TSB form)
+// over the full loaded library. Deterministic — reuses computePMC + unifiedLoad,
+// the exact pipeline the desktop dashboard runs (see dsShowDashboard).
+function aiFatigue_(){
+  var items=allRidesDeduped_().concat((st.runs||[]).map(function(r){return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe};}));
+  items.forEach(function(x){ x.load=unifiedLoad(x); });
+  var withLoad=items.filter(function(x){ return x.load>0; });
+  if(withLoad.length<8) return { ok:false, value:null, drivers:[], sampleSize:withLoad.length };
+  var pmc=computePMC(withLoad);
+  var now=pmc[pmc.length-1], wk=pmc[Math.max(0, pmc.length-8)];
+  var ctl=Math.round(now.ctl), atl=Math.round(now.atl), tsb=Math.round(now.tsb);
+  return {
+    ok:true,
+    value:tsb,
+    drivers:[
+      {label:'Fitness (CTL)', value:ctl, note:'42-day load'},
+      {label:'Fatigue (ATL)', value:atl, note:'7-day load'},
+      {label:'Form (TSB)', value:tsb, note:'CTL minus ATL'}
+    ],
+    ramp:{ ctl:Math.round(now.ctl-wk.ctl), atl:Math.round(now.atl-wk.atl), tsb:Math.round(now.tsb-wk.tsb) },
+    sampleSize:withLoad.length
+  };
+}
+
+// FTP change between two real FTP scalars (period A -> B). Deterministic delta of
+// values the app already stores; NOT a fabricated continuous trend line.
+function aiFtpChange_(fromW, toW){
+  if(fromW==null || toW==null || !(fromW>0) || !(toW>0)) return { ok:false, value:null, drivers:[], sampleSize:0 };
+  var d=Math.round(toW-fromW);
+  return {
+    ok:true,
+    value:d,
+    drivers:[
+      {label:'From', value:Math.round(fromW), note:'W'},
+      {label:'To', value:Math.round(toW), note:'W'},
+      {label:'Change', value:(d>=0?'+':'')+d, note:'W'}
+    ],
+    sampleSize:2
+  };
+}
+// ==================== end insight engine ====================
 // Single rollup used by BOTH the Calendar month footer AND each week-row summary
 // so they can never diverge. Sums ALL activity types (Miles + TSS include Zwift/
 // VirtualRide); rideCount stays type-scoped for the "Rides" label only.
@@ -13104,13 +13216,12 @@ function dsShowWeather(){
     var temp=Math.round(c.temperature_2m), feels=Math.round(c.apparent_temperature), hum=Math.round(c.relativehumidity_2m), wind=Math.round(c.windspeed_10m), precip=Math.round(c.precipitation_probability||0), uv=(c.uv_index!=null?Math.round(c.uv_index):null);
     var desc=wDesc(c.weathercode);
 
-    // ride score (unchanged rule from the existing page)
-    var windScore=wind<10?100:wind<20?70:40;
-    var tempScore=(temp>45&&temp<85)?100:(temp>35&&temp<95)?70:40;
-    var rainScore=precip<20?100:precip<50?60:20;
+    // ride score — routed through the shared scorer (aiRideConditionsScore_) so the
+    // Weather page and the Athlete Intelligence Why? decomposition can never drift.
+    var _rcs=aiRideConditionsScore_(wind,temp,precip);
+    var windScore=_rcs.windScore, tempScore=_rcs.tempScore, rainScore=_rcs.rainScore, rideScore=_rcs.rideScore;
     var humScore=hum<50?100:hum<65?80:hum<80?55:30;
     var aqiScore=aqi==null?null:(aqi<50?100:aqi<100?70:aqi<150?45:20);
-    var rideScore=Math.round((windScore+tempScore+rainScore)/3);
     var rideCol=rideScore>=80?'#4ade80':rideScore>=60?'#f59e0b':'#e24b4a';
     var scoreBand=rideScore>=85?'Excellent':rideScore>=70?'Very Good':rideScore>=55?'Good':rideScore>=40?'Fair':'Poor';
     var rideLabel=rideScore>=80?'Great day to ride!':rideScore>=60?'Decent conditions':'Tough conditions';
