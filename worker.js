@@ -14484,10 +14484,87 @@ function openRecoveryEditor_(){
   var save=document.createElement('button'); save.textContent='Save';
   save.style.cssText='width:100%;padding:12px;background:#4ade80;border:none;border-radius:11px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
   save.onclick=function(){ var h=parseFloat(document.getElementById('rec-hrv').value), r=parseFloat(document.getElementById('rec-rhr').value);
-    st.hrv=isNaN(h)?null:h; st.restingHR=isNaN(r)?null:r; try{sv();}catch(e){} m.remove(); if(typeof dsShowDashboard==='function') dsShowDashboard(); try{toast('Recovery saved');}catch(e){} };
+    st.hrv=isNaN(h)?null:h; st.restingHR=isNaN(r)?null:r;
+    // Log today's entry so the Recovery score can build a personal baseline
+    // (one entry per day; today's overwrites an earlier same-day save).
+    if(st.hrv!=null && st.restingHR!=null){
+      if(!Array.isArray(st.recoveryLog)) st.recoveryLog=[];
+      var tk=(typeof getTodayKey==='function')?getTodayKey():new Date().toISOString().slice(0,10);
+      st.recoveryLog=st.recoveryLog.filter(function(x){return x&&x.date!==tk;});
+      st.recoveryLog.push({date:tk, hrv:st.hrv, rhr:st.restingHR});
+      if(st.recoveryLog.length>90) st.recoveryLog=st.recoveryLog.slice(-90);
+    }
+    try{sv();}catch(e){} m.remove(); if(typeof dsShowDashboard==='function') dsShowDashboard(); try{toast('Recovery saved');}catch(e){} };
   s.appendChild(save); m.appendChild(s); (document.getElementById('app-shell')||document.body).appendChild(m);
 }
 
+// ONE shared taper-aware verdict. Every dashboard verdict (the IQ trend label,
+// the Training-Load pill, and the Recovery card) derives from this so they can
+// never disagree from the same TSB again. The core insight: a RISING TSB driven
+// by a FALLING CTL is a TAPER (load deliberately dropped), not improving fitness
+// — so freshness must never read "Improving". ctlRamp is CTL now minus 7 days
+// ago (same signal dsAttention_ uses for its "Fitness is sliding" text), so this
+// reconciles with the AI panel instead of contradicting it.
+//   Returns:
+//     phase       'peaking' | 'building' | 'maintaining' | 'detraining' | 'overreaching' | 'building-fresh'
+//     trend       IQ-card headline word (was the standalone 'Improving/Steady/Easing')
+//     trendNote   IQ-card sub-line
+//     load        Training-Load pill text (was the standalone 'Fresh/Optimal/…')
+//     loadNote    Training-Load pill trailing note
+//     readyLabel  Recovery-card gauge label when it is a FORM readiness (no HRV/RHR)
+//     readyNote   Recovery-card sub-line
+//     color       shared accent for the verdict
+function taperVerdict_(fit, iq, ctlRamp){
+  var G='#4ade80', B='#60a5fa', A='#f59e0b', R='#e24b4a';
+  var tsb=Math.round((fit&&fit.tsb)||0);
+  var ramp=(ctlRamp==null)?null:ctlRamp;            // + rising fitness, - falling
+  var falling=(ramp!=null && ramp<=-3);             // CTL genuinely dropping
+  var rising =(ramp!=null && ramp>=3);              // CTL genuinely building
+  var fresh  =(tsb>=8);                             // rested / tapered
+  var loaded =(tsb<=-15);                           // carrying real fatigue
+  // TAPER: fitness coming down AND legs coming fresh — the Holland-100-eve case.
+  // This is peaking, NOT improving. Read it as race-readiness.
+  if(falling && tsb>=0){
+    return {phase:'peaking', color:G,
+      trend:'Peaking', trendNote:'Sharpening for race day — fitness dips slightly as the legs come fresh. That is the taper working, not lost fitness.',
+      load:'Peaking', loadNote:'Fresh legs, race-ready — hold the taper.',
+      readyLabel:'Race-ready', readyNote:'Form readiness from taper (TSB '+(tsb>=0?'+':'')+tsb+')'};
+  }
+  // Overreaching: deep fatigue, legs cooked.
+  if(loaded && tsb<=-25){
+    return {phase:'overreaching', color:R,
+      trend:'Overreaching', trendNote:'Deep in a load block — legs are cooked. Productive briefly, but back off before anything that matters.',
+      load:'Deep', loadNote:'Heavy fatigue — protect recovery.',
+      readyLabel:'Fatigued', readyNote:'Form readiness from load (TSB '+tsb+')'};
+  }
+  // Genuine build: CTL rising, still carrying some fatigue — the productive zone.
+  if(rising && tsb<8){
+    return {phase:'building', color:G,
+      trend:'Improving', trendNote:'Fitness is climbing and you are absorbing the load — the productive-training zone.',
+      load:(tsb>-10?'Optimal':'Productive'), loadNote:'Building fitness — keep showing up.',
+      readyLabel:(tsb>-10?'Balanced':'Loaded'), readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
+  }
+  // Detraining: fitness falling AND already fresh/negative-nothing — losing form
+  // without a race reason (this is the case the AI panel flags as "sliding").
+  if(falling){
+    return {phase:'detraining', color:A,
+      trend:'Easing', trendNote:'Fitness is sliding — if this is not a planned taper, an easy ride slows the drop.',
+      load:'Detraining', loadNote:'Load has dropped off — add an easy ride.',
+      readyLabel:'Fresh', readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
+  }
+  // Fresh but flat fitness: rested, holding.
+  if(fresh){
+    return {phase:'building-fresh', color:B,
+      trend:'Fresh', trendNote:'Rested with steady fitness — a good day to push or to sharpen.',
+      load:'Fresh', loadNote:'Rested — room to add load.',
+      readyLabel:'Fresh', readyNote:'Form readiness (TSB +'+tsb+')'};
+  }
+  // Default: maintaining — balanced.
+  return {phase:'maintaining', color:B,
+    trend:'Steady', trendNote:'Balanced — fresh enough to train well, loaded enough to keep improving.',
+    load:(tsb>-10?'Optimal':'Productive'), loadNote:'Balanced training zone.',
+    readyLabel:'Balanced', readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
+}
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -14597,22 +14674,34 @@ function dsShowDashboard(){
   // ===== ROW 1 =====
   H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 0 auto">';
   // -- Athlete IQ --
-  var trend=(iq.score==null)?'Building':(iq.parts&&iq.parts.trend>=55?'Improving':iq.parts&&iq.parts.trend<45?'Easing':'Steady');
-  var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':(iq.score>=75?'You are on the right track.':iq.score>=60?'Solid and consistent.':'Room to build — stay steady.');
-  var loadState=fit.tsb>5?'Fresh':fit.tsb>-10?'Optimal':fit.tsb>-25?'Productive':'Deep';
+  // ONE shared taper-aware verdict feeds the IQ trend, the Training-Load pill,
+  // and (below) the Recovery card — so they can never read the same TSB three
+  // different ways. dlt.ctl is the 7-day CTL delta (the ramp): a falling CTL
+  // with rising TSB is a taper and must NOT read "Improving".
+  var verdict=taperVerdict_(fit, iq, dlt.ctl);
+  var trend=(iq.score==null)?'Building':verdict.trend;
+  var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':verdict.trendNote;
+  var loadState=verdict.load;
   var ringPct=iq.score==null?0:iq.score;
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
   var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
   iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:#5b6678;margin-top:2px">/100</div></div></div>';
-  iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+ACC.green+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg></div>';
+  var trendC=(iq.score==null)?ACC.green:verdict.color;
+  // Arrow points up for building/peaking/fresh, flat-ish (right) for easing/detraining.
+  var trendArrow=(verdict.phase==='detraining'||verdict.phase==='overreaching')
+    ? '<path d="M3 12h18M21 12l-6-6M21 12l-6 6"/>'
+    : '<path d="M3 17l6-6 4 4 8-8M14 7h6v6"/>';
+  iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+trendC+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+trendC+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+trendArrow+'</svg></div>';
   iqInner+='<div style="font-size:13px;color:#94a3b8;margin-top:4px">'+trendNote+'</div>';
   iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
   [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',Math.round(lastWt*10)/10,wtChange]].forEach(function(s){
     iqInner+='<div style="min-width:0"><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
   });
   iqInner+='</div></div></div>';
-  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130"><span style="font-size:11px;font-weight:700;color:'+ACC.green+';background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:#64748b">Keep monitoring recovery and fuel.</span></div>';
+  function _hx2rgb(h){ h=h.replace('#',''); return parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16); }
+  var _pillRGB=_hx2rgb(verdict.color);
+  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130"><span style="font-size:11px;font-weight:700;color:'+verdict.color+';background:rgba('+_pillRGB+',.12);border:1px solid rgba('+_pillRGB+',.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:#64748b">'+verdict.loadNote+'</span></div>';
   H+=card(iqInner);
 
   // -- Today's Plan --
@@ -14747,12 +14836,42 @@ function dsShowDashboard(){
   days7.forEach(function(k){ tl+='<div style="flex:1;text-align:center;font-size:9px;color:#5b6678">'+['S','M','T','W','T','F','S'][new Date(k+"T00:00:00").getDay()]+'</div>'; });
   tl+='</div><div style="width:22px"></div></div>';
   H+=card(tl);
-  // Recovery — TSB-based readiness gauge (real) + manual HRV / Resting HR (editable).
+  // Recovery card. TWO honest modes:
+  //  (a) real HRV + Resting HR entered → a genuine recovery score from them.
+  //  (b) neither entered → this is NOT recovery, it is a FORM-readiness view, so
+  //      it is LABELLED as such and its verdict comes from the SAME shared
+  //      taper-aware function as the IQ + Load cards. On a taper (TSB +11, CTL
+  //      falling) that reads "Race-ready", never a bare "Fair".
   var rC=2*Math.PI*30;
   var hrv=(st.hrv!=null)?st.hrv:null, rhr=(st.restingHR!=null)?st.restingHR:null;
-  var rd=lbl('RECOVERY','<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
-  rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">Readiness from form (TSB '+(fit.tsb>=0?'+':'')+fit.tsb+')</div>';
-  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+rdy.color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-rdy.score/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:#fff;line-height:1">'+rdy.score+'%</div><div style="font-size:11px;font-weight:700;color:'+rdy.color+';margin-top:2px">'+rdy.label+'</div></div></div></div>';
+  var haveRecovery=(hrv!=null && rhr!=null);
+  var recScore, recLabel, recColor, recTitle, recSub;
+  if(haveRecovery){
+    // Real recovery from manual HRV + Resting HR, blended against the user's own
+    // rolling baseline so the number means something. Higher HRV and lower RHR =
+    // better recovered. Falls back gracefully until a few days of baseline exist.
+    var hist=(st.recoveryLog||[]).filter(function(x){return x&&x.hrv!=null&&x.rhr!=null;});
+    var bHRV=null,bRHR=null;
+    if(hist.length){ bHRV=hist.reduce(function(s,x){return s+(+x.hrv);},0)/hist.length; bRHR=hist.reduce(function(s,x){return s+(+x.rhr);},0)/hist.length; }
+    // % deviation from baseline; if no baseline yet, score around neutral 65.
+    var hrvDev=(bHRV&&bHRV>0)?((hrv-bHRV)/bHRV):0;        // + is good
+    var rhrDev=(bRHR&&bRHR>0)?((rhr-bRHR)/bRHR):0;        // + is bad
+    var raw=65 + hrvDev*120 - rhrDev*160;
+    recScore=Math.max(0,Math.min(100,Math.round(raw)));
+    recLabel=recScore>=75?'Good':recScore>=55?'Fair':recScore>=35?'Low':'Poor';
+    recColor=recScore>=75?'#4ade80':recScore>=55?'#FFB938':'#e24b4a';
+    recTitle='RECOVERY';
+    recSub=(bHRV?'From HRV + Resting HR vs your baseline':'From HRV + Resting HR (building baseline)');
+  } else {
+    // No wearable/manual recovery inputs → honest form-readiness, taper-aware.
+    recScore=rdy.score; recColor=verdict.color;
+    recLabel=verdict.readyLabel;
+    recTitle='FORM READINESS';
+    recSub=verdict.readyNote;
+  }
+  var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
+  rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">'+recSub+'</div>';
+  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:#fff;line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">HRV ms</div></div>';
   rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Rest HR bpm</div></div>';
