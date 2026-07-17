@@ -12660,6 +12660,65 @@ function _recoverPreview_(backup){
   console.log('[rcv] post-backup rides kept=' + Number(postBackup));
   console.log('[rcv] projected-live-after-recovery=' + Number(uniqueFixed + postBackup) + ' = unique(' + Number(uniqueFixed) + ') + post-backup(' + Number(postBackup) + '); NO CHANGES MADE');
 }
+// STAGE 1 executor: pause poll, BLOCK gps-migrate, revive-from-IDB / add-from-backup
+// (mirrors _recoverPreview_ exactly), saveLocal_, then HALT before any remote push.
+// Remote is NOT touched here. Review the counts, then run aiRecoverPushRemote_().
+function aiRecoverLocal_(){ _bcmpBox_('EXECUTE local recovery (revive+add, NO remote push)', '[rcv-exec]', _recoverLocalExec_); }
+function _recoverLocalExec_(backup){
+  if(!backup||!backup.length){ console.log('[rcv-exec] no rides in backup file'); return; }
+  try{ if(typeof fbPollTimer!=='undefined' && fbPollTimer){ clearInterval(fbPollTimer); fbPollTimer=null; } }catch(e){}
+  try{ _gpsMigrated=true; }catch(e){}   // block gps-migrate's boot merge-push this session
+  var DUR_TOL=90;
+  var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
+  var durClose=function(a,b){ return (a>0&&b>0)?(Math.abs(a-b)<=DUR_TOL):true; };
+  var rich_=function(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length))s+=500; if(r.streams)s+=250; return s+Object.keys(r).length; };
+  if(!Array.isArray(st.rides)) st.rides=[];
+  var all=st.rides;
+  var wasLive={}; all.forEach(function(r){ if(r&&!r.deleted) wasLive[key_(r)]=1; });
+  var deadByKey={}; all.forEach(function(r){ if(r&&r.deleted){ var k=key_(r); (deadByKey[k]=deadByKey[k]||[]).push(r); } });
+  var bGroups={}; backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); } });
+  var revived=0, added=0, usedDeadKey={};
+  Object.keys(bGroups).forEach(function(k){
+    var gr=bGroups[k], used=[];
+    for(var i=0;i<gr.length;i++){
+      if(used[i]) continue; used[i]=1;
+      var bd=_durSec_(gr[i]);
+      for(var j=i+1;j<gr.length;j++){ if(!used[j] && durClose(bd, _durSec_(gr[j]))) used[j]=1; }
+      if(wasLive[k]) continue;
+      var dead=deadByKey[k]||[];
+      if(dead.length && !usedDeadKey[k]){ dead.sort(function(a,b){return rich_(b)-rich_(a);}); var p=dead[0]; delete p.deleted; delete p.deletedAt; delete p.deleteReason; usedDeadKey[k]=1; revived++; }
+      else { var c=JSON.parse(JSON.stringify(gr[i])); delete c.deleted; delete c.deletedAt; delete c.deleteReason; all.push(c); added++; }
+    }
+  });
+  try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+  try{ saveLocal_(); }catch(e){ console.log('[rcv-exec] saveLocal error '+(e&&e.message)); }
+  var live=0,nullTomb=0; all.forEach(function(r){ if(!r)return; if(!r.deleted) live++; else if(r.deleteReason==null||r.deleteReason==='') nullTomb++; });
+  console.log('[rcv-exec] LOCAL RECOVERY DONE — revived-from-IDB=' + Number(revived) + ' added-from-backup=' + Number(added) + ' live-now=' + Number(live) + ' null-tomb=' + Number(nullTomb));
+  console.log('[rcv-exec] saved to IDB. 5s poll PAUSED, gps-migrate BLOCKED, remote UNTOUCHED.');
+  console.log('[rcv-exec] >>> REVIEW these counts. If correct, run aiRecoverPushRemote_() to force-overwrite + verify remote. <<<');
+}
+// STAGE 2: force-OVERWRITE remote with the recovered local state, then re-fetch and
+// VERIFY. HALTS (no trust, stays paused) unless remote reads back null-tomb=0.
+function aiRecoverPushRemote_(){
+  console.log('[rcv-push] force-overwriting remote with recovered local state (no merge)...');
+  ensureFbAuth_().then(function(tok){
+    var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
+    delete saveData.ghToken; saveData.lastUpdate=Date.now(); try{ fbWriteTs=saveData.lastUpdate; }catch(e){}
+    return fetch(fbAuthedUrl_(tok), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(saveData)})
+      .then(function(r){ if(!r||!r.ok) throw new Error('PUT failed status '+(r&&r.status)); return fetch(fbAuthedUrl_(tok)); })
+      .then(function(r){ if(!r||!r.ok) throw new Error('verify GET failed status '+(r&&r.status)); return r.json(); })
+      .then(function(remote){
+        var rr=(remote&&remote.rides)||[]; var list=Array.isArray(rr)?rr:Object.keys(rr).map(function(k){return rr[k];});
+        var nullTomb=0, live=0; list.forEach(function(x){ if(!x)return; if(x.deleted){ if(x.deleteReason==null||x.deleteReason==='') nullTomb++; } else live++; });
+        if(nullTomb!==0){
+          console.error('[rcv-push] HALT — remote verify FAILED: null-tomb=' + Number(nullTomb) + ' (expected 0). Remote NOT trusted. Sync STAYS PAUSED. Do NOT resume, do NOT reopen mobiles. Re-run aiRecoverLocal_ then aiRecoverPushRemote_ after diagnosing.');
+          return;
+        }
+        console.log('[rcv-push] VERIFIED CLEAN — remote null-tomb=0, remote-live=' + Number(live) + '. Remote is now authoritative.');
+        console.log('[rcv-push] NEXT: commit the permanent gps-migrate fbPush(true,true) fix, THEN aiResumeSync_(). Keep mobiles OFF until that fix ships.');
+      });
+  }).catch(function(e){ console.error('[rcv-push] HALT — push/verify errored: ' + (e&&e.message) + '. Remote state UNKNOWN; sync STAYS PAUSED. Do NOT resume.'); });
+}
 function _bcmpReport_(backup){
   if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
   var DUR_TOL=90;
