@@ -12387,20 +12387,18 @@ var _aiMount=null, _aiTab='overview', _aiTombLogged=false;
 // included) plus how many are genuinely revivable (no live twin), so revival is driven
 // by counted reasons, not an estimate. Prints flat, one line per reason. Callable from
 // the console as aiTombBreakdown_() to re-check after a restore.
-// Per-load stability line — watch live + null-tomb + xsrc-dupe + raw across reloads
-// to detect drift. Non-mutating. Logged at render and again 8s later (after async
-// boot merges / gps-migrate settle) so intra-load drift shows too.
-function aiStabilityLog_(tag){
-  try{
-    var all=(st.rides||[]);
-    var live=0,nullTomb=0,xsrc=0;
-    all.forEach(function(r){ if(!r) return;
-      if(!r.deleted){ live++; return; }
-      var rs=String(r.deleteReason||'');
-      if(rs==='') nullTomb++; else if(rs.indexOf('dupe')>=0) xsrc++;
-    });
-    console.log('[stab] '+tag+' live='+Number(live)+' null-tomb='+Number(nullTomb)+' xsrc-dupe='+Number(xsrc)+' raw='+Number(all.length));
-  }catch(e){ console.log('[stab] error '+(e&&e.message)); }
+// Per-load stability counts — watch across reloads to detect drift. Non-mutating.
+// The two log sites (render + 8s) are DISTINCT console.log statements on purpose:
+// Chrome folds repeated calls from the SAME source location under one arrow, which
+// is what hid the values before.
+function _aiCounts_(){
+  var all=(st.rides||[]), live=0, nullTomb=0, xsrc=0;
+  all.forEach(function(r){ if(!r) return;
+    if(!r.deleted){ live++; return; }
+    var rs=String(r.deleteReason||'');
+    if(rs==='') nullTomb++; else if(rs.indexOf('dupe')>=0) xsrc++;
+  });
+  return {live:live, nullTomb:nullTomb, xsrc:xsrc, raw:all.length};
 }
 function aiTombBreakdown_(){
   try{
@@ -12674,7 +12672,10 @@ function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
   var rides=allRidesDeduped_(); // live, non-deleted, deduped — the one canonical count (713, not the tombstone-inflated 3744 raw IDB total)
-  if(!_aiTombLogged){ _aiTombLogged=true; try{ aiStabilityLog_('render'); setTimeout(function(){ aiStabilityLog_('+8s'); }, 8000); }catch(e){} }
+  if(!_aiTombLogged){ _aiTombLogged=true;
+    try{ var _c=_aiCounts_(); console.log('[stab] render live=' + Number(_c.live) + ' null-tomb=' + Number(_c.nullTomb) + ' xsrc-dupe=' + Number(_c.xsrc) + ' raw=' + Number(_c.raw)); }catch(e){}
+    try{ setTimeout(function(){ var _c2=_aiCounts_(); console.log('[stab] +8s live=' + Number(_c2.live) + ' null-tomb=' + Number(_c2.nullTomb) + ' xsrc-dupe=' + Number(_c2.xsrc) + ' raw=' + Number(_c2.raw)); }, 8000); }catch(e){}
+  }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
   var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
