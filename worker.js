@@ -12965,248 +12965,231 @@ function dsShowWeather(){
 function dsShowNutrition(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
-
   var now=new Date();
   var todayKey=now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate();
-  // Desktop shares the GLOBAL nutrDate with mobile so the shared add-food /
-  // water actions (which mutate getNDay(nutrDate)) target the day being viewed
-  // here, and nutRefresh()->dsShowNutrition() re-reads the same day.
   if(typeof nutrDate==='undefined' || !nutrDate) nutrDate=todayKey;
   var viewKey=nutrDate;
-
-  // Divergent local totals retired: delegate to the single-source
-  // nutritionForDate() so desktop and mobile can never disagree on consumed
-  // macros. Thin adapter keeps the shape the render code below expects.
-  function getTotals(dk){
-    var n=nutritionForDate(dk);
-    return {cal:n.consumed.cal,p:n.consumed.pro,c:n.consumed.carb,f:n.consumed.fat,
-      fiber:n.consumed.fiber,sodium:n.consumed.sodium,water:n.consumed.waterGlasses,
-      meals:n.meals,items:n.consumed.items};
-  }
+  var C={p:'#FC4C02',c:'#60a5fa',f:'#8b5cf6',w:'#22d3ee',cal:'#f59e0b',green:'#4ade80',amber:'#f59e0b',red:'#e24b4a',grey:'#5b6678',purple:'#a855f7'};
+  function keyOf(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+  function microsOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var t={fiber:0,sodium:0,potassium:0,calcium:0,iron:0}; MEAL_BUCKETS.forEach(function(m){ (nd.meals[m]||[]).forEach(function(i){ if(i.deleted) return; t.fiber+=i.fiber||0; t.sodium+=i.sodium||0; t.potassium+=i.potassium||0; t.calcium+=i.calcium||0; t.iron+=i.iron||0; }); }); return t; }
+  function waterOzOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{water:0}; return (nd.water||0)*WATER_GLASS_OZ; }
+  function calByMeal(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var out={}; MEAL_BUCKETS.forEach(function(m){ var s=0; (nd.meals[m]||[]).forEach(function(i){ if(!i.deleted) s+=i.cal||0; }); out[m]=Math.round(s); }); return out; }
 
   function render(){
     mc.innerHTML='';
-    var data=getTotals(viewKey);
-    // Training-aware targets — identical source to the mobile Nutrition screen
-    // so the same day never shows different targets on desktop vs mobile.
+    var n=nutritionForDate(viewKey);
+    var consumed=n.consumed;
     var trainingTgt; try{ trainingTgt=calcTrainingAwareTargets_(viewKey); }catch(e){ trainingTgt=null; }
-    var goals=trainingTgt
-      ? {cal:trainingTgt.cal, p:trainingTgt.pro, c:trainingTgt.carb, f:trainingTgt.fat}
-      : {cal:st.calGoal||2800, p:st.proteinGoal||165, c:st.carbGoal||350, f:st.fatGoal||90};
+    var goals=trainingTgt?{cal:trainingTgt.cal,p:trainingTgt.pro,c:trainingTgt.carb,f:trainingTgt.fat,fiber:trainingTgt.fiber||30,sodium:trainingTgt.sodium||2300,fluidOz:trainingTgt.fluidOz||107}
+      :{cal:st.calGoal||2000,p:st.proteinGoal||165,c:st.carbGoal||250,f:st.fatGoal||70,fiber:30,sodium:2300,fluidOz:107};
+    var cal=Math.round(consumed.cal||0), pro=Math.round(consumed.pro||0), carb=Math.round(consumed.carb||0), fat=Math.round(consumed.fat||0), fiber=Math.round(consumed.fiber||0), sodium=Math.round(consumed.sodium||0);
+    var mic=microsOf(viewKey);
+    var wOz=waterOzOf(viewKey), wTgt=goals.fluidOz||107;
+    var mealCal=calByMeal(viewKey);
+    // 7-day history (viewKey and 6 days before)
+    var days7=[]; for(var i=6;i>=0;i--){ var d=new Date(viewKey); d.setDate(d.getDate()-i); days7.push(keyOf(d)); }
+    var hist=days7.map(function(dk){ var nn=nutritionForDate(dk); return {key:dk, cal:Math.round(nn.consumed.cal||0), p:Math.round(nn.consumed.pro||0), c:Math.round(nn.consumed.carb||0), f:Math.round(nn.consumed.fat||0), water:waterOzOf(dk)}; });
+    // prior-7 average (days before the viewed day) for trends
+    var prior=[]; for(var j=7;j>=1;j--){ var pd=new Date(viewKey); pd.setDate(pd.getDate()-j); var pn=nutritionForDate(keyOf(pd)); prior.push({cal:pn.consumed.cal||0,p:pn.consumed.pro||0,c:pn.consumed.carb||0,f:pn.consumed.fat||0,fiber:pn.consumed.fiber||0}); }
+    function avg(arr,f2){ var s=0,n2=0; arr.forEach(function(x){ s+=f2(x); n2++; }); return n2?s/n2:0; }
+    function trend(cur,prevAvg){ if(prevAvg<=0) return null; return Math.round((cur-prevAvg)/prevAvg*100); }
+
+    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var vd=new Date(viewKey);
+    var dateLabel=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
+
+    // ---- helpers ----
+    function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
+    function pctBar(v,g,color){ var p=g>0?Math.min(100,Math.round(v/g*100)):0; return '<div style="height:7px;background:#1a2030;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+color+';border-radius:4px"></div></div>'; }
+    function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:#fff;line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:#5b6678;margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
+    function lineChart(series, w, h){ // series: [{color, pts:[0..100]}]
+      var out='<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">';
+      [25,50,75].forEach(function(g){ var y=h-(g/100)*(h-6)-3; out+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+w+'" y2="'+y.toFixed(1)+'" stroke="#171c2b" stroke-width="1"/>'; });
+      series.forEach(function(s){ var n2=s.pts.length; var pts=s.pts.map(function(v,ix){ var x=(n2>1?ix/(n2-1):0)*w; var y=h-(Math.min(100,v)/100)*(h-6)-3; return x.toFixed(1)+' '+y.toFixed(1); }); out+='<path d="M'+pts.join(' L')+'" fill="none" stroke="'+s.color+'" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>'; });
+      return out+'</svg>';
+    }
+
+    var H='';
+    // ===== HEADER =====
+    H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:2px">';
+    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Nutrition</div><div style="font-size:12px;color:#64748b;margin-top:1px">Fuel your performance. Recover smarter. Train stronger.</div></div>';
+    H+='<div style="display:flex;align-items:center;gap:10px">';
+    H+='<div style="display:flex;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:#f1f5f9;min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
+    H+='<div data-act="add" style="display:flex;align-items:center;gap:6px;background:'+C.c+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:#fff;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Food</div>';
+    H+='</div></div>';
+
+    // ===== ROW 1: Macro Targets + Calorie Summary =====
+    H+='<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:12px;flex-shrink:0">';
+    // Macro Targets
+    var calPct=goals.cal>0?Math.min(100,Math.round(cal/goals.cal*100)):0;
+    var mt=lbl('MACRO TARGETS');
+    mt+='<div style="display:flex;gap:18px;align-items:center">';
+    mt+=ringHtml(calPct, calPct>110?C.red:calPct>90?C.green:C.c, cal, 'of '+goals.cal+' cal', 104);
+    mt+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:11px">';
+    [['Protein',pro,goals.p,C.p],['Carbs',carb,goals.c,C.c],['Fat',fat,goals.f,C.f]].forEach(function(x){
+      var pc=x[2]>0?Math.round(x[1]/x[2]*100):0;
+      mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#e2e8f0">'+x[0]+'</span><span style="font-size:11px;color:#94a3b8">'+x[1]+'g / '+x[2]+'g <span style="color:#e8edf5;font-weight:700;margin-left:4px">'+pc+'%</span></span></div>'+pctBar(x[1],x[2],x[3])+'</div>';
+    });
+    var wpc=wTgt>0?Math.round(wOz/wTgt*100):0;
+    mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#e2e8f0;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span><span style="font-size:11px;color:#94a3b8">'+wOz+' / '+wTgt+' oz <span style="color:#e8edf5;font-weight:700;margin-left:4px">'+wpc+'%</span></span></div>'+pctBar(wOz,wTgt,C.w)+'</div>';
+    mt+='</div></div>';
+    mt+='<div style="display:flex;gap:8px;margin-top:13px"><div data-act="targets" style="font-size:11px;font-weight:700;color:#94a3b8;border:1px solid #1c2130;border-radius:8px;padding:6px 12px;cursor:pointer">Edit Targets</div><div data-act="waterminus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid #1c2130;border-radius:8px;padding:6px 11px;cursor:pointer">− Water</div><div data-act="waterplus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid #1c2130;border-radius:8px;padding:6px 11px;cursor:pointer">+ Water</div></div>';
+    H+=card(mt);
+    // Calorie Summary — calories LEFT + daily target + calories-by-meal chart (honest:
+    // no per-food timestamps exist, so this is by meal, not by hour).
+    var calLeft=Math.max(0,goals.cal-cal);
+    var mealsOrder=[['Breakfast','breakfast'],['Pre','preworkout'],['During','during'],['Post','postworkout'],['Lunch','lunch'],['Dinner','dinner'],['Snacks','snacks']];
+    var maxMeal=Math.max.apply(null, mealsOrder.map(function(m){return mealCal[m[1]]||0;}).concat([1]));
+    var cs=lbl('CALORIE SUMMARY','<span style="display:flex;gap:12px;font-size:10px;color:#64748b"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.cal+'"></span>Consumed</span></span>');
+    cs+='<div style="display:flex;gap:18px;align-items:flex-start">';
+    cs+='<div style="flex-shrink:0"><div style="font-size:30px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+calLeft+'</div><div style="font-size:11px;color:#64748b;margin:2px 0 12px">Calories Left</div><div style="font-size:30px;font-weight:800;color:#e8edf5;line-height:1">'+goals.cal+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Daily Target</div></div>';
+    // bar chart by meal
+    cs+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:flex-end;gap:5px;height:96px">';
+    mealsOrder.forEach(function(m){ var v=mealCal[m[1]]||0; var hp=Math.max(2,Math.round(v/maxMeal*90)); cs+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:'+hp+'px;background:linear-gradient(180deg,'+C.cal+',#b45309);border-radius:3px 3px 0 0" title="'+v+' cal"></div></div>'; });
+    cs+='</div><div style="display:flex;gap:5px;margin-top:5px">';
+    mealsOrder.forEach(function(m){ cs+='<div style="flex:1;text-align:center;font-size:8px;color:#5b6678">'+m[0]+'</div>'; });
+    cs+='</div></div>';
+    // side stats
+    cs+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:16px"><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.cal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+cal+'</div><div style="font-size:10px;color:#64748b">Consumed</div></div></div><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+Math.max(0,wTgt-wOz)+' oz</div><div style="font-size:10px;color:#64748b">Water Left</div></div></div></div>';
+    cs+='</div>';
+    H+=card(cs);
+    H+='</div>';
+
+    // ===== ROW 2: Key Nutrients + Insight + Macros Over Time =====
+    H+='<div style="display:grid;grid-template-columns:1fr 1fr 1.15fr;gap:12px;flex-shrink:0">';
+    // Key Nutrients + Micronutrient status
+    var kn=lbl('KEY NUTRIENTS','<span data-act="nutdetails" style="font-size:11px;font-weight:600;color:'+C.c+';cursor:pointer">View Details</span>');
+    kn+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
+    [['Fiber',fiber,goals.fiber,'g'],['Sodium',sodium,goals.sodium,'mg']].forEach(function(x){
+      kn+='<div style="background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:#94a3b8;margin-bottom:4px">'+x[0]+'</div><div style="font-size:20px;font-weight:800;color:#e8edf5;line-height:1">'+x[1]+'<span style="font-size:11px;color:#64748b;font-weight:600">'+x[3]+'</span></div><div style="font-size:10px;color:#5b6678;margin-top:3px">of '+x[2]+x[3]+' target</div></div>';
+    });
+    kn+='</div>';
+    kn+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Micronutrient Status</div>';
+    kn+='<div style="display:flex;gap:8px;justify-content:space-between">';
+    // Only nutrients this app actually tracks (Fiber/Sodium always; K/Ca/Fe when scanned).
+    [['Fe','Iron',mic.iron,18],['K','Potas.',mic.potassium,3400],['Ca','Calc.',mic.calcium,1000],['Na','Sodium',sodium,goals.sodium],['Fbr','Fiber',fiber,goals.fiber]].forEach(function(x){
+      var p=x[3]>0?x[2]/x[3]:0; var status=p>=0.7?'Good':p>=0.4?'Fair':'Low'; var col=p>=0.7?C.green:p>=0.4?C.amber:C.red;
+      kn+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="position:relative;width:44px;height:44px"><svg width="44" height="44" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#1a2030" stroke-width="3.5"/><circle cx="22" cy="22" r="18" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*18).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*18)*(1-Math.min(1,p))).toFixed(1)+'" transform="rotate(-90 22 22)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#e8edf5">'+x[0]+'</div></div><div style="font-size:9px;color:#94a3b8">'+x[1]+'</div><div style="font-size:9px;font-weight:700;color:'+col+'">'+status+'</div></div>';
+    });
+    kn+='</div>';
+    H+=card(kn);
+    // Nutrition Insight
+    var insights=[];
+    if(goals.p-pro>5) insights.push('Protein is '+(goals.p-pro)+'g short of your '+goals.p+'g target — add a protein source.');
+    if(goals.cal-cal>150) insights.push((goals.cal-cal)+' calories under target — fuel up, especially on a training day.');
+    if(fiber<goals.fiber*0.6) insights.push('Fiber is '+fiber+'g; aim for '+goals.fiber+'g (fruit, veg, whole grains).');
+    if(sodium>goals.sodium*1.15) insights.push('Sodium is high ('+sodium+'mg) vs your '+goals.sodium+'mg target.');
+    if(!insights.length) insights.push('You are on track for today — keep it steady.');
+    var ni=lbl('NUTRITION INSIGHT');
+    ni+='<div style="display:flex;gap:12px;margin-bottom:4px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5a5 5 0 0 1 7 0l3 3a2 2 0 0 1-3 3l-1-1M17.5 17.5a5 5 0 0 1-7 0l-3-3a2 2 0 0 1 3-3l1 1"/></svg></div><div><div style="font-size:13px;font-weight:700;color:#e8edf5">Performance Focus</div><div style="font-size:11px;color:#64748b">Real, from today log</div></div></div>';
+    ni+='<div style="flex:1;min-height:0;margin-top:8px">';
+    insights.slice(0,3).forEach(function(t){ ni+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+C.purple+';flex-shrink:0;margin-top:6px"></span><span style="font-size:12px;color:#cbd5e1;line-height:1.45">'+t+'</span></div>'; });
+    ni+='</div>';
+    ni+='<div data-act="insights" style="margin-top:auto;text-align:center;font-size:12px;font-weight:600;color:'+C.purple+';border:1px solid rgba(168,85,247,.25);background:rgba(168,85,247,.06);border-radius:9px;padding:9px;cursor:pointer">View All Insights &#8594;</div>';
+    H+=card(ni);
+    // Macros Over Time (7-day, % of macro-calories)
+    var mo=lbl('MACROS OVER TIME','<span style="font-size:11px;color:#64748b">7 Days</span>');
+    var carbPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.c*4/tot*100):0; });
+    var proPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.p*4/tot*100):0; });
+    var fatPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.f*9/tot*100):0; });
+    mo+='<div style="flex:1;min-height:110px;display:flex;flex-direction:column">';
+    mo+='<div style="flex:1;min-height:90px">'+lineChart([{color:C.c,pts:carbPts},{color:C.p,pts:proPts},{color:C.f,pts:fatPts}],200,90)+'</div>';
+    mo+='<div style="display:flex;justify-content:space-between;font-size:8px;color:#5b6678;margin-top:3px">'+days7.map(function(dk){ var dd=new Date(dk); return '<span>'+months[dd.getMonth()]+' '+dd.getDate()+'</span>'; }).join('')+'</div>';
+    mo+='<div style="display:flex;gap:14px;justify-content:center;margin-top:8px;font-size:10px;color:#94a3b8">'
+      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.c+'"></span>Carbs %</span>'
+      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.p+'"></span>Protein %</span>'
+      +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.f+'"></span>Fat %</span></div>';
+    mo+='</div>';
+    H+=card(mo);
+    H+='</div>';
+
+    // ===== ROW 3: Food Log + Meal status + Hydration =====
+    H+='<div style="display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:12px;flex-shrink:0">';
+    // Today's Food Log
+    var nd=(typeof getNDay==='function')?getNDay(viewKey):{meals:{}};
+    var fl=lbl("TODAY&#39;S FOOD LOG",'<span style="font-size:12px;color:#94a3b8">'+cal+' cal</span>');
+    var mealMeta={breakfast:['Breakfast',C.amber],lunch:['Lunch',C.cal],dinner:['Dinner',C.purple],snacks:['Snacks',C.c]};
+    ['breakfast','lunch','dinner','snacks'].forEach(function(m){
+      var items=(nd.meals[m]||[]).filter(function(i){return !i.deleted;});
+      var mc2=items.reduce(function(s,i){return s+(i.cal||0);},0);
+      fl+='<div style="padding:8px 0;border-top:1px solid #1c2130">';
+      fl+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:'+mealMeta[m][1]+'">'+mealMeta[m][0]+'</span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:#64748b">'+(mc2?Math.round(mc2)+' cal':'—')+'</span><span data-act="mealadd" data-meal="'+m+'" style="font-size:11px;font-weight:700;color:'+C.c+';cursor:pointer">+ Add</span></span></div>';
+      items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:#64748b;flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
+      fl+='</div>';
+    });
+    fl+='<div style="display:flex;gap:8px;margin-top:12px"><div data-act="add" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#fff;background:'+C.c+';border-radius:9px;padding:9px;cursor:pointer">+ Add Food</div></div>';
+    H+=card(fl);
+    // Meal status (adapted: no timestamps -> logged/empty status + cal, not clock times)
+    var ml=lbl('MEALS','<span style="font-size:11px;color:#64748b">Today</span>');
+    ml+='<div style="flex:1;display:flex;flex-direction:column;gap:2px">';
+    [['Breakfast','breakfast'],['Lunch','lunch'],['Dinner','dinner'],['Snacks','snacks']].forEach(function(m){
+      var v=mealCal[m[1]]||0; var done=v>0; var col=mealMeta[m[1]]?mealMeta[m[1]][1]:C.grey;
+      ml+='<div data-act="mealadd" data-meal="'+m[1]+'" style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;'+(m[0]!=='Breakfast'?'border-top:1px solid #1c2130':'')+'"><div style="width:34px;height:34px;border-radius:50%;background:'+(done?col+'22':'#1a2030')+';border:1.5px solid '+(done?col:'#232b3d')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(done?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<span style="color:#5b6678;font-size:16px;font-weight:300">+</span>')+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#e8edf5">'+m[0]+'</div><div style="font-size:10px;color:#64748b">'+(done?Math.round(v)+' cal logged':'Not logged yet')+'</div></div></div>';
+    });
+    ml+='</div>';
+    ml+='<div style="font-size:10px;color:#5b6678;margin-top:8px;padding-top:8px;border-top:1px solid #1c2130;line-height:1.4">Tip: spread protein across meals for better recovery. (Meal times need per-food timestamps we do not record yet.)</div>';
+    H+=card(ml);
+    // Hydration
+    var hyPct=wTgt>0?Math.round(wOz/wTgt*100):0;
+    var maxW=Math.max.apply(null, hist.map(function(d){return d.water;}).concat([wTgt,1]));
+    var hy=lbl('HYDRATION','<span style="font-size:11px;color:#64748b">7 Days</span>');
+    hy+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">'+ringHtml(hyPct,C.w,hyPct+'%','',72)+'<div><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+wOz+'<span style="font-size:12px;color:#64748b;font-weight:600"> oz</span></div><div style="font-size:11px;color:#64748b">of '+wTgt+' oz goal</div><div style="display:flex;gap:8px;margin-top:8px"><div data-act="waterminus" style="width:28px;height:28px;border-radius:8px;background:#1a2030;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">−</div><div data-act="waterplus" style="width:28px;height:28px;border-radius:8px;background:'+C.w+'22;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">+</div></div></div></div>';
+    hy+='<div style="flex:1;min-height:0;display:flex;align-items:flex-end;gap:5px;height:60px">';
+    hist.forEach(function(d){ var hp=Math.max(2,Math.round(d.water/maxW*54)); var isToday=d.key===viewKey; hy+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+hp+'px;background:'+(isToday?C.w:'#1e3a44')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+['S','M','T','W','T','F','S'][new Date(d.key).getDay()]+'</span></div>'; });
+    hy+='</div>';
+    H+=card(hy);
+    H+='</div>';
+
+    // ===== ROW 4: Nutrition Score + breakdown + trends =====
+    var calScore=Math.round(Math.max(0,100-Math.abs(cal-goals.cal)/Math.max(1,goals.cal)*100));
+    var macroScore=Math.round((Math.min(100,goals.p?pro/goals.p*100:0)+Math.min(100,goals.c?carb/goals.c*100:0)+Math.min(100,goals.f?fat/goals.f*100:0))/3);
+    var nutrScore=Math.round((Math.min(100,goals.fiber?fiber/goals.fiber*100:0)+Math.min(100,mic.iron?mic.iron/18*100:0)+Math.min(100,mic.potassium?mic.potassium/3400*100:0)+Math.min(100,mic.calcium?mic.calcium/1000*100:0))/4);
+    var overall=Math.round(0.4*calScore+0.35*macroScore+0.25*nutrScore);
+    var scoreLbl=overall>=80?'Excellent':overall>=60?'Good':overall>=40?'Needs Improvement':'Low';
+    var scoreCol=overall>=80?C.green:overall>=60?C.c:overall>=40?C.cal:C.red;
+    var tCal=trend(cal, avg(prior,function(x){return x.cal;})), tPro=trend(pro, avg(prior,function(x){return x.p;})), tCarb=trend(carb, avg(prior,function(x){return x.c;})), tFat=trend(fat, avg(prior,function(x){return x.f;})), tFib=trend(fiber, avg(prior,function(x){return x.fiber;}));
+    function trTxt(t){ if(t==null) return '<span style="color:#5b6678">—</span>'; var up=t>=0; return '<span style="color:'+(up?C.green:C.red)+';font-weight:700">'+(up?'&#8593; +':'&#8595; ')+t+'%</span>'; }
+    var sc='<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">';
+    sc+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">'+ringHtml(overall,scoreCol,overall,'/100',84)+'<div><div style="font-size:13px;font-weight:800;color:'+scoreCol+';text-transform:uppercase;letter-spacing:.04em">'+scoreLbl+'</div><div style="font-size:11px;color:#94a3b8;max-width:210px;margin-top:3px">'+(overall>=60?'Solid day — keep hitting your targets.':'Focus on protein and fiber and closing the calorie gap.')+'</div></div></div>';
+    sc+='<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;min-width:0">';
+    [['Calories',cal+' / '+goals.cal,goals.cal?Math.round(cal/goals.cal*100):0,C.cal],['Macros',macroScore+' / 100',macroScore,C.c],['Nutrients',nutrScore+' / 100',nutrScore,C.purple]].forEach(function(x){
+      sc+='<div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+x[0]+'</div><div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:16px;font-weight:800;color:#e8edf5">'+x[1]+'</span><span style="font-size:12px;font-weight:700;color:'+x[3]+'">'+x[2]+'%</span></div><div style="height:5px;background:#1a2030;border-radius:3px;margin-top:5px;overflow:hidden"><div style="height:100%;width:'+Math.min(100,x[2])+'%;background:'+x[3]+';border-radius:3px"></div></div></div>';
+    });
+    sc+='</div>';
+    sc+='<div style="flex-shrink:0;min-width:170px"><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Trends vs Last 7 Days</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Calories</span>'+trTxt(tCal)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Protein</span>'+trTxt(tPro)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Carbs</span>'+trTxt(tCarb)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Fat</span>'+trTxt(tFat)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8"><span>Fiber</span>'+trTxt(tFib)+'</div></div>';
+    sc+='</div>';
+    H+=card(sc,'flex-shrink:0');
 
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:12px';
-
-    // Date nav
-    var dateNav=document.createElement('div');
-    dateNav.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0';
-    var dPrev=document.createElement('div');
-    dPrev.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
-    dPrev.textContent='‹';
-    dPrev.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()-1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();nutrDate=viewKey;render();};
-    var dTitle=document.createElement('div');
-    dTitle.style.cssText='font-size:18px;font-weight:700;color:#fff';
-    var vd=new Date(viewKey);
-    var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    dTitle.textContent=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
-    var dNext=document.createElement('div');
-    dNext.style.cssText='width:32px;height:32px;border-radius:50%;background:#1a1f2e;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#94a3b8;font-size:20px';
-    dNext.textContent='›';
-    dNext.onclick=function(){var d=new Date(viewKey);d.setDate(d.getDate()+1);viewKey=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();nutrDate=viewKey;render();};
-    dateNav.appendChild(dPrev); dateNav.appendChild(dTitle); dateNav.appendChild(dNext);
-    wrap.appendChild(dateNav);
-
-    // Add Food — opens the shared food-search modal (z-index raised to clear the
-    // desktop shell). Targets the viewed day via the global nutrDate; meal
-    // defaults by time of day. This is what makes desktop no longer read-only.
-    var addFoodBtn=document.createElement('button');
-    addFoodBtn.textContent='+ Add Food';
-    addFoodBtn.style.cssText='align-self:flex-end;flex-shrink:0;padding:7px 14px;background:rgba(41,128,185,.12);border:1px solid rgba(41,128,185,.25);border-radius:9px;color:#2980B9;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit';
-    addFoodBtn.onclick=function(){ nutrDate=viewKey; var hr=new Date().getHours(); openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); };
-    wrap.appendChild(addFoodBtn);
-
-    // Calorie ring + macros
-    var topRow=document.createElement('div');
-    topRow.style.cssText='display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:16px;flex-shrink:0';
-
-    // Donut ring
-    var ringWrap=document.createElement('div');
-    ringWrap.style.cssText='position:relative;width:100px;height:100px;flex-shrink:0';
-    var pct=Math.min(100,Math.round((data.cal/goals.cal)*100));
-    var arc=Math.round(pct/100*251);
-    var ringColor=pct>110?'#e24b4a':pct>90?'#27AE60':'#60a5fa';
-    ringWrap.innerHTML='<svg width="100" height="100" viewBox="0 0 100 100">'+
-      '<circle cx="50" cy="50" r="40" fill="none" stroke="#1a1f2e" stroke-width="10"/>'+
-      '<circle cx="50" cy="50" r="40" fill="none" stroke="'+ringColor+'" stroke-width="10" stroke-dasharray="'+arc+' 251" stroke-dashoffset="63" stroke-linecap="round" transform="rotate(-90 50 50)"/>'+
-      '</svg>'+
-      '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
-        '<div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+data.cal+'</div>'+
-        '<div style="font-size:9px;color:#64748b">of '+goals.cal+' cal</div>'+
-      '</div>';
-    topRow.appendChild(ringWrap);
-
-    // Macro bars
-    var macros=document.createElement('div');
-    macros.style.cssText='display:flex;flex-direction:column;gap:8px';
-    [['Protein',data.p,goals.p,'#FC4C02'],['Carbs',data.c,goals.c,'#60a5fa'],['Fat',data.f,goals.f,'#8b5cf6']].forEach(function(x){
-      var row=document.createElement('div');
-      var pct2=Math.min(100,Math.round((x[1]/x[2])*100));
-      row.innerHTML='<div style="display:flex;justify-content:space-between;margin-bottom:3px">'+
-        '<span style="font-size:11px;font-weight:600;color:#e2e8f0">'+x[0]+'</span>'+
-        '<span style="font-size:11px;color:#64748b">'+x[1]+'g / '+x[2]+'g</span>'+
-        '</div>'+
-        '<div style="background:#1a1f2e;border-radius:4px;height:6px">'+
-          '<div style="background:'+x[3]+';border-radius:4px;height:6px;width:'+pct2+'%;transition:width .3s"></div>'+
-        '</div>';
-      macros.appendChild(row);
-    });
-    // Water — consumed vs training/weather-aware oz goal, with small inline
-    // +/- controls (shared updWater; 1 glass = WATER_GLASS_OZ oz).
-    var wTgtOz=(trainingTgt&&trainingTgt.fluidOz)||64;
-    var wOz=(data.water||0)*WATER_GLASS_OZ;
-    var wPct=Math.min(100,Math.round(wOz/wTgtOz*100));
-    var waterRow=document.createElement('div');
-    var wHead=document.createElement('div');
-    wHead.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:3px';
-    wHead.innerHTML='<span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#e2e8f0"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span>';
-    var wCtl=document.createElement('div');
-    wCtl.style.cssText='display:flex;align-items:center;gap:8px';
-    var wMinus=document.createElement('button'); wMinus.textContent='−';
-    var wVal=document.createElement('span'); wVal.textContent=wOz+' / '+wTgtOz+' oz'; wVal.setAttribute('data-water-oz',wTgtOz); wVal.style.cssText='font-size:11px;color:#64748b;min-width:66px;text-align:center';
-    var wPlus=document.createElement('button'); wPlus.textContent='+';
-    [wMinus,wPlus].forEach(function(b){ b.style.cssText='width:22px;height:22px;border-radius:6px;background:#1a1f2e;border:none;color:#22d3ee;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0'; });
-    wMinus.onclick=function(){ nutrDate=viewKey; updWater(-1); };
-    wPlus.onclick=function(){ nutrDate=viewKey; updWater(1); };
-    var wReset=document.createElement('button'); wReset.textContent='Reset'; wReset.title='Reset water to 0'; wReset.style.cssText='background:none;border:none;color:#64748b;font-size:10px;cursor:pointer;font-family:inherit;padding:2px';
-    wReset.onclick=function(){ nutrDate=viewKey; uiConfirm('Reset today\\'s water to 0?').then(function(ok){ if(ok) resetWater(); }); };
-    wCtl.appendChild(wMinus); wCtl.appendChild(wVal); wCtl.appendChild(wPlus); wCtl.appendChild(wReset);
-    wHead.appendChild(wCtl);
-    waterRow.appendChild(wHead);
-    var wBar=document.createElement('div'); wBar.style.cssText='background:#1a1f2e;border-radius:4px;height:6px';
-    wBar.innerHTML='<div data-water-bar="'+wTgtOz+'" style="background:#22d3ee;border-radius:4px;height:6px;width:'+wPct+'%"></div>';
-    waterRow.appendChild(wBar);
-    macros.appendChild(waterRow);
-    topRow.appendChild(macros);
-    wrap.appendChild(topRow);
-
-    // Key Nutrients (fiber + sodium) — parity with the mobile screen.
-    var fiberTgt=(trainingTgt&&trainingTgt.fiber)||30;
-    var sodiumTgt=(trainingTgt&&trainingTgt.sodium)||2300;
-    var knCard=document.createElement('div');
-    knCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
-    knCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Key Nutrients</div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
-        [['Fiber',data.fiber,fiberTgt,'g','#27AE60'],['Sodium',data.sodium,sodiumTgt,'mg','#f59e0b']].map(function(x){
-          var kpct=Math.min(100,Math.round((x[1]/x[2])*100));
-          return '<div style="background:#0d0f14;border-radius:10px;padding:10px 12px">'+
-            '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px"><span style="font-size:12px;color:#94a3b8">'+x[0]+'</span>'+
-            '<span style="font-size:14px;font-weight:800;color:#fff">'+x[1]+'<span style="font-size:10px;color:#64748b;font-weight:600">'+x[3]+'</span></span></div>'+
-            '<div style="background:#1a1f2e;border-radius:3px;height:5px"><div style="background:'+x[4]+';border-radius:3px;height:5px;width:'+kpct+'%"></div></div>'+
-            '<div style="font-size:9px;color:#64748b;margin-top:4px">of '+x[2]+x[3]+' target</div>'+
-          '</div>';
-        }).join('')+
-      '</div>';
-    wrap.appendChild(knCard);
-
-    // Nutrition Insight — deterministic guidance from the day's real numbers
-    // vs targets (same idea as the mobile insight card; not an LLM claim).
-    var bullets=[];
-    if(data.cal>0){
-      var proGap=Math.round(goals.p-data.p);
-      if(proGap>25) bullets.push('Protein is '+proGap+'g short of your '+goals.p+'g target — add a protein source.');
-      else if(proGap<=0) bullets.push('Protein target hit ('+data.p+'g). Solid.');
-      var calGap=Math.round(goals.cal-data.cal);
-      if(calGap>350) bullets.push(calGap+' calories under target — fuel up, especially on a training day.');
-      else if(calGap<-350) bullets.push(Math.abs(calGap)+' calories over target today.');
-      if(data.fiber<Math.round(fiberTgt*0.7)) bullets.push('Fiber is '+data.fiber+'g; aim for '+fiberTgt+'g (fruit, veg, whole grains).');
-      if(data.sodium>sodiumTgt) bullets.push('Sodium is '+data.sodium+'mg — above the '+sodiumTgt+'mg guide.');
-      if(!bullets.length) bullets.push('On track across calories and macros. Keep it steady.');
-    } else {
-      bullets.push('No food logged for this day yet.');
-    }
-    var insCard=document.createElement('div');
-    insCard.style.cssText='background:linear-gradient(135deg,rgba(168,85,247,.12),rgba(168,85,247,.03));border:1px solid rgba(168,85,247,.28);border-radius:14px;padding:14px 16px;flex-shrink:0';
-    insCard.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6 7 18.2l1.9-5.8L4 8.8h6.1z"/></svg><span style="font-size:11px;font-weight:700;color:#c084fc;text-transform:uppercase;letter-spacing:.06em">Nutrition Insight</span></div>'+
-      bullets.map(function(b){return '<div style="display:flex;gap:7px;margin-bottom:6px"><span style="color:#c084fc;flex-shrink:0">•</span><span style="font-size:12px;color:#e2e8f0;line-height:1.4">'+b+'</span></div>';}).join('');
-    wrap.appendChild(insCard);
-
-    // Meal breakdown
-    var mealNames={breakfast:'Breakfast',preworkout:'Pre-Workout',during:'During',postworkout:'Post-Workout',lunch:'Lunch',dinner:'Dinner',snacks:'Snacks'};
-    var meals=data.meals||{};
-    Object.keys(mealNames).forEach(function(key){
-      var items=meals[key]||[];
-      var live=items.filter(function(f){return !f.deleted;});
-      if(!live.length) return;   // hide empty buckets — the top "+ Add Food" covers those
-      var mealCal=live.reduce(function(s,f){return s+(f.cal||0);},0);
-      var card=document.createElement('div');
-      card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:12px;padding:12px 14px;flex-shrink:0';
-      var mHdr=document.createElement('div');
-      mHdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px';
-      var mTitle=document.createElement('div');
-      mTitle.style.cssText='font-size:12px;font-weight:700;color:#e2e8f0';
-      mTitle.textContent=mealNames[key]+' · '+Math.round(mealCal)+' cal';
-      var mAdd=document.createElement('button');
-      mAdd.textContent='+ Add';
-      mAdd.style.cssText='padding:3px 10px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:8px;color:#2980B9;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit';
-      mAdd.onclick=(function(k){return function(){ nutrDate=viewKey; openFoodForMeal(k); };})(key);
-      mHdr.appendChild(mTitle); mHdr.appendChild(mAdd);
-      card.appendChild(mHdr);
-      items.forEach(function(food){
-        if(food.deleted) return;
-        // Stable id so the shared stepper/edit/remove resolve the live item at
-        // click time. food is the real getNDay ref (nutritionForDate hands back
-        // nd.meals), so this id persists.
-        if(!food.id) food.id=genEntryId_();
-        var _fid=food.id;
-        var qty=food._qty||1;
-        var fRow=document.createElement('div');
-        fRow.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 0;border-top:1px solid #1a1f2e';
-        var nameEl=document.createElement('div');
-        nameEl.style.cssText='font-size:12px;color:#94a3b8;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer';
-        nameEl.textContent=qty>1 ? (food._baseName||food.n||food.name||'Food')+' ×'+qty : (food.n||food.name||'Food');
-        nameEl.title='Edit';
-        nameEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutEditFoodById_(k,id); };})(key,_fid);
-        // Edit (pencil), minus, cal, plus, remove — same controls/order as the
-        // mobile food rows, wired to the shared actions.
-        var editEl=document.createElement('button');
-        editEl.textContent='✎'; editEl.title='Edit';
-        editEl.style.cssText='background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0';
-        editEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutEditFoodById_(k,id); };})(key,_fid);
-        var minusEl=document.createElement('button');
-        minusEl.textContent='−';
-        minusEl.style.cssText='width:22px;height:22px;border-radius:50%;background:#1a1f2e;border:none;color:#94a3b8;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0;flex-shrink:0';
-        minusEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutStepFood_(k,id,-1); };})(key,_fid);
-        var calEl=document.createElement('div');
-        calEl.style.cssText='font-size:11px;color:#64748b;flex-shrink:0;min-width:46px;text-align:center';
-        calEl.textContent=(food.cal||0)+' cal';
-        var plusEl=document.createElement('button');
-        plusEl.textContent='+';
-        plusEl.style.cssText='width:22px;height:22px;border-radius:50%;background:rgba(41,128,185,.15);border:1px solid rgba(41,128,185,.3);color:#2980B9;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;padding:0;flex-shrink:0';
-        plusEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutStepFood_(k,id,1); };})(key,_fid);
-        var rmEl=document.createElement('button');
-        rmEl.textContent='×'; rmEl.title='Remove';
-        rmEl.style.cssText='background:none;border:none;color:#64748b;font-size:16px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0';
-        rmEl.onclick=(function(k,id){return function(){ nutrDate=viewKey; nutRemoveFoodById_(k,id); };})(key,_fid);
-        fRow.appendChild(nameEl); fRow.appendChild(editEl); fRow.appendChild(minusEl); fRow.appendChild(calEl); fRow.appendChild(plusEl); fRow.appendChild(rmEl);
-        card.appendChild(fRow);
-      });
-      wrap.appendChild(card);
-    });
-
-    if(!data.items.length){
-      var empty=document.createElement('div');
-      empty.style.cssText='text-align:center;color:#64748b;padding:32px;font-size:13px';
-      empty.textContent='No food logged for this day. Tap "+ Add Food" to log a meal.';
-      wrap.appendChild(empty);
-    }
-
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
+    wrap.innerHTML=H;
     mc.appendChild(wrap);
+
+    wrap.addEventListener('click',function(e){
+      var t=e.target.closest('[data-act]'); if(!t) return;
+      var a=t.getAttribute('data-act');
+      function stepDay(n){ var d=new Date(viewKey); d.setDate(d.getDate()+n); viewKey=keyOf(d); nutrDate=viewKey; render(); }
+      if(a==='prev') stepDay(-1);
+      else if(a==='next') stepDay(1);
+      else if(a==='add'){ nutrDate=viewKey; var hr=new Date().getHours(); if(typeof openFoodForMeal==='function') openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); }
+      else if(a==='mealadd'){ nutrDate=viewKey; if(typeof openFoodForMeal==='function') openFoodForMeal(t.getAttribute('data-meal')); }
+      else if(a==='fooditem'){ if(typeof editFoodItem==='function') editFoodItem(t.getAttribute('data-meal'), parseInt(t.getAttribute('data-idx'),10)); }
+      else if(a==='waterplus'){ nutrDate=viewKey; if(typeof updWater==='function') updWater(1); }
+      else if(a==='waterminus'){ nutrDate=viewKey; if(typeof updWater==='function') updWater(-1); }
+      else if(a==='targets'){ if(typeof openTargetsEditor_==='function') openTargetsEditor_(); else dsNav('settings'); }
+      else if(a==='insights'||a==='nutdetails'){ dsNav('aicoach'); }
+    });
   }
   render();
 }
 
-// ==== ANALYTICS DASHBOARD HELPERS (presentation; REAL data or "—" only) ====
-// Progress-ring gauge. frac 0..1; centerText pre-formatted.
 function dsGauge_(frac, color, centerText, sub, size){
   size=size||84; var sw=11, r=(size-sw)/2-1, cx=size/2, cy=size/2, circ=Math.PI*2*r;
   frac=Math.max(0,Math.min(1,frac||0)); var off=circ*(1-frac);
@@ -24656,7 +24639,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-edited-mask-survives-sync';
+window.__BUILD__ = '2026-07-16-nutrition-rich-redesign';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
