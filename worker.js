@@ -12593,39 +12593,50 @@ function aiLossVerify_(){
 // Compare the parsed backup rides array against current live state. Dedupes the
 // backup cross-source (date+distance, duration within 90s) to unique real rides and
 // reports how many have a LIVE local copy vs are MISSING. Read-only.
+// robust duration -> seconds. movingSecs is numeric; duration is a "H:MM:SS" STRING on
+// most sources, so movingSecs||duration would leak a string and NaN-out comparisons.
+function _durSec_(r){
+  var m=r.movingSecs; if(typeof m==='number'&&m>0) return m;
+  var d=r.duration;
+  if(typeof d==='number'&&d>0) return d;
+  if(typeof d==='string'&&d){ var p=d.split(':'); var ok=p.length>0, s=0;
+    for(var i=0;i<p.length;i++){ if(p[i]===''||isNaN(Number(p[i]))){ ok=false; break; } s=s*60+Number(p[i]); }
+    if(ok) return s; }
+  return 0;
+}
 function _bcmpReport_(backup){
   if(!backup||!backup.length){ console.log('[bcmp] no rides in backup file'); return; }
   var DUR_TOL=90;
   var key_=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
-  var dur_=function(r){ return r.movingSecs||r.duration||0; };
+  var durClose=function(a,b){ return (a>0&&b>0)?(Math.abs(a-b)<=DUR_TOL):true; };
   var live=(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+  // EXISTENCE is matched on the date+distance KEY only — duration is unreliable across
+  // sources (moving vs elapsed, string vs seconds) so it must NOT gate "is this ride
+  // represented". This is set-based, hence deterministic and immune to copy-swaps.
+  var liveKeyset={}; live.forEach(function(r){ liveKeyset[key_(r)]=1; });
   var bGroups={}, bKeyset={};
   backup.forEach(function(r){ if(r){ var k=key_(r); (bGroups[k]=bGroups[k]||[]).push(r); bKeyset[k]=1; } });
-  var liveDD={}; live.forEach(function(r){ var k=key_(r); (liveDD[k]=liveDD[k]||[]).push(dur_(r)); });
-  // (b) dedupe backup to unique real rides, then covered/missing vs live
+  // backup-internal dedup keeps duration (to separate two real rides on the same day)
   var uniqueBackup=0, covered=0, missing=0;
   Object.keys(bGroups).forEach(function(k){
-    var gr=bGroups[k], used=[];
+    var gr=bGroups[k], used=[], liveHere=!!liveKeyset[k];
     for(var i=0;i<gr.length;i++){
       if(used[i]) continue; used[i]=1;
-      for(var j=i+1;j<gr.length;j++){ if(!used[j] && Math.abs(dur_(gr[i])-dur_(gr[j]))<=DUR_TOL) used[j]=1; }
+      var bd=_durSec_(gr[i]);
+      for(var j=i+1;j<gr.length;j++){ if(!used[j] && durClose(bd, _durSec_(gr[j]))) used[j]=1; }
       uniqueBackup++;
-      var durs=liveDD[k]||[], d=dur_(gr[i]), hit=false;
-      for(var m=0;m<durs.length;m++){ if(Math.abs(durs[m]-d)<=DUR_TOL){ hit=true; break; } }
-      if(hit) covered++; else missing++;
+      if(liveHere) covered++; else missing++;   // existence = key present in live
     }
   });
-  // (a) live rides with no backup match — post-backup additions vs possible match-miss
-  var liveNotInBackup=0, liveNIB_keyInBackup=0;
-  live.forEach(function(r){
-    var k=key_(r), d=dur_(r), durs=(bGroups[k]||[]).map(dur_), hit=false;
-    for(var m=0;m<durs.length;m++){ if(Math.abs(durs[m]-d)<=DUR_TOL){ hit=true; break; } }
-    if(!hit){ liveNotInBackup++; if(bKeyset[k]) liveNIB_keyInBackup++; }
-  });
+  // live rides whose date+distance key is absent from the backup = genuine post-backup
+  var notInBackup=0;
+  live.forEach(function(r){ if(!bKeyset[key_(r)]) notInBackup++; });
+  console.log('[bcmp] live-local=' + Number(live.length) + '  (this must be identical across runs)');
+  console.log('[bcmp] MATCH RULE: date+distance key only (duration ignored for existence)');
   console.log('[bcmp] backup-rows=' + Number(backup.length) + ' -> UNIQUE-rides=' + Number(uniqueBackup) + ' (collapsed ' + Number(backup.length-uniqueBackup) + ' cross-source dupe copies)');
-  console.log('[bcmp] (b) backup-unique = covered(' + Number(covered) + ') + MISSING(' + Number(missing) + ') = ' + Number(covered+missing) + '  -> MISSING is on UNIQUE rides; internal dupe pairs already collapsed');
-  console.log('[bcmp] (a) live-local=' + Number(live.length) + ' = in-backup(' + Number(live.length-liveNotInBackup) + ') + NOT-in-backup(' + Number(liveNotInBackup) + '); of not-in-backup, share-a-backup-date+dist=' + Number(liveNIB_keyInBackup) + ' (rest = post-backup additions)');
-  console.log('[bcmp] projected=' + Number(live.length + missing) + ' = backup-unique(' + Number(uniqueBackup) + ') + live-not-in-backup(' + Number(liveNotInBackup) + '); NO CHANGES MADE');
+  console.log('[bcmp] (b) backup-unique = covered(' + Number(covered) + ') + MISSING(' + Number(missing) + ') = ' + Number(covered+missing) + '  -> MISSING = recovery target, on UNIQUE rides');
+  console.log('[bcmp] (a) live NOT-in-backup (no backup at that date+dist) = ' + Number(notInBackup) + '  <- want this SMALL; these are post-backup rides');
+  console.log('[bcmp] projected=' + Number(live.length + missing) + ' = backup-unique(' + Number(uniqueBackup) + ') + live-not-in-backup(' + Number(notInBackup) + '); NO CHANGES MADE');
 }
 // Backup reconciliation DRY-RUN. A programmatic file picker is blocked from the
 // console (no user gesture), so this puts a visible box at the top of the page: DROP
