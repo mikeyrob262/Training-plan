@@ -12384,7 +12384,7 @@ function aiCardMomentum_(){
   var ramp=(f.ramp&&f.ramp.ctl!=null)?f.ramp.ctl:0;
   var trend=ramp>=2?['Improving','#4ade80']:ramp<=-2?['Easing','#f59e0b']:['Steady','#60a5fa'];
   var arrow=ramp>=2?'M3 17l6-6 4 4 8-8M14 7h6v6':(ramp<=-2?'M3 7l6 6 4-4 8 8M14 17h6v-6':'M3 12h18');
-  var inner=aiLbl_('PERFORMANCE MOMENTUM','<span data-metric-teach="ai-momentum" style="cursor:pointer;font-size:11px;color:#5b6678">Why?</span>');
+  var inner=aiLbl_('PERFORMANCE MOMENTUM');
   inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
   inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days, from '+f.sampleSize+' loaded rides.</div>';
   inner+='<div style="display:flex;gap:22px;margin-top:16px">';
@@ -12446,7 +12446,7 @@ function aiCardWhatChanged_(){
   if(wl.length>=2){ var cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-1);
     var prior=wl.filter(function(x){return new Date(x.date)<=cutoff;}); var base=prior.length?prior[prior.length-1].weight:wl[0].weight;
     var cur=wl[wl.length-1].weight; rows.push(['Weight', (Math.round(cur*10)/10)+' lb', Math.round((cur-base)*10)/10, ' lb']); }
-  var inner=aiLbl_('WHAT CHANGED THIS MONTH','<span data-metric-teach="ai-changed" style="cursor:pointer;font-size:11px;color:#5b6678">Why?</span>');
+  var inner=aiLbl_('WHAT CHANGED THIS MONTH');
   rows.forEach(function(r){ var dv=r[2], good=(r[0]==='Weight')?(dv<=0):(dv>=0); var col=dv===0?'#64748b':(good?'#4ade80':'#f59e0b');
     var ds=(dv>0?'+':'')+dv+(r[3]||'');
     inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #161b28"><span style="font-size:13px;color:#94a3b8">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:#e8edf5">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
