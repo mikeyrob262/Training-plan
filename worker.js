@@ -515,6 +515,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
       <div class="ds-ni" onclick="dsNav('nutrition')"><i class="ti ti-apple"></i>Nutrition</div>
       <div class="ds-ni" onclick="dsNav('weather')"><i class="ti ti-cloud"></i>Weather</div>
+      <div class="ds-ni" onclick="dsNav('ai')"><i class="ti ti-brain"></i>Athlete Intelligence</div>
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
@@ -12363,6 +12364,168 @@ function aiFtpChange_(fromW, toW){
   };
 }
 // ==================== end insight engine ====================
+
+// ==================== Athlete Intelligence — page (Overview) ====================
+// ONE shared renderer mounted by BOTH desktop (dsShowAthleteIntel -> #ds-content)
+// and mobile (showAthleteIntel -> full-screen overlay). Takes a container; never
+// calls isDesktop() itself — parity by injection, like the ride-detail tab bodies.
+// Every card gates on real data: a card with nothing honest to show returns '' and
+// is omitted (pattern #2 — suppress, never placeholder a fake).
+var _aiMount=null, _aiTab='overview';
+var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
+function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
+function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ---- Performance Momentum (deterministic PMC, no fake confidence %) ----
+function aiCardMomentum_(){
+  var f=aiFatigue_();
+  if(!f.ok) return '';
+  var ramp=(f.ramp&&f.ramp.ctl!=null)?f.ramp.ctl:0;
+  var trend=ramp>=2?['Improving','#4ade80']:ramp<=-2?['Easing','#f59e0b']:['Steady','#60a5fa'];
+  var arrow=ramp>=2?'M3 17l6-6 4 4 8-8M14 7h6v6':(ramp<=-2?'M3 7l6 6 4-4 8 8M14 17h6v-6':'M3 12h18');
+  var inner=aiLbl_('PERFORMANCE MOMENTUM','<span data-metric-teach="ai-momentum" style="cursor:pointer;font-size:11px;color:#5b6678">Why?</span>');
+  inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
+  inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days, from '+f.sampleSize+' loaded rides.</div>';
+  inner+='<div style="display:flex;gap:22px;margin-top:16px">';
+  f.drivers.forEach(function(d){ inner+='<div><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+aiEsc_(d.label)+'</div><div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1">'+d.value+'</div></div>'; });
+  inner+='</div>';
+  return aiCard_(inner);
+}
+
+// ---- Today's Watchlist (real signals from dsAttention_) ----
+function aiCardWatchlist_(){
+  var d; try{ d=dsAttention_(); }catch(e){ return ''; }
+  if(!d) return '';
+  var items=d.items||[], pos=d.positives||[];
+  var inner=aiLbl_("TODAY'S WATCHLIST");
+  if(!items.length){
+    inner+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg><div style="font-size:19px;font-weight:800;color:#4ade80">Nothing to see here</div></div>';
+    pos.forEach(function(p){ inner+='<div style="display:flex;align-items:center;gap:9px;margin-top:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:13px;color:#cbd5e1">'+aiEsc_(p)+'</span></div>'; });
+  } else {
+    items.forEach(function(it){ var col=it.sev>=2?'#e24b4a':'#f59e0b';
+      inner+='<div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+';flex-shrink:0;margin-top:5px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.4">'+aiEsc_(it.text)+'</span></div>'; });
+  }
+  return aiCard_(inner);
+}
+
+// ---- Your Athletic Story (real milestones from the full library) ----
+function aiCardStory_(){
+  var rides=allRidesDeduped_().filter(function(r){return r&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(rides.length<10) return '';
+  var first=rides[0], firstYr=new Date(first.date).getFullYear(), nowYr=new Date().getFullYear();
+  var century=null; for(var i=0;i<rides.length;i++){ if((parseFloat(rides[i].distance)||0)>=100){ century=rides[i]; break; } }
+  var longest=rides.reduce(function(m,r){return (parseFloat(r.distance)||0)>(parseFloat(m.distance)||0)?r:m;}, rides[0]);
+  var byYear={}; rides.forEach(function(r){ var y=new Date(r.date).getFullYear(); byYear[y]=(byYear[y]||0)+(parseFloat(r.distance)||0); });
+  var bigYear=Object.keys(byYear).reduce(function(m,y){return byYear[y]>(byYear[m]||0)?y:m;}, Object.keys(byYear)[0]);
+  var nodes=[];
+  nodes.push([firstYr,'First ride']);
+  if(century) nodes.push([new Date(century.date).getFullYear(),'First century (100+ mi)']);
+  nodes.push([bigYear, Math.round(byYear[bigYear]).toLocaleString()+' mi — biggest year']);
+  var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:#5b6678">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
+  inner+='<div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">';
+  nodes.forEach(function(n){ inner+='<div style="flex:0 0 auto;text-align:center;min-width:88px"><div style="width:46px;height:46px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:14px;font-weight:800;color:#60a5fa">'+String(n[0]).slice(2)+'</span></div><div style="font-size:11px;color:#94a3b8;line-height:1.3">'+aiEsc_(n[1])+'</div></div>'; });
+  inner+='</div>';
+  inner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;font-size:12px;color:#94a3b8">Longest ride: <span style="color:#e8edf5;font-weight:700">'+Math.round(parseFloat(longest.distance)||0)+' mi</span> ('+new Date(longest.date).getFullYear()+')</div>';
+  return aiCard_(inner);
+}
+
+// ---- What Changed This Month (real deltas + transparent grade) ----
+function aiCardWhatChanged_(){
+  var rides=allRidesDeduped_();
+  function inMonth(r,back){ var d=new Date(); d.setMonth(d.getMonth()-back); var y=d.getFullYear(), m=d.getMonth();
+    var rd=r&&r.date?new Date(r.date):null; return rd && rd.getFullYear()===y && rd.getMonth()===m; }
+  var thisR=rides.filter(function(r){return inMonth(r,0);}), lastR=rides.filter(function(r){return inMonth(r,1);});
+  if(thisR.length+lastR.length<4) return '';
+  function miles(a){ return Math.round(a.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0)); }
+  var rows=[];
+  rows.push(['Rides', thisR.length, thisR.length-lastR.length, '']);
+  rows.push(['Distance', miles(thisR)+' mi', miles(thisR)-miles(lastR), ' mi']);
+  // weight delta (real, weightLog)
+  var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(wl.length>=2){ var cutoff=new Date(); cutoff.setMonth(cutoff.getMonth()-1);
+    var prior=wl.filter(function(x){return new Date(x.date)<=cutoff;}); var base=prior.length?prior[prior.length-1].weight:wl[0].weight;
+    var cur=wl[wl.length-1].weight; rows.push(['Weight', (Math.round(cur*10)/10)+' lb', Math.round((cur-base)*10)/10, ' lb']); }
+  var inner=aiLbl_('WHAT CHANGED THIS MONTH','<span data-metric-teach="ai-changed" style="cursor:pointer;font-size:11px;color:#5b6678">Why?</span>');
+  rows.forEach(function(r){ var dv=r[2], good=(r[0]==='Weight')?(dv<=0):(dv>=0); var col=dv===0?'#64748b':(good?'#4ade80':'#f59e0b');
+    var ds=(dv>0?'+':'')+dv+(r[3]||'');
+    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #161b28"><span style="font-size:13px;color:#94a3b8">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:#e8edf5">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
+  return aiCard_(inner);
+}
+
+// ---- Personal Records: VO2 (real). Power PRs gated; no fabricated projections. ----
+function aiCardRecords_(){
+  var vh=(st.vo2maxHistory||[]).filter(function(x){return x&&x.v!=null;});
+  if(!vh.length) return '';
+  var last=vh[vh.length-1], prev=vh.length>1?vh[vh.length-2]:null;
+  var dv=prev?Math.round((last.v-prev.v)*10)/10:null;
+  var inner=aiLbl_('PERSONAL RECORDS','<span style="font-size:11px;color:#5b6678">real data only</span>');
+  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:#e8edf5;line-height:1">'+last.v+'</span><span style="font-size:13px;color:#94a3b8">VO₂ max</span>';
+  if(dv!=null) inner+='<span style="font-size:12px;font-weight:700;color:'+(dv>=0?'#4ade80':'#f59e0b')+'">'+(dv>0?'+':'')+dv+'</span>';
+  inner+='</div>';
+  inner+='<div style="font-size:12px;color:#5b6678;margin-top:6px">From '+vh.length+' recorded VO₂ estimate'+(vh.length===1?'':'s')+'.</div>';
+  return aiCard_(inner);
+}
+
+// ---- tab body ----
+function aiRenderTab_(tab){
+  if(tab!=='overview'){
+    var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
+    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
+  }
+  var cards=[aiCardMomentum_(), aiCardWatchlist_(), aiCardWhatChanged_(), aiCardRecords_(), aiCardStory_()].filter(function(h){return h;});
+  if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
+}
+
+// ---- shared renderer (both surfaces) ----
+function aiRenderOverview_(container){
+  if(!container) return;
+  _aiMount=container;
+  var rides=allRidesDeduped_();
+  var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
+  var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
+  // header
+  H+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
+  H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Athlete Intelligence</div>';
+  H+='<span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:#0d0f14;background:#f59e0b;border-radius:6px;padding:3px 7px">BETA</span></div>';
+  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+rides.length.toLocaleString()+' rides across '+yrs+' years of data. Real numbers only.</div>';
+  // tabs
+  H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
+  AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
+  H+='</div>';
+  H+='<div id="ai-tab-body">'+aiRenderTab_(_aiTab)+'</div>';
+  H+='</div>';
+  container.innerHTML=H;
+  // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
+  aiEnsureFullLibrary_(function(){ if(_aiMount) aiRenderOverview_(_aiMount); });
+}
+function aiSetTab_(tab){ _aiTab=tab; if(_aiMount) aiRenderOverview_(_aiMount); }
+
+// desktop mount: into #ds-content (parity idiom, like dsShowDashboard)
+function dsShowAthleteIntel(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc){ setTimeout(dsShowAthleteIntel,200); return; }
+  mc.innerHTML='';
+  var wrap=document.createElement('div'); wrap.style.cssText='flex:1;overflow-y:auto;height:100%;box-sizing:border-box';
+  mc.appendChild(wrap);
+  _aiTab='overview';
+  aiRenderOverview_(wrap);
+}
+// mobile mount: full-screen overlay, same shared renderer into its body
+function showAthleteIntel(){
+  var old=document.getElementById('AIQ_PAGE'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='AIQ_PAGE';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#0d0f14;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  var close='<div onclick="var e=document.getElementById(&#39;AIQ_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:#161b28;border:1px solid #2a3550;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
+  var body=document.createElement('div');
+  ov.appendChild(body);
+  ov.insertAdjacentHTML('beforeend', close);
+  (document.getElementById('app-shell')||document.body).appendChild(ov);
+  _aiTab='overview';
+  aiRenderOverview_(body);
+}
+// ==================== end Athlete Intelligence page ====================
 // Single rollup used by BOTH the Calendar month footer AND each week-row summary
 // so they can never diverge. Sums ALL activity types (Miles + TSS include Zwift/
 // VirtualRide); rideCount stays type-scoped for the "Rides" label only.
@@ -12487,6 +12650,8 @@ function dsNav(section){
     dsShowNutrition();
   } else if(section === 'weather') {
     dsShowWeather();
+  } else if(section === 'ai') {
+    dsShowAthleteIntel();
   } else if(section === 'gear') {
     dsShowGear();
   } else if(section === 'aicoach') {
@@ -21695,6 +21860,7 @@ function showMoreSheet(){
   overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
+    {n:'Athlete Intelligence', i:'M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 0V4a3 3 0 0 0-3-1zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 0', fn:'showAthleteIntel', c:'#f59e0b'},
     {n:'Constellation', i:'M12 2l2.4 5.9 6.4.5-4.9 4.1 1.5 6.2L12 17l-5.8 3.7 1.5-6.2-4.9-4.1 6.4-.5z',                            fn:'showConstellation', c:'#F5C518'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
