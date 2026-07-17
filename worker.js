@@ -9372,7 +9372,7 @@ function showHomeDash(){
   } else {
     recent.forEach(function(r,idx){
       var realIdx=st.rides.indexOf(r);
-      var sport=r.sportType||r.type||'Ride';
+      var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
       if((typeof rideIsIndoor==='function'&&rideIsIndoor(r)) && /run|jog/i.test(sport)) sport='Treadmill';
       var iconHTML=activityIcon_(sport,36);
       var iconColorMatch=iconHTML.match(/stroke="(#[0-9A-Fa-f]{6})"/);
@@ -9950,7 +9950,12 @@ function renderPerf(container){
     if(p.length!==3) return d;
     return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
   }
-  function isCyc(r){ if(r.source==='strava'){ var st2=r.sportType||''; return !st2||/^(Ride|VirtualRide|EBikeRide|GravelRide|MountainBikeRide|Handcycle)$/i.test(st2); } return !r.type||r.type==='ride'||r.source==='fit'||r.source==='intervals'; }
+  // Cycling classifier off the SHARED sport accessor (rideSport_ = sportType ?? type),
+  // same basis as isRun/swim/strength below — no source-branching. The old version
+  // branched on r.source and dropped legacy/non-Strava VirtualRide rides (type held
+  // the sport, not sportType), which craters Zwift-heavy months in the YTD totals.
+  // Empty sport = untyped legacy ride → treat as cycling (matches prior default).
+  function isCyc(r){ var s=rideSport_(r); return !s || /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i.test(s); }
 
   // Today stats
   var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
@@ -10661,7 +10666,7 @@ function renderRideList(container, limit){
   rides.forEach(function(r,idx){
     var realIdx=st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
-    var sport=r.sportType||r.type||'Ride';
+    var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
     if(rideIsIndoor(r) && /run|jog/i.test(sport)) sport='Treadmill';
     var icon=activityIcon_(sport,36);
     var iconColor=(icon.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C';
@@ -14599,7 +14604,6 @@ function taperVerdict_(fit, iq, ctlRamp){
   var falling=(ramp!=null && ramp<=-3);             // CTL genuinely dropping
   var rising =(ramp!=null && ramp>=3);              // CTL genuinely building
   var fresh  =(tsb>=8);                             // rested / tapered
-  var loaded =(tsb<=-15);                           // carrying real fatigue
   // TAPER: fitness coming down AND legs coming fresh — the Holland-100-eve case.
   // This is peaking, NOT improving. Read it as race-readiness.
   if(falling && tsb>=0){
@@ -14609,7 +14613,7 @@ function taperVerdict_(fit, iq, ctlRamp){
       readyLabel:'Race-ready', readyNote:'Form readiness from taper (TSB '+(tsb>=0?'+':'')+tsb+')'};
   }
   // Overreaching: deep fatigue, legs cooked.
-  if(loaded && tsb<=-25){
+  if(tsb<=-25){
     return {phase:'overreaching', color:R,
       trend:'Overreaching', trendNote:'Deep in a load block — legs are cooked. Productive briefly, but back off before anything that matters.',
       load:'Deep', loadNote:'Heavy fatigue — protect recovery.',
@@ -14622,13 +14626,14 @@ function taperVerdict_(fit, iq, ctlRamp){
       load:(tsb>-10?'Optimal':'Productive'), loadNote:'Building fitness — keep showing up.',
       readyLabel:(tsb>-10?'Balanced':'Loaded'), readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
   }
-  // Detraining: fitness falling AND already fresh/negative-nothing — losing form
-  // without a race reason (this is the case the AI panel flags as "sliding").
+  // Detraining: CTL falling while TSB is negative (−25..0 — peaking takes TSB≥0,
+  // overreaching takes ≤−25). Losing form AND carrying fatigue, no race reason —
+  // this is the case the AI panel flags as "sliding".
   if(falling){
     return {phase:'detraining', color:A,
       trend:'Easing', trendNote:'Fitness is sliding — if this is not a planned taper, an easy ride slows the drop.',
       load:'Detraining', loadNote:'Load has dropped off — add an easy ride.',
-      readyLabel:'Fresh', readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
+      readyLabel:'Loaded', readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
   }
   // Fresh but flat fitness: rested, holding.
   if(fresh){
@@ -21487,6 +21492,7 @@ function showMoreSheet(){
     {n:'Sync Gear',     i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'syncStravaGear',   c:'#0F6E56'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
     {n:'Restore Backup', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',                                     fn:'restoreFromBackup_', c:'#22c55e'},
+    {n:'Merge Dupes',    i:'M8 6h10 M8 12h10 M8 18h10 M3 6h.01 M3 12h.01 M3 18h.01 M18 3l3 3-3 3',                                fn:'mergeCrossSourceDupes_', c:'#f59e0b'},
     {n:'Reconnect',     i:'M9 17H7A5 5 0 0 1 7 7h2 M15 7h2a5 5 0 0 1 0 10h-2 M8 12h8',                                          fn:'reconnectStrava',  c:'#FC4C02'},
     {n:'Elev Stats',    i:'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M3 17l4-4',                                           fn:'fetchStravaElevStats', c:'#27AE60'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
@@ -22803,7 +22809,7 @@ function showWeatherHistory(){
       document.head.appendChild(sbStyle);
       scrollWrap.classList.add('route-scroll');
       routes.forEach(function(r,idx){
-        var sport=r.sportType||r.type||'Ride';
+        var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
         var iconColor=sportColors[sport]||'#3A4A5C';
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var row=document.createElement('div');
@@ -22904,7 +22910,7 @@ function showWeatherHistory(){
       resultsList.appendChild(lbl);
 
       rides.forEach(function(r){
-        var sport=r.sportType||r.type||'Ride';
+        var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
         var c=sportColors[sport]||'#FC4C02';
         var icon=sport.toLowerCase().includes('run')?runIcon:rideIcon;
         var card=document.createElement('div');
@@ -23961,7 +23967,7 @@ function showCal(){
       dNum.textContent=d;
       cell.appendChild(dNum);
       dayRides.slice(0,2).forEach(function(r){
-        var sport=r.sportType||r.type||'Ride';
+        var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
         var c=colors[sport]||'#FC4C02';
         var tile=document.createElement('div');
         tile.style.cssText='background:'+c+';border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
@@ -24035,7 +24041,7 @@ function showCal(){
       var pct=Math.round((mi/maxMi)*100);
       var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
       var moActs=(st.rides||[]).filter(function(r){if(!r.date)return false;var rd=new Date(r.date);return rd.getFullYear()===calYear&&rd.getMonth()===m;});
-      var dots=moActs.slice(0,25).map(function(r){var sport=r.sportType||r.type||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:12px;height:12px;border-radius:50%;background:'+c+'"></div>';}).join('');
+      var dots=moActs.slice(0,25).map(function(r){var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:12px;height:12px;border-radius:50%;background:'+c+'"></div>';}).join('');
       var row=document.createElement('div');
       row.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;cursor:'+(mi?'pointer':'default');
       row.innerHTML='<div style="font-size:13px;color:'+(isCurrentMo?'var(--t1)':'var(--t3)')+';font-weight:'+(isCurrentMo?700:400)+';width:30px;flex-shrink:0">'+mo+'</div>'
@@ -24123,6 +24129,63 @@ function restoreFromBackup_(){
     rd.readAsText(f);
   };
   inp.click();
+}
+// ==================================================================================
+
+// ===== Merge cross-source duplicate rides ==========================================
+// The Restore-Backup path can bring back cross-source pairs: the SAME real ride
+// imported once from Strava and once from a FIT/Intervals file. They share a date and
+// distance but their recorded DURATION differs by a few seconds (moving vs elapsed),
+// so the strict rideKey (which includes duration) treats them as distinct and keeps
+// BOTH — doubling mileage. This collapses them safely: within a date+distance group,
+// merge only rides whose durations are within DUR_TOL seconds AND that come from
+// DIFFERENT sources (the cross-source-pair signature), keeping the richest copy
+// (stravaId > GPS > more fields) and tombstoning the rest. It deliberately does NOT
+// touch: same-source rides (two real rides same day), pairs with far-apart durations
+// (kept conservatively — an overcount is cosmetic, a deleted real ride is loss), or
+// 0-distance activities. REPORT-then-confirm; force-pushes so the merge survives sync.
+function mergeCrossSourceDupes_(){
+  var DUR_TOL=90;
+  function rich_(r){ var s=0; if(r.stravaId)s+=1000; if((r.lats&&r.lats.length)||(r.gpsLats&&r.gpsLats.length))s+=500; if(r.streams)s+=250; return s+Object.keys(r).length; }
+  function key_(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); }
+  function dur_(r){ return r.movingSecs||r.duration||0; }
+  var live=(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+  var groups={};
+  live.forEach(function(r){ var k=key_(r); (groups[k]=groups[k]||[]).push(r); });
+  var toTomb=[];
+  Object.keys(groups).forEach(function(k){
+    var gr=groups[k]; if(gr.length<2) return;
+    if(Math.round((+gr[0].distance||0)*10)===0) return; // never touch 0-distance activities
+    var used=[];
+    for(var i=0;i<gr.length;i++){
+      if(used[i]) continue;
+      var cl=[gr[i]]; used[i]=1;
+      for(var j=i+1;j<gr.length;j++){
+        if(used[j]) continue;
+        var a=dur_(gr[i]), b=dur_(gr[j]);
+        var durClose=(a&&b)?(Math.abs(a-b)<=DUR_TOL):true;
+        var diffSource=((gr[i].source||'')!==(gr[j].source||''));
+        if(durClose && diffSource){ cl.push(gr[j]); used[j]=1; }
+      }
+      if(cl.length>1){ cl.sort(function(x,y){return rich_(y)-rich_(x);}); for(var m=1;m<cl.length;m++) toTomb.push(cl[m]); }
+    }
+  });
+  if(!toTomb.length){ try{uiAlert('No cross-source duplicate rides found — nothing to merge.');}catch(e){alert('No cross-source duplicates found.');} return; }
+  var mix={}; toTomb.forEach(function(r){ var s=r.source||'?'; mix[s]=(mix[s]||0)+1; });
+  var mixStr=Object.keys(mix).map(function(s){return s+':'+mix[s];}).join(', ');
+  var NL=String.fromCharCode(10);
+  var msg='Found '+toTomb.length+' duplicate ride'+(toTomb.length>1?'s':'')+' (same date, distance & ~duration from a different source).'+NL+NL+'Sources removed: '+mixStr+NL+'Library: '+live.length+' -> '+(live.length-toTomb.length)+' rides.'+NL+NL+'The richer copy of each pair is kept. Merge these duplicates?';
+  var go=function(){
+    toTomb.forEach(function(r){ r.deleted=true; r.deletedAt=Date.now(); r.deleteReason='cross-source-dupe'; });
+    try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
+    try{ saveLocal_(); }catch(e){}
+    try{ fbPush(true,true); }catch(e){}
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    var liveNow=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+    console.log('[merge-dupes] tombstoned='+toTomb.length+' live now='+liveNow);
+    try{ toast('Merged '+toTomb.length+' duplicates — '+liveNow+' rides. Syncing…'); }catch(e){}
+  };
+  try{ uiConfirm(msg,{okText:'Merge'}).then(function(ok){ if(ok) go(); }); }catch(e){ if(confirm(msg)) go(); }
 }
 // ==================================================================================
 
