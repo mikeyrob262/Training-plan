@@ -14118,7 +14118,7 @@ function dsShowCalendar(){
       });
       H+='</div>';
       // week rail
-      H+='<div style="width:176px;display:grid;grid-template-rows:repeat('+N+',1fr);gap:8px">';
+      H+='<div style="width:176px;display:grid;grid-template-rows:repeat('+N+',minmax(0,1fr));gap:8px;overflow:hidden">';
       weeks.forEach(function(wk,wi){
         var roll=weekRoll[wi];
         if(roll.acts===0){ H+='<div></div>'; return; }
@@ -14136,24 +14136,20 @@ function dsShowCalendar(){
       H+='</div>';
     }
 
-    // ---- month summary footer ----
-    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:12px;padding:5px 14px;display:flex;align-items:center;gap:14px">';
+    // ---- month summary footer (compact, left-packed, no sparklines) ----
+    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
     H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;font-weight:700;letter-spacing:.1em;color:#4a5468">MONTH SUMMARY</div>';
-    H+='<div style="flex:1;min-width:0">';
-    H+='  <div style="display:flex;gap:16px;align-items:flex-end">';
-    H+=sumBlock(Math.round(mTot)+' <span style="font-size:10px;color:#5b6678;font-weight:600">mi</span>','Distance','#e8edf5',sparkSVG(distSeries,CAL.dist,120,12));
-    H+=sumBlock(totTSS+' <span style="font-size:10px;color:#5b6678;font-weight:600">TSS</span>','Training Load',CAL.tss,sparkSVG(tssSeries,CAL.tss,120,12));
-    H+=sumBlock(fmtHM(totSecs),'Total Time',CAL.time,sparkSVG(timeSeries,CAL.time,120,12));
-    H+=sumBlock(String(totAct),'Activities',CAL.act,sparkSVG(actSeries,CAL.act,120,12));
-    H+='  </div>';
+    H+='<div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:#e8edf5;line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:#5b6678;font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:#8592a6">Distance</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.tss+';line-height:1">'+totTSS+'<span style="font-size:10px;color:#5b6678;font-weight:600;margin-left:2px">TSS</span></span><span style="font-size:10px;color:#8592a6">Training Load</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.time+';line-height:1">'+fmtHM(totSecs)+'</span><span style="font-size:10px;color:#8592a6">Total Time</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.act+';line-height:1">'+totAct+'</span><span style="font-size:10px;color:#8592a6">Activities</span></div>';
     H+='</div>';
-    H+='<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">';
-    H+='  <div style="display:flex;align-items:center;gap:5px"><span style="font-size:9px;color:#8592a6;width:64px">Longest Ride</span>'+calIcon('Ride',12,C_RIDE)+'<span style="font-size:12px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
-    H+='  <div style="display:flex;align-items:center;gap:5px"><span style="font-size:9px;color:#8592a6;width:64px">Longest Run</span>'+calIcon('Run',12,C_RUN)+'<span style="font-size:12px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
-    H+='</div>';
-    var _R=14,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
+    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:#8592a6">Longest Ride</span>'+calIcon('Ride',12,C_RIDE)+'<span style="font-size:12px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:#8592a6">Longest Run</span>'+calIcon('Run',12,C_RUN)+'<span style="font-size:12px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
+    var _R=13,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
     H+='<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">';
-    H+='  <svg width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="4"/><circle cx="19" cy="19" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 19 19)"/><text x="19" y="22.5" text-anchor="middle" font-size="10" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
+    H+='  <svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="4"/><circle cx="17" cy="17" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 17 17)"/><text x="17" y="20.5" text-anchor="middle" font-size="9" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
     H+='  <div style="font-size:9px;color:#8592a6">Consistency</div>';
     H+='</div>';
     H+='</div>';
@@ -23264,7 +23260,8 @@ function showCalendarTab(){
     var mMaxTSS=Math.max(1, Math.max.apply(null, mWeekRoll.map(function(x){return x.tss;}).concat([0])));
     h+='<div style="padding:12px 16px 4px">';
     h+='  <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:10px">'+monthNamesFull[mMonth]+' '+mYear+'</div>';
-    h+='  <div style="display:grid;grid-template-columns:repeat(7,1fr) 0.85fr;gap:6px 4px">';
+    h+='  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px">';
+    h+='  <div style="display:grid;grid-template-columns:repeat(7,1fr) 0.85fr;gap:6px 4px;min-width:452px">';
     var wd=['M','T','W','T','F','S','S'];
     for(var wi=0; wi<7; wi++){ h+='<div style="text-align:center;font-size:10px;font-weight:600;color:var(--t3)">'+wd[wi]+'</div>'; }
     h+='<div style="text-align:center;font-size:9px;font-weight:700;letter-spacing:.05em;color:#FC4C02">WK</div>';
@@ -23299,6 +23296,7 @@ function showCalendarTab(){
           +'</div>';
       }
     });
+    h+='  </div>';
     h+='  </div>';
     h+='</div>';
   }
@@ -24789,7 +24787,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-dash-fit-fonts';
+window.__BUILD__ = '2026-07-16-cal-summary-flat';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
