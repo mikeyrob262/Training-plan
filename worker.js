@@ -23261,7 +23261,7 @@ function showCalendarTab(){
     h+='<div style="padding:12px 16px 4px">';
     h+='  <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:10px">'+monthNamesFull[mMonth]+' '+mYear+'</div>';
     h+='  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px">';
-    h+='  <div style="display:grid;grid-template-columns:repeat(7,1fr) 0.85fr;gap:6px 4px;min-width:452px">';
+    h+='  <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px 4px;min-width:468px">';
     var wd=['M','T','W','T','F','S','S'];
     for(var wi=0; wi<7; wi++){ h+='<div style="text-align:center;font-size:10px;font-weight:600;color:var(--t3)">'+wd[wi]+'</div>'; }
     h+='<div style="text-align:center;font-size:9px;font-weight:700;letter-spacing:.05em;color:#FC4C02">WK</div>';
@@ -24787,7 +24787,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-cal-summary-flat';
+window.__BUILD__ = '2026-07-16-mob-cal-wk-col';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
