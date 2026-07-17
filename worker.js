@@ -14137,24 +14137,24 @@ function dsShowCalendar(){
     }
 
     // ---- month summary footer ----
-    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:8px 16px;display:flex;align-items:center;gap:18px">';
-    H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:9px;font-weight:700;letter-spacing:.11em;color:#4a5468;padding:2px 0">MONTH SUMMARY</div>';
+    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:12px;padding:5px 14px;display:flex;align-items:center;gap:14px">';
+    H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;font-weight:700;letter-spacing:.1em;color:#4a5468">MONTH SUMMARY</div>';
     H+='<div style="flex:1;min-width:0">';
-    H+='  <div style="display:flex;gap:18px;align-items:flex-end">';
-    H+=sumBlock(Math.round(mTot)+' <span style="font-size:11px;color:#5b6678;font-weight:600">mi</span>','Distance','#e8edf5',sparkSVG(distSeries,CAL.dist,120,18));
-    H+=sumBlock(totTSS+' <span style="font-size:11px;color:#5b6678;font-weight:600">TSS</span>','Training Load',CAL.tss,sparkSVG(tssSeries,CAL.tss,120,18));
-    H+=sumBlock(fmtHM(totSecs),'Total Time',CAL.time,sparkSVG(timeSeries,CAL.time,120,18));
-    H+=sumBlock(String(totAct),'Activities',CAL.act,sparkSVG(actSeries,CAL.act,120,18));
+    H+='  <div style="display:flex;gap:16px;align-items:flex-end">';
+    H+=sumBlock(Math.round(mTot)+' <span style="font-size:10px;color:#5b6678;font-weight:600">mi</span>','Distance','#e8edf5',sparkSVG(distSeries,CAL.dist,120,12));
+    H+=sumBlock(totTSS+' <span style="font-size:10px;color:#5b6678;font-weight:600">TSS</span>','Training Load',CAL.tss,sparkSVG(tssSeries,CAL.tss,120,12));
+    H+=sumBlock(fmtHM(totSecs),'Total Time',CAL.time,sparkSVG(timeSeries,CAL.time,120,12));
+    H+=sumBlock(String(totAct),'Activities',CAL.act,sparkSVG(actSeries,CAL.act,120,12));
     H+='  </div>';
     H+='</div>';
-    H+='<div style="display:flex;flex-direction:column;gap:7px;flex-shrink:0">';
-    H+='  <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#8592a6;width:74px">Longest Ride</span>'+calIcon('Ride',14,C_RIDE)+'<span style="font-size:13px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
-    H+='  <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:#8592a6;width:74px">Longest Run</span>'+calIcon('Run',14,C_RUN)+'<span style="font-size:13px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
+    H+='<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">';
+    H+='  <div style="display:flex;align-items:center;gap:5px"><span style="font-size:9px;color:#8592a6;width:64px">Longest Ride</span>'+calIcon('Ride',12,C_RIDE)+'<span style="font-size:12px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
+    H+='  <div style="display:flex;align-items:center;gap:5px"><span style="font-size:9px;color:#8592a6;width:64px">Longest Run</span>'+calIcon('Run',12,C_RUN)+'<span style="font-size:12px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
     H+='</div>';
-    var _R=19,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
-    H+='<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center">';
-    H+='  <svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="26" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="5"/><circle cx="26" cy="26" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 26 26)"/><text x="26" y="30" text-anchor="middle" font-size="12" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
-    H+='  <div style="font-size:9.5px;color:#8592a6;margin-top:1px">Consistency</div>';
+    var _R=14,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
+    H+='<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">';
+    H+='  <svg width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="4"/><circle cx="19" cy="19" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 19 19)"/><text x="19" y="22.5" text-anchor="middle" font-size="10" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
+    H+='  <div style="font-size:9px;color:#8592a6">Consistency</div>';
     H+='</div>';
     H+='</div>';
 
@@ -14178,9 +14178,8 @@ function dsShowCalendar(){
 
   function sumBlock(big,label,color,spark){
     return '<div style="flex:1;min-width:0">'
-      +'<div style="font-size:17px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</div>'
-      +'<div style="font-size:10px;color:#8592a6;margin:2px 0 4px">'+label+'</div>'
-      +'<div style="height:18px">'+spark+'</div></div>';
+      +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</span><span style="font-size:9px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
+      +'<div style="height:12px;margin-top:3px">'+spark+'</div></div>';
   }
 
   // Agenda view — chronological list of the month's activities.
@@ -24790,7 +24789,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-cal-compact';
+window.__BUILD__ = '2026-07-16-cal-summary-thin';
 try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
