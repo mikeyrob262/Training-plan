@@ -13007,23 +13007,27 @@ function aiCardStory_(ded){
   for(var i=0;i<rides.length;i++){ if((parseFloat(rides[i].distance)||0)>=100){ cands.push([yrOf(rides[i].date), 'First century']); break; } }
   [1000,2000,3000,4000].forEach(function(n){ if(rides.length>=n) cands.push([yrOf(rides[n-1].date), n.toLocaleString()+'th ride']); });
   var longest=rides.reduce(function(m,r){return (parseFloat(r.distance)||0)>(parseFloat(m.distance)||0)?r:m;}, rides[0]);
-  cands.push([yrOf(longest.date), 'Longest ride, '+Math.round(parseFloat(longest.distance)||0)+' mi']);
+  var NBSP=String.fromCharCode(160);   // keep "N mi" on one line so "mi" can't orphan
+  cands.push([yrOf(longest.date), 'Longest '+Math.round(parseFloat(longest.distance)||0)+NBSP+'mi']);
   var byYear={}; rides.forEach(function(r){ var y=yrOf(r.date); byYear[y]=(byYear[y]||0)+(parseFloat(r.distance)||0); });
   var bigYear=+Object.keys(byYear).reduce(function(m,y){return byYear[y]>(byYear[m]||0)?y:m;}, Object.keys(byYear)[0]);
-  cands.push([bigYear, 'Biggest year, '+Math.round(byYear[bigYear]).toLocaleString()+' mi']);
+  cands.push([bigYear, 'Biggest yr '+Math.round(byYear[bigYear]).toLocaleString()+NBSP+'mi']);
   // Collapse to ONE node per year (a year can never appear twice); combine labels.
   var byYr={};
   cands.forEach(function(c){ var y=c[0]; if(!(y in byYr)) byYr[y]=[]; if(byYr[y].indexOf(c[1])<0) byYr[y].push(c[1]); });
   var nodes=Object.keys(byYr).map(Number).sort(function(a,b){return a-b;}).map(function(y){ return [y, byYr[y].join(' · ')]; });
   var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:#5b6678">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
-  // Fixed-width nodes with WRAPPING subtitles + horizontal scroll, so nothing clips.
-  inner+='<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch">';
+  // Timeline: circles joined by a line through their centers; labels wrap; scrolls if wide.
+  inner+='<div style="overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch">';
+  inner+='<div style="display:flex;gap:8px;position:relative;min-width:min-content;padding-top:2px">';
+  inner+='<div style="position:absolute;top:28px;left:58px;right:58px;height:2px;background:#2a3550;z-index:0"></div>';
   nodes.forEach(function(n){
-    inner+='<div style="flex:0 0 104px;text-align:center">'
-      +'<div style="width:52px;height:52px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div>'
-      +'<div style="font-size:11px;color:#94a3b8;line-height:1.3;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
+    inner+='<div style="flex:0 0 116px;text-align:center;position:relative;z-index:1">'
+      +'<div style="width:52px;height:52px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><span style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div>'
+      +'<div style="font-size:11px;color:#94a3b8;line-height:1.35;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
     +'</div>';
   });
+  inner+='</div>';
   inner+='</div>';
   return aiCard_(inner);
 }
