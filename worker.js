@@ -5253,13 +5253,10 @@ function weatherFormRowHTML(){
       + '<div style="font-size:11px;color:var(--t2);margin-top:2px">'+formLabel+'</div>';
   }
 
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=temperature_2m,windspeed_10m,precipitation_probability'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-  .then(function(r){ return r.json(); })
-  .then(function(d){
+  getWeather_().then(function(wres){
+    var d = wres.data;
     var el = document.getElementById(wxId);
-    if(!el || !d.current) return;
+    if(!el || !d || !d.current) return;
     var temp = Math.round(d.current.temperature_2m);
     var wind = Math.round(d.current.windspeed_10m);
     var rain = d.current.precipitation_probability;
@@ -5298,11 +5295,8 @@ function fetchCoachNote(elId){
   var el = document.getElementById(elId);
   if(!el) return;
 
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=temperature_2m,windspeed_10m,winddirection_10m,precipitation_probability'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-  .then(function(r){ return r.json(); })
-  .then(function(wxData){
+  getWeather_().then(function(wres){
+    var wxData = wres.data;
     var wx = wxData && wxData.current;
     var weatherStr = wx
       ? Math.round(wx.temperature_2m)+'F, wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% rain':'')
@@ -13777,9 +13771,8 @@ function dsShowAICoach(){
   var _nextRace=getNextRace_();
   var raceStr=_nextRace?_nextRace.name+' in '+_nextRace.daysOut+' days'+(_nextRace.target?' (target '+_nextRace.target+')':'')+(_nextRace.status==='tentative'?' [TENTATIVE - not yet confirmed]':''):'none scheduled';
 
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-  .then(function(r){return r.json();})
-  .then(function(wx){
+  getWeather_().then(function(wres){
+    var wx=wres.data;
     var c=wx&&wx.current;
     var dirs=['N','NE','E','SE','S','SW','W','NW'];
     var wstr=c?Math.round(c.temperature_2m)+'F (feels '+Math.round(c.apparent_temperature)+'F), wind '+Math.round(c.windspeed_10m)+'mph from '+dirs[Math.round((c.winddirection_10m||0)/45)%8]+(c.precipitation_probability!=null?', '+c.precipitation_probability+'% rain':''):'unavailable';
@@ -22610,11 +22603,8 @@ function showAICoach(){
 
   // Fetch live weather (Open-Meteo, same source used elsewhere in the app),
   // then build and send the coach prompt once weather is in hand.
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-  .then(function(r){ return r.json(); })
-  .then(function(wxData){
+  getWeather_().then(function(wres){
+    var wxData = wres.data;
     var wx = wxData && wxData.current;
     var weatherStr = wx
       ? Math.round(wx.temperature_2m)+'F (feels '+Math.round(wx.apparent_temperature)+'F), wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% chance of rain':'')
