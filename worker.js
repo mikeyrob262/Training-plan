@@ -13188,7 +13188,7 @@ function aiRenderTab_(tab, ded){
   var grid=[dna, mom, watch, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
-  if(grid.length) html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;align-items:stretch">'+grid.join('')+'</div>';
+  if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
   return html;
 }
@@ -13203,7 +13203,11 @@ function aiRenderOverview_(container){
     try{ setTimeout(function(){ var _c2=_aiCounts_(); console.log('[stab] +8s live=' + Number(_c2.live) + ' null-tomb=' + Number(_c2.nullTomb) + ' xsrc-dupe=' + Number(_c2.xsrc) + ' raw=' + Number(_c2.raw)); }, 8000); }catch(e){}
   }
   var yrs=0; if(rides.length){ var ys=rides.map(function(r){return r.date?new Date(r.date).getFullYear():null;}).filter(Boolean); yrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1; }
-  var H='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
+  // Responsive card grid — 3 columns on desktop (narrower cards, mockup width), 2 on
+  // medium, 1 on mobile. A <style> block is needed because inline styles can't do media
+  // queries, and auto-fit was collapsing to 2 very wide columns.
+  var H='<style>.ai-ov-grid{display:grid;gap:12px;align-items:stretch;grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:900px){.ai-ov-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.ai-ov-grid{grid-template-columns:1fr}}</style>';
+  H+='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
   H+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
   H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Athlete Intelligence</div>';
