@@ -13168,15 +13168,86 @@ function aiCardDNA_(ded){
   return aiCard_(inner);
 }
 
+// ---- Trends tab: real time-series only ----
+function _aiLinePath_(vals, W, H){
+  var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals); if(max<=min) max=min+1;
+  var n=vals.length;
+  return 'M'+vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-min)/(max-min))*(H-10)-5; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');
+}
+// Training-load PMC curve — reuses computePMC + unifiedLoad (the dashboard pipeline).
+function aiTrendPMC_(rides){
+  var items=(rides||[]).concat((st.runs||[]).map(function(r){return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe};}));
+  items.forEach(function(x){ x.load=unifiedLoad(x); });
+  var wl=items.filter(function(x){ return x.load>0; });
+  if(wl.length<8) return '';
+  var pmc=computePMC(wl); if(!pmc||pmc.length<2) return '';
+  var ctl=pmc.map(function(p){return p.ctl;}), atl=pmc.map(function(p){return p.atl;});
+  var lo=Math.min.apply(null,ctl.concat(atl)), hi=Math.max.apply(null,ctl.concat(atl)); if(hi<=lo)hi=lo+1;
+  var W=680,H=130,n=pmc.length;
+  function pth(vals){ return 'M'+vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-lo)/(hi-lo))*(H-10)-5; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L'); }
+  var now=pmc[pmc.length-1];
+  var inner=aiLbl_('TRAINING LOAD (PMC)','<span style="font-size:11px;color:#5b6678">last '+n+' days</span>');
+  inner+='<div style="display:flex;gap:22px;margin-bottom:12px">';
+  [['Fitness (CTL)',Math.round(now.ctl),'#4ade80'],['Fatigue (ATL)',Math.round(now.atl),'#f59e0b'],['Form (TSB)',Math.round(now.tsb),'#60a5fa']].forEach(function(s){ inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">'+s[0]+'</div><div style="font-size:22px;font-weight:800;color:'+s[2]+';line-height:1.1">'+s[1]+'</div></div>'; });
+  inner+='</div>';
+  inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+pth(ctl)+'" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><path d="'+pth(atl)+'" fill="none" stroke="#f59e0b" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+  inner+='<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#4ade80"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Fatigue</span></div>';
+  return aiCard_(inner);
+}
+function aiTrendWeight_(){
+  var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(wl.length<2) return '';
+  var vals=wl.map(function(x){return parseFloat(x.weight);}), W=320,H=90;
+  var inner=aiLbl_('WEIGHT TREND','<span style="font-size:11px;color:#5b6678">'+wl.length+' entries</span>');
+  inner+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">'+(Math.round(vals[0]*10)/10)+' &rarr; '+(Math.round(vals[vals.length-1]*10)/10)+' lb</div>';
+  inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="#60a5fa" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+  return aiCard_(inner);
+}
+function aiTrendVO2_(){
+  var vh=(st.vo2maxHistory||[]).filter(function(x){return x&&x.v!=null&&!isNaN(parseFloat(x.v));});
+  if(vh.length<2) return '';
+  var vals=vh.map(function(x){return parseFloat(x.v);}), W=320,H=90;
+  var inner=aiLbl_('VO&#8322; MAX TREND','<span style="font-size:11px;color:#5b6678">'+vh.length+' estimates</span>');
+  inner+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">'+vals[0]+' &rarr; '+vals[vals.length-1]+'</div>';
+  inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+  return aiCard_(inner);
+}
+function aiTrendVolume_(rides){
+  var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var now=new Date(), buckets=[], idx={};
+  for(var i=11;i>=0;i--){ var d=new Date(now.getFullYear(),now.getMonth()-i,1); var key=d.getFullYear()+'-'+d.getMonth(); buckets.push({key:key,label:M[d.getMonth()],mi:0}); }
+  buckets.forEach(function(b,i){ idx[b.key]=i; });
+  (rides||[]).forEach(function(r){ if(!r||!r.date)return; var dt=new Date(r.date); var k=dt.getFullYear()+'-'+dt.getMonth(); if(k in idx) buckets[idx[k]].mi+=parseFloat(r.distance)||0; });
+  var mx=Math.max.apply(null,buckets.map(function(b){return b.mi;})); if(!(mx>0)) return '';
+  var inner=aiLbl_('MONTHLY VOLUME','<span style="font-size:11px;color:#5b6678">last 12 months</span>');
+  inner+='<div style="display:flex;align-items:flex-end;gap:4px;height:100px">';
+  buckets.forEach(function(b){ var h=Math.round(b.mi/mx*100); inner+='<div title="'+b.label+' '+Math.round(b.mi)+' mi" style="flex:1;height:100%;display:flex;align-items:flex-end"><div style="width:100%;height:'+h+'%;min-height:2px;background:#60a5fa;border-radius:3px 3px 0 0"></div></div>'; });
+  inner+='</div><div style="display:flex;gap:4px;margin-top:5px">';
+  buckets.forEach(function(b){ inner+='<div style="flex:1;text-align:center;font-size:9px;color:#5b6678">'+b.label.charAt(0)+'</div>'; });
+  inner+='</div>';
+  return aiCard_(inner);
+}
+function aiRenderTrends_(ded){
+  var rides=ded||allRidesDeduped_();
+  var pmc=_aiSafe_('TrendPMC', function(){return aiTrendPMC_(rides);});
+  var rest=[_aiSafe_('TrendWeight', function(){return aiTrendWeight_();}), _aiSafe_('TrendVO2', function(){return aiTrendVO2_();}), _aiSafe_('TrendVolume', function(){return aiTrendVolume_(rides);})].filter(function(h){return h;});
+  if(!pmc && !rest.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet for trends.</div>';
+  var html='';
+  if(pmc) html+=pmc;
+  if(rest.length) html+='<div class="ai-ov-grid" style="margin-top:12px">'+rest.join('')+'</div>';
+  return html;
+}
+
 // ---- tab body ----
 // Each card is independently try/caught so one throwing card can't blank the whole
 // Overview — they build into one array, where an uncaught throw would kill every card
 // and leave innerHTML unset. On failure the card is dropped and named in the console.
 function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.error('[ai] card "'+label+'" threw: '+(e&&e.message)); }catch(_){} return ''; } }
 function aiRenderTab_(tab, ded){
+  if(tab==='trends') return aiRenderTrends_(ded);
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
-    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
+    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
   }
   var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
   var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
