@@ -13065,13 +13065,33 @@ function aiCardRecords_(){
   return aiCard_(inner);
 }
 
+// ---- Power Zone Distribution (real z1s..z6s only, via the shared dsPowerDist_) ----
+function aiCardZones_(ded){
+  var rides=ded||allRidesDeduped_();
+  var ftp=parseInt((typeof st!=='undefined'&&st.ftp)||186)||186;
+  var d; try{ d=dsPowerDist_(rides, ftp); }catch(e){ return ''; }
+  if(!d || !d.hasData || !d.zones) return '';   // gate: no real zone data -> hide the card
+  var inner=aiLbl_('POWER ZONE DISTRIBUTION','<span style="font-size:11px;color:#5b6678">'+Number(d.nReal).toLocaleString()+' rides with real zone data</span>');
+  inner+='<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:14px;background:#161b28">';
+  d.zones.forEach(function(z){ if(z.pct>0) inner+='<div style="width:'+z.pct+'%;background:'+z.color+'"></div>'; });
+  inner+='</div>';
+  d.zones.forEach(function(z){
+    inner+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'
+      +'<span style="width:9px;height:9px;border-radius:2px;background:'+z.color+';flex-shrink:0"></span>'
+      +'<span style="flex:1;font-size:12px;color:#94a3b8">'+aiEsc_(z.label)+'</span>'
+      +'<span style="font-size:13px;font-weight:700;color:#e8edf5">'+z.pct+'%</span>'
+    +'</div>';
+  });
+  return aiCard_(inner);
+}
+
 // ---- tab body ----
 function aiRenderTab_(tab, ded){
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
   }
-  var cards=[aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
+  var cards=[aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardZones_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
   if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
 }
