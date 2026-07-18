@@ -12336,16 +12336,79 @@ function aiGate_(nLeft, nRight, min){
   return { ok:(a>=min && b>=min), min:min, nLeft:a, nRight:b };
 }
 
-// Ride-conditions score, extracted verbatim from the weather renderer's rule so
-// there is exactly ONE formula. Pure function of (wind mph, temp F, precip %).
-// windScore/tempScore/rainScore are the three real sub-scores; rideScore is their
-// mean (0-100), identical to what the Weather page shows.
-function aiRideConditionsScore_(wind, temp, precip){
+// Hazard/severity model — the shared veto layer. Turns raw conditions into a
+// ranked list of hazards (severity 1 caution / 2 warning / 3 hazard; kind
+// health|comfort), a worst-severity, a worst-HEALTH severity, and a score CAP.
+// The point (Jul 18 report #2/#3): a Poor/hazardous component must VETO the
+// composite so "Excellent" is unreachable, and health must outrank comfort.
+function wxHazards_(w){
+  w=w||{};
+  var list=[];
+  function add(key,sev,kind,label,note){ list.push({key:key,sev:sev,kind:kind,label:label,note:note}); }
+  var aqi=(w.aqi==null?null:Math.round(w.aqi));
+  if(aqi!=null){
+    if(aqi>=150) add('aqi',3,'health','Air quality unhealthy (AQI '+aqi+')','Hard efforts outdoors are not worth it today — go very easy or train inside.');
+    else if(aqi>=100) add('aqi',2,'health','Air quality elevated (AQI '+aqi+')','Fine for easy riding; back off hard intervals and watch for irritation.');
+    else if(aqi>=50) add('aqi',1,'health','Air quality moderate (AQI '+aqi+')','Generally OK; sensitive lungs may notice hard efforts.');
+  }
+  var feels=(w.feels==null?w.temp:w.feels);
+  if(feels!=null){
+    if(feels>=100) add('heat',3,'health','Extreme heat (feels '+Math.round(feels)+')','Heat this high sharply cuts sustainable power — move earlier, shorten, or go indoors.');
+    else if(feels>=90) add('heat',2,'health','High heat (feels '+Math.round(feels)+')','Expect it to shave watts; start conservative and hydrate early.');
+    else if(feels<=10) add('cold',2,'comfort','Bitter cold (feels '+Math.round(feels)+')','Layer up, cover extremities, and watch for ice.');
+    else if(feels<=25) add('cold',1,'comfort','Cold (feels '+Math.round(feels)+')','Dress warm — windchill bites on the descents.');
+  }
+  if(w.weathercode!=null && w.weathercode>=95) add('storm',3,'health','Thunderstorms','Lightning risk — stay off the exposed roads; wait it out or train inside.');
+  var wind=(w.wind==null?null:Math.round(w.wind));
+  if(wind!=null){
+    if(wind>=25) add('wind',2,'comfort','Strong winds ('+wind+' mph)','Plan the return leg into the headwind; do not chase power on the exposed roads.');
+    else if(wind>=16) add('wind',1,'comfort','Breezy ('+wind+' mph)','Manageable, but the exposed stretches will cost you.');
+  }
+  var gust=(w.gust==null?null:Math.round(w.gust));
+  if(gust!=null && gust>=35) add('gust',2,'comfort','Gusts to '+gust+' mph','Sudden crosswind gusts — keep hands on the bars and pick sheltered roads.');
+  var precip=(w.precip==null?null:Math.round(w.precip));
+  if(precip!=null){
+    if(precip>=60) add('rain',2,'comfort','Rain likely ('+precip+'%)','Pack a shell and mind wet corners, or take it to the trainer.');
+    else if(precip>=40) add('rain',1,'comfort','Rain possible ('+precip+'%)','A shell is worth carrying.');
+  }
+  var uv=(w.uv==null?null:Math.round(w.uv));
+  if(uv!=null){
+    if(uv>=8) add('uv',2,'health','Very high UV ('+uv+')','Cover up, sunscreen early, and take extra care on long exposed climbs.');
+    else if(uv>=6) add('uv',1,'health','High UV ('+uv+')','Sunscreen and eye protection.');
+  }
+  // Rank: severity desc, then health before comfort at equal severity.
+  list.sort(function(a,b){ if(b.sev!==a.sev) return b.sev-a.sev; var ah=a.kind==='health'?0:1, bh=b.kind==='health'?0:1; return ah-bh; });
+  var worst=list.length?list[0].sev:0;
+  var worstHealth=list.reduce(function(m,h){ return h.kind==='health'?Math.max(m,h.sev):m; },0);
+  // Veto cap — sev1 cautions do NOT cap; a warning/hazard makes Excellent (>=85)
+  // unreachable, and a health hazard caps harder than a comfort one.
+  var cap=100;
+  if(worst>=3) cap=25;            // any hazard -> Poor ceiling
+  else if(worstHealth>=2) cap=55; // health warning -> Good ceiling (no Excellent/Very Good)
+  else if(worst>=2) cap=70;       // comfort warning -> Very Good ceiling (no Excellent)
+  return {list:list, worst:worst, worstHealth:worstHealth, cap:cap};
+}
+
+// Ride-conditions score — ONE formula shared by the Weather page and the Why?
+// decomposition. Base is the mean of the available comfort/health components;
+// then the hazard veto (wxHazards_) CAPS it so a Poor/hazardous input (bad air,
+// extreme heat, storms) can never read "Excellent". Optional opts carries the
+// extra inputs (aqi/feels/humidity/uv/gust/weathercode); without them it behaves
+// as the original 3-way mean, uncapped.
+function aiRideConditionsScore_(wind, temp, precip, opts){
+  opts=opts||{};
   var windScore = wind<10?100:wind<20?70:40;
   var tempScore = (temp>45&&temp<85)?100:(temp>35&&temp<95)?70:40;
   var rainScore = precip<20?100:precip<50?60:20;
-  var rideScore = Math.round((windScore+tempScore+rainScore)/3);
-  return { rideScore:rideScore, windScore:windScore, tempScore:tempScore, rainScore:rainScore };
+  var parts=[windScore,tempScore,rainScore];
+  var humScore=null, aqiScore=null;
+  if(opts.humidity!=null){ var h=opts.humidity; humScore=h<50?100:h<65?80:h<80?55:30; parts.push(humScore); }
+  if(opts.aqi!=null){ var a=opts.aqi; aqiScore=a<50?100:a<100?70:a<150?45:20; parts.push(aqiScore); }
+  var base = Math.round(parts.reduce(function(s,v){return s+v;},0)/parts.length);
+  var hasOpts=(opts.aqi!=null||opts.feels!=null||opts.humidity!=null||opts.uv!=null||opts.gust!=null||opts.weathercode!=null);
+  var hz = hasOpts ? wxHazards_({aqi:opts.aqi,feels:opts.feels,temp:temp,wind:wind,gust:opts.gust,precip:precip,uv:opts.uv,weathercode:opts.weathercode,humidity:opts.humidity}) : {list:[],worst:0,worstHealth:0,cap:100};
+  var rideScore = Math.min(base, hz.cap);
+  return { rideScore:rideScore, base:base, windScore:windScore, tempScore:tempScore, rainScore:rainScore, humScore:humScore, aqiScore:aqiScore, hazards:hz };
 }
 // Decompose a ride-conditions score into its drivers for a Why? button — the PoC
 // "77 = wind 70/100, temp 100/100, rain 60/100 -> mean 77". Reads the real
@@ -14230,10 +14293,10 @@ function dsShowWeather(){
 
     // ride score — routed through the shared scorer (aiRideConditionsScore_) so the
     // Weather page and the Athlete Intelligence Why? decomposition can never drift.
-    var _rcs=aiRideConditionsScore_(wind,temp,precip);
+    var _rcs=aiRideConditionsScore_(wind,temp,precip,{aqi:aqi,feels:feels,humidity:hum,uv:uv,gust:(daily.windgusts_10m_max&&daily.windgusts_10m_max[0]),weathercode:c.weathercode});
     var windScore=_rcs.windScore, tempScore=_rcs.tempScore, rainScore=_rcs.rainScore, rideScore=_rcs.rideScore;
-    var humScore=hum<50?100:hum<65?80:hum<80?55:30;
-    var aqiScore=aqi==null?null:(aqi<50?100:aqi<100?70:aqi<150?45:20);
+    var hazards=_rcs.hazards;                       // ranked, health-first (veto layer)
+    var humScore=_rcs.humScore, aqiScore=_rcs.aqiScore;
     var rideCol=rideScore>=80?'#4ade80':rideScore>=60?'#f59e0b':'#e24b4a';
     var scoreBand=rideScore>=85?'Excellent':rideScore>=70?'Very Good':rideScore>=55?'Good':rideScore>=40?'Fair':'Poor';
     var rideLabel=rideScore>=80?'Great day to ride!':rideScore>=60?'Decent conditions':'Tough conditions';
@@ -14335,10 +14398,17 @@ function dsShowWeather(){
     if(uv!=null && uv>=5) checks.push('Use sunscreen — UV index '+uv+' ('+uvRate[0].toLowerCase()+').');
     if(wind<12) checks.push('Calm winds — good for steady efforts.');
     else checks.push('Winds up to '+wind+' mph — plan the return leg.');
-    if(rideScore>=80) checks.unshift('Ideal conditions for high performance.');
-    var headline = rideScore>=80 ? ('Warm and dry conditions make this a strong window for a hard effort.'.replace('Warm and dry', (temp>82?'Warm and dry':temp<55?'Cool and calm':'Mild and dry')))
+    // Positive framing is gated on hazards (Jul 18 report #3): a warning-or-worse
+    // leads the insight, and "ideal / high performance" is only reachable on a
+    // genuinely clean day — never printed eight inches from a red AQI row.
+    var _topHaz=hazards&&hazards.list.length?hazards.list[0]:null;
+    var _hazLed=_topHaz && _topHaz.sev>=2;
+    var headline = _hazLed ? (_topHaz.label+' — '+_topHaz.note)
+      : rideScore>=80 ? ('Warm and dry conditions make this a strong window for a hard effort.'.replace('Warm and dry', (temp>82?'Warm and dry':temp<55?'Cool and calm':'Mild and dry')))
       : rideScore>=60 ? 'Rideable conditions — manageable with the right gear and pacing.'
       : 'Tough conditions today — keep efforts easy or consider the trainer.';
+    if(rideScore>=85 && !_hazLed && (!hazards||hazards.worst===0)) checks.unshift('Ideal conditions for high performance.');
+    if(_hazLed && hazards.list.length>1) checks.unshift(hazards.list[1].label+' — '+hazards.list[1].note);
     var wi=lbl('WEATHER INSIGHT');
     wi+='<div style="display:flex;gap:12px;margin-bottom:12px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div><div style="font-size:12.5px;color:#cbd5e1;line-height:1.45">'+headline+'</div></div>';
     wi+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 9px">What this means for you</div>';
@@ -14347,17 +14417,24 @@ function dsShowWeather(){
     wi+='</div>';
     H+=card(wi);
     // Alerts (derived from real data)
+    // Alerts — health-first, severity-ranked. Built from the shared hazard list
+    // (so AQI and heat can no longer be silently omitted while wind is flagged),
+    // then forward-looking trend items (wind building / storms later) appended.
     var alerts=[];
-    if(uv!=null && uv>=5) alerts.push(['#f59e0b','uv','UV Index '+uvRate[0]+' ('+uv+')','Wear sunscreen and eye protection.']);
-    // wind increasing: compare next-few-hours max wind vs current
+    (hazards?hazards.list:[]).forEach(function(hz){
+      var col=hz.sev>=3?'#e24b4a':(hz.sev>=2?(hz.kind==='health'?'#f97316':'#f59e0b'):'#60a5fa');
+      var ik=(hz.key==='uv'?'uv':(hz.key==='wind'||hz.key==='gust')?'wind':(hz.key==='aqi')?'aqi':'warn');
+      alerts.push([col, ik, hz.label, hz.note]);
+    });
+    // wind increasing: compare next-few-hours max wind vs current (forward-looking)
     var futureWindMax=0; hrs.forEach(function(k){ if(hourly.windspeed_10m[k]>futureWindMax) futureWindMax=hourly.windspeed_10m[k]; });
-    if(futureWindMax>=15 && futureWindMax>=wind+5) alerts.push(['#60a5fa','wind','Wind Increasing','Sustained winds up to '+Math.round(futureWindMax)+' mph later today.']);
-    // thunderstorm in the 7-day
-    var stormDay=-1; (daily.weathercode||[]).forEach(function(code,i){ if(stormDay<0 && code>=95){ stormDay=i; } });
-    if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','storm','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
+    if(futureWindMax>=15 && futureWindMax>=wind+5) alerts.push(['#60a5fa','wind','Wind increasing','Sustained winds up to '+Math.round(futureWindMax)+' mph later today.']);
+    // thunderstorm LATER in the 7-day (today's storm is already a hazard above)
+    var stormDay=-1; (daily.weathercode||[]).forEach(function(code,i){ if(stormDay<0 && i>0 && code>=95){ stormDay=i; } });
+    if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','warn','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
     var al=lbl('ALERTS');
     if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#64748b"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
-    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':'<path d="M18 38a12 12 0 0 1 1-23 15 15 0 0 1 28 3" transform="scale(0.5)"/><path d="M13 10l-3 5h3l-2 5 5-7h-3z"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+x[2]+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+x[3]+'</div></div></div>'; });
+    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+x[2]+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+x[3]+'</div></div></div>'; });
     H+=card(al);
     H+='</div>';
 
