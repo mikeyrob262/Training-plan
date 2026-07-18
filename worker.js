@@ -14136,6 +14136,33 @@ function dsShowGear(){
   mc.appendChild(wrap);
 }
 
+// ---- shared weather/AQI fetch layer -------------------------------------
+// ONE cache with per-source timestamps, so every surface reads the same value
+// and can show how fresh it is. A failed fetch returns the LAST-KNOWN value
+// WITH its real timestamp (flagged ok:false) instead of a silent blank or a
+// hardcoded "up to date" — this is the stale-AQI class of bug (yesterday's 150
+// shown as current). AQI lives on a separate endpoint from the core forecast,
+// so it gets its own timestamp and can age independently and visibly.
+var WX_LAT=42.9634, WX_LON=-85.6681, WX_TZ='America%2FChicago';
+var WX_TTL=15*60*1000, AQI_TTL=30*60*1000;   // refetch windows (ms)
+var wxCache_={ weather:null, aqi:null };       // each slot: {data, fetchedAt}
+function wxClock_(ts){ if(!ts) return ''; var d=new Date(ts); var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12||12; return h12+':'+(m<10?'0':'')+m+' '+ap; }
+function wxAsOf_(ts){ if(!ts) return 'no data'; var mins=Math.round((Date.now()-ts)/60000); if(mins<1) return 'just now'; if(mins<90) return mins+' min ago'; return 'as of '+wxClock_(ts); }
+function wxFetch_(url, slot, ttl){
+  var cached=wxCache_[slot];
+  if(cached && cached.data && (Date.now()-cached.fetchedAt)<ttl) return Promise.resolve({data:cached.data, fetchedAt:cached.fetchedAt, ok:true, stale:false});
+  return fetch(url).then(function(r){return r.json();}).then(function(j){
+    if(!j || (typeof j==='object' && j.error)) throw new Error('bad');
+    wxCache_[slot]={data:j, fetchedAt:Date.now()};
+    return {data:j, fetchedAt:wxCache_[slot].fetchedAt, ok:true, stale:false};
+  }).catch(function(){
+    if(cached && cached.data) return {data:cached.data, fetchedAt:cached.fetchedAt, ok:false, stale:true};
+    return {data:null, fetchedAt:0, ok:false, stale:true};
+  });
+}
+function getWeather_(){ return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
+function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=us_aqi&timezone='+WX_TZ, 'aqi', AQI_TTL); }
+
 function dsShowWeather(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -14144,19 +14171,10 @@ function dsShowWeather(){
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
   wrap.innerHTML='<div style="text-align:center;color:#64748b;padding:60px;font-size:13px">Loading weather…</div>';
   mc.appendChild(wrap);
-  var lat=42.9634, lon=-85.6681;
-  var url='https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+
-    '&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability,uv_index'+
-    '&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m'+
-    '&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max'+
-    '&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7';
-  var aqUrl='https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+lat+'&longitude='+lon+'&current=us_aqi&timezone=America%2FChicago';
-
-  Promise.all([
-    fetch(url).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch(aqUrl).then(function(r){return r.json();}).catch(function(){return null;})
-  ]).then(function(res){
-    var data=res[0], aqData=res[1];
+  Promise.all([ getWeather_(), getAQI_() ]).then(function(res){
+    var wres=res[0], ares=res[1];
+    var data=wres.data, aqData=ares.data;
+    var wxTs=wres.fetchedAt, aqiTs=ares.fetchedAt, wxOk=wres.ok, aqiOk=ares.ok;
     if(!data || !data.current){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Weather unavailable</div>'; return; }
     var c=data.current, daily=data.daily||{}, hourly=data.hourly||{};
     var aqi=(aqData&&aqData.current&&aqData.current.us_aqi!=null)?Math.round(aqData.current.us_aqi):null;
@@ -14198,7 +14216,7 @@ function dsShowWeather(){
     var H='';
     // ===== HEADER =====
     H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
-    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:#64748b;margin-top:1px">Plan smarter. Ride safer. Perform better.</div></div>';
+    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:'+(wxOk?'#64748b':'#f59e0b')+';margin-top:1px">'+(wxOk?'Updated '+wxClock_(wxTs)+' ET':'Live weather unavailable &middot; showing last seen '+wxClock_(wxTs))+'</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
     H+='<div style="display:flex;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:#f1f5f9;min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
     H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
@@ -14232,12 +14250,15 @@ function dsShowWeather(){
     H+=card(rs);
     // At A Glance
     var sunrise=daily.sunrise&&daily.sunrise[0], sunset=daily.sunset&&daily.sunset[0];
+    // per-field freshness for AQI — it fetches on a separate endpoint and can age
+    // independently of temp/wind; make that visible instead of implying "current".
+    var aqiStamp='<span style="font-size:10px;color:'+(aqiOk?'#5b6678':'#f59e0b')+'"> &middot; '+(aqi==null?'unavailable':wxAsOf_(aqiTs)+(aqiOk?'':' (stale)'))+'</span>';
     var ag=lbl('AT A GLANCE');
     ag+='<div style="flex:1;display:flex;flex-direction:column;gap:12px">';
     [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M8 6l4-4 4 4"/></svg>','Sunrise',fmtClock(sunrise),'#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>','Sunset',fmtClock(sunset),'#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+uvRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>','UV Index',(uv==null?'—':uv+' '+uvRate[0]),uvRate[1]],
-     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+aqiRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/></svg>','Air Quality',(aqi==null?'—':aqi+' '+aqiRate[0]),aqiRate[1]]].forEach(function(x){
+     ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+aqiRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/></svg>','Air Quality'+aqiStamp,(aqi==null?'Unavailable':aqi+' '+aqiRate[0]),aqiRate[1]]].forEach(function(x){
       ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:#94a3b8">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
     });
     ag+='</div>';
@@ -16167,7 +16188,10 @@ function dsShowDashboard(){
 
   // Footer
   var syncAgo=''; try{ if(st.lastUpdate){ var mAgo=Math.round((Date.now()-st.lastUpdate)/60000); syncAgo=mAgo<1?'just now':mAgo<60?mAgo+' min ago':Math.round(mAgo/60)+'h ago'; } }catch(e){}
-  H+='<div style="text-align:center;font-size:10px;color:#5b6678;padding:4px 0 2px">All times in Eastern Time (ET)'+(syncAgo?'  &middot;  Last synced: '+syncAgo:'')+'  &middot;  Up to date</div>';
+  // "Data synced" = app-data (Firebase) save time — NOT weather. Weather has its
+  // own live freshness token (#ds-wx-sync), filled by the getWeather_ call below,
+  // so a stale/failed weather fetch can never read as a blanket "Up to date".
+  H+='<div style="text-align:center;font-size:10px;color:#5b6678;padding:4px 0 2px">All times in Eastern Time (ET)'+(syncAgo?'  &middot;  Data synced '+syncAgo:'')+'  &middot;  <span id="ds-wx-sync">Weather loading&hellip;</span></div>';
 
   H+='</div>'; // body
 
@@ -16202,23 +16226,27 @@ function dsShowDashboard(){
     else if(a){ dsNav(a); }
   });
 
-  // ---- live weather (temp/feels/wind/hum/uv) + AQI ----
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,windspeed_10m,relativehumidity_2m,winddirection_10m,uv_index&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
-    .then(function(r){return r.json();}).then(function(data){
-      if(data&&data.current){ var c=data.current; var dirs=['N','NE','E','SE','S','SW','W','NW']; var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
-        if(c.temperature_2m!=null) st.wxTempF=Math.round(c.temperature_2m);
-        var g=function(id){return document.getElementById(id);};
-        if(g('ds-wx-temp')&&c.temperature_2m!=null) g('ds-wx-temp').textContent=Math.round(c.temperature_2m)+'°F';
-        if(g('ds-wx-feels')&&c.apparent_temperature!=null) g('ds-wx-feels').textContent='Feels like '+Math.round(c.apparent_temperature)+'°';
-        if(g('ds-wx-wind')) g('ds-wx-wind').textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
-        if(g('ds-wx-hum')) g('ds-wx-hum').textContent=Math.round(c.relativehumidity_2m)+'%';
-        if(g('ds-wx-uv')&&c.uv_index!=null){ var uvv=Math.round(c.uv_index); g('ds-wx-uv').textContent=uvv+' ('+(uvv>=8?'Very High':uvv>=6?'High':uvv>=3?'Moderate':'Low')+')'; g('ds-wx-uv').style.color=uvv>=8?'#ef4444':uvv>=6?'#f59e0b':'#e2e8f0'; }
-      }
-    }).catch(function(){});
-  fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681&current=us_aqi&timezone=America%2FChicago')
-    .then(function(r){return r.json();}).then(function(data){ var aqi=data&&data.current&&data.current.us_aqi; var el=document.getElementById('ds-wx-aqi');
-      if(el&&aqi!=null){ aqi=Math.round(aqi); el.textContent=aqi+' ('+(aqi>=150?'Unhealthy':aqi>=100?'Moderate':'Good')+')'; el.style.color=aqi>=150?'#ef4444':aqi>=100?'#f59e0b':'#4ade80'; }
-    }).catch(function(){});
+  // ---- live weather (temp/feels/wind/hum/uv) + AQI — via the shared cache, so the
+  //      footer states REAL weather freshness (or "stale"/"unavailable") instead of
+  //      a hardcoded "Up to date", and a failed AQI fetch shows last-known, not "—".
+  getWeather_().then(function(wres){
+    var data=wres.data, sEl=document.getElementById('ds-wx-sync');
+    if(sEl) sEl.innerHTML = !data ? '<span style="color:#f59e0b">Weather unavailable</span>'
+      : (wres.ok ? 'Weather '+wxAsOf_(wres.fetchedAt) : '<span style="color:#f59e0b">Weather stale ('+wxClock_(wres.fetchedAt)+')</span>');
+    if(data&&data.current){ var c=data.current; var dirs=['N','NE','E','SE','S','SW','W','NW']; var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
+      if(c.temperature_2m!=null) st.wxTempF=Math.round(c.temperature_2m);
+      var g=function(id){return document.getElementById(id);};
+      if(g('ds-wx-temp')&&c.temperature_2m!=null) g('ds-wx-temp').textContent=Math.round(c.temperature_2m)+'°F';
+      if(g('ds-wx-feels')&&c.apparent_temperature!=null) g('ds-wx-feels').textContent='Feels like '+Math.round(c.apparent_temperature)+'°';
+      if(g('ds-wx-wind')) g('ds-wx-wind').textContent=wdir+' '+Math.round(c.windspeed_10m)+' mph';
+      if(g('ds-wx-hum')) g('ds-wx-hum').textContent=Math.round(c.relativehumidity_2m)+'%';
+      if(g('ds-wx-uv')&&c.uv_index!=null){ var uvv=Math.round(c.uv_index); g('ds-wx-uv').textContent=uvv+' ('+(uvv>=8?'Very High':uvv>=6?'High':uvv>=3?'Moderate':'Low')+')'; g('ds-wx-uv').style.color=uvv>=8?'#ef4444':uvv>=6?'#f59e0b':'#e2e8f0'; }
+    }
+  });
+  getAQI_().then(function(ares){ var aqi=ares.data&&ares.data.current&&ares.data.current.us_aqi; var el=document.getElementById('ds-wx-aqi');
+    if(el&&aqi!=null){ aqi=Math.round(aqi); el.textContent=aqi+' ('+(aqi>=150?'Unhealthy':aqi>=100?'Moderate':'Good')+')'+(ares.ok?'':' · stale'); el.style.color=ares.ok?(aqi>=150?'#ef4444':aqi>=100?'#f59e0b':'#4ade80'):'#f59e0b'; }
+    else if(el){ el.textContent='—'; }
+  });
 }
 
 function dsShowRidesList(){
