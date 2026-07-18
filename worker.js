@@ -13174,18 +13174,23 @@ function aiRenderTab_(tab, ded){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
   }
-  var cards=[
-    _aiSafe_('DNA', function(){return aiCardDNA_(ded);}),
-    _aiSafe_('Momentum', function(){return aiCardMomentum_(ded);}),
-    _aiSafe_('Watchlist', function(){return aiCardWatchlist_();}),
-    _aiSafe_('WhatChanged', function(){return aiCardWhatChanged_(ded);}),
-    _aiSafe_('Weight', function(){return aiCardWeight_();}),
-    _aiSafe_('Zones', function(){return aiCardZones_(ded);}),
-    _aiSafe_('Records', function(){return aiCardRecords_();}),
-    _aiSafe_('Story', function(){return aiCardStory_(ded);})
-  ].filter(function(h){return h;});
-  if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
-  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
+  var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
+  var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
+  var watch=_aiSafe_('Watchlist', function(){return aiCardWatchlist_();});
+  var changed=_aiSafe_('WhatChanged', function(){return aiCardWhatChanged_(ded);});
+  var zones=_aiSafe_('Zones', function(){return aiCardZones_(ded);});
+  var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
+  var recs=_aiSafe_('Records', function(){return aiCardRecords_();});
+  var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
+  // Mockup grid: hero row (DNA | Momentum | Watchlist), then the metric cards, and
+  // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
+  // stretch keeps each row's cards equal height so there are no ragged gaps.
+  var grid=[dna, mom, watch, changed, zones, weight, recs].filter(function(h){return h;});
+  if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
+  var html='';
+  if(grid.length) html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;align-items:stretch">'+grid.join('')+'</div>';
+  if(story) html+='<div style="margin-top:12px">'+story+'</div>';
+  return html;
 }
 
 // ---- shared renderer (both surfaces) ----
