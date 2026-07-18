@@ -12663,6 +12663,7 @@ function _recoverPreview_(backup){
 // STAGE 1 executor: pause poll, BLOCK gps-migrate, revive-from-IDB / add-from-backup
 // (mirrors _recoverPreview_ exactly), saveLocal_, then HALT before any remote push.
 // Remote is NOT touched here. Review the counts, then run aiRecoverPushRemote_().
+var _rcvExpectedLive=null; // live count Stage 1 produced; Stage 2 refuses to push if st drifted from it
 function aiRecoverLocal_(){ _bcmpBox_('EXECUTE local recovery (revive+add, NO remote push)', '[rcv-exec]', _recoverLocalExec_); }
 function _recoverLocalExec_(backup){
   if(!backup||!backup.length){ console.log('[rcv-exec] no rides in backup file'); return; }
@@ -12693,6 +12694,7 @@ function _recoverLocalExec_(backup){
   try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
   try{ saveLocal_(); }catch(e){ console.log('[rcv-exec] saveLocal error '+(e&&e.message)); }
   var live=0,nullTomb=0; all.forEach(function(r){ if(!r)return; if(!r.deleted) live++; else if(r.deleteReason==null||r.deleteReason==='') nullTomb++; });
+  _rcvExpectedLive=live;   // Stage 2 verifies st still has this many live before pushing
   console.log('[rcv-exec] LOCAL RECOVERY DONE — revived-from-IDB=' + Number(revived) + ' added-from-backup=' + Number(added) + ' live-now=' + Number(live) + ' null-tomb=' + Number(nullTomb));
   console.log('[rcv-exec] saved to IDB. 5s poll PAUSED, gps-migrate BLOCKED, remote UNTOUCHED.');
   console.log('[rcv-exec] >>> REVIEW these counts. If correct, run aiRecoverPushRemote_() to force-overwrite + verify remote. <<<');
@@ -12700,11 +12702,21 @@ function _recoverLocalExec_(backup){
 // STAGE 2: force-OVERWRITE remote with the recovered local state, then re-fetch and
 // VERIFY. HALTS (no trust, stays paused) unless remote reads back null-tomb=0.
 function aiRecoverPushRemote_(){
-  console.log('[rcv-push] force-overwriting remote with recovered local state (no merge)...');
+  // Capture the snapshot SYNCHRONOUSLY, before any async. applyFirebaseData reassigns
+  // st (st = normalizeState_(mergeState_(...))), so serializing inside the async .then
+  // could grab a background-reverted (stale pre-revive) object — the push-snapshot bug.
+  var snap; try{ snap=JSON.parse(JSON.stringify(st)); }catch(e){ console.error('[rcv-push] ABORT — could not snapshot st: '+(e&&e.message)); return; }
+  if(Array.isArray(snap)) snap=Object.assign({},snap);
+  var snapLive=(snap.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+  // Drift guard: refuse to push if st no longer matches what Stage 1 recovered.
+  if(_rcvExpectedLive==null){ console.error('[rcv-push] ABORT — no Stage-1 recovery recorded. Run aiRecoverLocal_ first.'); return; }
+  if(snapLive!==_rcvExpectedLive){ console.error('[rcv-push] ABORT — st drifted since Stage 1: expected live=' + Number(_rcvExpectedLive) + ' but snapshot has ' + Number(snapLive) + '. A background merge reverted the revive. Run aiPauseSync_(), then aiRecoverLocal_ again, then retry. NOTHING pushed.'); return; }
+  delete snap.ghToken; snap.lastUpdate=Date.now();
+  var body=JSON.stringify(snap);   // freeze the bytes now — nothing async can change them
+  console.log('[rcv-push] snapshot frozen: live=' + Number(snapLive) + '. force-overwriting remote (no merge)...');
   ensureFbAuth_().then(function(tok){
-    var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
-    delete saveData.ghToken; saveData.lastUpdate=Date.now(); try{ fbWriteTs=saveData.lastUpdate; }catch(e){}
-    return fetch(fbAuthedUrl_(tok), {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(saveData)})
+    try{ fbWriteTs=snap.lastUpdate; }catch(e){}
+    return fetch(fbAuthedUrl_(tok), {method:'PUT', headers:{'Content-Type':'application/json'}, body:body})
       .then(function(r){ if(!r||!r.ok) throw new Error('PUT failed status '+(r&&r.status)); return fetch(fbAuthedUrl_(tok)); })
       .then(function(r){ if(!r||!r.ok) throw new Error('verify GET failed status '+(r&&r.status)); return r.json(); })
       .then(function(remote){
@@ -12712,15 +12724,13 @@ function aiRecoverPushRemote_(){
         var vkey=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
         var liveKey={}, live=0; list.forEach(function(x){ if(x&&!x.deleted){ live++; liveKey[vkey(x)]=1; } });
         var nullTomb=0, fullyDead=0; list.forEach(function(x){ if(x&&x.deleted&&(x.deleteReason==null||x.deleteReason==='')){ nullTomb++; if(!liveKey[vkey(x)]) fullyDead++; } });
-        var localLive=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
-        // Clean = the recovery's own definition: zero FULLY-DEAD tombstones (a null-reason
-        // tombstone with no live twin at its key) AND remote-live >= local-live. The
-        // dupe-keep null-tombstones (live twin exists) are correct and expected.
-        if(fullyDead!==0 || live<localLive){
-          console.error('[rcv-push] HALT — remote verify FAILED: fully-dead=' + Number(fullyDead) + ' (expected 0), remote-live=' + Number(live) + ' vs local-live=' + Number(localLive) + '. Remote NOT trusted. Sync STAYS PAUSED. Do NOT resume, do NOT reopen mobiles.');
+        // Clean = zero FULLY-DEAD tombstones AND remote-live matches the SNAPSHOT we pushed
+        // (not a re-read of st, which may have drifted). dupe-keep null-tombstones are fine.
+        if(fullyDead!==0 || live!==snapLive){
+          console.error('[rcv-push] HALT — remote verify FAILED: fully-dead=' + Number(fullyDead) + ' (expected 0), remote-live=' + Number(live) + ' vs pushed-snapshot=' + Number(snapLive) + '. Remote NOT trusted. Sync STAYS PAUSED. Do NOT resume, do NOT reopen mobiles.');
           return;
         }
-        console.log('[rcv-push] VERIFIED CLEAN — remote-live=' + Number(live) + ' fully-dead=0 (null-tomb=' + Number(nullTomb) + ' are dupe-keep, correct). Remote is authoritative.');
+        console.log('[rcv-push] VERIFIED CLEAN — remote-live=' + Number(live) + ' matches pushed snapshot, fully-dead=0 (null-tomb=' + Number(nullTomb) + ' are dupe-keep, correct). Remote is authoritative.');
         console.log('[rcv-push] NEXT: aiResumeSync_(), then reopen mobiles after clearing their storage.');
       });
   }).catch(function(e){ console.error('[rcv-push] HALT — push/verify errored: ' + (e&&e.message) + '. Remote state UNKNOWN; sync STAYS PAUSED. Do NOT resume.'); });
