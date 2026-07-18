@@ -1,6 +1,23 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
+    // ---- API proxy: keep the Intervals.icu API key SERVER-SIDE, never in the
+    //      served HTML. Reads env.INTERVALS_API_KEY (a Worker secret) and optional
+    //      env.INTERVALS_ATHLETE_ID. If the secret is not configured this returns
+    //      503 and the client falls back silently to CSV/computed fitness.
+    try {
+      const _u = new URL(request.url);
+      if (_u.pathname === '/api/intervals-wellness') {
+        const key = env && env.INTERVALS_API_KEY;
+        const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
+        if (!key) return new Response(JSON.stringify({ error: 'not_configured' }), { status: 503, headers: { 'content-type': 'application/json' } });
+        const day = _u.searchParams.get('date');
+        const safeDay = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : new Date().toISOString().slice(0, 10);
+        const iu = 'https://intervals.icu/api/v1/athlete/' + aid + '/wellness/' + safeDay;
+        const r = await fetch(iu, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+        return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+      }
+    } catch (e) {}
     return new Response(`<!DOCTYPE html><!-- BUST1783637100 v1783637100 -->
 <html lang="en">
 <head>
@@ -4996,7 +5013,7 @@ function migrateRaces_(){
       if(existingKeys_[ek]) return;   // present live OR tombstoned — never re-add
       st.races.push({id:e.id||('race-'+Date.now()+'-'+st.races.length),
         name:e.name||'Race', date:e.date, sport:raceSportGuess_(e.name),
-        distance:null, goal:(e.type==='goal'?'Goal':'Finish Strong'), target:'', location:''});
+        distance:null, goal:(e.type==='goal'?'Goal':'Finish Strong'), target:'', location:'', status:'active'});
       existingKeys_[ek]=true;
       changed=true;
     });
@@ -5005,6 +5022,7 @@ function migrateRaces_(){
   st.races.forEach(function(r,i){
     if(!r.id){ r.id='race-'+(r.date||'x')+'-'+i; changed=true; }
     if(!r.sport){ r.sport=raceSportGuess_(r.name); changed=true; }
+    if(r.status==null){ r.status='active'; changed=true; }   // status: active | tentative | cancelled
   });
   // Collapse duplicate races (same name + same calendar date) that earlier
   // seeds/migrations left behind — e.g. Grand Rapids Half seeded into both
@@ -5029,7 +5047,11 @@ function migrateRaces_(){
 }
 // All upcoming races (today or later), soonest first, normalized. The _i field
 // is the index into st.races so edit/delete can target the exact entry.
-function upcomingRaces_(){
+// Cancelled races are EXCLUDED by default so they drop out of every countdown,
+// taper narrative, and coach premise (Jul 18 report #5). Pass includeCancelled
+// to list them (management views render them struck-through so they can be
+// restored). status: 'active' | 'tentative' | 'cancelled'.
+function upcomingRaces_(includeCancelled){
   migrateRaces_();
   var today=new Date(); today.setHours(0,0,0,0);
   return (st.races||[]).map(function(r,i){
@@ -5037,9 +5059,9 @@ function upcomingRaces_(){
     var daysOut=d?Math.round((d-today)/86400000):null;
     return {id:r.id, name:r.name||'Race', date:r.date, sport:r.sport||'other',
       distance:(r.distance!=null?r.distance:null), goal:r.goal||'Finish Strong',
-      target:r.target||'', location:r.location||'', dateObj:d,
+      target:r.target||'', location:r.location||'', status:r.status||'active', dateObj:d,
       daysOut:daysOut, weeksOut:(daysOut!=null?Math.ceil(daysOut/7):null), _i:i, _deleted:!!r.deleted};
-  }).filter(function(x){ return !x._deleted && x.dateObj && x.daysOut>=0; })
+  }).filter(function(x){ return !x._deleted && (includeCancelled || x.status!=='cancelled') && x.dateObj && x.daysOut>=0; })
     .sort(function(a,b){ return a.dateObj-b.dateObj; });
 }
 // The single accessor: soonest upcoming race, normalized, or null.
@@ -9553,7 +9575,7 @@ function showHomeDash(){
 
   // Upcoming Events (real race data) - showing up to 3, not just the
   // next one, per request to keep motivation front and center.
-  var upcomingRaces=upcomingRaces_();
+  var upcomingRaces=upcomingRaces_(true);   // include cancelled (shown struck-through, restorable)
   if(upcomingRaces.length){
     html+='<div style="margin:0 16px 20px">'
       +'<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming Events</div>';
@@ -9566,10 +9588,10 @@ function showHomeDash(){
         +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
         +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:700;color:var(--t1)">'+race.name+'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:var(--t1)'+(race.status==='cancelled'?';text-decoration:line-through;opacity:.6':'')+'">'+race.name+(race.status==='tentative'?' <span style="font-size:10px;font-weight:700;color:#f59e0b">(tentative)</span>':'')+'</div>'
         +(race.location?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+race.location+'</div>':'')
         +'</div>'
-        +'<div style="font-size:13px;font-weight:700;color:#5DCAA5;flex-shrink:0">'+daysOut+' days</div>'
+        +'<div style="font-size:13px;font-weight:700;color:'+(race.status==='cancelled'?'#e24b4a':'#5DCAA5')+';flex-shrink:0">'+(race.status==='cancelled'?'Cancelled':daysOut+' days')+'</div>'
         +'</div>';
     });
     html+='</div>';
@@ -9628,14 +9650,12 @@ function showHomeDash(){
 // go stale between imports. Uses Basic auth per Intervals.icu's documented
 // API convention (username "API_KEY", password is the actual key).
 function fetchLiveIntervalsWellness(callback){
-  var athleteId='i544205';
-  var apiKey='4iacdcck2cllnwssbdilq6jhw';
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
-  var url='https://intervals.icu/api/v1/athlete/'+athleteId+'/wellness/'+todayStr;
-  var authHeader='Basic '+btoa('API_KEY:'+apiKey);
-
-  fetch(url,{headers:{'Authorization':authHeader}})
+  // The Intervals.icu key now lives server-side — call our own Worker proxy so no
+  // credential ships in the served HTML. A 503 (proxy not yet configured with the
+  // secret) or any error falls through to the silent CSV/computed fallback below.
+  fetch('/api/intervals-wellness?date='+todayStr)
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data){
       if(!data) return;
@@ -12432,7 +12452,7 @@ function wxCoachHazard_(wxCurrent, cb){
 }
 // Shared go/no-go directive for the coach prompts — decide on the WORST relevant
 // variable, health outranks comfort. Apostrophe-free (served template literal).
-var COACH_GONOGO=' IMPORTANT: base any go or no-go call on the WORST relevant condition, not the average of the agreeable ones. Air quality, extreme heat, and storms are HEALTH factors that outrank comfort items like wind or rain; if a health hazard is present, call it out plainly and do NOT green-light hard efforts even if temperature and rain look fine.';
+var COACH_GONOGO=' IMPORTANT: base any go or no-go call on the WORST relevant condition, not the average of the agreeable ones. Air quality, extreme heat, and storms are HEALTH factors that outrank comfort items like wind or rain; if a health hazard is present, call it out plainly and do NOT green-light hard efforts even if temperature and rain look fine. If a race is today or imminent, phrase race-day advice as conditional on the event actually proceeding (for example, assuming it is still on) rather than stating it as fact, and never give confident race-day bullets for a race flagged tentative or unconfirmed.';
 // Decompose a ride-conditions score into its drivers for a Why? button — the PoC
 // "77 = wind 70/100, temp 100/100, rain 60/100 -> mean 77". Reads the real
 // sub-scores; no new math.
@@ -13755,7 +13775,7 @@ function dsShowAICoach(){
   }).join('; ');
 
   var _nextRace=getNextRace_();
-  var raceStr=_nextRace?_nextRace.name+' in '+_nextRace.daysOut+' days'+(_nextRace.target?' (target '+_nextRace.target+')':''):'none scheduled';
+  var raceStr=_nextRace?_nextRace.name+' in '+_nextRace.daysOut+' days'+(_nextRace.target?' (target '+_nextRace.target+')':'')+(_nextRace.status==='tentative'?' [TENTATIVE - not yet confirmed]':''):'none scheduled';
 
   fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,precipitation_probability&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
   .then(function(r){return r.json();})
@@ -16039,7 +16059,7 @@ function dsShowDashboard(){
   var activeDays=Object.keys(activeSet).length;
   var elapsed=now.getDate();
   // Races (real).
-  var upRaces=(typeof upcomingRaces_==='function')?upcomingRaces_():[];
+  var upRaces=(typeof upcomingRaces_==='function')?upcomingRaces_(true):[];   // include cancelled (struck-through, restorable)
 
   // ---------- helpers ----------
   var ACC={green:'#4ade80',orange:'#FC4C02',blue:'#60a5fa',purple:'#8b5cf6',teal:'#22d3ee',amber:'#f59e0b',red:'#e24b4a',grey:'#64748b'};
@@ -16298,8 +16318,8 @@ function dsShowDashboard(){
     var sIcon=rr.sport==='run'?ACC.red:rr.sport==='bike'?ACC.green:ACC.amber;
     ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
     ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:#64748b">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1">'+rr.dateObj.getDate()+'</div></div>';
-    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+'</div><div style="font-size:10px;color:#64748b">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
-    ue+='<div style="font-size:11px;font-weight:700;color:'+ACC.green+';flex-shrink:0">'+rr.daysOut+' day'+(rr.daysOut===1?'':'s')+'</div></div>';
+    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#e8edf5;'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:#f59e0b">(tentative)</span>':'')+'</div><div style="font-size:10px;color:#64748b">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
+    ue+='<div style="font-size:11px;font-weight:700;color:'+(rr.status==='cancelled'?ACC.red:ACC.green)+';flex-shrink:0">'+(rr.status==='cancelled'?'Cancelled':(rr.daysOut+' day'+(rr.daysOut===1?'':'s')))+'</div></div>';
   });
   ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:#94a3b8;border:1px solid #1c2130;border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
   H+=card(ue);
@@ -19813,6 +19833,8 @@ function openRaceEditor(idx,onSaved){
   var sport=existing&&existing.sport?existing.sport:'bike';
   var esc=function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
   var sportOpt=function(v,label){ return '<option value="'+v+'"'+(sport===v?' selected':'')+'>'+label+'</option>'; };
+  var estatus=existing&&existing.status?existing.status:'active';
+  var statusOpt=function(v,label){ return '<option value="'+v+'"'+(estatus===v?' selected':'')+'>'+label+'</option>'; };
   var modal=document.createElement('div');
   // z-index 1000 so the sheet sits ABOVE #desktop-shell (z-index:999). At 300
   // it opened behind the desktop shell — invisible/unclickable — which is why
@@ -19838,8 +19860,11 @@ function openRaceEditor(idx,onSaved){
     +'<input id="re-target" type="text" placeholder="e.g. 5:30:00" value="'+(existing?esc(existing.target):'')+'" style="'+fieldCss+'"></div></div>'
     +'<div style="margin-bottom:10px"><div style="'+lblCss+'">Location</div>'
     +'<input id="re-loc" type="text" placeholder="e.g. Holland, MI" value="'+(existing?esc(existing.location):'')+'" style="'+fieldCss+'"></div>'
-    +'<div style="margin-bottom:16px"><div style="'+lblCss+'">Goal</div>'
-    +'<input id="re-goal" type="text" placeholder="e.g. Finish Strong" value="'+(existing?esc(existing.goal):'')+'" style="'+fieldCss+'"></div>';
+    +'<div style="margin-bottom:10px"><div style="'+lblCss+'">Goal</div>'
+    +'<input id="re-goal" type="text" placeholder="e.g. Finish Strong" value="'+(existing?esc(existing.goal):'')+'" style="'+fieldCss+'"></div>'
+    +'<div style="margin-bottom:16px"><div style="'+lblCss+'">Status</div>'
+    +'<select id="re-status" style="'+fieldCss+'">'+statusOpt('active','Confirmed / on')+statusOpt('tentative','Tentative / unconfirmed')+statusOpt('cancelled','Cancelled')+'</select>'
+    +'<div style="font-size:11px;color:var(--t3);margin-top:5px">Cancelled races drop out of countdowns and coaching advice but stay here so you can restore them.</div></div>';
 
   // Sport switch sets a sensible default distance when the field is empty.
   setTimeout(function(){
@@ -19866,7 +19891,8 @@ function openRaceEditor(idx,onSaved){
       distance:isNaN(distVal)?null:distVal,
       target:document.getElementById('re-target').value.trim(),
       location:document.getElementById('re-loc').value.trim(),
-      goal:document.getElementById('re-goal').value.trim()||'Finish Strong'
+      goal:document.getElementById('re-goal').value.trim()||'Finish Strong',
+      status:(document.getElementById('re-status')&&document.getElementById('re-status').value)||'active'
     };
     if(idx!==undefined && idx!==null) st.races[idx]=race;
     else st.races.push(race);
