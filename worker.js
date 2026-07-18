@@ -15791,13 +15791,10 @@ function dsAttentionState_(d){
 // air-quality API; both are real, not invented. Equipment reads live chain wear
 // (bike odometer vs a user-recorded wax mileage) — only fires when tracking is on.
 function dsAttentionWeather_(d, cb){
-  var wxUrl='https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=apparent_temperature,windspeed_10m,precipitation_probability,uv_index&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1';
-  var aqUrl='https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681&current=us_aqi&timezone=America%2FChicago';
-  Promise.all([
-    fetch(wxUrl).then(function(r){return r.json();}).catch(function(){return null;}),
-    fetch(aqUrl).then(function(r){return r.json();}).catch(function(){return null;})
-  ]).then(function(res){
-    var c=res[0]&&res[0].current, aq=res[1]&&res[1].current, calm=true;
+  // Shared cache (getWeather_/getAQI_) so the attention panel's weather + AQI match
+  // the rest of the app and reuse the same fetch instead of hitting the API again.
+  Promise.all([ getWeather_(), getAQI_() ]).then(function(res){
+    var c=res[0]&&res[0].data&&res[0].data.current, aq=res[1]&&res[1].data&&res[1].data.current, calm=true;
     if(c){
       var feels=Math.round(c.apparent_temperature), wind=Math.round(c.windspeed_10m), pop=c.precipitation_probability, uv=(c.uv_index!=null?Math.round(c.uv_index):null);
       if(feels>=100){ d.items.push({sev:2,cat:'env',text:'Extreme heat — feels like '+feels+'. Heat this high sharply cuts sustainable power; move the ride earlier, shorten it, or take it indoors.'}); calm=false; }
@@ -24071,13 +24068,11 @@ function showWeatherHistory(){
       +'</div>';
     scr.appendChild(wxCard);
 
-    // Fetch current conditions
-    fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-      +'&current=temperature_2m,apparent_temperature,weathercode'
-      +'&hourly=temperature_2m,weathercode'
-      +'&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=1')
-    .then(function(r){return r.json();}).then(function(data){
-      if(!data.current) return;
+    // Current conditions via the shared cache (Grand Rapids, same fetch as the
+    // Weather page/Dashboard/tabs).
+    getWeather_().then(function(wres){
+      var data=wres.data;
+      if(!data||!data.current) return;
       var temp=Math.round(data.current.temperature_2m);
       var feels=Math.round(data.current.apparent_temperature);
       var temps=data.hourly.temperature_2m||[];
@@ -24318,10 +24313,11 @@ function showWeatherHistory(){
         leg.appendChild(p);
       });
       body.appendChild(leg);
-      // Fetch wind and overlay colored polylines on the buildRouteMap instance
-      fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&hourly=windspeed_10m,winddirection_10m&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=1')
-        .then(function(r){return r.json();})
-        .then(function(wx){
+      // Wind overlay via the shared cache (Grand Rapids hourly wind). Colored
+      // polylines still overlay the ride's own route map; only the wind source
+      // is the shared GR forecast (as it was before).
+      getWeather_().then(function(wres){
+          var wx=wres.data;
           var hi=new Date().getHours();
           var wdir=wx&&wx.hourly?wx.hourly.winddirection_10m[hi]:null;
           var wspd=wx&&wx.hourly?wx.hourly.windspeed_10m[hi]:0;
