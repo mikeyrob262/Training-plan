@@ -3746,14 +3746,14 @@ function migrateCorruptTracks_(){
   // the Strava token flow bails), so remote could sit corrupt for the whole
   // session. A force-push here writes null for every mismatched pair immediately,
   // so remote can't re-seed while the re-fetch below fills clean pairs back in.
-  try{ if(typeof fbPush==='function'){ fbPush(true); console.log('[gps-migrate] force-pushed nulled state to remote (corrupt rides: refetchable='+bad.length+') — remote 596/740 overwritten'); } }catch(e){}
+  try{ if(typeof fbPush==='function'){ fbPush(true, true); console.log('[gps-migrate] force-OVERWROTE remote with local state (forceOverwrite; refetchable='+bad.length+') — no merge, so it can no longer re-pull remote tombstones'); } }catch(e){}
   if(!bad.length) return; // remote cleaned; nothing has a stravaId to re-fetch
   if(!st.stravaToken && !st.stravaRefreshToken) return;
   withStravaToken_(function(token){
     if(!token) return;
     var i=0, healed=0;
     function step(){
-      if(i>=bad.length){ try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){} try{ console.log('[gps-migrate] done — healed '+healed+' tracks'); }catch(e){} return; }
+      if(i>=bad.length){ try{ sv(); if(typeof fbPush==='function') fbPush(true, true); }catch(e){} try{ console.log('[gps-migrate] done — healed '+healed+' tracks'); }catch(e){} return; }
       var r=bad[i++];
       fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true',{headers:{'Authorization':'Bearer '+token}})
         .then(function(x){ if(x.status===429){ i--; setTimeout(step, 60000); throw 'rl'; } return x.ok?x.json():null; })
@@ -12709,13 +12709,19 @@ function aiRecoverPushRemote_(){
       .then(function(r){ if(!r||!r.ok) throw new Error('verify GET failed status '+(r&&r.status)); return r.json(); })
       .then(function(remote){
         var rr=(remote&&remote.rides)||[]; var list=Array.isArray(rr)?rr:Object.keys(rr).map(function(k){return rr[k];});
-        var nullTomb=0, live=0; list.forEach(function(x){ if(!x)return; if(x.deleted){ if(x.deleteReason==null||x.deleteReason==='') nullTomb++; } else live++; });
-        if(nullTomb!==0){
-          console.error('[rcv-push] HALT — remote verify FAILED: null-tomb=' + Number(nullTomb) + ' (expected 0). Remote NOT trusted. Sync STAYS PAUSED. Do NOT resume, do NOT reopen mobiles. Re-run aiRecoverLocal_ then aiRecoverPushRemote_ after diagnosing.');
+        var vkey=function(r){ return (r.date||'')+'|'+Math.round((+r.distance||0)*10); };
+        var liveKey={}, live=0; list.forEach(function(x){ if(x&&!x.deleted){ live++; liveKey[vkey(x)]=1; } });
+        var nullTomb=0, fullyDead=0; list.forEach(function(x){ if(x&&x.deleted&&(x.deleteReason==null||x.deleteReason==='')){ nullTomb++; if(!liveKey[vkey(x)]) fullyDead++; } });
+        var localLive=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
+        // Clean = the recovery's own definition: zero FULLY-DEAD tombstones (a null-reason
+        // tombstone with no live twin at its key) AND remote-live >= local-live. The
+        // dupe-keep null-tombstones (live twin exists) are correct and expected.
+        if(fullyDead!==0 || live<localLive){
+          console.error('[rcv-push] HALT — remote verify FAILED: fully-dead=' + Number(fullyDead) + ' (expected 0), remote-live=' + Number(live) + ' vs local-live=' + Number(localLive) + '. Remote NOT trusted. Sync STAYS PAUSED. Do NOT resume, do NOT reopen mobiles.');
           return;
         }
-        console.log('[rcv-push] VERIFIED CLEAN — remote null-tomb=0, remote-live=' + Number(live) + '. Remote is now authoritative.');
-        console.log('[rcv-push] NEXT: commit the permanent gps-migrate fbPush(true,true) fix, THEN aiResumeSync_(). Keep mobiles OFF until that fix ships.');
+        console.log('[rcv-push] VERIFIED CLEAN — remote-live=' + Number(live) + ' fully-dead=0 (null-tomb=' + Number(nullTomb) + ' are dupe-keep, correct). Remote is authoritative.');
+        console.log('[rcv-push] NEXT: aiResumeSync_(), then reopen mobiles after clearing their storage.');
       });
   }).catch(function(e){ console.error('[rcv-push] HALT — push/verify errored: ' + (e&&e.message) + '. Remote state UNKNOWN; sync STAYS PAUSED. Do NOT resume.'); });
 }
