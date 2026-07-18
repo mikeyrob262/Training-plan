@@ -13113,13 +13113,57 @@ function aiCardWeight_(){
   return aiCard_(inner);
 }
 
+// ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
+function aiCardDNA_(ded){
+  var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
+  if(rides.length<20) return '';
+  var MIN=20, traits=[];
+  // Climber — average elevation gain per mile.
+  (function(){
+    var e=rides.filter(function(r){ return (parseFloat(r.elev)||0)>0; });
+    if(e.length<MIN) return;
+    var ft=e.reduce(function(s,r){return s+(parseFloat(r.elev)||0);},0), mi=e.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
+    if(mi<=0) return; var fpm=Math.round(ft/mi);
+    if(fpm>=50) traits.push(['Climber','You average '+fpm+' ft of climbing per mile','#f59e0b']);
+  })();
+  // Endurance Engine — pace on the longest third of rides holds vs the shortest third.
+  (function(){
+    var s=rides.map(function(r){ var d=parseFloat(r.distance)||0, sec=_durSec_(r); return (d>0&&sec>0)?{d:d, mph:d/(sec/3600)}:null; }).filter(Boolean).filter(function(x){return x.mph>3&&x.mph<40;});
+    if(s.length<MIN*3) return;
+    var byD=s.slice().sort(function(a,b){return a.d-b.d;}), t=Math.floor(byD.length/3);
+    if(t<MIN) return;
+    var avg=function(g){ return g.reduce(function(a,x){return a+x.mph;},0)/g.length; };
+    var sh=avg(byD.slice(0,t)), lg=avg(byD.slice(byD.length-t));
+    if(lg>=sh*0.98) traits.push(['Endurance Engine','Pace holds on long rides ('+(Math.round(lg*10)/10)+' vs '+(Math.round(sh*10)/10)+' mph short)','#4ade80']);
+  })();
+  // Weekend Warrior — share of rides on Sat/Sun.
+  (function(){
+    var wk=rides.filter(function(r){ var g=new Date(r.date+'T00:00:00').getDay(); return g===0||g===6; }).length, f=wk/rides.length;
+    if(f>=0.6) traits.push(['Weekend Warrior',Math.round(f*100)+'% of your rides are on weekends','#60a5fa']);
+  })();
+  // Long Hauler — share of rides that are 50+ miles.
+  (function(){
+    var lng=rides.filter(function(r){ return (parseFloat(r.distance)||0)>=50; }).length, f=lng/rides.length;
+    if(f>=0.25) traits.push(['Long Hauler',Math.round(f*100)+'% of your rides are 50+ miles','#8b5cf6']);
+  })();
+  if(!traits.length) return '';
+  var inner=aiLbl_('ATHLETE DNA','<span style="font-size:11px;color:#5b6678">from '+rides.length.toLocaleString()+' rides</span>');
+  traits.forEach(function(t){
+    inner+='<div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:12px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+t[2]+';flex-shrink:0;margin-top:5px"></span>'
+      +'<div style="min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5">'+aiEsc_(t[0])+'</div><div style="font-size:12px;color:#94a3b8;line-height:1.35">'+aiEsc_(t[1])+'</div></div>'
+    +'</div>';
+  });
+  return aiCard_(inner);
+}
+
 // ---- tab body ----
 function aiRenderTab_(tab, ded){
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
   }
-  var cards=[aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardWeight_(), aiCardZones_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
+  var cards=[aiCardDNA_(ded), aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardWeight_(), aiCardZones_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
   if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
 }
