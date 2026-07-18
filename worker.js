@@ -5224,8 +5224,7 @@ function weatherFormRowHTML(){
   if(withLoad.length < 5){
     formHTML = '<div style="font-size:13px;color:var(--t2);margin-top:2px">Log more rides for a form reading</div>';
   } else {
-    var pmc = computePMC(withLoad);
-    var tsb = Math.round(pmc[pmc.length-1].ctl - pmc[pmc.length-1].atl);
+    var tsb = getFitness_().tsb;
     var formColor = tsb >= 10 ? '#5DCAA5' : tsb >= -10 ? '#4D9FFF' : tsb >= -25 ? '#EF9F27' : '#E24B4A';
     var formLabel = tsb >= 10 ? 'Fresh, good day to push' : tsb >= -10 ? 'Steady state' : tsb >= -25 ? 'Fatigue building' : 'Prioritize recovery';
     formHTML = '<div style="font-size:20px;font-weight:800;color:'+formColor+'">'+(tsb>=0?'+':'')+tsb+'</div>'
@@ -5367,9 +5366,8 @@ function readinessCardHTML(){
       + '</div>';
   }
 
-  var pmc = computePMC(withLoad);
-  var today = pmc[pmc.length-1];
-  var fitness = today.ctl, fatigue = today.atl, form = today.tsb;
+  var _f = getFitness_();
+  var fitness = _f.ctl, fatigue = _f.atl, form = _f.tsb;
 
   var headline, sub, badgeLabel, badgeColor, badgeText;
   if(form >= 10){
@@ -9381,9 +9379,10 @@ function showHomeDash(){
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
   var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
   var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
-  var tsb=Math.round(last.tsb||0);
-  var ctl=Math.round(last.ctl||0);
-  var atl=Math.round(last.atl||0);
+  // Single source of truth for the headline numbers (the live pull still
+  // overwrites these in place when it resolves — same source getFitness_ reads).
+  var _fitHome=getFitness_();
+  var tsb=_fitHome.tsb, ctl=_fitHome.ctl, atl=_fitHome.atl;
 
   // Readiness score: map TSB (typically -30 to +25) onto a 0-10 scale,
   // matching the reference's "8.2 / Good" format. This is a rough
@@ -9694,13 +9693,9 @@ function fetchLiveIntervalsWellness(callback){
 // apostrophes need no escaping; em-dashes via — (the outer template
 // literal renders these to real chars).
 function teachPMC_(){
-  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
-    return {ctl:Math.round(window.__liveWellness.ctl||0), atl:Math.round(window.__liveWellness.atl||0), tsb:Math.round(window.__liveWellness.tsb||0)};
-  }
-  var rides=(st.rides||[]).filter(function(r){return r && !r.deleted;});
-  var pmc=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
-  var last=pmc.length?pmc[pmc.length-1]:{ctl:0,atl:0,tsb:0};
-  return {ctl:Math.round(last.ctl||0), atl:Math.round(last.atl||0), tsb:Math.round(last.tsb||0)};
+  // Single source of truth — same numbers the Dashboard / Coach / AIQ show.
+  var f=getFitness_();
+  return {ctl:f.ctl, atl:f.atl, tsb:f.tsb};
 }
 function teachRacePhrase_(race){
   if(!race || !race.name) return "";
@@ -10250,15 +10245,11 @@ function renderPerf(container){
   // which can be stale relative to today's actual fitness state - this
   // was previously the one place still showing old CSV numbers while
   // Home had already been fixed to use live data.
-  var pmcLast2;
-  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
-    pmcLast2={ctl:window.__liveWellness.ctl, atl:window.__liveWellness.atl, tsb:window.__liveWellness.tsb};
-  } else {
-    pmcLast2=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
-  }
-  var ctl2=Math.round(pmcLast2.ctl||0);
-  var atl2=Math.round(pmcLast2.atl||0);
-  var tsb2=Math.round(pmcLast2.tsb||0);
+  // Single source of truth — identical CTL/ATL/TSB to Dashboard / Coach / teach.
+  var _fitAIQ=getFitness_();
+  var ctl2=_fitAIQ.ctl;
+  var atl2=_fitAIQ.atl;
+  var tsb2=_fitAIQ.tsb;
   var ctlStatus2=ctl2>=80?'Elite':ctl2>=60?'Chase 1 Zone':ctl2>=40?'Building':ctl2>=20?'Base':'Starting';
   var ctlC2=ctl2>=60?'#00C896':ctl2>=40?'#4D9FFF':ctl2>=20?'#FC4C02':'var(--t3)';
   var atlDiff2=atl2-ctl2;
@@ -10896,6 +10887,46 @@ function computePMC(rides){
     data.push({d: dt.getMonth()+1+'/'+dt.getDate(), ctl: Math.round(ctl*10)/10, atl: Math.round(atl*10)/10, tsb: Math.round(tsb*10)/10});
   }
   return data;
+}
+
+// ---- SINGLE fitness source of truth --------------------------------------
+// Every headline surface (desktop Dashboard, AI Coach, Athlete Intelligence,
+// metric-teach) reads getFitness_() so they can no longer disagree the way the
+// Jul 18 report caught them (Dashboard CTL 53 / Coach 60 / AIQ 72 at the same
+// time). Divergence had two causes, both removed here: a split live-freshness
+// gate (Dashboard trusted a 1-hour-old value; everyone else 10 min) and a split
+// fallback (Dashboard always computePMC at baseline 20/20; everyone else the
+// Intervals CSV). One gate, one fallback, one 7-day ramp — computed here once.
+var FIT_LIVE_GATE=10*60*1000;
+function fitnessSeries_(){
+  // Prefer the athlete's own Intervals.icu weekly history (authoritative) over a
+  // local reconstruction; only compute locally when no history has been imported.
+  if(st.pmcHistory && st.pmcHistory.length) return buildPMCFromHistory(st.pmcHistory);
+  var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
+    .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
+  a.forEach(function(x){ x.load=unifiedLoad(x); });
+  var wl=a.filter(function(x){return x.load>0;});
+  return wl.length?computePMC(wl):[];
+}
+function getFitness_(){
+  var series=[]; try{ series=fitnessSeries_()||[]; }catch(e){ series=[]; }
+  var last=series.length?series[series.length-1]:null;
+  var ctl=last?Math.round(last.ctl||0):0;
+  var atl=last?Math.round(last.atl||0):0;
+  var tsb=last?Math.round(last.tsb!=null?last.tsb:((last.ctl||0)-(last.atl||0))):0;
+  // 7-day deltas (ctl ramp drives peaking/detraining direction) — computed ONCE.
+  var d7=null;
+  if(series.length>=8){ var n=series.length-1, p=series.length-8;
+    d7={ ctl:Math.round((series[n].ctl-series[p].ctl)*10)/10,
+         atl:Math.round((series[n].atl-series[p].atl)*10)/10,
+         tsb:Math.round(((series[n].ctl-series[n].atl)-(series[p].ctl-series[p].atl))*10)/10 }; }
+  var ramp=d7?d7.ctl:null;
+  var source=(st.pmcHistory&&st.pmcHistory.length)?'intervals-csv':'computed';
+  var asOf=(st&&st.lastUpdate)?st.lastUpdate:Date.now(), stale=true;
+  // Live Intervals.icu overrides the headline numbers when genuinely fresh, under
+  // ONE shared gate. Ramp/d7 stay from the series (live carries no history).
+  try{ var lw=window.__liveWellness; if(lw && lw.fetchedAt && (Date.now()-lw.fetchedAt)<FIT_LIVE_GATE){ ctl=Math.round(lw.ctl||0); atl=Math.round(lw.atl||0); tsb=Math.round(lw.tsb||0); source='live'; asOf=lw.fetchedAt; stale=false; } }catch(e){}
+  return {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, d7:d7, source:source, asOf:asOf, stale:stale};
 }
 
 function buildPMCChart(data){
@@ -15511,16 +15542,11 @@ function dsShowCalendar(){
 // Intervals.icu wellness cache (same source Home's Readiness card + the AI
 // Coach use); falls back to computing CTL/ATL/TSB from the unified load model.
 function getDesktopFitness_(){
-  try{ var lw=window.__liveWellness; if(lw && lw.fetchedAt && (Date.now()-lw.fetchedAt)<3600000) return {ctl:lw.ctl, atl:lw.atl, tsb:lw.tsb}; }catch(e){}
-  try{
-    var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
-      .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
-    a.forEach(function(x){ x.load=unifiedLoad(x); });
-    var wl=a.filter(function(x){return x.load>0;});
-    var pmc=wl.length?computePMC(wl):null;
-    if(pmc && pmc.length){ var last=pmc[pmc.length-1]; var ctl=Math.round(last.ctl), atl=Math.round(last.atl); return {ctl:ctl, atl:atl, tsb:ctl-atl}; }
-  }catch(e){}
-  return {ctl:0, atl:0, tsb:0};
+  // Back-compat alias — now delegates to the single source of truth so the
+  // desktop Dashboard reads the exact same CTL/ATL/TSB (and ramp) as the AI
+  // Coach and Athlete Intelligence, instead of its own 1-hour-gate/computePMC
+  // variant. Returns the full snapshot; legacy callers just read ctl/atl/tsb.
+  return getFitness_();
 }
 // TSB-based readiness on a 0-100 scale (desktop ring), mirroring the mobile
 // card's 5 + TSB/6 (0-10) formula. Returns {score,label,color}.
@@ -15577,18 +15603,11 @@ function wkgTrend_(){
 function dsAttention_(){
   var out={items:[], positives:[], state:'green', rec:''};
   function push(sev,cat,text){ out.items.push({sev:sev,cat:cat,text:text}); }
-  var fit=(typeof getDesktopFitness_==='function')?getDesktopFitness_():{ctl:0,atl:0,tsb:0};
+  var fit=(typeof getFitness_==='function')?getFitness_():{ctl:0,atl:0,tsb:0,ramp:null};
   var tsb=Math.round(fit.tsb||0);
-  // CTL ramp from a local PMC series (real): CTL now vs 7 days back.
-  var ramp=null;
-  try{
-    var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
-      .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe};}));
-    a.forEach(function(x){ x.load=unifiedLoad(x); });
-    var wl=a.filter(function(x){return x.load>0;});
-    var pmc=wl.length?computePMC(wl):null;
-    if(pmc && pmc.length>8) ramp=Math.round((pmc[pmc.length-1].ctl - pmc[pmc.length-8].ctl)*10)/10;
-  }catch(e){}
+  // CTL ramp comes from the single fitness source (computed once) so the
+  // attention engine and the taper verdict can never read different ramps.
+  var ramp=(fit&&fit.ramp!=null)?fit.ramp:null;
   // Weekly TSS this vs last (real).
   function tssWin(d0,d1){ var c0=new Date(); c0.setDate(c0.getDate()-d0); var c1=new Date(); c1.setDate(c1.getDate()-d1);
     var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10);
@@ -15863,22 +15882,11 @@ function dsShowDashboard(){
   var rides=(st.rides||[]).slice().sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
   var recent=recentRides_(3);
   var iq=(typeof athleteIQ_==='function')?athleteIQ_():{score:null};
-  var fit=(typeof getDesktopFitness_==='function')?getDesktopFitness_():{ctl:0,atl:0,tsb:0};
+  var fit=(typeof getFitness_==='function')?getFitness_():{ctl:0,atl:0,tsb:0,d7:null};
   var rdy=readinessFromTSB_(fit.tsb);
   var wkg=(typeof currentWkg_==='function')?currentWkg_():0;
-  // CTL/ATL/TSB 7-day deltas from a local PMC (real).
-  var dlt={ctl:null,atl:null,tsb:null};
-  try{
-    var _a=rides.filter(function(r){return r&&!r.deleted;}).concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe};}));
-    _a.forEach(function(x){x.load=unifiedLoad(x);});
-    var _wl=_a.filter(function(x){return x.load>0;});
-    var _pmc=_wl.length?computePMC(_wl):null;
-    if(_pmc && _pmc.length>8){ var n=_pmc.length-1,p=_pmc.length-8;
-      dlt.ctl=Math.round(_pmc[n].ctl-_pmc[p].ctl);
-      dlt.atl=Math.round(_pmc[n].atl-_pmc[p].atl);
-      dlt.tsb=Math.round((_pmc[n].ctl-_pmc[n].atl)-(_pmc[p].ctl-_pmc[p].atl));
-    }
-  }catch(e){}
+  // CTL/ATL/TSB 7-day deltas from the single fitness source (computed once).
+  var dlt=(fit&&fit.d7)?{ctl:Math.round(fit.d7.ctl),atl:Math.round(fit.d7.atl),tsb:Math.round(fit.d7.tsb)}:{ctl:null,atl:null,tsb:null};
   // Weight change (real, from the weight log).
   var wtChange=null, lastWt=bwt;
   try{ var wlog=(st.weightLog||[]).filter(function(w){return w&&w.date&&w.weight;}).slice().sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;});
@@ -22336,17 +22344,10 @@ function fetchTodaysDecision(weatherStr, callback){
   // keeps the AI Coach's message in agreement with whatever Readiness is
   // actually showing right now, instead of recomputing its own separate
   // (and previously wildly inconsistent) CTL/ATL/TSB from local rides.
-  var ctl, atl, tsb;
-  if(window.__liveWellness && (Date.now()-window.__liveWellness.fetchedAt)<10*60*1000){
-    ctl=window.__liveWellness.ctl; atl=window.__liveWellness.atl; tsb=window.__liveWellness.tsb;
-  } else {
-    var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
-    var pmcForCoach=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
-    var coachLast=pmcForCoach.length?pmcForCoach[pmcForCoach.length-1]:{ctl:0,atl:0,tsb:0};
-    ctl = coachLast.ctl||0;
-    atl = coachLast.atl||0;
-    tsb = coachLast.tsb!=null ? coachLast.tsb : (ctl-atl);
-  }
+  // Single source of truth — the Coach's CTL/ATL/TSB now matches Readiness,
+  // Dashboard and Athlete Intelligence exactly (one gate, one fallback).
+  var _fitCoach=getFitness_();
+  var ctl=_fitCoach.ctl, atl=_fitCoach.atl, tsb=_fitCoach.tsb;
 
   var ftp = parseInt(st.ftp||186);
   var weight = parseFloat(st.weight||162);
@@ -22427,14 +22428,10 @@ function showAICoach(){
 
   // Use the same unified training-load model as the Home readiness card,
   // instead of the old separate st.iculast CTL/ATL - one source of truth.
-  var activitiesForCoach = (st.rides||[]).filter(function(r){ return !r.deleted; })
-    .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
-  activitiesForCoach.forEach(function(a){ a.load = unifiedLoad(a); });
-  var withLoadForCoach = activitiesForCoach.filter(function(a){ return a.load>0; });
-  var pmcForCoach = withLoadForCoach.length ? computePMC(withLoadForCoach) : null;
-  var ctl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].ctl : 0;
-  var atl = pmcForCoach ? pmcForCoach[pmcForCoach.length-1].atl : 0;
-  var tsb = ctl - atl;
+  // Single source of truth — the full AI Coach screen reads the same CTL/ATL/TSB
+  // as the home briefing, Dashboard, Readiness and Athlete Intelligence.
+  var _fitCoach2=getFitness_();
+  var ctl=_fitCoach2.ctl, atl=_fitCoach2.atl, tsb=_fitCoach2.tsb;
 
   var ftp = parseInt(st.ftp||186);
   var weight = parseFloat(st.weight||162);
