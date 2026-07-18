@@ -17740,6 +17740,12 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
     body.appendChild(wrap);
     return;
   }
+  // Per-ride wind direction, fetched at THIS ride's own GPS coords (not a fixed
+  // Grand Rapids point) and closure-scoped so it resets per ride. The old global
+  // _rideWindDir both used GR coords — miscoloring head/tail/cross on
+  // any ride ridden elsewhere (Chicago, Tampa, ...) — AND leaked one ride's wind
+  // onto every later ride opened in the same session.
+  var _rideWindDir=null;
 
   // Recolor stat cards - each card shows the metric's value and doubles
   // as the recolor trigger (click to color the route by that metric),
@@ -17747,7 +17753,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
   // one control. Active card gets an orange ring + tinted background.
   var toggleRow=document.createElement('div');
   toggleRow.style.cssText='display:flex;gap:8px;margin-bottom:12px';
-  var windVal = (r.avgWindDir!=null||window._rideWindDirCache!=null) ? 'Direction' : 'Tap to color';
+  var windVal = (r.avgWindDir!=null||_rideWindDir!=null) ? 'Direction' : 'Tap to color';
   var modes=[
     {id:'power',label:'Power',val:(r.avgPwr?r.avgPwr+'W':'—'),sub:'Avg'},
     {id:'hr',label:'Heart Rate',val:(r.avgHR?r.avgHR+'':'—'),sub:(r.avgHR?'Avg bpm':'')},
@@ -17813,7 +17819,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
     // historical wind requires the archive API call made on the Weather
     // tab; this toggle gives a quick visual read using current direction
     // as an approximation when historical data has not loaded yet.
-    var windDeg = window._rideWindDirCache;
+    var windDeg = _rideWindDir;
     var lats=r.lats||r.gpsLats, lons=r.lons||r.gpsLons;
     var mapId='ride-route-map-'+idx;
     var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
@@ -17872,10 +17878,11 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
       legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#1D9E75"></span>Tailwind</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#E24B4A"></span>Headwind</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#BA7517"></span>Crosswind</span>'].join('');
-      if(window._rideWindDirCache==null){
-        fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681&current=winddirection_10m')
+      if(_rideWindDir==null){
+        var _wlat=(r.lats||r.gpsLats||[])[0], _wlon=(r.lons||r.gpsLons||[])[0];
+        if(_wlat!=null && _wlon!=null) fetch('https://api.open-meteo.com/v1/forecast?latitude='+_wlat+'&longitude='+_wlon+'&current=winddirection_10m')
           .then(function(res){ return res.json(); })
-          .then(function(d){ window._rideWindDirCache = d && d.current ? d.current.winddirection_10m : null; if(routeColorMode==='wind') buildWindColoredMap(); })
+          .then(function(d){ _rideWindDir = d && d.current ? d.current.winddirection_10m : null; if(routeColorMode==='wind') buildWindColoredMap(); })
           .catch(function(){});
       }
     }
@@ -23621,6 +23628,19 @@ var weatherMapInstance=null;
 var weatherMapSelectedRouteId=null;
 var weatherMapSelectedOffset=0; // hours from now
 
+// Wind for the weather-map is fetched at the SELECTED ROUTE's own coordinates,
+// not a fixed Grand Rapids point — otherwise a Tampa/Chicago route gets colored
+// head/tail/cross by GR wind. The forecast time axis is location-agnostic (same
+// hourly timestamps in a given timezone), so the time selector can be shared.
+function wxRouteCoords_(ride){
+  var la=(ride&&(ride.gpsLats||ride.lats)||[])[0], lo=(ride&&(ride.gpsLons||ride.lons)||[])[0];
+  return (la!=null&&lo!=null)?{lat:la,lon:lo}:null;
+}
+function wxRouteWindUrl_(lat,lon){
+  return 'https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon
+    +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m,temperature_2m,precipitation_probability'
+    +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=7';
+}
 function renderWeatherMapTab(body){
   body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
     +'<div style="font-size:14px;font-weight:600">Loading routes and forecast&hellip;</div>'
@@ -23653,16 +23673,17 @@ function renderWeatherMapTab(body){
     weatherMapSelectedRouteId = routes[0]._mapRouteId;
   }
 
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&hourly=windspeed_10m,winddirection_10m,windgusts_10m,temperature_2m,precipitation_probability'
-    +'&windspeed_unit=mph&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=7')
+  // Seed with the FIRST route's own-location forecast (used for the time axis and
+  // that route's initial coloring). rerender() fetches per selected route after.
+  var _seedC=wxRouteCoords_(routes[0]);
+  fetch(_seedC?wxRouteWindUrl_(_seedC.lat,_seedC.lon):wxRouteWindUrl_(42.9634,-85.6681))
   .then(function(r){
     if(!r.ok) throw new Error('Weather API returned '+r.status);
     return r.json();
   })
   .then(function(wxData){
     if(!wxData || !wxData.hourly){ throw new Error('Weather response missing hourly data'); }
-    renderMapSelectors(body, routes, wxData.hourly);
+    renderMapSelectors(body, routes, wxData.hourly, routes[0]._mapRouteId);
   })
   .catch(function(err){
     body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
@@ -23675,8 +23696,13 @@ function renderWeatherMapTab(body){
 // Renders the route + time selector bar, then delegates to renderMapContent
 // for the actual map, re-rendering the map (not re-fetching weather) each
 // time the selection changes.
-function renderMapSelectors(body, routes, hourlyData){
+function renderMapSelectors(body, routes, hourlyData, seedRouteId){
   body.innerHTML='';
+  // Per-route wind cache (keyed by _mapRouteId), seeded with the first route's
+  // own-location forecast so we do not refetch it. Each other route fetches its
+  // own coords the first time it is selected.
+  var _routeWind={};
+  if(seedRouteId && hourlyData) _routeWind[seedRouteId]=hourlyData;
 
   var selectorCard=document.createElement('div');
   selectorCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:14px 16px;border:1px solid var(--b1)';
@@ -23735,6 +23761,20 @@ function renderMapSelectors(body, routes, hourlyData){
   mapContainer.id='wx-map-container';
   body.appendChild(mapContainer);
 
+  function paint(ride, hourly, selectedIdx){
+    var windAtTime = null;
+    if(hourly && hourly.windspeed_10m){
+      windAtTime = {
+        windspeed_10m: hourly.windspeed_10m[selectedIdx],
+        winddirection_10m: hourly.winddirection_10m[selectedIdx],
+        windgusts_10m: hourly.windgusts_10m[selectedIdx]
+      };
+    }
+    var timeLabel = (hourly && hourly.time && hourly.time[selectedIdx])
+      ? new Date(hourly.time[selectedIdx])
+      : new Date();
+    renderMapContent(mapContainer, ride, windAtTime, timeLabel);
+  }
   function rerender(){
     weatherMapSelectedRouteId = routeSelect.value;
     var selectedIdx = parseInt(timeSelect.value)||0;
@@ -23743,18 +23783,16 @@ function renderMapSelectors(body, routes, hourlyData){
       mapContainer.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Could not find that route. Try selecting a different one.</div>';
       return;
     }
-    var windAtTime = null;
-    if(hourlyData && hourlyData.windspeed_10m){
-      windAtTime = {
-        windspeed_10m: hourlyData.windspeed_10m[selectedIdx],
-        winddirection_10m: hourlyData.winddirection_10m[selectedIdx],
-        windgusts_10m: hourlyData.windgusts_10m[selectedIdx]
-      };
-    }
-    var timeLabel = (hourlyData && hourlyData.time && hourlyData.time[selectedIdx])
-      ? new Date(hourlyData.time[selectedIdx])
-      : new Date();
-    renderMapContent(mapContainer, ride, windAtTime, timeLabel);
+    var cached=_routeWind[ride._mapRouteId];
+    if(cached){ paint(ride, cached, selectedIdx); return; }
+    var c=wxRouteCoords_(ride);
+    if(!c){ paint(ride, hourlyData, selectedIdx); return; }   // no coords: fall back to the shared time-axis data
+    mapContainer.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Loading wind for this route&hellip;</div>';
+    fetch(wxRouteWindUrl_(c.lat,c.lon)).then(function(r){return r.json();}).then(function(wd){
+      var h=(wd&&wd.hourly)?wd.hourly:hourlyData;
+      _routeWind[ride._mapRouteId]=h;
+      paint(ride, h, selectedIdx);
+    }).catch(function(){ paint(ride, hourlyData, selectedIdx); });
   }
 
   routeSelect.onchange=rerender;
