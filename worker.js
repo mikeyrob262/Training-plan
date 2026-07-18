@@ -13158,12 +13158,25 @@ function aiCardDNA_(ded){
 }
 
 // ---- tab body ----
+// Each card is independently try/caught so one throwing card can't blank the whole
+// Overview — they build into one array, where an uncaught throw would kill every card
+// and leave innerHTML unset. On failure the card is dropped and named in the console.
+function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.error('[ai] card "'+label+'" threw: '+(e&&e.message)); }catch(_){} return ''; } }
 function aiRenderTab_(tab, ded){
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming after Overview sign-off.</div>';
   }
-  var cards=[aiCardDNA_(ded), aiCardMomentum_(ded), aiCardWatchlist_(), aiCardWhatChanged_(ded), aiCardWeight_(), aiCardZones_(ded), aiCardRecords_(), aiCardStory_(ded)].filter(function(h){return h;});
+  var cards=[
+    _aiSafe_('DNA', function(){return aiCardDNA_(ded);}),
+    _aiSafe_('Momentum', function(){return aiCardMomentum_(ded);}),
+    _aiSafe_('Watchlist', function(){return aiCardWatchlist_();}),
+    _aiSafe_('WhatChanged', function(){return aiCardWhatChanged_(ded);}),
+    _aiSafe_('Weight', function(){return aiCardWeight_();}),
+    _aiSafe_('Zones', function(){return aiCardZones_(ded);}),
+    _aiSafe_('Records', function(){return aiCardRecords_();}),
+    _aiSafe_('Story', function(){return aiCardStory_(ded);})
+  ].filter(function(h){return h;});
   if(!cards.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;align-items:start">'+cards.join('')+'</div>';
 }
@@ -13188,7 +13201,7 @@ function aiRenderOverview_(container){
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
   H+='</div>';
-  H+='<div id="ai-tab-body">'+aiRenderTab_(_aiTab, rides)+'</div>';
+  H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:#e24b4a;font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
   H+='</div>';
   container.innerHTML=H;
   // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
