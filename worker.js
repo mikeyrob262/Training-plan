@@ -5286,10 +5286,12 @@ function fetchCoachNote(elId){
       ? Math.round(wx.temperature_2m)+'F, wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% rain':'')
       : 'unavailable';
 
-    fetchTodaysDecision(weatherStr, function(err, decisionText){
+    wxCoachHazard_(wx, function(_aq){
+    fetchTodaysDecision(weatherStr+_aq, function(err, decisionText){
       var target = document.getElementById(elId);
       if(!target) return;
       target.textContent = (err || !decisionText) ? 'Coach unavailable right now.' : decisionText;
+    });
     });
   })
   .catch(function(){
@@ -12410,6 +12412,27 @@ function aiRideConditionsScore_(wind, temp, precip, opts){
   var rideScore = Math.min(base, hz.cap);
   return { rideScore:rideScore, base:base, windScore:windScore, tempScore:tempScore, rainScore:rainScore, humScore:humScore, aqiScore:aqiScore, hazards:hz };
 }
+
+// Coach hazard context — appends air quality + the single worst relevant factor to
+// a coach weather string, so the LLM actually RECEIVES AQI (a health input it was
+// never handed) and can gate go/no-go on the worst variable instead of cherry-
+// picking the agreeable ones (Jul 18 report #4). Resolves even if AQI fails.
+function wxCoachHazard_(wxCurrent, cb){
+  try{
+    getAQI_().then(function(ares){
+      var aqi=(ares&&ares.data&&ares.data.current&&ares.data.current.us_aqi!=null)?Math.round(ares.data.current.us_aqi):null;
+      var w=wxCurrent||{};
+      var hz=wxHazards_({aqi:aqi, feels:(w.apparent_temperature!=null?w.apparent_temperature:w.temperature_2m), temp:w.temperature_2m, wind:w.windspeed_10m, precip:w.precipitation_probability, weathercode:w.weathercode, uv:(w.uv_index!=null?w.uv_index:null)});
+      var aqiStr=(aqi==null?'AQI unavailable':'AQI '+aqi+' ('+(aqi>=150?'unhealthy':aqi>=100?'elevated':aqi>=50?'moderate':'good')+')');
+      var worst=hz.list.length?hz.list[0]:null;
+      var worstStr=worst?(((worst.kind==='health')&&worst.sev>=2)?('HEALTH HAZARD present: '+worst.label):('worst factor: '+worst.label)):'no significant hazards';
+      cb('. AIR QUALITY: '+aqiStr+' ('+worstStr+')');
+    }).catch(function(){ cb('. AIR QUALITY: unavailable'); });
+  }catch(e){ cb(''); }
+}
+// Shared go/no-go directive for the coach prompts — decide on the WORST relevant
+// variable, health outranks comfort. Apostrophe-free (served template literal).
+var COACH_GONOGO=' IMPORTANT: base any go or no-go call on the WORST relevant condition, not the average of the agreeable ones. Air quality, extreme heat, and storms are HEALTH factors that outrank comfort items like wind or rain; if a health hazard is present, call it out plainly and do NOT green-light hard efforts even if temperature and rain look fine.';
 // Decompose a ride-conditions score into its drivers for a Why? button — the PoC
 // "77 = wind 70/100, temp 100/100, rain 60/100 -> mean 77". Reads the real
 // sub-scores; no new math.
@@ -13740,7 +13763,7 @@ function dsShowAICoach(){
     var c=wx&&wx.current;
     var dirs=['N','NE','E','SE','S','SW','W','NW'];
     var wstr=c?Math.round(c.temperature_2m)+'F (feels '+Math.round(c.apparent_temperature)+'F), wind '+Math.round(c.windspeed_10m)+'mph from '+dirs[Math.round((c.winddirection_10m||0)/45)%8]+(c.precipitation_probability!=null?', '+c.precipitation_probability+'% rain':''):'unavailable';
-    runBriefing(wstr);
+    wxCoachHazard_(c, function(_aq){ runBriefing(wstr+_aq); });
   }).catch(function(){runBriefing('unavailable');});
 
   function runBriefing(wstr){
@@ -13755,7 +13778,7 @@ function dsShowAICoach(){
       +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
       +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
       +' UPCOMING:'+upcoming.join(', ')
-      +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.';
+      +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.'+COACH_GONOGO;
 
     fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -22468,7 +22491,7 @@ function fetchTodaysDecision(weatherStr, callback){
     +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0);
     }).join('; ')
-    +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.';
+    +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.'+COACH_GONOGO;
 
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
@@ -22570,7 +22593,7 @@ function showAICoach(){
       ? Math.round(wx.temperature_2m)+'F (feels '+Math.round(wx.apparent_temperature)+'F), wind '+Math.round(wx.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wx.winddirection_10m||0)/45)%8]+(wx.precipitation_probability!=null?', '+wx.precipitation_probability+'% chance of rain':'')
       : 'unavailable';
 
-    runAICoachPrompt(weatherStr);
+    wxCoachHazard_(wx, function(_aq){ runAICoachPrompt(weatherStr+_aq); });
   })
   .catch(function(){ runAICoachPrompt('unavailable'); });
 
@@ -22588,7 +22611,7 @@ function showAICoach(){
       return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
-    +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'
+    +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'+COACH_GONOGO
 
 
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
