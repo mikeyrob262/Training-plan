@@ -16,6 +16,12 @@ export default {
         const _org = request.headers.get('Origin');
         const _ref = request.headers.get('Referer');
         if ((_org && _org !== _self) || (_ref && _ref.indexOf(_self) !== 0)) return J({ error: 'forbidden' }, 403);
+        // Shared token gate: reject unless x-proxy-token matches env.PROXY_TOKEN.
+        // The token ships in the served HTML (window.PROXY_TOKEN), so this is a
+        // drive-by/scanner deterrent, NOT auth against anyone who reads page source.
+        // Enforced only when configured, so a missing secret cannot brick the app.
+        const _ptok = env && env.PROXY_TOKEN;
+        if (_ptok && request.headers.get('x-proxy-token') !== _ptok) return J({ error: 'unauthorized' }, 401);
 
         // Intervals.icu wellness (GET). No longer returns CTL/ATL/TSB to arbitrary
         // cross-site callers; key stays server-side.
@@ -54,6 +60,7 @@ export default {
 <html lang="en">
 <head>
 <meta charset="UTF-8"><!-- 1783629145 -->
+<script>window.PROXY_TOKEN=${JSON.stringify((env&&env.PROXY_TOKEN)||'')};</script>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -3591,7 +3598,7 @@ function fetchStravaStreams_(r, ds, maxOf){
     };
     if(!st.stravaToken && !st.stravaRefreshToken){ done(); return; }
     if(st.stravaRefreshToken){
-      fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
         body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
       }).then(function(res){return res.json();}).then(function(d){
         if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); run(d.access_token); }
@@ -3629,7 +3636,7 @@ function zoneFromWatts_(pwr, ftp, durSecs){
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
   if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
   if(st.stravaRefreshToken){
-    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
       .then(function(x){return x.json();}).then(function(d){
         if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; try{sv();}catch(e){} cb(d.access_token); }
@@ -9681,7 +9688,7 @@ function fetchLiveIntervalsWellness(callback){
   // The Intervals.icu key now lives server-side — call our own Worker proxy so no
   // credential ships in the served HTML. A 503 (proxy not yet configured with the
   // secret) or any error falls through to the silent CSV/computed fallback below.
-  fetch('/api/intervals-wellness?date='+todayStr)
+  fetch('/api/intervals-wellness?date='+todayStr,{headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
     .then(function(data){
       if(!data) return;
@@ -21152,7 +21159,7 @@ function recomputeGearMileage(){
 function withFreshStravaToken(onToken, onNoToken){
   var noToken = onNoToken || function(){};
   if(st.stravaRefreshToken){
-    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(res){return res.json();}).then(function(d){
       if(d && d.access_token){
@@ -22951,7 +22958,7 @@ function fetchRideSegments(r, cb){
     }).catch(function(){ cb(null); });
   };
   if(st.stravaRefreshToken){
-    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(res){return res.json();}).then(function(d){
       if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
@@ -23026,7 +23033,7 @@ function fetchStravaGPS(stravaId, rideIndex) {
     }).catch(function(){ toast('Failed to fetch GPS'); });
   };
   if(st.stravaRefreshToken){
-    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
@@ -25589,7 +25596,7 @@ function stravaFullResync() {
   toast('Starting full resync from Strava...');
   if(st.stravaRefreshToken) {
     var CLIENT_ID='260935', CLIENT_SECRET='';  // secret now server-side (/api/strava/token); kept only so lingering refs do not throw
-    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(!d.access_token){toast('Token refresh failed');return;}
@@ -25624,7 +25631,7 @@ function stravaBackfill() {
     toast('Refreshing Strava token...');
     fetch('/api/strava/token', {
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(!d.access_token){toast('Token refresh failed — re-authorizing...');st.stravaRefreshToken=null;stravaBackfill();return;}
@@ -25651,7 +25658,7 @@ function stravaBackfill() {
         var code=href.match(/code=([^&]+)/)[1];
         popup.close();
         toast('Getting token...');
-        fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code,grant_type:'authorization_code'})
+        fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({code:code,grant_type:'authorization_code'})
         }).then(function(r){return r.json();}).then(function(d){
           if(!d.access_token){toast('Auth failed: '+(d.message||'unknown'));return;}
           st.stravaToken=d.access_token;st.stravaRefreshToken=d.refresh_token;
