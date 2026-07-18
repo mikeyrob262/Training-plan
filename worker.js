@@ -12989,20 +12989,32 @@ function aiCardWatchlist_(){
 function aiCardStory_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){return r&&r.date;}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
   if(rides.length<10) return '';
-  var first=rides[0], firstYr=new Date(first.date).getFullYear(), nowYr=new Date().getFullYear();
-  var century=null; for(var i=0;i<rides.length;i++){ if((parseFloat(rides[i].distance)||0)>=100){ century=rides[i]; break; } }
+  var yrOf=function(d){ return new Date(d).getFullYear(); };
+  var firstYr=yrOf(rides[0].date), nowYr=new Date().getFullYear();
+  // Candidate milestones, ALL derived from the real ride history (no fixed template).
+  var cands=[];
+  cands.push([firstYr, 'First ride']);
+  for(var i=0;i<rides.length;i++){ if((parseFloat(rides[i].distance)||0)>=100){ cands.push([yrOf(rides[i].date), 'First century']); break; } }
+  [1000,2000,3000,4000].forEach(function(n){ if(rides.length>=n) cands.push([yrOf(rides[n-1].date), n.toLocaleString()+'th ride']); });
   var longest=rides.reduce(function(m,r){return (parseFloat(r.distance)||0)>(parseFloat(m.distance)||0)?r:m;}, rides[0]);
-  var byYear={}; rides.forEach(function(r){ var y=new Date(r.date).getFullYear(); byYear[y]=(byYear[y]||0)+(parseFloat(r.distance)||0); });
-  var bigYear=Object.keys(byYear).reduce(function(m,y){return byYear[y]>(byYear[m]||0)?y:m;}, Object.keys(byYear)[0]);
-  var nodes=[];
-  nodes.push([firstYr,'First ride']);
-  if(century) nodes.push([new Date(century.date).getFullYear(),'First century (100+ mi)']);
-  nodes.push([bigYear, Math.round(byYear[bigYear]).toLocaleString()+' mi — biggest year']);
+  cands.push([yrOf(longest.date), 'Longest ride, '+Math.round(parseFloat(longest.distance)||0)+' mi']);
+  var byYear={}; rides.forEach(function(r){ var y=yrOf(r.date); byYear[y]=(byYear[y]||0)+(parseFloat(r.distance)||0); });
+  var bigYear=+Object.keys(byYear).reduce(function(m,y){return byYear[y]>(byYear[m]||0)?y:m;}, Object.keys(byYear)[0]);
+  cands.push([bigYear, 'Biggest year, '+Math.round(byYear[bigYear]).toLocaleString()+' mi']);
+  // Collapse to ONE node per year (a year can never appear twice); combine labels.
+  var byYr={};
+  cands.forEach(function(c){ var y=c[0]; if(!(y in byYr)) byYr[y]=[]; if(byYr[y].indexOf(c[1])<0) byYr[y].push(c[1]); });
+  var nodes=Object.keys(byYr).map(Number).sort(function(a,b){return a-b;}).map(function(y){ return [y, byYr[y].join(' · ')]; });
   var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:#5b6678">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
-  inner+='<div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">';
-  nodes.forEach(function(n){ inner+='<div style="flex:0 0 auto;text-align:center;min-width:98px"><div style="width:58px;height:58px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:15px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div><div style="font-size:11px;color:#94a3b8;line-height:1.3">'+aiEsc_(n[1])+'</div></div>'; });
+  // Fixed-width nodes with WRAPPING subtitles + horizontal scroll, so nothing clips.
+  inner+='<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch">';
+  nodes.forEach(function(n){
+    inner+='<div style="flex:0 0 104px;text-align:center">'
+      +'<div style="width:52px;height:52px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 6px"><span style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div>'
+      +'<div style="font-size:11px;color:#94a3b8;line-height:1.3;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
+    +'</div>';
+  });
   inner+='</div>';
-  inner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;font-size:12px;color:#94a3b8">Longest ride: <span style="color:#e8edf5;font-weight:700">'+Math.round(parseFloat(longest.distance)||0)+' mi</span> ('+new Date(longest.date).getFullYear()+')</div>';
   return aiCard_(inner);
 }
 
