@@ -15608,6 +15608,13 @@ function dsAttention_(){
   // CTL ramp comes from the single fitness source (computed once) so the
   // attention engine and the taper verdict can never read different ramps.
   var ramp=(fit&&fit.ramp!=null)?fit.ramp:null;
+  // Taper awareness — a CTL drop while TSB is >=0, or with an A-event imminent,
+  // IS the taper (peaking), not detraining. Defer to the SAME shared verdict the
+  // dashboard renders so the attention panel can never contradict "peaking / hold
+  // the taper" with "you are detraining, get a ride in" (Jul 18 report #7).
+  var _verdict=(typeof taperVerdict_==='function')?taperVerdict_(fit,null,ramp):{phase:''};
+  var _nextRace=null; try{ var _ur=(typeof upcomingRaces_==='function')?upcomingRaces_():[]; _nextRace=_ur&&_ur.length?_ur[0]:null; }catch(e){}
+  var inTaper=(_verdict.phase==='peaking') || (_nextRace && _nextRace.daysOut!=null && _nextRace.daysOut<=10);
   // Weekly TSS this vs last (real).
   function tssWin(d0,d1){ var c0=new Date(); c0.setDate(c0.getDate()-d0); var c1=new Date(); c1.setDate(c1.getDate()-d1);
     var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10);
@@ -15616,10 +15623,14 @@ function dsAttention_(){
   // Recovery / fatigue (TSB).
   if(tsb<=-25) push(2,'recovery','Form is deep in the red ('+tsb+'). A hard session today only digs the hole deeper — swap to an easy Zone 1 spin or take the rest.');
   else if(tsb<=-15) push(1,'recovery','Fatigue is accumulating (form '+tsb+'). Fine mid-build, but guard your recovery and sleep this week.');
-  // Training load.
+  // Training load. Detraining / low-volume warnings are suppressed in a taper
+  // (inTaper): during a peak the CTL drop and reduced TSS ARE the plan, and firing
+  // "you are detraining" next to the dashboard's "peaking / hold the taper" is the
+  // exact self-contradiction the Jul 18 report flagged.
   if(ramp!=null && ramp>=8) push(1,'training','Fitness is ramping fast (CTL up '+ramp+' per week). Strong progress, but overtraining and injury risk climb past about 8 per week.');
-  else if(ramp!=null && ramp<=-6) push(1,'training','Fitness is sliding (CTL down '+Math.abs(ramp)+' per week). You are detraining faster than ideal — get an easy ride in.');
-  if(wkLast>=150 && wkThis < wkLast*0.5) push(1,'training','This week is well below last ('+wkThis+' vs '+wkLast+' TSS). If it is not a planned rest week, you are leaving fitness on the table.');
+  else if(ramp!=null && ramp<=-6 && !inTaper) push(1,'training','Fitness is sliding (CTL down '+Math.abs(ramp)+' per week). You are detraining faster than ideal — get an easy ride in.');
+  else if(ramp!=null && ramp<=-6 && inTaper) out.positives.push('Fitness easing on plan — that is the taper, not lost fitness');
+  if(wkLast>=150 && wkThis < wkLast*0.5 && !inTaper) push(1,'training','This week is well below last ('+wkThis+' vs '+wkLast+' TSS). If it is not a planned rest week, you are leaving fitness on the table.');
   // Goals — next race + annual mileage pace.
   try{
     var races=(typeof upcomingRaces_==='function')?upcomingRaces_():[];
