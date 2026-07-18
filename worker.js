@@ -14297,8 +14297,12 @@ function wxFetch_(url, slot, ttl){
     return {data:null, fetchedAt:0, ok:false, stale:true};
   });
 }
-function getWeather_(){ return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,weathercode,precipitation_probability,windspeed_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
-function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=us_aqi&timezone='+WX_TZ, 'aqi', AQI_TTL); }
+// Superset query — carries every field any surface needs (Weather page, Dashboard
+// strip, Alerts tab, Overview tab) so all four share ONE cached fetch. Adding
+// fields is backward-compatible: readers take subsets. hourly apparent_temperature
+// / winddirection_10m / windgusts_10m + current windgusts_10m are for the tabs.
+function getWeather_(){ return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,apparent_temperature,weathercode,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
+function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=us_aqi&hourly=us_aqi&timezone='+WX_TZ+'&forecast_days=7', 'aqi', AQI_TTL); }
 
 function dsShowWeather(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
@@ -23117,17 +23121,11 @@ function renderWeatherAlertsTab(body){
     +'<div style="font-size:14px;font-weight:600">Scanning the week ahead&hellip;</div>'
     +'</div>';
 
-  Promise.all([
-    fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-      +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windgusts_10m,weathercode'
-      +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7')
-      .then(function(r){ if(!r.ok) throw new Error('Weather API returned '+r.status); return r.json(); }),
-    fetch('https://air-quality-api.open-meteo.com/v1/air-quality?latitude=42.9634&longitude=-85.6681'
-      +'&hourly=us_aqi&timezone=America%2FChicago&forecast_days=7')
-      .then(function(r){ if(!r.ok) throw new Error('AQI API returned '+r.status); return r.json(); })
-      .catch(function(){ return null; }) // AQI is a bonus - do not fail the whole tab if it is unavailable
-  ]).then(function(results){
-    renderAlertsContent(body, results[0]&&results[0].hourly, results[1]&&results[1].hourly);
+  // Shared cache (getWeather_/getAQI_) so the Alerts tab reuses the same fetch as
+  // the Weather page/Dashboard and shows last-known on failure instead of erroring.
+  Promise.all([ getWeather_(), getAQI_() ]).then(function(results){
+    var wres=results[0], ares=results[1];
+    renderAlertsContent(body, wres.data&&wres.data.hourly, ares.data&&ares.data.hourly);
   }).catch(function(err){
     body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">'
       +'<div style="font-size:14px;font-weight:600;color:var(--t1);margin-bottom:8px">Could not load alerts</div>'
@@ -23281,16 +23279,13 @@ function renderWeatherOverviewTab(body){
   var ftp=parseInt(st.ftp||186);
   var weight=parseFloat(st.weight||162);
 
-  fetch('https://api.open-meteo.com/v1/forecast?latitude=42.9634&longitude=-85.6681'
-    +'&hourly=temperature_2m,apparent_temperature,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m,weathercode'
-    +'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,windgusts_10m,precipitation_probability,weathercode'
-    +'&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max'
-    +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago&forecast_days=7')
-  .then(function(r){ return r.json(); })
-  .then(function(wxData){
-    renderOverviewContent(body, wxData, ftp, weight);
-  })
-  .catch(function(){
+  // Shared cache (getWeather_) — same fetch as the Weather page/Dashboard/Alerts,
+  // with last-known fallback on failure. getWeather_'s superset query carries every
+  // current/hourly/daily field renderOverviewContent reads.
+  getWeather_().then(function(wres){
+    if(!wres.data){ body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather unavailable right now.</div>'; return; }
+    renderOverviewContent(body, wres.data, ftp, weight);
+  }).catch(function(){
     body.innerHTML='<div style="padding:40px 24px;text-align:center;color:var(--t3)">Weather unavailable right now.</div>';
   });
 }
