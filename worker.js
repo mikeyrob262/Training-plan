@@ -1,21 +1,53 @@
 // build pipeline verification - 2026-07-02
 export default {
   async fetch(request, env, ctx) {
-    // ---- API proxy: keep the Intervals.icu API key SERVER-SIDE, never in the
-    //      served HTML. Reads env.INTERVALS_API_KEY (a Worker secret) and optional
-    //      env.INTERVALS_ATHLETE_ID. If the secret is not configured this returns
-    //      503 and the client falls back silently to CSV/computed fitness.
+    // ---- API proxies: keep provider credentials SERVER-SIDE (never in the served
+    //      HTML). Both routes are same-origin gated + method/input validated. The
+    //      residual open case (a header-less non-browser client) is what the
+    //      Cloudflare rate-limit rule on /api/* covers — see the deploy notes.
     try {
       const _u = new URL(request.url);
-      if (_u.pathname === '/api/intervals-wellness') {
-        const key = env && env.INTERVALS_API_KEY;
-        const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
-        if (!key) return new Response(JSON.stringify({ error: 'not_configured' }), { status: 503, headers: { 'content-type': 'application/json' } });
-        const day = _u.searchParams.get('date');
-        const safeDay = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : new Date().toISOString().slice(0, 10);
-        const iu = 'https://intervals.icu/api/v1/athlete/' + aid + '/wellness/' + safeDay;
-        const r = await fetch(iu, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
-        return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+      if (_u.pathname.startsWith('/api/')) {
+        const J = (obj, status) => new Response(JSON.stringify(obj), { status: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        // Same-origin gate: block a request whose Origin/Referer is a DIFFERENT
+        // site (browser cross-site abuse). A header-less caller still passes — no
+        // false negatives, so the app is never broken; rate-limiting covers the rest.
+        const _self = _u.origin;
+        const _org = request.headers.get('Origin');
+        const _ref = request.headers.get('Referer');
+        if ((_org && _org !== _self) || (_ref && _ref.indexOf(_self) !== 0)) return J({ error: 'forbidden' }, 403);
+
+        // Intervals.icu wellness (GET). No longer returns CTL/ATL/TSB to arbitrary
+        // cross-site callers; key stays server-side.
+        if (_u.pathname === '/api/intervals-wellness') {
+          if (request.method !== 'GET') return J({ error: 'method_not_allowed' }, 405);
+          const key = env && env.INTERVALS_API_KEY;
+          const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
+          if (!key) return J({ error: 'not_configured' }, 503);
+          const day = _u.searchParams.get('date');
+          const safeDay = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : new Date().toISOString().slice(0, 10);
+          const r = await fetch('https://intervals.icu/api/v1/athlete/' + aid + '/wellness/' + safeDay, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+
+        // Strava OAuth token exchange (POST). client_secret stays server-side; only
+        // the two grants the app uses are honored, and only their whitelisted fields.
+        if (_u.pathname === '/api/strava/token') {
+          if (request.method !== 'POST') return J({ error: 'method_not_allowed' }, 405);
+          const secret = env && env.STRAVA_CLIENT_SECRET;
+          const cid = (env && env.STRAVA_CLIENT_ID) || '260935';
+          if (!secret) return J({ error: 'not_configured' }, 503);
+          let inb = {};
+          try { inb = await request.json(); } catch (e) {}
+          const gt = (inb && inb.grant_type === 'authorization_code') ? 'authorization_code' : 'refresh_token';
+          const body = { client_id: cid, client_secret: secret, grant_type: gt };
+          if (gt === 'refresh_token' && inb && inb.refresh_token) body.refresh_token = String(inb.refresh_token);
+          if (gt === 'authorization_code' && inb && inb.code) body.code = String(inb.code);
+          const r = await fetch('https://www.strava.com/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+
+        return J({ error: 'not_found' }, 404);
       }
     } catch (e) {}
     return new Response(`<!DOCTYPE html><!-- BUST1783637100 v1783637100 -->
@@ -3559,8 +3591,8 @@ function fetchStravaStreams_(r, ds, maxOf){
     };
     if(!st.stravaToken && !st.stravaRefreshToken){ done(); return; }
     if(st.stravaRefreshToken){
-      fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+      fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
       }).then(function(res){return res.json();}).then(function(d){
         if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); run(d.access_token); }
         else if(st.stravaToken){ run(st.stravaToken); } else { done(); }
@@ -3597,8 +3629,8 @@ function zoneFromWatts_(pwr, ftp, durSecs){
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
   if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
   if(st.stravaRefreshToken){
-    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
       .then(function(x){return x.json();}).then(function(d){
         if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; try{sv();}catch(e){} cb(d.access_token); }
         else cb(st.stravaToken||null);
@@ -21120,8 +21152,8 @@ function recomputeGearMileage(){
 function withFreshStravaToken(onToken, onNoToken){
   var noToken = onNoToken || function(){};
   if(st.stravaRefreshToken){
-    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(res){return res.json();}).then(function(d){
       if(d && d.access_token){
         st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token;
@@ -22919,8 +22951,8 @@ function fetchRideSegments(r, cb){
     }).catch(function(){ cb(null); });
   };
   if(st.stravaRefreshToken){
-    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(res){return res.json();}).then(function(d){
       if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
       else if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); }
@@ -22994,8 +23026,8 @@ function fetchStravaGPS(stravaId, rideIndex) {
     }).catch(function(){ toast('Failed to fetch GPS'); });
   };
   if(st.stravaRefreshToken){
-    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:'260935',client_secret:'570c52239e99be3ba40d9c47ed78d5107c5725ba',grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); }
     });
@@ -25556,9 +25588,9 @@ function stravaFullResync() {
   }
   toast('Starting full resync from Strava...');
   if(st.stravaRefreshToken) {
-    var CLIENT_ID='260935', CLIENT_SECRET='570c52239e99be3ba40d9c47ed78d5107c5725ba';
-    fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+    var CLIENT_ID='260935', CLIENT_SECRET='';  // secret now server-side (/api/strava/token); kept only so lingering refs do not throw
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(!d.access_token){toast('Token refresh failed');return;}
       st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token;
@@ -25585,15 +25617,15 @@ async function reconnectStrava(){
 
 function stravaBackfill() {
   var CLIENT_ID = '260935';
-  var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  var CLIENT_SECRET = '';  // secret now server-side (/api/strava/token)
 
   // If we have a refresh token, use it to get a fresh access token silently
   if(st.stravaRefreshToken) {
     toast('Refreshing Strava token...');
-    fetch('https://www.strava.com/oauth/token', {
+    fetch('/api/strava/token', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
       if(!d.access_token){toast('Token refresh failed — re-authorizing...');st.stravaRefreshToken=null;stravaBackfill();return;}
       st.stravaToken=d.access_token;
@@ -25619,7 +25651,7 @@ function stravaBackfill() {
         var code=href.match(/code=([^&]+)/)[1];
         popup.close();
         toast('Getting token...');
-        fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,code:code,grant_type:'authorization_code'})
+        fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:code,grant_type:'authorization_code'})
         }).then(function(r){return r.json();}).then(function(d){
           if(!d.access_token){toast('Auth failed: '+(d.message||'unknown'));return;}
           st.stravaToken=d.access_token;st.stravaRefreshToken=d.refresh_token;
