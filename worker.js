@@ -13085,27 +13085,34 @@ function aiCardZones_(ded){
   return aiCard_(inner);
 }
 
-// ---- Weight + trend sparkline (st.weightLog — real dated series) ----
+// ---- Weight: current + goal always (if any weight known); trend + sparkline when >=2 logged ----
 function aiCardWeight_(){
   var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
-  if(wl.length<2) return '';   // gate: need >=2 real points for a trend/sparkline
   var vals=wl.map(function(x){return parseFloat(x.weight);});
-  var cur=vals[vals.length-1];
-  // trend over the last ~90 days if we have points there, else since the first log
-  var cutoff=new Date(); cutoff.setDate(cutoff.getDate()-90);
-  var recent=wl.filter(function(x){return new Date(x.date)>=cutoff;});
-  var windowed=recent.length>=2;
-  var base=parseFloat((windowed?recent[0]:wl[0]).weight);
-  var delta=Math.round((cur-base)*10)/10;
+  var cur = vals.length ? vals[vals.length-1] : (parseFloat(st.weight)||null);
+  if(cur==null) return '';   // no weight known anywhere -> hide
   var goals=(typeof _goalTargets_==='function')?_goalTargets_():{};
-  var goal=parseFloat(goals.weightLb); if(!(goal>0)) goal=null;
-  var inner=aiLbl_('WEIGHT','<span style="font-size:11px;color:#5b6678">'+wl.length.toLocaleString()+' entries</span>');
-  var dcol=delta<=0?'#4ade80':'#f59e0b';
-  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:#e8edf5;line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:13px;color:#94a3b8">lb</span><span style="font-size:12px;font-weight:700;color:'+dcol+'">'+(delta>0?'+':'')+delta+' lb'+(windowed?' · 90d':'')+'</span></div>';
-  var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals); if(max<=min) max=min+1;
-  var W=260,H=42,n=vals.length;
-  var pts=vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-min)/(max-min))*(H-6)-3; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');
-  inner+='<div style="margin-top:12px"><svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="M'+pts+'" fill="none" stroke="#60a5fa" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+  var goal=parseFloat(goals&&goals.weightLb); if(!(goal>0)) goal=null;
+  var inner=aiLbl_('WEIGHT', wl.length?('<span style="font-size:11px;color:#5b6678">'+wl.length.toLocaleString()+' entries</span>'):'');
+  // trend only when there are >=2 real logged points
+  var deltaStr='';
+  if(vals.length>=2){
+    var cutoff=new Date(); cutoff.setDate(cutoff.getDate()-90);
+    var recent=wl.filter(function(x){return new Date(x.date)>=cutoff;});
+    var windowed=recent.length>=2;
+    var base=parseFloat((windowed?recent[0]:wl[0]).weight);
+    var delta=Math.round((cur-base)*10)/10;
+    var dcol=delta<=0?'#4ade80':'#f59e0b';
+    deltaStr='<span style="font-size:12px;font-weight:700;color:'+dcol+'">'+(delta>0?'+':'')+delta+' lb'+(windowed?' · 90d':'')+'</span>';
+  }
+  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:#e8edf5;line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:13px;color:#94a3b8">lb</span>'+deltaStr+'</div>';
+  // sparkline only when there are >=2 real logged points
+  if(vals.length>=2){
+    var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals); if(max<=min) max=min+1;
+    var W=260,H=42,n=vals.length;
+    var pts=vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-min)/(max-min))*(H-6)-3; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');
+    inner+='<div style="margin-top:12px"><svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="M'+pts+'" fill="none" stroke="#60a5fa" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
+  }
   if(goal){
     var toGo=Math.round((cur-goal)*10)/10;
     inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;display:flex;justify-content:space-between;font-size:12px;color:#94a3b8"><span>Goal '+goal+' lb</span><span style="color:#e8edf5;font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
