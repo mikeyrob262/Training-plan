@@ -25274,6 +25274,44 @@ function findActivityForDate(dateKey){
 // Tap a day -> open the day-detail editor. Dual-mode:
 //  - if a completed activity exists for that date, edit that activity
 //  - otherwise edit the planned workout name for that date
+// Session presets — picking one sets type + intent + name TOGETHER so they can
+// never disagree (free-text naming is what fragmented "Streach" and would corrupt
+// the 1RM/progression history). Pulled forward from Phase 1 per the strength spec.
+var SESSION_PRESETS=[
+  {v:'strengthA', label:'Strength A', type:'strength', intent:'strengthA', name:'Strength A'},
+  {v:'strengthB', label:'Strength B', type:'strength', intent:'strengthB', name:'Strength B'},
+  {v:'mobility',  label:'Mobility',   type:'mobility', intent:'mobility',  name:'Mobility'},
+  {v:'z2',        label:'Z2 Endurance',type:'ride',    intent:'z2',        name:'Z2 Endurance'},
+  {v:'threshold', label:'Threshold',  type:'ride',     intent:'threshold', name:'Threshold'},
+  {v:'vo2',       label:'VO2',         type:'ride',     intent:'vo2',       name:'VO2'},
+  {v:'group',     label:'Group Ride',  type:'ride',     intent:'group',     name:'Group Ride'},
+  {v:'long',      label:'Long Ride',   type:'ride',     intent:'long',      name:'Long Ride'},
+  {v:'recovery',  label:'Recovery',    type:'ride',     intent:'recovery',  name:'Recovery'},
+  {v:'rest',      label:'Rest',        type:'rest',     intent:'',          name:'Rest'},
+  {v:'other',     label:'Other…',      type:'',         intent:'',          name:''}
+];
+// Exercise library (spec 3.2-3.4) with default sets/reps/%1RM. The per-row exercise
+// dropdown prefills from here (reps: carries=meters, mobility=reps or seconds).
+var EX_LIBRARY=[
+  {name:'Trap-bar deadlift', sets:3, reps:8, pct1RM:70, group:'strengthA'},
+  {name:'Front squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Goblet squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Loaded carry (farmer)', sets:3, reps:40, pct1RM:'', group:'strengthA'},
+  {name:'Suitcase carry', sets:3, reps:40, pct1RM:'', group:'strengthA'},
+  {name:'Standing calf raise', sets:3, reps:12, pct1RM:'', group:'strengthA'},
+  {name:'Pallof press', sets:3, reps:10, pct1RM:'', group:'strengthA'},
+  {name:'Romanian deadlift', sets:3, reps:10, pct1RM:70, group:'strengthB'},
+  {name:'Bulgarian split squat', sets:3, reps:10, pct1RM:70, group:'strengthB'},
+  {name:'Hip thrust', sets:3, reps:12, pct1RM:70, group:'strengthB'},
+  {name:'Single-leg RDL', sets:2, reps:8, pct1RM:'', group:'strengthB'},
+  {name:'Dead bug', sets:2, reps:10, pct1RM:'', group:'strengthB'},
+  {name:'Bird dog', sets:2, reps:10, pct1RM:'', group:'strengthB'},
+  {name:'Thoracic rotation (open-book)', sets:2, reps:8, pct1RM:'', group:'mobility'},
+  {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'mobility'},
+  {name:'90/90 hip rotations', sets:2, reps:8, pct1RM:'', group:'mobility'},
+  {name:'Wall ankle dorsiflexion', sets:2, reps:10, pct1RM:'', group:'mobility'},
+  {name:'Adductor rock-back', sets:2, reps:8, pct1RM:'', group:'mobility'}
+];
 function openDayEditor(dateKey){
   var existing=document.getElementById('day-editor-modal');
   if(existing) existing.remove();
@@ -25323,25 +25361,56 @@ function openDayEditor(dateKey){
   var sess=_sessions.length?_sessions[0]:null;
   var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
   if(!/^(ride|strength|mobility)$/.test(curType)) curType='ride';
+  // Current preset: match the session's intent (or type) to a named preset; unknown -> Other.
+  var _curP=(function(){
+    if(sess){ var bi=SESSION_PRESETS.filter(function(p){return p.intent&&p.intent===sess.intent;})[0]; if(bi) return bi.v; var bt=SESSION_PRESETS.filter(function(p){return p.type===sess.type;})[0]; if(bt) return bt.v; }
+    if(plan&&plan.intent){ var pi=SESSION_PRESETS.filter(function(p){return p.intent===plan.intent;})[0]; if(pi) return pi.v; }
+    return 'other';
+  })();
+  // Preset-derived state — the single source of truth for type/intent/name.
+  var _selType=curType, _selIntent=(sess?sess.intent:(plan?plan.intent:'')), _selName=(sess&&sess.name?sess.name:(plan?plan.name:''));
   var typeWrap=document.createElement('div'); typeWrap.style.cssText='margin:8px 0 12px';
-  var typeLbl=document.createElement('div'); typeLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; typeLbl.textContent='Workout';
+  var typeLbl=document.createElement('div'); typeLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; typeLbl.textContent='Session';
   var typeSel=document.createElement('select');
   typeSel.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box;cursor:pointer';
-  [['ride','Ride'],['strength','Strength'],['mobility','Mobility']].forEach(function(tt){ var op=document.createElement('option'); op.value=tt[0]; op.textContent=tt[1]; if(tt[0]===curType) op.selected=true; typeSel.appendChild(op); });
+  SESSION_PRESETS.forEach(function(p){ var op=document.createElement('option'); op.value=p.v; op.textContent=p.label; if(p.v===_curP) op.selected=true; typeSel.appendChild(op); });
   typeWrap.appendChild(typeLbl); typeWrap.appendChild(typeSel); sheet.appendChild(typeWrap);
+  // "Other…" reveals a free-text name + a type sub-select so nothing is ever blocked.
+  var otherWrap=document.createElement('div'); otherWrap.style.cssText='margin:0 0 12px;display:'+(_curP==='other'?'block':'none');
+  var otherName=document.createElement('input'); otherName.type='text'; otherName.placeholder='Custom session name'; if(_curP==='other') otherName.value=_selName||'';
+  otherName.style.cssText='width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:6px';
+  var otherType=document.createElement('select'); otherType.style.cssText='width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
+  [['ride','Ride'],['strength','Strength'],['mobility','Mobility']].forEach(function(tt){ var op=document.createElement('option'); op.value=tt[0]; op.textContent=tt[1]; if(tt[0]===_selType) op.selected=true; otherType.appendChild(op); });
+  otherWrap.appendChild(otherName); otherWrap.appendChild(otherType); sheet.appendChild(otherWrap);
   var bodyEl=document.createElement('div'); sheet.appendChild(bodyEl);
   function _mkI(val, ph){ var i=document.createElement('input'); i.type='text'; i.placeholder=ph||'-'; if(val!=null&&val!=='') i.value=val; i.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box'; return i; }
   function _sect(t){ var d=document.createElement('div'); d.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px'; d.textContent=t; bodyEl.appendChild(d); }
   function _fr(label,input){ var r=document.createElement('div'); r.style.cssText='display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:center;margin-bottom:8px'; var l=document.createElement('div'); l.style.cssText='font-size:12px;color:var(--t2);font-weight:600'; l.textContent=label; r.appendChild(l); r.appendChild(input); bodyEl.appendChild(r); return input; }
   function _num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
   var getData=function(){ return {}; };
+  // Exercise name field: a <select> from EX_LIBRARY (+ Other free-text). Picking a
+  // library exercise prefills its default sets/reps/%1RM. Keeps names consistent so
+  // the 1RM history / progression logic is never fragmented by typos.
+  function _exNameField(val, onPick){
+    var wrap=document.createElement('div');
+    var sel=document.createElement('select'); sel.style.cssText='width:100%;padding:6px 6px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;box-sizing:border-box';
+    var bl=document.createElement('option'); bl.value=''; bl.textContent='exercise…'; sel.appendChild(bl);
+    EX_LIBRARY.forEach(function(x){ var op=document.createElement('option'); op.value=x.name; op.textContent=x.name; sel.appendChild(op); });
+    var ot=document.createElement('option'); ot.value='__other'; ot.textContent='Other…'; sel.appendChild(ot);
+    var inp=document.createElement('input'); inp.type='text'; inp.placeholder='custom'; inp.style.cssText='width:100%;margin-top:4px;padding:6px 6px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:12px;font-family:inherit;box-sizing:border-box;display:none';
+    if(val){ var m=EX_LIBRARY.filter(function(x){return x.name===val;})[0]; if(m){ sel.value=val; } else { sel.value='__other'; inp.value=val; inp.style.display='block'; } }
+    sel.onchange=function(){ if(sel.value==='__other'){ inp.style.display='block'; try{inp.focus();}catch(e){} } else { inp.style.display='none'; var lib=EX_LIBRARY.filter(function(x){return x.name===sel.value;})[0]; if(lib&&onPick) onPick(lib); } };
+    wrap.appendChild(sel); wrap.appendChild(inp);
+    return { el:wrap, get:function(){ return sel.value==='__other'?inp.value.trim():(sel.value||'').trim(); } };
+  }
   function renderType(type){
     bodyEl.innerHTML='';
+    if(type==='rest'){ var rm=document.createElement('div'); rm.style.cssText='font-size:13px;color:var(--t3);padding:12px 2px;line-height:1.5'; rm.textContent='Rest day — no session. Saving removes any planned session for this day.'; bodyEl.appendChild(rm); getData=function(){ return { type:'rest' }; }; return; }
     var t=(sess&&sess.type===type&&sess.targets)?sess.targets:{};
     if(type==='ride'){
       _sect('Planned');
       var iSel=document.createElement('select'); iSel.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
-      [['z2','Z2 endurance'],['threshold','Threshold'],['vo2','VO2'],['group','Group'],['long','Long'],['recovery','Recovery']].forEach(function(x){ var op=document.createElement('option'); op.value=x[0]; op.textContent=x[1]; if(sess&&sess.intent===x[0]) op.selected=true; iSel.appendChild(op); });
+      [['z2','Z2 endurance'],['threshold','Threshold'],['vo2','VO2'],['group','Group'],['long','Long'],['recovery','Recovery']].forEach(function(x){ var op=document.createElement('option'); op.value=x[0]; op.textContent=x[1]; if(_selIntent===x[0]) op.selected=true; iSel.appendChild(op); });
       _fr('Intent',iSel);
       var pLo=_mkI(t.powerLo!=null?t.powerLo:'','lo W'), pHi=_mkI(t.powerHi!=null?t.powerHi:'','hi W');
       var pw=document.createElement('div'); pw.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:6px'; pw.appendChild(pLo); pw.appendChild(pHi); _fr('Power',pw);
@@ -25355,52 +25424,68 @@ function openDayEditor(dateKey){
       var cT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:'','-'));
       var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:''),'W'));
       var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:'','ft'));
-      getData=function(){ return { type:'ride', intent:iSel.value, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
+      getData=function(){ return { type:'ride', intent:iSel.value, name:_selName, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
     } else if(type==='strength'){
       _sect('Planned — exercises (sets x reps @ %1RM)');
-      var nmI=_fr('Session',_mkI(sess&&sess.name?sess.name:(plan?plan.name:''),'e.g. Strength A'));
       var exWrap=document.createElement('div'); var exRows=[];
-      function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 50px;gap:5px;margin-bottom:6px'; var n=_mkI(ex.name||'','exercise'),s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); rw.appendChild(n);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({n:n,s:s,rp:rp,pc:pc}); }
+      function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 50px;gap:5px;margin-bottom:6px;align-items:start'; var s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); var nf=_exNameField(ex.name,function(lib){ s.value=lib.sets; rp.value=lib.reps; pc.value=(lib.pct1RM===''?'':lib.pct1RM); }); rw.appendChild(nf.el);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({nf:nf,s:s,rp:rp,pc:pc}); }
       ((sess&&sess.exercises&&sess.exercises.length)?sess.exercises:[{}]).forEach(addEx);
       bodyEl.appendChild(exWrap);
       var addB=document.createElement('button'); addB.textContent='+ exercise'; addB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addB.onclick=function(){ addEx({}); }; bodyEl.appendChild(addB);
       _sect('Completed — logged (weight x reps @ RPE)');
       var lgWrap=document.createElement('div'); var lgRows=[];
-      function addLg(e){ e=e||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 44px 42px 42px;gap:5px;margin-bottom:6px'; var n=_mkI(e.name||'','exercise'),wt=_mkI(e.weight!=null?e.weight:'','lb'),rp=_mkI(e.reps!=null?e.reps:'','rep'),rpe=_mkI(e.rpe!=null?e.rpe:'','RPE'); rw.appendChild(n);rw.appendChild(wt);rw.appendChild(rp);rw.appendChild(rpe); lgWrap.appendChild(rw); lgRows.push({n:n,wt:wt,rp:rp,rpe:rpe}); }
+      function addLg(e){ e=e||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 44px 42px 42px;gap:5px;margin-bottom:6px;align-items:start'; var wt=_mkI(e.weight!=null?e.weight:'','lb'),rp=_mkI(e.reps!=null?e.reps:'','rep'),rpe=_mkI(e.rpe!=null?e.rpe:'','RPE'); var nf=_exNameField(e.name,null); rw.appendChild(nf.el);rw.appendChild(wt);rw.appendChild(rp);rw.appendChild(rpe); lgWrap.appendChild(rw); lgRows.push({nf:nf,wt:wt,rp:rp,rpe:rpe}); }
       var exLog=(st.strength&&st.strength.log&&st.strength.log[dateKey])||[];
       (exLog.length?exLog.map(function(e){ var st0=e.sets&&e.sets[0]||{}; return {name:e.name, weight:st0.weight, reps:st0.reps, rpe:st0.rpe}; }):[{}]).forEach(addLg);
       bodyEl.appendChild(lgWrap);
       var addLB=document.createElement('button'); addLB.textContent='+ logged exercise'; addLB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addLB.onclick=function(){ addLg({}); }; bodyEl.appendChild(addLB);
       getData=function(){
-        var exs=exRows.map(function(r){ return { name:r.n.value.trim(), sets:_num(r.s.value), reps:_num(r.rp.value), pct1RM:_num(r.pc.value) }; }).filter(function(e){ return e.name; });
-        var logs=lgRows.map(function(r){ var w=_num(r.wt.value); return (r.n.value.trim()&&w!=null)?{ name:r.n.value.trim(), sets:[{ weight:w, reps:_num(r.rp.value), rpe:_num(r.rpe.value) }] }:null; }).filter(Boolean);
-        return { type:'strength', name:nmI.value.trim()||'Strength', exercises:exs, strengthLog:logs };
+        var exs=exRows.map(function(r){ return { name:r.nf.get(), sets:_num(r.s.value), reps:_num(r.rp.value), pct1RM:_num(r.pc.value) }; }).filter(function(e){ return e.name; });
+        var logs=lgRows.map(function(r){ var w=_num(r.wt.value), nm=r.nf.get(); return (nm&&w!=null)?{ name:nm, sets:[{ weight:w, reps:_num(r.rp.value), rpe:_num(r.rpe.value) }] }:null; }).filter(Boolean);
+        return { type:'strength', name:_selName||'Strength', exercises:exs, strengthLog:logs };
       };
     } else {
       _sect('Planned');
-      var mN=_fr('Session',_mkI(sess&&sess.name?sess.name:(plan?plan.name:''),'e.g. Mobility 15 min'));
-      var mD=_fr('Duration',_mkI((sess&&sess.targets&&sess.targets.durationMin)||'','min'));
+      var mD=_fr('Duration',_mkI((t&&t.durationMin)||'','min'));
       _sect('Completed');
       var mDone=document.createElement('input'); mDone.type='checkbox'; mDone.checked=(sess&&sess.status==='completed'); mDone.style.cssText='width:18px;height:18px';
       _fr('Completed',mDone);
       var mA=_fr('Actual dur',_mkI((sess&&sess.actualDurationMin)||'','min'));
-      getData=function(){ return { type:'mobility', name:mN.value.trim()||'Mobility', targets:{ durationMin:_num(mD.value) }, completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
+      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
     }
   }
-  typeSel.onchange=function(){ renderType(typeSel.value); };
-  renderType(curType);
+  function applyPreset(){
+    var p=SESSION_PRESETS.filter(function(x){return x.v===typeSel.value;})[0]||SESSION_PRESETS[0];
+    if(p.v==='other'){ otherWrap.style.display='block'; _selType=otherType.value; _selIntent=''; _selName=otherName.value.trim(); renderType(_selType); }
+    else if(p.v==='rest'){ otherWrap.style.display='none'; _selType='rest'; _selIntent=''; _selName='Rest'; renderType('rest'); }
+    else { otherWrap.style.display='none'; _selType=p.type; _selIntent=p.intent; _selName=p.name; renderType(p.type); }
+  }
+  typeSel.onchange=applyPreset;
+  otherType.onchange=function(){ _selType=otherType.value; renderType(_selType); };
+  otherName.oninput=function(){ _selName=otherName.value.trim(); };
+  renderType(_curP==='rest'?'rest':_selType);
 
   var save=document.createElement('button');
   save.textContent='Save';
   save.style.cssText='width:100%;padding:13px;margin-top:10px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
   save.onclick=function(){
-    var d=getData(), type=typeSel.value;
+    var d=getData(), type=d.type;
+    // Rest = remove any planned session for the day (soft-delete so it syncs).
+    if(type==='rest'){
+      if(sess){ sess.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(sess,['deleted']); }
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
+      modal.remove();
+      try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+      try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
+      return;
+    }
     // Reuse the existing session id where possible; a NEW session gets a
     // DETERMINISTIC date-based id (not random) so two devices never diverge.
     var s2 = sess ? sess : { id:'plan-'+dateKey+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
     s2.type=type;
     if(type==='ride'){
-      if(!s2.name) s2.name = ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
+      s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
       s2.intent=d.intent; s2.targets=d.targets;
       // completed side -> the recorded ride (edit if one exists; create is out of scope)
       if(o){
