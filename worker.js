@@ -15633,7 +15633,7 @@ function dsShowCalendar(){
             // activity, or the centered icon+name on an otherwise-empty day.
             if(planRaw && planRaw.name){
               if(dl.length){
-                H+='<div style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span><span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planRaw.name+'</span></div>';
+                H+='<div data-cal="planchip" data-date="'+c.date+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span><span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planRaw.name+'</span></div>';
               } else {
                 H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(planRaw.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+planRaw.name+'</div></div>';
               }
@@ -15690,6 +15690,7 @@ function dsShowCalendar(){
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
+      else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); if(pd && typeof openDayEditor==='function') openDayEditor(pd); }
       else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
         if(idx!=null) openRideDetail(parseInt(idx,10));
         else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
