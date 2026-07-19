@@ -25516,6 +25516,7 @@ function openDayEditor(dateKey){
         planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status']);
       }
       if(typeof sv==='function') sv();   // persist: saveLocal_ (localStorage + IndexedDB) + debounced fbPush
+      try{ console.log('[dayEditor] saved st.plan['+dateKey+'] ->', JSON.stringify((typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).map(function(s){return {id:s.id,type:s.type,name:s.name,editedAt:s.editedAt};}))); }catch(_e){}
     }catch(err){
       try{ if(typeof console!=='undefined') console.error('[dayEditor save]', err); }catch(_e){}
       try{ if(typeof toast==='function') toast('Save failed: '+((err&&err.message)||'error')+'. Nothing lost — try again.'); }catch(_e){}
@@ -26820,7 +26821,15 @@ window.onload = function(){
           var idbRides=Array.isArray(full.rides)?full.rides.length:0;
           var curRides=Array.isArray(st.rides)?st.rides.length:0;
           if(idbRides>=curRides){
+            // PRESERVE freshly-saved plan/strength across the wholesale swap. saveLocal_'s
+            // IDB write (idbSet_) is async + unawaited, so a quick reload after a plan save
+            // (common on mobile: save -> app-switch -> resume) catches IDB mid-write and
+            // this swap would otherwise clobber a just-written session that IS in the slim
+            // localStorage copy. Merge those two keys (union by id + editedAt) instead of
+            // replacing them; normalizeState_ then collapses to the most-recently-edited.
+            var _fp=st.plan, _fs=st.strength;
             st=full;
+            try{ if(typeof mergeState_==='function'){ st.plan=mergeState_(_fp||{}, st.plan||{}); st.strength=mergeState_(_fs||{}, st.strength||{}); } if(typeof normalizeState_==='function') normalizeState_(st); }catch(e){}
             try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
             try{ showHomeDash(); }catch(e){}
             console.log('[idb] loaded full state — rides='+idbRides+' (localStorage had '+curRides+')');
