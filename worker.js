@@ -4536,23 +4536,17 @@ function normalizeState_(s){
       s.plan[ck].sessions=s.plan[ck].sessions.concat(src.sessions);
       delete s.plan[dk];
     });
-    // (a2) Normalize legacy unpadded session ids ('plan-2026-7-23-0' ->
-    // 'plan-2026-07-23-0'). The editor's old new-session id builder used the raw
-    // (mobile non-padded) dateKey, so such ids never reconcile by id with a padded
-    // copy on another device. Rewrite to the padded form so cross-device id-merge
-    // works (matching migration's ids and the canonical bucket key). No backslashes
-    // in the regex — the served template strips them.
-    Object.keys(s.plan).forEach(function(dk){
-      var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
-      day.sessions.forEach(function(x){
-        if(!x || typeof x.id!=='string') return;
-        var m=x.id.match(/^plan-([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})-([0-9]+)$/);
-        if(!m) return;
-        var p2=function(n){ return n.length<2?('0'+n):n; };
-        var nid='plan-'+m[1]+'-'+p2(m[2])+'-'+p2(m[3])+'-'+m[4];
-        if(nid!==x.id) x.id=nid;
+    // (a2) Heal every existing session to the CANONICAL shape — the load/merge
+    // counterpart to normalizeSession_ on write. Pads legacy unpadded ids
+    // ('plan-2026-7-23-0' -> 'plan-2026-07-23-0', so cross-device id-merge works),
+    // coerces a missing/empty type from the name, and ensures editedAt/targets/status.
+    // Legacy on-disk data thus converges to the same shape new writes use.
+    if(typeof normalizeSession_==='function'){
+      Object.keys(s.plan).forEach(function(dk){
+        var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+        day.sessions.forEach(function(x){ if(x && typeof x==='object'){ try{ normalizeSession_(x, dk); }catch(e){} } });
       });
-    });
+    }
     // (b) Backfill editedAt (migrated sessions were pushed directly, bypassing
     // markPlanEdited_; undefined would sort as 0 and break tie-ordering), then dedupe
     // duplicates per day. Dedupe is scoped to the normalized NAME (NOT name+type):
@@ -20564,14 +20558,57 @@ function planDay_(dateKey, create){
   if(!Array.isArray(st.plan[dateKey].sessions)) st.plan[dateKey].sessions=[];
   return st.plan[dateKey];
 }
-// Upsert a session by id for a date; marks edited fields so the change survives sync.
+// ONE canonical session shape. Every write to st.plan flows through planUpsertSession_,
+// which normalizes here first — so writer/reader format mismatches (padded vs unpadded
+// keys, type present vs absent, dropdown value vs stored) cannot accumulate. Enum is the
+// four plan states; 'rest' is a FIRST-CLASS session (a Rest day persists + reads back as
+// Rest, not a bare deletion). No backslashes in these regexes — the served template
+// strips them.
+var PLAN_SESSION_TYPES=/^(ride|strength|mobility|rest)$/;
+function normalizeSession_(sess, dateKey){
+  var s=(sess && typeof sess==='object')?sess:{};
+  // name -> trimmed string
+  s.name=(s.name==null?'':String(s.name)).trim();
+  // type -> enum. Rest-name => rest; else derive from name; else default ride.
+  if(!PLAN_SESSION_TYPES.test(s.type||'')){
+    if(typeof isRestName_==='function' && isRestName_(s.name)) s.type='rest';
+    else { var dt=(typeof sessionTypeFromName_==='function')?sessionTypeFromName_(s.name):''; s.type=/^(ride|strength|mobility)$/.test(dt)?dt:'ride'; }
+  }
+  if(s.type==='rest' && !s.name) s.name='Rest';
+  // intent present
+  if(s.intent==null) s.intent='';
+  // legacy unpadded plan id -> padded (matches canonical bucket + migration ids)
+  if(typeof s.id==='string'){ var m=s.id.match(/^plan-([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})-(.+)$/); if(m){ var p2=function(n){ return n.length<2?('0'+n):n; }; s.id='plan-'+m[1]+'-'+p2(m[2])+'-'+p2(m[3])+'-'+m[4]; } }
+  // required containers / status / stamp
+  if(!isPlainObj_(s.targets)) s.targets={};
+  if(!s.status) s.status=(s.type==='rest'?'rest':'planned');
+  if(!s.editedAt) s.editedAt=1;
+  return s;
+}
+// Write-time validation: reject a session missing required fields instead of persisting a
+// malformed one that a reader later can't match. Returns a list of problems ([] = valid).
+function validateSession_(s){
+  if(!s || typeof s!=='object') return ['not-an-object'];
+  var e=[];
+  if(s.id==null || s.id==='') e.push('id');
+  if(!PLAN_SESSION_TYPES.test(s.type||'')) e.push('type('+s.type+')');
+  if(typeof s.name!=='string' || !s.name.trim()) e.push('name');
+  return e;
+}
+// THE single enforced write path into st.plan. Canonicalize -> assign a deterministic id
+// if missing -> validate (throw on invalid; the editor save wraps this and surfaces a
+// toast, so nothing is silently dropped) -> upsert by id -> stamp edited fields.
 function planUpsertSession_(dateKey, sess, editedFields){
-  var day=planDay_(dateKey, true);
-  if(!sess.id) sess.id=sid_();
-  var i=-1; for(var j=0;j<day.sessions.length;j++){ if(day.sessions[j] && day.sessions[j].id===sess.id){ i=j; break; } }
-  if(editedFields) markPlanEdited_(sess, editedFields);
-  if(i>=0) day.sessions[i]=sess; else day.sessions.push(sess);
-  return sess;
+  var key=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded bucket
+  var s=normalizeSession_(sess, key);
+  var day=planDay_(key, true);
+  if(s.id==null || s.id===''){ s.id='plan-'+key+'-'+day.sessions.length; }
+  var errs=validateSession_(s);
+  if(errs.length) throw new Error('invalid session ['+key+']: '+errs.join(','));
+  var i=-1; for(var j=0;j<day.sessions.length;j++){ if(day.sessions[j] && day.sessions[j].id===s.id){ i=j; break; } }
+  if(editedFields) markPlanEdited_(s, editedFields);
+  if(i>=0) day.sessions[i]=s; else day.sessions.push(s);
+  return s;
 }
 // One-time migration: the ephemeral 17-week plan (static ws{} DOM, which already
 // reflects ws() swaps) + st.plannedWorkouts overrides -> persistent st.plan. Runs
@@ -20607,7 +20644,9 @@ function migratePlanToStPlan_(){
         var sess={ id:'plan-'+key+'-0', type:type, intent:sessionIntentFromName_(name,type), name:name, block:null,
                    targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, migrated:true, editedAt:1 };
         if(type==='strength' || type==='mobility') sess.exercises=[];
-        planDay_(key, true).sessions.push(sess);
+        // Route through the single write path (canonicalize + validate) — no direct push.
+        // editedFields=null so it stays an unedited migrated baseline (editedAt sentinel 1).
+        try{ planUpsertSession_(key, sess, null); }catch(e){}
       }
     }
     st._planMig=1;
@@ -20632,10 +20671,13 @@ function getPlannedWorkoutForDate(dateStr){
   // primary session in the legacy {name,dur} shape existing callers expect, plus the
   // full session list + type for new callers. Rest days -> null (no session).
   var sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateStr):[];
-  if(!sessions.length) return null;
-  var s=sessions[0];
+  // A Rest day is a first-class 'rest' session but NOT a workout — exclude rest so
+  // training/fueling readers see a Rest day as "no session" (returns null).
+  var trained=sessions.filter(function(x){ return x && x.type!=='rest'; });
+  if(!trained.length) return null;
+  var s=trained[0];
   var dur=(s.targets && s.targets.durationMin!=null)?(s.targets.durationMin+' min'):'';
-  return { name:s.name, dur:dur, type:s.type, intent:s.intent, sessions:sessions, custom:true, week:null, dayIdx:null };
+  return { name:s.name, dur:dur, type:s.type, intent:s.intent, sessions:trained, custom:true, week:null, dayIdx:null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25571,8 +25613,16 @@ function openDayEditor(dateKey){
     try{
       var d=getData(), type=d.type;
       if(type==='rest'){
-        // Rest = remove any planned session for the day (soft-delete so it syncs).
-        if(sess){ sess.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(sess,['deleted']); }
+        // Rest is a FIRST-CLASS session (deterministic id 'plan-<key>-rest') so the day
+        // PERSISTS and reads back as Rest — not a bare deletion that reverts the dropdown
+        // to blank on reopen. Clear the day's other live (non-rest) sessions, then upsert
+        // the rest session through the single write path. deleted:false + masked so a prior
+        // rest tombstone revives by recency.
+        var _rk=(typeof normDate==='function')?normDate(dateKey):dateKey;
+        (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); } });
+        var rs=(sess && sess.type==='rest')?sess:{ id:'plan-'+_rk+'-rest', block:null };
+        rs.type='rest'; rs.name='Rest'; rs.deleted=false;
+        planUpsertSession_(dateKey, rs, ['type','name','status','deleted']);
       } else {
         // Reuse the existing session id where possible; a NEW session gets a
         // DETERMINISTIC date-based id (not random) so two devices never diverge.
