@@ -4137,13 +4137,23 @@ function mergeSession_(a, b){
     merged._edited=mask;
   }
   if(aEdit||bEdit) merged.editedAt=Math.max(aEdit,bEdit);
-  // 'deleted' resolves by RECENCY when either side tracked it in the edit-mask (the
-  // Rest-save delete and planReviveDay_ both stamp editedAt + mask 'deleted'): the
-  // most-recent action wins, so a re-add or revive beats a stale tombstone instead of
-  // the tombstone winning forever. Sessions that never masked 'deleted' keep the old
-  // OR-merge (an un-tracked delete still sticks).
-  if(mask && mask.deleted){ merged.deleted=!!((aEdit>=bEdit)?a:b).deleted; }
-  else if(a.deleted||b.deleted){ merged.deleted=true; }
+  // 'deleted' resolves by RECENCY, ALWAYS — never an unconditional OR. When the two sides
+  // disagree, the higher editedAt wins; on a tie a MASKED (explicitly tracked: Rest-save,
+  // editor Delete, planDeleteSession_, planReviveDay_) delete sticks, otherwise the LIVE
+  // side is kept. This is critical: the name-collapse tombstones a duplicate WITHOUT
+  // masking and keeps its own (often low / sentinel-1) editedAt, so the old OR fallback let
+  // that unmasked tombstone silently kill a fresh live save of the same id on merge — the
+  // whole-day-tombstoned-after-save bug. Now a fresh save (high editedAt) beats it; the
+  // collapse still hides the dup locally and both devices re-collapse deterministically.
+  if(!!a.deleted===!!b.deleted){
+    merged.deleted=!!a.deleted;
+  } else {
+    var _del=a.deleted?a:b, _live=a.deleted?b:a;
+    var _de=_del.editedAt||0, _le=_live.editedAt||0;
+    if(_de>_le) merged.deleted=true;
+    else if(_le>_de) merged.deleted=false;
+    else merged.deleted=!!(mask && mask.deleted);   // tie: tracked delete sticks, else keep live
+  }
   return merged;
 }
 function mergeItemFast_(a, b){
@@ -25707,10 +25717,12 @@ function openDayEditor(dateKey, targetId){
         rs.type='rest'; rs.name='Rest'; rs.deleted=false;
         planUpsertSession_(dateKey, rs, ['type','name','status','deleted']);
       } else {
-        // Reuse the existing session id where possible; a NEW session gets a
-        // DETERMINISTIC date-based id (not random) so two devices never diverge.
-        var _idk=(typeof normDate==='function')?normDate(dateKey):dateKey;   // padded, matching the canonical bucket key (mobile passes non-padded)
-        var s2 = sess ? sess : { id:'plan-'+_idk+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
+        // Reuse the existing session id; a NEW session gets NO id here — planUpsertSession_
+        // assigns 'plan-<key>-<total>' from the day's TOTAL session count (incl. deleted).
+        // Building it here from the LIVE count gave 'plan-<key>-0' when the day's sessions
+        // were all deleted, colliding with a deleted twin of that id — which then OR-killed
+        // the save on merge (index-0 collision, diagnostic #2).
+        var s2 = sess ? sess : { status:'planned', completedRideKey:null, executionScore:null, block:null };
         s2.type=type;
         if(type==='ride'){
           s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
