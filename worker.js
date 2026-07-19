@@ -4137,7 +4137,13 @@ function mergeSession_(a, b){
     merged._edited=mask;
   }
   if(aEdit||bEdit) merged.editedAt=Math.max(aEdit,bEdit);
-  if(a.deleted||b.deleted) merged.deleted=true;   // soft-delete OR-merges (no tombstones otherwise)
+  // 'deleted' resolves by RECENCY when either side tracked it in the edit-mask (the
+  // Rest-save delete and planReviveDay_ both stamp editedAt + mask 'deleted'): the
+  // most-recent action wins, so a re-add or revive beats a stale tombstone instead of
+  // the tombstone winning forever. Sessions that never masked 'deleted' keep the old
+  // OR-merge (an un-tracked delete still sticks).
+  if(mask && mask.deleted){ merged.deleted=!!((aEdit>=bEdit)?a:b).deleted; }
+  else if(a.deleted||b.deleted){ merged.deleted=true; }
   return merged;
 }
 function mergeItemFast_(a, b){
@@ -4529,6 +4535,23 @@ function normalizeState_(s){
       if(!Array.isArray(s.plan[ck].sessions)) s.plan[ck].sessions=[];
       s.plan[ck].sessions=s.plan[ck].sessions.concat(src.sessions);
       delete s.plan[dk];
+    });
+    // (a2) Normalize legacy unpadded session ids ('plan-2026-7-23-0' ->
+    // 'plan-2026-07-23-0'). The editor's old new-session id builder used the raw
+    // (mobile non-padded) dateKey, so such ids never reconcile by id with a padded
+    // copy on another device. Rewrite to the padded form so cross-device id-merge
+    // works (matching migration's ids and the canonical bucket key). No backslashes
+    // in the regex — the served template strips them.
+    Object.keys(s.plan).forEach(function(dk){
+      var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+      day.sessions.forEach(function(x){
+        if(!x || typeof x.id!=='string') return;
+        var m=x.id.match(/^plan-([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})-([0-9]+)$/);
+        if(!m) return;
+        var p2=function(n){ return n.length<2?('0'+n):n; };
+        var nid='plan-'+m[1]+'-'+p2(m[2])+'-'+p2(m[3])+'-'+m[4];
+        if(nid!==x.id) x.id=nid;
+      });
     });
     // (b) Backfill editedAt (migrated sessions were pushed directly, bypassing
     // markPlanEdited_; undefined would sort as 0 and break tie-ordering), then dedupe
@@ -20518,6 +20541,22 @@ function planDump_(dateKey){
     return rows;
   }catch(e){ console.log('[planDump] err', e); return []; }
 }
+// Console recovery: planReviveDay_('2026-07-23') un-deletes every tombstoned session
+// for a day and re-stamps editedAt so the revive is the most-recent action — with the
+// recency-gated 'deleted' merge, it beats the stale tombstone cross-device instead of
+// the tombstone winning forever. Persists immediately.
+function planReviveDay_(dateKey){
+  try{
+    var k=(typeof normDate==='function')?normDate(dateKey):dateKey;
+    var d=st.plan && st.plan[k];
+    if(!d || !Array.isArray(d.sessions)){ console.log('[planRevive] no day '+k); return 0; }
+    var n=0;
+    d.sessions.forEach(function(x){ if(x && x.deleted){ x.deleted=false; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); n++; } });
+    if(n){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    console.log('[planRevive] '+k+' revived '+n+' session(s)');
+    return n;
+  }catch(e){ console.log('[planRevive] err', e); return 0; }
+}
 function planDay_(dateKey, create){
   dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key (mobile cells pass non-padded)
   if(!st.plan) st.plan={};
@@ -25554,6 +25593,13 @@ function openDayEditor(dateKey){
             if(c.elev!=null){ o.elev=c.elev; ef.push('elev'); }
             if(o.distance&&o.duration&&c.avgSpeed==null){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
             if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null)); }
+          } else {
+            // No recorded ride to attach actuals to. Rather than silently DROP what was
+            // typed into the Completed fields (the old "create is out of scope" gap),
+            // persist them ON the session via planUpsertSession_ below (stamped +
+            // merge-tracked like every other session field), so nothing entered is lost.
+            var c0=d.completed, hasC=c0 && (c0.distance!=null||c0.duration!=null||c0.avgSpeed!=null||c0.tss!=null||c0.np!=null||c0.elev!=null);
+            if(hasC){ s2.completed=c0; s2.status='completed'; }
           }
         } else if(type==='strength'){
           s2.name=d.name; s2.exercises=d.exercises;
@@ -25570,7 +25616,7 @@ function openDayEditor(dateKey){
           s2.status=d.completed?'completed':'planned';
         }
         if(typeof planUpsertSession_!=='function') throw new Error('planUpsertSession_ unavailable');
-        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status']);
+        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status','completed']);
       }
       if(typeof sv==='function') sv();   // persist: saveLocal_ (localStorage + IndexedDB) + debounced fbPush
       try{ console.log('[dayEditor] saved st.plan['+dateKey+'] ->', JSON.stringify((typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).map(function(s){return {id:s.id,type:s.type,name:s.name,editedAt:s.editedAt};}))); }catch(_e){}
