@@ -4515,6 +4515,12 @@ function normalizeState_(s){
   try{
     Object.keys(s.plan).forEach(function(dk){
       var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+      // Backfill editedAt on any session missing it (migrated sessions were pushed
+      // directly, bypassing markPlanEdited_). Without this, undefined sorts as 0 and
+      // ties are decided by id alone, and the boot-swap merge can't order divergent
+      // copies — so a migrated session could survive over a real edit. Sentinel 1
+      // keeps migrated entries below any real edit while making the field defined.
+      day.sessions.forEach(function(x){ if(x && !x.editedAt) x.editedAt=1; });
       var live=day.sessions.filter(function(x){ return x && !x.deleted; });
       if(live.length<=1) return;
       live.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
@@ -20509,8 +20515,12 @@ function migratePlanToStPlan_(){
         var type=sessionTypeFromName_(name);
         // DETERMINISTIC id (date-based, not random) so a session migrated
         // independently on two devices reconciles by id instead of duplicating.
+        // editedAt:1 — a deterministic sentinel (NOT Date.now(), which would differ
+        // per device). Non-zero so the field is never undefined (undefined breaks the
+        // merge/collapse sort), and the lowest possible value so ANY real user edit
+        // (editedAt=Date.now()) always outranks this never-edited migrated baseline.
         var sess={ id:'plan-'+key+'-0', type:type, intent:sessionIntentFromName_(name,type), name:name, block:null,
-                   targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, migrated:true };
+                   targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, migrated:true, editedAt:1 };
         if(type==='strength' || type==='mobility') sess.exercises=[];
         planDay_(key, true).sessions.push(sess);
       }
