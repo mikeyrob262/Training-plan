@@ -4507,6 +4507,21 @@ function normalizeState_(s){
   if(!isPlainObj_(s.strength)) s.strength = {};
   if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
   if(!isPlainObj_(s.strength.log)) s.strength.log = {};
+  // Collapse duplicate plan sessions per date. Independently-migrated copies had
+  // divergent random ids, so a hand-edit on one device landed as a SECOND session
+  // rather than reconciling. Deterministically keep the most-recently-edited (tie ->
+  // lowest id) and soft-delete the rest, so the edited session wins cross-device and
+  // both devices converge to the same survivor. Runs every load + merge.
+  try{
+    Object.keys(s.plan).forEach(function(dk){
+      var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+      var live=day.sessions.filter(function(x){ return x && !x.deleted; });
+      if(live.length<=1) return;
+      live.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
+      var keep=live[0];
+      day.sessions.forEach(function(x){ if(x && !x.deleted && x!==keep) x.deleted=true; });
+    });
+  }catch(e){}
   // Prune manual bike assignments that cross the indoor/outdoor line (stale
   // pre-guard bulk stamps). Runs here so it's page-independent — every load and
   // sync merge flows through normalizeState_, not just the Garage screen.
@@ -9595,7 +9610,7 @@ function showHomeDash(){
     html+='<div style="font-size:13px;color:var(--t3)">No workout scheduled for today.</div>';
   } else {
     html+='<div id="home-todays-plan-row" style="display:flex;align-items:center;gap:12px;cursor:pointer">'
-      +activityIcon_(todaysPlanInfo.sessName,40)
+      +activityIcon_(todaysPlanInfo.stype||todaysPlanInfo.sessName,40)
       +'<div style="flex:1;min-width:0">'
       +'<div style="font-size:15px;font-weight:700;color:var(--t1)">'+todaysPlanInfo.sessName+'</div>'
       +(todaysPlanInfo.plannedDur?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+todaysPlanInfo.plannedDur+'</div>':'')
@@ -15635,7 +15650,7 @@ function dsShowCalendar(){
               if(dl.length){
                 H+='<div data-cal="planchip" data-date="'+c.date+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span><span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planRaw.name+'</span></div>';
               } else {
-                H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(planRaw.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+planRaw.name+'</div></div>';
+                H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(planRaw.type||planRaw.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+planRaw.name+'</div></div>';
               }
             }
           }
@@ -20492,7 +20507,9 @@ function migratePlanToStPlan_(){
         else { var el=document.getElementById('ws'+w+'_'+dayIdx); name=el?(el.textContent||'').trim():null; dur=durOf(w,dayIdx); }
         if(!name || isRestName_(name)) continue;
         var type=sessionTypeFromName_(name);
-        var sess={ id:sid_(), type:type, intent:sessionIntentFromName_(name,type), name:name, block:null,
+        // DETERMINISTIC id (date-based, not random) so a session migrated
+        // independently on two devices reconciles by id instead of duplicating.
+        var sess={ id:'plan-'+key+'-0', type:type, intent:sessionIntentFromName_(name,type), name:name, block:null,
                    targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, migrated:true };
         if(type==='strength' || type==='mobility') sess.exercises=[];
         planDay_(key, true).sessions.push(sess);
@@ -24892,6 +24909,7 @@ function showCalendarTab(){
     if(/run/.test(t)) return '#5DCAA5';
     if(/virtual|zwift/.test(t)) return '#4D9FFF';
     if(/strength|core|gym|lift/.test(t)) return '#A855F7';
+    if(/mobility|yoga|stretch/.test(t)) return '#1D9E75';
     if(/recovery|rest|easy/.test(t)) return '#8E8E93';
     return '#2FA8E0'; // ride (default)
   }
@@ -24910,6 +24928,9 @@ function showCalendarTab(){
     }
     if(/recovery|rest|easy/.test(t)){ // hollow ring
       return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="'+col+'" stroke-width="2"/></svg>';
+    }
+    if(/mobility|yoga|stretch/.test(t)){ // mobility / person
+      return o+'<path d="M4 20h4l1.5-3"/><path d="M17 20l-1-5h-5l1-7"/><path d="M4 10l4-1l4-1l4 1.5l4 1.5"/><path d="M10.007 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/></svg>';
     }
     // Real Lucide/Tabler sport glyph for swim/walk/run/strength/ride.
     return o+sportPaths_(sportKeyFor_(t))+'</svg>';
@@ -24955,7 +24976,8 @@ function showCalendarTab(){
     var label=pw?pw.name:'';
     if(!label){ var dt=(typeof getDType==='function')?getDType(dKey):''; label=(dt&&dt!=='REST')?dt:''; }
     var isRest=!label||/rest|recovery/i.test(label);
-    var col=actColor(label);
+    var ptype=(pw&&pw.type)?pw.type:label;   // glyph/colour by session type, not name
+    var col=actColor(ptype);
     // Pull a duration/sub hint out of the name if present (e.g. "45m", "1:15").
     var subM=label.match(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b|Z\d)/i);
     var sub=subM?subM[0]:'';
@@ -24966,7 +24988,7 @@ function showCalendarTab(){
     if(dayDone){ h+='<div style="position:absolute;top:4px;right:5px;width:13px;height:13px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:900">&#10003;</div>'; }
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
-    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(label,20,col))+'</div>';
+    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(ptype,20,col))+'</div>';
     h+='  <div style="font-size:9px;font-weight:600;color:var(--t1);line-height:1.15;min-height:22px">'+(isRest?'Recovery':shortName)+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
     h+='</div>';
   }
@@ -25008,13 +25030,14 @@ function showCalendarTab(){
         var mKey=mYear+'-'+(mMonth+1)+'-'+dn;
         var mpw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(mKey):null;
         var mLabel=mpw?mpw.name:'';
+        var mType=mpw?(mpw.type||mpw.name):'';
         var mRest=!mLabel||/rest|recovery/i.test(mLabel);
-        var mCol=actColor(mLabel);
+        var mCol=actColor(mType);
         var mToday=(dn===todayD);
         var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
         h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
         h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
-        if(!mRest){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon(mLabel,13,mCol)+'</div>'; }
+        if(!mRest){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon(mType,13,mCol)+'</div>'; }
         if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
         h+='</div>';
       });
@@ -25372,8 +25395,9 @@ function openDayEditor(dateKey){
   save.style.cssText='width:100%;padding:13px;margin-top:10px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
   save.onclick=function(){
     var d=getData(), type=typeSel.value;
-    // Reuse the existing session id where possible so the edit-mask/merge tracks it.
-    var s2 = sess ? sess : { id:sid_(), status:'planned', completedRideKey:null, executionScore:null, block:null };
+    // Reuse the existing session id where possible; a NEW session gets a
+    // DETERMINISTIC date-based id (not random) so two devices never diverge.
+    var s2 = sess ? sess : { id:'plan-'+dateKey+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
     s2.type=type;
     if(type==='ride'){
       if(!s2.name) s2.name = ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
