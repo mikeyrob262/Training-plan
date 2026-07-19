@@ -3966,7 +3966,9 @@ function mergeArrays_(a, b){
     if(item == null) return;
     for(var ci=0; ci<clusters.length; ci++){
       if(itemsMatch_(clusters[ci].rep, item)){
-        clusters[ci].rep = mergeState_(clusters[ci].rep, item);
+        clusters[ci].rep = (_isSession_(clusters[ci].rep)||_isSession_(item))
+          ? mergeSession_(clusters[ci].rep, item)
+          : mergeState_(clusters[ci].rep, item);
         return;
       }
     }
@@ -4106,6 +4108,37 @@ function applyRideSync_(existing, incoming){
   if(Object.keys(em).length) out._edited=em;
   var eAt=Math.max(existing.editedAt||0, incoming.editedAt||0); if(eAt) out.editedAt=eAt;
   return out;
+}
+// ===== Plan-session manual-edit protection (Phase 0) ==============
+// st.plan is date-keyed -> {sessions:[...]}. Each session carries the same
+// _edited/editedAt mask as rides so a hand-edited session survives a sync merge
+// with a stale/auto-generated copy. The ride mask lives on mergeItemFast_ (the
+// stravaId fast path) with a ride-specific field list; sessions have no stravaId
+// and no such list, so they get this generic-mask merge via mergeArrays_'s
+// id-cluster path (itemsMatch_ buckets them by their stable session id).
+function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && /^(ride|strength|mobility)$/.test(x.type)); }
+function markPlanEdited_(sess, fields){
+  if(!sess||!fields) return sess;
+  if(!sess._edited || typeof sess._edited!=='object') sess._edited={};
+  (Array.isArray(fields)?fields:[fields]).forEach(function(f){ if(f) sess._edited[f]=1; });
+  sess.editedAt=Date.now();
+  return sess;
+}
+function mergeSession_(a, b){
+  if(a==null) return b; if(b==null) return a;
+  if(!isPlainObj_(a) || !isPlainObj_(b)) return mergeState_(a, b);
+  var merged=mergeState_(a, b);           // generic union base (all fields both sides)
+  var aM=(a._edited&&typeof a._edited==='object')?a._edited:{}, bM=(b._edited&&typeof b._edited==='object')?b._edited:{};
+  var mask=Object.assign({}, aM, bM), mk=Object.keys(mask);
+  var aEdit=a.editedAt||0, bEdit=b.editedAt||0;
+  if(mk.length){
+    var win=(aEdit>=bEdit)?a:b;            // later edit wins a tie
+    mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
+    merged._edited=mask;
+  }
+  if(aEdit||bEdit) merged.editedAt=Math.max(aEdit,bEdit);
+  if(a.deleted||b.deleted) merged.deleted=true;   // soft-delete OR-merges (no tombstones otherwise)
+  return merged;
 }
 function mergeItemFast_(a, b){
   if(a == null) return b;
@@ -4467,6 +4500,13 @@ function normalizeState_(s){
   // deep-merged by mergeState_'s object branch — never touched by
   // mergeArrays_/dedupeRides_ (those only operate on the rides array).
   if(!isPlainObj_(s.bikeAssignments)) s.bikeAssignments = {};
+  // Persistent plan (Phase 0): date-keyed sessions + strength store. Sibling of
+  // st.rides; syncs via the whole-state fbPush and deep-merges by mergeState_'s
+  // object branch (sessions arrays get the per-session mask via mergeSession_).
+  if(!isPlainObj_(s.plan)) s.plan = {};
+  if(!isPlainObj_(s.strength)) s.strength = {};
+  if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
+  if(!isPlainObj_(s.strength.log)) s.strength.log = {};
   // Prune manual bike assignments that cross the indoor/outdoor line (stale
   // pre-guard bulk stamps). Runs here so it's page-independent — every load and
   // sync merge flows through normalizeState_, not just the Garage screen.
@@ -5363,24 +5403,31 @@ function fetchCoachNote(elId){
 // rebuilding workout logic separately, so behavior stays identical. Given a
 // left accent bar to read as "the next action," distinct from the stat cards.
 function todayWorkoutHTML(){
-  var today = new Date();
-  var todayIdx = today.getDay()===0 ? 6 : today.getDay()-1;
-  var sourceCard = document.getElementById('wc'+cw+'_'+todayIdx);
+  // Phase 0: renders today's real session(s) from st.plan (was: cloning the static
+  // ws{} DOM card verbatim, which surfaced the "2 min" template artifact).
+  var esc=function(x){ return String(x==null?'':x).replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
   var label = '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin:0 16px 8px">Today</div>';
-  if(!sourceCard){
-    return label + '<div style="margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:20px;text-align:center;border-left:3px solid var(--b1)">'
-      + '<div style="font-size:14px;color:var(--t2)">No workout scheduled today</div></div>';
+  var key=(typeof getTodayKey==='function')?getTodayKey():null;
+  var sessions=(key && typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
+  if(!sessions.length){
+    return label + '<div onclick="openDayEditor(\\''+key+'\\')" style="margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:20px;text-align:center;border-left:3px solid var(--b1);cursor:pointer">'
+      + '<div style="font-size:14px;color:var(--t2)">Rest day — nothing scheduled</div></div>';
   }
-  var clone = sourceCard.cloneNode(true);
-  clone.removeAttribute('id');
-  var innerIds = clone.querySelectorAll('[id]');
-  innerIds.forEach(function(el){ el.id = 'today-clone-'+el.id; });
-  clone.style.borderLeft = '3px solid #FC4C02';
-  clone.style.borderTopLeftRadius = '4px';
-  clone.style.borderBottomLeftRadius = '4px';
-  var wrapper = document.createElement('div');
-  wrapper.appendChild(clone);
-  return label + wrapper.innerHTML;
+  var html=label;
+  sessions.forEach(function(s){
+    var ic=(typeof activityIcon_==='function')?activityIcon_(s.type,18):'';
+    var t=s.targets||{}, bits=[];
+    if(s.type==='strength'||s.type==='mobility'){ if(t.durationMin)bits.push(t.durationMin+' min'); if(s.exercises&&s.exercises.length)bits.push(s.exercises.length+' exercises'); }
+    else { if(t.durationMin)bits.push(t.durationMin+' min'); if(t.powerLo&&t.powerHi)bits.push(t.powerLo+'–'+t.powerHi+'W'); if(t.tssTarget)bits.push(t.tssTarget+' TSS'); }
+    var sub=bits.join(' · ');
+    html += '<div onclick="openDayEditor(\\''+key+'\\')" style="margin:0 16px 10px;background:var(--s2);border-radius:14px;padding:14px 16px;border-left:3px solid #FC4C02;cursor:pointer">'
+      + '<div style="display:flex;align-items:center;gap:10px">'+ic
+      + '<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;color:var(--t1)">'+esc(s.name)+'</div>'
+      + (sub?'<div style="font-size:12px;color:var(--t2);margin-top:2px">'+sub+'</div>':'')+'</div>'
+      + (s.status==='completed'?'<span style="font-size:14px;color:#1D9E75">✓</span>':'')
+      + '</div></div>';
+  });
+  return html;
 }
 
 // Weight + Nutrition secondary stat row - demoted below Today since these
@@ -5845,6 +5892,18 @@ function rmSwap(w,i){var o=document.getElementById('swap-overlay');if(o)o.remove
 
 function applySwap(w,idx,val){
   var s=ws(w);if(!s.swaps)s.swaps={};s.swaps[idx]=val;sv();
+  // Mirror the swap into st.plan so it propagates cross-device (Phase 0). Model it
+  // as an in-place status change on the day's session (no tombstones for a hard
+  // replace). Map plan week/day -> real date via planStart.
+  try{
+    var _plan=getActivePlan(); var _start=new Date(((_plan&&_plan.planStart)||'2026-06-08')+'T00:00:00'); _start.setHours(0,0,0,0);
+    var _dt=new Date(_start); _dt.setDate(_start.getDate()+(w-1)*7+idx);
+    var _key=_dt.getFullYear()+'-'+('0'+(_dt.getMonth()+1)).slice(-2)+'-'+('0'+_dt.getDate()).slice(-2);
+    var _ss=(typeof planSessionsForDate_==='function')?planSessionsForDate_(_key):[];
+    var _s=_ss.length?_ss[0]:{ id:sid_(), targets:{}, completedRideKey:null, executionScore:null, block:null };
+    _s.name=val; _s.type=sessionTypeFromName_(val); _s.intent=sessionIntentFromName_(val,_s.type); _s.status='swapped';
+    if(typeof planUpsertSession_==='function'){ planUpsertSession_(_key, _s, ['name','type','intent','status']); try{ sv(); }catch(e){} }
+  }catch(e){}
   var e=document.getElementById('ws'+w+'_'+idx);
   if(e){e.textContent=val;e.style.color='var(--blue)';}
   var o=document.getElementById('swap-overlay');if(o)o.remove();
@@ -7486,8 +7545,8 @@ function renderAllAvatars(){
 var MEAL_BUCKETS=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
 
 function getWorkoutForDate_(dateKey){
-  // A user-scheduled override (from the Calendar) wins for any date.
-  var _ov=(typeof plannedOverrideFor_==='function')?plannedOverrideFor_(dateKey):null;
+  // Reads the persistent plan (st.plan) via getPlannedWorkoutForDate (Phase 0).
+  var _ov=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
   if(_ov && _ov.name){
     var onm=_ov.name, omin=90;
     if(_ov.dur){ var _dn=String(_ov.dur).match(/[0-9]+/g); if(_dn && _dn.length>=2 && String(_ov.dur).indexOf('-')>=0) omin=(parseInt(_dn[0])+parseInt(_dn[1]))/2; else if(_dn && _dn.length) omin=parseInt(_dn[0]); }
@@ -9519,14 +9578,13 @@ function showHomeDash(){
   var todaysPlanCurWeek = (typeof getCurrentPlanWeek==='function') ? getCurrentPlanWeek() : 1;
   var todaysPlanDayIdx = (new Date().getDay()===0) ? 6 : new Date().getDay()-1;
   var todaysPlanInfo = (function(){
-    var sessEl = document.getElementById('ws'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
-    var cardEl = document.getElementById('wc'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
-    var checkEl = document.getElementById('ck'+todaysPlanCurWeek+'_'+todaysPlanDayIdx);
-    var sessName = sessEl ? sessEl.textContent.trim() : null;
-    var plannedEl = cardEl ? cardEl.querySelector('.wof-pl') : null;
-    var plannedDur = plannedEl ? plannedEl.textContent.trim() : null;
-    var isDone = checkEl ? checkEl.className.indexOf('on')>=0 : false;
-    return {sessName:sessName, plannedDur:plannedDur, isDone:isDone};
+    // Phase 0: reads today's real session from st.plan (was: scraping the ws{} DOM).
+    var key=(typeof getTodayKey==='function')?getTodayKey():null;
+    var sessions=(key && typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
+    if(!sessions.length) return {sessName:null, plannedDur:null, isDone:false};
+    var s=sessions[0];
+    var plannedDur=(s.targets && s.targets.durationMin!=null)?(s.targets.durationMin+' min'):null;
+    return {sessName:s.name, plannedDur:plannedDur, isDone:(s.status==='completed'), stype:s.type};
   })();
   html+='<div style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
@@ -13787,7 +13845,7 @@ function dsShowAICoach(){
 
   var weekData=ws(cw);
   var dayShort=['mon','tue','wed','thu','fri','sat','sun'];
-  var todayWorkout=((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name||(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
+  var todayWorkout=((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name||(weekData.swaps&&weekData.swaps[todayIdx])||(weekData.wo&&weekData.wo[todayIdx])||null;
 
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
@@ -15541,7 +15599,7 @@ function dsShowCalendar(){
           var dl=c.inMonth?(ridesByDate[c.date]||[]):[];
           // Planned workout for this date (persisted override) — shown on ALL days,
           // alongside any completed activity, gated by the Planned/Rest filters.
-          var planRaw=(c.inMonth && calFilter.planned && typeof plannedOverrideFor_==='function')?(plannedOverrideFor_(c.date)||null):null;
+          var planRaw=(c.inMonth && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
           var restPlan=planRaw && /rest|recovery|off/i.test(planRaw.name||'');
           if(restPlan && !calFilter.rest){ planRaw=null; restPlan=false; }
           var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
@@ -20360,6 +20418,90 @@ function getCurrentPlanWeek(){
 // Persistent per-date planned-workout overrides (user-scheduled workouts on
 // the Calendar). Stored in st so they survive reload and sync, and so both
 // Today's Plan and the AI Coach can read what was scheduled for a date.
+// ===== st.plan — persistent plan (Phase 0) =======================
+function sid_(){ try{ if(typeof crypto!=='undefined' && crypto.randomUUID) return 's-'+crypto.randomUUID(); }catch(e){} return 's-'+Date.now().toString(36)+'-'+Math.floor(Math.random()*1e6).toString(36); }
+// Coarse Phase-0 session type (ride|strength|mobility) from a name, reusing the
+// SAME classification as activityIcon_ so the calendar glyph/colour and the plan
+// type never disagree. Runs/rides/groups all bucket to 'ride' in this enum.
+function sessionTypeFromName_(name){
+  var s=String(name||'').toLowerCase();
+  if(/weight|strength|lift/.test(s)) return 'strength';
+  if(/mobility|yoga|stretch/.test(s)) return 'mobility';
+  return 'ride';
+}
+function sessionIntentFromName_(name, type){
+  var s=String(name||'').toLowerCase();
+  if(type==='strength') return /strength b|posterior|single|rdl|split/.test(s)?'strengthB':'strengthA';
+  if(type==='mobility') return 'mobility';
+  if(/threshold|z4|interval/.test(s)) return 'threshold';
+  if(/vo2|v02/.test(s)) return 'vo2';
+  if(/group/.test(s)) return 'group';
+  if(/long/.test(s)) return 'long';
+  if(/recover/.test(s)) return 'recovery';
+  return 'z2';
+}
+function isRestName_(name){ return /rest|recovery|off/i.test(String(name||'')); }
+// THE shared planned-sessions accessor. Reads st.plan[dateKey].sessions (non-deleted).
+// Replaces the plannedOverrideFor_ / getPlannedWorkoutForDate / DOM-scrape split so
+// desktop and mobile read one source and can never drift.
+function planSessionsForDate_(dateKey){
+  try{
+    var d=st.plan && st.plan[dateKey];
+    if(!d || !Array.isArray(d.sessions)) return [];
+    return d.sessions.filter(function(x){ return x && !x.deleted; });
+  }catch(e){ return []; }
+}
+function planDay_(dateKey, create){
+  if(!st.plan) st.plan={};
+  if(!isPlainObj_(st.plan[dateKey])){ if(!create) return null; st.plan[dateKey]={sessions:[]}; }
+  if(!Array.isArray(st.plan[dateKey].sessions)) st.plan[dateKey].sessions=[];
+  return st.plan[dateKey];
+}
+// Upsert a session by id for a date; marks edited fields so the change survives sync.
+function planUpsertSession_(dateKey, sess, editedFields){
+  var day=planDay_(dateKey, true);
+  if(!sess.id) sess.id=sid_();
+  var i=-1; for(var j=0;j<day.sessions.length;j++){ if(day.sessions[j] && day.sessions[j].id===sess.id){ i=j; break; } }
+  if(editedFields) markPlanEdited_(sess, editedFields);
+  if(i>=0) day.sessions[i]=sess; else day.sessions.push(sess);
+  return sess;
+}
+// One-time migration: the ephemeral 17-week plan (static ws{} DOM, which already
+// reflects ws() swaps) + st.plannedWorkouts overrides -> persistent st.plan. Runs
+// once (guarded by st._planMig, which syncs so it fires once globally). Recovers
+// ONLY what is honestly present — type (classified), name, planned duration — never
+// fabricated power/%1RM/TSS (those come from the Phase 1 generator). Rest -> no
+// session. Overrides win; st.plannedWorkouts is then retired.
+function migratePlanToStPlan_(){
+  try{
+    if(st._planMig) return;
+    if(!st.plan) st.plan={};
+    var plan=getActivePlan();
+    var start=new Date(((plan&&plan.planStart)||'2026-06-08')+'T00:00:00'); start.setHours(0,0,0,0);
+    function dk(dt){ return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2); }
+    function durOf(w,dayIdx){ try{ var el=document.querySelector('#wc'+w+'_'+dayIdx+' .wof-pl'); if(!el) return null; var m=(el.textContent||'').match(/([0-9]+)/); return m?parseInt(m[1],10):null; }catch(e){ return null; } }
+    for(var w=1; w<=17; w++){
+      for(var dayIdx=0; dayIdx<7; dayIdx++){
+        var dt=new Date(start); dt.setDate(start.getDate()+(w-1)*7+dayIdx);
+        var key=dk(dt);
+        if(planSessionsForDate_(key).length) continue;   // never clobber an existing session
+        var ov=(st.plannedWorkouts && st.plannedWorkouts[key]) || null;
+        var name=null, dur=null;
+        if(ov && ov.name){ name=ov.name; var dm=(''+(ov.dur||'')).match(/[0-9]+/); dur=dm?parseInt(dm[0],10):null; }
+        else { var el=document.getElementById('ws'+w+'_'+dayIdx); name=el?(el.textContent||'').trim():null; dur=durOf(w,dayIdx); }
+        if(!name || isRestName_(name)) continue;
+        var type=sessionTypeFromName_(name);
+        var sess={ id:sid_(), type:type, intent:sessionIntentFromName_(name,type), name:name, block:null,
+                   targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, migrated:true };
+        if(type==='strength' || type==='mobility') sess.exercises=[];
+        planDay_(key, true).sessions.push(sess);
+      }
+    }
+    st._planMig=1;
+    try{ if(st.plannedWorkouts) delete st.plannedWorkouts; }catch(e){}   // retired — readers now use st.plan
+    try{ sv(); }catch(e){}
+  }catch(e){}
+}
 function plannedOverrideFor_(dateKey){
   try{ return (st.plannedWorkouts && st.plannedWorkouts[dateKey]) || null; }catch(e){ return null; }
 }
@@ -20372,23 +20514,15 @@ function setPlannedOverride_(dateKey, name, dur){
 }
 
 function getPlannedWorkoutForDate(dateStr){
-  // A user-scheduled override wins over the fixed 17-week plan.
-  var _ov=plannedOverrideFor_(dateStr);
-  if(_ov && _ov.name) return {week:null, dayIdx:null, name:_ov.name, dur:_ov.dur||'', custom:true};
-  var plan = getActivePlan();
-  var planStart = new Date((plan.planStart||'2026-06-08')+'T00:00:00');
-  planStart.setHours(0,0,0,0);
-  var target = (typeof parseDayKey==='function') ? parseDayKey(dateStr) : new Date(dateStr+'T00:00:00');
-  target.setHours(0,0,0,0);
-  var diffDays = Math.round((target - planStart) / (24*60*60*1000));
-  if(diffDays < 0) return null;
-  var w = Math.floor(diffDays/7) + 1;
-  var dayIdx = diffDays % 7;
-  if(w < 1 || w > 17) return null;
-  var el = document.getElementById('ws'+w+'_'+dayIdx);
-  var name = el ? el.textContent.trim() : null;
-  if(!name) return null;
-  return {week:w, dayIdx:dayIdx, name:name};
+  // Phase 0: reads the persistent plan (st.plan) EXCLUSIVELY — the ephemeral ws{}
+  // DOM-scrape path is retired (the static markup is left inert). Returns the day's
+  // primary session in the legacy {name,dur} shape existing callers expect, plus the
+  // full session list + type for new callers. Rest days -> null (no session).
+  var sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateStr):[];
+  if(!sessions.length) return null;
+  var s=sessions[0];
+  var dur=(s.targets && s.targets.durationMin!=null)?(s.targets.durationMin+' min'):'';
+  return { name:s.name, dur:dur, type:s.type, intent:s.intent, sessions:sessions, custom:true, week:null, dayIdx:null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22531,7 +22665,7 @@ function fetchTodaysDecision(weatherStr, callback){
 
   var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
-  var todayWorkout = ((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
+  var todayWorkout = ((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
 
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
   var recentRides = (st.rides||[]).filter(function(r){
@@ -22619,7 +22753,7 @@ function showAICoach(){
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
   var dayNames2=['mon','tue','wed','thu','fri','sat','sun'];
   var todayKey = dayNames2[todayIdx];
-  var todayWorkout = ((typeof plannedOverrideFor_==='function'&&plannedOverrideFor_(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
+  var todayWorkout = ((typeof getPlannedWorkoutForDate==='function'&&getPlannedWorkoutForDate(getTodayKey()))||{}).name || (weekData.wo && weekData.wo[todayIdx] ? weekData.wo[todayIdx] : null);
 
   // Get recent rides (last 7 days)
   var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-7);
@@ -25158,102 +25292,123 @@ function openDayEditor(dateKey){
   // user's data (via rideSport_) ∪ previously-scheduled custom names — so a name
   // typed once via "Other" (planned override) reappears next time. Shared editor,
   // so this covers BOTH the desktop and mobile calendars.
-  var nameWrap=document.createElement('div'); nameWrap.style.cssText='margin:8px 0 16px';
-  var nameLbl=document.createElement('div'); nameLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; nameLbl.textContent='Workout';
-  var _optMap={}, _opts=[];
-  function _addOpt(v){ if(v==null) return; v=String(v).trim(); if(!v) return; var k=v.toLowerCase(); if(_optMap[k]) return; _optMap[k]=1; _opts.push(v); }
-  ['Ride','Run','Strength','Swim','Yoga','Walk','Hike','Row','Rest'].forEach(_addOpt);
-  try{ (typeof allRidesDeduped_==='function'?allRidesDeduped_():((st.rides||[]).filter(function(r){return r&&!r.deleted;}))).forEach(function(r){ _addOpt((typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type)); }); }catch(e){}
-  try{ var _pw=st.plannedWorkouts||{}; Object.keys(_pw).forEach(function(k){ _addOpt(_pw[k]&&_pw[k].name); }); }catch(e){}
-  _opts.sort(function(a,b){ return a.toLowerCase()<b.toLowerCase()?-1:(a.toLowerCase()>b.toLowerCase()?1:0); });
-  var curName=(o&&o.name!=null)?String(o.name):(plan?String(plan.name||''):'');
-  var _matched=null; for(var _oi=0;_oi<_opts.length;_oi++){ if(_opts[_oi].toLowerCase()===curName.toLowerCase()){ _matched=_opts[_oi]; break; } }
-  var nameSel=document.createElement('select');
-  nameSel.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box;cursor:pointer';
-  var _selList=[''].concat(_opts).concat(['Other']);
-  _selList.forEach(function(op){ var o2=document.createElement('option'); o2.value=op; o2.textContent=(op===''?'Select workout…':op); nameSel.appendChild(o2); });
-  var nameInp=document.createElement('input'); nameInp.type='text'; nameInp.placeholder='Custom workout name';
-  nameInp.style.cssText='width:100%;margin-top:8px;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
-  // Preserve value on edit: a matching option is selected; an unmatched legacy
-  // custom value selects "Other" and pre-fills the text field (never lost).
-  if(_matched){ nameSel.value=_matched; nameInp.style.display='none'; }
-  else if(curName){ nameSel.value='Other'; nameInp.value=curName; nameInp.style.display='block'; }
-  else { nameSel.value=''; nameInp.style.display='none'; }
-  nameSel.onchange=function(){ if(nameSel.value==='Other'){ nameInp.style.display='block'; try{ nameInp.focus(); }catch(e){} } else { nameInp.style.display='none'; } };
-  function effectiveName(){ return nameSel.value==='Other'?nameInp.value.trim():(nameSel.value||'').trim(); }
-  nameWrap.appendChild(nameLbl); nameWrap.appendChild(nameSel); nameWrap.appendChild(nameInp); sheet.appendChild(nameWrap);
-
-  // Column headers
-  var colH=document.createElement('div'); colH.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:8px';
-  colH.innerHTML='<div></div><div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center">Planned</div><div style="font-size:11px;font-weight:700;color:#2FA8E0;text-transform:uppercase;letter-spacing:.05em;text-align:center">Completed</div>';
-  sheet.appendChild(colH);
-
-  // Build a Planned|Completed row: returns {planned, completed} inputs.
-  function row(label, plannedVal, completedVal, ph){
-    var r=document.createElement('div'); r.style.cssText='display:grid;grid-template-columns:74px 1fr 1fr;gap:8px;align-items:center;margin-bottom:9px';
-    var l=document.createElement('div'); l.style.cssText='font-size:12px;color:var(--t2);font-weight:600'; l.textContent=label;
-    function inp(v){
-      var i=document.createElement('input'); i.type='text'; i.placeholder=ph||'-'; if(v!=null&&v!=='') i.value=v;
-      i.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box;text-align:center';
-      return i;
+  // Type-aware editor (Phase 0 §2.2): the day's primary session comes from st.plan;
+  // the Workout dropdown selects the session TYPE and the field set swaps. DOM-built
+  // (no HTML strings) so no escaping concerns.
+  var _sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey):[];
+  var sess=_sessions.length?_sessions[0]:null;
+  var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
+  if(!/^(ride|strength|mobility)$/.test(curType)) curType='ride';
+  var typeWrap=document.createElement('div'); typeWrap.style.cssText='margin:8px 0 12px';
+  var typeLbl=document.createElement('div'); typeLbl.style.cssText='font-size:12px;font-weight:600;color:var(--t3);margin-bottom:5px'; typeLbl.textContent='Workout';
+  var typeSel=document.createElement('select');
+  typeSel.style.cssText='width:100%;padding:10px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box;cursor:pointer';
+  [['ride','Ride'],['strength','Strength'],['mobility','Mobility']].forEach(function(tt){ var op=document.createElement('option'); op.value=tt[0]; op.textContent=tt[1]; if(tt[0]===curType) op.selected=true; typeSel.appendChild(op); });
+  typeWrap.appendChild(typeLbl); typeWrap.appendChild(typeSel); sheet.appendChild(typeWrap);
+  var bodyEl=document.createElement('div'); sheet.appendChild(bodyEl);
+  function _mkI(val, ph){ var i=document.createElement('input'); i.type='text'; i.placeholder=ph||'-'; if(val!=null&&val!=='') i.value=val; i.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box'; return i; }
+  function _sect(t){ var d=document.createElement('div'); d.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px'; d.textContent=t; bodyEl.appendChild(d); }
+  function _fr(label,input){ var r=document.createElement('div'); r.style.cssText='display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:center;margin-bottom:8px'; var l=document.createElement('div'); l.style.cssText='font-size:12px;color:var(--t2);font-weight:600'; l.textContent=label; r.appendChild(l); r.appendChild(input); bodyEl.appendChild(r); return input; }
+  function _num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
+  var getData=function(){ return {}; };
+  function renderType(type){
+    bodyEl.innerHTML='';
+    var t=(sess&&sess.type===type&&sess.targets)?sess.targets:{};
+    if(type==='ride'){
+      _sect('Planned');
+      var iSel=document.createElement('select'); iSel.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
+      [['z2','Z2 endurance'],['threshold','Threshold'],['vo2','VO2'],['group','Group'],['long','Long'],['recovery','Recovery']].forEach(function(x){ var op=document.createElement('option'); op.value=x[0]; op.textContent=x[1]; if(sess&&sess.intent===x[0]) op.selected=true; iSel.appendChild(op); });
+      _fr('Intent',iSel);
+      var pLo=_mkI(t.powerLo!=null?t.powerLo:'','lo W'), pHi=_mkI(t.powerHi!=null?t.powerHi:'','hi W');
+      var pw=document.createElement('div'); pw.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:6px'; pw.appendChild(pLo); pw.appendChild(pHi); _fr('Power',pw);
+      var hrc=_fr('HR cap',_mkI(t.hrCap!=null?t.hrCap:'','bpm'));
+      var du=_fr('Duration',_mkI(t.durationMin!=null?t.durationMin:'','min'));
+      var ts=_fr('Target TSS',_mkI(t.tssTarget!=null?t.tssTarget:'','TSS'));
+      _sect('Completed');
+      var cD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:'','mi'));
+      var cU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:'','min'));
+      var cP=_fr('Pace/Spd',_mkI(o&&o.avgSpeed!=null?o.avgSpeed:'','mph'));
+      var cT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:'','-'));
+      var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:''),'W'));
+      var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:'','ft'));
+      getData=function(){ return { type:'ride', intent:iSel.value, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
+    } else if(type==='strength'){
+      _sect('Planned — exercises (sets x reps @ %1RM)');
+      var nmI=_fr('Session',_mkI(sess&&sess.name?sess.name:(plan?plan.name:''),'e.g. Strength A'));
+      var exWrap=document.createElement('div'); var exRows=[];
+      function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 50px;gap:5px;margin-bottom:6px'; var n=_mkI(ex.name||'','exercise'),s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); rw.appendChild(n);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({n:n,s:s,rp:rp,pc:pc}); }
+      ((sess&&sess.exercises&&sess.exercises.length)?sess.exercises:[{}]).forEach(addEx);
+      bodyEl.appendChild(exWrap);
+      var addB=document.createElement('button'); addB.textContent='+ exercise'; addB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addB.onclick=function(){ addEx({}); }; bodyEl.appendChild(addB);
+      _sect('Completed — logged (weight x reps @ RPE)');
+      var lgWrap=document.createElement('div'); var lgRows=[];
+      function addLg(e){ e=e||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 44px 42px 42px;gap:5px;margin-bottom:6px'; var n=_mkI(e.name||'','exercise'),wt=_mkI(e.weight!=null?e.weight:'','lb'),rp=_mkI(e.reps!=null?e.reps:'','rep'),rpe=_mkI(e.rpe!=null?e.rpe:'','RPE'); rw.appendChild(n);rw.appendChild(wt);rw.appendChild(rp);rw.appendChild(rpe); lgWrap.appendChild(rw); lgRows.push({n:n,wt:wt,rp:rp,rpe:rpe}); }
+      var exLog=(st.strength&&st.strength.log&&st.strength.log[dateKey])||[];
+      (exLog.length?exLog.map(function(e){ var st0=e.sets&&e.sets[0]||{}; return {name:e.name, weight:st0.weight, reps:st0.reps, rpe:st0.rpe}; }):[{}]).forEach(addLg);
+      bodyEl.appendChild(lgWrap);
+      var addLB=document.createElement('button'); addLB.textContent='+ logged exercise'; addLB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addLB.onclick=function(){ addLg({}); }; bodyEl.appendChild(addLB);
+      getData=function(){
+        var exs=exRows.map(function(r){ return { name:r.n.value.trim(), sets:_num(r.s.value), reps:_num(r.rp.value), pct1RM:_num(r.pc.value) }; }).filter(function(e){ return e.name; });
+        var logs=lgRows.map(function(r){ var w=_num(r.wt.value); return (r.n.value.trim()&&w!=null)?{ name:r.n.value.trim(), sets:[{ weight:w, reps:_num(r.rp.value), rpe:_num(r.rpe.value) }] }:null; }).filter(Boolean);
+        return { type:'strength', name:nmI.value.trim()||'Strength', exercises:exs, strengthLog:logs };
+      };
+    } else {
+      _sect('Planned');
+      var mN=_fr('Session',_mkI(sess&&sess.name?sess.name:(plan?plan.name:''),'e.g. Mobility 15 min'));
+      var mD=_fr('Duration',_mkI((sess&&sess.targets&&sess.targets.durationMin)||'','min'));
+      _sect('Completed');
+      var mDone=document.createElement('input'); mDone.type='checkbox'; mDone.checked=(sess&&sess.status==='completed'); mDone.style.cssText='width:18px;height:18px';
+      _fr('Completed',mDone);
+      var mA=_fr('Actual dur',_mkI((sess&&sess.actualDurationMin)||'','min'));
+      getData=function(){ return { type:'mobility', name:mN.value.trim()||'Mobility', targets:{ durationMin:_num(mD.value) }, completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
     }
-    var pI=inp(plannedVal), cI=inp(completedVal);
-    r.appendChild(l); r.appendChild(pI); r.appendChild(cI);
-    sheet.appendChild(r);
-    return {planned:pI, completed:cI};
   }
-
-  var distR=row('Distance', '', (o&&o.distance!=null?o.distance:''), 'mi');
-  var durR =row('Duration', plannedDurText, (o&&o.duration!=null?o.duration:''), 'min');
-  var paceR=row('Pace/Spd', '', (o&&o.avgSpeed!=null?o.avgSpeed:''), 'mph');
-  var tssR =row('TSS', '', (o&&o.tss!=null?o.tss:''), '-');
-  var pwrR =row('Power', '', (o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:'')), 'W');
-  var elevR=row('Elevation', '', (o&&o.elev!=null?o.elev:''), 'ft');
-
-  var hint=document.createElement('div'); hint.style.cssText='font-size:11px;color:var(--t3);margin:6px 0 14px';
-  hint.textContent=o?'Editing your recorded activity. Fix any bad values (e.g. extra miles) and save.':(plan?'No recorded activity yet — Completed side saves once you log this day.':'This day is outside your current plan window.');
-  sheet.appendChild(hint);
+  typeSel.onchange=function(){ renderType(typeSel.value); };
+  renderType(curType);
 
   var save=document.createElement('button');
   save.textContent='Save';
-  save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
+  save.style.cssText='width:100%;padding:13px;margin-top:10px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
   save.onclick=function(){
-    function num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
-    var _nm=effectiveName();
-    // Completed side -> recorded activity (create-on-save is out of scope; edit if exists)
-    if(o){
-      var _ef2=[];
-      if(_nm){ o.name=_nm; _ef2.push('name'); }
-      var dv=num(distR.completed.value); if(dv!=null){ o.distance=dv; _ef2.push('distance'); }
-      var uv=num(durR.completed.value);  if(uv!=null){ o.duration=uv; _ef2.push('duration'); }
-      var sv2=num(paceR.completed.value);if(sv2!=null){ o.avgSpeed=sv2; _ef2.push('avgSpeed'); }
-      var tv=num(tssR.completed.value);  if(tv!=null){ o.tss=tv; _ef2.push('tss'); }
-      var pv=num(pwrR.completed.value);  if(pv!=null){ o.np=pv; _ef2.push('np'); }
-      var ev=num(elevR.completed.value); if(ev!=null){ o.elev=ev; _ef2.push('elev'); }
-      if(o.distance&&o.duration&&!paceR.completed.value){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
-      markRideEdited_(o, _ef2);
+    var d=getData(), type=typeSel.value;
+    // Reuse the existing session id where possible so the edit-mask/merge tracks it.
+    var s2 = sess ? sess : { id:sid_(), status:'planned', completedRideKey:null, executionScore:null, block:null };
+    s2.type=type;
+    if(type==='ride'){
+      if(!s2.name) s2.name = ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
+      s2.intent=d.intent; s2.targets=d.targets;
+      // completed side -> the recorded ride (edit if one exists; create is out of scope)
+      if(o){
+        var ef=[], c=d.completed;
+        if(c.distance!=null){ o.distance=c.distance; ef.push('distance'); }
+        if(c.duration!=null){ o.duration=c.duration; ef.push('duration'); }
+        if(c.avgSpeed!=null){ o.avgSpeed=c.avgSpeed; ef.push('avgSpeed'); }
+        if(c.tss!=null){ o.tss=c.tss; ef.push('tss'); }
+        if(c.np!=null){ o.np=c.np; ef.push('np'); }
+        if(c.elev!=null){ o.elev=c.elev; ef.push('elev'); }
+        if(o.distance&&o.duration&&c.avgSpeed==null){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
+        if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null)); }
+      }
+    } else if(type==='strength'){
+      s2.name=d.name; s2.exercises=d.exercises;
+      if(d.strengthLog && d.strengthLog.length){
+        if(!st.strength) st.strength={oneRM:{},log:{}};
+        if(!st.strength.log) st.strength.log={}; if(!st.strength.oneRM) st.strength.oneRM={};
+        st.strength.log[dateKey]=d.strengthLog; s2.status='completed';
+        // best-effort Epley 1RM estimate from a logged set; never lowers an estimate.
+        try{ d.strengthLog.forEach(function(e){ var set=e.sets&&e.sets[0]; if(set&&set.weight&&set.reps){ var est=Math.round(set.weight*(1+set.reps/30)); if(!(st.strength.oneRM[e.name]>est)) st.strength.oneRM[e.name]=est; } }); }catch(_e){}
+      }
+    } else { // mobility
+      s2.name=d.name; s2.targets=d.targets;
+      if(d.actualDurationMin!=null) s2.actualDurationMin=d.actualDurationMin;
+      s2.status=d.completed?'completed':'planned';
     }
-    // Planned side -> plan session name + duration text back into the plan DOM
-    if(plan && plan.week){
-      var el=document.getElementById('ws'+plan.week+'_'+plan.dayIdx);
-      if(el && _nm) el.textContent=_nm;
-      var card2=document.getElementById('wc'+plan.week+'_'+plan.dayIdx);
-      var plEl2=card2?card2.querySelector('.wof-pl'):null;
-      if(plEl2 && durR.planned.value.trim()) plEl2.textContent=durR.planned.value.trim();
-    }
-    // Persist the planned workout for this date so it survives reload/sync and
-    // feeds Today's Plan + the AI Coach. Only when scheduling a plan (no
-    // recorded activity being edited on this day).
-    if(!o && _nm){
-      setPlannedOverride_(dateKey, _nm, durR.planned.value.trim());
-    }
+    if(typeof planUpsertSession_==='function') planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status']);
     try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
     modal.remove();
-    try{
-      if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); }
-      else { showCalendarTab(); }
-    }catch(e){}
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
   };
   sheet.appendChild(save);
 
@@ -26562,7 +26717,14 @@ window.onload = function(){
     initFirebaseSync();
     return ensureFbAuth_().then(function(tok){
       return fetch(fbAuthedUrl_(tok)).then(function(r){return r.ok?r.json():null;});
-    }).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){});
+    }).then(function(data){if(data)applyFirebaseData(data);}).catch(function(){})
+      .then(function(){
+        // One-time cutover of the ephemeral 17-week plan into st.plan — AFTER the
+        // initial remote pull, so a device that already migrated (st._planMig synced)
+        // short-circuits here and we never double-create sessions with fresh ids.
+        try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        try{ showHomeDash(); }catch(e){}
+      });
   });
 };</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
