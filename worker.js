@@ -20565,7 +20565,7 @@ function planDump_(dateKey){
   try{
     var k=(typeof normDate==='function')?normDate(dateKey):dateKey;
     var d=st.plan && st.plan[k];
-    var rows=(d && Array.isArray(d.sessions))?d.sessions.map(function(s){ return {id:s.id, name:s.name, type:s.type, editedAt:s.editedAt, deleted:!!s.deleted}; }):[];
+    var rows=(d && Array.isArray(d.sessions))?d.sessions.map(function(s){ return {id:s.id, name:s.name, type:s.type, status:s.status, editedAt:s.editedAt, deleted:!!s.deleted, migrated:!!s.migrated, gen:!!s.gen, edited:(s._edited?Object.keys(s._edited):[]), own:(_planUserOwned_(s)?'user':(_planReplaceable_(s)?'replaceable':'other')) }; }):[];
     console.log('[planDump] '+k+' ('+rows.length+' raw)', JSON.stringify(rows,null,2));
     return rows;
   }catch(e){ console.log('[planDump] err', e); return []; }
@@ -20642,8 +20642,22 @@ var PLAN_TEMPLATE_=[
 // Ownership: migration sets migrated, the generator sets gen; ANY user edit/swap clears both
 // (see the editor save + applySwap), claiming the session. The generator only ever touches
 // migrated/gen sessions — never one the user owns or has completed.
-function _planUserOwned_(s){ return !!s && !s.deleted && !s.gen && !s.migrated; }
-function _planReplaceable_(s){ return !!s && !s.deleted && (s.gen || s.migrated) && s.status!=='completed'; }
+// A session the user actually authored: a real _edited mask (any key beyond 'deleted') and not
+// flagged as generator/migration output. This is the true "preserve" signal.
+function _planUserOwned_(s){
+  if(!s || s.deleted || s.gen || s.migrated) return false;
+  var em=(s._edited && typeof s._edited==='object')?s._edited:null;
+  return !!(em && Object.keys(em).some(function(k){ return k!=='deleted'; }));
+}
+function _planReplaceable_(s){
+  if(!s || s.deleted || s.status==='completed') return false;
+  if(s.gen || s.migrated) return true;                       // explicit template / prior-gen
+  // Legacy template residue that predates the ownership flags: never really edited (only the
+  // backfill sentinel editedAt, no user _edited key beyond 'deleted') and unflagged.
+  var em=(s._edited && typeof s._edited==='object')?s._edited:null;
+  var userEdited=em && Object.keys(em).some(function(k){ return k!=='deleted'; });
+  return !userEdited && (!s.editedAt || s.editedAt<=1);
+}
 // Exercises for a strength/mobility group with within-block VOLUME periodization (§3.6): the
 // deload week cuts sets to ~60%, intensity (pct1RM) held. Absolute lb stays '—' until a 1RM
 // estimate exists (no-fake-data) — we prescribe the % band, not a weight.
@@ -20674,15 +20688,21 @@ function generatePlanBlock_(startKey, weeks){
     races.forEach(function(r){ try{ var d=(typeof parseRaceDate_==='function')?parseRaceDate_(r.date):new Date(r.date); if(d){ d.setHours(0,0,0,0); raceTimes.push(d.getTime()); } }catch(e){} });
     function loadedTaper_(dt){ var t=dt.getTime(); for(var i=0;i<raceTimes.length;i++){ var diff=raceTimes[i]-t; if(diff>=0 && diff<=72*3600*1000) return true; } return false; }
     function keyOf_(dt){ return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2); }
-    var out={generated:[], kept:[], weeks:weeks, start:keyOf_(start)};
+    var _todayKey=(function(){ var td=new Date(); td.setHours(0,0,0,0); return keyOf_(td); })();
+    var out={generated:[], kept:[], cleaned:0, skippedPast:0, weeks:weeks, start:keyOf_(start)};
     for(var w=0; w<weeks; w++){
       var blockWeek=(w%4)+1;
       for(var d=0; d<7; d++){
         var dt=new Date(start); dt.setDate(start.getDate()+w*7+d);
         var key=keyOf_(dt);
+        if(key < _todayKey){ out.skippedPast++; continue; }   // HARD clamp: never write a date before today
         var existing=(typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
+        // ALWAYS tombstone replaceable template / prior-gen residue — even on a day that also
+        // has a user session — so leftover migrated slots get cleared instead of surviving.
+        existing.forEach(function(s){ if(_planReplaceable_(s)){ s.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(s,['deleted']); out.cleaned++; } });
+        // Only WRITE the template on a day with no user-owned / completed session (respect a
+        // day the user has planned); its residue is already cleaned above.
         if(existing.some(function(s){ return _planUserOwned_(s) || (s && s.status==='completed'); })){ out.kept.push(key); continue; }
-        existing.forEach(function(s){ if(_planReplaceable_(s)){ s.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(s,['deleted']); } });
         var specs=(PLAN_TEMPLATE_[d]||[]).map(function(x){ var o={}; for(var kk in x) o[kk]=x[kk]; return o; });
         if(loadedTaper_(dt)) specs=specs.map(function(x){ return x.type==='strength' ? {type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15,tapered:true} : x; });
         specs.forEach(function(spec){
