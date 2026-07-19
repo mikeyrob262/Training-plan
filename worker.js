@@ -15720,11 +15720,11 @@ function dsShowCalendar(){
             if(_psAll.length){
               if(dl.length){
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
                 });
               } else {
                 _psAll.forEach(function(ps){
-                  H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div></div>';
                 });
               }
             }
@@ -15780,7 +15780,7 @@ function dsShowCalendar(){
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
-      else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); if(pd && typeof openDayEditor==='function') openDayEditor(pd); }
+      else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
       else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
         if(idx!=null) openRideDetail(parseInt(idx,10));
         else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
@@ -20577,6 +20577,29 @@ function planReviveDay_(dateKey){
     console.log('[planRevive] '+k+' revived '+n+' session(s)'+(n?' — pushed to remote':''));
     return n;
   }catch(e){ console.log('[planRevive] err', e); return 0; }
+}
+// Tombstone ONE session by id (the day-editor Delete control uses this too). Two forms:
+//   planDeleteSession_('s-cae1…')            -> scan all dates for that id
+//   planDeleteSession_('2026-07-23','s-…')   -> scoped to one date
+// Soft-delete (revivable via planReviveDay_): sets deleted + masks it + stamps editedAt so
+// the recency merge propagates the delete, then pushes NOW (not just sv()'s debounce).
+function planDeleteSession_(dateKey, id){
+  try{
+    if(id==null){ id=dateKey; dateKey=null; }   // single-arg form: id only, scan all dates
+    if(!st.plan || id==null) return 0;
+    var keys = (dateKey!=null) ? [(typeof normDate==='function'?normDate(dateKey):dateKey)] : Object.keys(st.plan);
+    var n=0;
+    keys.forEach(function(k){
+      var d=st.plan[k]; if(!d || !Array.isArray(d.sessions)) return;
+      d.sessions.forEach(function(x){ if(x && x.id===id && !x.deleted){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); n++; } });
+    });
+    if(n){
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}   // push now, don't rely on the debounce
+    }
+    console.log('[planDelete] '+id+' tombstoned '+n+' session(s)'+(n?' — pushed to remote':''));
+    return n;
+  }catch(e){ console.log('[planDelete] err', e); return 0; }
 }
 function planDay_(dateKey, create){
   dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key (mobile cells pass non-padded)
@@ -25490,7 +25513,7 @@ var EX_LIBRARY=[
   {name:'Wall ankle dorsiflexion', sets:2, reps:10, pct1RM:'', group:'mobility'},
   {name:'Adductor rock-back', sets:2, reps:8, pct1RM:'', group:'mobility'}
 ];
-function openDayEditor(dateKey){
+function openDayEditor(dateKey, targetId){
   var existing=document.getElementById('day-editor-modal');
   if(existing) existing.remove();
 
@@ -25536,7 +25559,26 @@ function openDayEditor(dateKey){
   // the Workout dropdown selects the session TYPE and the field set swaps. DOM-built
   // (no HTML strings) so no escaping concerns.
   var _sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey):[];
-  var sess=_sessions.length?_sessions[0]:null;
+  // Edit a specific session when targetId is given (the switcher chips + per-session
+  // calendar entries pass it); otherwise default to the day's first session.
+  var sess=targetId?(_sessions.filter(function(x){ return x && x.id===targetId; })[0]||null):null;
+  if(!sess) sess=_sessions.length?_sessions[0]:null;
+  // Session switcher — when a day holds >1 session (e.g. Strength + Ride), chips pick which
+  // one to edit/delete; the active one is highlighted. Built after the header is appended.
+  var _mkSwitcher=function(sheetEl, modalEl){
+    if(_sessions.length<=1) return;
+    var swRow=document.createElement('div'); swRow.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px';
+    _sessions.forEach(function(ps){
+      var active=(sess && ps.id===sess.id);
+      var chip=document.createElement('button');
+      chip.style.cssText='padding:5px 10px;border-radius:9px;border:1px solid '+(active?'#2FA8E0':'var(--b1)')+';background:'+(active?'rgba(47,168,224,.12)':'var(--s2)')+';color:var(--t1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit';
+      chip.textContent=ps.name||ps.type||'Session';
+      chip.onclick=function(){ modalEl.remove(); openDayEditor(dateKey, ps.id); };
+      swRow.appendChild(chip);
+    });
+    sheetEl.appendChild(swRow);
+  };
+  _mkSwitcher(sheet, modal);
   var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
   if(!/^(ride|strength|mobility)$/.test(curType)) curType='ride';
   // Current preset: match the session's intent (or type) to a named preset; unknown -> Other.
@@ -25722,6 +25764,28 @@ function openDayEditor(dateKey){
     try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
   };
   sheet.appendChild(save);
+
+  // Delete control — tombstone the session currently open in the editor (soft-delete, so
+  // it's restorable via planReviveDay_). Only shown for an existing session. The session
+  // switcher above picks WHICH session this deletes on a multi-session day.
+  if(sess && sess.id){
+    var delBtn=document.createElement('button');
+    delBtn.textContent='Delete session';
+    delBtn.style.cssText='width:100%;padding:11px;margin-top:8px;background:transparent;border:1px solid #E24B4A;border-radius:12px;color:#E24B4A;font-size:13px;font-weight:700;cursor:pointer';
+    delBtn.onclick=function(){
+      var _nm=sess.name||sess.type||'this session';
+      var go=function(){
+        try{ if(typeof planDeleteSession_==='function') planDeleteSession_(dateKey, sess.id); }catch(e){}
+        modal.remove();
+        try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+        try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
+      };
+      if(typeof uiConfirm==='function'){ uiConfirm('Delete "'+_nm+'"? You can restore it later with planReviveDay_.', {title:'Delete session', danger:true, okText:'Delete'}).then(function(ok){ if(ok) go(); }); }
+      else if(typeof confirm==='function'){ if(confirm('Delete "'+_nm+'"?')) go(); }
+      else { go(); }
+    };
+    sheet.appendChild(delBtn);
+  }
 
   // Mark complete toggle
   var mc=document.createElement('button');
