@@ -4532,12 +4532,15 @@ function normalizeState_(s){
     });
     // (b) Backfill editedAt (migrated sessions were pushed directly, bypassing
     // markPlanEdited_; undefined would sort as 0 and break tie-ordering), then dedupe
-    // duplicates per day. Dedupe is scoped to a session IDENTITY (normalized name +
-    // type), NOT the whole day: divergent-id copies of the SAME session (independent
-    // pre-deterministic-id migration, or the date-key split above) collapse to one —
-    // keep most-edited, tie -> lowest id so both devices converge on the same
-    // survivor — while genuinely different sessions on one day (e.g. a ride AND a
-    // strength session) have distinct identities and BOTH survive.
+    // duplicates per day. Dedupe is scoped to the normalized NAME (NOT name+type):
+    // divergent-id copies of the SAME session collapse to one — keep most-edited,
+    // tie -> lowest id so both devices converge on the same survivor — while
+    // genuinely different sessions on one day (e.g. "Group Ride" AND "Strength A")
+    // have distinct names and BOTH survive. Name only, because a duplicate can carry
+    // a DIFFERENT stored type (e.g. a swap set type='ride' on one copy while the other
+    // kept an empty/legacy type) even though it's the same session — name+type would
+    // then split them and both would survive. Unnamed sessions stay unique (keyed by
+    // id) so two distinct blank sessions aren't wrongly merged.
     Object.keys(s.plan).forEach(function(dk){
       var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
       day.sessions.forEach(function(x){ if(x && !x.editedAt) x.editedAt=1; });
@@ -4545,7 +4548,8 @@ function normalizeState_(s){
       if(live.length<=1) return;
       var groups={};
       live.forEach(function(x){
-        var gk=String(x.name||'').trim().toLowerCase()+'|'+(x.type||'');
+        var nm=String(x.name||'').trim().toLowerCase();
+        var gk=nm ? ('nm|'+nm) : ('id|'+x.id);
         (groups[gk] || (groups[gk]=[])).push(x);
       });
       Object.keys(groups).forEach(function(gk){
@@ -20502,6 +20506,18 @@ function planSessionsForDate_(dateKey){
     return d.sessions.filter(function(x){ return x && !x.deleted; });
   }catch(e){ return []; }
 }
+// Console diagnostic: planDump_('2026-07-23') -> raw sessions (incl. deleted) with the
+// fields the dedupe keys on, so a "why didn't these two merge?" question is answered by
+// the actual stored name/type, not the glyph (which falls back to name classification).
+function planDump_(dateKey){
+  try{
+    var k=(typeof normDate==='function')?normDate(dateKey):dateKey;
+    var d=st.plan && st.plan[k];
+    var rows=(d && Array.isArray(d.sessions))?d.sessions.map(function(s){ return {id:s.id, name:s.name, type:s.type, editedAt:s.editedAt, deleted:!!s.deleted}; }):[];
+    console.log('[planDump] '+k+' ('+rows.length+' raw)', JSON.stringify(rows,null,2));
+    return rows;
+  }catch(e){ console.log('[planDump] err', e); return []; }
+}
 function planDay_(dateKey, create){
   dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key (mobile cells pass non-padded)
   if(!st.plan) st.plan={};
@@ -25521,7 +25537,8 @@ function openDayEditor(dateKey){
       } else {
         // Reuse the existing session id where possible; a NEW session gets a
         // DETERMINISTIC date-based id (not random) so two devices never diverge.
-        var s2 = sess ? sess : { id:'plan-'+dateKey+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
+        var _idk=(typeof normDate==='function')?normDate(dateKey):dateKey;   // padded, matching the canonical bucket key (mobile passes non-padded)
+        var s2 = sess ? sess : { id:'plan-'+_idk+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
         s2.type=type;
         if(type==='ride'){
           s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
