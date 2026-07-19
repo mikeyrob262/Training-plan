@@ -9195,8 +9195,10 @@ function activityIcon_(sport, size){
   var ACTIVITY='<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>';
   var MOBILITY='<path d="M4 20h4l1.5-3"/><path d="M17 20l-1-5h-5l1-7"/><path d="M4 10l4-1l4-1l4 1.5l4 1.5"/><path d="M10.007 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0"/>';
   var SWIM='<path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/>';
+  var MOON='<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>';
   var col, path, extra='';
-  if(/treadmill/.test(s)){ col='#EF9F27'; path=RUN; }                                    // derived indoor run
+  if(/^rest/.test(s)){ col='#6B7686'; path=MOON; }                                       // Rest day (muted moon)
+  else if(/treadmill/.test(s)){ col='#EF9F27'; path=RUN; }                               // derived indoor run
   else if(/virtual/.test(s)){ col='#3B95E8'; path=BIKE; extra='<path d="M5 22h14"/>'; }   // VirtualRide: bike + baseline
   else if(/run|jog/.test(s)){ col='#E24B4A'; path=RUN; }
   else if(/weight|strength|lift/.test(s)){ col='#7F77DD'; path=DUMBBELL; }
@@ -15670,7 +15672,13 @@ function dsShowCalendar(){
           // Planned workout for this date (persisted override) — shown on ALL days,
           // alongside any completed activity, gated by the Planned/Rest filters.
           var planRaw=(c.inMonth && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
-          var restPlan=planRaw && /rest|recovery|off/i.test(planRaw.name||'');
+          // getPlannedWorkoutForDate excludes rest (rest != workout), so surface a
+          // rest DAY here or the cell draws blank. A rest-only day -> synthetic Rest.
+          if(!planRaw && c.inMonth && calFilter.planned && typeof planSessionsForDate_==='function'){
+            var _rs=planSessionsForDate_(c.date).filter(function(x){ return x && x.type==='rest'; })[0];
+            if(_rs) planRaw={ name:'Rest', type:'rest', intent:'', sessions:[_rs] };
+          }
+          var restPlan=planRaw && (planRaw.type==='rest' || /rest|recovery|off/i.test(planRaw.name||''));
           if(restPlan && !calFilter.rest){ planRaw=null; restPlan=false; }
           var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
           var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
@@ -25110,10 +25118,13 @@ function showCalendarTab(){
     var isToday=(i===dow);
     // Real planned workout for THIS day (works for future days too).
     var pw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dKey):null;
-    var label=pw?pw.name:'';
-    if(!label){ var dt=(typeof getDType==='function')?getDType(dKey):''; label=(dt&&dt!=='REST')?dt:''; }
-    var isRest=!label||/rest|recovery/i.test(label);
-    var ptype=(pw&&pw.type)?pw.type:label;   // glyph/colour by session type, not name
+    // getPlannedWorkoutForDate excludes rest; a stored Rest day surfaces here so it reads
+    // "Rest" (explicit) rather than the generic "Recovery" shown for an unplanned day.
+    var restSess=(!pw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(dKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;
+    var label=pw?pw.name:(restSess?'Rest':'');
+    if(!label && !restSess){ var dt=(typeof getDType==='function')?getDType(dKey):''; label=(dt&&dt!=='REST')?dt:''; }
+    var isRest=!!restSess||!label||/rest|recovery/i.test(label);
+    var ptype=restSess?'rest':((pw&&pw.type)?pw.type:label);   // glyph/colour by session type, not name
     var col=actColor(ptype);
     // Pull a duration/sub hint out of the name if present (e.g. "45m", "1:15").
     var subM=label.match(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b|Z\d)/i);
@@ -25125,8 +25136,8 @@ function showCalendarTab(){
     if(dayDone){ h+='<div style="position:absolute;top:4px;right:5px;width:13px;height:13px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:900">&#10003;</div>'; }
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
-    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon('recovery',16,'#8E8E93'):actIcon(ptype,20,col))+'</div>';
-    h+='  <div style="font-size:9px;font-weight:600;color:var(--t1);line-height:1.15;min-height:22px">'+(isRest?'Recovery':shortName)+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
+    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon(restSess?'rest':'recovery',16,'#8E8E93'):actIcon(ptype,20,col))+'</div>';
+    h+='  <div style="font-size:9px;font-weight:600;color:var(--t1);line-height:1.15;min-height:22px">'+(isRest?(restSess?'Rest':'Recovery'):shortName)+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
     h+='</div>';
   }
   h+='</div>';
@@ -25166,8 +25177,9 @@ function showCalendarTab(){
         if(!dn){ h+='<div></div>'; return; }
         var mKey=mYear+'-'+(mMonth+1)+'-'+dn;
         var mpw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(mKey):null;
-        var mLabel=mpw?mpw.name:'';
-        var mType=mpw?(mpw.type||mpw.name):'';
+        var mRestSess=(!mpw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(mKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;
+        var mLabel=mpw?mpw.name:(mRestSess?'Rest':'');
+        var mType=mpw?(mpw.type||mpw.name):(mRestSess?'rest':'');
         var mRest=!mLabel||/rest|recovery/i.test(mLabel);
         var mCol=actColor(mType);
         var mToday=(dn===todayD);
@@ -25175,6 +25187,7 @@ function showCalendarTab(){
         h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
         h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
         if(!mRest){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon(mType,13,mCol)+'</div>'; }
+        else if(mRestSess){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon('rest',13,'#8E8E93')+'</div>'; }
         if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
         h+='</div>';
       });
