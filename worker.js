@@ -25586,23 +25586,33 @@ function openDayEditor(dateKey, targetId){
   // the Workout dropdown selects the session TYPE and the field set swaps. DOM-built
   // (no HTML strings) so no escaping concerns.
   var _sessions=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey):[];
-  // Edit a specific session when targetId is given (the switcher chips + per-session
-  // calendar entries pass it); otherwise default to the day's first session.
-  var sess=targetId?(_sessions.filter(function(x){ return x && x.id===targetId; })[0]||null):null;
-  if(!sess) sess=_sessions.length?_sessions[0]:null;
-  // Session switcher — when a day holds >1 session (e.g. Strength + Ride), chips pick which
-  // one to edit/delete; the active one is highlighted. Built after the header is appended.
+  // Edit a specific session when targetId is given (switcher chips + per-session calendar
+  // entries pass it). targetId==='__new__' forces ADD mode (sess=null) so the save mints a
+  // NEW session instead of editing the day's first — this is what lets a day hold more than
+  // one session; without it, opening a day with a session always edited that session.
+  var _forceNew=(targetId==='__new__');
+  var sess=_forceNew?null:(targetId?(_sessions.filter(function(x){ return x && x.id===targetId; })[0]||null):null);
+  if(!sess && !_forceNew) sess=_sessions.length?_sessions[0]:null;
+  if(_forceNew) plan=null;   // a brand-new session has no planned backing — don't prefill it from the day's existing session
+  // Session row — one chip per existing session (tap to edit/delete that one; active is
+  // highlighted) plus an "+ Add" chip that opens the editor in ADD mode so a day can hold
+  // MORE THAN ONE session. Shown whenever the day already has ≥1 session.
   var _mkSwitcher=function(sheetEl, modalEl){
-    if(_sessions.length<=1) return;
+    if(!_sessions.length) return;   // empty day is already a new-session editor
     var swRow=document.createElement('div'); swRow.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px';
     _sessions.forEach(function(ps){
-      var active=(sess && ps.id===sess.id);
+      var active=(!_forceNew && sess && ps.id===sess.id);
       var chip=document.createElement('button');
       chip.style.cssText='padding:5px 10px;border-radius:9px;border:1px solid '+(active?'#2FA8E0':'var(--b1)')+';background:'+(active?'rgba(47,168,224,.12)':'var(--s2)')+';color:var(--t1);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit';
       chip.textContent=ps.name||ps.type||'Session';
       chip.onclick=function(){ modalEl.remove(); openDayEditor(dateKey, ps.id); };
       swRow.appendChild(chip);
     });
+    var addChip=document.createElement('button');
+    addChip.textContent='+ Add';
+    addChip.style.cssText='padding:5px 10px;border-radius:9px;border:1px '+(_forceNew?'solid #2FA8E0':'dashed var(--b1)')+';background:'+(_forceNew?'rgba(47,168,224,.12)':'transparent')+';color:'+(_forceNew?'var(--t1)':'#2FA8E0')+';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    addChip.onclick=function(){ modalEl.remove(); openDayEditor(dateKey, '__new__'); };
+    swRow.appendChild(addChip);
     sheetEl.appendChild(swRow);
   };
   _mkSwitcher(sheet, modal);
