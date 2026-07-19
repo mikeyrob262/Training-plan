@@ -5970,7 +5970,11 @@ function applySwap(w,idx,val){
     var _dt=new Date(_start); _dt.setDate(_start.getDate()+(w-1)*7+idx);
     var _key=_dt.getFullYear()+'-'+('0'+(_dt.getMonth()+1)).slice(-2)+'-'+('0'+_dt.getDate()).slice(-2);
     var _ss=(typeof planSessionsForDate_==='function')?planSessionsForDate_(_key):[];
-    var _s=_ss.length?_ss[0]:{ id:sid_(), targets:{}, completedRideKey:null, executionScore:null, block:null };
+    // No id here — planUpsertSession_ assigns the DETERMINISTIC 'plan-<key>-<idx>', so
+    // two devices swapping the same empty day converge instead of minting divergent
+    // s- uuids (the split that produced two Group Rides). sid_() was the only non-editor
+    // path still creating s- session ids.
+    var _s=_ss.length?_ss[0]:{ targets:{}, completedRideKey:null, executionScore:null, block:null };
     _s.name=val; _s.type=sessionTypeFromName_(val); _s.intent=sessionIntentFromName_(val,_s.type); _s.status='swapped';
     if(typeof planUpsertSession_==='function'){ planUpsertSession_(_key, _s, ['name','type','intent','status']); try{ sv(); }catch(e){} }
   }catch(e){}
@@ -15709,11 +15713,19 @@ function dsShowCalendar(){
             if(dl.length>2){ H+='<div style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600">+'+(dl.length-2)+' more</div>'; }
             // Planned marker — compact dashed chip when there is ALSO a completed
             // activity, or the centered icon+name on an otherwise-empty day.
-            if(planRaw && planRaw.name){
+            // Render EVERY live planned session, each glyph + name from the SAME
+            // session object (a day can hold e.g. Strength + Ride — two entries, not one
+            // row whose glyph and label come from different sessions).
+            var _psAll=(planRaw && Array.isArray(planRaw.sessions) && planRaw.sessions.length)?planRaw.sessions:(planRaw && planRaw.name?[{type:planRaw.type,name:planRaw.name}]:[]);
+            if(_psAll.length){
               if(dl.length){
-                H+='<div data-cal="planchip" data-date="'+c.date+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span><span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planRaw.name+'</span></div>';
+                _psAll.forEach(function(ps){
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                });
               } else {
-                H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(planRaw.type||planRaw.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+planRaw.name+'</div></div>';
+                _psAll.forEach(function(ps){
+                  H+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div></div>';
+                });
               }
             }
           }
@@ -25128,23 +25140,27 @@ function showCalendarTab(){
     // getPlannedWorkoutForDate excludes rest; a stored Rest day surfaces here so it reads
     // "Rest" (explicit) rather than the generic "Recovery" shown for an unplanned day.
     var restSess=(!pw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(dKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;
-    var label=pw?pw.name:(restSess?'Rest':'');
-    if(!label && !restSess){ var dt=(typeof getDType==='function')?getDType(dKey):''; label=(dt&&dt!=='REST')?dt:''; }
-    var isRest=!!restSess||!label||/rest|recovery/i.test(label);
-    var ptype=restSess?'rest':((pw&&pw.type)?pw.type:label);   // glyph/colour by session type, not name
-    var col=actColor(ptype);
-    // Pull a duration/sub hint out of the name if present (e.g. "45m", "1:15").
-    var subM=label.match(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b|Z\d)/i);
-    var sub=subM?subM[0]:'';
-    var shortName=label.replace(/(\d+\s?(?:min|m)\b|\d:\d{2}|\d+\s?mi\b)/i,'').trim();
-    if(shortName.length>10) shortName=shortName.slice(0,10);
+    // One entry PER live planned session so a multi-session day (e.g. Strength + Ride)
+    // shows each, glyph + name from the SAME session — never a row whose glyph and label
+    // come from different sessions. Rest -> the stored rest day; else the day-type
+    // placeholder for an unplanned day.
+    var entries=[];
+    if(pw && Array.isArray(pw.sessions) && pw.sessions.length){ pw.sessions.forEach(function(ps){ entries.push({type:ps.type||ps.name, name:ps.name, rest:false}); }); }
+    else if(restSess){ entries.push({type:'rest', name:'Rest', rest:true}); }
+    else { var dt=(typeof getDType==='function')?getDType(dKey):''; if(dt&&dt!=='REST') entries.push({type:dt, name:dt, rest:false}); else entries.push({type:'recovery', name:'Recovery', rest:true}); }
     var dayDone=(typeof isDayComplete==='function')&&isDayComplete(dKey);
     h+='<div onclick="openDayEditor(\\''+dKey+'\\')" style="position:relative;flex:0 0 auto;width:62px;background:'+(isToday?'rgba(252,76,2,.08)':'transparent')+';border:'+(isToday?'1.5px solid #FC4C02':'1px solid transparent')+';border-radius:10px;padding:9px 5px;text-align:center;box-sizing:border-box;cursor:pointer">';
     if(dayDone){ h+='<div style="position:absolute;top:4px;right:5px;width:13px;height:13px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:900">&#10003;</div>'; }
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
-    h+='  <div style="height:22px;display:flex;align-items:center;justify-content:center;margin-bottom:5px">'+(isRest?actIcon(restSess?'rest':'recovery',16,'#8E8E93'):actIcon(ptype,20,col))+'</div>';
-    h+='  <div style="font-size:9px;font-weight:600;color:var(--t1);line-height:1.15;min-height:22px">'+(isRest?(restSess?'Rest':'Recovery'):shortName)+(sub?'<br><span style="color:var(--t3);font-weight:400">'+sub+'</span>':'')+'</div>';
+    h+='  <div style="min-height:44px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;margin:2px 0 3px">';
+    entries.slice(0,2).forEach(function(en){
+      var ecol=en.rest?'#8E8E93':actColor(en.type);
+      var enm=String(en.name||''); if(enm.length>9) enm=enm.slice(0,8)+'…';
+      h+='<div style="display:flex;flex-direction:column;align-items:center;gap:1px;max-width:100%">'+actIcon(en.rest?(en.type==='rest'?'rest':'recovery'):en.type,16,ecol)+'<span style="font-size:8.5px;font-weight:600;color:var(--t1);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58px">'+enm+'</span></div>';
+    });
+    if(entries.length>2){ h+='<span style="font-size:8px;color:var(--t3);font-weight:600">+'+(entries.length-2)+'</span>'; }
+    h+='</div>';
     h+='</div>';
   }
   h+='</div>';
@@ -25193,8 +25209,13 @@ function showCalendarTab(){
         var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
         h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
         h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
-        if(!mRest){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon(mType,13,mCol)+'</div>'; }
-        else if(mRestSess){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon('rest',13,'#8E8E93')+'</div>'; }
+        if(mpw && Array.isArray(mpw.sessions) && mpw.sessions.length){
+          // A glyph PER live planned session (each from its own type), so a Strength +
+          // Ride day shows both — not one glyph that may not match the day's sessions.
+          h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;gap:2px;line-height:0">';
+          mpw.sessions.slice(0,2).forEach(function(ms){ h+=actIcon(ms.type||ms.name,13,actColor(ms.type||ms.name)); });
+          h+='</div>';
+        } else if(mRestSess){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon('rest',13,'#8E8E93')+'</div>'; }
         if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
         h+='</div>';
       });
