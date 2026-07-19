@@ -20554,8 +20554,15 @@ function planReviveDay_(dateKey){
     if(!d || !Array.isArray(d.sessions)){ console.log('[planRevive] no day '+k); return 0; }
     var n=0;
     d.sessions.forEach(function(x){ if(x && x.deleted){ x.deleted=false; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); n++; } });
-    if(n){ try{ if(typeof sv==='function') sv(); }catch(e){} }
-    console.log('[planRevive] '+k+' revived '+n+' session(s)');
+    if(n){
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      // Push NOW — not only via sv()'s 1.5s debounce, which a console run followed by a
+      // tab close/blur can skip, leaving the revive local-only (persists here but never
+      // reaches other devices). Merge-push, not forceOverwrite: the recency-gated
+      // 'deleted' merge makes the newer revive win over the remote tombstone.
+      try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
+    }
+    console.log('[planRevive] '+k+' revived '+n+' session(s)'+(n?' — pushed to remote':''));
     return n;
   }catch(e){ console.log('[planRevive] err', e); return 0; }
 }
