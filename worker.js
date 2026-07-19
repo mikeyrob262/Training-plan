@@ -5988,6 +5988,7 @@ function applySwap(w,idx,val){
     // path still creating s- session ids.
     var _s=_ss.length?_ss[0]:{ targets:{}, completedRideKey:null, executionScore:null, block:null };
     _s.name=val; _s.type=sessionTypeFromName_(val); _s.intent=sessionIntentFromName_(val,_s.type); _s.status='swapped';
+    try{ delete _s.gen; delete _s.migrated; }catch(e){}   // a swap is a user action — claim the session so the generator won't overwrite it
     if(typeof planUpsertSession_==='function'){ planUpsertSession_(_key, _s, ['name','type','intent','status']); try{ sv(); }catch(e){} }
   }catch(e){}
   var e=document.getElementById('ws'+w+'_'+idx);
@@ -15613,6 +15614,7 @@ function dsShowCalendar(){
     H+='</div>';
     H+='<div data-cal="today" style="padding:8px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#cbd5e1">Today</div>';
     H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
+    H+='  <div data-cal="gen" style="padding:8px 15px;background:#2FA8E0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#fff">Generate</div>';
     H+='  <div style="display:inline-flex;background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:3px">';
     ['week','month','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
       H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
@@ -15792,6 +15794,7 @@ function dsShowCalendar(){
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
+      else if(a==='gen'){ calFilterOpen=false; if(typeof openPlanGenerator_==='function') openPlanGenerator_(); }
       else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
       else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
         if(idx!=null) openRideDetail(parseInt(idx,10));
@@ -20623,6 +20626,105 @@ function planDeleteSession_(dateKey, id){
     return n;
   }catch(e){ console.log('[planDelete] err', e); return 0; }
 }
+
+// ── Phase 1: program generator ──────────────────────────────────────────────
+// Strength-first weekly template (§3.1), index 0=Mon .. 6=Sun. Two loaded + two
+// mobility; heavy work never sits the day before quality bike work.
+var PLAN_TEMPLATE_=[
+  [{type:'strength',intent:'strengthA',name:'Strength A',group:'strengthA'}],                                                      // Mon
+  [{type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15},{type:'ride',intent:'threshold',name:'Threshold'}], // Tue
+  [{type:'ride',intent:'z2',name:'Z2 Endurance'}],                                                                                  // Wed
+  [{type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15},{type:'ride',intent:'group',name:'Group Ride'}],    // Thu
+  [{type:'strength',intent:'strengthB',name:'Strength B',group:'strengthB'}],                                                       // Fri
+  [{type:'ride',intent:'long',name:'Long Ride'}],                                                                                   // Sat
+  [{type:'rest',intent:'',name:'Rest'}]                                                                                             // Sun
+];
+// Ownership: migration sets migrated, the generator sets gen; ANY user edit/swap clears both
+// (see the editor save + applySwap), claiming the session. The generator only ever touches
+// migrated/gen sessions — never one the user owns or has completed.
+function _planUserOwned_(s){ return !!s && !s.deleted && !s.gen && !s.migrated; }
+function _planReplaceable_(s){ return !!s && !s.deleted && (s.gen || s.migrated) && s.status!=='completed'; }
+// Exercises for a strength/mobility group with within-block VOLUME periodization (§3.6): the
+// deload week cuts sets to ~60%, intensity (pct1RM) held. Absolute lb stays '—' until a 1RM
+// estimate exists (no-fake-data) — we prescribe the % band, not a weight.
+function _planExercises_(group, blockWeek){
+  var lib=(typeof EX_LIBRARY!=='undefined' && Array.isArray(EX_LIBRARY))?EX_LIBRARY:[];
+  var deload=(blockWeek===4);
+  return lib.filter(function(e){ return e.group===group; }).map(function(e){
+    return { name:e.name, sets:(deload?Math.max(1,Math.round(e.sets*0.6)):e.sets), reps:e.reps, pct1RM:e.pct1RM };
+  });
+}
+function _planBlockMeta_(blockWeek){
+  var phase=(blockWeek===4)?'deload':(blockWeek===1?'baseline':'build');
+  var cue=(blockWeek===1)?'Baseline':(blockWeek===4)?'Deload — 60% volume, intensity held':'+5% vs last week';
+  return { name:'Base 1', week:blockWeek, phase:phase, cue:cue };
+}
+// Generate a strength-first block into st.plan from a start Monday. Per day: preserve any
+// user-owned/completed session (leave the whole day), else tombstone replaceable template/
+// prior-gen sessions and write the template. Race taper (§3.6): no loaded strength within 72h
+// before a race — that slot becomes Mobility. Writes carry a fresh editedAt (via
+// planUpsertSession_ -> markPlanEdited_) so they beat any stale mobile tombstone (FIX B).
+function generatePlanBlock_(startKey, weeks){
+  try{
+    weeks=weeks||4;
+    var start=(typeof parseDayKey==='function')?parseDayKey(startKey):new Date(String(startKey)+'T00:00:00');
+    start.setHours(0,0,0,0);
+    var races=(typeof upcomingRaces_==='function')?(upcomingRaces_()||[]):[];
+    var raceTimes=[];
+    races.forEach(function(r){ try{ var d=(typeof parseRaceDate_==='function')?parseRaceDate_(r.date):new Date(r.date); if(d){ d.setHours(0,0,0,0); raceTimes.push(d.getTime()); } }catch(e){} });
+    function loadedTaper_(dt){ var t=dt.getTime(); for(var i=0;i<raceTimes.length;i++){ var diff=raceTimes[i]-t; if(diff>=0 && diff<=72*3600*1000) return true; } return false; }
+    function keyOf_(dt){ return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2); }
+    var out={generated:[], kept:[], weeks:weeks, start:keyOf_(start)};
+    for(var w=0; w<weeks; w++){
+      var blockWeek=(w%4)+1;
+      for(var d=0; d<7; d++){
+        var dt=new Date(start); dt.setDate(start.getDate()+w*7+d);
+        var key=keyOf_(dt);
+        var existing=(typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
+        if(existing.some(function(s){ return _planUserOwned_(s) || (s && s.status==='completed'); })){ out.kept.push(key); continue; }
+        existing.forEach(function(s){ if(_planReplaceable_(s)){ s.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(s,['deleted']); } });
+        var specs=(PLAN_TEMPLATE_[d]||[]).map(function(x){ var o={}; for(var kk in x) o[kk]=x[kk]; return o; });
+        if(loadedTaper_(dt)) specs=specs.map(function(x){ return x.type==='strength' ? {type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15,tapered:true} : x; });
+        specs.forEach(function(spec){
+          var s={ status:'planned', gen:true, block:_planBlockMeta_(blockWeek) };
+          s.type=spec.type; s.intent=spec.intent||''; s.name=spec.name;
+          if(spec.type==='strength'){ s.exercises=_planExercises_(spec.group, blockWeek); s.targets={}; }
+          else if(spec.type==='mobility'){ s.exercises=_planExercises_(spec.group||'mobility', blockWeek); s.targets={durationMin:spec.durationMin||15}; }
+          else { s.targets={}; }
+          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status']); }catch(e){}
+        });
+        out.generated.push(key);
+      }
+    }
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}   // push now — don't rely on the debounce
+    console.log('[planGen] '+out.start+' +'+weeks+'wk -> generated '+out.generated.length+' day(s), kept '+out.kept.length+' edited/done day(s)'+(out.kept.length?(' ('+out.kept.join(', ')+')'):''));
+    return out;
+  }catch(e){ console.log('[planGen] err', e); return {generated:[], kept:[], error:String(e&&e.message||e)}; }
+}
+// Next Monday (or +7 if today is Monday) so a block never overwrites days already trained.
+function _nextMondayKey_(){
+  var d=new Date(); d.setHours(0,0,0,0);
+  var add=((8-d.getDay())%7)||7;
+  d.setDate(d.getDate()+add);
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+// Shared generate flow — ONE function wired on both calendars. Confirm -> generate 4 weeks
+// from next Monday -> re-render -> honest summary (generated vs kept). Never a silent write.
+function openPlanGenerator_(){
+  var startKey=_nextMondayKey_();
+  var msg='Generate a 4-week strength-first block starting Monday '+startKey+'? Days you have edited or completed are kept — only template / auto-generated days are replaced.';
+  var run=function(){
+    var r=(typeof generatePlanBlock_==='function')?generatePlanBlock_(startKey,4):null;
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
+    var summary=r?('Generated '+r.generated.length+' day(s) from '+startKey+(r.kept.length?('. Kept '+r.kept.length+' day(s) you had edited/completed'):'')+'.'):'Generator unavailable.';
+    try{ if(typeof uiAlert==='function') uiAlert(summary,{title:'Plan generated'}); else if(typeof toast==='function') toast(summary); }catch(e){}
+  };
+  if(typeof uiConfirm==='function'){ uiConfirm(msg,{title:'Generate 4-week block',okText:'Generate'}).then(function(ok){ if(ok) run(); }); }
+  else if(typeof confirm==='function'){ if(confirm(msg)) run(); }
+  else run();
+}
 function planDay_(dateKey, create){
   dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key (mobile cells pass non-padded)
   if(!st.plan) st.plan={};
@@ -25165,7 +25267,10 @@ function showCalendarTab(){
   h+='      <div style="font-size:15px;font-weight:600;color:var(--t1)">Week '+weekNum+' &middot; '+monthNames[now.getMonth()]+' '+now.getFullYear()+'</div>';
   h+='      <button class="cal-wk-nav" data-dir="1" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8250;</button>';
   h+='    </div>';
-  h+='    <button id="cal-today-btn" style="background:none;border:1px solid #FC4C02;color:#FC4C02;font-size:13px;font-weight:700;border-radius:10px;padding:6px 14px;cursor:pointer">Today</button>';
+  h+='    <div style="display:flex;align-items:center;gap:8px">';
+  h+='      <button id="cal-gen-btn" style="background:#2FA8E0;border:none;color:#fff;font-size:13px;font-weight:700;border-radius:10px;padding:6px 12px;cursor:pointer">Generate</button>';
+  h+='      <button id="cal-today-btn" style="background:none;border:1px solid #FC4C02;color:#FC4C02;font-size:13px;font-weight:700;border-radius:10px;padding:6px 14px;cursor:pointer">Today</button>';
+  h+='    </div>';
   h+='  </div>';
   h+='</div>';
 
@@ -25456,6 +25561,8 @@ function showCalendarTab(){
   // ---- Wire interactions ---------------------------------------------------
   var tbtn=document.getElementById('cal-today-btn');
   if(tbtn) tbtn.onclick=function(){ showCalendarTab(); };
+  var gbtn=document.getElementById('cal-gen-btn');
+  if(gbtn) gbtn.onclick=function(){ if(typeof openPlanGenerator_==='function') openPlanGenerator_(); };
 }
 
 
@@ -25742,6 +25849,7 @@ function openDayEditor(dateKey, targetId){
         (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); if(typeof _planTrace_==='function') _planTrace_('rest-save['+dateKey+']', x); } });
         var rs=(sess && sess.type==='rest')?sess:{ id:'plan-'+_rk+'-rest', block:null };
         rs.type='rest'; rs.name='Rest'; rs.deleted=false;
+        try{ delete rs.gen; delete rs.migrated; }catch(e){}   // user-set rest — claim it
         planUpsertSession_(dateKey, rs, ['type','name','status','deleted']);
       } else {
         // Reuse the existing session id; a NEW session gets NO id here — planUpsertSession_
@@ -25750,6 +25858,7 @@ function openDayEditor(dateKey, targetId){
         // were all deleted, colliding with a deleted twin of that id — which then OR-killed
         // the save on merge (index-0 collision, diagnostic #2).
         var s2 = sess ? sess : { status:'planned', completedRideKey:null, executionScore:null, block:null };
+        try{ delete s2.gen; delete s2.migrated; }catch(e){}   // a manual save claims the session — the generator won't overwrite an edited day
         s2.type=type;
         if(type==='ride'){
           s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
