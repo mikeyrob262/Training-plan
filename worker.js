@@ -4513,19 +4513,47 @@ function normalizeState_(s){
   // lowest id) and soft-delete the rest, so the edited session wins cross-device and
   // both devices converge to the same survivor. Runs every load + merge.
   try{
+    // (a) Canonicalize date keys. Mobile calendar cells wrote NON-padded keys
+    // ('2026-7-23') while migration + desktop wrote padded ('2026-07-23'), so the
+    // SAME calendar day split into two st.plan buckets — each holding one session,
+    // so the dedupe below (which needs 2+ in a bucket) never fired and both survived
+    // as hidden duplicates. Re-key every non-canonical bucket into its padded form,
+    // concatenating sessions so the dedupe then sees them together. Accessors now
+    // normalize too, so future writes land in the canonical bucket directly.
+    Object.keys(s.plan).forEach(function(dk){
+      var ck=(typeof normDate==='function')?normDate(dk):dk;
+      if(ck===dk) return;
+      var src=s.plan[dk];
+      if(!src || !Array.isArray(src.sessions)){ delete s.plan[dk]; return; }
+      if(!isPlainObj_(s.plan[ck])) s.plan[ck]={sessions:[]};
+      if(!Array.isArray(s.plan[ck].sessions)) s.plan[ck].sessions=[];
+      s.plan[ck].sessions=s.plan[ck].sessions.concat(src.sessions);
+      delete s.plan[dk];
+    });
+    // (b) Backfill editedAt (migrated sessions were pushed directly, bypassing
+    // markPlanEdited_; undefined would sort as 0 and break tie-ordering), then dedupe
+    // duplicates per day. Dedupe is scoped to a session IDENTITY (normalized name +
+    // type), NOT the whole day: divergent-id copies of the SAME session (independent
+    // pre-deterministic-id migration, or the date-key split above) collapse to one —
+    // keep most-edited, tie -> lowest id so both devices converge on the same
+    // survivor — while genuinely different sessions on one day (e.g. a ride AND a
+    // strength session) have distinct identities and BOTH survive.
     Object.keys(s.plan).forEach(function(dk){
       var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
-      // Backfill editedAt on any session missing it (migrated sessions were pushed
-      // directly, bypassing markPlanEdited_). Without this, undefined sorts as 0 and
-      // ties are decided by id alone, and the boot-swap merge can't order divergent
-      // copies — so a migrated session could survive over a real edit. Sentinel 1
-      // keeps migrated entries below any real edit while making the field defined.
       day.sessions.forEach(function(x){ if(x && !x.editedAt) x.editedAt=1; });
       var live=day.sessions.filter(function(x){ return x && !x.deleted; });
       if(live.length<=1) return;
-      live.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
-      var keep=live[0];
-      day.sessions.forEach(function(x){ if(x && !x.deleted && x!==keep) x.deleted=true; });
+      var groups={};
+      live.forEach(function(x){
+        var gk=String(x.name||'').trim().toLowerCase()+'|'+(x.type||'');
+        (groups[gk] || (groups[gk]=[])).push(x);
+      });
+      Object.keys(groups).forEach(function(gk){
+        var g=groups[gk]; if(g.length<=1) return;
+        g.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
+        var keep=g[0];
+        g.forEach(function(x){ if(x!==keep) x.deleted=true; });
+      });
     });
   }catch(e){}
   // Prune manual bike assignments that cross the indoor/outdoor line (stale
@@ -20468,12 +20496,14 @@ function isRestName_(name){ return /rest|recovery|off/i.test(String(name||'')); 
 // desktop and mobile read one source and can never drift.
 function planSessionsForDate_(dateKey){
   try{
+    dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key
     var d=st.plan && st.plan[dateKey];
     if(!d || !Array.isArray(d.sessions)) return [];
     return d.sessions.filter(function(x){ return x && !x.deleted; });
   }catch(e){ return []; }
 }
 function planDay_(dateKey, create){
+  dateKey=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded key (mobile cells pass non-padded)
   if(!st.plan) st.plan={};
   if(!isPlainObj_(st.plan[dateKey])){ if(!create) return null; st.plan[dateKey]={sessions:[]}; }
   if(!Array.isArray(st.plan[dateKey].sessions)) st.plan[dateKey].sessions=[];
