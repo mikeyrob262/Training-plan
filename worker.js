@@ -25469,52 +25469,58 @@ function openDayEditor(dateKey){
   save.textContent='Save';
   save.style.cssText='width:100%;padding:13px;margin-top:10px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer';
   save.onclick=function(){
-    var d=getData(), type=d.type;
-    // Rest = remove any planned session for the day (soft-delete so it syncs).
-    if(type==='rest'){
-      if(sess){ sess.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(sess,['deleted']); }
-      try{ if(typeof sv==='function') sv(); }catch(e){}
-      try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
-      modal.remove();
-      try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
-      try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
-      return;
-    }
-    // Reuse the existing session id where possible; a NEW session gets a
-    // DETERMINISTIC date-based id (not random) so two devices never diverge.
-    var s2 = sess ? sess : { id:'plan-'+dateKey+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
-    s2.type=type;
-    if(type==='ride'){
-      s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
-      s2.intent=d.intent; s2.targets=d.targets;
-      // completed side -> the recorded ride (edit if one exists; create is out of scope)
-      if(o){
-        var ef=[], c=d.completed;
-        if(c.distance!=null){ o.distance=c.distance; ef.push('distance'); }
-        if(c.duration!=null){ o.duration=c.duration; ef.push('duration'); }
-        if(c.avgSpeed!=null){ o.avgSpeed=c.avgSpeed; ef.push('avgSpeed'); }
-        if(c.tss!=null){ o.tss=c.tss; ef.push('tss'); }
-        if(c.np!=null){ o.np=c.np; ef.push('np'); }
-        if(c.elev!=null){ o.elev=c.elev; ef.push('elev'); }
-        if(o.distance&&o.duration&&c.avgSpeed==null){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
-        if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null)); }
+    // The whole write is wrapped: a throw (or a persist failure) must NOT close the
+    // modal with a false "Saved" and silently drop the entry — keep the sheet open,
+    // surface the error, so nothing typed is lost. sv() is INSIDE the try so a
+    // persist failure is caught, not swallowed.
+    try{
+      var d=getData(), type=d.type;
+      if(type==='rest'){
+        // Rest = remove any planned session for the day (soft-delete so it syncs).
+        if(sess){ sess.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(sess,['deleted']); }
+      } else {
+        // Reuse the existing session id where possible; a NEW session gets a
+        // DETERMINISTIC date-based id (not random) so two devices never diverge.
+        var s2 = sess ? sess : { id:'plan-'+dateKey+'-'+((typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey).length:0), status:'planned', completedRideKey:null, executionScore:null, block:null };
+        s2.type=type;
+        if(type==='ride'){
+          s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
+          s2.intent=d.intent; s2.targets=d.targets;
+          // completed side -> the recorded ride (edit if one exists; create is out of scope)
+          if(o){
+            var ef=[], c=d.completed;
+            if(c.distance!=null){ o.distance=c.distance; ef.push('distance'); }
+            if(c.duration!=null){ o.duration=c.duration; ef.push('duration'); }
+            if(c.avgSpeed!=null){ o.avgSpeed=c.avgSpeed; ef.push('avgSpeed'); }
+            if(c.tss!=null){ o.tss=c.tss; ef.push('tss'); }
+            if(c.np!=null){ o.np=c.np; ef.push('np'); }
+            if(c.elev!=null){ o.elev=c.elev; ef.push('elev'); }
+            if(o.distance&&o.duration&&c.avgSpeed==null){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
+            if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null)); }
+          }
+        } else if(type==='strength'){
+          s2.name=d.name; s2.exercises=d.exercises;
+          if(d.strengthLog && d.strengthLog.length){
+            if(!st.strength) st.strength={oneRM:{},log:{}};
+            if(!st.strength.log) st.strength.log={}; if(!st.strength.oneRM) st.strength.oneRM={};
+            st.strength.log[dateKey]=d.strengthLog; s2.status='completed';
+            // best-effort Epley 1RM estimate from a logged set; never lowers an estimate.
+            try{ d.strengthLog.forEach(function(e){ var set=e.sets&&e.sets[0]; if(set&&set.weight&&set.reps){ var est=Math.round(set.weight*(1+set.reps/30)); if(!(st.strength.oneRM[e.name]>est)) st.strength.oneRM[e.name]=est; } }); }catch(_e){}
+          }
+        } else { // mobility
+          s2.name=d.name; s2.targets=d.targets;
+          if(d.actualDurationMin!=null) s2.actualDurationMin=d.actualDurationMin;
+          s2.status=d.completed?'completed':'planned';
+        }
+        if(typeof planUpsertSession_!=='function') throw new Error('planUpsertSession_ unavailable');
+        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status']);
       }
-    } else if(type==='strength'){
-      s2.name=d.name; s2.exercises=d.exercises;
-      if(d.strengthLog && d.strengthLog.length){
-        if(!st.strength) st.strength={oneRM:{},log:{}};
-        if(!st.strength.log) st.strength.log={}; if(!st.strength.oneRM) st.strength.oneRM={};
-        st.strength.log[dateKey]=d.strengthLog; s2.status='completed';
-        // best-effort Epley 1RM estimate from a logged set; never lowers an estimate.
-        try{ d.strengthLog.forEach(function(e){ var set=e.sets&&e.sets[0]; if(set&&set.weight&&set.reps){ var est=Math.round(set.weight*(1+set.reps/30)); if(!(st.strength.oneRM[e.name]>est)) st.strength.oneRM[e.name]=est; } }); }catch(_e){}
-      }
-    } else { // mobility
-      s2.name=d.name; s2.targets=d.targets;
-      if(d.actualDurationMin!=null) s2.actualDurationMin=d.actualDurationMin;
-      s2.status=d.completed?'completed':'planned';
+      if(typeof sv==='function') sv();   // persist: saveLocal_ (localStorage + IndexedDB) + debounced fbPush
+    }catch(err){
+      try{ if(typeof console!=='undefined') console.error('[dayEditor save]', err); }catch(_e){}
+      try{ if(typeof toast==='function') toast('Save failed: '+((err&&err.message)||'error')+'. Nothing lost — try again.'); }catch(_e){}
+      return;   // keep the sheet OPEN so the typed entry is not dropped
     }
-    if(typeof planUpsertSession_==='function') planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status']);
-    try{ if(typeof sv==='function') sv(); }catch(e){}
     try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
     modal.remove();
     try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
