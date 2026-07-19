@@ -4153,6 +4153,8 @@ function mergeSession_(a, b){
     if(_de>_le) merged.deleted=true;
     else if(_le>_de) merged.deleted=false;
     else merged.deleted=!!(mask && mask.deleted);   // tie: tracked delete sticks, else keep live
+    // Trace only when a merge tombstones a session that came in LIVE on one side.
+    if(merged.deleted && typeof _planTrace_==='function') _planTrace_('merge', merged, 'delEditedAt='+_de+' liveEditedAt='+_le+' masked='+!!(mask&&mask.deleted));
   }
   return merged;
 }
@@ -4583,7 +4585,7 @@ function normalizeState_(s){
         var g=groups[gk]; if(g.length<=1) return;
         g.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
         var keep=g[0];
-        g.forEach(function(x){ if(x!==keep) x.deleted=true; });
+        g.forEach(function(x){ if(x!==keep){ x.deleted=true; if(typeof _planTrace_==='function') _planTrace_('collapse['+dk+']', x, 'keptId='+keep.id+' keptEditedAt='+keep.editedAt); } });
       });
     });
   }catch(e){}
@@ -20565,6 +20567,16 @@ function planDump_(dateKey){
     return rows;
   }catch(e){ console.log('[planDump] err', e); return []; }
 }
+// Tombstone tracer — set window._planTrace=true in the console, reproduce, and every place a
+// plan session is soft-deleted logs its id/name/editedAt + a stack, so "who removed my save?"
+// is answered by the actual caller instead of by reasoning. No-op unless the flag is on.
+function _planTrace_(where, s, extra){
+  try{
+    if(typeof window!=='undefined' && window._planTrace){
+      console.log('[planTrace] '+where+' -> deleted id='+(s&&s.id)+' name='+(s&&s.name)+' type='+(s&&s.type)+' editedAt='+(s&&s.editedAt)+(extra?(' | '+extra):''), (new Error()).stack);
+    }
+  }catch(e){}
+}
 // Console recovery: planReviveDay_('2026-07-23') un-deletes every tombstoned session
 // for a day and re-stamps editedAt so the revive is the most-recent action — with the
 // recency-gated 'deleted' merge, it beats the stale tombstone cross-device instead of
@@ -20688,7 +20700,12 @@ function migratePlanToStPlan_(){
       for(var dayIdx=0; dayIdx<7; dayIdx++){
         var dt=new Date(start); dt.setDate(start.getDate()+(w-1)*7+dayIdx);
         var key=dk(dt);
-        if(planSessionsForDate_(key).length) continue;   // never clobber an existing session
+        // Skip any day that already has sessions — LIVE **or DELETED**. Using the live
+        // count alone would re-seed a template session onto a day the user had emptied
+        // (all sessions tombstoned), resurrecting template slots and churning against the
+        // user's edits. A touched day is off-limits to the migration forever.
+        var _rawDay=st.plan[(typeof normDate==='function')?normDate(key):key];
+        if(_rawDay && Array.isArray(_rawDay.sessions) && _rawDay.sessions.length) continue;
         var ov=(st.plannedWorkouts && st.plannedWorkouts[key]) || null;
         var name=null, dur=null;
         if(ov && ov.name){ name=ov.name; var dm=(''+(ov.dur||'')).match(/[0-9]+/); dur=dm?parseInt(dm[0],10):null; }
@@ -25712,7 +25729,7 @@ function openDayEditor(dateKey, targetId){
         // the rest session through the single write path. deleted:false + masked so a prior
         // rest tombstone revives by recency.
         var _rk=(typeof normDate==='function')?normDate(dateKey):dateKey;
-        (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); } });
+        (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); if(typeof _planTrace_==='function') _planTrace_('rest-save['+dateKey+']', x); } });
         var rs=(sess && sess.type==='rest')?sess:{ id:'plan-'+_rk+'-rest', block:null };
         rs.type='rest'; rs.name='Rest'; rs.deleted=false;
         planUpsertSession_(dateKey, rs, ['type','name','status','deleted']);
