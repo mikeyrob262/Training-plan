@@ -4166,6 +4166,31 @@ function computeExecutionScore_(sess){
 
   function _num_(v){ var n = Number(v); return isFinite(n) ? n : 0; }
 }
+// Ride execution: 0-100, or null when unscoreable. Unlike strength (one-sided, overshoot capped),
+// rides are TWO-sided — a session prescribed at 7/10 ridden at 9/10 is a failure of execution, not
+// a bonus (the throttle problem the Coach names). So the penalty is SYMMETRIC around target:
+//   ratio = actual/target ; score = 100 - |1 - ratio|*100  (so 90% -> 90, 110% -> 90, 100% -> 100).
+// Target priority: tssTarget vs actual TSS (intensity+duration together), else durationMin vs actual
+// duration; neither present (or the ride lacks the matching actual) -> null. Pairing is by the
+// session's completedRideKey ONLY (the caller passes the linked ride) — never a guessed date match.
+// NOTE (flagged, not resolved): an ASYMMETRIC penalty may eventually be right — for a masters
+// athlete a 20% overshoot is arguably worse than a 20% undershoot. Start symmetric; revisit on data.
+function computeRideExecutionScore_(sess, ride){
+  if(!sess || typeof sess!=='object' || !ride || typeof ride!=='object') return null;
+  function _num_(v){ var n = Number(v); return isFinite(n) ? n : 0; }
+  var tgt = sess.targets || {};
+  var target = null, actual = null;
+  var tssTarget = _num_(tgt.tssTarget), rideTss = _num_(ride.tss);
+  if(tssTarget > 0 && rideTss > 0){ target = tssTarget; actual = rideTss; }                 // preferred: TSS
+  else {
+    var durTarget = _num_(tgt.durationMin);                                                 // fallback: duration (min)
+    var durActual = (typeof _durSec_ === 'function') ? (_durSec_(ride) / 60) : 0;
+    if(durTarget > 0 && durActual > 0){ target = durTarget; actual = durActual; }
+  }
+  if(!(target > 0) || !(actual > 0)) return null;
+  var ratio = actual / target;
+  return Math.max(0, Math.min(100, Math.round(100 - Math.abs(1 - ratio) * 100)));
+}
 function markPlanEdited_(sess, fields){
   if(!sess||!fields) return sess;
   if(!sess._edited || typeof sess._edited!=='object') sess._edited={};
@@ -13630,13 +13655,15 @@ function aiCardWeight_(){
   return aiCard_(inner);
 }
 
-// ---- Strength adherence: rolling weekly view of executionScore across the plan ----
+// ---- Adherence: rolling weekly executionScore across the plan (strength/mobility AND rides) ----
 // Returns [{weekStart:'YYYY-MM-DD', mean:Number|null, scored:Int, planned:Int}], oldest -> newest,
-// gaps (zero-planned weeks) included as null-mean entries. Window = weeks-count ending at the
-// current ISO week (Mon start); future-dated weeks are excluded entirely. _todayRef is a test seam.
-//   planned = live strength/mobility sessions in the week, ANY status
+// gaps (zero-planned weeks) included as null-mean entries. Window = weeks-count ending at the current
+// ISO week (Mon start); future-dated weeks excluded. _todayRef is a test seam. The types arg picks the
+// session types counted. Strength and rides are kept SEPARATE (different behaviors, different failure
+// modes — averaging them together would hide which one is slipping).
+//   planned = live sessions of those types in the week, ANY status (synthetic scaffolding excluded)
 //   scored  = those with a non-null executionScore ; mean = rounded avg of those (null when scored=0)
-function strengthAdherenceTrend_(st, weeks, _todayRef){
+function _adherenceTrend_(st, weeks, types, _todayRef){
   weeks = weeks||8;
   function _wk(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var g=x.getDay(); x.setDate(x.getDate()-(g===0?6:g-1)); x.setHours(0,0,0,0); return x; }   // Monday start
   function _key(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
@@ -13653,27 +13680,31 @@ function strengthAdherenceTrend_(st, weeks, _todayRef){
     day.sessions.forEach(function(x){
       if(!x||x.deleted) return;
       if(x.synthetic===true || x.source==='synthetic') return;   // validation scaffolding never counts toward a real metric
-      if(x.type!=='strength' && x.type!=='mobility') return;
+      if(types.indexOf(x.type)<0) return;
       b.planned++;
       if(x.executionScore!=null){ b.scored++; b._sum+=(+x.executionScore||0); }
     });
   });
   return order.map(function(k){ var b=byKey[k]; return { weekStart:k, mean:(b.scored>0?Math.round(b._sum/b.scored):null), scored:b.scored, planned:b.planned }; });
 }
+// Public series (strengthAdherenceTrend_ keeps its spec signature) — strength/mobility, and the
+// parallel ride series. Two behaviors, reported separately.
+function strengthAdherenceTrend_(st, weeks, _todayRef){ return _adherenceTrend_(st, weeks, ['strength','mobility'], _todayRef); }
+function rideAdherenceTrend_(st, weeks, _todayRef){ return _adherenceTrend_(st, weeks, ['ride'], _todayRef); }
 function _adhLbl_(k){ var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; var p=String(k).split('-'); return M[((+p[1]||1)-1)]+' '+(+p[2]||1); }
-// Card: completion rate (did you show up) as the primary bar series; mean execution (quality of
-// what you did) as a secondary line. Zero-planned weeks are gaps, not zero bars. Two numbers, not
-// one — a declining completion rate is the earlier adherence-failure signal. Honest at low n:
-// under 3 scored sessions total it shows raw counts and suppresses any trend language.
-function aiCardStrengthAdherence_(){
-  var wk=(typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[];
-  if(!wk.length) return '';
+// Shared card body: completion rate (did you show up) as the primary bar series; mean execution
+// (quality of what you did) as a secondary SEGMENTED line (a null week breaks it, never bridged).
+// Zero-planned weeks are gaps, not zero bars. Two numbers, not one — a declining completion rate is
+// the earlier adherence-failure signal. Honest at low n: under 3 scored total it shows raw counts,
+// a dot not a line, and no trend language. Returns '' when the plan has no sessions of this kind.
+function _adhCardInner_(title, wk){
+  if(!wk||!wk.length) return '';
   var totalPlanned=wk.reduce(function(a,w){return a+w.planned;},0);
-  if(totalPlanned===0) return '';                       // no strength/mobility plan -> nothing to show
+  if(totalPlanned===0) return '';                       // no plan of this kind -> nothing to show
   var totalScored=wk.reduce(function(a,w){return a+w.scored;},0);
   var cur=wk[wk.length-1];
   var lowN=totalScored<3;
-  var inner=aiLbl_('STRENGTH ADHERENCE','<span style="font-size:11px;color:#5b6678">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
+  var inner=aiLbl_(title,'<span style="font-size:11px;color:#5b6678">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
   // Two headline numbers for the current week: Completion (show up) + Execution (quality).
   inner+='<div style="display:flex;gap:24px;margin-bottom:12px">';
   inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:#60a5fa;line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:#5b6678">this week</div></div>';
@@ -13711,6 +13742,9 @@ function aiCardStrengthAdherence_(){
   }
   return aiCard_(inner);
 }
+// Strength adherence and ride adherence — separate cards, same viz, different series.
+function aiCardStrengthAdherence_(){ return _adhCardInner_('STRENGTH ADHERENCE', (typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[]); }
+function aiCardRideAdherence_(){ return _adhCardInner_('RIDE ADHERENCE', (typeof rideAdherenceTrend_==='function')?rideAdherenceTrend_(st,8):[]); }
 
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
 function aiCardDNA_(ded){
@@ -13845,12 +13879,13 @@ function aiRenderTab_(tab, ded){
   var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
   var recs=_aiSafe_('Records', function(){return aiCardRecords_();});
   var adh=_aiSafe_('StrengthAdherence', function(){return aiCardStrengthAdherence_();});
+  var ridh=_aiSafe_('RideAdherence', function(){return aiCardRideAdherence_();});
   var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
   // Mockup grid: hero row (DNA | Momentum | Watchlist), then the metric cards, and
   // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
   // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
   // Adherence leads the metric row — a declining completion rate is an early warning.
-  var grid=[dna, mom, watch, adh, changed, zones, weight, recs].filter(function(h){return h;});
+  var grid=[dna, mom, watch, adh, ridh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
@@ -26449,7 +26484,9 @@ function openDayEditor(dateKey, targetId){
             if(c.np!=null){ o.np=c.np; ef.push('np'); }
             if(c.elev!=null){ o.elev=c.elev; ef.push('elev'); }
             if(o.distance&&o.duration&&c.avgSpeed==null){ o.avgSpeed=Math.round((o.distance/(o.duration/60))*10)/10; }
-            if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null)); }
+            if(ef.length){ markRideEdited_(o, ef); s2.status='completed'; s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null));
+              s2.executionScore = computeRideExecutionScore_(s2, o);   // symmetric target scoring; null if no tss/duration target. _ef push below masks it (gated non-null)
+            }
           } else {
             // No recorded ride to attach actuals to. Rather than silently DROP what was
             // typed into the Completed fields (the old "create is out of scope" gap),
