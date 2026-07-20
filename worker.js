@@ -4363,7 +4363,10 @@ function dedupeRides_(rides){
   // "close" = exact string OR within 24h; then distance<1mi OR movingSecs<120.
   function matchesP(i, j){
     var A = P[i], B = P[j];
-    if(A.sid && B.sid && A.sid !== B.sid) return false;
+    // Coerce to string: the SAME Strava id imports as a number on one path and a string on another
+    // (stravaId 15150442244 vs '15150442244'). A strict !== marked them as distinct ids and blocked
+    // the merge, so the same ride survived twice (inflating monthly totals past the athlete's export).
+    if(A.sid && B.sid && String(A.sid) !== String(B.sid)) return false;
     var dayClose;
     if(A.dateStr === B.dateStr) dayClose = true;
     else if(!isNaN(A.ts) && !isNaN(B.ts)) dayClose = Math.abs(A.ts - B.ts) <= 86400000;
@@ -12719,8 +12722,14 @@ function rideSport_(r){ if(!r) return ''; var s=(r.sportType!=null&&r.sportType!
 // copy, NO sport-type filter (VirtualRide/Zwift included). This is THE source any
 // aggregate that must not undercount virtual rides should read from.
 function allRidesDeduped_(){
+  // Run the canonical FUZZY dedup first (date+distance clustering, the one that collapses the
+  // cross-source dupes in the boot log) — rideKey-exact alone can't merge a stravaId'd ride with a
+  // no-stravaId twin (different key formats: s<id> vs k:date_dist_secs), so those survived into the
+  // chart and double-counted. Same idiom as the PMC/records path (dedupeRides_(...).kept then filter
+  // deleted). Then the rideKey pass keeps the GPS-richest among any exact collisions.
+  var base; try{ base=(typeof dedupeRides_==='function')?dedupeRides_(st.rides||[]).kept:(st.rides||[]); }catch(e){ base=(st.rides||[]); }
   var seen={}, out=[];
-  (st.rides||[]).filter(function(r){return r && !r.deleted;}).forEach(function(r){
+  base.filter(function(r){return r && !r.deleted;}).forEach(function(r){
     var k=rideKey(r), ex=seen[k];
     if(ex===undefined){ seen[k]=r; out.push(r); }
     else if(((r.gpsLats&&r.gpsLats.length)||0) > ((ex.gpsLats&&ex.gpsLats.length)||0)){
