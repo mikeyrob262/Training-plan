@@ -13975,7 +13975,13 @@ function _msCatalog_(nowRef){
   push('Consistency','rides',lifeRides,[100,500,1000,2500,5000],function(t){return num(t)+' Rides';},'rides');
   push('Climbing','ft',lifeFt,[29029,290290,500000,1000000],function(t,i){return ['Everest','10x Everest','500k ft','1 Million ft'][i]||num(t)+' ft';},'ft');
   push('Power','power',ftp,[200,250,300,350],function(t){return 'FTP '+t+'W';},'W');
-  if(races>0 || true) push('Events','events',races,[1,5,10,25,50],function(t){return t+' Event'+(t>1?'s':'');},'');
+  push('Events','events',races,[1,5,10,25,50],function(t){return t+' Event'+(t>1?'s':'');},'');
+  var nutDays=0; try{ var nl=st.nl||{}; Object.keys(nl).forEach(function(k){ var dd=nl[k]; if(dd&&dd.meals && ['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'].some(function(m){ return (dd.meals[m]||[]).some(function(x){return x&&!x.deleted;}); })) nutDays++; }); }catch(e){}
+  push('Nutrition','nutdays',nutDays,[10,30,60,100,180,365],function(t){return t+' Days Logged';},'days');
+  var restDays=0; try{ var pl=st.plan||{}; Object.keys(pl).forEach(function(k){ var day=pl[k]; if(day&&Array.isArray(day.sessions)&&day.sessions.some(function(s){return s&&!s.deleted&&s.type==='rest';})) restDays++; }); }catch(e){}
+  push('Recovery','restdays',restDays,[10,30,60,100,200],function(t){return t+' Rest Days';},'days');
+  var bikeN=((st&&st.bikes)||[]).filter(function(b){return b&&!b.deleted;}).length;
+  push('Gear','bikes',bikeN,[1,2,3,5,8],function(t){return t+' Bike'+(t>1?'s':'');},'');
   var proj=milestoneProjections_(defs, rates, now);
   // attach unlock dates (from crossing scans) to unlocked cumulative defs
   var crossMi=_msCross_(cyc,'miles',[1000,5000,10000,25000,50000,100000]);
@@ -13987,28 +13993,42 @@ function _msCatalog_(nowRef){
   var cats={}; proj.forEach(function(p){ var c=cats[p.category]||(cats[p.category]={cat:p.category,total:0,done:0}); c.total++; if(p.unlocked) c.done++; });
   return { now:now, proj:proj, lifetime:{miles:lifeMi,ft:lifeFt,rides:lifeRides,hours:lifeSec/3600,centuries:cent}, cats:cats };
 }
+function _msDarken_(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3) hex=hex.replace(/(.)/g,'$1$1'); var r=parseInt(hex.slice(0,2),16)||60,g=parseInt(hex.slice(2,4),16)||60,b=parseInt(hex.slice(4,6),16)||60; return 'rgb('+Math.round(r*0.4)+','+Math.round(g*0.4)+','+Math.round(b*0.4)+')'; }
+// Achievement badge: large gradient-filled hexagon + particle burst + dominant number.
+function _msBadge_(idx, color, big, sub){
+  var W=150,Hh=150, cx=75, cy=72, g='mgb'+idx, parts='', A=[8,40,72,110,150,182,214,250,285,320,352,200,128,300];
+  for(var i=0;i<A.length;i++){ var rad=A[i]*Math.PI/180, rr=54+((i*17)%22), x=cx+Math.cos(rad)*rr, y=cy+Math.sin(rad)*rr, s=(i%3===0)?3.2:2; parts+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+s+'" fill="'+color+'" opacity="'+(0.35+((i*7)%5)*0.12).toFixed(2)+'"/>'; }
+  var fs=(String(big).length>=5)?23:(String(big).length>=4?27:33);
+  return '<svg width="'+W+'" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" style="display:block;margin:0 auto">'
+    +'<defs><linearGradient id="'+g+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+color+'"/><stop offset="1" stop-color="'+_msDarken_(color)+'"/></linearGradient></defs>'+parts
+    +'<polygon points="'+cx+',12 127,42 127,102 '+cx+',132 23,102 23,42" fill="url(#'+g+')" stroke="'+color+'" stroke-width="2.5"/>'
+    +'<polygon points="'+cx+',25 115,48 115,96 '+cx+',119 35,96 35,48" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1"/>'
+    +'<text x="'+cx+'" y="'+(cy+fs*0.34)+'" text-anchor="middle" font-size="'+fs+'" font-weight="800" fill="#fff">'+big+'</text>'
+    +'<text x="'+cx+'" y="'+(cy+26)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="rgba(255,255,255,.85)" letter-spacing="1.5">'+sub+'</text></svg>';
+}
 function aiRenderMilestones_(){
   var C=_msCatalog_(new Date());
-  var proj=C.proj, PAD='max-width:1100px;margin:0 auto;padding-bottom:20px';
+  var proj=C.proj, PAD='width:100%;padding:0 4px 26px;box-sizing:border-box';   // full-bleed, no narrow center column
   if(!proj.length){ return '<div style="'+PAD+'"><div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough ride data yet for milestones.</div></div>'; }
   function ic(cat,c){ return _msIcon_(_MS_ICON[cat]||_MS_ICON.Distance, c||_MS_COL[cat]||'#94a3b8'); }
   function pct(p){ return Math.round(p*10)/10; }
   var H='<div style="'+PAD+'">';
-  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 16px;line-height:1.5">Celebrate progress. Stay motivated. The best is still ahead. <span style="color:#5b6678">Projected dates are estimates from your recent training rate.</span></div>';
-  // ---- HERO: next 3 projected ----
+  H+='<div style="font-size:13px;color:#64748b;margin:2px 2px 16px;line-height:1.5">Celebrate progress. Stay motivated. The best is still ahead. <span style="color:#5b6678">Projected dates are estimates from your recent training rate.</span></div>';
+  // ---- HERO: sunset-road bg (CSS gradient stand-in; swap a hosted photo URL for background-image) + next 3 ----
   var next=nextMilestones_(proj,3).filter(function(p){return p.projectedDate;});
-  H+='<div style="background:linear-gradient(120deg,#0e1420,#141b2b);border:1px solid #1c2130;border-radius:18px;padding:22px 22px 20px;margin-bottom:14px;overflow:hidden">';
-  H+='<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">';
-  H+='<div style="flex:1 1 210px;min-width:180px"><div style="font-size:27px;font-weight:800;color:#f1f5f9;line-height:1.1">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13px;color:#94a3b8;margin-top:10px;line-height:1.5">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
-  H+='<div style="flex:2 1 460px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">';
+  var HEROBG='linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.94) 34%,rgba(11,14,20,.62) 60%,rgba(150,74,30,.28) 100%),radial-gradient(120% 150% at 93% 16%,rgba(255,184,74,.6) 0%,rgba(255,120,40,.18) 30%,transparent 56%),linear-gradient(160deg,#14203a,#0b0e14)';
+  H+='<div style="background:'+HEROBG+';border:1px solid #1c2130;border-radius:18px;padding:26px 26px 24px;margin-bottom:14px;overflow:hidden">';
+  H+='<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center">';
+  H+='<div style="flex:1 1 240px;min-width:210px"><div style="font-size:33px;font-weight:800;color:#f1f5f9;line-height:1.08">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13.5px;color:#cbd5e1;margin-top:12px;line-height:1.55;max-width:280px">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
+  H+='<div style="flex:2 1 520px"><div style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin:0 2px 10px">Next Milestones (Projected)</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">';
   next.forEach(function(p){ var c=_MS_COL[p.category];
-    H+='<div style="background:rgba(255,255,255,.03);border:1px solid #1c2130;border-radius:13px;padding:13px 14px">'
-      +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;font-weight:700">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
-      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin:7px 0 8px">'+_msFmtDate_(p.projectedDate)+'</div>'
-      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:5px">'+pct(p.pct)+'% complete</div>'
-      +'<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+c+';border-radius:3px"></div></div>'
+    H+='<div style="background:rgba(20,26,40,.62);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:14px 15px">'
+      +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#e2e8f0;font-weight:700;margin-bottom:9px">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
+      +'<div style="font-size:23px;font-weight:800;color:#f8fafc;letter-spacing:-.01em;margin-bottom:9px">'+_msFmtDate_(p.projectedDate)+'</div>'
+      +'<div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">'+pct(p.pct)+'% complete</div>'
+      +'<div style="height:7px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+c+';border-radius:4px"></div></div>'
     +'</div>'; });
-  H+='</div></div></div>';
+  H+='</div></div></div></div>';
   // ---- LIFETIME AT A GLANCE (Strava all-time totals — option A) ----
   var strip=(typeof _msLifetimeStrip_==='function')?_msLifetimeStrip_(st.athleteStats):null;
   if(strip){
@@ -14017,7 +14037,7 @@ function aiRenderMilestones_(){
     H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 20px;margin-bottom:14px">';
     H+='<div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Lifetime at a Glance</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:20px 40px">';
-    strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:10px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;line-height:1">'+s.v+'</div><div style="font-size:11px;color:#5b6678">'+s.k+'</div></div></div>'; });
+    strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:11px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:29px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+s.v+'</div><div style="font-size:11px;color:#5b6678;margin-top:2px">'+s.k+'</div></div></div>'; });
     H+='</div></div>';
   } else {
     H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:#5b6678">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid #2a3550;color:#94a3b8;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
@@ -14027,19 +14047,21 @@ function aiRenderMilestones_(){
   if(unlocked.length){
     H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Recently Unlocked</div>';
     H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
-    unlocked.forEach(function(p){ var c=_MS_COL[p.category], big=(p.metric==='centuries')?('#'+p.target):(p.metric==='rides'?p.target.toLocaleString():p.metric==='miles'?(p.target>=1000?(p.target/1000)+'k':p.target):p.metric==='ft'?(p.target>=1000?Math.round(p.target/1000)+'k':p.target):p.target);
-      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px;text-align:center">'
-        +'<div style="width:96px;height:104px;margin:0 auto 10px;position:relative;display:flex;align-items:center;justify-content:center">'
-          +'<svg width="96" height="104" viewBox="0 0 96 104" style="position:absolute;inset:0"><polygon points="48,3 91,28 91,76 48,101 5,76 5,28" fill="'+c+'22" stroke="'+c+'" stroke-width="2"/></svg>'
-          +'<div style="position:relative;text-align:center"><div style="font-size:23px;font-weight:800;color:'+c+';line-height:1">'+big+'</div><div style="font-size:8.5px;font-weight:700;color:'+c+';letter-spacing:.08em;text-transform:uppercase;margin-top:2px">'+(p.metric==='centuries'?'Century':p.metric==='rides'?'Rides':p.metric==='ft'?'ft':p.category==='Distance'?'Miles':aiEsc_(p.category))+'</div></div>'
-        +'</div>'
-        +'<div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div>'
+    unlocked.forEach(function(p,bi){ var c=_MS_COL[p.category],
+        big=(p.metric==='centuries')?('#'+p.target):(p.metric==='rides'?p.target.toLocaleString():p.metric==='miles'?(p.target>=1000?(p.target/1000)+'K':p.target):p.metric==='ft'?(p.target>=1000?Math.round(p.target/1000)+'K':p.target):p.target),
+        sub=(p.metric==='centuries'?'CENTURY':p.metric==='rides'?'RIDES':p.metric==='miles'?'MILES':p.metric==='ft'?'CLIMB':p.metric==='power'?'FTP':p.metric==='events'?'EVENTS':String(p.category).toUpperCase());
+      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 16px 16px;text-align:center">'
+        +_msBadge_(bi,c,big,sub)
+        +'<div style="font-size:13.5px;font-weight:700;color:#e8edf5;margin-top:6px">'+aiEsc_(p.name)+'</div>'
         +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+_msFmtDate_(p.date)+'</div>'
       +'</div>'; });
     H+='</div>';
   }
-  // ---- IN PROGRESS: 4 rings (closest to done, not yet unlocked) ----
-  var prog=proj.filter(function(p){return !p.unlocked && p.pct>0;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,4);
+  // ---- IN PROGRESS: 4 rings, one per DISTINCT category so the colors read as 4 (not top-4-by-% which clump) ----
+  var prog=[], _seenCat={}, _catOrder=['Distance','Consistency','Climbing','Power','Events','Nutrition','Recovery','Gear'];
+  _catOrder.forEach(function(cat){ if(prog.length>=4) return; var cand=proj.filter(function(p){return p.category===cat && !p.unlocked && p.pct>0;}).sort(function(a,b){return b.pct-a.pct;})[0]; if(cand){ prog.push(cand); _seenCat[cat]=1; } });
+  if(prog.length<4){ proj.filter(function(p){return !p.unlocked && p.pct>0 && prog.indexOf(p)<0;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,4-prog.length).forEach(function(p){prog.push(p);}); }
+  prog.sort(function(a,b){return b.pct-a.pct;});
   if(prog.length){
     H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">In Progress</div>';
     H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
@@ -14057,31 +14079,33 @@ function aiRenderMilestones_(){
   var tl=nextMilestones_(proj,8).filter(function(p){return p.projectedDate;});
   if(tl.length){
     H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Next 12 Months (Projected)</div>';
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 12px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*104)+'px">';
-    tl.forEach(function(p,i){ var c=_MS_COL[p.category], mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" &#39;"+p.projectedDate.slice(2,4);
-      H+='<div style="flex:1;text-align:center;position:relative">'
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
+    H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:#1c2130"></div>';
+    tl.forEach(function(p,i){ var c=_MS_COL[p.category], _yr=p.projectedDate.slice(0,4), mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" "+((+_yr>=2100)?_yr:("&#39;"+p.projectedDate.slice(2,4)));
+      var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:#fff;letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
+      H+='<div style="flex:1;text-align:center;position:relative;z-index:1">'
         +'<div style="font-size:9px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
-        +'<div style="width:34px;height:34px;border-radius:50%;background:'+c+'22;border:2px solid '+c+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+ic(p.category,c)+'</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#e8edf5;margin-top:8px;line-height:1.2">'+aiEsc_(p.name)+'</div>'
+        +'<div style="width:44px;height:44px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 0 4px '+c+'22">'+inner+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#e8edf5;margin-top:9px;line-height:1.2">'+aiEsc_(p.name)+'</div>'
         +'<div style="font-size:9.5px;color:#5b6678;margin-top:2px">'+_msFmtDate_(p.projectedDate)+'</div>'
-      +(i<tl.length-1?'<div style="position:absolute;top:24px;right:-3px;width:6px;height:6px;border-radius:50%;background:#2a3550"></div>':'')+'</div>'; });
+      +'</div>'; });
     H+='</div></div>';
   }
-  // ---- ALMOST THERE (reachable within ~35 days) ----
-  var soon=proj.filter(function(p){return !p.unlocked && p.etaWeeks!=null && p.etaWeeks<=5 && p.pct<100;}).sort(function(a,b){return a.etaWeeks-b.etaWeeks;}).slice(0,5);
+  // ---- ALMOST THERE (closest to done by %, always populated — not a date-window filter that empties at a slow rate) ----
+  var soon=proj.filter(function(p){return !p.unlocked && p.pct>0 && p.pct<100;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,5);
   H+='<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start">';
   if(soon.length){
     H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
-    soon.forEach(function(p,i){ var c=_MS_COL[p.category];
+    soon.forEach(function(p,i){ var c=_MS_COL[p.category], eta=(p.etaWeeks!=null)?(p.etaWeeks<=8?(Math.ceil(p.etaWeeks*7)+' days'):(Math.round(p.etaWeeks/4.345)+' mo')):null;
       H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid #1c2130':'')+'">'
         +'<span style="width:28px;height:28px;border-radius:8px;background:'+c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic(p.category,c)+'</span>'
         +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">'+(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go</div></div>'
-        +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div><div style="font-size:10px;color:#5b6678">'+Math.ceil(p.etaWeeks*7)+' days</div></div>'
+        +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div>'+(eta?'<div style="font-size:10px;color:#5b6678">'+eta+'</div>':'')+'</div>'
       +'</div>'; });
     H+='</div>';
   } else { H+='<div></div>'; }
   // ---- MILESTONE CATEGORIES ----
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 20px">';
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px">';
   Object.keys(C.cats).forEach(function(k){ var cat=C.cats[k], c=_MS_COL[k]||'#94a3b8', pc=cat.total?Math.round(cat.done/cat.total*100):0;
     H+='<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex-shrink:0">'+ic(k,c)+'</span><span style="font-size:13px;font-weight:700;color:#e8edf5">'+k+'</span><span style="margin-left:auto;font-size:12px;font-weight:800;color:'+c+'">'+pc+'%</span></div>'
       +'<div style="font-size:11px;color:#5b6678;margin-bottom:5px">'+cat.done+' / '+cat.total+'</div>'
@@ -14093,9 +14117,9 @@ function aiRenderMilestones_(){
   if(rate10>=80){ head='You are building something incredible.'; sub='Your recent volume is strong — the big milestones are closing fast.'; }
   else if(rate10>=25){ head='Momentum is on your side.'; sub='Keep showing up — every ride moves the next milestone closer.'; }
   else { head='Every mile counts.'; sub='Small consistent efforts compound into the milestones ahead.'; }
-  H+='<div style="background:linear-gradient(120deg,#141b2b,#0e1420);border:1px solid #1c2130;border-radius:16px;padding:22px 24px;margin-top:14px;display:flex;align-items:center;gap:18px">'
-    +'<span style="width:52px;height:52px;border-radius:50%;background:#f59e0b22;border:1px solid #f59e0b55;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg></span>'
-    +'<div><div style="font-size:12px;color:#94a3b8;margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:19px;font-weight:800;color:#f1f5f9">'+head+'</div><div style="font-size:13px;color:#FC4C02;margin-top:3px">'+sub+'</div></div>'
+  H+='<div style="background:linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.92) 42%,rgba(150,74,30,.26) 100%),radial-gradient(120% 160% at 96% 30%,rgba(255,184,74,.5) 0%,rgba(255,120,40,.14) 32%,transparent 58%),linear-gradient(160deg,#14203a,#0b0e14);border:1px solid #1c2130;border-radius:16px;padding:24px 26px;margin-top:14px;display:flex;align-items:center;gap:20px">'
+    +'<span style="width:54px;height:54px;border-radius:50%;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.5);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg></span>'
+    +'<div><div style="font-size:12px;color:#cbd5e1;margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:21px;font-weight:800;color:#f8fafc">'+head+'</div><div style="font-size:13px;color:#fb923c;margin-top:3px">'+sub+'</div></div>'
   +'</div>';
   H+='</div>'; return H;
 }
