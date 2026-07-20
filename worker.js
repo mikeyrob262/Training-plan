@@ -4643,6 +4643,10 @@ function normalizeState_(s){
       });
     });
   }catch(e){}
+  // Heal the strength log AFTER the plan is canonicalized + collapsed, so parent-session detection
+  // (backfill/orphan-drop) sees the final session set. Idempotent; must run every merge to re-drop
+  // orphan keys that mergeState_'s key-union re-adds from remote.
+  try{ if(typeof healStrengthState_==='function') healStrengthState_(s); }catch(e){}
   // Prune manual bike assignments that cross the indoor/outdoor line (stale
   // pre-guard bulk stamps). Runs here so it's page-independent — every load and
   // sync merge flows through normalizeState_, not just the Garage screen.
@@ -21171,24 +21175,28 @@ function migratePlanToStPlan_(){
     try{ sv(); }catch(e){}
   }catch(e){}
 }
-// One-time repair of st.strength.log (guarded by st._strLogMig, syncs so it fires once globally):
-//  1) fold every key into its canonical padded form (the raw-key write at save time orphaned ~10
-//     unpadded keys, e.g. '2026-6-8', from their normalized session buckets);
-//  2) collapse the 2–3× duplicate rows a prior append/sync-union left, keeping the last per name;
-//  3) backfill the log ONTO its parent strength session (the new source of truth) where one exists;
-//  4) drop keys with NO parent strength session (synthetic-seed orphans) — legacy cache only.
-function migrateStrengthLog_(){
+// IDEMPOTENT repair of st.strength.log, run from normalizeState_ on EVERY load + merge (NOT a
+// one-time guarded migration). It must re-run each merge because mergeState_'s object branch
+// UNIONS keys — a locally-dropped orphan key is re-added from the remote side on the next pull,
+// so a one-shot delete never sticks; re-dropping every load is the only thing that survives.
+//  1) fold every key into its canonical padded form (the old raw-key save orphaned ~10 unpadded
+//     keys, e.g. '2026-6-8', from their normalized session buckets);
+//  2) collapse the 2–3× duplicate rows an append/sync-union left, keeping the last per name;
+//  3) backfill the log ONTO its parent strength session (the source of truth) where one exists;
+//  4) drop keys with NO parent strength session (synthetic-seed orphans) — legacy cache only;
+//  5) score any completed session that has a log/actual but no executionScore yet (retroactive —
+//     the old mark-day-complete path set status='completed' without ever computing a score).
+// Operates on the passed state s (normalizeState_ runs before st is assigned). Idempotent:
+// once healed, the only per-load work is re-dropping merge-re-added orphans; nothing else changes,
+// so there's no edit/push churn. No guard field — self-healing beats a fired-once flag here.
+function healStrengthState_(s){
   try{
-    if(typeof st==='undefined') return;
-    if(st._strLogMig) return;
-    if(!st.strength) st.strength={oneRM:{},log:{}};
-    if(!isPlainObj_(st.strength.log)) st.strength.log={};
-    var log=st.strength.log, folded={};
+    if(!s || !isPlainObj_(s.strength) || !isPlainObj_(s.strength.log)) return;
+    var log=s.strength.log, plan=isPlainObj_(s.plan)?s.plan:{}, folded={};
     // (1) fold keys to canonical form
     Object.keys(log).forEach(function(dk){
       var nk=(typeof normDate==='function')?normDate(dk):dk;
-      var arr=Array.isArray(log[dk])?log[dk]:[];
-      folded[nk]=(folded[nk]||[]).concat(arr);
+      folded[nk]=(folded[nk]||[]).concat(Array.isArray(log[dk])?log[dk]:[]);
     });
     // (2) dedupe within each key by exercise name (last write wins), preserving first-seen order
     Object.keys(folded).forEach(function(nk){
@@ -21196,13 +21204,13 @@ function migrateStrengthLog_(){
       folded[nk].forEach(function(e){ if(!e||!e.name) return; if(!(e.name in byName)) order.push(e.name); byName[e.name]=e; });
       folded[nk]=order.map(function(n){ return byName[n]; });
     });
-    // (3)+(4) backfill onto parent sessions; keep only keys that HAVE a parent strength session
+    // (3)+(4) backfill onto parent sessions; keep only keys with a parent strength session
     var kept={};
     Object.keys(folded).forEach(function(nk){
-      var day=st.plan && st.plan[nk];
+      var day=plan[nk];
       var sessions=(day && Array.isArray(day.sessions))?day.sessions:[];
       var strengthSess=sessions.filter(function(x){ return x && !x.deleted && x.type==='strength'; });
-      if(!strengthSess.length) return;   // orphan — drop
+      if(!strengthSess.length) return;   // orphan — drop (re-dropped every load; see header)
       var target=strengthSess.filter(function(x){ return !Array.isArray(x.strengthLog)||!x.strengthLog.length; })[0]||strengthSess[0];
       if(!Array.isArray(target.strengthLog)||!target.strengthLog.length){
         target.strengthLog=folded[nk];
@@ -21210,9 +21218,18 @@ function migrateStrengthLog_(){
       }
       kept[nk]=folded[nk];
     });
-    st.strength.log=kept;
-    st._strLogMig=1;
-    try{ if(typeof sv==='function') sv(); }catch(e){}
+    s.strength.log=kept;
+    // (5) retroactively score completed sessions that carry evidence but were never scored.
+    if(typeof computeExecutionScore_==='function'){
+      Object.keys(plan).forEach(function(dk){
+        var day=plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+        day.sessions.forEach(function(x){
+          if(!x || x.deleted || x.status!=='completed' || x.executionScore!=null) return;
+          var sc=computeExecutionScore_(x);   // null unless the session has a scoreable log/actual
+          if(sc!=null){ x.executionScore=sc; if(typeof markPlanEdited_==='function') markPlanEdited_(x, ['executionScore']); }
+        });
+      });
+    }
   }catch(e){}
 }
 function plannedOverrideFor_(dateKey){
@@ -27719,8 +27736,8 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
-        // Runs AFTER the plan migration so parent sessions exist to backfill onto + orphan-detect against.
-        try{ if(typeof migrateStrengthLog_==='function') migrateStrengthLog_(); }catch(e){}
+        // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
+        // self-healing against key-union re-adds) — no separate one-time call needed here.
         try{ showHomeDash(); }catch(e){}
       });
   });
