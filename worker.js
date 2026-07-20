@@ -5489,6 +5489,36 @@ function fetchCoachNote(elId){
 // week view (with its live checkbox/swap/log buttons intact) rather than
 // rebuilding workout logic separately, so behavior stays identical. Given a
 // left accent bar to read as "the next action," distinct from the stat cards.
+// SHARED Today's-Plan / session card. Resolves the prescription through planResolve_ (derive-at-
+// render, priced to current FTP) so both Home surfaces show the same content: name, ride band + %
+// of FTP + HR + duration + TSS, or the movement list (sets x reps @ %1RM), plus the note. Rest
+// renders distinctly. Tapping opens the day editor for THAT session. One function, both renderers.
+function planCardHTML_(s, dateKey){
+  var r=(typeof planResolve_==='function')?planResolve_(s):s;
+  var esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
+  var t=r.targets||{}, type=r.type, done=(r.status==='completed');
+  var ic=(typeof activityIcon_==='function')?activityIcon_(type==='rest'?'rest':type,22):'';
+  var lines=[];
+  if(type==='ride' && t.powerLo!=null){
+    var pct=(t.pctLo!=null)?(' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+(t.zone?esc(t.zone)+', ':'')+t.pctLo+'–'+t.pctHi+'% of FTP '+t.ftp+')</span>'):'';
+    lines.push('<div style="font-size:15px;font-weight:800;color:var(--t1)">'+t.powerLo+'–'+t.powerHi+'W'+pct+'</div>');
+    var meta=[]; if(t.hrLo!=null) meta.push('HR '+t.hrLo+'–'+t.hrHi+(t.hrCap?(' (cap '+t.hrCap+')'):'')); else if(t.hrCap!=null) meta.push('HR cap '+t.hrCap);
+    if(t.durationMin) meta.push(t.durationMin+' min'); if(t.tssTarget) meta.push('~'+t.tssTarget+' TSS');
+    if(meta.length) lines.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+meta.join(' · ')+'</div>');
+  } else if((type==='strength'||type==='mobility') && r.exercises && r.exercises.length){
+    lines.push(r.exercises.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+'% 1RM'):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+  } else if(type==='rest'){
+    lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
+  }
+  if(r.note) lines.push('<div style="font-size:11.5px;color:var(--t3);margin-top:7px;line-height:1.45;font-style:italic">'+esc(r.note)+'</div>');
+  var border=(type==='rest')?'#5DCAA5':'#FC4C02';
+  var oc=dateKey?(' onclick="openDayEditor(\\''+dateKey+'\\',\\''+(r.id||'')+'\\')" style="cursor:pointer;'):(' style="');
+  return '<div'+oc+'background:var(--s2);border-radius:14px;padding:14px 16px;margin:0 0 10px;border-left:3px solid '+border+'">'
+    +'<div style="display:flex;align-items:center;gap:10px'+(lines.length?';margin-bottom:8px':'')+'">'+ic
+    +'<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name)+'</div>'
+    +(done?'<span style="font-size:14px;color:#1D9E75;flex-shrink:0">✓</span>':'')
+    +'</div>'+lines.join('')+'</div>';
+}
 function todayWorkoutHTML(){
   // Phase 0: renders today's real session(s) from st.plan (was: cloning the static
   // ws{} DOM card verbatim, which surfaced the "2 min" template artifact).
@@ -5500,21 +5530,10 @@ function todayWorkoutHTML(){
     return label + '<div onclick="openDayEditor(\\''+key+'\\')" style="margin:0 16px 14px;background:var(--s2);border-radius:14px;padding:20px;text-align:center;border-left:3px solid var(--b1);cursor:pointer">'
       + '<div style="font-size:14px;color:var(--t2)">Rest day — nothing scheduled</div></div>';
   }
-  var html=label;
-  sessions.forEach(function(s){
-    var ic=(typeof activityIcon_==='function')?activityIcon_(s.type,18):'';
-    var t=s.targets||{}, bits=[];
-    if(s.type==='strength'||s.type==='mobility'){ if(t.durationMin)bits.push(t.durationMin+' min'); if(s.exercises&&s.exercises.length)bits.push(s.exercises.length+' exercises'); }
-    else { if(t.durationMin)bits.push(t.durationMin+' min'); if(t.powerLo&&t.powerHi)bits.push(t.powerLo+'–'+t.powerHi+'W'); if(t.tssTarget)bits.push(t.tssTarget+' TSS'); }
-    var sub=bits.join(' · ');
-    html += '<div onclick="openDayEditor(\\''+key+'\\')" style="margin:0 16px 10px;background:var(--s2);border-radius:14px;padding:14px 16px;border-left:3px solid #FC4C02;cursor:pointer">'
-      + '<div style="display:flex;align-items:center;gap:10px">'+ic
-      + '<div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;color:var(--t1)">'+esc(s.name)+'</div>'
-      + (sub?'<div style="font-size:12px;color:var(--t2);margin-top:2px">'+sub+'</div>':'')+'</div>'
-      + (s.status==='completed'?'<span style="font-size:14px;color:#1D9E75">✓</span>':'')
-      + '</div></div>';
-  });
-  return html;
+  // Full resolved prescription per session (two-a-days -> both), via the shared card.
+  var html=label+'<div style="margin:0 16px 14px">';
+  sessions.forEach(function(s){ html += (typeof planCardHTML_==='function')?planCardHTML_(s, key):''; });
+  return html + '</div>';
 }
 
 // Weight + Nutrition secondary stat row - demoted below Today since these
@@ -9664,11 +9683,9 @@ function showHomeDash(){
   // Activity streak card (shared renderer, both dashboards)
   html+=streakCardHTML_();
 
-  // Today's Plan - reads the real scheduled workout for today directly
-  // from the training plan's rendered DOM (week/day workout cards),
-  // since that's where the actual session name/duration genuinely live;
-  // the completion-tracking data structure (ws().wo) only stores a
-  // done/not-done flag, not the workout details themselves.
+  // Today's Plan - reads today's real session(s) from st.plan (NOT the old ws{} DOM template,
+  // which is what surfaced the "Group Ride / Zone 2 / 2 min" artifact). Prescription renders via
+  // the shared planCardHTML_ -> planResolve_, priced to current FTP. week/day kept only for Swap.
   var todaysPlanCurWeek = (typeof getCurrentPlanWeek==='function') ? getCurrentPlanWeek() : 1;
   var todaysPlanDayIdx = (new Date().getDay()===0) ? 6 : new Date().getDay()-1;
   var todaysPlanInfo = (function(){
@@ -9688,23 +9705,10 @@ function showHomeDash(){
   if(!todaysPlanInfo.sessName){
     html+='<div style="font-size:13px;color:var(--t3)">No workout scheduled for today.</div>';
   } else {
-    html+='<div id="home-todays-plan-row" style="display:flex;align-items:center;gap:12px;cursor:pointer">'
-      +activityIcon_(todaysPlanInfo.stype||todaysPlanInfo.sessName,40)
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:15px;font-weight:700;color:var(--t1)">'+todaysPlanInfo.sessName+'</div>'
-      +(todaysPlanInfo.plannedDur?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+todaysPlanInfo.plannedDur+'</div>':'')
-      +'</div>'
-      +(todaysPlanInfo.isDone
-        ?'<div style="font-size:12px;font-weight:700;color:#5DCAA5;flex-shrink:0">Done</div>'
-        :'<button id="home-todays-plan-start" style="background:none;border:1px solid #5DCAA5;color:#5DCAA5;font-size:13px;font-weight:700;padding:8px 18px;border-radius:20px;cursor:pointer;flex-shrink:0">Start</button>')
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding-left:52px">'
-      +'<div style="flex:1;height:4px;background:var(--s2);border-radius:2px"><div style="height:4px;width:'+(todaysPlanInfo.isDone?'100':'0')+'%;background:#5DCAA5;border-radius:2px"></div></div>'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:5px;margin-top:8px;padding-left:52px">'
-      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2"><path d="M12 2l1.5 5L19 8l-5.5 1L12 14l-1.5-5L5 8l5.5-1z"/></svg>'
-      +'<span style="font-size:11px;color:#a855f7;font-weight:600">Recommended by AI Coach</span>'
-      +'</div>';
+    // Full resolved prescription per session (two-a-days -> both) via the shared card.
+    var _tpKey=(typeof getTodayKey==='function')?getTodayKey():null;
+    var _tpSess=(_tpKey && typeof planSessionsForDate_==='function')?planSessionsForDate_(_tpKey):[];
+    _tpSess.forEach(function(s){ html += (typeof planCardHTML_==='function')?planCardHTML_(s, _tpKey):''; });
   }
   html+='</div>';
 
