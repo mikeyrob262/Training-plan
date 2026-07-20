@@ -20733,6 +20733,23 @@ function _planSessionFromDef_(intent, blockWeek){
   if(def.note) s.note=def.note;
   return s;
 }
+// DERIVE-AT-READ. A stored session carries only IDENTITY (type/intent/name/block/status); its
+// prescription is resolved from SESSION_DEFS here, so an FTP change reprices every generated block
+// with no regenerate. Stored prescription fields are honored ONLY on a user-owned session (a
+// manual override) — the same user-vs-generated line that source already tracks. Every
+// prescription reader (editor, Today's Plan card) reads through this, not raw sess.targets.
+function planResolve_(s){
+  if(!s || typeof s!=='object') return s;
+  var src=(typeof _planSource_==='function')?_planSource_(s):(s.source||'user');
+  if(src==='user') return s;                       // user overrides are authoritative — as stored
+  var key=(s.type==='rest')?'rest':s.intent;
+  var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1):null;
+  if(!def) return s;                               // unknown intent — nothing to derive
+  var out={}; for(var k in def) out[k]=def[k];     // derived prescription (targets/exercises/note)
+  ['id','source','status','block','completedRideKey','executionScore','editedAt','_edited','deleted','gen','migrated','actualDurationMin','completed'].forEach(function(f){ if(s[f]!==undefined) out[f]=s[f]; });
+  if(s.name) out.name=s.name;                      // a renamed/swapped session keeps its name
+  return out;
+}
 // Generate a strength-first block into st.plan from a start Monday. Per day: preserve any
 // user-owned/completed session (leave the whole day), else tombstone replaceable template/
 // prior-gen sessions and write the template. Race taper (§3.6): no loaded strength within 72h
@@ -20767,10 +20784,12 @@ function generatePlanBlock_(startKey, weeks){
         // Race taper (§3.6): no loaded strength within 72h before a race — that slot -> Mobility.
         if(loadedTaper_(dt)) keys=keys.map(function(k){ return (SESSION_DEFS[k] && SESSION_DEFS[k].type==='strength') ? 'mobility' : k; });
         keys.forEach(function(intent){
-          var s=_planSessionFromDef_(intent, blockWeek);   // full prescription from the ONE source
-          if(!s) return;
-          s.block=_planBlockMeta_(blockWeek);
-          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status','note'], 'gen'); }catch(e){}
+          var def=SESSION_DEFS[intent]; if(!def) return;
+          // Store IDENTITY only — the prescription (power band, HR, movements, note) derives from
+          // SESSION_DEFS at read via planResolve_, so an FTP change reprices this block with no
+          // regenerate. block.week carries the periodization the resolver needs.
+          var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned', block:_planBlockMeta_(blockWeek) };
+          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen'); }catch(e){}
         });
         out.generated.push(key);
       }
@@ -25852,17 +25871,24 @@ function openDayEditor(dateKey, targetId){
     return { el:wrap, get:function(){ return sel.value==='__other'?inp.value.trim():(sel.value||'').trim(); } };
   }
   function _esc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); }
+  // Effective prescription for the CURRENT dropdown selection, DERIVED at render (repriced to
+  // current FTP). Stored fields override ONLY when this session is user-owned (a manual edit) —
+  // the user-vs-generated line source already tracks. A generated session pulls fresh from FTP.
+  function _effRx_(type){
+    var key=(type==='rest')?'rest':_selIntent;
+    var derived=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(sess&&sess.block&&sess.block.week)||1):null;
+    var base=derived||{type:type,targets:{}};
+    var isUser=sess && sess.type===type && ((typeof _planSource_==='function'?_planSource_(sess):(sess.source||'user'))==='user');
+    if(isUser){ return { type:type, name:(sess.name||base.name), note:(sess.note||base.note), targets:Object.assign({}, base.targets||{}, sess.targets||{}), exercises:((sess.exercises&&sess.exercises.length)?sess.exercises:(base.exercises||[])) }; }
+    return { type:type, name:base.name, note:base.note, targets:base.targets||{}, exercises:base.exercises||[] };
+  }
   function renderType(type){
     bodyEl.innerHTML='';
-    // Prescription card (read-only) — the ONE-source content for this session: ride band with %
-    // of FTP + HR, or the movement/exercise list, plus the coaching note. Makes it a prescription,
-    // not a label. Reads the session where it exists, else SESSION_DEFS via _planSessionFromDef_.
+    var eff=_effRx_(type);   // derive-at-render: prescription for the current selection, priced to FTP now
+    // Prescription card (read-only) — DERIVED at render; a user override wins. Ride band + % of
+    // FTP + HR, or the movement/exercise list, plus the note. Makes it a prescription, not a label.
     (function(){
-      var base=(sess && sess.type===type)?sess:null;
-      var def=(type!=='rest' && _selIntent && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_selIntent,(base&&base.block&&base.block.week)||1):((type==='rest'&&typeof SESSION_DEFS!=='undefined'&&SESSION_DEFS.rest)?{note:SESSION_DEFS.rest.note}:null);
-      var tgt=(base&&base.targets)||(def&&def.targets)||{};
-      var ex=((base&&base.exercises&&base.exercises.length)?base.exercises:(def&&def.exercises))||[];
-      var note=(base&&base.note)||(def&&def.note)||'';
+      var tgt=eff.targets||{}; var ex=eff.exercises||[]; var note=eff.note||'';
       if(type!=='rest' && !note && !ex.length && tgt.powerLo==null) return;
       var rows=[];
       if(type==='ride' && tgt.powerLo!=null){
@@ -25881,7 +25907,7 @@ function openDayEditor(dateKey, targetId){
       card.innerHTML=rows.join(''); bodyEl.appendChild(card);
     })();
     if(type==='rest'){ var rm=document.createElement('div'); rm.style.cssText='font-size:13px;color:var(--t3);padding:4px 2px 12px;line-height:1.5'; rm.textContent='Saving marks this a Rest day and clears any planned session.'; bodyEl.appendChild(rm); getData=function(){ return { type:'rest' }; }; return; }
-    var t=(sess&&sess.type===type&&sess.targets)?sess.targets:{};
+    var t=eff.targets||{};   // derive-at-render: prefill from the resolved prescription, not raw stored targets
     if(type==='ride'){
       _sect('Planned');
       var iSel=document.createElement('select'); iSel.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
@@ -25904,7 +25930,7 @@ function openDayEditor(dateKey, targetId){
       _sect('Planned — exercises (sets x reps @ %1RM)');
       var exWrap=document.createElement('div'); var exRows=[];
       function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 50px;gap:5px;margin-bottom:6px;align-items:start'; var s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); var nf=_exNameField(ex.name,function(lib){ s.value=lib.sets; rp.value=lib.reps; pc.value=(lib.pct1RM===''?'':lib.pct1RM); }); rw.appendChild(nf.el);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({nf:nf,s:s,rp:rp,pc:pc}); }
-      ((sess&&sess.exercises&&sess.exercises.length)?sess.exercises:[{}]).forEach(addEx);
+      ((eff.exercises&&eff.exercises.length)?eff.exercises:[{}]).forEach(addEx);
       bodyEl.appendChild(exWrap);
       var addB=document.createElement('button'); addB.textContent='+ exercise'; addB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addB.onclick=function(){ addEx({}); }; bodyEl.appendChild(addB);
       _sect('Completed — logged (weight x reps @ RPE)');
@@ -25926,7 +25952,7 @@ function openDayEditor(dateKey, targetId){
       var mDone=document.createElement('input'); mDone.type='checkbox'; mDone.checked=(sess&&sess.status==='completed'); mDone.style.cssText='width:18px;height:18px';
       _fr('Completed',mDone);
       var mA=_fr('Actual dur',_mkI((sess&&sess.actualDurationMin)||'','min'));
-      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, exercises:(sess&&sess.exercises)||[], completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
+      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, exercises:(eff.exercises||[]), completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
     }
   }
   function applyPreset(){
