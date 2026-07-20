@@ -27318,25 +27318,35 @@ function reimportStravaActivities_(opts, cb){
     if(!Array.isArray(st.rides)) st.rides=[];
     var page=1, totAdded=0, totRevived=0, ftp=parseInt((st.ftp)||186)||186;
     var resumePoll=function(){ try{ if(typeof initFirebaseSync==='function') initFirebaseSync(); }catch(e){} };
-    var finishAll=function(){
+    var PER=200, pagesWalked=0;
+    var finishAll=function(reason){
+      console.log('[reimport] walk ENDED ('+(reason||'done')+') after '+pagesWalked+' page(s) — cumulative add='+totAdded+' rev='+totRevived+'. Verifying superset + pushing…');
       _reimportGuardedPush_(function(res){
         resumePoll();
-        if(res.aborted){ report({aborted:true, missing:res.missing, added:totAdded, revived:totRevived, msg:'Re-import ABORTED — '+res.missing.length+' live remote record(s) not in local; nothing pushed. Re-run.'}); return; }
-        if(res.error){ report({error:res.error, added:totAdded, revived:totRevived, msg:'Merged locally but push failed: '+res.error+'. Re-run to push.'}); return; }
-        report({pushed:true, added:totAdded, revived:totRevived, msg:'Re-import done: '+totAdded+' added, '+totRevived+' revived.'});
+        if(res.aborted){ console.warn('[reimport] guard ABORTED — '+res.missing.length+' live remote record(s) not in local; NO push.'); report({aborted:true, missing:res.missing, added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Re-import ABORTED — '+res.missing.length+' live remote record(s) not in local; nothing pushed. Re-run.'}); return; }
+        if(res.error){ report({error:res.error, added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Merged locally but push failed: '+res.error+'. Re-run to push.'}); return; }
+        console.log('[reimport] DONE — '+totAdded+' added, '+totRevived+' revived across '+pagesWalked+' page(s), pushed.');
+        report({pushed:true, added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Re-import done: '+totAdded+' added, '+totRevived+' revived ('+pagesWalked+' pages).'});
       });
     };
     var nextPage=function(){
-      fetch('https://www.strava.com/api/v3/athlete/activities?per_page=100&page='+page,{headers:{'Authorization':'Bearer '+token}})
-      .then(function(r){ return r.ok?r.json():null; }).then(function(list){
-        if(!Array.isArray(list)||!list.length){ finishAll(); return; }
+      fetch('https://www.strava.com/api/v3/athlete/activities?per_page='+PER+'&page='+page,{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){ var sc=r.status; if(!r.ok){ console.warn('[reimport] page '+page+' HTTP '+sc+' — stopping walk'); return {__http:sc}; } return r.json(); })
+      .then(function(list){
+        if(list && list.__http){ finishAll('HTTP '+list.__http); return; }
+        if(!Array.isArray(list)){ console.warn('[reimport] page '+page+' non-array response — stopping'); finishAll('non-array'); return; }
+        if(!list.length){ console.log('[reimport] page '+page+': 0 activities — end of history'); finishAll('empty page'); return; }
+        pagesWalked++;
         var mapped=list.filter(function(a){ return inScope(a.sport_type||a.type); }).map(function(a){ return reimportMap_(a, ftp); });
         var res=reimportMerge_(st.rides, mapped); totAdded+=res.added; totRevived+=res.revived;
+        var f=(list[0]&&(list[0].start_date_local||list[0].start_date)||'').slice(0,10), l=(list[list.length-1]&&(list[list.length-1].start_date_local||list[list.length-1].start_date)||'').slice(0,10);
+        console.log('[reimport] page '+page+': raw='+list.length+' ('+f+' .. '+l+') inScope='+mapped.length+' +add='+res.added+' +rev='+res.revived+' skip='+res.skipped+' | cum add='+totAdded+' rev='+totRevived);
         try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
         if(typeof opts.onProgress==='function') opts.onProgress({page:page, added:totAdded, revived:totRevived});
-        if(list.length<100){ finishAll(); } else { page++; setTimeout(nextPage, 200); }
-      }).catch(function(e){ resumePoll(); report({error:(e&&e.message)||'fetch', added:totAdded, revived:totRevived, msg:'Re-import paused (fetch error) — re-run to resume.'}); });
+        if(list.length<PER){ console.log('[reimport] page '+page+' short ('+list.length+'<'+PER+') — last page'); finishAll('last page'); } else { page++; setTimeout(nextPage, 250); }
+      }).catch(function(e){ console.warn('[reimport] page '+page+' fetch error: '+(e&&e.message)); resumePoll(); report({error:(e&&e.message)||'fetch', added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Re-import paused (fetch error) — re-run to resume.'}); });
     };
+    console.log('[reimport] starting walk — scope='+types.join('+')+', per_page='+PER);
     nextPage();
   };
   if(st.stravaRefreshToken){
