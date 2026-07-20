@@ -13652,6 +13652,7 @@ function strengthAdherenceTrend_(st, weeks, _todayRef){
     var b=byKey[_key(_wk(dt))]; if(!b) return;   // out-of-window OR future week -> skipped
     day.sessions.forEach(function(x){
       if(!x||x.deleted) return;
+      if(x.synthetic===true || x.source==='synthetic') return;   // validation scaffolding never counts toward a real metric
       if(x.type!=='strength' && x.type!=='mobility') return;
       b.planned++;
       if(x.executionScore!=null){ b.scored++; b._sum+=(+x.executionScore||0); }
@@ -13688,11 +13689,19 @@ function aiCardStrengthAdherence_(){
     var bh=Math.max(2, rate*(H-6)), x=i*bw+bw*0.22, bwid=bw*0.56, y=H-bh-1;
     svg+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" fill="#60a5fa" fill-opacity="'+(w.scored>0?'0.9':'0.28')+'"/>';
   });
-  // Secondary: mean execution (0..100) across weeks that have a score. A line only with >=2 points
-  // (a line implies a trend); a single scored week is a dot, not a trend.
-  var mpts=wk.map(function(w,i){ if(w.mean==null) return null; var x=i*bw+bw*0.5, y=H-((w.mean/100)*(H-6))-1; return x.toFixed(1)+' '+y.toFixed(1); }).filter(Boolean);
-  if(mpts.length>=2){ svg+='<path d="M'+mpts.join(' L')+'" fill="none" stroke="#f59e0b" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'; }
-  else if(mpts.length===1){ var p=mpts[0].split(' '); svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.6" fill="#f59e0b"/>'; }
+  // Secondary: mean execution (0..100). SEGMENTED — a null (unscored) week BREAKS the line rather
+  // than being bridged across, so the line never implies scores in weeks that have none. A run of
+  // consecutive scored weeks draws a line; an isolated scored week draws a dot (not a trend).
+  var segs=[], curSeg=[];
+  wk.forEach(function(w,i){
+    if(w.mean==null){ if(curSeg.length){ segs.push(curSeg); curSeg=[]; } return; }
+    var x=i*bw+bw*0.5, y=H-((w.mean/100)*(H-6))-1; curSeg.push(x.toFixed(1)+' '+y.toFixed(1));
+  });
+  if(curSeg.length) segs.push(curSeg);
+  segs.forEach(function(seg){
+    if(seg.length>=2){ svg+='<path d="M'+seg.join(' L')+'" fill="none" stroke="#f59e0b" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'; }
+    else { var p=seg[0].split(' '); svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.6" fill="#f59e0b"/>'; }
+  });
   svg+='</svg>';
   inner+='<div style="margin-top:2px">'+svg+'</div>';
   inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:#5b6678"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
@@ -21290,6 +21299,17 @@ function healStrengthState_(s){
   try{
     if(!s || !isPlainObj_(s.strength) || !isPlainObj_(s.strength.log)) return;
     var log=s.strength.log, plan=isPlainObj_(s.plan)?s.plan:{}, folded={};
+    // (0) Durable purge of synthetic validation sessions. A HARD delete (splicing them out of the
+    // array) can't win the array union-merge — the remote copy re-adds the id — which is why the
+    // local teardown resurrected. SOFT-delete instead: deleted=true OR-merges sticky (true wins),
+    // re-applied every merge so a remote re-add is re-dropped, same pattern as the orphan log keys.
+    // NOT masked, so it can never revive by recency. Flag a one-shot push so the cloud copy clears.
+    Object.keys(plan).forEach(function(dk){
+      var day=plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
+      day.sessions.forEach(function(x){
+        if(x && !x.deleted && (x.synthetic===true || x.source==='synthetic')){ x.deleted=true; _planDidCollapse_=true; }
+      });
+    });
     // (1) fold keys to canonical form
     Object.keys(log).forEach(function(dk){
       var nk=(typeof normDate==='function')?normDate(dk):dk;
