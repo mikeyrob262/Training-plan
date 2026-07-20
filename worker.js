@@ -20648,16 +20648,34 @@ function planClearDay_(dateKey){
 }
 
 // ── Phase 1: program generator ──────────────────────────────────────────────
-// Strength-first weekly template (§3.1), index 0=Mon .. 6=Sun. Two loaded + two
-// mobility; heavy work never sits the day before quality bike work.
+// SESSION_DEFS — THE single source of session prescription, keyed by intent. The generator,
+// the day editor (SESSION_PRESETS), the Today's Plan card and the glossary all read this, so
+// content lives in ONE place and can't drift. Exercises come from EX_LIBRARY by exGroup; ride
+// power is % of FTP (watts computed at read time from st.ftp, shown with the FTP inline per the
+// §3.8 Z-fix). Blank pct1RM weights stay blank (no 1RM data); blank prescription is filled here.
+var SESSION_DEFS={
+  strengthA:{ type:'strength', name:'Strength A',  exGroup:'strengthA', note:'Lower & axial load — the bone and structural stimulus cycling never provides.' },
+  strengthB:{ type:'strength', name:'Strength B',  exGroup:'strengthB', note:'Posterior chain, single-leg and core — opposes the flexed riding position.' },
+  mobility: { type:'mobility', name:'Mobility',    exGroup:'mobility', durationMin:15, note:'15 min. Prescribed, not optional — this is what lets you hold a five-hour position.' },
+  z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
+  threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
+  vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
+  group:    { type:'ride', name:'Group Ride',      zone:'Z2–Z4', pctFtp:[60,88],  note:'Sit in for the first 20 mi. Race only the last 10–15. Do not chase if dropped.' },
+  long:     { type:'ride', name:'Long Ride',       zone:'Z2–Z3', pctFtp:[62,83],  durationMin:180, note:'Controlled Z2–Z3. Tolerable on tired legs after Friday strength.' },
+  recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  note:'Genuinely easy. Spin the legs; add no fatigue.' },
+  rest:     { type:'rest', name:'Rest',            body:null,    note:'Full rest. Recovery is part of the plan, not a gap in it.' }
+};
+var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','z2','threshold','vo2','group','long','recovery','rest'];
+// Strength-first weekly layout (§3.1), index 0=Mon .. 6=Sun, as SESSION_DEFS keys. Two loaded +
+// two mobility; heavy work never sits the day before quality bike work.
 var PLAN_TEMPLATE_=[
-  [{type:'strength',intent:'strengthA',name:'Strength A',group:'strengthA'}],                                                      // Mon
-  [{type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15},{type:'ride',intent:'threshold',name:'Threshold'}], // Tue
-  [{type:'ride',intent:'z2',name:'Z2 Endurance'}],                                                                                  // Wed
-  [{type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15},{type:'ride',intent:'group',name:'Group Ride'}],    // Thu
-  [{type:'strength',intent:'strengthB',name:'Strength B',group:'strengthB'}],                                                       // Fri
-  [{type:'ride',intent:'long',name:'Long Ride'}],                                                                                   // Sat
-  [{type:'rest',intent:'',name:'Rest'}]                                                                                             // Sun
+  ['strengthA'],              // Mon
+  ['mobility','threshold'],   // Tue
+  ['z2'],                     // Wed
+  ['mobility','group'],       // Thu
+  ['strengthB'],              // Fri
+  ['long'],                   // Sat
+  ['rest']                    // Sun
 ];
 // Ownership: migration sets migrated, the generator sets gen; ANY user edit/swap clears both
 // (see the editor save + applySwap), claiming the session. The generator only ever touches
@@ -20692,14 +20710,28 @@ function _planBlockMeta_(blockWeek){
   var cue=(blockWeek===1)?'Baseline':(blockWeek===4)?'Deload — 60% volume, intensity held':'+5% vs last week';
   return { name:'Base 1', week:blockWeek, phase:phase, cue:cue };
 }
-// Ride power band for an intent, DERIVED from FTP as % of FTP (glossary Z1-Z5 fix). Carries the
-// % band + the FTP used so the display can show "162-180W (Z4, 88-98% of FTP 183W)" and stay
-// honest that FTP is a manual value. Bands chosen to match the prescribed watts at FTP 183.
-function _planZoneWatts_(intent){
-  var ftp=(typeof st!=='undefined' && st && st.ftp)?(+st.ftp||183):183;
-  var bands={ z2:[0.62,0.83], threshold:[0.88,0.98], vo2:[0.99,1.09], group:[0.62,0.85], long:[0.62,0.80], recovery:[0.40,0.55] };
-  var b=bands[intent]; if(!b) return null;
-  return { powerLo:Math.round(ftp*b[0]), powerHi:Math.round(ftp*b[1]), pctLo:Math.round(b[0]*100), pctHi:Math.round(b[1]*100), ftp:ftp };
+// Watts from a % of FTP band. Reads the app's (manual, possibly stale) FTP; default 190. Carries
+// the % band + the FTP used so the display can show "162–180W (Z4, 85–95% of FTP 190)".
+function _planZoneFromPct_(pct){
+  if(!pct || pct.length<2) return null;
+  var ftp=(typeof st!=='undefined' && st && st.ftp)?(+st.ftp||190):190;
+  return { powerLo:Math.round(ftp*pct[0]/100), powerHi:Math.round(ftp*pct[1]/100), pctLo:pct[0], pctHi:pct[1], ftp:ftp };
+}
+// Build a full session prescription from SESSION_DEFS[intent]. THE resolver every consumer uses
+// (generator, editor prefill, Today's Plan card). blockWeek applies within-block volume
+// periodization to exercises (deload cuts sets). No id/source/block here — the write path stamps
+// those. Rest returns a bodyless session.
+function _planSessionFromDef_(intent, blockWeek){
+  var def=SESSION_DEFS[intent]; if(!def) return null;
+  var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned', targets:{} };
+  if(def.exGroup && typeof _planExercises_==='function') s.exercises=_planExercises_(def.exGroup, blockWeek||1);
+  if(def.durationMin) s.targets.durationMin=def.durationMin;
+  if(def.zone) s.targets.zone=def.zone;
+  if(def.pctFtp){ var z=_planZoneFromPct_(def.pctFtp); if(z){ s.targets.powerLo=z.powerLo; s.targets.powerHi=z.powerHi; s.targets.pctLo=z.pctLo; s.targets.pctHi=z.pctHi; s.targets.ftp=z.ftp; } }
+  if(def.hr){ s.targets.hrLo=def.hr[0]; s.targets.hrHi=def.hr[1]; }
+  if(def.hrCap) s.targets.hrCap=def.hrCap;
+  if(def.note) s.note=def.note;
+  return s;
 }
 // Generate a strength-first block into st.plan from a start Monday. Per day: preserve any
 // user-owned/completed session (leave the whole day), else tombstone replaceable template/
@@ -20731,16 +20763,14 @@ function generatePlanBlock_(startKey, weeks){
         // Only WRITE the template on a day with no user-owned / completed session (respect a
         // day the user has planned); its residue is already cleaned above.
         if(existing.some(function(s){ return _planUserOwned_(s) || (s && s.status==='completed'); })){ out.kept.push(key); continue; }
-        var specs=(PLAN_TEMPLATE_[d]||[]).map(function(x){ var o={}; for(var kk in x) o[kk]=x[kk]; return o; });
-        if(loadedTaper_(dt)) specs=specs.map(function(x){ return x.type==='strength' ? {type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15,tapered:true} : x; });
-        specs.forEach(function(spec){
-          var s={ status:'planned', block:_planBlockMeta_(blockWeek) };
-          s.type=spec.type; s.intent=spec.intent||''; s.name=spec.name;
-          if(spec.type==='strength'){ s.exercises=_planExercises_(spec.group, blockWeek); s.targets={}; }
-          else if(spec.type==='mobility'){ s.exercises=_planExercises_(spec.group||'mobility', blockWeek); s.targets={durationMin:spec.durationMin||15}; }
-          else if(spec.type==='ride'){ var z=_planZoneWatts_(spec.intent); s.targets=z||{}; }   // prescribed power band from FTP
-          else { s.targets={}; }
-          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status'], 'gen'); }catch(e){}
+        var keys=(PLAN_TEMPLATE_[d]||[]).slice();
+        // Race taper (§3.6): no loaded strength within 72h before a race — that slot -> Mobility.
+        if(loadedTaper_(dt)) keys=keys.map(function(k){ return (SESSION_DEFS[k] && SESSION_DEFS[k].type==='strength') ? 'mobility' : k; });
+        keys.forEach(function(intent){
+          var s=_planSessionFromDef_(intent, blockWeek);   // full prescription from the ONE source
+          if(!s) return;
+          s.block=_planBlockMeta_(blockWeek);
+          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status','note'], 'gen'); }catch(e){}
         });
         out.generated.push(key);
       }
@@ -25672,19 +25702,13 @@ function findActivityForDate(dateKey){
 // Session presets — picking one sets type + intent + name TOGETHER so they can
 // never disagree (free-text naming is what fragmented "Streach" and would corrupt
 // the 1RM/progression history). Pulled forward from Phase 1 per the strength spec.
-var SESSION_PRESETS=[
-  {v:'strengthA', label:'Strength A', type:'strength', intent:'strengthA', name:'Strength A'},
-  {v:'strengthB', label:'Strength B', type:'strength', intent:'strengthB', name:'Strength B'},
-  {v:'mobility',  label:'Mobility',   type:'mobility', intent:'mobility',  name:'Mobility'},
-  {v:'z2',        label:'Z2 Endurance',type:'ride',    intent:'z2',        name:'Z2 Endurance'},
-  {v:'threshold', label:'Threshold',  type:'ride',     intent:'threshold', name:'Threshold'},
-  {v:'vo2',       label:'VO2',         type:'ride',     intent:'vo2',       name:'VO2'},
-  {v:'group',     label:'Group Ride',  type:'ride',     intent:'group',     name:'Group Ride'},
-  {v:'long',      label:'Long Ride',   type:'ride',     intent:'long',      name:'Long Ride'},
-  {v:'recovery',  label:'Recovery',    type:'ride',     intent:'recovery',  name:'Recovery'},
-  {v:'rest',      label:'Rest',        type:'rest',     intent:'',          name:'Rest'},
-  {v:'other',     label:'Other…',      type:'',         intent:'',          name:''}
-];
+// DERIVED from SESSION_DEFS (the one source) so the dropdown can never drift from the generator.
+// Same order, plus the free-text "Other…" escape hatch.
+var SESSION_PRESETS=(function(){
+  var out=SESSION_DEF_ORDER.map(function(k){ var d=SESSION_DEFS[k]; return {v:k, label:d.name, type:d.type, intent:(d.type==='rest'?'':k), name:d.name}; });
+  out.push({v:'other', label:'Other…', type:'', intent:'', name:''});
+  return out;
+})();
 // Exercise library (spec 3.2-3.4) with default sets/reps/%1RM. The per-row exercise
 // dropdown prefills from here (reps: carries=meters, mobility=reps or seconds).
 var EX_LIBRARY=[
@@ -25827,9 +25851,36 @@ function openDayEditor(dateKey, targetId){
     wrap.appendChild(sel); wrap.appendChild(inp);
     return { el:wrap, get:function(){ return sel.value==='__other'?inp.value.trim():(sel.value||'').trim(); } };
   }
+  function _esc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); }
   function renderType(type){
     bodyEl.innerHTML='';
-    if(type==='rest'){ var rm=document.createElement('div'); rm.style.cssText='font-size:13px;color:var(--t3);padding:12px 2px;line-height:1.5'; rm.textContent='Rest day — no session. Saving removes any planned session for this day.'; bodyEl.appendChild(rm); getData=function(){ return { type:'rest' }; }; return; }
+    // Prescription card (read-only) — the ONE-source content for this session: ride band with %
+    // of FTP + HR, or the movement/exercise list, plus the coaching note. Makes it a prescription,
+    // not a label. Reads the session where it exists, else SESSION_DEFS via _planSessionFromDef_.
+    (function(){
+      var base=(sess && sess.type===type)?sess:null;
+      var def=(type!=='rest' && _selIntent && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_selIntent,(base&&base.block&&base.block.week)||1):((type==='rest'&&typeof SESSION_DEFS!=='undefined'&&SESSION_DEFS.rest)?{note:SESSION_DEFS.rest.note}:null);
+      var tgt=(base&&base.targets)||(def&&def.targets)||{};
+      var ex=((base&&base.exercises&&base.exercises.length)?base.exercises:(def&&def.exercises))||[];
+      var note=(base&&base.note)||(def&&def.note)||'';
+      if(type!=='rest' && !note && !ex.length && tgt.powerLo==null) return;
+      var rows=[];
+      if(type==='ride' && tgt.powerLo!=null){
+        var pct=(tgt.pctLo!=null)?(' ('+(tgt.zone?_esc_(tgt.zone)+', ':'')+tgt.pctLo+'–'+tgt.pctHi+'% of FTP '+tgt.ftp+')'):'';
+        rows.push('<div style="font-size:15px;font-weight:800;color:var(--t1)">'+tgt.powerLo+'–'+tgt.powerHi+'W<span style="font-size:11px;font-weight:600;color:var(--t3)">'+pct+'</span></div>');
+        if(tgt.hrLo!=null) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">HR '+tgt.hrLo+'–'+tgt.hrHi+(tgt.hrCap?(' · back off above '+tgt.hrCap):'')+' bpm</div>');
+        else if(tgt.hrCap!=null) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">HR cap '+tgt.hrCap+' bpm</div>');
+      } else if((type==='strength'||type==='mobility') && ex.length){
+        rows.push(ex.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+'% 1RM'):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+      } else if(type==='rest'){
+        rows.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
+      }
+      if(note) rows.push('<div style="font-size:11.5px;color:var(--t3);margin-top:'+(rows.length?'7px':'0')+';line-height:1.45;font-style:italic">'+_esc_(note)+'</div>');
+      if(!rows.length) return;
+      var card=document.createElement('div'); card.style.cssText='background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:11px 13px;margin:2px 0 12px';
+      card.innerHTML=rows.join(''); bodyEl.appendChild(card);
+    })();
+    if(type==='rest'){ var rm=document.createElement('div'); rm.style.cssText='font-size:13px;color:var(--t3);padding:4px 2px 12px;line-height:1.5'; rm.textContent='Saving marks this a Rest day and clears any planned session.'; bodyEl.appendChild(rm); getData=function(){ return { type:'rest' }; }; return; }
     var t=(sess&&sess.type===type&&sess.targets)?sess.targets:{};
     if(type==='ride'){
       _sect('Planned');
@@ -25875,7 +25926,7 @@ function openDayEditor(dateKey, targetId){
       var mDone=document.createElement('input'); mDone.type='checkbox'; mDone.checked=(sess&&sess.status==='completed'); mDone.style.cssText='width:18px;height:18px';
       _fr('Completed',mDone);
       var mA=_fr('Actual dur',_mkI((sess&&sess.actualDurationMin)||'','min'));
-      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
+      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, exercises:(sess&&sess.exercises)||[], completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
     }
   }
   function applyPreset(){
@@ -25953,6 +26004,7 @@ function openDayEditor(dateKey, targetId){
           }
         } else { // mobility
           s2.name=d.name; s2.targets=d.targets;
+          if(d.exercises) s2.exercises=d.exercises;   // preserve the §3.4 movement list on save
           if(d.actualDurationMin!=null) s2.actualDurationMin=d.actualDurationMin;
           s2.status=d.completed?'completed':'planned';
         }
