@@ -27223,6 +27223,129 @@ function mergeCrossSourceDupes_(){
 }
 // ==================================================================================
 
+// ==================== Additive Strava re-import (recover the library loss) ====================
+// STRICTLY ADDITIVE: writes only activities absent from the library, matched by Strava id (+ a
+// date/distance fuzzy so a FIT-only twin is never duplicated). Revives tombstones IN PLACE. Never
+// deletes, tombstones, or overwrites a live record — local-only 2026 + FIT "other" survive untouched.
+// Ride deleted-flag merges by OR (deletions win, sessions-only recency at ~4214), so a revival can only
+// survive sync via a force-PUT of the merged state. That force-PUT is guarded at RUNTIME: it re-reads
+// the remote and aborts unless local is a strict superset of every LIVE remote record. This is NOT
+// keep-richest/delete-rest — nothing is dropped; it only clears the remote tombstones that ARE the loss.
+function reimportMap_(a, ftp){
+  ftp = ftp || (parseInt((typeof st!=='undefined'&&st.ftp)||186)||186);
+  var dateStr=(a.start_date_local||a.start_date||'').split('T')[0];
+  var distMi=a.distance?parseFloat((a.distance/1609.344).toFixed(1)):0;
+  var dur=a.moving_time||a.elapsed_time||0;
+  var np=a.weighted_average_watts||null, avgPwr=a.average_watts||null;
+  var tss=(np&&dur&&ftp)?Math.round((dur*np*(np/ftp))/(ftp*3600)*100):null;
+  var elev=a.total_elevation_gain?Math.round(a.total_elevation_gain*3.28084):null;
+  var IF2=(np&&ftp)?np/ftp:null;
+  var fmtDur=(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(dur);
+  var gpsLats=null,gpsLons=null;
+  if(a.map&&a.map.summary_polyline&&typeof decodePolyline==='function'){ try{ var d=decodePolyline(a.map.summary_polyline); if(d.lats.length>5){ gpsLats=d.lats; gpsLons=d.lons; } }catch(e){} }
+  return { name:a.name||'Strava Activity', date:dateStr, duration:fmtDur, movingSecs:dur, distance:distMi,
+    avgPwr:avgPwr, np:np, avgHR:a.average_heartrate?Math.round(a.average_heartrate):null, maxHR:a.max_heartrate?Math.round(a.max_heartrate):null,
+    cadence:a.average_cadence?Math.round(a.average_cadence):null, tss:tss, elev:elev, calories:a.calories||null,
+    workKj:a.kilojoules?Math.round(a.kilojoules):null, relEffort:a.suffer_score||null, ifPct:IF2?Math.round(IF2*100):null,
+    gpsLats:gpsLats, gpsLons:gpsLons, gpsQuality:gpsLats?'summary':null, avgSpeed:a.average_speed||null,
+    source:'strava', stravaId:a.id, sportType:a.sport_type||a.type||'Ride', gearId:a.gear_id||null, trainer:!!a.trainer };
+}
+// PURE. Additive merge of mapped Strava activities into the rides array. Mutates rides in place;
+// returns {added, revived, skipped}. Present-live (by id OR fuzzy) -> skip. Tombstone by id -> revive
+// in place (applyRideSync_ preserves manual edits). Otherwise insert. Fresh editedAt on each.
+function reimportMerge_(rides, mapped, nowTs){
+  nowTs = nowTs || Date.now();
+  var added=0, revived=0, skipped=0;
+  var sidOf=function(r){ return (r&&r.stravaId!=null&&r.stravaId!=='')?String(r.stravaId):null; };
+  var liveById={}, deadById={};
+  (rides||[]).forEach(function(r){ if(!r) return; var s=sidOf(r); if(!s) return; if(r.deleted){ if(!deadById[s]) deadById[s]=r; } else liveById[s]=r; });
+  var fuzzyLive=function(m){ for(var i=0;i<rides.length;i++){ var r=rides[i]; if(!r||r.deleted) continue; if(r.date!==m.date) continue; if(Math.abs((r.distance||0)-(m.distance||0))>=0.5) continue; var rs=r.movingSecs||0, ms=m.movingSecs||0; if(rs>0&&ms>0&&Math.abs(rs-ms)>120) continue; return r; } return null; };
+  (mapped||[]).forEach(function(m){
+    var s=(m.stravaId!=null&&m.stravaId!=='')?String(m.stravaId):null;
+    if(s && liveById[s]){ skipped++; return; }
+    if(fuzzyLive(m)){ skipped++; return; }                                  // FIT-only twin already live -> never duplicate
+    var tomb=s?deadById[s]:null;
+    if(tomb){
+      var _rev=(typeof applyRideSync_==='function')?applyRideSync_(tomb, m):Object.assign({}, tomb, m);
+      Object.keys(_rev).forEach(function(k){ tomb[k]=_rev[k]; });
+      tomb.deleted=false; tomb.deletedAt=null; try{ delete tomb.deleteReason; }catch(e){}
+      tomb.editedAt=nowTs; if(s) liveById[s]=tomb; revived++;
+    } else {
+      m.editedAt=nowTs; rides.push(m); if(s) liveById[s]=m; added++;
+    }
+  });
+  return { added:added, revived:revived, skipped:skipped };
+}
+// PURE runtime guard. Returns {ok, missing:[]}. ok only when EVERY live remote record has a live
+// local counterpart (by coerced stravaId/id, else a same-date/~distance live match). Any live remote
+// record missing from local -> not a superset -> the force-PUT would drop it -> abort.
+function _supersetGuard_(localRides, remoteRides){
+  var sidOf=function(r){ var c=(r&&r.stravaId!=null&&r.stravaId!=='')?r.stravaId:((r&&r.id!=null&&r.id!=='')?r.id:null); return c!=null?String(c):null; };
+  var liveIds={}, liveArr=[];
+  (localRides||[]).forEach(function(r){ if(r&&!r.deleted){ liveArr.push(r); var s=sidOf(r); if(s) liveIds[s]=r; } });
+  var has=function(rr){ var s=sidOf(rr); if(s && liveIds[s]) return true; for(var i=0;i<liveArr.length;i++){ var r=liveArr[i]; if(r.date===rr.date && Math.abs((r.distance||0)-(rr.distance||0))<0.5) return true; } return false; };
+  var missing=[];
+  (remoteRides||[]).forEach(function(rr){ if(rr && !rr.deleted && !has(rr)) missing.push({stravaId:(rr.stravaId||rr.id||null), date:rr.date, distance:rr.distance}); });
+  return { ok: missing.length===0, missing: missing };
+}
+// Re-read remote, verify superset, then force-PUT. Aborts (no write) if the guard fails — including
+// a mid-flight remote change that added a live record after our local read.
+function _reimportGuardedPush_(cb){
+  cb=cb||function(){};
+  ensureFbAuth_().then(function(tok){
+    return fetch(fbAuthedUrl_(tok)).then(function(r){ return r.ok?r.json():null; }).then(function(remote){
+      var rem=remote&&remote.rides; rem=Array.isArray(rem)?rem:(rem&&typeof rem==='object'?Object.keys(rem).map(function(k){return rem[k];}):[]);
+      var g=_supersetGuard_(st.rides||[], rem);
+      if(!g.ok){ cb({aborted:true, missing:g.missing}); return; }
+      var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
+      delete saveData.ghToken; saveData.lastUpdate=Date.now(); fbWriteTs=saveData.lastUpdate;
+      return fetch(fbAuthedUrl_(tok),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(saveData)})
+        .then(function(r){ if(!(r&&r.ok)) throw new Error('PUT '+(r?r.status:'?')); return r.json(); })
+        .then(function(){ st.lastUpdate=fbWriteTs; try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){} cb({pushed:true}); });
+    });
+  }).catch(function(e){ cb({error:(e&&e.message)||'push failed'}); });
+}
+// Orchestrator (user-run). Pauses the 5s poll (its OR-merge would clobber revivals mid-run), pages
+// all activities, merges additively, then the guarded force-PUT, then resumes the poll. Idempotent —
+// a closed tab is recovered by re-running (the merge skips everything already present).
+function reimportStravaActivities_(opts, cb){
+  opts=opts||{}; cb=cb||function(){};
+  var types=opts.types||['cycling','running'];
+  var inScope=function(sp){ sp=String(sp||''); if(/run/i.test(sp)) return types.indexOf('running')>=0; if(/ride|handcycle|velomobile/i.test(sp)) return types.indexOf('cycling')>=0; return false; };
+  var report=function(o){ try{ if(typeof toast==='function' && o.msg) toast(o.msg); }catch(e){} cb(o); };
+  var doRun=function(token){
+    try{ if(typeof fbPollTimer!=='undefined' && fbPollTimer) clearInterval(fbPollTimer); }catch(e){}   // pause poll
+    if(!Array.isArray(st.rides)) st.rides=[];
+    var page=1, totAdded=0, totRevived=0, ftp=parseInt((st.ftp)||186)||186;
+    var resumePoll=function(){ try{ if(typeof initFirebaseSync==='function') initFirebaseSync(); }catch(e){} };
+    var finishAll=function(){
+      _reimportGuardedPush_(function(res){
+        resumePoll();
+        if(res.aborted){ report({aborted:true, missing:res.missing, added:totAdded, revived:totRevived, msg:'Re-import ABORTED — '+res.missing.length+' live remote record(s) not in local; nothing pushed. Re-run.'}); return; }
+        if(res.error){ report({error:res.error, added:totAdded, revived:totRevived, msg:'Merged locally but push failed: '+res.error+'. Re-run to push.'}); return; }
+        report({pushed:true, added:totAdded, revived:totRevived, msg:'Re-import done: '+totAdded+' added, '+totRevived+' revived.'});
+      });
+    };
+    var nextPage=function(){
+      fetch('https://www.strava.com/api/v3/athlete/activities?per_page=100&page='+page,{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){ return r.ok?r.json():null; }).then(function(list){
+        if(!Array.isArray(list)||!list.length){ finishAll(); return; }
+        var mapped=list.filter(function(a){ return inScope(a.sport_type||a.type); }).map(function(a){ return reimportMap_(a, ftp); });
+        var res=reimportMerge_(st.rides, mapped); totAdded+=res.added; totRevived+=res.revived;
+        try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+        if(typeof opts.onProgress==='function') opts.onProgress({page:page, added:totAdded, revived:totRevived});
+        if(list.length<100){ finishAll(); } else { page++; setTimeout(nextPage, 200); }
+      }).catch(function(e){ resumePoll(); report({error:(e&&e.message)||'fetch', added:totAdded, revived:totRevived, msg:'Re-import paused (fetch error) — re-run to resume.'}); });
+    };
+    nextPage();
+  };
+  if(st.stravaRefreshToken){
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+    .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doRun(d.access_token); } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'no token'}); } })
+    .catch(function(){ if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'auth'}); } });
+  } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'Connect Strava first'}); }
+}
+
 function stravaFullResync() {
   // Clear the last sync timestamp so fetchStravaPage pulls everything
   if(!st.stravaRefreshToken && !st.stravaToken) {
