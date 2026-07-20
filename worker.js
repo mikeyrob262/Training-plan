@@ -5500,13 +5500,13 @@ function planCardHTML_(s, dateKey){
   var ic=(typeof activityIcon_==='function')?activityIcon_(type==='rest'?'rest':type,22):'';
   var lines=[];
   if(type==='ride' && t.powerLo!=null){
-    var pct=(t.pctLo!=null)?(' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+(t.zone?esc(t.zone)+', ':'')+t.pctLo+'–'+t.pctHi+'% of FTP '+t.ftp+')</span>'):'';
+    var pct=(t.pctLo!=null)?(' <span style="font-size:11px;font-weight:600;color:var(--t3)">('+(t.zone?gTerm_(esc(t.zone),'zones')+', ':'')+t.pctLo+'–'+t.pctHi+'% of FTP '+t.ftp+')</span>'):'';
     lines.push('<div style="font-size:15px;font-weight:800;color:var(--t1)">'+t.powerLo+'–'+t.powerHi+'W'+pct+'</div>');
     var meta=[]; if(t.hrLo!=null) meta.push('HR '+t.hrLo+'–'+t.hrHi+(t.hrCap?(' (cap '+t.hrCap+')'):'')); else if(t.hrCap!=null) meta.push('HR cap '+t.hrCap);
-    if(t.durationMin) meta.push(t.durationMin+' min'); if(t.tssTarget) meta.push('~'+t.tssTarget+' TSS');
+    if(t.durationMin) meta.push(t.durationMin+' min'); if(t.tssTarget) meta.push('~'+t.tssTarget+' '+gTerm_('TSS','tss'));
     if(meta.length) lines.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+meta.join(' · ')+'</div>');
   } else if((type==='strength'||type==='mobility') && r.exercises && r.exercises.length){
-    lines.push(r.exercises.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+'% 1RM'):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+    lines.push(r.exercises.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+gTerm_('% 1RM','pct1rm')):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
   }
@@ -6672,6 +6672,11 @@ function showSet(){
     +'<div><div class="ci-lbl">CTL</div><input class="ci-in" type="number" value="'+_Gm.ctl+'" id="gt-ctl"></div>'
     +'</div>'
     +'<div style="margin-top:12px"><button onclick="saveGoalTargets_()" style="background:#22c55e;border:none;color:white;font-size:13px;font-weight:700;padding:10px 20px;border-radius:10px;cursor:pointer">Save Goals</button></div>'
+    +'</div>';
+  // -- Help: Glossary (§3.8 second surface — not a nav item, not an AI-page tab)
+  html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);overflow:hidden">'
+    +'<div style="background:var(--s3);padding:9px 16px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3)">Help</div>'
+    +'<div onclick="showGlossary()" style="padding:13px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer"><span style="font-size:14px;color:var(--t1)">Glossary</span><span style="font-size:12px;color:var(--t3)">Every term explained &#8250;</span></div>'
     +'</div>';
   // -- Cloud Sync + Data Backup combined, compact
   var autoSync = st.autoSync || false;
@@ -10073,6 +10078,71 @@ var METRIC_TEACH={
       var p=iq.parts;
       return "Yours: "+iq.score+" / 100. Breakdown (each 0-100, then weighted 30/30/20/20): fitness trend "+Math.round(p.trend)+", consistency "+Math.round(p.consist)+", freshness "+Math.round(p.fresh)+", volume "+Math.round(p.volume)+". It rewards building fitness, showing up, and training in a productive TSB zone — so a deep-block TSB like -25 scores WELL here, because this measures training quality, not daily readiness. Nothing in it uses your (stale) FTP.";
     }
+  },
+  // ── Glossary (§3.8) — endurance terms with a live line where data is trustworthy ──────────
+  vi:{
+    name:"VI — Variability Index", aka:"How even the effort was",
+    oneLiner:"Normalised Power divided by average power. 1.0 is metronome-smooth; higher means you surged and coasted. On an endurance ride you want it low.",
+    forYou:function(ctx){ var lr=ctx.lr; if(lr && lr.np && lr.avgPwr){ var vi=Math.round((lr.np/lr.avgPwr)*100)/100; return "Your last ride: VI "+vi+". "+(vi<=1.05?"Smooth and even — what a Z2 ride should look like.":vi<=1.15?"Some surging — on an endurance day, flatten it out.":"A lot of surging — this is the throttle problem showing up in the data."); } return "Ride with power and average-power data to see your last ride here."; }
+  },
+  vo2max:{
+    name:"VO₂ max — Maximal oxygen uptake", aka:"Your aerobic ceiling",
+    oneLiner:"The most oxygen your body can use per minute — a ceiling on aerobic power. NOT the same as the Z5 / VO2 training zone, which is the work you do to push that ceiling up.",
+    forYou:function(ctx){ var v=(typeof st!=="undefined"&&st.vo2max)?st.vo2max:null; return v?("You have entered "+v+" ml/kg/min. That is the physiological ceiling — separate from the Z5 zone that trains toward it."):"Not entered. Add a lab or watch estimate in Settings if you have one — it is the ceiling, distinct from Z5 work."; }
+  },
+  zones:{
+    name:"Z1–Z5 — Training zones", aka:"How hard, as % of FTP",
+    oneLiner:"Five effort bands, each a percentage of your FTP. The zone tells you how hard: Z1 recovery, Z2 endurance, Z3 tempo, Z4 threshold, Z5 VO2.",
+    ranges:[
+      {c:"#8E8E93", label:"Z1 — under 55% FTP", desc:"Recovery. Genuinely easy; add no fatigue."},
+      {c:"#2FA8E0", label:"Z2 — 60–80% FTP", desc:"Endurance. The bulk of the plan. Hold the ceiling."},
+      {c:"#5DCAA5", label:"Z3 — 76–90% FTP", desc:"Tempo. Useful, but the grey zone — easy to overuse."},
+      {c:"#EF9F27", label:"Z4 — 85–95% FTP", desc:"Threshold. The quality bike work of the week."},
+      {c:"#E24B4A", label:"Z5 — 95–105%+ FTP", desc:"VO2. Short and hard, then stop."}
+    ],
+    forYou:function(ctx){ return "Your zones are computed from FTP "+ctx.ftp+" W — a number you enter by hand, not measured, so it can drift out of date. Update it in Settings and every zone (and every planned watt) reprices automatically."; }
+  },
+  // ── Glossary (§3.8) — strength terms: DEFINITIONAL until 1RM data exists (§4). Static third
+  //    line (note); a live line can be added later without rewriting the entry. ──────────────
+  "1rm":{
+    name:"1RM — one-rep max", aka:"Your strength benchmark",
+    oneLiner:"The heaviest weight you could lift once with good form.",
+    note:"In Athlete IQ it is ESTIMATED from your working sets (Epley), never actually tested — a moving best guess, not a number to chase. Your program prescribes 70% of it: heavy enough to build strength, light enough that you are not grinding."
+  },
+  "pct1rm":{
+    name:"%1RM — percent of one-rep max", aka:"The main strength number",
+    oneLiner:"The share of your estimated 1RM a set is loaded to.",
+    note:"Your program prescribes 70% for 10–12 reps at about 7/10 effort. Anything logged above 75% gets flagged — the strength-side version of the Z2 power ceiling."
+  },
+  "rpe":{
+    name:"RPE — Rate of Perceived Exertion", aka:"How hard it felt",
+    oneLiner:"A 1–10 effort scale. 7 means you had about three reps left; 10 means nothing left.",
+    note:"Your prescription is about 7/10. The throttle problem is training at 9–10 — RPE is where you catch it."
+  },
+  "progressive-overload":{
+    name:"Progressive overload", aka:"Why load goes up",
+    oneLiner:"Adaptation needs gradually increasing demand — a little more load or reps over time.",
+    note:"It is why the plan adds weight rather than repeating it — but only after you have EXECUTED correctly: top of the rep range at 7/10 or easier, two sessions running."
+  },
+  "working-set":{
+    name:"Working set", aka:"The real sets",
+    oneLiner:"A set at the prescribed load, not the warm-ups.",
+    note:"Your 1RM estimates are derived only from these — so log the working sets, and leave the warm-ups out."
+  },
+  "axial-loading":{
+    name:"Axial loading", aka:"Load through the spine",
+    oneLiner:"Weight carried straight down through the spine — deadlifts, carries, squats.",
+    note:"Cycling provides almost none of it. This is the bone and structural stimulus Strength A is built around."
+  },
+  "deload":{
+    name:"Deload", aka:"The lighter week",
+    oneLiner:"A planned lighter week — less volume, intensity held — so the training you did actually sticks.",
+    note:"Every 4th week of a block drops to about 60% volume. Backing off is part of the plan, not skipping it."
+  },
+  "periodization":{
+    name:"Periodization", aka:"Blocks with a purpose",
+    oneLiner:"Structuring training into blocks, each with a job — build, then absorb, then build heavier.",
+    note:"Your strength runs in 4-week blocks: baseline, +5%, +5%, then deload."
   }
 };
 // ATHLETE IQ SCORE — 0..100 training-QUALITY composite from REAL inputs only
@@ -10153,7 +10223,9 @@ function teachCtx_(){
 // Shared teaching panel. Reused by every metric now and in later phases.
 function openMetricTeach(metric){
   var t=METRIC_TEACH[metric]; if(!t) return;
-  var forYouText=t.forYou(teachCtx_());
+  // forYou is the live "right now" line for metrics; glossary terms without live data (strength,
+  // per §4) instead carry a static third line in note (definitional until 1RM data exists).
+  var forYouText=(typeof t.forYou==='function')?t.forYou(teachCtx_()):(t.note||'');
   var desktop=(typeof isDesktop==="function" && isDesktop());
   var old=document.getElementById("metric-teach"); if(old) old.remove();
   var ov=document.createElement("div");
@@ -10171,18 +10243,22 @@ function openMetricTeach(metric){
   h+='<button id="mt-close" aria-label="Close" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cfd4dd;width:32px;height:32px;border-radius:50%;font-size:19px;line-height:1;cursor:pointer;flex-shrink:0">&times;</button>';
   h+='</div>';
   h+='<div style="font-size:13.5px;color:#c7ccd6;line-height:1.5;margin-bottom:16px">'+uiEsc_(t.oneLiner)+'</div>';
-  h+='<div style="background:rgba(78,203,60,.08);border:1px solid rgba(78,203,60,.3);border-radius:12px;padding:12px 13px;margin-bottom:16px">';
-  h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7fe06a;margin-bottom:5px">For you, right now</div>';
-  h+='<div id="mt-foryou" style="font-size:13.5px;color:#eafce6;line-height:1.5;font-weight:600"></div>';
-  h+='</div>';
-  h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a8290;margin-bottom:8px">What the ranges mean</div>';
-  t.ranges.forEach(function(rg){
-    h+='<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:9px">';
-    h+='<span style="width:9px;height:9px;border-radius:50%;background:'+rg.c+';flex-shrink:0;margin-top:4px"></span>';
-    h+='<div><div style="font-size:12.5px;font-weight:700;color:#e6e9ef">'+uiEsc_(rg.label)+'</div>';
-    h+='<div style="font-size:12px;color:#9aa2b1;line-height:1.45">'+uiEsc_(rg.desc)+'</div></div>';
+  if(forYouText){
+    h+='<div style="background:rgba(78,203,60,.08);border:1px solid rgba(78,203,60,.3);border-radius:12px;padding:12px 13px;margin-bottom:16px">';
+    h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7fe06a;margin-bottom:5px">'+((typeof t.forYou==='function')?'For you, right now':'In your program')+'</div>';
+    h+='<div id="mt-foryou" style="font-size:13.5px;color:#eafce6;line-height:1.5;font-weight:600"></div>';
     h+='</div>';
-  });
+  }
+  if(t.ranges && t.ranges.length){
+    h+='<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#7a8290;margin-bottom:8px">What the ranges mean</div>';
+    t.ranges.forEach(function(rg){
+      h+='<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:9px">';
+      h+='<span style="width:9px;height:9px;border-radius:50%;background:'+rg.c+';flex-shrink:0;margin-top:4px"></span>';
+      h+='<div><div style="font-size:12.5px;font-weight:700;color:#e6e9ef">'+uiEsc_(rg.label)+'</div>';
+      h+='<div style="font-size:12px;color:#9aa2b1;line-height:1.45">'+uiEsc_(rg.desc)+'</div></div>';
+      h+='</div>';
+    });
+  }
   h+='</div>';
   card.innerHTML=h;
   ov.appendChild(card);
@@ -10198,6 +10274,33 @@ document.addEventListener('click', function(e){
   var el=(e.target && e.target.closest)?e.target.closest('[data-metric-teach]'):null;
   if(el){ openMetricTeach(el.getAttribute('data-metric-teach')); }
 });
+// Inline glossary term (§3.8) — dotted underline, tap opens the shared panel. stopPropagation so
+// tapping a term inside a card does NOT also fire the card's own click (e.g. openDayEditor).
+function gTerm_(text, key){ return '<span onclick="event.stopPropagation();openMetricTeach(\\''+key+'\\')" style="border-bottom:1px dotted rgba(150,160,175,.65);cursor:pointer">'+(text==null?'':text)+'</span>'; }
+// Browsable glossary (§3.8, second surface) — reached from Settings, NOT a nav item or an AI-page
+// tab (definitions apply app-wide). Reads the ONE METRIC_TEACH map; every term taps to its panel.
+function showGlossary(){
+  var order=['ctl','atl','tsb','tss','if','np','vi','wkg','vo2max','ftp','zones','1rm','pct1rm','rpe','working-set','progressive-overload','axial-loading','deload','periodization','iq'];
+  var desktop=(typeof isDesktop==='function' && isDesktop());
+  var old=document.getElementById('glossary-screen'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='glossary-screen';
+  ov.style.cssText='position:fixed;inset:0;z-index:3200;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch';
+  var h='<div style="max-width:560px;margin:0 auto;padding:16px 16px 40px">';
+  h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><button id="gl-back" style="background:rgba(255,255,255,.08);border:none;border-radius:9px;color:var(--t1);font-size:13px;font-weight:600;padding:6px 12px;cursor:pointer">&#8592; Back</button>';
+  h+='<div style="font-size:20px;font-weight:800;color:var(--t1)">Glossary</div></div>';
+  h+='<div style="font-size:12px;color:var(--t3);margin:0 2px 14px">Every term the app uses, explained. Tap any underlined term anywhere in the app for the same panel.</div>';
+  order.forEach(function(k){ var t=METRIC_TEACH[k]; if(!t) return;
+    h+='<div data-metric-teach="'+k+'" role="button" tabindex="0" style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer">';
+    h+='<div style="font-size:14px;font-weight:800;color:var(--t1)">'+uiEsc_(t.name)+'</div>';
+    if(t.aka) h+='<div style="font-size:11px;color:var(--t3);margin-top:1px">'+uiEsc_(t.aka)+'</div>';
+    h+='<div style="font-size:12.5px;color:var(--t2);line-height:1.45;margin-top:5px">'+uiEsc_(t.oneLiner)+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  ov.innerHTML=h;
+  (document.getElementById('app-shell')||document.body).appendChild(ov);
+  var b=ov.querySelector('#gl-back'); if(b) b.onclick=function(){ ov.remove(); };
+}
 
 function showAnalytics(){
   showScreen('ANALYTICS');
@@ -13847,6 +13950,12 @@ function dsShowSettings(){
   dmCard.style.cssText='background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px';
   dmCard.appendChild(buildLayoutToggle_());
   wrap.appendChild(dmCard);
+  // Help: Glossary (§3.8 second surface)
+  var glCard=document.createElement('div');
+  glCard.style.cssText='background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px;cursor:pointer';
+  glCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Glossary</div><div style="font-size:12px;color:var(--t3)">Every term the app uses, explained &#8250;</div>';
+  glCard.onclick=function(){ if(typeof showGlossary==='function') showGlossary(); };
+  wrap.appendChild(glCard);
   mc.appendChild(wrap);
 }
 
