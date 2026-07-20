@@ -13930,28 +13930,152 @@ function milestonesCompute_(rides, nowRef){
   win.forEach(function(r){ run+=r.mi; while(ti<MT.length && run>=MT[ti]){ mc.push({mi:MT[ti],date:r.date}); ti++; } });
   return { count:win.length, sinceYear:cutoff.getFullYear(), firsts:firsts, streaks:streaks, crossings:{rides:rc,miles:mc} };
 }
+// SVG icon paths per category (stroke-based, no emoji).
+var _MS_ICON={ Distance:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  Consistency:'<path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/>',
+  Climbing:'<path d="M3 20h18L14 6l-4 7-3-3-4 10z"/>', Power:'<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>',
+  Events:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>', Nutrition:'<path d="M12 7c1-3 4-4 6-3 0 4-3 6-6 6-3 0-6-2-6-6 2-1 5 0 6 3z"/>',
+  Recovery:'<path d="M12 21s-8-5-8-11a4 4 0 018-1 4 4 0 018 1c0 6-8 11-8 11z"/>', Gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>' };
+var _MS_COL={ Distance:'#f59e0b', Consistency:'#a855f7', Climbing:'#22c55e', Power:'#FC4C02', Events:'#3b82f6', Nutrition:'#4ade80', Recovery:'#ef4444', Gear:'#94a3b8' };
+// Chronological threshold-crossing dates for a cumulative metric. Returns {threshold: 'YYYY-MM-DD'}.
+function _msCross_(cyc, metric, thresholds){
+  var out={}, run=0, cc=0, ti=0, ths=(thresholds||[]).slice().sort(function(a,b){return a-b;});
+  for(var i=0;i<cyc.length;i++){ var r=cyc[i];
+    if(metric==='miles') run+=r.mi; else if(metric==='ft') run+=r.elev; else if(metric==='rides') run=i+1; else if(metric==='centuries'){ if(r.mi>=100) cc++; run=cc; }
+    while(ti<ths.length && run>=ths[ti]){ out[ths[ti]]=r.date; ti++; }
+  }
+  return out;
+}
+// Build the milestone catalog from LOCAL data (understated on lifetime metrics until the re-import
+// lands / option A is added — the source is swappable; this only assembles defs + current values).
+// Returns {defs (with projection fields), lifetime, cats}. NO Lifetime-strip data (held pending A/B).
+function _msCatalog_(nowRef){
+  var now=nowRef?new Date(nowRef):new Date();
+  var cyc=(typeof _msCycling_==='function')?_msCycling_():[];
+  var lifeMi=0, lifeFt=0, lifeSec=0, cent=0;
+  cyc.forEach(function(r){ lifeMi+=r.mi; lifeFt+=r.elev; lifeSec+=r.sec; if(r.mi>=100) cent++; });
+  var lifeRides=cyc.length, ftp=parseInt((st&&st.ftp)||186)||186;
+  var races=((st&&st.races)||[]).filter(function(r){ return r&&!r.deleted&&r.status!=='cancelled'; }).length;
+  var rates=milestoneRates_(cyc, now, 10);
+  var num=function(v){ return (+v||0).toLocaleString(); };
+  var defs=[];
+  function push(cat,metric,cur,tgts,nameFn,unit){ tgts.forEach(function(t,i){ defs.push({ id:cat+'-'+t, category:cat, metric:metric, current:cur, target:t, unit:unit||'', name:nameFn(t,i) }); }); }
+  push('Distance','miles',lifeMi,[1000,5000,10000,25000,50000,100000],function(t){return num(t)+' Miles';},'mi');
+  push('Distance','centuries',cent,[1,5,10,25,50,100],function(t){return 'Century #'+t;},'');
+  push('Consistency','rides',lifeRides,[100,500,1000,2500,5000],function(t){return num(t)+' Rides';},'rides');
+  push('Climbing','ft',lifeFt,[29029,290290,500000,1000000],function(t,i){return ['Everest','10x Everest','500k ft','1 Million ft'][i]||num(t)+' ft';},'ft');
+  push('Power','power',ftp,[200,250,300,350],function(t){return 'FTP '+t+'W';},'W');
+  if(races>0 || true) push('Events','events',races,[1,5,10,25,50],function(t){return t+' Event'+(t>1?'s':'');},'');
+  var proj=milestoneProjections_(defs, rates, now);
+  // attach unlock dates (from crossing scans) to unlocked cumulative defs
+  var crossMi=_msCross_(cyc,'miles',[1000,5000,10000,25000,50000,100000]);
+  var crossFt=_msCross_(cyc,'ft',[29029,290290,500000,1000000]);
+  var crossRd=_msCross_(cyc,'rides',[100,500,1000,2500,5000]);
+  var crossCe=_msCross_(cyc,'centuries',[1,5,10,25,50,100]);
+  proj.forEach(function(p){ if(!p.unlocked) return; var m=(p.metric==='miles')?crossMi:(p.metric==='ft')?crossFt:(p.metric==='rides')?crossRd:(p.metric==='centuries')?crossCe:null; if(m && m[p.target]) p.date=m[p.target]; });
+  // category rollup (unlocked / total)
+  var cats={}; proj.forEach(function(p){ var c=cats[p.category]||(cats[p.category]={cat:p.category,total:0,done:0}); c.total++; if(p.unlocked) c.done++; });
+  return { now:now, proj:proj, lifetime:{miles:lifeMi,ft:lifeFt,rides:lifeRides,hours:lifeSec/3600,centuries:cent}, cats:cats };
+}
 function aiRenderMilestones_(){
-  var M=milestonesCompute_(_msCycling_(), new Date());
-  var H='<div style="max-width:900px;margin:0 auto;padding-bottom:16px">';
-  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 20px;line-height:1.5">Milestones from your last 3 years of riding.</div>';
-  if(M.count<5){ return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough recent rides yet to mark milestones.</div></div>'; }
-  H+='<style>.ms-grid{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:820px){.ms-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.ms-grid{grid-template-columns:1fr}}</style>';
-  function sec(title,cards){ return cards.length?('<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:4px 2px 11px">'+title+'</div><div class="ms-grid" style="margin-bottom:22px">'+cards.join('')+'</div>'):''; }
-  var FLAG='<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>';
-  var BOLT='<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>';
-  var CAL='<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>';
-  var MTN='<path d="M3 20h18L14 6l-4 7-3-3-4 10z"/>';
-  var PIN='<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>';
-  var fc=M.firsts.map(function(f){ return _msCard_('#FC4C02',_msIcon_(FLAG,'#FC4C02'),f.big,f.label,f.sub); });
-  var sc=[];
-  if(M.streaks.longestWeeks.weeks>=2) sc.push(_msCard_('#22c55e',_msIcon_(BOLT,'#22c55e'),M.streaks.longestWeeks.weeks+' weeks','Longest weekly streak',_msFmtDate_(_msTs_(M.streaks.longestWeeks.start))+' – '+_msFmtDate_(_msTs_(M.streaks.longestWeeks.end))));
-  if(M.streaks.peakN) sc.push(_msCard_('#22c55e',_msIcon_(CAL,'#22c55e'),M.streaks.peakN.n+' rides','Most rides in a month',_RY_MON[M.streaks.peakN.m]+' '+M.streaks.peakN.y));
-  if(M.streaks.peakMi) sc.push(_msCard_('#22c55e',_msIcon_(MTN,'#22c55e'),Math.round(M.streaks.peakMi.mi).toLocaleString()+' mi','Biggest month',_RY_MON[M.streaks.peakMi.m]+' '+M.streaks.peakMi.y));
-  var cc=[];
-  M.crossings.rides.forEach(function(c){ cc.push(_msCard_('#60a5fa',_msIcon_(PIN,'#60a5fa'),c.n.toLocaleString()+' rides','Rides logged',_msFmtDate_(c.date))); });
-  M.crossings.miles.forEach(function(c){ cc.push(_msCard_('#60a5fa',_msIcon_(PIN,'#60a5fa'),c.mi.toLocaleString()+' mi','Miles logged',_msFmtDate_(c.date))); });
-  H+=sec('Firsts',fc); H+=sec('Streaks &amp; Peaks',sc); H+=sec('Crossings',cc);
-  if(!fc.length && !sc.length && !cc.length) H+='<div style="padding:40px 20px;text-align:center;color:#5b6678;font-size:14px">No milestones crossed in this window yet.</div>';
+  var C=_msCatalog_(new Date());
+  var proj=C.proj, PAD='max-width:1100px;margin:0 auto;padding-bottom:20px';
+  if(!proj.length){ return '<div style="'+PAD+'"><div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough ride data yet for milestones.</div></div>'; }
+  function ic(cat,c){ return _msIcon_(_MS_ICON[cat]||_MS_ICON.Distance, c||_MS_COL[cat]||'#94a3b8'); }
+  function pct(p){ return Math.round(p*10)/10; }
+  var H='<div style="'+PAD+'">';
+  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 16px;line-height:1.5">Celebrate progress. Stay motivated. The best is still ahead. <span style="color:#5b6678">Projected dates are estimates from your recent training rate.</span></div>';
+  // ---- HERO: next 3 projected ----
+  var next=nextMilestones_(proj,3).filter(function(p){return p.projectedDate;});
+  H+='<div style="background:linear-gradient(120deg,#0e1420,#141b2b);border:1px solid #1c2130;border-radius:18px;padding:22px 22px 20px;margin-bottom:14px;overflow:hidden">';
+  H+='<div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">';
+  H+='<div style="flex:1 1 210px;min-width:180px"><div style="font-size:27px;font-weight:800;color:#f1f5f9;line-height:1.1">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13px;color:#94a3b8;margin-top:10px;line-height:1.5">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
+  H+='<div style="flex:2 1 460px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">';
+  next.forEach(function(p){ var c=_MS_COL[p.category];
+    H+='<div style="background:rgba(255,255,255,.03);border:1px solid #1c2130;border-radius:13px;padding:13px 14px">'
+      +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#cbd5e1;font-weight:700">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
+      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin:7px 0 8px">'+_msFmtDate_(p.projectedDate)+'</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-bottom:5px">'+pct(p.pct)+'% complete</div>'
+      +'<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+c+';border-radius:3px"></div></div>'
+    +'</div>'; });
+  H+='</div></div></div>';
+  // ---- LIFETIME strip: HELD pending A/B ----
+  H+='<div style="background:#111318;border:1px dashed #2a3550;border-radius:14px;padding:16px 18px;margin-bottom:14px;font-size:12.5px;color:#5b6678">Lifetime at a glance — <span style="color:#94a3b8">held</span> pending the true-totals source (Strava lifetime vs restored library). Not shown until it can be correct.</div>';
+  // ---- RECENTLY UNLOCKED: hex badges (most recent by date) ----
+  var unlocked=proj.filter(function(p){return p.unlocked && p.date;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date));}).slice(0,4);
+  if(unlocked.length){
+    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Recently Unlocked</div>';
+    H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
+    unlocked.forEach(function(p){ var c=_MS_COL[p.category], big=(p.metric==='centuries')?('#'+p.target):(p.metric==='rides'?p.target.toLocaleString():p.metric==='miles'?(p.target>=1000?(p.target/1000)+'k':p.target):p.metric==='ft'?(p.target>=1000?Math.round(p.target/1000)+'k':p.target):p.target);
+      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px;text-align:center">'
+        +'<div style="width:96px;height:104px;margin:0 auto 10px;position:relative;display:flex;align-items:center;justify-content:center">'
+          +'<svg width="96" height="104" viewBox="0 0 96 104" style="position:absolute;inset:0"><polygon points="48,3 91,28 91,76 48,101 5,76 5,28" fill="'+c+'22" stroke="'+c+'" stroke-width="2"/></svg>'
+          +'<div style="position:relative;text-align:center"><div style="font-size:23px;font-weight:800;color:'+c+';line-height:1">'+big+'</div><div style="font-size:8.5px;font-weight:700;color:'+c+';letter-spacing:.08em;text-transform:uppercase;margin-top:2px">'+(p.metric==='centuries'?'Century':p.metric==='rides'?'Rides':p.metric==='ft'?'ft':p.category==='Distance'?'Miles':aiEsc_(p.category))+'</div></div>'
+        +'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+_msFmtDate_(p.date)+'</div>'
+      +'</div>'; });
+    H+='</div>';
+  }
+  // ---- IN PROGRESS: 4 rings (closest to done, not yet unlocked) ----
+  var prog=proj.filter(function(p){return !p.unlocked && p.pct>0;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,4);
+  if(prog.length){
+    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">In Progress</div>';
+    H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
+    prog.forEach(function(p){ var c=_MS_COL[p.category], R=32, CIRC=2*Math.PI*R, off=CIRC*(1-Math.min(100,p.pct)/100);
+      var rem=(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go';
+      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px;text-align:center">'
+        +'<svg width="82" height="82" viewBox="0 0 82 82" style="display:block;margin:0 auto 10px"><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="'+c+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 41 41)"/><text x="41" y="46" text-anchor="middle" font-size="17" font-weight="800" fill="#f1f5f9">'+Math.round(p.pct)+'%</text></svg>'
+        +'<div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'+(p.current>=1000?Math.round(p.current).toLocaleString():Math.round(p.current))+' of '+(p.target>=1000?p.target.toLocaleString():p.target)+'</div>'
+        +'<div style="font-size:11px;color:'+c+';margin-top:2px">'+rem+'</div>'
+      +'</div>'; });
+    H+='</div>';
+  }
+  // ---- NEXT 12 MONTHS timeline ----
+  var tl=nextMilestones_(proj,8).filter(function(p){return p.projectedDate;});
+  if(tl.length){
+    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Next 12 Months (Projected)</div>';
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 12px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*104)+'px">';
+    tl.forEach(function(p,i){ var c=_MS_COL[p.category], mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" &#39;"+p.projectedDate.slice(2,4);
+      H+='<div style="flex:1;text-align:center;position:relative">'
+        +'<div style="font-size:9px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:'+c+'22;border:2px solid '+c+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+ic(p.category,c)+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#e8edf5;margin-top:8px;line-height:1.2">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:9.5px;color:#5b6678;margin-top:2px">'+_msFmtDate_(p.projectedDate)+'</div>'
+      +(i<tl.length-1?'<div style="position:absolute;top:24px;right:-3px;width:6px;height:6px;border-radius:50%;background:#2a3550"></div>':'')+'</div>'; });
+    H+='</div></div>';
+  }
+  // ---- ALMOST THERE (reachable within ~35 days) ----
+  var soon=proj.filter(function(p){return !p.unlocked && p.etaWeeks!=null && p.etaWeeks<=5 && p.pct<100;}).sort(function(a,b){return a.etaWeeks-b.etaWeeks;}).slice(0,5);
+  H+='<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start">';
+  if(soon.length){
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
+    soon.forEach(function(p,i){ var c=_MS_COL[p.category];
+      H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid #1c2130':'')+'">'
+        +'<span style="width:28px;height:28px;border-radius:8px;background:'+c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic(p.category,c)+'</span>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">'+(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go</div></div>'
+        +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div><div style="font-size:10px;color:#5b6678">'+Math.ceil(p.etaWeeks*7)+' days</div></div>'
+      +'</div>'; });
+    H+='</div>';
+  } else { H+='<div></div>'; }
+  // ---- MILESTONE CATEGORIES ----
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px 20px">';
+  Object.keys(C.cats).forEach(function(k){ var cat=C.cats[k], c=_MS_COL[k]||'#94a3b8', pc=cat.total?Math.round(cat.done/cat.total*100):0;
+    H+='<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex-shrink:0">'+ic(k,c)+'</span><span style="font-size:13px;font-weight:700;color:#e8edf5">'+k+'</span><span style="margin-left:auto;font-size:12px;font-weight:800;color:'+c+'">'+pc+'%</span></div>'
+      +'<div style="font-size:11px;color:#5b6678;margin-bottom:5px">'+cat.done+' / '+cat.total+'</div>'
+      +'<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+pc+'%;background:'+c+';border-radius:3px"></div></div></div>'; });
+  H+='</div></div></div>';
+  // ---- DYNAMIC FOOTER ----
+  var totDone=proj.filter(function(p){return p.unlocked;}).length, totAll=proj.length, rate10=C.now && milestoneRates_(_msCycling_(),C.now,10).milesPerWeek;
+  var head, sub;
+  if(rate10>=80){ head='You are building something incredible.'; sub='Your recent volume is strong — the big milestones are closing fast.'; }
+  else if(rate10>=25){ head='Momentum is on your side.'; sub='Keep showing up — every ride moves the next milestone closer.'; }
+  else { head='Every mile counts.'; sub='Small consistent efforts compound into the milestones ahead.'; }
+  H+='<div style="background:linear-gradient(120deg,#141b2b,#0e1420);border:1px solid #1c2130;border-radius:16px;padding:22px 24px;margin-top:14px;display:flex;align-items:center;gap:18px">'
+    +'<span style="width:52px;height:52px;border-radius:50%;background:#f59e0b22;border:1px solid #f59e0b55;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg></span>'
+    +'<div><div style="font-size:12px;color:#94a3b8;margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:19px;font-weight:800;color:#f1f5f9">'+head+'</div><div style="font-size:13px;color:#FC4C02;margin-top:3px">'+sub+'</div></div>'
+  +'</div>';
   H+='</div>'; return H;
 }
 
@@ -13965,15 +14089,15 @@ function milestoneRates_(rides, nowRef, weeksBack){
   weeksBack = weeksBack || 10;   // trailing 8-12 weeks
   var now=nowRef?new Date(nowRef):new Date();
   var cut=new Date(now.getFullYear(),now.getMonth(),now.getDate()); cut.setDate(cut.getDate()-weeksBack*7); cut.setHours(0,0,0,0);
-  var mi=0, ft=0, n=0, hrs=0;
-  (rides||[]).forEach(function(r){ if(!r||!r.d) return; if(r.d<cut||r.d>now) return; mi+=(+r.mi||0); ft+=(+r.elev||0); hrs+=((+r.sec||0)/3600); n++; });
-  return { milesPerWeek:mi/weeksBack, ftPerWeek:ft/weeksBack, ridesPerWeek:n/weeksBack, hoursPerWeek:hrs/weeksBack, weeks:weeksBack, sampleRides:n };
+  var mi=0, ft=0, n=0, hrs=0, cent=0;
+  (rides||[]).forEach(function(r){ if(!r||!r.d) return; if(r.d<cut||r.d>now) return; mi+=(+r.mi||0); ft+=(+r.elev||0); hrs+=((+r.sec||0)/3600); if((+r.mi||0)>=100) cent++; n++; });
+  return { milesPerWeek:mi/weeksBack, ftPerWeek:ft/weeksBack, ridesPerWeek:n/weeksBack, hoursPerWeek:hrs/weeksBack, centuriesPerWeek:cent/weeksBack, weeks:weeksBack, sampleRides:n };
 }
 // def: {id, category, name, metric:'miles'|'ft'|'rides'|'hours', unit, current, target}. Returns each
 // with pct/remaining/unlocked/ratePerWeek/projectedDate (null when unlocked or rate<=0 -> not projectable).
 function milestoneProjections_(defs, rates, nowRef){
   var now=nowRef?new Date(nowRef):new Date();
-  var rateFor=function(m){ return m==='miles'?rates.milesPerWeek : m==='ft'?rates.ftPerWeek : m==='rides'?rates.ridesPerWeek : m==='hours'?rates.hoursPerWeek : 0; };
+  var rateFor=function(m){ return m==='miles'?rates.milesPerWeek : m==='ft'?rates.ftPerWeek : m==='rides'?rates.ridesPerWeek : m==='hours'?rates.hoursPerWeek : m==='centuries'?rates.centuriesPerWeek : 0; };
   var key=function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); };
   return (defs||[]).map(function(d){
     var cur=+d.current||0, tgt=+d.target||0;
