@@ -20657,12 +20657,12 @@ var SESSION_DEFS={
   strengthA:{ type:'strength', name:'Strength A',  exGroup:'strengthA', note:'Lower & axial load — the bone and structural stimulus cycling never provides.' },
   strengthB:{ type:'strength', name:'Strength B',  exGroup:'strengthB', note:'Posterior chain, single-leg and core — opposes the flexed riding position.' },
   mobility: { type:'mobility', name:'Mobility',    exGroup:'mobility', durationMin:15, note:'15 min. Prescribed, not optional — this is what lets you hold a five-hour position.' },
-  z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
-  threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
-  vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
-  group:    { type:'ride', name:'Group Ride',      zone:'Z2–Z4', pctFtp:[60,88],  note:'Sit in for the first 20 mi. Race only the last 10–15. Do not chase if dropped.' },
+  z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, durationMin:90,  note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
+  threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  durationMin:60,  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
+  vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], durationMin:45,  note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
+  group:    { type:'ride', name:'Group Ride',      zone:'Z2–Z4', pctFtp:[60,88],  durationMin:120, note:'Sit in for the first 20 mi. Race only the last 10–15. Do not chase if dropped.' },
   long:     { type:'ride', name:'Long Ride',       zone:'Z2–Z3', pctFtp:[62,83],  durationMin:180, note:'Controlled Z2–Z3. Tolerable on tired legs after Friday strength.' },
-  recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  note:'Genuinely easy. Spin the legs; add no fatigue.' },
+  recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  durationMin:45,  note:'Genuinely easy. Spin the legs; add no fatigue.' },
   rest:     { type:'rest', name:'Rest',            body:null,    note:'Full rest. Recovery is part of the plan, not a gap in it.' }
 };
 var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','z2','threshold','vo2','group','long','recovery','rest'];
@@ -20710,11 +20710,12 @@ function _planBlockMeta_(blockWeek){
   var cue=(blockWeek===1)?'Baseline':(blockWeek===4)?'Deload — 60% volume, intensity held':'+5% vs last week';
   return { name:'Base 1', week:blockWeek, phase:phase, cue:cue };
 }
-// Watts from a % of FTP band. Reads the app's (manual, possibly stale) FTP; default 190. Carries
-// the % band + the FTP used so the display can show "162–180W (Z4, 85–95% of FTP 190)".
+// Watts from a % of FTP band. Reads the app's MANUAL FTP (st.ftp), default 186 to match every
+// other call site. FTP is user-entered, never auto-estimated — a stale value shows stale watts,
+// which is why the band is shown with the FTP inline (§3.8 Z-fix). Update st.ftp to reprice all.
 function _planZoneFromPct_(pct){
   if(!pct || pct.length<2) return null;
-  var ftp=(typeof st!=='undefined' && st && st.ftp)?(+st.ftp||190):190;
+  var ftp=(typeof st!=='undefined' && st && st.ftp)?(parseInt(st.ftp,10)||186):186;
   return { powerLo:Math.round(ftp*pct[0]/100), powerHi:Math.round(ftp*pct[1]/100), pctLo:pct[0], pctHi:pct[1], ftp:ftp };
 }
 // Build a full session prescription from SESSION_DEFS[intent]. THE resolver every consumer uses
@@ -20730,6 +20731,15 @@ function _planSessionFromDef_(intent, blockWeek){
   if(def.pctFtp){ var z=_planZoneFromPct_(def.pctFtp); if(z){ s.targets.powerLo=z.powerLo; s.targets.powerHi=z.powerHi; s.targets.pctLo=z.pctLo; s.targets.pctHi=z.pctHi; s.targets.ftp=z.ftp; } }
   if(def.hr){ s.targets.hrLo=def.hr[0]; s.targets.hrHi=def.hr[1]; }
   if(def.hrCap) s.targets.hrCap=def.hrCap;
+  // Target TSS DERIVED (not stored): TSS = duration_hr x IF^2 x 100, IF = midpoint of the power
+  // band. Because the band is a % of FTP, IF is FTP-normalised — so TSS is intentionally
+  // FTP-INDEPENDENT (the watts move with FTP; the relative load does not). Deriving it keeps it in
+  // step with any band/duration change in the def, same as the watts.
+  if(def.pctFtp && def.durationMin){
+    var _if=((def.pctFtp[0]+def.pctFtp[1])/2)/100;
+    s.targets.ifTarget=Math.round(_if*100)/100;
+    s.targets.tssTarget=Math.round((def.durationMin/60)*_if*_if*100);
+  }
   if(def.note) s.note=def.note;
   return s;
 }
@@ -25896,6 +25906,8 @@ function openDayEditor(dateKey, targetId){
         rows.push('<div style="font-size:15px;font-weight:800;color:var(--t1)">'+tgt.powerLo+'–'+tgt.powerHi+'W<span style="font-size:11px;font-weight:600;color:var(--t3)">'+pct+'</span></div>');
         if(tgt.hrLo!=null) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">HR '+tgt.hrLo+'–'+tgt.hrHi+(tgt.hrCap?(' · back off above '+tgt.hrCap):'')+' bpm</div>');
         else if(tgt.hrCap!=null) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">HR cap '+tgt.hrCap+' bpm</div>');
+        var _dl=[]; if(tgt.durationMin) _dl.push(tgt.durationMin+' min'); if(tgt.tssTarget) _dl.push('~'+tgt.tssTarget+' TSS'); if(tgt.ifTarget) _dl.push('IF '+tgt.ifTarget);
+        if(_dl.length) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+_dl.join(' · ')+'</div>');
       } else if((type==='strength'||type==='mobility') && ex.length){
         rows.push(ex.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+'% 1RM'):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
       } else if(type==='rest'){
