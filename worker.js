@@ -4556,7 +4556,12 @@ function normalizeState_(s){
     if(typeof normalizeSession_==='function'){
       Object.keys(s.plan).forEach(function(dk){
         var day=s.plan[dk]; if(!day || !Array.isArray(day.sessions)) return;
-        day.sessions.forEach(function(x){ if(x && typeof x==='object'){ try{ normalizeSession_(x, dk); }catch(e){} } });
+        day.sessions.forEach(function(x){ if(x && typeof x==='object'){ try{ normalizeSession_(x, dk); }catch(e){}
+          // One-time legacy provenance backfill (load/merge only, never on a write): trust the
+          // old gen/migrated booleans; anything flagless -> 'user' (safe false-preserve — cleared
+          // by hand via planClearDay_). Set once; never recomputed once source exists.
+          try{ if(!x.source && typeof _planSource_==='function') x.source=_planSource_(x); }catch(e){}
+        } });
       });
     }
     // (b) Backfill editedAt (migrated sessions were pushed directly, bypassing
@@ -5988,8 +5993,8 @@ function applySwap(w,idx,val){
     // path still creating s- session ids.
     var _s=_ss.length?_ss[0]:{ targets:{}, completedRideKey:null, executionScore:null, block:null };
     _s.name=val; _s.type=sessionTypeFromName_(val); _s.intent=sessionIntentFromName_(val,_s.type); _s.status='swapped';
-    _s.source='user'; try{ delete _s.gen; delete _s.migrated; }catch(e){}   // a swap is a user action — claim the session (source=user)
-    if(typeof planUpsertSession_==='function'){ planUpsertSession_(_key, _s, ['name','type','intent','status']); try{ sv(); }catch(e){} }
+    try{ delete _s.gen; delete _s.migrated; }catch(e){}   // a swap is a user action — claim it (source=user, declared at the call)
+    if(typeof planUpsertSession_==='function'){ planUpsertSession_(_key, _s, ['name','type','intent','status'], 'user'); try{ sv(); }catch(e){} }
   }catch(e){}
   var e=document.getElementById('ws'+w+'_'+idx);
   if(e){e.textContent=val;e.style.color='var(--blue)';}
@@ -20687,6 +20692,15 @@ function _planBlockMeta_(blockWeek){
   var cue=(blockWeek===1)?'Baseline':(blockWeek===4)?'Deload — 60% volume, intensity held':'+5% vs last week';
   return { name:'Base 1', week:blockWeek, phase:phase, cue:cue };
 }
+// Ride power band for an intent, DERIVED from FTP as % of FTP (glossary Z1-Z5 fix). Carries the
+// % band + the FTP used so the display can show "162-180W (Z4, 88-98% of FTP 183W)" and stay
+// honest that FTP is a manual value. Bands chosen to match the prescribed watts at FTP 183.
+function _planZoneWatts_(intent){
+  var ftp=(typeof st!=='undefined' && st && st.ftp)?(+st.ftp||183):183;
+  var bands={ z2:[0.62,0.83], threshold:[0.88,0.98], vo2:[0.99,1.09], group:[0.62,0.85], long:[0.62,0.80], recovery:[0.40,0.55] };
+  var b=bands[intent]; if(!b) return null;
+  return { powerLo:Math.round(ftp*b[0]), powerHi:Math.round(ftp*b[1]), pctLo:Math.round(b[0]*100), pctHi:Math.round(b[1]*100), ftp:ftp };
+}
 // Generate a strength-first block into st.plan from a start Monday. Per day: preserve any
 // user-owned/completed session (leave the whole day), else tombstone replaceable template/
 // prior-gen sessions and write the template. Race taper (§3.6): no loaded strength within 72h
@@ -20720,12 +20734,13 @@ function generatePlanBlock_(startKey, weeks){
         var specs=(PLAN_TEMPLATE_[d]||[]).map(function(x){ var o={}; for(var kk in x) o[kk]=x[kk]; return o; });
         if(loadedTaper_(dt)) specs=specs.map(function(x){ return x.type==='strength' ? {type:'mobility',intent:'mobility',name:'Mobility',group:'mobility',durationMin:15,tapered:true} : x; });
         specs.forEach(function(spec){
-          var s={ status:'planned', source:'gen', block:_planBlockMeta_(blockWeek) };
+          var s={ status:'planned', block:_planBlockMeta_(blockWeek) };
           s.type=spec.type; s.intent=spec.intent||''; s.name=spec.name;
           if(spec.type==='strength'){ s.exercises=_planExercises_(spec.group, blockWeek); s.targets={}; }
           else if(spec.type==='mobility'){ s.exercises=_planExercises_(spec.group||'mobility', blockWeek); s.targets={durationMin:spec.durationMin||15}; }
+          else if(spec.type==='ride'){ var z=_planZoneWatts_(spec.intent); s.targets=z||{}; }   // prescribed power band from FTP
           else { s.targets={}; }
-          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status']); }catch(e){}
+          try{ planUpsertSession_(key, s, ['type','name','intent','targets','exercises','status'], 'gen'); }catch(e){}
         });
         out.generated.push(key);
       }
@@ -20791,14 +20806,9 @@ function normalizeSession_(sess, dateKey){
   if(!isPlainObj_(s.targets)) s.targets={};
   if(!s.status) s.status=(s.type==='rest'?'rest':'planned');
   if(!s.editedAt) s.editedAt=1;
-  // Provenance, set ONCE and never recomputed. The write sites (generator/migration/editor/swap)
-  // set s.source before we get here; this only backfills a session that has none — from the old
-  // gen/migrated booleans, else 'user'. DOCUMENTED ERROR: a template session migrated BEFORE the
-  // migrated:true flag existed has no flag, so it backfills to 'user' and the generator will
-  // NOT clean it (false-preserve). This is deliberate — the alternative (guessing 'migrated' from
-  // names/timestamps) risks false-DELETE of a real plan, which is the unacceptable direction.
-  // Such residue must be cleared by hand (planClearDay_ / the editor Delete). Zero false-deletes.
-  if(!s.source && typeof _planSource_==='function') s.source=_planSource_(s);
+  // NOTE: provenance (source) is intentionally NOT invented here. Shape-normalization must not
+  // mint provenance — that is planUpsertSession_'s job (declared per write) for new sessions, and
+  // the one-time legacy backfill in normalizeState_ for old on-disk sessions.
   return s;
 }
 // Write-time validation: reject a session missing required fields instead of persisting a
@@ -20813,12 +20823,19 @@ function validateSession_(s){
 }
 // THE single enforced write path into st.plan. Canonicalize -> assign a deterministic id
 // if missing -> validate (throw on invalid; the editor save wraps this and surfaces a
-// toast, so nothing is silently dropped) -> upsert by id -> stamp edited fields.
-function planUpsertSession_(dateKey, sess, editedFields){
+// toast, so nothing is silently dropped) -> upsert by id -> stamp source + edited fields.
+// PROVENANCE is declared HERE, at the call, via the source arg ('gen'|'migrated'|'user') — the
+// one place it is set, never inferred. Every caller must pass it. An omitted source is a caller
+// bug: we WARN loudly (so it surfaces immediately) and fall to 'user' — the safe direction
+// (unreplaceable, never wrongly deleted), but no longer SILENT. This closes the hole where an
+// undeclared write minted a permanently-unreplaceable session with no trace.
+function planUpsertSession_(dateKey, sess, editedFields, source){
   var key=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded bucket
   var s=normalizeSession_(sess, key);
   var day=planDay_(key, true);
   if(s.id==null || s.id===''){ s.id='plan-'+key+'-'+day.sessions.length; }
+  if(source==='gen' || source==='migrated' || source==='user'){ s.source=source; }
+  else if(!s.source){ try{ if(typeof console!=='undefined') console.warn('[planUpsert] no source declared for '+s.id+' — defaulting to user (unreplaceable). Fix the caller.'); }catch(e){} s.source='user'; }
   var errs=validateSession_(s);
   if(errs.length) throw new Error('invalid session ['+key+']: '+errs.join(','));
   var i=-1; for(var j=0;j<day.sessions.length;j++){ if(day.sessions[j] && day.sessions[j].id===s.id){ i=j; break; } }
@@ -20866,8 +20883,9 @@ function migratePlanToStPlan_(){
                    targets:(dur?{durationMin:dur}:{}), status:'planned', completedRideKey:null, executionScore:null, source:'migrated', migrated:true, editedAt:1 };
         if(type==='strength' || type==='mobility') sess.exercises=[];
         // Route through the single write path (canonicalize + validate) — no direct push.
-        // editedFields=null so it stays an unedited migrated baseline (editedAt sentinel 1).
-        try{ planUpsertSession_(key, sess, null); }catch(e){}
+        // editedFields=null so it stays an unedited migrated baseline (editedAt sentinel 1);
+        // source declared at the call.
+        try{ planUpsertSession_(key, sess, null, 'migrated'); }catch(e){}
       }
     }
     st._planMig=1;
@@ -25891,8 +25909,8 @@ function openDayEditor(dateKey, targetId){
         (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); if(typeof _planTrace_==='function') _planTrace_('rest-save['+dateKey+']', x); } });
         var rs=(sess && sess.type==='rest')?sess:{ id:'plan-'+_rk+'-rest', block:null };
         rs.type='rest'; rs.name='Rest'; rs.deleted=false;
-        rs.source='user'; try{ delete rs.gen; delete rs.migrated; }catch(e){}   // user-set rest — claim it
-        planUpsertSession_(dateKey, rs, ['type','name','status','deleted']);
+        try{ delete rs.gen; delete rs.migrated; }catch(e){}   // user-set rest — claim it (source=user via param)
+        planUpsertSession_(dateKey, rs, ['type','name','status','deleted'], 'user');
       } else {
         // Reuse the existing session id; a NEW session gets NO id here — planUpsertSession_
         // assigns 'plan-<key>-<total>' from the day's TOTAL session count (incl. deleted).
@@ -25900,7 +25918,7 @@ function openDayEditor(dateKey, targetId){
         // were all deleted, colliding with a deleted twin of that id — which then OR-killed
         // the save on merge (index-0 collision, diagnostic #2).
         var s2 = sess ? sess : { status:'planned', completedRideKey:null, executionScore:null, block:null };
-        s2.source='user'; try{ delete s2.gen; delete s2.migrated; }catch(e){}   // a manual save claims the session (source=user) — the generator won't overwrite an edited day
+        try{ delete s2.gen; delete s2.migrated; }catch(e){}   // a manual save claims the session (source=user via param) — the generator won't overwrite an edited day
         s2.type=type;
         if(type==='ride'){
           s2.name = d.name || s2.name || ({z2:'Z2 endurance',threshold:'Threshold',vo2:'VO2',group:'Group ride',long:'Long ride',recovery:'Recovery'}[d.intent]||'Ride');
@@ -25939,7 +25957,7 @@ function openDayEditor(dateKey, targetId){
           s2.status=d.completed?'completed':'planned';
         }
         if(typeof planUpsertSession_!=='function') throw new Error('planUpsertSession_ unavailable');
-        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status','completed']);
+        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status','completed'], 'user');
       }
       if(typeof sv==='function') sv();   // persist: saveLocal_ (localStorage + IndexedDB) + debounced fbPush
       try{ console.log('[dayEditor] saved st.plan['+dateKey+'] ->', JSON.stringify((typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).map(function(s){return {id:s.id,type:s.type,name:s.name,editedAt:s.editedAt};}))); }catch(_e){}
