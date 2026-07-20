@@ -13955,6 +13955,44 @@ function aiRenderMilestones_(){
   H+='</div>'; return H;
 }
 
+// ==================== Milestones redesign — projection engine (forward-looking) ====================
+// The page answers "what's the next milestone I'm likely to reach?" — Hero, In-progress rings,
+// Timeline, and Almost-there are all the SAME computation: current vs target, a trailing-window rate,
+// a projected date. PURE + testable. current-values are supplied by the caller (local now; Strava
+// /athlete/stats or the restored library later) — the engine only projects, so the A/B data decision
+// just swaps the source, not this math.
+function milestoneRates_(rides, nowRef, weeksBack){
+  weeksBack = weeksBack || 10;   // trailing 8-12 weeks
+  var now=nowRef?new Date(nowRef):new Date();
+  var cut=new Date(now.getFullYear(),now.getMonth(),now.getDate()); cut.setDate(cut.getDate()-weeksBack*7); cut.setHours(0,0,0,0);
+  var mi=0, ft=0, n=0, hrs=0;
+  (rides||[]).forEach(function(r){ if(!r||!r.d) return; if(r.d<cut||r.d>now) return; mi+=(+r.mi||0); ft+=(+r.elev||0); hrs+=((+r.sec||0)/3600); n++; });
+  return { milesPerWeek:mi/weeksBack, ftPerWeek:ft/weeksBack, ridesPerWeek:n/weeksBack, hoursPerWeek:hrs/weeksBack, weeks:weeksBack, sampleRides:n };
+}
+// def: {id, category, name, metric:'miles'|'ft'|'rides'|'hours', unit, current, target}. Returns each
+// with pct/remaining/unlocked/ratePerWeek/projectedDate (null when unlocked or rate<=0 -> not projectable).
+function milestoneProjections_(defs, rates, nowRef){
+  var now=nowRef?new Date(nowRef):new Date();
+  var rateFor=function(m){ return m==='miles'?rates.milesPerWeek : m==='ft'?rates.ftPerWeek : m==='rides'?rates.ridesPerWeek : m==='hours'?rates.hoursPerWeek : 0; };
+  var key=function(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); };
+  return (defs||[]).map(function(d){
+    var cur=+d.current||0, tgt=+d.target||0;
+    var unlocked=tgt>0 && cur>=tgt;
+    var remaining=Math.max(0, tgt-cur);
+    var pct=tgt>0?Math.min(100, Math.round(cur/tgt*1000)/10):0;
+    var rpw=rateFor(d.metric)||0, proj=null, etaWeeks=null;
+    if(!unlocked && remaining>0 && rpw>0){ etaWeeks=remaining/rpw; var dt=new Date(now); dt.setDate(dt.getDate()+Math.ceil(etaWeeks*7)); proj=key(dt); }
+    return { id:d.id, category:d.category, name:d.name, unit:d.unit||'', metric:d.metric, current:cur, target:tgt,
+             remaining:remaining, pct:pct, unlocked:unlocked, ratePerWeek:rpw, etaWeeks:etaWeeks, projectedDate:proj };
+  });
+}
+// Next N un-reached, soonest projected first; unprojectable (rate<=0) sink to the bottom by closeness.
+function nextMilestones_(projections, n){
+  var pend=(projections||[]).filter(function(p){ return !p.unlocked; });
+  pend.sort(function(a,b){ if(a.projectedDate&&b.projectedDate) return a.projectedDate<b.projectedDate?-1:1; if(a.projectedDate) return -1; if(b.projectedDate) return 1; return b.pct-a.pct; });
+  return pend.slice(0, n||5);
+}
+
 // ==================== Records — segment PRs (all-time; data is intact server-side) ====================
 // Decision A: segment bests ARE genuinely all-time — Strava holds the complete effort history, so
 // the local ride-library loss does NOT apply here. This is the one surface where "best ever" is honest.
