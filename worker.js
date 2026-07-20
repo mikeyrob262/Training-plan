@@ -13823,9 +13823,16 @@ function _racingChart_(title, acts){
 function aiRenderRacing_(){
   var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():(st.rides||[]).filter(function(r){return r&&!r.deleted;});
   function sport(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }
+  function nm(r){ return String((r&&r.name)||''); }
   function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sport(r)); }
-  function isRide(r){ return /ride/i.test(sport(r)) && !isRun(r); }              // cycling only (excludes runs/swims)
-  function isVirt(r){ return isRide(r) && /virtual/i.test(sport(r)); }            // Strava VirtualRide = Zwift
+  // Virtual detection MUST be consistent across the athlete's FULL history, or a prior-year figure
+  // silently becomes combined. Newer Zwift rides carry Strava's VirtualRide sportType, but OLDER
+  // ones import as plain "Ride" — the reliable cross-year signals are the "Zwift" name ("Zwift -
+  // Montmartre") and the trainer flag. Without these, pre-VirtualRide Zwift rides leak into the
+  // OUTDOOR bucket, so the outdoor chart's current month reads outdoor-only while its YoY reads
+  // outdoor+virtual. Both sides use this identical filter — the fix is making the filter robust.
+  function isVirt(r){ if(isRun(r)) return false; return /virtual/i.test(sport(r)) || /zwift/i.test(nm(r)) || r.trainer===true; }
+  function isRide(r){ if(isRun(r)) return false; return /ride/i.test(sport(r)) || isVirt(r); }   // cycling (excl runs/swims), incl any virtual
   function mi(r){ return parseFloat(r.distance)||0; }
   function toAct(r){ return { d:_ryDate_(r.date), mi:mi(r) }; }
   var outdoor=[], virtual=[];
