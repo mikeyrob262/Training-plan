@@ -4606,6 +4606,7 @@ function normalizeState_(s){
   if(!isPlainObj_(s.plan)) s.plan = {};
   if(!isPlainObj_(s.strength)) s.strength = {};
   if(!isPlainObj_(s.segments)) s.segments = {};   // per-segment all-time PR store (keyed by 's'+stravaSegmentId), sourced from Strava
+  if(!isPlainObj_(s.athleteStats)) s.athleteStats = {};   // Strava lifetime totals (all_ride_totals) — true all-time, unaffected by the local library loss
   if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
   if(!isPlainObj_(s.strength.log)) s.strength.log = {};
   // Collapse duplicate plan sessions per date. Independently-migrated copies had
@@ -13946,6 +13947,15 @@ function _msCross_(cyc, metric, thresholds){
   }
   return out;
 }
+// Lifetime "at a glance" strip data from Strava's all-time totals (option A) — genuinely all-time,
+// unaffected by the local loss. Calories intentionally omitted (not in /athlete/stats). Returns null
+// until synced. PURE + testable (unit conversions).
+function _msLifetimeStrip_(as){
+  if(!as || !((+as.rideCount)>0 || (+as.rideMeters)>0)) return null;
+  var mi=Math.round((+as.rideMeters||0)/1609.344), ft=Math.round((+as.rideElevM||0)*3.28084), hrs=Math.round((+as.rideSecs||0)/3600);
+  return [ {k:'Rides', v:(+as.rideCount||0).toLocaleString()}, {k:'Miles', v:mi.toLocaleString()}, {k:'ft Climbed', v:ft.toLocaleString()}, {k:'Hours', v:hrs.toLocaleString()} ];
+}
+function aiSyncStats_(){ try{ if(typeof toast==='function') toast('Syncing lifetime stats…'); }catch(e){} if(typeof syncAthleteStats_==='function') syncAthleteStats_(false, function(){ try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }); }
 // Build the milestone catalog from LOCAL data (understated on lifetime metrics until the re-import
 // lands / option A is added — the source is swappable; this only assembles defs + current values).
 // Returns {defs (with projection fields), lifetime, cats}. NO Lifetime-strip data (held pending A/B).
@@ -13999,8 +14009,19 @@ function aiRenderMilestones_(){
       +'<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+c+';border-radius:3px"></div></div>'
     +'</div>'; });
   H+='</div></div></div>';
-  // ---- LIFETIME strip: HELD pending A/B ----
-  H+='<div style="background:#111318;border:1px dashed #2a3550;border-radius:14px;padding:16px 18px;margin-bottom:14px;font-size:12.5px;color:#5b6678">Lifetime at a glance — <span style="color:#94a3b8">held</span> pending the true-totals source (Strava lifetime vs restored library). Not shown until it can be correct.</div>';
+  // ---- LIFETIME AT A GLANCE (Strava all-time totals — option A) ----
+  var strip=(typeof _msLifetimeStrip_==='function')?_msLifetimeStrip_(st.athleteStats):null;
+  if(strip){
+    var SICO={ 'Rides':'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h3l2.5 6.5M5.5 17.5l4-9h5l3.5 9"/>', 'Miles':_MS_ICON.Distance, 'ft Climbed':_MS_ICON.Climbing, 'Hours':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>' };
+    var SCOL={ 'Rides':'#60a5fa','Miles':'#3b82f6','ft Climbed':'#22c55e','Hours':'#f59e0b' };
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 20px;margin-bottom:14px">';
+    H+='<div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Lifetime at a Glance</div>';
+    H+='<div style="display:flex;flex-wrap:wrap;gap:20px 40px">';
+    strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:10px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;line-height:1">'+s.v+'</div><div style="font-size:11px;color:#5b6678">'+s.k+'</div></div></div>'; });
+    H+='</div></div>';
+  } else {
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:#5b6678">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid #2a3550;color:#94a3b8;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
+  }
   // ---- RECENTLY UNLOCKED: hex badges (most recent by date) ----
   var unlocked=proj.filter(function(p){return p.unlocked && p.date;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date));}).slice(0,4);
   if(unlocked.length){
@@ -24466,6 +24487,35 @@ function syncSegmentPRs_(silent, cb){
     .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'no token'); } })
     .catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'auth'); } });
   } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'Connect Strava first'); }
+}
+
+// Pull the athlete's LIFETIME totals from Strava (/athletes/{id}/stats -> all_ride_totals) into
+// st.athleteStats. Genuinely all-time (server-side), so the local library loss does not apply — this
+// is option A for the Milestones "Lifetime at a glance" strip. Calories are NOT in /stats (per-activity
+// only), so they are omitted rather than shown wrong. Pull on sync; manual trigger from the strip.
+function syncAthleteStats_(silent, cb){
+  cb=cb||function(){};
+  function done(ok,err){ if(!silent){ try{ if(typeof toast==='function') toast(err?('Lifetime stats failed: '+err):'Lifetime stats synced'); }catch(e){} } cb(ok,err); }
+  var doFetch=function(token){
+    var idP=(st.stravaAthleteId)?Promise.resolve(st.stravaAthleteId)
+      :fetch('https://www.strava.com/api/v3/athlete',{headers:{'Authorization':'Bearer '+token}}).then(function(r){return r.ok?r.json():null;}).then(function(a){ if(a&&a.id){ st.stravaAthleteId=a.id; return a.id; } return null; });
+    idP.then(function(id){ if(!id){ done(false,'no athlete id'); return; }
+      fetch('https://www.strava.com/api/v3/athletes/'+id+'/stats',{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){ return r.ok?r.json():null; }).then(function(s){
+        if(!s){ done(false,'no stats'); return; }
+        var rt=s.all_ride_totals||{}, run=s.all_run_totals||{};
+        st.athleteStats={ rideCount:rt.count||0, rideMeters:rt.distance||0, rideElevM:rt.elevation_gain||0, rideSecs:rt.moving_time||0,
+          runCount:run.count||0, runMeters:run.distance||0, updatedAt:Date.now() };
+        try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+        done(true);
+      }).catch(function(e){ done(false,(e&&e.message)||'fetch'); });
+    }).catch(function(e){ done(false,(e&&e.message)||'fetch'); });
+  };
+  if(st.stravaRefreshToken){
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+    .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(false,'no token'); } })
+    .catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { done(false,'auth'); } });
+  } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(false,'Connect Strava first'); }
 }
 
 // Segments tab: lists this ride's Strava segment efforts (name, your time,
