@@ -13630,6 +13630,79 @@ function aiCardWeight_(){
   return aiCard_(inner);
 }
 
+// ---- Strength adherence: rolling weekly view of executionScore across the plan ----
+// Returns [{weekStart:'YYYY-MM-DD', mean:Number|null, scored:Int, planned:Int}], oldest -> newest,
+// gaps (zero-planned weeks) included as null-mean entries. Window = weeks-count ending at the
+// current ISO week (Mon start); future-dated weeks are excluded entirely. _todayRef is a test seam.
+//   planned = live strength/mobility sessions in the week, ANY status
+//   scored  = those with a non-null executionScore ; mean = rounded avg of those (null when scored=0)
+function strengthAdherenceTrend_(st, weeks, _todayRef){
+  weeks = weeks||8;
+  function _wk(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var g=x.getDay(); x.setDate(x.getDate()-(g===0?6:g-1)); x.setHours(0,0,0,0); return x; }   // Monday start
+  function _key(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  var today=_todayRef?new Date(_todayRef):new Date(); today.setHours(0,0,0,0);
+  var curWk=_wk(today);
+  var order=[], byKey={};
+  for(var i=weeks-1;i>=0;i--){ var ws=new Date(curWk); ws.setDate(curWk.getDate()-i*7); var k=_key(ws); order.push(k); byKey[k]={scored:0,planned:0,_sum:0}; }
+  var plan=(st&&st.plan)?st.plan:{};
+  Object.keys(plan).forEach(function(dk){
+    var day=plan[dk]; if(!day||!Array.isArray(day.sessions)) return;
+    var dt=(typeof parseDayKey==='function')?parseDayKey(dk):new Date(dk);
+    if(!dt||isNaN(dt.getTime())) return;
+    var b=byKey[_key(_wk(dt))]; if(!b) return;   // out-of-window OR future week -> skipped
+    day.sessions.forEach(function(x){
+      if(!x||x.deleted) return;
+      if(x.type!=='strength' && x.type!=='mobility') return;
+      b.planned++;
+      if(x.executionScore!=null){ b.scored++; b._sum+=(+x.executionScore||0); }
+    });
+  });
+  return order.map(function(k){ var b=byKey[k]; return { weekStart:k, mean:(b.scored>0?Math.round(b._sum/b.scored):null), scored:b.scored, planned:b.planned }; });
+}
+function _adhLbl_(k){ var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; var p=String(k).split('-'); return M[((+p[1]||1)-1)]+' '+(+p[2]||1); }
+// Card: completion rate (did you show up) as the primary bar series; mean execution (quality of
+// what you did) as a secondary line. Zero-planned weeks are gaps, not zero bars. Two numbers, not
+// one — a declining completion rate is the earlier adherence-failure signal. Honest at low n:
+// under 3 scored sessions total it shows raw counts and suppresses any trend language.
+function aiCardStrengthAdherence_(){
+  var wk=(typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[];
+  if(!wk.length) return '';
+  var totalPlanned=wk.reduce(function(a,w){return a+w.planned;},0);
+  if(totalPlanned===0) return '';                       // no strength/mobility plan -> nothing to show
+  var totalScored=wk.reduce(function(a,w){return a+w.scored;},0);
+  var cur=wk[wk.length-1];
+  var lowN=totalScored<3;
+  var inner=aiLbl_('STRENGTH ADHERENCE','<span style="font-size:11px;color:#5b6678">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
+  // Two headline numbers for the current week: Completion (show up) + Execution (quality).
+  inner+='<div style="display:flex;gap:24px;margin-bottom:12px">';
+  inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:#60a5fa;line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:#5b6678">this week</div></div>';
+  inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:#f59e0b;line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:#5b6678">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
+  inner+='</div>';
+  // Bars = completion rate/week (gap when planned==0); faint bar when planned>0 but scored==0.
+  var W=280,H=70,n=wk.length,bw=W/n;
+  var svg='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block">';
+  svg+='<line x1="0" y1="'+(H-1)+'" x2="'+W+'" y2="'+(H-1)+'" stroke="#1c2130" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+  wk.forEach(function(w,i){
+    if(w.planned<=0) return;                            // gap, not a zero bar
+    var rate=w.scored/w.planned;
+    var bh=Math.max(2, rate*(H-6)), x=i*bw+bw*0.22, bwid=bw*0.56, y=H-bh-1;
+    svg+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" fill="#60a5fa" fill-opacity="'+(w.scored>0?'0.9':'0.28')+'"/>';
+  });
+  // Secondary: mean execution (0..100) across weeks that have a score. A line only with >=2 points
+  // (a line implies a trend); a single scored week is a dot, not a trend.
+  var mpts=wk.map(function(w,i){ if(w.mean==null) return null; var x=i*bw+bw*0.5, y=H-((w.mean/100)*(H-6))-1; return x.toFixed(1)+' '+y.toFixed(1); }).filter(Boolean);
+  if(mpts.length>=2){ svg+='<path d="M'+mpts.join(' L')+'" fill="none" stroke="#f59e0b" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'; }
+  else if(mpts.length===1){ var p=mpts[0].split(' '); svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.6" fill="#f59e0b"/>'; }
+  svg+='</svg>';
+  inner+='<div style="margin-top:2px">'+svg+'</div>';
+  inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:#5b6678"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
+  inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
+  if(lowN){
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;font-size:11.5px;color:#94a3b8;line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
+  }
+  return aiCard_(inner);
+}
+
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
 function aiCardDNA_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
@@ -13762,11 +13835,13 @@ function aiRenderTab_(tab, ded){
   var zones=_aiSafe_('Zones', function(){return aiCardZones_(ded);});
   var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
   var recs=_aiSafe_('Records', function(){return aiCardRecords_();});
+  var adh=_aiSafe_('StrengthAdherence', function(){return aiCardStrengthAdherence_();});
   var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
   // Mockup grid: hero row (DNA | Momentum | Watchlist), then the metric cards, and
   // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
-  // stretch keeps each row's cards equal height so there are no ragged gaps.
-  var grid=[dna, mom, watch, changed, zones, weight, recs].filter(function(h){return h;});
+  // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
+  // Adherence leads the metric row — a declining completion rate is an early warning.
+  var grid=[dna, mom, watch, adh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
