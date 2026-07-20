@@ -13867,6 +13867,93 @@ function aiRenderRacing_(){
   return H;
 }
 
+// ==================== Milestones — cycling, recent era (last ~3 years) ====================
+// Recent window ONLY — that scope IS the honesty mechanism (the header line carries context; NO
+// per-card caveats). Firsts within the era, streaks/peaks, and window-cumulative crossings. NO
+// lifetime totals, NO "ever"/"all-time", NO reach-back into the sparse pre-2016 data.
+function _msIcon_(p,c){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>'; }
+function _msFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return String(s); return _RY_MON[((+p[1]||1)-1)].slice(0,3)+' '+(+p[2]||1)+', '+p[0]; }
+function _msTs_(ts){ var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _msDur_(sec){ sec=+sec||0; var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h?(h+'h '+m+'m'):(m+'m'); }
+function _msCard_(color,icon,big,label,sub){
+  return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:7px;min-width:0">'
+    +'<div style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:8px;background:'+color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</span>'
+    +'<div style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;line-height:1.25">'+label+'</div></div>'
+    +'<div style="font-size:25px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+big+'</div>'
+    +(sub?('<div style="font-size:12px;color:#5b6678">'+sub+'</div>'):'')
+  +'</div>';
+}
+function _msCycling_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+  var sp=function(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }, nm=function(r){ return String((r&&r.name)||''); };
+  var isRun=function(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sp(r)); };
+  var isRide=function(r){ return !isRun(r)&&(/ride/i.test(sp(r))||/virtual/i.test(sp(r))||/zwift/i.test(nm(r))||r.trainer===true); };
+  return ded.filter(function(r){ return r&&r.date&&isRide(r); }).map(function(r){
+    var d=_ryDate_(r.date), mi=parseFloat(r.distance)||0, sec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
+    var mph=parseFloat(r.avgSpeed); if(!(mph>0)) mph=(mi>0&&sec>0)?mi/(sec/3600):0;
+    return { d:d, mi:mi, sec:sec, mph:mph, elev:parseFloat(r.elev)||0, date:String(r.date).slice(0,10) };
+  }).filter(function(x){ return x.d && !isNaN(x.d.getTime()) && x.mi>0; }).sort(function(a,b){ return a.d-b.d; });
+}
+// PURE + testable. rides = cycling rides sorted asc by date; nowRef = today. Everything is scoped to
+// the trailing 3-year window; nothing reaches earlier, nothing is lifetime.
+function milestonesCompute_(rides, nowRef){
+  var now=nowRef?new Date(nowRef):new Date();
+  var cutoff=new Date(now.getFullYear()-3, now.getMonth(), now.getDate()); cutoff.setHours(0,0,0,0);
+  var win=(rides||[]).filter(function(r){ return r.d>=cutoff && r.d<=now; });
+  function first(pred){ for(var i=0;i<win.length;i++) if(pred(win[i])) return win[i]; return null; }
+  // ---- FIRSTS (distance progression; skip a threshold whose first ride is a date already shown) ----
+  var firsts=[], usedDate={};
+  [[100,'First century'],[62.137,'First metric century'],[50,'First 50-miler']].forEach(function(t){
+    var r=first(function(x){return x.mi>=t[0];});
+    if(r && !usedDate[r.date]){ usedDate[r.date]=1; firsts.push({label:t[1],big:(Math.round(r.mi*10)/10)+' mi',sub:_msFmtDate_(r.date)+' · '+_msDur_(r.sec),date:r.date,ts:r.d.getTime()}); }
+  });
+  var f40=first(function(r){return r.mi>=24.855 && r.mph>=24.855;});   // whole-ride pace guarantees a sub-1h 40k inside it
+  if(f40) firsts.push({label:'First sub-hour 40k',big:(Math.round(f40.mph*10)/10)+' mph',sub:_msFmtDate_(f40.date)+' · '+(Math.round(f40.mi*10)/10)+' mi',date:f40.date,ts:f40.d.getTime()});
+  var fcl=first(function(r){return r.elev>=5000;});
+  if(fcl) firsts.push({label:'First 5,000 ft day',big:Math.round(fcl.elev).toLocaleString()+' ft',sub:_msFmtDate_(fcl.date),date:fcl.date,ts:fcl.d.getTime()});
+  firsts.sort(function(a,b){return a.ts-b.ts;});
+  // ---- STREAKS & PEAKS ----
+  function wkk(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var g=x.getDay(); x.setDate(x.getDate()-(g===0?6:g-1)); x.setHours(0,0,0,0); return x.getTime(); }
+  var wset={}; win.forEach(function(r){ wset[wkk(r.d)]=1; });
+  var weeks=Object.keys(wset).map(Number).sort(function(a,b){return a-b;});
+  var WEEK=604800000, best=0, cur=0, bestEnd=0, prev=null;
+  weeks.forEach(function(w){ if(prev!=null && (w-prev)===WEEK) cur++; else cur=1; if(cur>best){best=cur;bestEnd=w;} prev=w; });
+  var mon={}; win.forEach(function(r){ var k=r.d.getFullYear()+'-'+r.d.getMonth(); (mon[k]=mon[k]||{n:0,mi:0,y:r.d.getFullYear(),m:r.d.getMonth()}); mon[k].n++; mon[k].mi+=r.mi; });
+  var monA=Object.keys(mon).map(function(k){return mon[k];});
+  var peakN=monA.reduce(function(a,b){return (!a||b.n>a.n)?b:a;},null);
+  var peakMi=monA.reduce(function(a,b){return (!a||b.mi>a.mi)?b:a;},null);
+  var streaks={ longestWeeks:{weeks:best,start:(best?bestEnd-(best-1)*WEEK:0),end:bestEnd}, peakN:peakN, peakMi:peakMi };
+  // ---- CROSSINGS (window-cumulative — scoped to the log, never lifetime) ----
+  var rc=[]; [100,250,500,1000,1500,2000].forEach(function(T){ if(win.length>=T) rc.push({n:T,date:win[T-1].date}); });
+  var mc=[], run=0, ti=0, MT=[1000,2500,5000,10000,15000,20000];
+  win.forEach(function(r){ run+=r.mi; while(ti<MT.length && run>=MT[ti]){ mc.push({mi:MT[ti],date:r.date}); ti++; } });
+  return { count:win.length, sinceYear:cutoff.getFullYear(), firsts:firsts, streaks:streaks, crossings:{rides:rc,miles:mc} };
+}
+function aiRenderMilestones_(){
+  var M=milestonesCompute_(_msCycling_(), new Date());
+  var H='<div style="max-width:900px;margin:0 auto;padding-bottom:16px">';
+  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 20px;line-height:1.5">Milestones from your last 3 years of riding.</div>';
+  if(M.count<5){ return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough recent rides yet to mark milestones.</div></div>'; }
+  H+='<style>.ms-grid{display:grid;gap:12px;grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:820px){.ms-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.ms-grid{grid-template-columns:1fr}}</style>';
+  function sec(title,cards){ return cards.length?('<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:4px 2px 11px">'+title+'</div><div class="ms-grid" style="margin-bottom:22px">'+cards.join('')+'</div>'):''; }
+  var FLAG='<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>';
+  var BOLT='<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>';
+  var CAL='<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>';
+  var MTN='<path d="M3 20h18L14 6l-4 7-3-3-4 10z"/>';
+  var PIN='<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>';
+  var fc=M.firsts.map(function(f){ return _msCard_('#FC4C02',_msIcon_(FLAG,'#FC4C02'),f.big,f.label,f.sub); });
+  var sc=[];
+  if(M.streaks.longestWeeks.weeks>=2) sc.push(_msCard_('#22c55e',_msIcon_(BOLT,'#22c55e'),M.streaks.longestWeeks.weeks+' weeks','Longest weekly streak',_msFmtDate_(_msTs_(M.streaks.longestWeeks.start))+' – '+_msFmtDate_(_msTs_(M.streaks.longestWeeks.end))));
+  if(M.streaks.peakN) sc.push(_msCard_('#22c55e',_msIcon_(CAL,'#22c55e'),M.streaks.peakN.n+' rides','Most rides in a month',_RY_MON[M.streaks.peakN.m]+' '+M.streaks.peakN.y));
+  if(M.streaks.peakMi) sc.push(_msCard_('#22c55e',_msIcon_(MTN,'#22c55e'),Math.round(M.streaks.peakMi.mi).toLocaleString()+' mi','Biggest month',_RY_MON[M.streaks.peakMi.m]+' '+M.streaks.peakMi.y));
+  var cc=[];
+  M.crossings.rides.forEach(function(c){ cc.push(_msCard_('#60a5fa',_msIcon_(PIN,'#60a5fa'),c.n.toLocaleString()+' rides','Rides logged',_msFmtDate_(c.date))); });
+  M.crossings.miles.forEach(function(c){ cc.push(_msCard_('#60a5fa',_msIcon_(PIN,'#60a5fa'),c.mi.toLocaleString()+' mi','Miles logged',_msFmtDate_(c.date))); });
+  H+=sec('Firsts',fc); H+=sec('Streaks &amp; Peaks',sc); H+=sec('Crossings',cc);
+  if(!fc.length && !sc.length && !cc.length) H+='<div style="padding:40px 20px;text-align:center;color:#5b6678;font-size:14px">No milestones crossed in this window yet.</div>';
+  H+='</div>'; return H;
+}
+
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
 function aiCardDNA_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
@@ -13989,6 +14076,7 @@ function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.erro
 function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Racing Yourself — render error.</div>';
+  if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
