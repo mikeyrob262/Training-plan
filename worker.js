@@ -4548,6 +4548,10 @@ function dedupeRidesByKey_(rides){
   });
   return order.map(function(key){ return byKey[key]; }).concat(keyless);
 }
+// Set by normalizeState_'s plan-collapse when it soft-deletes a duplicate. applyFirebaseData
+// (the 5s poll) reads+clears it to push the collapse to remote once, so the cloud copy converges
+// instead of re-sending the duplicates every poll for the sticky OR-merge to re-collapse forever.
+var _planDidCollapse_=false;
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf','runs'].forEach(function(k){
@@ -4637,9 +4641,20 @@ function normalizeState_(s){
       });
       Object.keys(groups).forEach(function(gk){
         var g=groups[gk]; if(g.length<=1) return;
-        g.sort(function(a,b){ var e=(b.editedAt||0)-(a.editedAt||0); return e!==0?e:(String(a.id)<String(b.id)?-1:1); });
+        g.sort(function(a,b){
+          var e=(b.editedAt||0)-(a.editedAt||0); if(e!==0) return e;                              // most-recently-edited wins
+          var au=(a.source==='user')?1:0, bu=(b.source==='user')?1:0; if(au!==bu) return bu-au;    // then a manual edit over a gen/migrated template
+          return String(a.id)<String(b.id)?-1:1;                                                   // then lowest id so both devices converge on the same survivor
+        });
         var keep=g[0];
-        g.forEach(function(x){ if(x!==keep){ x.deleted=true; if(typeof _planTrace_==='function') _planTrace_('collapse['+dk+']', x, 'keptId='+keep.id+' keptEditedAt='+keep.editedAt); } });
+        // Carry execution data FORWARD onto the survivor so a collapse never drops a completed
+        // session's log/score — it may sit on a losing copy (e.g. healStrengthState_ backfilled
+        // the log onto a gen/migrated twin rather than the user copy we keep).
+        g.forEach(function(x){ if(x===keep) return;
+          if((!Array.isArray(keep.strengthLog)||!keep.strengthLog.length) && Array.isArray(x.strengthLog) && x.strengthLog.length){ keep.strengthLog=x.strengthLog; if(typeof markPlanEdited_==='function') markPlanEdited_(keep,['strengthLog']); }
+          if(keep.executionScore==null && x.executionScore!=null){ keep.executionScore=x.executionScore; if(typeof markPlanEdited_==='function') markPlanEdited_(keep,['executionScore']); }
+        });
+        g.forEach(function(x){ if(x!==keep){ x.deleted=true; _planDidCollapse_=true; if(typeof _planTrace_==='function') _planTrace_('collapse['+dk+']', x, 'keptId='+keep.id+' keptEditedAt='+keep.editedAt); } });
       });
     });
   }catch(e){}
@@ -4855,6 +4870,13 @@ function applyFirebaseData(data){
     try{ _rn=_dc(data.rides); _ln=_dc(st.rides); }catch(e){}
   }
   st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+  // Persist the merged+deduped result — this poll path was the ONE normalizeState_ caller that
+  // never did, so an in-memory duplicate-collapse (and any merged remote change) was dropped on
+  // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
+  try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+  // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
+  // them every poll. Self-terminating: once remote is clean, no further collapse -> no push.
+  try{ if(_planDidCollapse_){ _planDidCollapse_=false; if(typeof fbPush==='function') fbPush(true); } }catch(e){}
   if(_durLogN<4){ _durLogN++; try{ var _la=(function(a){ var n=0; (a||[]).forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; })(st.rides); console.log('[dur] merge remote-null-tomb='+Number(_rn)+' local-before='+Number(_ln)+' local-after='+Number(_la)); }catch(e){} }
   document.querySelectorAll('.nt-chk').forEach(function(e){e.className='nt-chk';e.textContent='';});
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
