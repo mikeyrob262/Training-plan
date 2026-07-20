@@ -4400,6 +4400,7 @@ function dedupeRides_(rides){
       for(var m=1;m<cluster.length;m++){
         var loser = rides[cluster[m]];
         Object.keys(loser).forEach(function(k){
+          if(k==='deleted') return;   // NEVER let a deleted-tombstone loser poison a live winner with deleted:true
           if((winner[k]==null || winner[k]==='') && loser[k]!=null && loser[k]!=='') winner[k]=loser[k];
         });
         toRemove[cluster[m]] = true;
@@ -12722,14 +12723,17 @@ function rideSport_(r){ if(!r) return ''; var s=(r.sportType!=null&&r.sportType!
 // copy, NO sport-type filter (VirtualRide/Zwift included). This is THE source any
 // aggregate that must not undercount virtual rides should read from.
 function allRidesDeduped_(){
-  // Run the canonical FUZZY dedup first (date+distance clustering, the one that collapses the
-  // cross-source dupes in the boot log) — rideKey-exact alone can't merge a stravaId'd ride with a
-  // no-stravaId twin (different key formats: s<id> vs k:date_dist_secs), so those survived into the
-  // chart and double-counted. Same idiom as the PMC/records path (dedupeRides_(...).kept then filter
-  // deleted). Then the rideKey pass keeps the GPS-richest among any exact collisions.
-  var base; try{ base=(typeof dedupeRides_==='function')?dedupeRides_(st.rides||[]).kept:(st.rides||[]); }catch(e){ base=(st.rides||[]); }
+  // Filter deleted FIRST, then run the canonical FUZZY dedup on LIVE rides only. Feeding the
+  // ~1000 null-tombstones into dedupeRides_ was catastrophic: each live ride clustered with its
+  // deleted twin, the winner-merge copied deleted:true onto the live winner, and it got filtered
+  // out — so only rides whose duplicate happened to be LIVE (the dup dates) survived. The fuzzy
+  // pass is still needed here because rideKey-exact can't merge a stravaId'd ride (s<id> key) with
+  // a no-stravaId twin (k:date_dist_secs key). Then the rideKey pass keeps the GPS-richest.
+  var live=(st.rides||[]).filter(function(r){return r && !r.deleted;});
+  var base; try{ base=(typeof dedupeRides_==='function')?dedupeRides_(live).kept:live; }catch(e){ base=live; }
   var seen={}, out=[];
-  base.filter(function(r){return r && !r.deleted;}).forEach(function(r){
+  base.forEach(function(r){
+    if(!r || r.deleted) return;
     var k=rideKey(r), ex=seen[k];
     if(ex===undefined){ seen[k]=r; out.push(r); }
     else if(((r.gpsLats&&r.gpsLats.length)||0) > ((ex.gpsLats&&ex.gpsLats.length)||0)){
