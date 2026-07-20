@@ -5506,7 +5506,9 @@ function planCardHTML_(s, dateKey){
     if(t.durationMin) meta.push(t.durationMin+' min'); if(t.tssTarget) meta.push('~'+t.tssTarget+' '+gTerm_('TSS','tss'));
     if(meta.length) lines.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+meta.join(' · ')+'</div>');
   } else if((type==='strength'||type==='mobility') && r.exercises && r.exercises.length){
-    lines.push(r.exercises.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+gTerm_('% 1RM','pct1rm')):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+    var _cues=[];
+    lines.push(r.exercises.map(function(e){ if(e.loadCue && _cues.indexOf(e.loadCue)<0) _cues.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+gTerm_('% 1RM','pct1rm')):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+    if(_cues.length) lines.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+esc(_cues.join('; '))+'</div>');
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
   }
@@ -20823,6 +20825,44 @@ function _planBlockMeta_(blockWeek){
   var cue=(blockWeek===1)?'Baseline':(blockWeek===4)?'Deload — 60% volume, intensity held':'+5% vs last week';
   return { name:'Base 1', week:blockWeek, phase:phase, cue:cue };
 }
+// ── §3.6 / §3.7 CONSUMPTION — turn logged data into prescribed load ──────────────────────────
+// Lower body gets +10 lb steps, everything else +5 (§3.7).
+function _isLowerLift_(name){ return /deadlift|squat|rdl|romanian|hip thrust|lunge|split|calf|leg|hinge|glute/i.test(String(name||'')); }
+// CTL 7-day ramp from the single fitness source.
+function _ctlRamp_(){ try{ var f=(typeof getFitness_==='function')?getFitness_():null; var r=f&&f.ramp; return (typeof r==='number')?r:((r&&r.ctl!=null)?r.ctl:null); }catch(e){ return null; } }
+// Most-recent-first top sets for a lift, from st.strength.log.
+function _strTopSets_(exName){
+  var out=[]; try{ var log=(typeof st!=='undefined'&&st.strength&&st.strength.log)?st.strength.log:{};
+    Object.keys(log).forEach(function(dk){ (log[dk]||[]).forEach(function(e){ if(e && e.name===exName && e.sets && e.sets.length){ var top=e.sets[0]||{}; out.push({date:dk, weight:+top.weight||0, reps:+top.reps||0, rpe:(top.rpe!=null?+top.rpe:null)}); } }); });
+    out.sort(function(a,b){ return (a.date<b.date)?1:-1; });
+  }catch(e){} return out;
+}
+// §3.7 trigger: top of the rep range hit at ≤7/10 for TWO consecutive logged sessions.
+function _strProgressed_(exName, topReps){ var s=_strTopSets_(exName); if(s.length<2 || !topReps) return false; var a=s[0], b=s[1]; return a.reps>=topReps && b.reps>=topReps && a.rpe!=null && a.rpe<=7 && b.rpe!=null && b.rpe<=7; }
+// §3.6: two consecutive PAST planned sessions of this intent left uncompleted.
+function _strMissed2_(intent){ try{ if(typeof st==='undefined' || !st.plan || !intent) return false; var today=(typeof getTodayKey==='function')?getTodayKey():null; var past=[];
+    Object.keys(st.plan).forEach(function(dk){ if(today && dk>=today) return; var d=st.plan[dk]; if(!d||!d.sessions) return; d.sessions.forEach(function(x){ if(x && !x.deleted && x.intent===intent) past.push({date:dk, done:(x.status==='completed')}); }); });
+    past.sort(function(a,b){ return (a.date<b.date)?1:-1; }); if(past.length<2) return false; return !past[0].done && !past[1].done;
+  }catch(e){ return false; } }
+// Prescribed load for one lift, DERIVED at read from 1RM + block week + logged history + CTL.
+// Blank (no fake weight) until a 1RM estimate exists. Returns {weight, oneRM, cue} where cue is
+// the honest derivation (never a bare number — §6). extra:{isLower, missed}.
+function strengthRx_(exName, pct1RM, topReps, block, extra){
+  extra=extra||{};
+  var oneRM=(typeof st!=='undefined'&&st.strength&&st.strength.oneRM&&st.strength.oneRM[exName])?(+st.strength.oneRM[exName]||0):0;
+  if(!oneRM || !pct1RM) return { weight:null, oneRM:(oneRM||null), cue:(oneRM?null:'Log a working set to set your 1RM') };
+  var week=(block&&block.week)||1;
+  var mult=(week===2)?1.05:(week===3)?1.1025:1.0;   // §3.6 within-block: +5% wk2, +5% wk3 (compounded); wk4 deload holds intensity
+  var cues=[]; if(week===2||week===3) cues.push('+5% (block wk '+week+')');
+  var ramp=_ctlRamp_();
+  if(ramp!=null && ramp>7 && mult>1){ mult=1.0; cues=['CTL ramping ('+Math.round(ramp)+'/wk) — load held flat']; }   // §3.6 CTL-ramp-hold
+  var base=oneRM*(pct1RM/100)*mult;
+  var bump=0;
+  if(_strProgressed_(exName, topReps)){ bump=extra.isLower?10:5; cues.push('+'+bump+' lb — 2 clean sessions at the top of the range'); }   // §3.7
+  if(extra.missed){ base=base*0.9; cues.push('held back — 2 missed sessions'); }   // §3.6 regress
+  var w=Math.max(0, Math.round((base+bump)/5)*5);
+  return { weight:w, oneRM:oneRM, cue:(cues.join(' · ')||null) };
+}
 // Watts from a % of FTP band. Reads the app's MANUAL FTP (st.ftp), default 186 to match every
 // other call site. FTP is user-entered, never auto-estimated — a stale value shows stale watts,
 // which is why the band is shown with the FTP inline (§3.8 Z-fix). Update st.ftp to reprice all.
@@ -20838,7 +20878,15 @@ function _planZoneFromPct_(pct){
 function _planSessionFromDef_(intent, blockWeek){
   var def=SESSION_DEFS[intent]; if(!def) return null;
   var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned', targets:{} };
-  if(def.exGroup && typeof _planExercises_==='function') s.exercises=_planExercises_(def.exGroup, blockWeek||1);
+  if(def.exGroup && typeof _planExercises_==='function'){
+    s.exercises=_planExercises_(def.exGroup, blockWeek||1);
+    // §3.6/§3.7 CONSUMPTION: derive the prescribed WEIGHT per strength lift from 1RM + block week +
+    // logged history + CTL. Stays blank until a 1RM exists (no fake data). Mobility has no pct1RM.
+    if(def.type==='strength' && typeof strengthRx_==='function'){
+      var _missed=(typeof _strMissed2_==='function')?_strMissed2_(intent):false;
+      s.exercises.forEach(function(e){ if(e && e.pct1RM){ try{ var rx=strengthRx_(e.name, e.pct1RM, e.reps, {week:blockWeek||1}, {isLower:_isLowerLift_(e.name), missed:_missed}); if(rx){ if(rx.weight!=null) e.weight=rx.weight; if(rx.cue) e.loadCue=rx.cue; if(rx.oneRM!=null) e.oneRM=rx.oneRM; } }catch(_e){} } });
+    }
+  }
   if(def.durationMin) s.targets.durationMin=def.durationMin;
   if(def.zone) s.targets.zone=def.zone;
   if(def.pctFtp){ var z=_planZoneFromPct_(def.pctFtp); if(z){ s.targets.powerLo=z.powerLo; s.targets.powerHi=z.powerHi; s.targets.pctLo=z.pctLo; s.targets.pctHi=z.pctHi; s.targets.ftp=z.ftp; } }
@@ -26022,7 +26070,9 @@ function openDayEditor(dateKey, targetId){
         var _dl=[]; if(tgt.durationMin) _dl.push(tgt.durationMin+' min'); if(tgt.tssTarget) _dl.push('~'+tgt.tssTarget+' TSS'); if(tgt.ifTarget) _dl.push('IF '+tgt.ifTarget);
         if(_dl.length) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+_dl.join(' · ')+'</div>');
       } else if((type==='strength'||type==='mobility') && ex.length){
-        rows.push(ex.map(function(e){ var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(e.pct1RM?(' @ '+e.pct1RM+'% 1RM'):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+        var _ec=[];
+        rows.push(ex.map(function(e){ if(e.loadCue && _ec.indexOf(e.loadCue)<0) _ec.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+'% 1RM'):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+        if(_ec.length) rows.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+_esc_(_ec.join('; '))+'</div>');
       } else if(type==='rest'){
         rows.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
       }
