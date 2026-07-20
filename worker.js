@@ -13747,7 +13747,10 @@ function _adhCardInner_(title, wk){
     else { var p=seg[0].split(' '); svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.6" fill="#f59e0b"/>'; }
   });
   svg+='</svg>';
-  inner+='<div style="margin-top:2px">'+svg+'</div>';
+  // SVG height is a fixed H px, so top:cy px maps 1:1 to the viewBox y. Small bg fade keeps the
+  // label legible where it crosses the lines. Clamped to >=0 so a top-of-chart ceiling never clips.
+  var _ceilLbl = (ceilCy!=null) ? '<div style="position:absolute;left:2px;top:'+Math.max(0,ceilCy-14).toFixed(0)+'px;font-size:10px;font-weight:700;color:'+CEILT+';white-space:nowrap;pointer-events:none;background:linear-gradient(90deg,#111318 72%,rgba(17,19,24,0));padding:0 10px 1px 2px;border-radius:3px">'+_RY_MON[pM].slice(0,3)+' &#183; '+_ryMi_(prevFinal)+' mi</div>' : '';
+  inner+='<div style="position:relative;margin-top:2px">'+svg+_ceilLbl+'</div>';
   inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:#5b6678"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
   inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
   if(lowN){
@@ -13810,9 +13813,11 @@ function _racingChart_(title, acts){
   function xFor(day){ return padL + (daysCur>1?(day-1)/(daysCur-1):0)*(W-padL-padR); }
   function yFor(v){ return H-padB - (v/yMax)*(H-padT-padB); }
   var svg='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;overflow:visible">';
-  if(prevFinal>0){ var cy=yFor(prevFinal);
-    svg+='<line x1="'+padL+'" y1="'+cy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+cy.toFixed(1)+'" stroke="'+CEIL+'" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>';
-    svg+='<text x="'+padL+'" y="'+(cy-4).toFixed(1)+'" font-size="9" fill="'+CEILT+'" font-weight="700">'+_RY_MON[pM].slice(0,3)+' &#183; '+_ryMi_(prevFinal)+' mi</text>';
+  var ceilCy=null;
+  if(prevFinal>0){ ceilCy=yFor(prevFinal);
+    svg+='<line x1="'+padL+'" y1="'+ceilCy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+ceilCy.toFixed(1)+'" stroke="'+CEIL+'" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>';
+    // Label is an HTML overlay below (NOT SVG <text>) — preserveAspectRatio="none" horizontally
+    // stretches SVG text, which distorted/clipped it. HTML text is immune to the non-uniform scale.
   }
   if(prevSame.cum.length>=2){ var gp=prevSame.cum.map(function(p){ return xFor(p.day).toFixed(1)+' '+yFor(p.val).toFixed(1); });
     svg+='<path d="M'+gp.join(' L')+'" fill="none" stroke="'+GHOST+'" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'; }
