@@ -4117,6 +4117,55 @@ function applyRideSync_(existing, incoming){
 // and no such list, so they get this generic-mask merge via mergeArrays_'s
 // id-cluster path (itemsMatch_ buckets them by their stable session id).
 function _isSession_(x){ return !!(x && typeof x==='object' && x.id!=null && typeof x.type==='string' && /^(ride|strength|mobility)$/.test(x.type)); }
+// Returns 0-100, or null when there's nothing meaningful to score against.
+// Volume-weighted (sets x reps) for strength; duration ratio for mobility.
+// Overshoot capped at 100. Strength reads the log off the session (sess.strengthLog);
+// the save path synthesizes that shape since the live log lives in st.strength.log[dateKey].
+function computeExecutionScore_(sess){
+  if(!sess || typeof sess !== 'object') return null;
+  if(sess.status !== 'completed') return null;
+
+  var type = sess.type;
+
+  if(type === 'mobility'){
+    var target = sess.targets && sess.targets.durationMin;
+    var actual = sess.actualDurationMin;
+    if(!(target > 0) || actual == null) return null;
+    return Math.max(0, Math.min(100, Math.round((actual / target) * 100)));
+  }
+
+  if(type === 'strength'){
+    var exs  = Array.isArray(sess.exercises) ? sess.exercises : [];
+    var logs = Array.isArray(sess.strengthLog) ? sess.strengthLog : [];
+    if(!exs.length || !logs.length) return null;
+
+    var prescribed = 0, performed = 0;
+
+    exs.forEach(function(e, i){
+      var pSets = _num_(e.sets), pReps = _num_(e.reps);
+      if(!(pSets > 0) || !(pReps > 0)) return;
+      prescribed += pSets * pReps;
+
+      var lg = logs[i];
+      if(!lg || lg.name !== e.name){
+        lg = logs.filter(function(l){ return l && l.name === e.name; })[0];
+      }
+      if(!lg || !Array.isArray(lg.sets)) return;
+
+      lg.sets.slice(0, pSets).forEach(function(st){
+        var r = _num_(st && st.reps);
+        if(r > 0) performed += Math.min(r, pReps);
+      });
+    });
+
+    if(!(prescribed > 0)) return null;
+    return Math.max(0, Math.min(100, Math.round((performed / prescribed) * 100)));
+  }
+
+  return null;
+
+  function _num_(v){ var n = Number(v); return isFinite(n) ? n : 0; }
+}
 function markPlanEdited_(sess, fields){
   if(!sess||!fields) return sess;
   if(!sess._edited || typeof sess._edited!=='object') sess._edited={};
@@ -20832,8 +20881,17 @@ function _isLowerLift_(name){ return /deadlift|squat|rdl|romanian|hip thrust|lun
 function _ctlRamp_(){ try{ var f=(typeof getFitness_==='function')?getFitness_():null; var r=f&&f.ramp; return (typeof r==='number')?r:((r&&r.ctl!=null)?r.ctl:null); }catch(e){ return null; } }
 // Most-recent-first top sets for a lift, from st.strength.log.
 function _strTopSets_(exName){
-  var out=[]; try{ var log=(typeof st!=='undefined'&&st.strength&&st.strength.log)?st.strength.log:{};
-    Object.keys(log).forEach(function(dk){ (log[dk]||[]).forEach(function(e){ if(e && e.name===exName && e.sets && e.sets.length){ var top=e.sets[0]||{}; out.push({date:dk, weight:+top.weight||0, reps:+top.reps||0, rpe:(top.rpe!=null?+top.rpe:null)}); } }); });
+  var out=[]; try{
+    function _take(dk, e){ if(e && e.name===exName && e.sets && e.sets.length){ var top=e.sets[0]||{}; out.push({date:dk, weight:+top.weight||0, reps:+top.reps||0, rpe:(top.rpe!=null?+top.rpe:null)}); } }
+    // Session-authoritative logs first — one entry per (date, session), so no sync-union dup.
+    var seen={};
+    if(typeof st!=='undefined' && st.plan){
+      Object.keys(st.plan).forEach(function(dk){ var d=st.plan[dk]; if(!d||!Array.isArray(d.sessions)) return;
+        d.sessions.forEach(function(x){ if(!x||x.deleted||!Array.isArray(x.strengthLog)||!x.strengthLog.length) return; seen[dk]=true; x.strengthLog.forEach(function(e){ _take(dk, e); }); }); });
+    }
+    // Legacy keyed cache only for dates no session-log covers (unmigrated/orphan-free remainder).
+    var log=(typeof st!=='undefined'&&st.strength&&st.strength.log)?st.strength.log:{};
+    Object.keys(log).forEach(function(dk){ var nk=(typeof normDate==='function')?normDate(dk):dk; if(seen[nk]||seen[dk]) return; (log[dk]||[]).forEach(function(e){ _take(nk, e); }); });
     out.sort(function(a,b){ return (a.date<b.date)?1:-1; });
   }catch(e){} return out;
 }
@@ -20917,7 +20975,7 @@ function planResolve_(s){
   var def=(key && typeof _planSessionFromDef_==='function')?_planSessionFromDef_(key,(s.block&&s.block.week)||1):null;
   if(!def) return s;                               // unknown intent — nothing to derive
   var out={}; for(var k in def) out[k]=def[k];     // derived prescription (targets/exercises/note)
-  ['id','source','status','block','completedRideKey','executionScore','editedAt','_edited','deleted','gen','migrated','actualDurationMin','completed'].forEach(function(f){ if(s[f]!==undefined) out[f]=s[f]; });
+  ['id','source','status','block','completedRideKey','executionScore','strengthLog','editedAt','_edited','deleted','gen','migrated','actualDurationMin','completed'].forEach(function(f){ if(s[f]!==undefined) out[f]=s[f]; });
   if(s.name) out.name=s.name;                      // a renamed/swapped session keeps its name
   return out;
 }
@@ -21111,6 +21169,50 @@ function migratePlanToStPlan_(){
     st._planMig=1;
     try{ if(st.plannedWorkouts) delete st.plannedWorkouts; }catch(e){}   // retired — readers now use st.plan
     try{ sv(); }catch(e){}
+  }catch(e){}
+}
+// One-time repair of st.strength.log (guarded by st._strLogMig, syncs so it fires once globally):
+//  1) fold every key into its canonical padded form (the raw-key write at save time orphaned ~10
+//     unpadded keys, e.g. '2026-6-8', from their normalized session buckets);
+//  2) collapse the 2–3× duplicate rows a prior append/sync-union left, keeping the last per name;
+//  3) backfill the log ONTO its parent strength session (the new source of truth) where one exists;
+//  4) drop keys with NO parent strength session (synthetic-seed orphans) — legacy cache only.
+function migrateStrengthLog_(){
+  try{
+    if(typeof st==='undefined') return;
+    if(st._strLogMig) return;
+    if(!st.strength) st.strength={oneRM:{},log:{}};
+    if(!isPlainObj_(st.strength.log)) st.strength.log={};
+    var log=st.strength.log, folded={};
+    // (1) fold keys to canonical form
+    Object.keys(log).forEach(function(dk){
+      var nk=(typeof normDate==='function')?normDate(dk):dk;
+      var arr=Array.isArray(log[dk])?log[dk]:[];
+      folded[nk]=(folded[nk]||[]).concat(arr);
+    });
+    // (2) dedupe within each key by exercise name (last write wins), preserving first-seen order
+    Object.keys(folded).forEach(function(nk){
+      var byName={}, order=[];
+      folded[nk].forEach(function(e){ if(!e||!e.name) return; if(!(e.name in byName)) order.push(e.name); byName[e.name]=e; });
+      folded[nk]=order.map(function(n){ return byName[n]; });
+    });
+    // (3)+(4) backfill onto parent sessions; keep only keys that HAVE a parent strength session
+    var kept={};
+    Object.keys(folded).forEach(function(nk){
+      var day=st.plan && st.plan[nk];
+      var sessions=(day && Array.isArray(day.sessions))?day.sessions:[];
+      var strengthSess=sessions.filter(function(x){ return x && !x.deleted && x.type==='strength'; });
+      if(!strengthSess.length) return;   // orphan — drop
+      var target=strengthSess.filter(function(x){ return !Array.isArray(x.strengthLog)||!x.strengthLog.length; })[0]||strengthSess[0];
+      if(!Array.isArray(target.strengthLog)||!target.strengthLog.length){
+        target.strengthLog=folded[nk];
+        if(typeof markPlanEdited_==='function') markPlanEdited_(target, ['strengthLog']);
+      }
+      kept[nk]=folded[nk];
+    });
+    st.strength.log=kept;
+    st._strLogMig=1;
+    try{ if(typeof sv==='function') sv(); }catch(e){}
   }catch(e){}
 }
 function plannedOverrideFor_(dateKey){
@@ -25864,11 +25966,37 @@ function isDayComplete(dateKey){
 }
 function toggleDayComplete(dateKey){
   var c=getCompletions();
+  var marking=!c[dateKey];
   if(c[dateKey]) delete c[dateKey]; else c[dateKey]=Date.now();
   try{ localStorage.setItem('aiq_completions', JSON.stringify(c)); }catch(e){}
-  try{ if(typeof toast==='function') toast(c[dateKey]?'Marked complete':'Marked incomplete'); }catch(e){}
+  // Route through the SAME completion path as the editor: marking a day complete should
+  // finish + score its logged sessions, not just flip a local display flag. Un-marking
+  // leaves session state alone (a completed session with a real log stays completed).
+  if(marking){ try{ _scoreDaySessions_(dateKey); }catch(e){} }
+  try{ if(typeof toast==='function') toast(marking?'Marked complete':'Marked incomplete'); }catch(e){}
   // Re-render whichever calendar view is active.
   try{ if(typeof showCalendarTab==='function') showCalendarTab(); }catch(e){}
+}
+// Complete + score the day's sessions that carry real evidence of work (a strength log on the
+// session, or a mobility actual duration). No evidence -> left untouched: marking a day complete
+// never fabricates a completed status on an un-logged session. Score is computed AFTER status is
+// set, since computeExecutionScore_ returns null unless status==='completed'.
+function _scoreDaySessions_(dateKey){
+  if(typeof st==='undefined' || !st.plan) return;
+  var nk=(typeof normDate==='function')?normDate(dateKey):dateKey;
+  var day=st.plan[nk]; if(!day||!Array.isArray(day.sessions)) return;
+  var changed=false;
+  day.sessions.forEach(function(s){
+    if(!s || s.deleted || s.type==='rest') return;
+    var hasLog=(s.type==='strength' && Array.isArray(s.strengthLog) && s.strengthLog.length);
+    var hasActual=(s.type==='mobility' && s.actualDurationMin!=null);
+    if(!hasLog && !hasActual) return;
+    s.status='completed';
+    if(typeof computeExecutionScore_==='function') s.executionScore=computeExecutionScore_(s);
+    if(typeof markPlanEdited_==='function') markPlanEdited_(s, s.executionScore!=null?['status','executionScore']:['status']);
+    changed=true;
+  });
+  if(changed){ try{ if(typeof sv==='function') sv(); }catch(e){} }
 }
 
 // Find a completed activity (ride or run) for a given date key (Y-M-D).
@@ -26110,14 +26238,16 @@ function openDayEditor(dateKey, targetId){
       var addB=document.createElement('button'); addB.textContent='+ exercise'; addB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addB.onclick=function(){ addEx({}); }; bodyEl.appendChild(addB);
       _sect('Completed — logged (weight x reps @ RPE)');
       var lgWrap=document.createElement('div'); var lgRows=[];
-      function addLg(e){ e=e||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 44px 42px 42px;gap:5px;margin-bottom:6px;align-items:start'; var wt=_mkI(e.weight!=null?e.weight:'','lb'),rp=_mkI(e.reps!=null?e.reps:'','rep'),rpe=_mkI(e.rpe!=null?e.rpe:'','RPE'); var nf=_exNameField(e.name,null); rw.appendChild(nf.el);rw.appendChild(wt);rw.appendChild(rp);rw.appendChild(rpe); lgWrap.appendChild(rw); lgRows.push({nf:nf,wt:wt,rp:rp,rpe:rpe}); }
-      var exLog=(st.strength&&st.strength.log&&st.strength.log[dateKey])||[];
+      function addLg(e){ e=e||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 58px 42px 42px;gap:5px;margin-bottom:6px;align-items:start'; var wt=_mkI(e.weight!=null?e.weight:'','lb'),rp=_mkI(e.reps!=null?e.reps:'','rep'),rpe=_mkI(e.rpe!=null?e.rpe:'','RPE'); var nf=_exNameField(e.name,null); rw.appendChild(nf.el);rw.appendChild(wt);rw.appendChild(rp);rw.appendChild(rpe); lgWrap.appendChild(rw); lgRows.push({nf:nf,wt:wt,rp:rp,rpe:rpe}); }
+      // Session-authoritative log wins; fall back to the legacy keyed cache (canonical then raw key).
+      var _lkR=(typeof normDate==='function')?normDate(dateKey):dateKey;
+      var exLog=(sess&&Array.isArray(sess.strengthLog)&&sess.strengthLog.length)?sess.strengthLog:((st.strength&&st.strength.log&&(st.strength.log[_lkR]||st.strength.log[dateKey]))||[]);
       (exLog.length?exLog.map(function(e){ var st0=e.sets&&e.sets[0]||{}; return {name:e.name, weight:st0.weight, reps:st0.reps, rpe:st0.rpe}; }):[{}]).forEach(addLg);
       bodyEl.appendChild(lgWrap);
       var addLB=document.createElement('button'); addLB.textContent='+ logged exercise'; addLB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addLB.onclick=function(){ addLg({}); }; bodyEl.appendChild(addLB);
       getData=function(){
         var exs=exRows.map(function(r){ return { name:r.nf.get(), sets:_num(r.s.value), reps:_num(r.rp.value), pct1RM:_num(r.pc.value) }; }).filter(function(e){ return e.name; });
-        var logs=lgRows.map(function(r){ var w=_num(r.wt.value), nm=r.nf.get(); return (nm&&w!=null)?{ name:nm, sets:[{ weight:w, reps:_num(r.rp.value), rpe:_num(r.rpe.value) }] }:null; }).filter(Boolean);
+        var logs=lgRows.map(function(r){ var w=_num(r.wt.value), nm=r.nf.get(); var rpe=_num(r.rpe.value); if(rpe!=null) rpe=Math.max(1,Math.min(10,rpe)); return (nm&&w!=null)?{ name:nm, sets:[{ weight:w, reps:_num(r.rp.value), rpe:rpe }] }:null; }).filter(Boolean);
         return { type:'strength', name:_selName||'Strength', exercises:exs, strengthLog:logs };
       };
     } else {
@@ -26199,7 +26329,14 @@ function openDayEditor(dateKey, targetId){
           if(d.strengthLog && d.strengthLog.length){
             if(!st.strength) st.strength={oneRM:{},log:{}};
             if(!st.strength.log) st.strength.log={}; if(!st.strength.oneRM) st.strength.oneRM={};
-            st.strength.log[dateKey]=d.strengthLog; s2.status='completed';
+            // Canonical (padded) key — the raw dateKey orphaned logs from their normalized session bucket.
+            var _lk=(typeof normDate==='function')?normDate(dateKey):dateKey;
+            st.strength.log[_lk]=d.strengthLog;   // REPLACE, not append; kept only as a legacy cache
+            // Authoritative copy ON the session: atomic with status+score, and merges by the
+            // per-session _edited mask (a later save's array wins wholesale — no sync-union dup).
+            s2.strengthLog=d.strengthLog;
+            s2.status='completed';
+            s2.executionScore = computeExecutionScore_(s2);   // s2 now carries the log directly
             // best-effort Epley 1RM estimate from a logged set; never lowers an estimate.
             try{ d.strengthLog.forEach(function(e){ var set=e.sets&&e.sets[0]; if(set&&set.weight&&set.reps){ var est=Math.round(set.weight*(1+set.reps/30)); if(!(st.strength.oneRM[e.name]>est)) st.strength.oneRM[e.name]=est; } }); }catch(_e){}
           }
@@ -26208,9 +26345,16 @@ function openDayEditor(dateKey, targetId){
           if(d.exercises) s2.exercises=d.exercises;   // preserve the §3.4 movement list on save
           if(d.actualDurationMin!=null) s2.actualDurationMin=d.actualDurationMin;
           s2.status=d.completed?'completed':'planned';
+          s2.executionScore = computeExecutionScore_(s2);   // null unless completed w/ target + actual
         }
         if(typeof planUpsertSession_!=='function') throw new Error('planUpsertSession_ unavailable');
-        planUpsertSession_(dateKey, s2, ['type','name','intent','targets','exercises','status','completed'], 'user');
+        // executionScore is computed deterministically, but mask it so a recompute (new formula)
+        // wins cross-device instead of the generic Math.max merge. Only when a real score exists —
+        // ride saves leave it null, and masking an undefined field is just noise.
+        var _ef=['type','name','intent','targets','exercises','status','completed'];
+        if(s2.executionScore!=null) _ef.push('executionScore');
+        if(Array.isArray(s2.strengthLog)) _ef.push('strengthLog');   // mask so a re-save's log REPLACES on merge (no array-union dup)
+        planUpsertSession_(dateKey, s2, _ef, 'user');
       }
       if(typeof sv==='function') sv();   // persist: saveLocal_ (localStorage + IndexedDB) + debounced fbPush
       try{ console.log('[dayEditor] saved st.plan['+dateKey+'] ->', JSON.stringify((typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).map(function(s){return {id:s.id,type:s.type,name:s.name,editedAt:s.editedAt};}))); }catch(_e){}
@@ -26220,9 +26364,17 @@ function openDayEditor(dateKey, targetId){
       return;   // keep the sheet OPEN so the typed entry is not dropped
     }
     try{ if(typeof toast==='function') toast('Saved'); }catch(e){}
-    modal.remove();
+    // Stay in the editor — logging several exercises shouldn't force a close + reopen + re-scroll
+    // per save. Rebind to the persisted session, refresh the body in place, refresh the views
+    // behind, then re-append the (still-open) sheet so it stays on top.
+    try{
+      var _saved=(typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).filter(function(x){ return x && x.id===s2.id; })[0];
+      if(_saved){ sess=_saved; _forceNew=false; }
+      if(typeof renderType==='function') renderType(_selType);
+    }catch(e){}
     try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
     try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
+    try{ (document.getElementById('app-shell')||document.body).appendChild(modal); }catch(e){}
   };
   sheet.appendChild(save);
 
@@ -27567,6 +27719,8 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        // Runs AFTER the plan migration so parent sessions exist to backfill onto + orphan-detect against.
+        try{ if(typeof migrateStrengthLog_==='function') migrateStrengthLog_(); }catch(e){}
         try{ showHomeDash(); }catch(e){}
       });
   });
