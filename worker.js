@@ -27009,17 +27009,19 @@ function mergeCrossSourceDupes_(){
   var mixStr=Object.keys(mix).map(function(s){return s+':'+mix[s];}).join(', ');
   var NL=String.fromCharCode(10);
   var msg='Found '+toTomb.length+' duplicate ride'+(toTomb.length>1?'s':'')+' (same date, distance & ~duration from a different source).'+NL+NL+'Sources removed: '+mixStr+NL+'Library: '+live.length+' -> '+(live.length-toTomb.length)+' rides.'+NL+NL+'The richer copy of each pair is kept. Merge these duplicates?';
-  var go=function(){
-    toTomb.forEach(function(r){ r.deleted=true; r.deletedAt=Date.now(); r.deleteReason='cross-source-dupe'; });
-    try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
-    try{ saveLocal_(); }catch(e){}
-    try{ fbPush(true,true); }catch(e){}
-    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
-    var liveNow=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
-    console.log('[merge-dupes] tombstoned='+toTomb.length+' live now='+liveNow);
-    try{ toast('Merged '+toTomb.length+' duplicates — '+liveNow+' rides. Syncing…'); }catch(e){}
-  };
-  try{ uiConfirm(msg,{okText:'Merge'}).then(function(ok){ if(ok) go(); }); }catch(e){ if(confirm(msg)) go(); }
+  // DISABLED (Jul 2026): this bulk pass tombstoned rides AND force-OVERWROTE the cloud
+  // (fbPush(true,true)) — the exact shape that destroyed ~83% of the library (2,775 orphan
+  // tombstones, 1,755 from an earlier cross-source pass whose stamper is already removed). It is now
+  // REPORT-ONLY: it logs what it WOULD collapse but sets no deleted flag and issues no push, so no
+  // bulk ride-tombstoning or irreversible cloud overwrite can happen. This also neutralizes the
+  // revive-then-rekill (aiReviveNulls_ calls this at 13500, which previously re-killed freshly
+  // revived rides). Re-enable only behind a deliberate rewrite that guarantees a surviving live twin
+  // per pair and never force-overwrites. See [[ride-dedup-stravaid-coercion]] for why keep/richest
+  // dedup + force-push is the wrong tool here; recovery is a separate, twin-verified path.
+  var _mix2=Object.keys(mix).map(function(s){return s+':'+mix[s];}).join(', ');
+  console.log('[merge-dupes] DISABLED (report-only) — WOULD collapse '+toTomb.length+' cross-source pair(s); NO writes, NO push. Sources: '+_mix2);
+  try{ if(typeof toast==='function') toast('Merge Dupes is disabled (report-only): '+toTomb.length+' candidates logged, nothing changed.'); }catch(e){}
+  return;
 }
 // ==================================================================================
 
