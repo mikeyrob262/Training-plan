@@ -13488,7 +13488,7 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
+var AI_TABS=[['overview','Overview'],['racing','Racing Yourself'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -13746,6 +13746,102 @@ function _adhCardInner_(title, wk){
 function aiCardStrengthAdherence_(){ return _adhCardInner_('STRENGTH ADHERENCE', (typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[]); }
 function aiCardRideAdherence_(){ return _adhCardInner_('RIDE ADHERENCE', (typeof rideAdherenceTrend_==='function')?rideAdherenceTrend_(st,8):[]); }
 
+// ==================== Racing Yourself — cumulative month-over-month ghost charts ====================
+// Strava-style: a bright cumulative line for the current month drawn against the SAME-PERIOD line
+// from last month (stops at the same day-of-month, so partial-vs-full never reads as a false loss),
+// with last month's FULL total as a dashed ceiling to chase. Ahead/behind is color-coded (green vs
+// red) so you read your pace vs your past self without reading a number. Three modalities, split so
+// virtual and outdoor rides never blur together.
+function _ryDate_(s){ var p=String(s||'').split('T')[0].split('-'); if(p.length<3) return new Date(NaN); return new Date(+p[0], (+p[1]||1)-1, (+p[2]||1)); }   // LOCAL parse (no UTC day-shift)
+function _ryMi_(v){ var n=Math.round((+v||0)*10)/10; return n.toLocaleString(); }
+var _RY_MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+// Cumulative distance for (year, month0) up to the upto day (capped at the month's length); returns
+// {cum:[{day,val}], total, count, days}. acts = [{d:Date, mi:Number}].
+function _ryCum_(acts, year, month, upto){
+  var days=new Date(year, month+1, 0).getDate();
+  var lim=(upto!=null && upto<days)?upto:days;
+  var per={}, count=0, total=0;
+  acts.forEach(function(a){ if(a.d && a.d.getFullYear()===year && a.d.getMonth()===month){ var dd=a.d.getDate(); if(dd<=lim){ per[dd]=(per[dd]||0)+a.mi; count++; total+=a.mi; } } });
+  var cum=[], run=0;
+  for(var day=1; day<=lim; day++){ run+=(per[day]||0); cum.push({day:day, val:run}); }
+  return {cum:cum, total:total, count:count, days:days};
+}
+// One ghost chart for a modality. Renders honestly at zero (flat line, 0/0) rather than hiding.
+function _racingChart_(title, acts){
+  var now=new Date(); var Y=now.getFullYear(), M=now.getMonth(), curDay=now.getDate();
+  var pM=(M===0)?11:M-1, pY=(M===0)?Y-1:Y;
+  var cur=_ryCum_(acts,Y,M,curDay), daysCur=cur.days;
+  var prevSame=_ryCum_(acts,pY,pM,curDay);       // SAME-PERIOD: capped at same day-of-month (and prev month length)
+  var prevFull=_ryCum_(acts,pY,pM,null);          // full prior month -> the dashed ceiling
+  var curTotal=cur.total, curCount=cur.count, prevSameTotal=prevSame.total, prevFinal=prevFull.total;
+  var even=Math.abs(curTotal-prevSameTotal)<0.05;
+  var ahead=curTotal>=prevSameTotal;
+  var AC = even ? '#e8edf5' : (ahead ? '#22c55e' : '#ff5c5c');   // even white / ahead green / behind red
+  var GHOST='#6b7280', CEIL='#4b5563', CEILT='#9ca3af';
+  var delta=curTotal-prevSameTotal;
+  var inner='';
+  // header: title + ahead/behind chip (color AND arrow+word — not color alone)
+  var arrow = even ? '&#183;' : (ahead ? '&#9650;' : '&#9660;');
+  var word = even ? 'even with' : (ahead ? 'ahead of' : 'behind');
+  inner+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">';
+  inner+='<div style="font-size:17px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+aiEsc_(title)+'</div>';
+  inner+='<div style="font-size:12px;font-weight:800;color:'+AC+'"><span>'+arrow+'</span> '+_ryMi_(Math.abs(delta))+' mi '+word+' '+_RY_MON[pM]+' pace</div>';
+  inner+='</div>';
+  inner+='<div style="display:flex;gap:26px;margin:8px 0 12px">';
+  inner+='<div><div style="font-size:30px;font-weight:800;color:'+AC+';line-height:1">'+_ryMi_(curTotal)+'<span style="font-size:14px;color:#94a3b8;font-weight:700"> mi</span></div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-top:2px">this month</div></div>';
+  inner+='<div><div style="font-size:30px;font-weight:800;color:#e8edf5;line-height:1">'+curCount+'</div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-top:2px">activities</div></div>';
+  inner+='</div>';
+  // chart
+  var W=340,H=158, padL=8,padR=14,padT=20,padB=8;
+  var yMax=Math.max(prevFinal, curTotal, prevSameTotal, 1)*1.06;
+  function xFor(day){ return padL + (daysCur>1?(day-1)/(daysCur-1):0)*(W-padL-padR); }
+  function yFor(v){ return H-padB - (v/yMax)*(H-padT-padB); }
+  var svg='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;overflow:visible">';
+  if(prevFinal>0){ var cy=yFor(prevFinal);
+    svg+='<line x1="'+padL+'" y1="'+cy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+cy.toFixed(1)+'" stroke="'+CEIL+'" stroke-width="1" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>';
+    svg+='<text x="'+padL+'" y="'+(cy-4).toFixed(1)+'" font-size="9" fill="'+CEILT+'" font-weight="700">'+_RY_MON[pM].slice(0,3)+' &#183; '+_ryMi_(prevFinal)+' mi</text>';
+  }
+  if(prevSame.cum.length>=2){ var gp=prevSame.cum.map(function(p){ return xFor(p.day).toFixed(1)+' '+yFor(p.val).toFixed(1); });
+    svg+='<path d="M'+gp.join(' L')+'" fill="none" stroke="'+GHOST+'" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>'; }
+  if(cur.cum.length>=1){ var cp=cur.cum.map(function(p){ return xFor(p.day).toFixed(1)+' '+yFor(p.val).toFixed(1); });
+    if(cp.length>=2) svg+='<path d="M'+cp.join(' L')+'" fill="none" stroke="'+AC+'" stroke-width="2.4" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/>';
+    var last=cur.cum[cur.cum.length-1], lx=xFor(last.day), ly=yFor(last.val);
+    svg+='<circle cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" r="6" fill="'+AC+'" fill-opacity="0.22"/><circle cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" r="3.2" fill="'+AC+'"/>';
+  }
+  svg+='</svg>';
+  inner+='<div>'+svg+'</div>';
+  inner+='<div style="display:flex;justify-content:space-between;margin-top:2px;font-size:9px;color:#5b6678"><span>'+_RY_MON[M].slice(0,3)+' 1</span><span>'+_RY_MON[M].slice(0,3)+' '+daysCur+'</span></div>';
+  // year-over-year, same-period prior year; OMITTED entirely when there is no prior-year data
+  var pySame=_ryCum_(acts, Y-1, M, curDay);
+  if(pySame.total>0){
+    var pct=Math.round((curTotal-pySame.total)/pySame.total*100);
+    var ml=pct>=0?'more':'less', pcol=pct>=0?'#22c55e':'#ff5c5c';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;font-size:12.5px;color:#94a3b8;line-height:1.5">You&#8217;ve logged <b style="color:#e8edf5">'+_ryMi_(curTotal)+' mi</b> this month, <b style="color:'+pcol+'">'+Math.abs(pct)+'% '+ml+'</b> than '+_ryMi_(pySame.total)+' mi by this point in '+_RY_MON[M]+' '+(Y-1)+'.</div>';
+  }
+  return aiCard_(inner);
+}
+function aiRenderRacing_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+  function sport(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }
+  function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sport(r)); }
+  function isRide(r){ return /ride/i.test(sport(r)) && !isRun(r); }              // cycling only (excludes runs/swims)
+  function isVirt(r){ return isRide(r) && /virtual/i.test(sport(r)); }            // Strava VirtualRide = Zwift
+  function mi(r){ return parseFloat(r.distance)||0; }
+  function toAct(r){ return { d:_ryDate_(r.date), mi:mi(r) }; }
+  var outdoor=[], virtual=[];
+  ded.forEach(function(r){ if(!r||!r.date||!isRide(r)) return; (isVirt(r)?virtual:outdoor).push(toAct(r)); });
+  // runs live in BOTH st.rides (run sportType) AND st.runs — union, deduped by date+distance
+  var seen={}, runs=[];
+  ded.filter(function(r){ return r&&r.date&&isRun(r); }).concat((st.runs||[]).filter(function(r){ return r&&!r.deleted&&r.date; }))
+     .forEach(function(r){ var k=String(r.date).split('T')[0]+'|'+Math.round(mi(r)*10); if(!seen[k]){ seen[k]=1; runs.push(toAct(r)); } });
+  function clean(l){ return l.filter(function(a){ return a.d && !isNaN(a.d.getTime()); }); }
+  var H='<div style="max-width:760px;margin:0 auto;padding-bottom:10px">';
+  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 16px;line-height:1.55">Cumulative distance this month against your <b style="color:#94a3b8">same-day pace last month</b>. The dashed line is last month&#8217;s full total &#8212; the ceiling to chase. <b style="color:#22c55e">Green</b> means ahead of your past self; <b style="color:#ff5c5c">red</b> means behind.</div>';
+  H+=[_racingChart_('Outdoor Ride', clean(outdoor)), '<div style="height:12px"></div>', _racingChart_('Virtual Ride', clean(virtual)), '<div style="height:12px"></div>', _racingChart_('Run', clean(runs))].join('');
+  H+='</div>';
+  return H;
+}
+
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
 function aiCardDNA_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
@@ -13867,6 +13963,7 @@ function aiRenderTrends_(ded){
 function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.error('[ai] card "'+label+'" threw: '+(e&&e.message)); }catch(_){} return ''; } }
 function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
+  if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Racing Yourself — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
