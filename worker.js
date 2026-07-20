@@ -4605,6 +4605,7 @@ function normalizeState_(s){
   // object branch (sessions arrays get the per-session mask via mergeSession_).
   if(!isPlainObj_(s.plan)) s.plan = {};
   if(!isPlainObj_(s.strength)) s.strength = {};
+  if(!isPlainObj_(s.segments)) s.segments = {};   // per-segment all-time PR store (keyed by 's'+stravaSegmentId), sourced from Strava
   if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
   if(!isPlainObj_(s.strength.log)) s.strength.log = {};
   // Collapse duplicate plan sessions per date. Independently-migrated copies had
@@ -13954,6 +13955,64 @@ function aiRenderMilestones_(){
   H+='</div>'; return H;
 }
 
+// ==================== Records — segment PRs (all-time; data is intact server-side) ====================
+// Decision A: segment bests ARE genuinely all-time — Strava holds the complete effort history, so
+// the local ride-library loss does NOT apply here. This is the one surface where "best ever" is honest.
+// Records = best time per segment + PR progression (each improvement). Milestones = first threshold
+// crossings (separate tab). One computation shape, two framings; this is the "best" framing.
+function _segFmtT_(sec){ sec=Math.round(+sec||0); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h>0?(h+':'+('0'+m).slice(-2)):(''+m))+':'+('0'+s).slice(-2); }
+// PURE + testable. store = st.segments (object keyed by id). Returns records sorted most-ridden first.
+// NO window cap (all-time is honest here). A segment with no PR time is skipped.
+function segmentRecordsCompute_(store){
+  var arr=[], keys=isPlainObj_(store)?Object.keys(store):[];
+  keys.forEach(function(k){
+    var s=store[k]; if(!s) return;
+    var prSec=+s.prSec||0; if(!(prSec>0)) return;
+    var prog=[];
+    if(Array.isArray(s.efforts) && s.efforts.length){
+      var byDate=s.efforts.filter(function(e){ return e && (+e.sec)>0 && e.date; }).slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+      var bestSoFar=Infinity;
+      byDate.forEach(function(e){ if(+e.sec<bestSoFar){ bestSoFar=+e.sec; prog.push({sec:+e.sec,date:String(e.date).slice(0,10)}); } });
+    }
+    arr.push({ id:k, name:s.name||'Segment', distMi:(+s.distMi||0)||null, grade:(s.grade!=null?+s.grade:null),
+      prSec:prSec, prDate:s.prDate?String(s.prDate).slice(0,10):null, effortCount:(+s.effortCount||prog.length||0),
+      starred:!!s.starred, progression:prog });
+  });
+  arr.sort(function(a,b){ if(b.effortCount!==a.effortCount) return b.effortCount-a.effortCount; return String(b.prDate||'').localeCompare(String(a.prDate||'')); });
+  return arr;
+}
+function aiSyncSegments_(){ try{ if(typeof toast==='function') toast('Syncing segment PRs…'); }catch(e){} if(typeof syncSegmentPRs_==='function') syncSegmentPRs_(false, function(){ try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }); }
+function aiRenderRecords_(){
+  var recs=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
+  var H='<div style="max-width:900px;margin:0 auto;padding-bottom:16px">';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 20px">';
+  H+='<div style="font-size:13px;color:#64748b;line-height:1.5">Your best times on Strava segments — all-time, straight from Strava.</div>';
+  H+='<button onclick="aiSyncSegments_()" style="flex:0 0 auto;background:transparent;border:1px solid #2a3550;color:#94a3b8;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Sync Segment PRs</button></div>';
+  if(!recs.length){
+    H+='<div style="padding:44px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">No segment records yet.<br><span style="font-size:12.5px">Tap <b style="color:#94a3b8">Sync Segment PRs</b> (Strava must be connected) to pull your starred-segment bests.</span></div>';
+    return H+'</div>';
+  }
+  H+='<style>.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}@media(max-width:640px){.rec-grid{grid-template-columns:1fr}}</style><div class="rec-grid">';
+  var STAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>';
+  recs.slice(0,40).forEach(function(r){
+    var spark='';
+    if(r.progression.length>=2){
+      var W=180,Hh=32, secs=r.progression.map(function(p){return p.sec;}), mn=Math.min.apply(null,secs), mx=Math.max.apply(null,secs); if(mx<=mn) mx=mn+1;
+      var n=r.progression.length;
+      var pts=r.progression.map(function(p,i){ var x=(n>1?i/(n-1):0)*W; var y=Hh-((mx-p.sec)/(mx-mn))*(Hh-6)-3; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');   // faster (lower sec) sits HIGHER
+      spark='<svg width="100%" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" style="display:block;margin-top:9px"><path d="M'+pts+'" fill="none" stroke="#22c55e" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+    }
+    var meta=[]; if(r.distMi) meta.push(r.distMi+' mi'); if(r.grade!=null) meta.push(r.grade+'%'); if(r.effortCount) meta.push(r.effortCount+' effort'+(r.effortCount===1?'':'s'));
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+(r.starred?STAR:'')+'<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
+      +'<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:#FC4C02;line-height:1">'+_segFmtT_(r.prSec)+'</span>'+(r.prDate?('<span style="font-size:11.5px;color:#5b6678">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
+      +(meta.length?('<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+meta.join(' · ')+'</div>'):'')
+      +spark
+    +'</div>';
+  });
+  H+='</div></div>'; return H;
+}
+
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
 function aiCardDNA_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
@@ -14077,6 +14136,7 @@ function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Racing Yourself — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
+  if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
@@ -24194,6 +24254,56 @@ function fetchRideSegments(r, cb){
       else if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); }
     }).catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); } });
   } else if(st.stravaToken){ doFetch(st.stravaToken); } else { cb(null); }
+}
+
+// Pull the athlete's STARRED segments and store each one's ALL-TIME PR (elapsed time + date + effort
+// count) into st.segments, keyed by 's'+segmentId. This is the complete, server-side truth — it does
+// NOT come from the (lossy) per-ride r.segments cache. Cheap (paginated starred list), so it is the
+// "pull on sync" path; run it after a Strava sync or from the Records tab button. Rank/KOM is NOT
+// fetched here — that is a live view-time read only, never persisted (a stored rank drifts silently).
+// Progression per segment (the full effort list) needs a per-segment all_efforts pass — deferred.
+function syncSegmentPRs_(silent, cb){
+  cb=cb||function(){};
+  function done(n,err){ if(!silent){ try{ if(typeof toast==='function') toast(err?('Segment sync failed: '+err):(n+' segment PR'+(n===1?'':'s')+' synced')); }catch(e){} } cb(n,err); }
+  var doFetch=function(token){
+    if(!isPlainObj_(st.segments)) st.segments={};
+    var all=[], page=1;
+    var finish=function(){
+      var n=0;
+      all.forEach(function(s){
+        if(!s || s.id==null) return;
+        var stats=s.athlete_pr_effort||s.athlete_segment_stats||{};
+        var prSec=(stats.pr_elapsed_time!=null)?stats.pr_elapsed_time:(stats.elapsed_time!=null?stats.elapsed_time:null);
+        var prDate=stats.pr_date||(stats.start_date_local?String(stats.start_date_local).slice(0,10):null);
+        var cnt=(stats.effort_count!=null)?stats.effort_count:null;
+        var id='s'+s.id, cur=st.segments[id]||{};
+        st.segments[id]=Object.assign(cur,{
+          id:id, name:s.name||cur.name||'Segment',
+          distMi:(s.distance!=null?Math.round(s.distance/1609.344*100)/100:cur.distMi)||null,
+          grade:(s.average_grade!=null?s.average_grade:cur.grade),
+          prSec:(prSec!=null?prSec:cur.prSec)||null, prDate:prDate||cur.prDate||null,
+          effortCount:(cnt!=null?cnt:cur.effortCount)||null, starred:true, updatedAt:Date.now()
+        });
+        if((+st.segments[id].prSec)>0) n++;
+      });
+      try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      done(n);
+    };
+    var next=function(){
+      fetch('https://www.strava.com/api/v3/segments/starred?per_page=200&page='+page,{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){ return r.ok?r.json():null; }).then(function(list){
+        if(!Array.isArray(list)){ finish(); return; }
+        all=all.concat(list);
+        if(list.length===200 && page<10){ page++; next(); } else finish();
+      }).catch(function(e){ done(0,(e&&e.message)||'fetch'); });
+    };
+    next();
+  };
+  if(st.stravaRefreshToken){
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+    .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'no token'); } })
+    .catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'auth'); } });
+  } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'Connect Strava first'); }
 }
 
 // Segments tab: lists this ride's Strava segment efforts (name, your time,
