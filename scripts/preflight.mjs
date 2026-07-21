@@ -53,6 +53,18 @@ try {
   if (bad) fail(`${bad} served script block(s) fail to parse — the app would break at load.`);
   console.log(`${G}✓ served scripts parse (browser-equivalent, ${scripts.length} block${scripts.length > 1 ? 's' : ''})${X}`);
 
+  // ---- 3. AI card render smoke-test -> catches bare undeclared-symbol ReferenceErrors
+  //         (ceilCy / rcv class) that _aiSafe_ swallows in production, blanking a card.
+  console.log(`${D}· rendering AI cards (smoke-test)…${X}`);
+  try {
+    const so = execSync('node scripts/ai-cards-smoke.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('an AI card throws or renders blank (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
