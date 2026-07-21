@@ -14330,16 +14330,299 @@ function aiTrendVolume_(rides){
   inner+='</div>';
   return aiCard_(inner);
 }
+// ==================== Trends redesign — coaching layer ====================
+// Question-as-headline, not metric-as-headline: every card answers "what can I learn in
+// 10 seconds?". Numbers are REAL (computed from the library / logs) or the card degrades to
+// an honest "needs X" state — never fabricated. ONE coverage helper feeds the superlative
+// footnote, the scoped phrasing, and every confidence meter, so the honesty dialect is uniform
+// and self-updates as the library changes.
+function _trCoverage_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st.rides||[]).filter(function(r){return r&&!r.deleted;}));
+  var n=ded.length;
+  var ys=ded.map(function(r){ return r&&r.date?(+String(r.date).slice(0,4)):null; }).filter(function(y){return y&&y>1990;});
+  var years=ys.length?((Math.max.apply(null,ys)-Math.min.apply(null,ys))+1):0;
+  // "whole enough" for all-time superlatives once the re-import has restored the bulk.
+  var complete=(n>=1500 && years>=10);
+  return { n:n, years:years, complete:complete };
+}
+function _trCoverNote_(){ var c=_trCoverage_(); return 'across '+c.n.toLocaleString()+' synced rides'; }
+// Sample-size confidence: saturating curve on real n. full = n at which we call it well-supported.
+function _trConf_(n, full){ n=+n||0; full=full||120; var c=Math.round(100*(1-Math.exp(-n/(full*0.55)))); return Math.max(20, Math.min(99, c)); }
+// Full-history daily CTL/ATL (not the 85-day window) — a single pass over all live load, so
+// "highest CTL ever" is a real all-time comparison. Cheap: bucket load by day, walk with τ=42/7.
+function _trLongPMC_(){
+  var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
+    .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe};}));
+  a.forEach(function(x){ x.load=(typeof unifiedLoad==='function')?unifiedLoad(x):(+x.tss||0); });
+  var byDay={}, min=null;
+  a.forEach(function(x){ if(!x.date||!(x.load>0))return; var k=normDate(x.date); byDay[k]=(byDay[k]||0)+x.load; var t=new Date(String(x.date).slice(0,10)+'T00:00:00'); if(isNaN(t.getTime()))return; if(!min||t<min)min=t; });
+  if(!min) return null;
+  var today=new Date(); today.setHours(0,0,0,0);
+  var ctl=0, atl=0, peakCtl=0, peakDate=null, d=new Date(min), guard=0;
+  while(d<=today && guard++<20000){ var k=normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()); var tss=byDay[k]||0; ctl+=(tss-ctl)/42; atl+=(tss-atl)/7; if(ctl>peakCtl){peakCtl=ctl; peakDate=new Date(d);} d.setDate(d.getDate()+1); }
+  return { ctlNow:Math.round(ctl), peakCtl:Math.round(peakCtl), peakDate:peakDate };
+}
+// Your Story — Last 90 days: fitness/fatigue/form now vs ~90d ago (authoritative series).
+function _trStory_(){
+  var s=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[]; if(s.length<2) return null;
+  var now=s[s.length-1], then=s[Math.max(0, s.length-1-84)];
+  function tsbOf(p){ return p.tsb!=null?p.tsb:((p.ctl||0)-(p.atl||0)); }
+  function pctChg(a,b){ return (b&&Math.abs(b)>0.5)?Math.round((a-b)/Math.abs(b)*100):null; }
+  var lp=_trLongPMC_(), isPeak=lp && lp.peakCtl>0 && lp.ctlNow>=lp.peakCtl-1;
+  return {
+    fitness:{now:Math.round(now.ctl), then:Math.round(then.ctl), pct:pctChg(now.ctl,then.ctl)},
+    fatigue:{now:Math.round(now.atl), then:Math.round(then.atl), pct:pctChg(now.atl,then.atl)},
+    form:{now:Math.round(tsbOf(now)), then:Math.round(tsbOf(then))},
+    peak:isPeak, longPmc:lp
+  };
+}
+// CTL-relative training-state bands (share of the athlete's own all-time peak CTL). Real, and
+// coaching-meaningful: where the green line sits tells you the state you're training in.
+function _trBands_(peakCtl){
+  var pk=peakCtl>0?peakCtl:60;
+  return [ {label:'Peak Fitness', lo:0.90*pk, color:'#22c55e'}, {label:'Productive', lo:0.70*pk, color:'#4ade80'}, {label:'Maintenance', lo:0.50*pk, color:'#f59e0b'}, {label:'Detraining', lo:0, color:'#ef4444'} ];
+}
+// Major ATL jumps + the ride that caused each (day-over-day ATL rise past a threshold; attribute
+// to the biggest-load ride in the prior 2 days). Real. Also returns recovery-days for the latest.
+function _trSpikes_(series, rides){
+  if(!series||series.length<10) return [];
+  var byDay={}; (rides||[]).forEach(function(r){ if(!r||!r.date)return; var k=normDate(r.date); var load=(typeof unifiedLoad==='function')?unifiedLoad(r):(+r.tss||0); if(!byDay[k]||load>byDay[k].load) byDay[k]={load:load, r:r}; });
+  var out=[], base=[]; for(var i=0;i<series.length;i++) base.push(series[i].atl);
+  var mean=base.reduce(function(a,b){return a+b;},0)/base.length;
+  for(var j=3;j<series.length;j++){
+    var jump=series[j].atl-series[j-2].atl;
+    if(jump < Math.max(6, mean*0.18)) continue;
+    // find the day key for this series point; series[].d is "M/D"
+    var lbl=series[j].d, parts=String(lbl).split('/'); if(parts.length<2) continue;
+    var yr=(new Date()).getFullYear(); var dk=normDate(yr+'-'+parts[0]+'-'+parts[1]);
+    var hit=byDay[dk]; if(!hit){ // look back a day
+      var pk=parts[0], pd=(+parts[1])-1; dk=normDate(yr+'-'+pk+'-'+pd); hit=byDay[dk]; }
+    if(!hit||!hit.r) continue;
+    // recovery days: how long until atl falls back near pre-spike
+    var pre=series[j-2].atl, rec=null; for(var k2=j+1;k2<series.length;k2++){ if(series[k2].atl<=pre+2){ rec=k2-j; break; } }
+    out.push({ i:j, at:series[j].d, jump:Math.round(jump), ride:hit.r, rec:rec });
+  }
+  // keep the biggest few, most-recent last
+  out.sort(function(a,b){return b.jump-a.jump;});
+  return out.slice(0,4).sort(function(a,b){return a.i-b.i;});
+}
+// Ranked fitness drivers — recent 60d vs prior 60d. REAL subset only (threshold work needs zone
+// data; weight/consistency/volume always available). Sleep/HRV + per-ride heat are omitted (no
+// stored data) rather than faked — the caller notes that.
+function _trDrivers_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[]; ded=ded.filter(function(r){return r&&r.date;});
+  var now=new Date(), d60=new Date(now), d120=new Date(now); d60.setDate(now.getDate()-60); d120.setDate(now.getDate()-120);
+  function inR(r,a,b){ var t=new Date(String(r.date).slice(0,10)+'T00:00:00'); return t>=a && t<b; }
+  var recent=ded.filter(function(r){return inR(r,d60,now);}), prior=ded.filter(function(r){return inR(r,d120,d60);});
+  function pct(a,b){ return b>0?Math.round((a-b)/b*100):(a>0?100:0); }
+  var out=[];
+  var thr=function(arr){ return arr.reduce(function(s,r){return s+((+r.z4s||0)+(+r.z5s||0));},0); };
+  var tr=thr(recent), tp=thr(prior); if(tr>0||tp>0) out.push({key:'Threshold Work', cat:'Power', delta:pct(tr,tp)});
+  var act=function(arr){ var s={}; arr.forEach(function(r){s[String(r.date).slice(0,10)]=1;}); return Object.keys(s).length; };
+  var ar=act(recent), ap=act(prior); if(ar||ap) out.push({key:'Consistency', cat:'Events', delta:pct(ar,ap)});
+  var mi=function(arr){ return arr.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0); };
+  var mr=mi(recent), mp=mi(prior); if(mr||mp) out.push({key:'Training Volume', cat:'Distance', delta:pct(mr,mp)});
+  var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null;}).sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  if(wl.length>=2){ var wNow=parseFloat(wl[wl.length-1].weight), cut=new Date(now); cut.setDate(now.getDate()-90); var w90=null; for(var i=wl.length-1;i>=0;i--){ if(new Date(wl[i].date)<=cut){ w90=parseFloat(wl[i].weight); break; } } if(w90==null)w90=parseFloat(wl[0].weight); if(w90>0){ out.push({key:'Weight Change', cat:'Climbing', delta:Math.round((wNow-w90)/w90*100), invert:true}); } }
+  out.sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);});
+  return out;
+}
+// Aerobic-efficiency trend (avgSpeed/avgHR) — a REAL proxy for the "recovery/efficiency" question
+// where intra-ride HR-drift streams don't exist. Returns {vals, efNow, pct, n}.
+function _trEfficiency_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+  var pts=ded.filter(function(r){return r&&r.date;}).map(function(r){
+    var hr=parseFloat(r.avgHR)||0, sec=(typeof _durSec_==='function')?_durSec_(r):(+r.movingSecs||0), mi=parseFloat(r.distance)||0;
+    var sp=parseFloat(r.avgSpeed)||((mi>0&&sec>0)?mi/(sec/3600):0);
+    return (hr>60 && sp>3)?{d:String(r.date).slice(0,10), ef:sp/hr*100}:null;
+  }).filter(Boolean).sort(function(a,b){return a.d<b.d?-1:1;});
+  if(pts.length<8) return null;
+  // Monthly-average so the sparkline reads as a TREND, not per-ride noise.
+  var mon={}, order=[]; pts.forEach(function(p){ var k=p.d.slice(0,7); if(!mon[k]){mon[k]={s:0,n:0}; order.push(k);} mon[k].s+=p.ef; mon[k].n++; });
+  var mvals=order.map(function(k){ return mon[k].s/mon[k].n; });
+  var vals=mvals.slice(-30);
+  var avg=function(a){return a.length?a.reduce(function(s,x){return s+x;},0)/a.length:0;};
+  var half=Math.max(2, Math.floor(vals.length/3));
+  var er=avg(vals.slice(-half)), ep=avg(vals.slice(0, half));
+  return { vals:vals, efNow:Math.round(er*10)/10, pct:ep>0?Math.round((er-ep)/ep*100):0, n:pts.length };
+}
+// Watch: day-of-week that carries the athlete's heaviest average load (where fatigue concentrates).
+function _trWatchDay_(){
+  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[]; ded=ded.filter(function(r){return r&&r.date&&(parseFloat(r.distance)||0)>0;});
+  if(ded.length<20) return null;
+  var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], sum={}, cnt={};
+  ded.forEach(function(r){ var g=new Date(String(r.date).slice(0,10)+'T00:00:00').getDay(); var load=(typeof unifiedLoad==='function')?unifiedLoad(r):(+r.tss||0); sum[g]=(sum[g]||0)+load; cnt[g]=(cnt[g]||0)+1; });
+  var best=-1, bg=null; for(var g=0;g<7;g++){ if(!cnt[g])continue; var a=sum[g]/cnt[g]; if(a>best){best=a;bg=g;} }
+  return bg!=null?DOW[bg]:null;
+}
+// Predictions: reuse the Milestones projection engine; confidence from rate sample + coverage.
+function _trPredictions_(n){
+  try{ if(typeof _msCatalog_!=='function') return []; var C=_msCatalog_(new Date()); var nx=(typeof nextMilestones_==='function')?nextMilestones_(C.proj, n||2):[]; nx=nx.filter(function(p){return p.projectedDate;});
+    var cov=_trCoverage_();
+    return nx.map(function(p){ var prox=p.etaWeeks!=null?Math.max(0.4, 1-Math.min(1, p.etaWeeks/104)):0.5; var conf=Math.round(_trConf_(p.ratePerWeek>0?60:8, 80)*prox*(cov.complete?1:0.9)); if(p.ratePerWeek<=0)conf=Math.min(conf,40);
+      return { name:p.name, date:p.projectedDate, cat:p.category, color:(typeof _MS_COL!=='undefined'&&_MS_COL[p.category])||'#94a3b8', conf:Math.max(20,Math.min(97,conf)) }; });
+  }catch(e){ return []; }
+}
+// ---- render helpers ----
+function _trDelta_(pct, invert){ if(pct==null) return ''; var good=invert?(pct<0):(pct>0); var c=(pct===0)?'#94a3b8':(good?'#22c55e':'#ef4444'); var s=(pct>0?'+':'')+pct+'%'; return '<span style="color:'+c+';font-weight:800">'+s+'</span>'; }
+function _trConfBar_(conf, color){ color=color||'#22c55e'; return '<div style="display:flex;align-items:center;gap:9px"><div style="flex:1;height:5px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+Math.max(3,Math.min(100,conf))+'%;background:'+color+';border-radius:3px"></div></div><span style="font-size:12px;font-weight:800;color:'+color+'">'+conf+'%</span></div>'; }
+function _trSpark_(vals, color){ if(!vals||vals.length<2) return ''; var W=300,H=54; return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;margin-top:8px"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="'+(color||'#22c55e')+'" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>'; }
+// Question card: coaching question is the headline; the metric is secondary.
+function _trQCard_(q, bodyHtml){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:#e8edf5;line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
+
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
-  var pmc=_aiSafe_('TrendPMC', function(){return aiTrendPMC_(rides);});
-  var rest=[_aiSafe_('TrendWeight', function(){return aiTrendWeight_();}), _aiSafe_('TrendVO2', function(){return aiTrendVO2_();}), _aiSafe_('TrendVolume', function(){return aiTrendVolume_(rides);})].filter(function(h){return h;});
-  if(!pmc && !rest.length) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet for trends.</div>';
-  var html='';
-  if(pmc) html+=pmc;
-  if(rest.length) html+='<div class="ai-ov-grid" style="margin-top:12px">'+rest.join('')+'</div>';
-  return html;
+  var GRN='#22c55e', ORG='#FC4C02', BLU='#60a5fa', GOOD='#22c55e', BAD='#ef4444';
+  var story=_aiSafe_('TrStory', function(){return _trStory_();});
+  var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+  if(!story && series.length<2){ return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet for trends. Log or sync rides to build your fitness story.</div>'; }
+  var cov=_trCoverage_();
+  var H='<div style="padding:2px 2px 30px">';
+  H+='<div style="font-size:13px;color:#64748b;margin:0 2px 14px">Understand what is happening. Learn why. See what is next.</div>';
+
+  // ===== HEADLINES STRIP =====
+  var heads=[];
+  if(story && story.fitness.pct!=null) heads.push({t:(story.fitness.pct>=0?'Fitness up ':'Fitness down ')+Math.abs(story.fitness.pct)+'% in 90 days', up:story.fitness.pct>=0});
+  var drv=_aiSafe_('TrDrivers', function(){return _trDrivers_();})||[];
+  if(drv.length){ var top=drv[0]; var g=top.invert?(top.delta<0):(top.delta>0); heads.push({t:top.key+' '+(top.delta>0?'+':'')+top.delta+'%'+(g?' (helping)':' (watch)'), up:g}); }
+  var preds=_aiSafe_('TrPreds', function(){return _trPredictions_(2);})||[];
+  if(preds.length) heads.push({t:'Next: '+preds[0].name+' ~'+_msFmtDate_(preds[0].date), up:true});
+  if(story && story.peak) heads.push({t:'At your highest fitness'+(cov.complete?(' in '+cov.years+' years'):' on record'), up:true});
+  if(heads.length){
+    H+='<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">';
+    heads.forEach(function(h){ var c=h.up?GOOD:'#f59e0b'; H+='<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;background:#111318;border:1px solid #1c2130;border-left:3px solid '+c+';border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:#cbd5e1"><span style="color:'+c+';font-weight:800">'+(h.up?'&#9650;':'&#9679;')+'</span>'+aiEsc_(h.t)+'</div>'; });
+    H+='</div>';
+  }
+
+  // ===== YOUR STORY — LAST 90 DAYS =====
+  if(story){
+    var watchDay=_aiSafe_('TrWatch', function(){return _trWatchDay_();});
+    function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:#5b6678;margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 20px;margin-bottom:14px">';
+    H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last 90 Days</div>';
+    H+='<div style="display:flex;flex-wrap:wrap;gap:26px 30px;align-items:flex-start">';
+    H+=statBlock('Fitness (CTL)', (story.fitness.pct!=null?((story.fitness.pct>=0?'+':'')+story.fitness.pct+'%'):story.fitness.now), story.fitness.then+' &rarr; '+story.fitness.now, story.fitness.pct>=0?GRN:BAD);
+    H+=statBlock('Fatigue (ATL)', (story.fatigue.pct!=null?((story.fatigue.pct>=0?'+':'')+story.fatigue.pct+'%'):story.fatigue.now), story.fatigue.then+' &rarr; '+story.fatigue.now, ORG);
+    H+=statBlock('Form (TSB)', (story.form.now>=0?'+':'')+story.form.now, story.form.then+' &rarr; '+story.form.now, BLU);
+    // Biggest Win — all-time CTL peak, with the coverage footnote (scoped until library whole)
+    if(story.peak){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg>Biggest Win</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">Highest CTL '+(cov.complete?('in '+cov.years+' years'):'on record')+'</div><div style="font-size:10.5px;color:#5b6678;margin-top:3px">'+_trCoverNote_()+'</div></div>'; }
+    if(watchDay){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/></svg>Watch</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">Fatigue spikes after long '+aiEsc_(watchDay)+'s</div></div>'; }
+    if(preds.length){ H+='<div style="min-width:150px"><div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Prediction</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">'+aiEsc_(preds[0].name)+' &middot; '+_msFmtDate_(preds[0].date)+'</div></div>'; }
+    H+='</div></div>';
+  }
+
+  // ===== BODY RESPONSE (PMC) + WHAT'S DRIVING =====
+  H+='<div style="display:grid;grid-template-columns:1.9fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
+  // -- PMC with context bands + spike explanation --
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:#e8edf5">How is your body responding?</span><span style="font-size:11px;color:#5b6678">Fitness / Fatigue / Form</span></div>';
+  var pmcHtml=_aiSafe_('TrPMC', function(){
+    var s=series.slice(-85); if(s.length<4) return '<div style="color:#5b6678;font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
+    var W=680,Hh=210, padL=30,padR=76,padT=8,padB=22;
+    var lp=story&&story.longPmc?story.longPmc:null; var bands=_trBands_(lp?lp.peakCtl:0);
+    var all=[]; s.forEach(function(p){ all.push(p.ctl); all.push(p.atl); all.push(p.tsb!=null?p.tsb:(p.ctl-p.atl)); });
+    var lo=Math.min.apply(null,all), hi=Math.max.apply(null,all); if(hi<=lo)hi=lo+1; var pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+    var X=function(i){ return padL+(i/(s.length-1))*(W-padL-padR); }, Y=function(v){ return padT+(1-(v-lo)/(hi-lo))*(Hh-padT-padB); };
+    var svg='<svg width="100%" viewBox="0 0 '+W+' '+Hh+'" style="display:block">';
+    // context bands (CTL-relative), drawn as background rows with right-edge labels
+    var pk=lp?lp.peakCtl:hi; var edges=[hi, Math.max(lo,0.90*pk), Math.max(lo,0.70*pk), Math.max(lo,0.50*pk), lo];
+    var bl=['Peak Fitness','Productive','Maintenance','Detraining'], bc=['#22c55e','#4ade80','#f59e0b','#ef4444'];
+    for(var bi=0; bi<4; bi++){ var y0=Y(edges[bi]), y1=Y(edges[bi+1]); if(y1<=y0) continue; svg+='<rect x="'+padL+'" y="'+y0.toFixed(1)+'" width="'+(W-padL-padR)+'" height="'+(y1-y0).toFixed(1)+'" fill="'+bc[bi]+'" opacity="0.06"/>'; svg+='<text x="'+(W-padR+6)+'" y="'+((y0+y1)/2+3).toFixed(1)+'" font-size="10" font-weight="700" fill="'+bc[bi]+'" opacity="0.9">'+bl[bi]+'</text>'; }
+    // zero line for TSB
+    if(lo<0&&hi>0){ svg+='<line x1="'+padL+'" y1="'+Y(0).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+Y(0).toFixed(1)+'" stroke="#2a3550" stroke-width="1" stroke-dasharray="3 3"/>'; }
+    function path(key){ return 'M'+s.map(function(p,i){ var v=key==='tsb'?(p.tsb!=null?p.tsb:(p.ctl-p.atl)):p[key]; return X(i).toFixed(1)+' '+Y(v).toFixed(1); }).join(' L'); }
+    svg+='<path d="'+path('ctl')+'" fill="none" stroke="'+GRN+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+    svg+='<path d="'+path('atl')+'" fill="none" stroke="'+ORG+'" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
+    svg+='<path d="'+path('tsb')+'" fill="none" stroke="'+BLU+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round" opacity="0.85"/>';
+    // spike markers (hover title = the cause)
+    var spikes=_trSpikes_(s, rides);
+    spikes.forEach(function(sp){ var x=X(sp.i), y=Y(s[sp.i].atl); var r=sp.ride, nm=(r&&r.name)||'Ride', dm=Math.round(parseFloat(r.distance)||0), el=Math.round(parseFloat(r.elev)||0); svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.4" fill="'+ORG+'" stroke="#111318" stroke-width="1.5"><title>'+aiEsc_(nm)+' — '+dm+' mi'+(el>0?(', '+el.toLocaleString()+' ft'):'')+' (ATL +'+sp.jump+')</title></circle>'; });
+    svg+='</svg>';
+    var foot=''; if(spikes.length){ var last=spikes[spikes.length-1], lr=last.ride; foot='<div style="display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 11px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.18);border-radius:9px;font-size:11.5px;color:#94a3b8"><span style="color:'+GRN+'">&#10003;</span>ATL spike from '+aiEsc_((lr&&lr.name)||'a hard ride')+'.'+(last.rec!=null?(' Fatigue returned to normal in '+last.rec+' day'+(last.rec===1?'':'s')+'.'):' Hover a marker for the cause.')+'</div>'; }
+    return svg+foot;
+  });
+  H+=pmcHtml;
+  H+='<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+GRN+'"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+ORG+'"></span>Fatigue</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+BLU+'"></span>Form</span></div>';
+  H+='</div>';
+  // -- WHAT'S DRIVING YOUR FITNESS --
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:#e8edf5">What is driving your fitness?</span><span style="font-size:11px;color:#5b6678">60 vs prior 60 days</span></div>';
+  if(drv.length){ var mxd=Math.max.apply(null, drv.map(function(x){return Math.abs(x.delta)||1;}))||1;
+    drv.forEach(function(x){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
+      H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:13px"><span style="width:120px;flex:0 0 auto;font-size:12.5px;font-weight:600;color:#cbd5e1">'+aiEsc_(x.key)+'</span><div style="flex:1;height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+c+';border-radius:3px"></div></div><span style="width:52px;text-align:right;font-size:12.5px;font-weight:800;color:'+c+'">'+(x.delta>0?'+':'')+x.delta+'%</span></div>'; });
+  } else { H+='<div style="color:#5b6678;font-size:12.5px">Not enough windowed data yet.</div>'; }
+  H+='<div style="font-size:10.5px;color:#5b6678;margin-top:6px;line-height:1.5;border-top:1px solid #1c2130;padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
+  H+='</div></div>';
+
+  // ===== FOUR QUESTION CARDS =====
+  H+='<div class="ai-ov-grid" style="margin-bottom:14px">';
+  // Are you becoming a better aerobic athlete? (VO2)
+  var vh=(st.vo2maxHistory||[]).filter(function(x){return x&&x.v!=null&&!isNaN(parseFloat(x.v));});
+  if(vh.length>=2){ var vv=vh.map(function(x){return parseFloat(x.v);}); var cut=vh.length>6?vh[vh.length-7]:vh[0]; var vd=Math.round((vv[vv.length-1]-parseFloat(cut.v))*10)/10;
+    H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+vv[vv.length-1]+'</span><span style="font-size:12px;color:#5b6678">VO&#8322; ml/kg/min</span><span style="margin-left:auto">'+_trDelta_(vd?Math.round(vd/parseFloat(cut.v)*100):0)+'</span></div><div style="margin:12px 0 4px">'+_trConfBar_(_trConf_(vh.length,20), GRN)+'</div><div style="font-size:10.5px;color:#5b6678">Based on '+vh.length+' estimates</div>'+_trSpark_(vv, GRN)); }
+  else { H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough VO&#8322; estimates yet &mdash; they accrue from HR-paired rides.</div>'); }
+  // Are you getting faster? (FTP — honest degrade: manual, no history)
+  var ftp=parseInt(st.ftp)||0;
+  H+=_trQCard_('Are you getting faster?', ftp>0 ? ('<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+ftp+'</span><span style="font-size:12px;color:#5b6678">FTP W</span></div><div style="font-size:11px;color:#94a3b8;margin-top:12px;line-height:1.5">You set this manually &mdash; there is no FTP history to trend yet. Log FTP tests (or connect power-based estimates) to see progression here.</div>') : '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Set your FTP in Settings to track this.</div>');
+  // How is your aerobic efficiency? (EF trend — real proxy for "recovery")
+  var eff=_aiSafe_('TrEff', function(){return _trEfficiency_();});
+  if(eff){ H+=_trQCard_('How is your aerobic efficiency?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+eff.efNow+'</span><span style="font-size:12px;color:#5b6678">speed per HR</span><span style="margin-left:auto">'+_trDelta_(eff.pct)+'</span></div><div style="margin:12px 0 4px">'+_trConfBar_(_trConf_(eff.n,120), GRN)+'</div><div style="font-size:10.5px;color:#5b6678">Based on '+eff.n+' HR-paired rides</div>'+_trSpark_(eff.vals, GRN)); }
+  else { H+=_trQCard_('How is your aerobic efficiency?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Needs rides with average HR + speed. Sync HR-paired rides to unlock this.</div>'); }
+  // How consistent have you been?
+  var consCells=_aiSafe_('TrCons', function(){ return (typeof dsConsistency_==='function')?dsConsistency_(rides,90,new Date(),normDate):null; });
+  if(consCells&&consCells.length){ var active=consCells.filter(function(c){return c.n>0;}).length; var consPct=Math.round(active/consCells.length*100);
+    // per-week active bars over ~13 weeks
+    var wk=[]; for(var wi=0; wi<13; wi++){ wk.push(0); } consCells.forEach(function(c,i){ var w=Math.floor(i/7); if(w<13&&c.n>0) wk[w]++; });
+    var wkmx=Math.max.apply(null,wk)||1; var bars=wk.map(function(v){ var h=Math.round(v/7*100); return '<div style="flex:1;height:44px;display:flex;align-items:flex-end"><div style="width:100%;height:'+Math.max(6,h)+'%;background:'+BLU+';opacity:'+(0.35+0.65*(v/7))+';border-radius:2px 2px 0 0"></div></div>'; }).join('');
+    H+=_trQCard_('How consistent have you been?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+consPct+'%</span><span style="font-size:12px;color:#5b6678">active days, 90d</span></div><div style="display:flex;gap:3px;margin-top:14px">'+bars+'</div>'); }
+  else { H+=_trQCard_('How consistent have you been?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough recent rides to score consistency.</div>'); }
+  H+='</div>';
+
+  // ===== WHAT'S NEXT + WHY IMPROVING =====
+  H+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
+  // What's next (predictions)
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="font-size:13px;font-weight:700;color:#e8edf5;margin-bottom:14px">What is next? <span style="font-weight:600;color:#5b6678;font-size:11px">(projected)</span></div>';
+  if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid #1c2130':'')+'">'
+      +'<span style="width:30px;height:30px;border-radius:8px;background:'+p.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+((typeof _msIcon_==='function'&&typeof _MS_ICON!=='undefined')?_msIcon_(_MS_ICON[p.cat]||_MS_ICON.Distance,p.color):'')+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">Projected '+_msFmtDate_(p.date)+'</div></div>'
+      +'<div style="width:120px;flex:0 0 auto">'+_trConfBar_(p.conf, p.color)+'<div style="font-size:9.5px;color:#5b6678;text-align:right;margin-top:2px">confidence</div></div>'
+    +'</div>'; });
+    H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:10px;cursor:pointer" onclick="aiSetTab_(&#39;milestones&#39;)">View all milestones &rsaquo;</div>';
+  } else { H+='<div style="color:#5b6678;font-size:12.5px">No projectable milestones yet &mdash; a training rate builds from recent rides.</div>'; }
+  H+='</div>';
+  // Why is fitness improving/changing
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
+  var improving = story && story.fitness.pct!=null && story.fitness.pct>=0;
+  H+='<div style="font-size:13px;font-weight:700;color:#e8edf5;margin-bottom:6px">Why is your fitness '+(improving?'improving':'changing')+'?</div>';
+  var pos=drv.filter(function(x){ return x.invert?(x.delta<0):(x.delta>0); });
+  var overall=drv.length?Math.round(pos.length/drv.length*100):0;
+  H+='<div style="display:flex;gap:16px;align-items:center">';
+  H+='<div style="flex:1;min-width:0">';
+  if(pos.length){ pos.slice(0,4).forEach(function(x){ var mag=Math.abs(x.delta); H+='<div style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:12px;color:#cbd5e1;line-height:1.4"><span style="color:'+GOOD+';flex-shrink:0">&#10003;</span><span>'+aiEsc_(x.key)+' '+(x.invert?'improved ':'up ')+mag+'%</span></div>'; }); }
+  else { H+='<div style="font-size:12px;color:#5b6678;margin-top:8px;line-height:1.5">No positive drivers in the current window. Keep showing up &mdash; consistency compounds.</div>'; }
+  H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:12px;cursor:pointer" onclick="aiSetTab_(&#39;overview&#39;)">Ask AI Coach &rsaquo;</div>';
+  H+='</div>';
+  // improvement ring
+  var R=34, CIRC=2*Math.PI*R, off=CIRC*(1-overall/100);
+  H+='<div style="flex:0 0 auto;text-align:center"><svg width="92" height="92" viewBox="0 0 92 92"><circle cx="46" cy="46" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="8"/><circle cx="46" cy="46" r="'+R+'" fill="none" stroke="'+GRN+'" stroke-width="8" stroke-linecap="round" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 46 46)"/><text x="46" y="51" text-anchor="middle" font-size="19" font-weight="800" fill="#f1f5f9">'+overall+'%</text></svg><div style="font-size:10px;color:#5b6678;margin-top:2px;max-width:92px">drivers trending positive</div></div>';
+  H+='</div></div></div>';
+
+  // ===== ONE THING TO REMEMBER =====
+  var oneThing='';
+  if(story){
+    if(story.peak && story.fitness.pct>0) oneThing='Your fitness is at its highest '+(cov.complete?('in '+cov.years+' years'):'on record')+' and still climbing'+(watchDayGlobal_()?(' — protect recovery after '+watchDayGlobal_()+'s'):'')+'.';
+    else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over 90 days'+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
+    else oneThing='Fitness has dipped '+Math.abs(story.fitness.pct||0)+'% — a productive base phase if it is intentional, a flag if it is not.';
+  }
+  if(oneThing){ H+='<div style="background:linear-gradient(90deg,rgba(34,197,94,.10),rgba(17,19,24,0));border:1px solid rgba(34,197,94,.25);border-left:4px solid '+GRN+';border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+GRN+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z"/></svg><div><div style="font-size:11px;font-weight:800;color:'+GRN+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">If you only remember one thing</div><div style="font-size:15px;font-weight:700;color:#f1f5f9;line-height:1.35">'+aiEsc_(oneThing)+'</div></div></div>'; }
+
+  H+='<style>@media(max-width:820px){.tr-2col{grid-template-columns:1fr !important}}</style>';
+  H+='</div>';
+  return H;
 }
+// tiny accessor so the one-thing line can reuse the watch-day without recompute cost being fatal
+function watchDayGlobal_(){ try{ return _trWatchDay_(); }catch(e){ return null; } }
 
 // ---- tab body ----
 // Each card is independently try/caught so one throwing card can't blank the whole
