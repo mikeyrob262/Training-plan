@@ -4426,7 +4426,7 @@ function runRideCleanup(){
   st.rides = result.kept;
   if(result.removedCount === 0){ toast('No duplicates found'); return; }
   sv();
-  fbPush(false, true);
+  fbPush(false);   // MERGE push - deleted OR-merges, so the removals stick without a blind overwrite
   toast('Removed '+result.removedCount+' duplicate rides ('+before+' -> '+result.kept.length+')');
   try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
   try{ if(document.getElementById('ANALYTICS')) showAnalytics(); }catch(e){}
@@ -4482,7 +4482,7 @@ function runNutritionCleanup(){
   var result = dedupeNutrition_(st.nl);
   if(result.totalRemoved === 0){ toast('No duplicates found'); return; }
   sv();
-  fbPush(false, true);
+  fbPush(false);   // MERGE push - deleted OR-merges, so the removals stick without a blind overwrite
   toast('Removed '+result.totalRemoved+' duplicate food entries');
   try{ renderNutr(); }catch(e){}
 }
@@ -4529,7 +4529,7 @@ function runRaceCleanup(){
     if(!ok) return;
     var toRemove=planRaceDedupe_();   // re-plan against current state
     toRemove.forEach(function(x){ if(x.race){ if(!x.race.id) x.race.id='race-'+(x.race.date||'x')+'-'+Math.round(Math.random()*1e6); x.race.deleted=true; x.race.deletedAt=Date.now(); } });
-    sv(); try{ fbPush(false, true); }catch(e){}
+    sv(); try{ fbPush(false); }catch(e){}   // MERGE push - deleted OR-merges, so the removals stick
     toast('Removed '+toRemove.length+' duplicate race'+(toRemove.length===1?'':'s'));
     try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowDashboard==='function') dsShowDashboard(); }catch(e){}
     try{ if(typeof showHomeDash==='function' && !(typeof isDesktop==='function'&&isDesktop())) showHomeDash(); }catch(e){}
@@ -4942,8 +4942,19 @@ function initFirebaseSync(){
 
 // Push local state to Firebase - merges with whatever is currently in the
 // cloud first, so a stale or empty local device can never erase real data.
-function fbPush(silent, forceOverwrite){
+function fbPush(silent, forceOverwrite, confirmToken, tag){
   if(Array.isArray(st)) st=Object.assign({},st);
+  // A blind full-state PUT from a degraded local state is what repeatedly re-buried the ride
+  // library: every revive force-pushed its own result over a healthier remote, so each recovery
+  // undid itself on the next boot. Force now requires an explicit token and can never fire
+  // implicitly. An UNCONFIRMED force downgrades to the safe merge path rather than failing
+  // closed, so a stale caller loses nothing.
+  if(forceOverwrite && confirmToken !== 'FORCE-OVERWRITE-CONFIRMED'){
+    console.warn('[fbPush] BLOCKED unconfirmed force overwrite from ' + (tag || '(unnamed caller)') + ' - downgrading to a MERGE push. Use fbPushGuarded_ for additive work.');
+    forceOverwrite = false;
+  } else if(forceOverwrite){
+    console.warn('[fbPush] FORCE OVERWRITE from ' + (tag || '(unnamed caller)') + ' - skipping the remote read and PUTting local state wholesale.');
+  }
   var fbTok = null;
   ensureFbAuth_()
   .then(function(tok){
@@ -4975,6 +4986,28 @@ function fbPush(silent, forceOverwrite){
     if(!silent) toast('Cloud Saved!');
   })
   .catch(function(e){ if(!silent) toast('! Save failed: '+e); });
+}
+
+// Superset-guarded replacement for the old fbPush(_, true) blind force-PUT. Re-reads remote and
+// ABORTS unless local is a superset of every LIVE remote record, so a staler local can never
+// overwrite a fuller remote. Use for ADDITIVE work only (revive, restore, import).
+// Deletion paths must NOT use this: a deletion is a non-superset operation by construction and
+// would abort every time. They use the plain merge push instead, where deleted OR-merges so the
+// removal still wins - no force needed for a deletion to stick.
+function fbPushGuarded_(tag, silent){
+  tag = tag || 'push';
+  try{
+    if(typeof _reimportGuardedPush_ === 'function'){
+      _reimportGuardedPush_(function(res){
+        if(res && res.aborted) console.warn('[' + tag + '] guarded push ABORTED - ' + res.missing.length + ' remote-only live record(s); remote intact, local saved. Pull first, then retry.');
+        else if(res && res.error) console.error('[' + tag + '] guarded push FAILED: ' + res.error);
+        else console.log('[' + tag + '] guarded push OK - remote now matches local');
+      });
+      return;
+    }
+    console.warn('[' + tag + '] _reimportGuardedPush_ not parsed yet - using the safe MERGE push instead of a force overwrite');
+    fbPush(silent !== false);
+  }catch(e){ console.error('[' + tag + '] guarded push threw: ' + (e && e.message)); }
 }
 
 // Pull from Firebase and merge into local state (never discards local-only data)
@@ -13061,7 +13094,7 @@ function aiReviveOrphans_(execute, day){
     try{ dedupeInvalidate_&&dedupeInvalidate_(); }catch(e){}
     var liveNow=(st.rides||[]).filter(function(r){return r&&!r.deleted;}).length;
     try{ saveLocal_(); }catch(e){ console.log('[orphan-revive] saveLocal error '+(e&&e.message)); }
-    try{ if(typeof fbPush==='function') fbPush(true, true); }catch(e){ console.log('[orphan-revive] fbPush error '+(e&&e.message)); }
+    fbPushGuarded_('orphan-revive', true);   // additive - guard passes; never blind-overwrite a fuller remote
     console.log('[orphan-revive] DONE revived=' + Number(n) + ' live-now=' + Number(liveNow) + ' — saved to IDB + force-pushed. (No merge run.)');
     try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){}
     return n;
@@ -13502,7 +13535,7 @@ function aiReviveNulls_(execute){
     // Persist + force-push NOW so the 5s Firebase poll can't re-apply the tombstones
     // (deleted OR-merges to true — deletions win — so an un-pushed revival gets clobbered).
     try{ saveLocal_(); }catch(e){ console.log('[revive] saveLocal error ' + (e&&e.message)); }
-    try{ if(typeof fbPush==='function') fbPush(true, true); }catch(e){ console.log('[revive] fbPush error ' + (e&&e.message)); }
+    fbPushGuarded_('revive', true);   // additive - guard passes; never blind-overwrite a fuller remote
     console.log('[revive] DONE flipped=' + Number(flipped) + ' live-after=' + Number(liveAfter) + ' — saved to IDB + force-pushed. Now confirm the cross-source merge prompt to collapse any internal pair.');
     try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){}
     // Interactive: prompts, then tombstones the pair + its own saveLocal_/fbPush.
@@ -20130,7 +20163,7 @@ function deleteRide(idx, e){
       ride.deletedAt = Date.now();
     }
     sv();
-    fbPush(false, true); // push immediately as authoritative, so the deletion sticks right away rather than waiting on the next routine merge
+    fbPush(false); // MERGE push - deleted OR-merges (deletions win), so this sticks immediately WITHOUT a blind overwrite
     // If this delete was triggered from inside the ride detail view
     // itself (via the More menu), close it - the ride it was showing
     // no longer exists.
@@ -27679,7 +27712,7 @@ function restoreFromBackup_(){
       // Persist to IndexedDB (full state) then FORCE-push to Firebase so the restored
       // rides overwrite any remote tombstones and survive the next poll.
       try{ saveLocal_(); }catch(e){}
-      try{ fbPush(true, true); }catch(e){}
+      fbPushGuarded_('restore', true);   // restore only un-tombstones and adds back, so local is a superset
       try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
       console.log('[restore] un-tombstoned='+restored+' added-back='+addedBack+' live now='+liveNow);
       try{ toast('Restored '+(restored+addedBack)+' rides — '+liveNow+' live. Syncing…'); }catch(e){}
@@ -28081,7 +28114,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
     if(acts.length < 50){
       sv();
       recomputeGearMileage();
-      fbPush(true, true);
+      fbPushGuarded_('strava-sync', true);   // import is additive - guard passes
       toast('Strava sync done: ' + imported + ' imported. Fetching missing GPS...');
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       // Auto-fetch GPS for rides missing it
