@@ -13510,7 +13510,7 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['racing','Racing Yourself'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -13771,7 +13771,7 @@ function _adhCardInner_(title, wk){
 function aiCardStrengthAdherence_(){ return _adhCardInner_('STRENGTH ADHERENCE', (typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[]); }
 function aiCardRideAdherence_(){ return _adhCardInner_('RIDE ADHERENCE', (typeof rideAdherenceTrend_==='function')?rideAdherenceTrend_(st,8):[]); }
 
-// ==================== Racing Yourself — cumulative month-over-month ghost charts ====================
+// ==================== You vs. You — cumulative month-over-month ghost charts ====================
 // Strava-style: a bright cumulative line for the current month drawn against the SAME-PERIOD line
 // from last month (stops at the same day-of-month, so partial-vs-full never reads as a false loss),
 // with last month's FULL total as a dashed ceiling to chase. Ahead/behind is color-coded (green vs
@@ -14631,7 +14631,7 @@ function watchDayGlobal_(){ try{ return _trWatchDay_(); }catch(e){ return null; 
 function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.error('[ai] card "'+label+'" threw: '+(e&&e.message)); }catch(_){} return ''; } }
 function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
-  if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Racing Yourself — render error.</div>';
+  if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
   if(tab!=='overview'){
