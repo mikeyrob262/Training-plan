@@ -3802,14 +3802,21 @@ function migrateCorruptTracks_(){
   // the Strava token flow bails), so remote could sit corrupt for the whole
   // session. A force-push here writes null for every mismatched pair immediately,
   // so remote can't re-seed while the re-fetch below fills clean pairs back in.
-  try{ if(typeof fbPush==='function'){ fbPush(true, true); console.log('[gps-migrate] force-OVERWROTE remote with local state (forceOverwrite; refetchable='+bad.length+') — no merge, so it can no longer re-pull remote tombstones'); } }catch(e){}
+  // Route through the re-import's superset-guarded push (was a blind fbPush(true,true) full-
+  // state overwrite). The Jul-17 blind overwrite assumed remote was clean + authoritative;
+  // that inverted once remote carried revives this boot's local still has tombstoned. The
+  // guard re-reads remote and ABORTS unless local is a superset of every LIVE remote record,
+  // so a staler boot-time local can no longer broadcast its tombstones over a fuller remote
+  // (the re-burial that undid the re-import). GPS cleanup then defers to a boot where local
+  // is a superset — not re-burying revived rides outranks clearing a few corrupt GPS pairs.
+  try{ if(typeof _reimportGuardedPush_==='function'){ _reimportGuardedPush_(function(res){ try{ if(res&&res.aborted){ console.warn('[gps-migrate] guarded push ABORTED — local not a superset of live remote ('+res.missing.length+' remote-only live record(s)); remote LEFT INTACT, GPS cleanup deferred'); } else if(res&&res.error){ console.warn('[gps-migrate] guarded push error: '+res.error); } else { console.log('[gps-migrate] superset-guarded push OK — remote GPS state cleaned (refetchable='+bad.length+')'); } }catch(_e){} }); } else { console.warn('[gps-migrate] _reimportGuardedPush_ unavailable — SKIPPING push (refusing a blind force-overwrite that could re-bury revived rides)'); } }catch(e){}
   if(!bad.length) return; // remote cleaned; nothing has a stravaId to re-fetch
   if(!st.stravaToken && !st.stravaRefreshToken) return;
   withStravaToken_(function(token){
     if(!token) return;
     var i=0, healed=0;
     function step(){
-      if(i>=bad.length){ try{ sv(); if(typeof fbPush==='function') fbPush(true, true); }catch(e){} try{ console.log('[gps-migrate] done — healed '+healed+' tracks'); }catch(e){} return; }
+      if(i>=bad.length){ try{ sv(); if(typeof _reimportGuardedPush_==='function') _reimportGuardedPush_(function(res){ try{ if(res&&res.aborted) console.warn('[gps-migrate] post-heal guarded push ABORTED — '+res.missing.length+' remote-only live record(s); remote intact, healed tracks saved locally'); }catch(_e){} }); }catch(e){} try{ console.log('[gps-migrate] done — healed '+healed+' tracks'); }catch(e){} return; }
       var r=bad[i++];
       fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=latlng&key_by_type=true',{headers:{'Authorization':'Bearer '+token}})
         .then(function(x){ if(x.status===429){ i--; setTimeout(step, 60000); throw 'rl'; } return x.ok?x.json():null; })
