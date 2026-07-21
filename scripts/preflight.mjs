@@ -65,6 +65,20 @@ try {
     fail('an AI card throws or renders blank (see above).');
   }
 
+  // ---- 4. Nutrition fold semantics -> the st.nl dialect fold must merge meal buckets by
+  //         MULTISET MAX. A set-rebuild collapses a food legitimately logged twice in one meal
+  //         (real case: Hamburger - Five Guys x2, 2026-07-21) and a naive concat doubles a
+  //         cross-dialect twin. Both are silent; the fixture blocks the push.
+  console.log(`${D}· checking nutrition fold semantics…${X}`);
+  try {
+    const so = execSync('node scripts/nl-merge-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('nutrition fold semantics regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

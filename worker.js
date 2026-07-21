@@ -4613,6 +4613,67 @@ function nutKey_(d){
   var dt=(d instanceof Date)?d:new Date(d);
   return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2);
 }
+// Entry identity for the fold. Prefer the assigned id; fall back to a content fingerprint for
+// entries predating genEntryId_ (measured Jul 21 2026: 62 of 182, every one a cross-dialect
+// twin - the fingerprint matched 31/31 with zero unmatched at name alone, so it is not fragile).
+function _nlFp_(i){
+  if(!i) return 'f:';
+  if(i.id!=null && i.id!=='') return 'i:'+i.id;
+  return 'f:'+String(i.n||'')+'|'+(+i.cal||0)+'|'+(+i.p||0)+'|'+(+i.c||0)+'|'+(+i.f||0);
+}
+// Merge one meal bucket by MULTISET MAX - never a set union. A cross-dialect copy of the SAME
+// entry must collapse, but a food genuinely logged twice in one meal must survive. That case is
+// real in this log (Hamburger - Five Guys x2, 2026-07-21 dinner), and set semantics would have
+// silently deleted one - turning invisible duplication into visible data loss. Guarded by
+// scripts/nl-merge-test.mjs so a refactor cannot quietly reintroduce set behaviour.
+// dst counts INCLUDE deleted entries, so re-merging a stale copy cannot undo a deletion.
+function _nlMergeBucket_(dstArr, srcArr){
+  dstArr = Array.isArray(dstArr) ? dstArr : [];
+  var have={};
+  dstArr.forEach(function(i){ if(i){ var k=_nlFp_(i); have[k]=(have[k]||0)+1; } });
+  var want={}, byKey={};
+  (Array.isArray(srcArr)?srcArr:[]).forEach(function(i){
+    if(!i||i.deleted) return;
+    var k=_nlFp_(i); want[k]=(want[k]||0)+1; (byKey[k]=byKey[k]||[]).push(i);
+  });
+  Object.keys(want).forEach(function(k){
+    var need=want[k]-(have[k]||0);
+    for(var n=0;n<need;n++) dstArr.push(byKey[k][n]);
+  });
+  return dstArr;
+}
+var _nlConverged=false;
+// Push the folded nl to remote ONCE per session so the mixed dialect stops coming back.
+// Guarded: every live entry identity in REMOTE must already exist locally, or abort rather
+// than overwrite a copy we do not fully contain. A food log has no external source.
+function _nlConvergeRemote_(){
+  if(_nlConverged) return;
+  if(typeof ensureFbAuth_!=='function' || typeof _withTimeout_!=='function') return;
+  _nlConverged=true;
+  var padk=function(k){ var p=String(k).split('-'); return p.length===3?(p[0]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[2]).slice(-2)):String(k); };
+  var sigOf=function(nl){
+    var out={};
+    Object.keys(nl||{}).forEach(function(k){
+      var d=nl[k]; if(!d||!d.meals) return; var pk=padk(k);
+      Object.keys(d.meals).forEach(function(m){
+        (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted){ var x=pk+'|'+m+'|'+_nlFp_(i); out[x]=(out[x]||0)+1; } });
+      });
+    });
+    return out;
+  };
+  _withTimeout_(ensureFbAuth_(),15000,'auth').then(function(tok){
+    return _withTimeout_(fetch(fbAuthedUrl_(tok)),30000,'nl read').then(function(r){
+      if(!(r&&r.ok)) throw new Error('remote read failed '+(r?r.status:'no response'));
+      return r.json();
+    }).then(function(remote){
+      var rs=sigOf(remote&&remote.nl), ls=sigOf(st.nl), missing=[];
+      Object.keys(rs).forEach(function(x){ if((ls[x]||0)<rs[x]) missing.push(x); });
+      if(missing.length){ console.warn('[nl-migrate] remote converge ABORTED - '+missing.length+' remote-only entry identit(ies); remote untouched. First: '+missing[0]); return null; }
+      return _withTimeout_(fetch(fbAuthedUrl_(tok),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nl:st.nl})}),60000,'nl PATCH')
+        .then(function(r2){ if(!(r2&&r2.ok)) throw new Error('PATCH '+(r2?r2.status:'?')); console.log('[nl-migrate] remote converged - the poll will stop reintroducing unpadded keys'); });
+    });
+  }).catch(function(e){ console.error('[nl-migrate] remote converge failed: '+((e&&e.message)||'?')); });
+}
 // One-time fold of the unpadded buckets into the padded ones. A real MERGE, not a rename:
 // a device still running the old code can produce a genuine both-sides day, and a rename
 // would silently drop one side. Measured Jul 21 2026: 81 of 101 entries were stranded in
@@ -4637,7 +4698,23 @@ function migrateNlKeyPadding_(s){
     }
   }catch(e){ console.error('[nl-migrate] ABORT - pre-migration backup failed: '+(e&&e.message)); return 0; }
 
-  var before=0; keys.forEach(function(k){ before+=count_(nl[k]); });
+  // IDENTITY invariant, not a count. A correct fold across a mixed-dialect merge MUST reduce
+  // the raw entry count - that reduction IS the duplicate collapsing - so an after-less-than-
+  // before check flagged success as failure and rolled back on every poll, forever. What never
+  // shrink is the PADDED side: that is what the UI reads. The unpadded copies are the thing
+  // being folded in, and their disappearance is the goal.
+  var sig_=function(){
+    var out={};
+    Object.keys(nl).forEach(function(k){
+      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(k)) return;
+      var d=nl[k]; if(!d||!d.meals) return;
+      Object.keys(d.meals).forEach(function(m){
+        (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted){ var x=k+'|'+m+'|'+_nlFp_(i); out[x]=(out[x]||0)+1; } });
+      });
+    });
+    return out;
+  };
+  var sigBefore=sig_(), before=0; keys.forEach(function(k){ before+=count_(nl[k]); });
   var folded=0, moved=0, dropped=0;
   unpadded.forEach(function(k){
     var tgt=pad_(k); if(!tgt||tgt===k) return;
@@ -4647,27 +4724,23 @@ function migrateNlKeyPadding_(s){
     var dst=nl[tgt];
     if(!isPlainObj_(dst.meals)) dst.meals={};
     if(isPlainObj_(src.meals)) Object.keys(src.meals).forEach(function(m){
-      if(!Array.isArray(dst.meals[m])) dst.meals[m]=[];
-      var seen={};
-      dst.meals[m].forEach(function(i){ if(i&&i.id!=null) seen[String(i.id)]=1; });
-      (src.meals[m]||[]).forEach(function(i){
-        if(!i) return;
-        var id=(i.id!=null)?String(i.id):null;
-        if(id && seen[id]) return;   // same entry on both sides - never double-count calories
-        if(id) seen[id]=1;
-        dst.meals[m].push(i);
-      });
+      dst.meals[m]=_nlMergeBucket_(dst.meals[m], src.meals[m]);
     });
     dst.water=Math.max(+(dst.water||0), +(src.water||0));
     delete nl[k]; folded++;
   });
-  var after=0; Object.keys(nl).forEach(function(k){ after+=count_(nl[k]); });
-  if(after<before){
-    console.error('[nl-migrate] ENTRY LOSS ('+before+' -> '+after+') - rolled back in memory, nothing persisted. Backup in localStorage.nlBackupPreMigrate');
+  var sigAfter=sig_(), lost=[];
+  Object.keys(sigBefore).forEach(function(x){ if((sigAfter[x]||0) < sigBefore[x]) lost.push(x); });
+  if(lost.length){
+    console.error('[nl-migrate] PADDED-SIDE LOSS on '+lost.length+' entry identit(ies) - rolled back, nothing persisted. First: '+lost[0]+'. Backup: localStorage.nlBackupPreMigrate');
     try{ s.nl=JSON.parse(snapshot); }catch(e){}
     return 0;
   }
-  console.log('[nl-migrate] folded='+folded+' moved='+moved+' dropped-empty-shells='+dropped+'  entries '+before+' -> '+after);
+  var liveNow=0; Object.keys(nl).forEach(function(k){ liveNow+=count_(nl[k]); });
+  console.log('[nl-migrate] folded='+folded+' moved='+moved+' dropped-empty-shells='+dropped+'  live '+before+' -> '+liveNow+' (duplicates collapsed: '+(before-liveNow)+')');
+  // Remote still holds the mixed dialect, so the poll keeps re-merging unpadded keys back in.
+  // The fold now collapses them correctly but would run forever without ever converging.
+  try{ setTimeout(_nlConvergeRemote_, 0); }catch(e){}
   return folded+moved+dropped;
 }
 function normalizeState_(s){
