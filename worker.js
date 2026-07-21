@@ -27852,8 +27852,21 @@ function _supersetGuard_(localRides, remoteRides){
 function _reimportGuardedPush_(cb){
   cb=cb||function(){};
   ensureFbAuth_().then(function(tok){
-    return fetch(fbAuthedUrl_(tok)).then(function(r){ return r.ok?r.json():null; }).then(function(remote){
+    return fetch(fbAuthedUrl_(tok)).then(function(r){
+      // The guard must NEVER degrade into no-guard. This used to be r.ok ? r.json() : null,
+      // so a 401/5xx/offline read produced remote=null -> rem=[] -> _supersetGuard_(local, [])
+      // found nothing missing -> it force-PUT over a remote it had never actually read. That is
+      // the same blind-overwrite shape as the original force-push vector, and it armed itself on
+      // any network blip. An unreadable remote now ABORTS the push; remote is left untouched.
+      if(!(r && r.ok)) throw new Error('remote read failed ' + (r ? r.status : 'no response') + ' - push aborted, remote untouched');
+      return r.json();
+    }).then(function(remote){
       var rem=remote&&remote.rides; rem=Array.isArray(rem)?rem:(rem&&typeof rem==='object'?Object.keys(rem).map(function(k){return rem[k];}):[]);
+      // A successful read yielding ZERO rides is also an abort, not a trivial pass. A real
+      // library is never empty, so this is a malformed or partial read, and treating it as
+      // "nothing to protect" is the same failure wearing a 200. Seeding a genuinely empty
+      // remote is not this function's job - the debounced merge push from sv() does that.
+      if(!rem.length) throw new Error('remote read returned 0 rides - push aborted, remote untouched');
       var g=_supersetGuard_(st.rides||[], rem);
       if(!g.ok){ cb({aborted:true, missing:g.missing}); return; }
       var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
