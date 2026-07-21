@@ -4604,6 +4604,72 @@ function dedupeRidesByKey_(rides){
 // (the 5s poll) reads+clears it to push the collapse to remote once, so the cloud copy converges
 // instead of re-sending the duplicates every poll for the sticky OR-merge to re-collapse forever.
 var _planDidCollapse_=false;
+// ---- Nutrition day keys: ONE dialect ------------------------------------------------
+// st.nl was written in TWO: getTodayKey() pads (YYYY-MM-DD) while nutrDelta and the
+// multi-day readers did not (YYYY-M-D). Before October the two NEVER agree, so an entry
+// logged after any day-navigation landed in a bucket nothing reads on load - it synced to
+// remote perfectly and was simply invisible in the UI. Every producer goes through this.
+function nutKey_(d){
+  var dt=(d instanceof Date)?d:new Date(d);
+  return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2);
+}
+// One-time fold of the unpadded buckets into the padded ones. A real MERGE, not a rename:
+// a device still running the old code can produce a genuine both-sides day, and a rename
+// would silently drop one side. Measured Jul 21 2026: 81 of 101 entries were stranded in
+// unpadded buckets, plus 12 empty shells that getNDay's create-on-read had manufactured.
+// Persistence-pure: mutates s.nl and returns a change count; the CALLER saves.
+function migrateNlKeyPadding_(s){
+  if(!s || !isPlainObj_(s.nl)) return 0;
+  var nl=s.nl, keys=Object.keys(nl);
+  var unpadded=keys.filter(function(k){ return /^\\d{4}-\\d{1,2}-\\d{1,2}$/.test(k) && !/^\\d{4}-\\d{2}-\\d{2}$/.test(k); });
+  if(!unpadded.length) return 0;   // already one dialect - true no-op, no backup, no write
+  var pad_=function(k){ var p=String(k).split('-'); return p.length===3 ? (p[0]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[2]).slice(-2)) : null; };
+  var count_=function(d){ var n=0; if(!d||!d.meals) return 0; Object.keys(d.meals).forEach(function(m){ (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted) n++; }); }); return n; };
+
+  // A food log has NO external source to rebuild from - rides could always be reconciled
+  // against Strava, this cannot. Refuse to fold anything unless a pre-migration copy is
+  // written AND read back. The EARLIEST snapshot is kept and never overwritten.
+  var snapshot=JSON.stringify(nl);
+  try{
+    if(!localStorage.getItem('nlBackupPreMigrate')){
+      localStorage.setItem('nlBackupPreMigrate', JSON.stringify({savedAt:new Date().toISOString(), keys:keys.length, nl:nl}));
+      if(!localStorage.getItem('nlBackupPreMigrate')) throw new Error('readback empty');
+    }
+  }catch(e){ console.error('[nl-migrate] ABORT - pre-migration backup failed: '+(e&&e.message)); return 0; }
+
+  var before=0; keys.forEach(function(k){ before+=count_(nl[k]); });
+  var folded=0, moved=0, dropped=0;
+  unpadded.forEach(function(k){
+    var tgt=pad_(k); if(!tgt||tgt===k) return;
+    var src=nl[k];
+    if(count_(src)===0 && !(+(src&&src.water))){ delete nl[k]; dropped++; return; }   // empty create-on-read shell
+    if(!nl[tgt]){ nl[tgt]=src; delete nl[k]; moved++; return; }
+    var dst=nl[tgt];
+    if(!isPlainObj_(dst.meals)) dst.meals={};
+    if(isPlainObj_(src.meals)) Object.keys(src.meals).forEach(function(m){
+      if(!Array.isArray(dst.meals[m])) dst.meals[m]=[];
+      var seen={};
+      dst.meals[m].forEach(function(i){ if(i&&i.id!=null) seen[String(i.id)]=1; });
+      (src.meals[m]||[]).forEach(function(i){
+        if(!i) return;
+        var id=(i.id!=null)?String(i.id):null;
+        if(id && seen[id]) return;   // same entry on both sides - never double-count calories
+        if(id) seen[id]=1;
+        dst.meals[m].push(i);
+      });
+    });
+    dst.water=Math.max(+(dst.water||0), +(src.water||0));
+    delete nl[k]; folded++;
+  });
+  var after=0; Object.keys(nl).forEach(function(k){ after+=count_(nl[k]); });
+  if(after<before){
+    console.error('[nl-migrate] ENTRY LOSS ('+before+' -> '+after+') - rolled back in memory, nothing persisted. Backup in localStorage.nlBackupPreMigrate');
+    try{ s.nl=JSON.parse(snapshot); }catch(e){}
+    return 0;
+  }
+  console.log('[nl-migrate] folded='+folded+' moved='+moved+' dropped-empty-shells='+dropped+'  entries '+before+' -> '+after);
+  return folded+moved+dropped;
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf','runs'].forEach(function(k){
@@ -4630,6 +4696,10 @@ function normalizeState_(s){
   if(!isPlainObj_(s.strength)) s.strength = {};
   if(!isPlainObj_(s.segments)) s.segments = {};   // per-segment all-time PR store (keyed by 's'+stravaSegmentId), sourced from Strava
   if(!isPlainObj_(s.athleteStats)) s.athleteStats = {};   // Strava lifetime totals (all_ride_totals) — true all-time, unaffected by the local library loss
+  // Fold split nutrition day keys on EVERY normalize, not once: a device still running the
+  // old code keeps reintroducing unpadded keys through the merge, so a one-shot guard would
+  // let them creep back. The early-out above makes this free once the dialect is clean.
+  try{ migrateNlKeyPadding_(s); }catch(e){ console.error('[nl-migrate] threw: '+(e&&e.message)); }
   if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
   if(!isPlainObj_(s.strength.log)) s.strength.log = {};
   // Collapse duplicate plan sessions per date. Independently-migrated copies had
@@ -6621,7 +6691,7 @@ function showProg(){
   var protDays=[],calDays=[],protHits=0;
   for(var di=6;di>=0;di--){
     var d2=new Date(now); d2.setDate(now.getDate()-di);
-    var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+    var dk=nutKey_(d2);
     var days2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var nd=st.nl&&st.nl[dk];
     var prot=0,cal=0;
@@ -8004,6 +8074,10 @@ function nutritionForDate(key){
 // hardcoding the mobile renderNutr()/showScreen('NUTR') tail, so the same
 // action works on both mobile and desktop without a duplicated copy.
 function nutRefresh(){
+  // BEFORE any render: getNDay creates a bucket on read, so rendering first would let the
+  // multi-day readers manufacture fresh empty shells mid-migration. Boot does not route
+  // through normalizeState_, so this is also the guarantee for a cold open of Nutrition.
+  try{ if(migrateNlKeyPadding_(st)>0 && typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   // Preserve scroll across the mobile re-render. renderNutr rebuilds #NUTR via
   // innerHTML; as the content briefly empties, the browser clamps window scroll
@@ -8116,7 +8190,7 @@ function nutrDelta(d){
   var parts=nutrDate.split('-');
   var dt=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   dt.setDate(dt.getDate()+d);
-  nutrDate=dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate();
+  nutrDate=nutKey_(dt);   // was unpadded - day-nav was the main way entries got stranded
   nutRefresh();
 }
 
@@ -8588,10 +8662,10 @@ function renderNutr(){
     monday.setHours(0,0,0,0);
     var dw=['M','Tu','W','Th','F','Sa','Su'];
     var weekData=[];
-    var todayKey=now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate();
+    var todayKey=nutKey_(now);
     for(var di=0;di<7;di++){
       var d2=new Date(monday); d2.setDate(monday.getDate()+di);
-      var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+      var dk=nutKey_(d2);
       var nd2=getNDay(dk);
       var prot=0,cal=0,carb=0,fat=0,fiber=0,satFat=0,sodium=0,sugar=0;
       if(nd2&&nd2.meals){MEAL_BUCKETS.forEach(function(m){(nd2.meals[m]||[]).forEach(function(f){if(f.deleted)return;prot+=f.p||0;cal+=f.cal||0;carb+=f.c||0;fat+=f.f||0;fiber+=f.fiber||0;satFat+=f.satFat||0;sodium+=f.sodium||0;sugar+=f.sugar||0;});});}
@@ -8895,7 +8969,7 @@ function renderNutr(){
     var days7=[];
     for(var di=6;di>=0;di--){
       var d2=new Date(now); d2.setDate(now.getDate()-di);
-      var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+      var dk=nutKey_(d2);
       var tot2=getDTots(dk);
       var lbl=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d2.getDay()];
       days7.push({label:lbl,date:d2.getDate()+'/'+(d2.getMonth()+1),cal:Math.round(tot2.cal),isToday:dk===nutrDate});
@@ -8945,7 +9019,7 @@ function renderNutr(){
     var now=new Date();
     for(var di=0;di<14 && recentItems.length<8;di++){
       var d2=new Date(now); d2.setDate(now.getDate()-di);
-      var dk=d2.getFullYear()+'-'+(d2.getMonth()+1)+'-'+d2.getDate();
+      var dk=nutKey_(d2);
       var dayLog=st.nl&&st.nl[dk];
       if(!dayLog||!dayLog.meals) continue;
       MEAL_BUCKETS.forEach(function(m){
@@ -15806,11 +15880,11 @@ function dsShowNutrition(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
   var now=new Date();
-  var todayKey=now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate();
-  if(typeof nutrDate==='undefined' || !nutrDate) nutrDate=todayKey;
+  var todayKey=nutKey_(now);   // was unpadded AND assigned into nutrDate below - the desktop
+  if(typeof nutrDate==='undefined' || !nutrDate) nutrDate=todayKey;   // path stranded entries with no day-nav at all
   var viewKey=nutrDate;
   var C={p:'#FC4C02',c:'#60a5fa',f:'#8b5cf6',w:'#22d3ee',cal:'#f59e0b',green:'#4ade80',amber:'#f59e0b',red:'#e24b4a',grey:'#5b6678',purple:'#a855f7'};
-  function keyOf(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+  function keyOf(d){ return nutKey_(d); }   // feeds microsOf/waterOzOf/calByMeal -> getNDay
   function microsOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var t={fiber:0,sodium:0,potassium:0,calcium:0,iron:0,magnesium:0}; MEAL_BUCKETS.forEach(function(m){ (nd.meals[m]||[]).forEach(function(i){ if(i.deleted) return; t.fiber+=i.fiber||0; t.sodium+=i.sodium||0; t.potassium+=i.potassium||0; t.calcium+=i.calcium||0; t.iron+=i.iron||0; t.magnesium+=i.magnesium||0; }); }); return t; }
   function waterOzOf(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{water:0}; return (nd.water||0)*WATER_GLASS_OZ; }
   function calByMeal(dk){ var nd=(typeof getNDay==='function')?getNDay(dk):{meals:{}}; var out={}; MEAL_BUCKETS.forEach(function(m){ var s=0; (nd.meals[m]||[]).forEach(function(i){ if(!i.deleted) s+=i.cal||0; }); out[m]=Math.round(s); }); return out; }
