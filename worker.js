@@ -27893,10 +27893,24 @@ function _reimportGuardedPush_(cb){
       if(!rem.length) throw new Error('remote read returned 0 rides - push aborted, remote untouched');
       var g=_supersetGuard_(st.rides||[], rem);
       if(!g.ok){ cb({aborted:true, missing:g.missing}); return; }
-      var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
-      delete saveData.ghToken; saveData.lastUpdate=Date.now(); fbWriteTs=saveData.lastUpdate;
-      return _withTimeout_(fetch(fbAuthedUrl_(tok),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(saveData)}), 180000, 'remote PUT')
-        .then(function(r){ if(!(r&&r.ok)) throw new Error('PUT '+(r?r.status:'?')); return r.json(); })
+      // Runs get the SAME superset guard as rides - a revived run is re-buried by the merge
+      // for exactly the same reason (deleted OR-merges), so it needs the force path too, but
+      // it must never be force-written unguarded.
+      var remRuns=remote&&remote.runs; remRuns=Array.isArray(remRuns)?remRuns:(remRuns&&typeof remRuns==='object'?Object.keys(remRuns).map(function(k){return remRuns[k];}):[]);
+      var gr=_supersetGuard_(st.runs||[], remRuns);
+      if(!gr.ok) console.warn('[guarded-push] runs NOT written - ' + gr.missing.length + ' remote-only live run(s); rides still pushed');
+      // Write ONLY the activity stores, not the whole blob. The old full-state PUT guarded
+      // rides and then blind-overwrote every OTHER top-level key (plan, nutrition, strength,
+      // segments, bikes, races) with this device's copy - a second blind-overwrite vector
+      // hiding INSIDE the guarded path, unprotected by any guard. A PATCH touches only these
+      // keys; everything else converges through the normal merge push, as it should.
+      var payload={ rides: st.rides||[], lastUpdate: Date.now() };
+      if(gr.ok) payload.runs = st.runs||[];
+      fbWriteTs=payload.lastUpdate;
+      var body=JSON.stringify(payload);
+      console.log('[guarded-push] PATCH ' + body.length + ' bytes (' + (body.length/1048576).toFixed(1) + ' MB) rides=' + (st.rides||[]).length + (gr.ok ? (' runs=' + (st.runs||[]).length) : ' runs=SKIPPED'));
+      return _withTimeout_(fetch(fbAuthedUrl_(tok),{method:'PATCH',headers:{'Content-Type':'application/json'},body:body}), 180000, 'remote PATCH')
+        .then(function(r){ if(!(r&&r.ok)) throw new Error('PATCH '+(r?r.status:'?')); return r.json(); })
         .then(function(){ st.lastUpdate=fbWriteTs; try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){ console.error('[guarded-push] PUT succeeded but the LOCAL save failed: ' + (e&&e.message) + ' - remote is ahead of this device'); } cb({pushed:true}); });
     });
   }).catch(function(e){ cb({error:(e&&e.message)||'push failed'}); });
