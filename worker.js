@@ -3303,16 +3303,32 @@ function fbRefreshToken_(refresh){
 }
 // Returns a promise resolving to a currently-valid ID token, refreshing or
 // signing up as needed. Call this before every Firebase RTDB request.
+// Bounds a promise so a stalled network call cannot leave a chain pending FOREVER. Every hang
+// chased in this file traced back to an unbounded fetch or a cached auth promise that never
+// settled: the callback simply never fired, so a failure looked identical to success in flight.
+// A timeout converts that silence into a loud, catchable rejection.
+function _withTimeout_(p, ms, label){
+  return Promise.race([
+    p,
+    new Promise(function(_, rej){ setTimeout(function(){ rej(new Error((label||'operation') + ' TIMED OUT after ' + ms + 'ms')); }, ms); })
+  ]);
+}
 function ensureFbAuth_(){
   var tok = localStorage.getItem('fbIdToken');
   var exp = parseInt(localStorage.getItem('fbTokenExpiry')||'0', 10);
   if(tok && Date.now() < exp - 60000) return Promise.resolve(tok);
   if(fbAuthPromise) return fbAuthPromise;
   var refresh = localStorage.getItem('fbRefreshToken');
-  fbAuthPromise = (refresh ? fbRefreshToken_(refresh) : fbSignUpAnon_())
-    .catch(function(){ return fbSignUpAnon_(); }) // refresh failed for any reason - fall back to a fresh sign-up
+  // The cached in-flight promise is shared by every concurrent caller, so if the underlying
+  // sign-in stalls mid-flight it poisons the whole session: 3314/3315 only cleared it on
+  // SETTLE, and a pending promise never settles. Bounding the attempt guarantees it settles
+  // one way or the other, so the catch below always runs and fbAuthPromise self-heals.
+  fbAuthPromise = _withTimeout_(
+      (refresh ? fbRefreshToken_(refresh) : fbSignUpAnon_())
+        .catch(function(){ return fbSignUpAnon_(); }), // refresh failed for any reason - fall back to a fresh sign-up
+      15000, 'firebase auth')
     .then(function(t){ fbAuthPromise=null; return t; })
-    .catch(function(e){ fbAuthPromise=null; throw e; });
+    .catch(function(e){ fbAuthPromise=null; console.error('[auth] ' + ((e&&e.message)||'auth failed') + ' - cached promise cleared, next call retries'); throw e; });
   return fbAuthPromise;
 }
 // Builds an authenticated Firebase RTDB URL for the current request.
@@ -27850,9 +27866,17 @@ function _supersetGuard_(localRides, remoteRides){
 // Re-read remote, verify superset, then force-PUT. Aborts (no write) if the guard fails — including
 // a mid-flight remote change that added a live record after our local read.
 function _reimportGuardedPush_(cb){
-  cb=cb||function(){};
-  ensureFbAuth_().then(function(tok){
-    return fetch(fbAuthedUrl_(tok)).then(function(r){
+  // A noop default meant any caller that omitted a callback swallowed EVERY outcome - success,
+  // guard abort, and hard failure alike. Default to logging instead, so no push is ever silent.
+  cb=cb||function(res){
+    try{
+      if(res && res.aborted) console.warn('[guarded-push] ABORTED - ' + res.missing.length + ' remote-only live record(s); remote untouched (no callback supplied)');
+      else if(res && res.error) console.error('[guarded-push] FAILED: ' + res.error + ' (no callback supplied)');
+      else console.log('[guarded-push] OK (no callback supplied)');
+    }catch(e){}
+  };
+  _withTimeout_(ensureFbAuth_(), 15000, 'auth').then(function(tok){
+    return _withTimeout_(fetch(fbAuthedUrl_(tok)), 30000, 'remote read').then(function(r){
       // The guard must NEVER degrade into no-guard. This used to be r.ok ? r.json() : null,
       // so a 401/5xx/offline read produced remote=null -> rem=[] -> _supersetGuard_(local, [])
       // found nothing missing -> it force-PUT over a remote it had never actually read. That is
@@ -27871,9 +27895,9 @@ function _reimportGuardedPush_(cb){
       if(!g.ok){ cb({aborted:true, missing:g.missing}); return; }
       var saveData=JSON.parse(JSON.stringify(st)); if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
       delete saveData.ghToken; saveData.lastUpdate=Date.now(); fbWriteTs=saveData.lastUpdate;
-      return fetch(fbAuthedUrl_(tok),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(saveData)})
+      return _withTimeout_(fetch(fbAuthedUrl_(tok),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(saveData)}), 180000, 'remote PUT')
         .then(function(r){ if(!(r&&r.ok)) throw new Error('PUT '+(r?r.status:'?')); return r.json(); })
-        .then(function(){ st.lastUpdate=fbWriteTs; try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){} cb({pushed:true}); });
+        .then(function(){ st.lastUpdate=fbWriteTs; try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){ console.error('[guarded-push] PUT succeeded but the LOCAL save failed: ' + (e&&e.message) + ' - remote is ahead of this device'); } cb({pushed:true}); });
     });
   }).catch(function(e){ cb({error:(e&&e.message)||'push failed'}); });
 }
