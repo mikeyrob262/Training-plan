@@ -3618,6 +3618,117 @@ function storeV2RunShape_(){
              lost:lost.length, lostKeys:lost.map(mkey) };
   });
 }
+// Read-only run-match probe. Wired to NOTHING — console entry is storeV2RunMatchProbe_().
+// Writes nothing to st, /data or /store_v2; it never calls sv() or saveLocal_.
+//
+// Sizes the st.runs fold for the re-snapshot BEFORE merge.py is touched: how many live runs
+// correspond to a run already in the snapshot decides whether the fold is mostly UNION
+// (append the unmatched wholesale) or mostly MERGE (per-run reconcile keeping the snapshot's
+// measured fields and the local zone/stride fields).
+//
+// Supersedes an earlier "33 of ~1,290 matched" reading, which is dead: it ran against the
+// UN-normalised snapshot and compared distanceM in metres against distance in miles, so
+// nearly every distance comparison was garbage. This routes through the same funnel every
+// reader sits behind — storeV2Flatten_ -> storeV2Normalize_ — and refuses to report a count
+// if the records still look un-normalised.
+var STORE_V2_MANUAL_RUN_F  = ['z1pct','z2pct','z3pct','z4pct','z5pct','stride','rpe','rss','shoe','weather'];
+var STORE_V2_MEASURED_RUN_F= ['distance','movingSecs','elev','maxHR','avgHR'];
+function storeV2RunMatchProbe_(){
+  return loadStoreV2_(true).then(function(s){
+    var snapRuns=(s && s.runs) || [];
+    if(!snapRuns.length){ console.error('[run-match] snapshot returned NO run records — reporting the failure, not a zero match count.'); return null; }
+    // Guard against silently measuring the raw path: normalised distance is in MILES, so a
+    // sample in the thousands means distanceM is being read as distance and every band below
+    // would be meaningless.
+    var withDist=snapRuns.filter(function(a){ return (parseFloat(a && a.distance)||0)>0; });
+    var med=withDist.length ? (parseFloat(withDist[Math.floor(withDist.length/2)].distance)||0) : 0;
+    console.log('[run-match] normalisation spot-check: sample snapshot run distance=' + med + ' mi'
+      + (med>100 ? '  <-- ABORT: that is metres, you are on the RAW path' : '  (miles, normalised)'));
+    if(med>100){ console.error('[run-match] refusing to report counts against un-normalised records.'); return null; }
+
+    var dayKey=function(r){ var d=String((r&&r.date)||'').split('T')[0]; return (typeof normDate==='function')?normDate(d):d; };
+    var mi=function(r){ return parseFloat(r && r.distance)||0; };
+    var has=function(r,k){ return !!r && r[k]!=null && r[k]!==''; };
+    // Live-run test honours all three deletion conventions, not just .deleted.
+    var isLive=function(r){
+      if(!r) return false;
+      if(r.deleted) return false;
+      var dead=false;
+      Object.keys(r).forEach(function(k){
+        if(!STORE_V2_DEL_RE.test(k)) return;
+        var v=r[k];
+        if(v===null||v===undefined||v===false||v==='') return;
+        dead=true;
+      });
+      return !dead;
+    };
+    var liveRuns=(st.runs||[]).filter(isLive);
+
+    var byDate={};
+    snapRuns.forEach(function(a){ var d=dayKey(a); if(!d) return; if(!byDate[d]) byDate[d]=[]; byDate[d].push(a); });
+
+    function pass(tol){
+      var matched=[], unmatched=[], ambiguous=0, snapHit={};
+      liveRuns.forEach(function(r){
+        var cands=byDate[dayKey(r)]||[];
+        var hits=cands.filter(function(a){ return Math.abs(mi(a)-mi(r))<=tol; });
+        if(hits.length===0){ unmatched.push(r); return; }
+        if(hits.length>1) ambiguous++;
+        matched.push({live:r, snap:hits[0], n:hits.length});
+        hits.forEach(function(a){ snapHit[dayKey(a)+'|'+mi(a)]=1; });
+      });
+      var snapOnly=snapRuns.filter(function(a){ return !snapHit[dayKey(a)+'|'+mi(a)]; }).length;
+      return { matched:matched, unmatched:unmatched, ambiguous:ambiguous, snapOnly:snapOnly };
+    }
+    var A=pass(0.1), B=pass(0.25);
+
+    console.log('[run-match] live st.runs (non-deleted): ' + liveRuns.length + '   snapshot runs: ' + snapRuns.length);
+    console.log('[run-match] live runs WITH a snapshot match:  +/-0.1mi = ' + A.matched.length + '   +/-0.25mi = ' + B.matched.length);
+    console.log('[run-match] live runs with NO snapshot match: +/-0.1mi = ' + A.unmatched.length + '   +/-0.25mi = ' + B.unmatched.length
+      + '   <-- the UNION-ONLY population');
+    console.log('[run-match] snapshot runs with no live match: +/-0.1mi = ' + A.snapOnly + '   +/-0.25mi = ' + B.snapOnly + '   (informational)');
+    console.log('[run-match] ambiguous (one live run matching >1 snapshot run): +/-0.1mi = ' + A.ambiguous + '   +/-0.25mi = ' + B.ambiguous
+      + (A.ambiguous ? '   <-- needs a tiebreak beyond date+distance' : ''));
+
+    // Field provenance across the matched pairs — this is what decides merge vs union SHAPE.
+    var pct=function(n,d){ return d ? (Math.round(n*1000/d)/10) + '%' : '0%'; };
+    var mF={}, sF={};
+    STORE_V2_MANUAL_RUN_F.forEach(function(k){ mF[k]=0; });
+    STORE_V2_MEASURED_RUN_F.forEach(function(k){ sF[k]=0; });
+    A.matched.forEach(function(p){
+      STORE_V2_MANUAL_RUN_F.forEach(function(k){ if(has(p.live,k)) mF[k]++; });
+      STORE_V2_MEASURED_RUN_F.forEach(function(k){ if(has(p.snap,k)) sF[k]++; });
+    });
+    var n=A.matched.length;
+    console.log('[run-match] matched LIVE runs carrying manual-only fields: '
+      + STORE_V2_MANUAL_RUN_F.map(function(k){ return k+'='+mF[k]+'('+pct(mF[k],n)+')'; }).join('  '));
+    console.log('[run-match] matched SNAPSHOT runs carrying measured fields: '
+      + STORE_V2_MEASURED_RUN_F.map(function(k){ return k+'='+sF[k]+'('+pct(sF[k],n)+')'; }).join('  '));
+    var richBoth=A.matched.filter(function(p){
+      var m=STORE_V2_MANUAL_RUN_F.some(function(k){ return has(p.live,k); });
+      var q=STORE_V2_MEASURED_RUN_F.some(function(k){ return has(p.snap,k) && !has(p.live,k); });
+      return m && q;
+    }).length;
+    console.log('[run-match] matched pairs where BOTH sides carry something the other lacks: ' + richBoth + ' / ' + n
+      + (richBoth ? '   <-- a two-way merge is required; picking one record loses data' : ''));
+
+    A.matched.slice(0,5).forEach(function(p,i){
+      var lu=STORE_V2_MANUAL_RUN_F.filter(function(k){ return has(p.live,k); });
+      var su=STORE_V2_MEASURED_RUN_F.filter(function(k){ return has(p.snap,k) && !has(p.live,k); });
+      console.log('[run-match] example ' + (i+1) + ': ' + dayKey(p.live)
+        + '  live=' + mi(p.live) + 'mi  snapshot=' + mi(p.snap) + 'mi'
+        + (p.n>1 ? ('  (AMBIGUOUS, ' + p.n + ' candidates)') : '')
+        + '  live-only[' + lu.join(',') + ']  snapshot-only[' + su.join(',') + ']');
+    });
+    console.log('[run-match] SHAPE: ' + (A.unmatched.length > A.matched.length
+      ? 'mostly UNION — most live runs have no snapshot match, so the fold appends them with their manual fields.'
+      : 'mostly MERGE — most live runs match, so the fold is a per-run reconcile keyed on date+distance.'));
+    return { liveRuns:liveRuns.length, snapRuns:snapRuns.length, tol01:A, tol025:B, manualFields:mF, measuredFields:sF, richBoth:richBoth };
+  }).catch(function(e){
+    console.error('[run-match] FAILED: ' + ((e && e.message) || e) + ' — this is a read failure, not a zero match count.');
+    throw e;
+  });
+}
 // Read-only identity probe for the index->identity refactor. Wired to NOTHING — console
 // entry is storeV2IdentityProbe_(). No handler edits, no renderer changes.
 //
