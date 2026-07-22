@@ -15797,7 +15797,9 @@ var VIEW_ACTIONS = {
   nutrition: function(){ dsNav('nutrition'); },
   gear:      function(){ dsNav('gear'); },
   progress:  function(){ showNutr(); },
-  editRide:  function(a){ if(typeof editRideData==='function') editRideData(parseInt(a,10)); }
+  // parseInt would NaN a handle and editRideData's if(!r) return would swallow it silently.
+  // rideRefFromAttr_ decides by shape, so it reads both a legacy position and a handle.
+  editRide:  function(a){ if(typeof editRideData==='function') editRideData(rideRefFromAttr_(a)); }
 };
 document.addEventListener('click', function(e){
   var el = (e.target && e.target.closest) ? e.target.closest('[data-view]') : null;
@@ -19034,7 +19036,7 @@ function openDesktopRideDetail(idx, _noFetch){
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
             '<span style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
-            '<span data-view="editRide" data-arg="'+idx+'" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
+            '<span data-view="editRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
           '<div style="font-size:11px;color:#64748b;margin-top:2px">'+dtStr+'</div>'+
         '</div>'+
@@ -21953,8 +21955,14 @@ function renderRun(){
 
       // Load Map button if stravaId but no GPS
       if(r.stravaId && !(r.gpsLats && r.gpsLats.length > 5)){
-        var rideIdx = st.rides.findIndex(function(x){return x.stravaId===r.stravaId;});
-        if(rideIdx >= 0){
+        // r here is a getRuns() PROJECTION, not an st.rides record, so indexOf can never match
+        // it — which is why this used a stravaId findIndex. This branch is already gated on
+        // r.stravaId, so rideHandle_ yields the reliable s<id> form; the fragile k: form (which
+        // would read movingSecs/duration the projection does not carry) is unreachable here.
+        var rideIdx = (STORE_V2_HANDLES && typeof rideHandle_==='function')
+          ? rideHandle_(r)
+          : st.rides.findIndex(function(x){return x.stravaId===r.stravaId;});
+        if(rideRefOk_(rideIdx)){
           var loadMapBtn=document.createElement('button');
           loadMapBtn.style.cssText='margin-bottom:8px;font-size:11px;color:#4D9FFF;background:none;border:1px solid #4D9FFF;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit';
           loadMapBtn.textContent='Load GPS Map';
@@ -22007,7 +22015,12 @@ function renderRun(){
       (function(rRef){delBtn.onclick=async function(){
         if(!(await uiConfirm('Delete this run?',{danger:true}))) return;
         if(rRef.stravaId){
-          var rideIdx=st.rides.findIndex(function(x){return x.stravaId===rRef.stravaId;});
+          // Resolved to a POSITION here, after the uiConfirm await, because splice needs an
+          // index and the array can be reordered while the dialog is open. rRef is a getRuns()
+          // projection, so the handle is the s<id> form (this branch is gated on stravaId).
+          var rideIdx=(STORE_V2_HANDLES && typeof rideHandle_==='function')
+            ? rideResolveIdx_(rideHandle_(rRef))
+            : st.rides.findIndex(function(x){return x.stravaId===rRef.stravaId;});
           if(rideIdx>=0) st.rides.splice(rideIdx,1);
         } else {
           var manIdx=(st.runs||[]).findIndex(function(x){return x.date===rRef.date&&x.name===rRef.name&&x.distance===rRef.distance;});
@@ -25901,7 +25914,12 @@ function renderRideSegmentsTab(body, r, idx){
   fetchRideSegments(r, function(segs){ render(segs); });
 }
 
-function fetchStravaGPS(stravaId, rideIndex) {
+// Dual-accepts a position or a durable handle. NOTE the resolution point: this writes AFTER
+// a network round-trip to Strava, so a position captured at call time can be stale by the
+// time the write lands — a sync or a delete during the fetch would move the target and the
+// assignment below would silently land on a different ride. The reference is therefore
+// resolved inside doFetch, immediately before the write, not here at entry.
+function fetchStravaGPS(stravaId, rideRef) {
   if(!st.stravaToken && !st.stravaRefreshToken){ toast('Connect Strava first'); return; }
   var doFetch = function(token){
     fetch('https://www.strava.com/api/v3/activities/'+stravaId, {
@@ -25914,8 +25932,14 @@ function fetchStravaGPS(stravaId, rideIndex) {
         var decoded = decodePolyline(poly);
         if(decoded.lats.length > 5){
           var s=Math.max(1,Math.floor(decoded.lats.length/300));
-          st.rides[rideIndex].gpsLats = decoded.lats.filter(function(_,i){return i%s===0;}).slice(0,300);
-          st.rides[rideIndex].gpsLons = decoded.lons.filter(function(_,i){return i%s===0;}).slice(0,300);
+          // Resolve here, not at entry — see the note on the signature. Also guard the target:
+          // previously an out-of-range index made this throw a TypeError inside a .then, which
+          // surfaces as an unhandled rejection rather than anything the user can see.
+          var rideIndex = rideResolveIdx_(rideRef);
+          var target = (rideIndex>=0) ? st.rides[rideIndex] : null;
+          if(!target){ toast('That ride is no longer in the library'); return; }
+          target.gpsLats = decoded.lats.filter(function(_,i){return i%s===0;}).slice(0,300);
+          target.gpsLons = decoded.lons.filter(function(_,i){return i%s===0;}).slice(0,300);
           sv(); fbPush(true);
           toast('GPS loaded! Reload Run Training to see map.');
         } else {
