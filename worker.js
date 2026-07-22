@@ -3788,7 +3788,30 @@ function rideResolveIdx_(ref){
 // format cannot break out of the attribute.
 function rideRefAttr_(ref){
   if(typeof ref==='number') return String(ref);
-  return "'" + String(ref==null?'':ref).replace(/[^A-Za-z0-9:_.-]/g, '') + "'";
+  return "'" + rideRefData_(ref) + "'";
+}
+// Producer-side reference for a ride: a durable handle when handles are on, else the legacy
+// position. ONE definition so every producer migrates identically instead of each repeating
+// the ternary. Falls back to indexOf if a handle ever comes back empty.
+function rideRefOf_(r){
+  if(STORE_V2_HANDLES && typeof rideHandle_==='function'){ var h=rideHandle_(r); if(h) return h; }
+  return (st.rides||[]).indexOf(r);
+}
+// Bare sanitised form, for a data-* ATTRIBUTE VALUE (which supplies its own quotes).
+function rideRefData_(ref){ return String(ref==null?'':ref).replace(/[^A-Za-z0-9:_.-]/g, ''); }
+// Is a reference usable? A bare idx>=0 test silently fails on a handle: 'k:2026-01-01_20_3600'
+// >= 0 coerces to NaN >= 0, which is false — so a producer guarded that way would simply stop
+// emitting the attribute and every row would become unclickable, with no error anywhere.
+function rideRefOk_(ref){ return (typeof ref==='number') ? (ref>=0) : !!ref; }
+// Reads a reference back OUT of a data-* attribute, where everything is a string. Decided by
+// SHAPE, not by STORE_V2_HANDLES: a page rendered before a rollback can still have handle
+// attributes sitting in the DOM, and a flag-based test would misread them. rideKey always
+// emits a letter prefix (s<id> or k:<...>), so an all-digit value is unambiguously a position.
+function rideRefFromAttr_(s){
+  if(s===null || s===undefined || s==='') return -1;
+  var str=String(s);
+  if(/^-?[0-9]+$/.test(str)){ var n=parseInt(str,10); return isNaN(n) ? -1 : n; }
+  return str;
 }
 function storeV2HandleDryRun_(){
   return loadStoreV2_(true).then(function(s){
@@ -17747,9 +17770,9 @@ function dsShowCalendar(){
           var restPlan=planRaw && (planRaw.type==='rest' || /rest|recovery|off/i.test(planRaw.name||''));
           if(restPlan && !calFilter.rest){ planRaw=null; restPlan=false; }
           var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
-          var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
+          var idx=dl.length?rideRefOf_(dl[0]):-1;
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
-          var attrs=' data-cal="cell"'+(c.inMonth?(' data-date="'+c.date+'"'):'')+(idx>=0?(' data-idx="'+idx+'"'):'');
+          var attrs=' data-cal="cell"'+(c.inMonth?(' data-date="'+c.date+'"'):'')+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'');
           H+='<div'+attrs+' style="position:relative;border-right:1px solid #171c2b;border-bottom:1px solid #171c2b;padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
           if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
           var complete=c.inMonth && typeof isDayComplete==='function' && isDayComplete(c.date);
@@ -17845,7 +17868,8 @@ function dsShowCalendar(){
       else if(a==='gen'){ calFilterOpen=false; if(typeof openPlanGenerator_==='function') openPlanGenerator_(); }
       else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
       else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
-        if(idx!=null) openRideDetail(parseInt(idx,10));
+        // parseInt would turn a handle into NaN and openRideDetail would silently no-op.
+        if(idx!=null) openRideDetail(rideRefFromAttr_(idx));
         else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
       }
     });
@@ -17864,11 +17888,11 @@ function dsShowCalendar(){
     var H='<div style="flex:1;min-height:0;overflow-y:auto;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:6px 4px">';
     if(!list.length){ H+='<div style="padding:44px;text-align:center;color:#5b6678;font-size:13px">No activities this month.</div>'; }
     list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
-      var idx=(st.rides||[]).indexOf(r);
+      var idx=rideRefOf_(r);
       var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
       var dObj=new Date(normDate(r.date)+'T00:00:00');
       var dstr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dObj.getDay()]+' '+(dObj.getMonth()+1)+'/'+dObj.getDate();
-      H+='<div data-cal="cell"'+(idx>=0?(' data-idx="'+idx+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
+      H+='<div data-cal="cell"'+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
         +'<div style="width:54px;font-size:11px;color:#8592a6;font-weight:600">'+dstr+'</div>'
         +'<div style="width:36px;height:36px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center">'+calIcon(rideSport_(r)||'Ride',20,col)+'</div>'
         +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
@@ -17885,8 +17909,8 @@ function dsShowCalendar(){
     for(var i=0;i<7;i++){ var dt=new Date(mon); dt.setDate(mon.getDate()+i);
       var nd=normDate(dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate());
       var dl=ridesByDate[nd]||[]; var isToday=nd===today;
-      var idx=dl.length?(st.rides||[]).indexOf(dl[0]):-1;
-      H+='<div data-cal="cell" data-date="'+nd+'"'+(idx>=0?(' data-idx="'+idx+'"'):'')+' style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
+      var idx=dl.length?rideRefOf_(dl[0]):-1;
+      H+='<div data-cal="cell" data-date="'+nd+'"'+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'')+' style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
       H+='<div style="font-size:11px;color:#8592a6;font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
       H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
       dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
@@ -18406,11 +18430,11 @@ function dsShowDashboard(){
   if(!recent.length){ ra+='<div style="font-size:12px;color:#64748b;padding:12px 0">No activities yet.</div>'; }
   recent.forEach(function(r,ix){
     var stype=r.sportType||r.type||'Ride'; if((typeof rideIsIndoor==='function'&&rideIsIndoor(r))&&/run|jog/i.test(stype)) stype='Treadmill';
-    var ridx=(st.rides||[]).indexOf(r); if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
+    var ridx=rideRefOf_(r); if(rideRefOk_(ridx)===false && r.stravaId) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=Math.round(parseFloat(r.tss)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
-    ra+='<div data-ride="'+ridx+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
     ra+='<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,30)+'</div>';
     ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:#64748b;margin-top:1px">'+dstr+'</div></div>';
     ra+='<div style="display:flex;gap:13px;flex-shrink:0;text-align:right">';
@@ -18597,7 +18621,9 @@ function dsShowDashboard(){
   // ---- delegated clicks ----
   shell.addEventListener('click',function(e){
     var t=e.target.closest('[data-ride],[data-race],[data-act],[data-teach]'); if(!t) return;
-    if(t.hasAttribute('data-ride')){ var i=parseInt(t.getAttribute('data-ride'),10); if(i>=0) openRideDetail(i); return; }
+    // Shape-decided read: parseInt would NaN a handle, and i>=0 would then be false, so the
+    // click would vanish with no error. rideRefOk_ accepts a position or a non-empty handle.
+    if(t.hasAttribute('data-ride')){ var i=rideRefFromAttr_(t.getAttribute('data-ride')); if(rideRefOk_(i)) openRideDetail(i); return; }
     if(t.hasAttribute('data-race')){ var ri=parseInt(t.getAttribute('data-race'),10); if(typeof openRaceEditor==='function') openRaceEditor(ri, dsShowDashboard); return; }
     if(t.hasAttribute('data-teach')){ if(typeof openMetricTeach==='function') openMetricTeach(t.getAttribute('data-teach')); return; }
     var a=t.getAttribute('data-act');
@@ -18885,8 +18911,8 @@ function openDesktopRideDetail(idx, _noFetch){
     var moLabel=MO_NAMES[parseInt(parts[1],10)-1]+' '+parts[0];
     listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
     months2[mo2].forEach(function(lr){
-      var lridx=(st.rides||[]).indexOf(lr);
-      if(lridx<0) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
+      var lridx=rideRefOf_(lr);
+      if(rideRefOk_(lridx)===false && lr.stravaId) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
       var isActive=lridx===idx;
       var lwkg=lr.np&&BWT?(lr.np/BWT*2.20462).toFixed(2):lr.avgPwr&&BWT?(lr.avgPwr/BWT*2.20462).toFixed(2):null;
       var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
@@ -18894,7 +18920,7 @@ function openDesktopRideDetail(idx, _noFetch){
       var ldStr=ldParts&&ldParts.length>=3?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(ldParts[1],10)-1]+' '+parseInt(ldParts[2],10)):'';
       var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
       var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
-      listHtml2+='<div onclick="openDesktopRideDetail('+lridx+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
+      listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
         +'<div style="width:28px;height:28px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:#4ade80">'+sportIcon+'</div>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
@@ -28540,14 +28566,14 @@ function showCal(){
       });
       if(dayRides.length>2){var more=document.createElement('div');more.style.cssText='font-size:7px;color:var(--t3)';more.textContent='+'+(dayRides.length-2)+' more';cell.appendChild(more);}
       if(dayRides.length===1){
-        (function(ride){cell.onclick=function(){var idx=(st.rides||[]).indexOf(ride);if(idx>=0){scr.remove();openRideDetail(idx);}};})(dayRides[0]);
+        (function(ride){cell.onclick=function(){var idx=rideRefOf_(ride);if(rideRefOk_(idx)){scr.remove();openRideDetail(idx);}};})(dayRides[0]);
       } else if(dayRides.length>1){
         (function(rides,ds2){cell.onclick=function(){
           var pick=document.createElement('div');
           pick.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center';
           var box=document.createElement('div');box.style.cssText='background:var(--s1);border-radius:16px;padding:16px;width:280px';
           box.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px">'+ds2+'</div>';
-          rides.forEach(function(r){var idx=(st.rides||[]).indexOf(r);var btn=document.createElement('button');btn.style.cssText='display:block;width:100%;text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit';btn.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t1)">'+(r.name||r.sportType||'Activity')+'</div><div style="font-size:11px;color:var(--t3)">'+(r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';btn.onclick=function(){pick.remove();scr.remove();if(idx>=0)openRideDetail(idx);};box.appendChild(btn);});
+          rides.forEach(function(r){var idx=rideRefOf_(r);var btn=document.createElement('button');btn.style.cssText='display:block;width:100%;text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit';btn.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t1)">'+(r.name||r.sportType||'Activity')+'</div><div style="font-size:11px;color:var(--t3)">'+(r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';btn.onclick=function(){pick.remove();scr.remove();if(idx>=0)openRideDetail(idx);};box.appendChild(btn);});
           var cancel=document.createElement('button');cancel.style.cssText='display:block;width:100%;text-align:center;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;margin-top:4px;font-family:inherit';cancel.textContent='Cancel';cancel.onclick=function(){pick.remove();};box.appendChild(cancel);
           pick.appendChild(box);document.body.appendChild(pick);
         };})(dayRides,ds);
