@@ -3359,6 +3359,16 @@ function fbStoreV2Url_(token){
 // both vocabularies to compare and nothing that reads the raw form breaks. A target field is
 // only written when the source is actually present, so a null can never overwrite a real value.
 var STORE_V2_M_PER_MI = 1609.344, STORE_V2_FT_PER_M = 3.28084;
+// Seconds -> "M:SS" / "H:MM:SS". Mirrors bulkImportTCX's nested fmtDurHMS EXACTLY (which is
+// out of scope here) so the run screen's time column reads the same whether a run came from
+// an import or the snapshot. Returns '' for a non-positive input so the reader shows '—'
+// rather than a fake '0:00' — the no-fake-data rule the ~7 duration-less runs depend on.
+function secToHMS_(sec){
+  sec=Math.round(+sec||0);
+  if(sec<=0) return '';
+  var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return h>0 ? (h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s) : (m+':'+(s<10?'0':'')+s);
+}
 function storeV2Normalize_(rec){
   if(!rec || typeof rec!=='object') return rec;
   var r=rec;
@@ -3381,6 +3391,16 @@ function storeV2Normalize_(rec){
   // this is what recovers the 228 virtual rides. It also means sportType now carries SPACED
   // Strava strings ("Virtual Ride"), which is why the classifier strips separators below.
   if(r.stravaType) r.sportType = r.stravaType;
+  // Run-card aliases (Group H). renderRun reads .time and .elevation; the normalizer produces
+  // movingSecs/elev. Added here, at the one adapter boundary, so every run reader gets them
+  // rather than each re-deriving. .elevation is the same number as .elev; .time is the
+  // FORMATTED duration string renderRun displays directly — from movingSecs, else the
+  // elapsedSec-derived duration, so the ~7 runs with neither get '' -> the reader shows '—'.
+  // Harmless on ride records: no ride surface reads .time (they read .duration), and the
+  // elevation readers already accept (elev||elevation).
+  if(r.elev!=null && r.elevation==null) r.elevation = r.elev;
+  var _ts=(r.movingSecs!=null)?r.movingSecs:(r.duration!=null?r.duration:null);
+  if(_ts!=null && r.time==null){ var _hms=secToHMS_(_ts); if(_hms) r.time=_hms; }
   return r;
 }
 // Sport string for MATCHING: strips spaces/underscores/hyphens so the spaced Strava forms
@@ -13941,6 +13961,11 @@ var STORE_V2_READS = true;
 // st.rides, so a slow or failed snapshot read degrades to the old behaviour rather
 // than to an empty library.
 var _storeV2Rides = null;
+// Sync cache for the run screen (Group H), mirroring _storeV2Rides. getRuns is called
+// synchronously by renderRun, so it cannot await storeV2ByType_; primeStoreV2_ fills this
+// once at boot and getRuns reads it. Null means not-primed-yet, so getRuns falls through to
+// the legacy union rather than to empty.
+var _storeV2Runs = null;
 // Loads the snapshot and arms the sync cache with the RIDE-TYPED subset only.
 // The filter is the point: st.rides held ~838 live records, while /store_v2 is a
 // single typed collection of 2,451 (409 ride + 1,760 run + 282 other). Repointing
@@ -13950,10 +13975,12 @@ function primeStoreV2_(){
   if(!STORE_V2_READS) return Promise.resolve(null);
   return loadStoreV2_().then(function(s){
     _storeV2Rides = s.rides;
+    _storeV2Runs = s.runs;
     var was=(st.rides||[]).filter(function(r){ return r && !r.deleted; }).length;
     console.log('[store_v2] reads ARMED — allRidesDeduped_ now serves ' + s.rides.length
       + ' ride-typed records (st.rides live was ' + was + '). Excluded: ' + s.runs.length
       + ' run, ' + s.other.length + ' other. Set STORE_V2_READS=false to roll back.');
+    if(typeof STORE_V2_RUNS!=='undefined' && STORE_V2_RUNS) console.log('[store_v2] run screen ARMED — getRuns now serves ' + s.runs.length + ' snapshot runs. Set STORE_V2_RUNS=false to roll back.');
     if(s.virtual.length===0) console.warn('[store_v2] indoor/outdoor split is NOT available from this snapshot (virtual=0) — see storeV2Verify_() indoor signals before migrating any surface that splits them.');
     try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
     try{ showHomeDash(); }catch(e){}
@@ -21990,7 +22017,21 @@ var RUN_ZONES = [
 var RUN_TYPES = ['Easy Run','Long Run','Tempo Run','Fartlek Run','Walk/Run','Hill Repeats','Race'];
 
 function showRun(){ renderRun(); }
+// ROLLBACK IS THIS ONE LINE: STORE_V2_RUNS=false returns getRuns to the legacy union on the
+// next render. The legacy body is preserved verbatim as getRunsLegacy_ — not edited — so the
+// rollback is exact, not an approximation.
+var STORE_V2_RUNS = true;
 function getRuns(){
+  // Snapshot runs when armed and primed: already normalized (app vocab), tombstone-free and
+  // deduped, and carrying the folded zone/stride fields. The count changes ON PURPOSE — the
+  // legacy union was inflated (no tombstone filter, ride-derived runs concatenated with
+  // st.runs, no dedup), so this is the clean 2201, not a match to the old number. Falls
+  // through to the legacy union when not primed, so a slow/failed snapshot read degrades to
+  // today's behaviour, never to an empty screen.
+  if(STORE_V2_RUNS && _storeV2Runs && _storeV2Runs.length) return _storeV2Runs.slice();
+  return getRunsLegacy_();
+}
+function getRunsLegacy_(){
   var rides = st.rides||[];
   var stravaRuns = rides.filter(function(r){
     return /^(run|trailrun|virtualrun|treadmill)$/i.test(rideSport_(r));
