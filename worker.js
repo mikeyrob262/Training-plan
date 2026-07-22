@@ -3694,39 +3694,101 @@ function _fpAudit_(list, fields){
   });
   return out;
 }
+// PAIRED field audit. The first version of this audited ONE field list against both
+// stores and reported almost everything DROPPED — an artifact of the audit, not a fact
+// about the data. The snapshot is built by merge.py from the Garmin/Strava exports and
+// keeps the EXPORT vocabulary (distanceM in metres, movingSec, elevGainM in metres,
+// avgHr, avgPower, normPower, avgCadence); the app keeps its own (distance in miles,
+// movingSecs, elev in feet, avgHR, avgPwr, np, cadence). Auditing either vocabulary
+// against both stores makes the other side look empty. So every row names BOTH fields
+// and compares like for like. Units differ too, which is why presence — not value — is
+// what this compares.
+var STORE_V2_RIDE_PAIRS=[
+  ['distanceM','distance','metres vs miles'],
+  ['movingSec','movingSecs',''],
+  ['elapsedSec','duration','snapshot seconds vs local H:MM:SS string'],
+  ['elevGainM','elev','metres vs feet'],
+  ['avgHr','avgHR',''],
+  ['maxHr','maxHR',''],
+  ['avgPower','avgPwr',''],
+  ['normPower','np',''],
+  ['avgCadence','cadence',''],
+  ['calories','calories','same name both sides'],
+  ['tss','tss','same name both sides'],
+  ['stravaType','sportType','indoor signal — snapshot keeps the original Strava type'],
+  ['name','name',''],
+  ['date','date',''],
+  ['stravaId','stravaId',''],
+  [null,'trainer','LOCAL ONLY — snapshot has no trainer; stravaType supersedes it'],
+  [null,'avgSpeed','LOCAL ONLY'],
+  ['relativeEffort',null,'SNAPSHOT ONLY'],
+  ['gear',null,'SNAPSHOT ONLY']
+];
+var STORE_V2_RUN_PAIRS=[
+  ['distanceM','distance','metres vs miles'],
+  ['movingSec','movingSecs','known gap: null on many Garmin-only runs'],
+  ['elapsedSec','time','snapshot seconds vs local MM:SS string'],
+  ['elevGainM','elevation','metres vs feet'],
+  ['avgHr','avgHR',''],
+  ['maxHr','maxHR',''],
+  ['avgCadence','cadence',''],
+  ['name','name',''],
+  ['date','date',''],
+  ['stravaId','stravaId',''],
+  [null,'pace','LOCAL ONLY'],
+  [null,'rss','LOCAL ONLY (manual/garmin run-card field)'],
+  [null,'rpe','LOCAL ONLY (manual run-card field)'],
+  [null,'z1pct','LOCAL ONLY (manual run-card field)'],
+  [null,'shoe','LOCAL ONLY (manual run-card field)'],
+  [null,'stride','LOCAL ONLY (manual run-card field)']
+];
 function storeV2FieldAudit_(){
   return loadStoreV2_(true).then(function(s){
     var snapRides=s.rides||[], snapRuns=s.runs||[];
     var locRides=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
     var locRuns=(st.runs||[]).filter(function(r){ return r && !r.deleted; });
-    var RIDE_F=['distance','duration','movingSecs','elev','elevation','avgHR','maxHR','avgPwr','np','cadence','tss','calories','avgSpeed','pace','trainer','name','date','stravaId'];
-    var RUN_F =['distance','duration','movingSecs','time','elev','elevation','avgHR','maxHR','cadence','pace','rss','rpe','name','date','stravaId'];
-    var durOK=function(l){ return l.filter(function(r){ return ((typeof _durSec_==='function')?_durSec_(r):0)>0; }).length; };
     var pct=function(n,d){ return d ? Math.round(n*1000/d)/10 : 0; };
+    var pad=function(x,n){ return (String(x)+'                    ').slice(0,n); };
+    // _durSec_ reads movingSecs/duration — neither exists in the export vocabulary, so
+    // the snapshot side is measured on its OWN duration fields instead.
+    var locDur=function(l){ return l.filter(function(r){ return ((typeof _durSec_==='function')?_durSec_(r):0)>0; }).length; };
+    var snapDur=function(l){ return l.filter(function(a){ return ((+(a&&a.movingSec)||0)>0) || ((+(a&&a.elapsedSec)||0)>0); }).length; };
 
-    function table(label, fields, snap, loc){
+    function table(label, pairs, snap, loc){
       console.log('[field-audit] ===== ' + label + ' — snapshot n=' + snap.length + '  vs  local n=' + loc.length + ' =====');
-      var A=_fpAudit_(snap,fields), B=_fpAudit_(loc,fields), dropped=[], thinned=[];
-      fields.forEach(function(f){
-        var a=A[f], b=B[f], ar=pct(a.pos,snap.length), br=pct(b.pos,loc.length);
+      var sf=[], lf=[];
+      pairs.forEach(function(p){ if(p[0]) sf.push(p[0]); if(p[1]) lf.push(p[1]); });
+      var A=_fpAudit_(snap,sf), B=_fpAudit_(loc,lf), missing=[], thin=[];
+      pairs.forEach(function(p){
+        var a=p[0]?A[p[0]]:null, b=p[1]?B[p[1]]:null;
+        var ar=a?pct(a.pos,snap.length):null, br=b?pct(b.pos,loc.length):null;
         var flag='';
-        if(br>0 && ar===0){ flag='  <-- DROPPED'; dropped.push(f); }
-        else if(br>0 && ar < br/2){ flag='  <-- THINNED'; thinned.push(f); }
-        console.log('[field-audit]   ' + (f+'                ').slice(0,14)
-          + ' snap pos=' + a.pos + ' zero=' + a.zero + ' abs=' + a.abs + ' (' + ar + '%)'
-          + '   local pos=' + b.pos + ' zero=' + b.zero + ' abs=' + b.abs + ' (' + br + '%)' + flag);
+        if(a && b){
+          if(br>0 && ar===0){ flag='  <-- MISSING in snapshot'; missing.push(p[0]); }
+          else if(br>0 && ar < br/2){ flag='  <-- THINNER in snapshot'; thin.push(p[0]); }
+        }
+        console.log('[field-audit]   ' + pad((p[0]||'—')+' -> '+(p[1]||'—'), 30)
+          + (a ? (' snap pos=' + a.pos + ' zero=' + a.zero + ' abs=' + a.abs + ' (' + ar + '%)') : ' snap —                       ')
+          + (b ? ('   local pos=' + b.pos + ' zero=' + b.zero + ' abs=' + b.abs + ' (' + br + '%)') : '   local —')
+          + flag + (p[2] ? ('   [' + p[2] + ']') : ''));
       });
-      var sd=durOK(snap), ld=durOK(loc);
-      console.log('[field-audit]   [record-level] duration parseable via _durSec_ >0: snapshot ' + sd + '/' + snap.length
-        + ' (' + pct(sd,snap.length) + '%)   local ' + ld + '/' + loc.length + ' (' + pct(ld,loc.length) + '%)');
-      console.log('[field-audit]   FIX LIST for ' + label + ': dropped=[' + dropped.join(', ') + ']  thinned=[' + thinned.join(', ') + ']');
-      return { snap:A, local:B, dropped:dropped, thinned:thinned, snapDurOK:sd, locDurOK:ld };
+      var sd=snapDur(snap), ld=locDur(loc);
+      console.log('[field-audit]   [record-level] usable duration: snapshot ' + sd + '/' + snap.length + ' (' + pct(sd,snap.length)
+        + '%, via movingSec|elapsedSec)   local ' + ld + '/' + loc.length + ' (' + pct(ld,loc.length) + '%, via _durSec_)');
+      console.log('[field-audit]   ' + label + ' genuinely missing from snapshot: [' + missing.join(', ') + ']  thinner: [' + thin.join(', ') + ']');
+      return { snap:A, local:B, missing:missing, thin:thin, snapDurOK:sd, locDurOK:ld };
     }
 
-    var R=table('RIDES', RIDE_F, snapRides, locRides);
-    var U=table('RUNS',  RUN_F,  snapRuns,  locRuns);
-    console.log('[field-audit] NOTE: "zero" means merge.py carried the key but flattened the value; "abs" means it never carried the key at all. They need different fixes.');
-    return { rides:R, runs:U, counts:{snapRides:snapRides.length, snapRuns:snapRuns.length, locRides:locRides.length, locRuns:locRuns.length} };
+    var R=table('RIDES', STORE_V2_RIDE_PAIRS, snapRides, locRides);
+    var U=table('RUNS',  STORE_V2_RUN_PAIRS,  snapRuns,  locRuns);
+    // stravaType is the real indoor signal — merge.py collapses Virtual Ride into
+    // type:'ride' but preserves the original here, so this is data, not inference.
+    var stv={}; snapRides.forEach(function(a){ var k=(a&&a.stravaType)||'(none)'; stv[k]=(stv[k]||0)+1; });
+    console.log('[field-audit] stravaType across snapshot rides: '
+      + Object.keys(stv).sort(function(x,y){return stv[y]-stv[x];}).map(function(k){ return k+'='+stv[k]; }).join('  '));
+    console.log('[field-audit] NOTE: rows pair EXPORT vocabulary (snapshot) against APP vocabulary (local). "abs" on one side with values on the other is a NAMING difference, not lost data — that is what this audit exists to distinguish.');
+    return { rides:R, runs:U, stravaType:stv,
+             counts:{snapRides:snapRides.length, snapRuns:snapRuns.length, locRides:locRides.length, locRuns:locRuns.length} };
   });
 }
 
