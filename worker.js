@@ -3334,6 +3334,149 @@ function ensureFbAuth_(){
 // Builds an authenticated Firebase RTDB URL for the current request.
 function fbAuthedUrl_(token){ return FB_URL + '?auth=' + encodeURIComponent(token); }
 
+// -- /store_v2 read path (migration step 1) --------------------------------
+// The clean activity snapshot lives at a ROOT SIBLING of /data (.../store_v2.json),
+// NOT at /data/store_v2. That placement is what makes it safe: every Firebase write
+// in this file is scoped to /data.json (fbPush PUT, _rcvPush PUT, the guarded PATCH,
+// the nl PATCH) or /gps/{key}.json, and there is no root-level write anywhere. A
+// full-blob PUT to /data.json replaces the /data node only, so it structurally
+// cannot reach this snapshot. /store_v2 is therefore frozen and read-only until the
+// writer flip; NOTHING below writes to it.
+//
+// Built with the same string replace as fbGpsUrl_ rather than a regex: a regex
+// written here would have its backslashes stripped by the served template literal
+// (/\.json$/ arrives as /.json$/ — a matching any-char), which preflight step 2
+// exists to catch. String replace has no backslashes to lose.
+function fbStoreV2Url_(token){
+  return FB_URL.replace('/data.json','') + '/store_v2.json?auth=' + encodeURIComponent(token);
+}
+// Firebase returns an ARRAY when the node's keys are dense 0..n-1 and an OBJECT
+// otherwise, and the snapshot may be a bare collection or wrapped. Resolve every
+// one of those to a flat array and REPORT which shape was seen, so a wrong guess
+// about the snapshot's layout surfaces as a shape line instead of a silent zero.
+// The split-bucket case reads BOTH rides and runs — taking whichever key matched
+// first would drop an entire bucket and still look like a plausible count.
+function storeV2Flatten_(j){
+  var keyed=function(v){ return Array.isArray(v) ? v : ((v && typeof v==='object') ? Object.keys(v).map(function(k){ return v[k]; }) : []); };
+  var shape, coll;
+  if(Array.isArray(j)){ shape='array'; coll=j; }
+  else if(!j || typeof j!=='object'){ shape='empty'; coll=[]; }
+  else if(j.rides!=null || j.runs!=null){
+    var br=keyed(j.rides), bu=keyed(j.runs);
+    coll=br.concat(bu); shape='split(rides=' + br.length + ',runs=' + bu.length + ')';
+  }
+  else if(j.activities!=null){ coll=keyed(j.activities); shape='wrapped:activities'; }
+  else if(j.items!=null){ coll=keyed(j.items); shape='wrapped:items'; }
+  else { coll=keyed(j); shape='keyed'; }
+  // Keep only records that actually look like activities; count the rest rather
+  // than dropping them silently, so a wrapper we did not anticipate is visible.
+  var acts=coll.filter(function(a){ return a && typeof a==='object' && (a.date!=null || a.sportType!=null || a.type!=null); });
+  return {
+    shape: shape,
+    all: acts,
+    dropped: coll.length - acts.length,
+    topKeys: (j && typeof j==='object' && !Array.isArray(j)) ? Object.keys(j).slice(0,12) : []
+  };
+}
+// Same sport vocabularies the app already classifies by, so counts off this
+// snapshot are comparable to counts off st.rides: the run set matches getRuns(),
+// the cycling set matches the isCyc() filter. Sport is read via rideSport_ so a
+// record carrying only .type (not .sportType) is not invisible.
+var STORE_V2_RUN_RE  = /^(run|trailrun|virtualrun|treadmill)$/i;
+var STORE_V2_RIDE_RE = /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i;
+// Any deletion-shaped FIELD NAME, not one hardcoded key — see the tombstone note in loadStoreV2_.
+var STORE_V2_DEL_RE  = /delet|tomb|remov/i;
+var _storeV2Cache=null;
+// Reads /store_v2 once per session and resolves a classified view of it. Wired to
+// NOTHING — step 2 repoints allRidesDeduped_() here; until then the only entry
+// point is storeV2Verify_() from the console. A failure is never cached, so the
+// next call retries instead of pinning a null for the session.
+function loadStoreV2_(force){
+  if(_storeV2Cache && !force) return _storeV2Cache;
+  _storeV2Cache = ensureFbAuth_().then(function(tok){
+    return _withTimeout_(fetch(fbStoreV2Url_(tok)), 60000, 'store_v2 read');
+  }).then(function(r){
+    if(!(r && r.ok)) throw new Error('store_v2 GET failed status ' + (r ? r.status : 'no response'));
+    return r.json();
+  }).then(function(j){
+    var f=storeV2Flatten_(j);
+    var byType={}, rides=[], runs=[], virt=[], other=[], deleted=0, deletedAny=0, delFields={};
+    f.all.forEach(function(a){
+      var s=rideSport_(a);
+      var k=s||'(none)';
+      byType[k]=(byType[k]||0)+1;
+      // Tombstone detection gates step 2, so do NOT trust a single field name. This
+      // codebase marks deletions three different ways (.deleted, .deleteReason,
+      // ._deleted); a snapshot flagging them by any convention we did not check
+      // would report a clean zero and wave through a reader migration onto dirty
+      // data. Count the canonical flag, AND scan every key for a deletion-shaped
+      // name, AND report which names actually fired.
+      if(a.deleted) deleted++;
+      var any=false;
+      Object.keys(a).forEach(function(kk){
+        if(!STORE_V2_DEL_RE.test(kk)) return;
+        var v=a[kk];
+        if(v===null || v===undefined || v===false || v==='') return;
+        delFields[kk]=(delFields[kk]||0)+1;
+        any=true;
+      });
+      if(any) deletedAny++;
+      if(STORE_V2_RUN_RE.test(s)) runs.push(a);
+      else if(STORE_V2_RIDE_RE.test(s)){ rides.push(a); if(/virtual/i.test(s) || a.trainer===true) virt.push(a); }
+      else other.push(a);
+    });
+    return { shape:f.shape, total:f.all.length, dropped:f.dropped, topKeys:f.topKeys,
+             all:f.all, byType:byType, rides:rides, runs:runs, virtual:virt, other:other,
+             deleted:deleted, deletedAny:deletedAny, delFields:delFields };
+  }).catch(function(e){
+    _storeV2Cache=null;
+    console.error('[store_v2] read failed: ' + ((e && e.message) || e));
+    throw e;
+  });
+  return _storeV2Cache;
+}
+// The type-filtered accessor. kind: 'all' | 'ride' | 'run' | 'virtual' | 'other',
+// or any literal sport string (matched case-insensitively via rideSport_).
+function storeV2ByType_(kind){
+  return loadStoreV2_().then(function(s){
+    if(!kind || kind==='all') return s.all;
+    if(kind==='ride')    return s.rides;
+    if(kind==='run')     return s.runs;
+    if(kind==='virtual') return s.virtual;
+    if(kind==='other')   return s.other;
+    var want=String(kind).toLowerCase();
+    return s.all.filter(function(a){ return String(rideSport_(a)).toLowerCase()===want; });
+  });
+}
+// Step-1 verification. Run storeV2Verify_() in the console: it forces a fresh read
+// and prints shape, totals, the classified counts, tombstones, and the FULL type
+// histogram. The histogram is the real check — if the snapshot names its sport
+// field something rideSport_ does not read, every record lands in '(none)' and
+// that is visible, instead of ride=0 looking like an empty node.
+function storeV2Verify_(){
+  return loadStoreV2_(true).then(function(s){
+    console.log('[store_v2] shape=' + s.shape + ' total=' + s.total + (s.dropped ? (' non-activity-records-dropped=' + s.dropped) : ''));
+    if(s.topKeys && s.topKeys.length) console.log('[store_v2] top-level keys: ' + s.topKeys.join(', '));
+    console.log('[store_v2] RIDE=' + s.rides.length + '  (virtual subset=' + s.virtual.length + ', outdoor=' + (s.rides.length - s.virtual.length) + ')');
+    console.log('[store_v2] RUN =' + s.runs.length);
+    console.log('[store_v2] other=' + s.other.length);
+    var ks=Object.keys(s.byType).sort(function(a,b){ return s.byType[b]-s.byType[a]; });
+    console.log('[store_v2] type histogram: ' + ks.map(function(k){ return k + '=' + s.byType[k]; }).join('  '));
+    var unk=s.byType['(none)']||0;
+    console.log('[store_v2] GATE sport-readable: ' + (unk===0 ? 'PASS (0 records in (none))'
+      : ('FAIL — ' + unk + ' record(s) in (none); rideSport_ cannot read this snapshot type field, so ride/run counts are NOT trustworthy')));
+    var df=Object.keys(s.delFields);
+    console.log('[store_v2] GATE tombstone-clean: ' + ((s.deleted===0 && s.deletedAny===0) ? 'PASS (0 by any convention)'
+      : ('FAIL — deleted:true=' + s.deleted + ', any-deletion-field=' + s.deletedAny
+         + ', fields seen: ' + (df.length ? df.map(function(k){ return k + ' x' + s.delFields[k]; }).join(', ') : 'none')
+         + ' — STOP, do not point a reader at this snapshot')));
+    var okR=(s.rides.length===409), okU=(s.runs.length===1760);
+    console.log('[store_v2] expected ride=409 run=1760 -> ' + ((okR && okU) ? 'MATCH'
+      : ('MISMATCH (ride ' + (okR ? 'ok' : ('off by ' + (s.rides.length-409))) + ', run ' + (okU ? 'ok' : ('off by ' + (s.runs.length-1760))) + ')')));
+    return s;
+  });
+}
+
 // -- Per-ride GPS storage --------------------------------------------------
 // Heavy GPS + chart streams are kept OUT of the monolithic st blob (which
 // syncs to localStorage's ~5MB cap) and stored per-ride at Firebase
