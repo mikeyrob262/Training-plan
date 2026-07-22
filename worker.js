@@ -14279,7 +14279,14 @@ function _racingChart_(title, acts){
   return aiCard_(inner);
 }
 function aiRenderRacing_(){
-  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():(st.rides||[]).filter(function(r){return r&&!r.deleted;});
+  // PINNED to legacy — this is a RUN-consuming surface, so it belongs to the runs pass,
+  // not the ride pass. It reads its source as ALL-SPORTS and does its own sport split
+  // below (isRide / isVirt / isRun). Step 2 made allRidesDeduped_ ride-typed, which is
+  // right for the 11 Intelligence readers that do NOT filter by sport, but it silently
+  // emptied the isRun half of this function's run union — the Run chart lost every
+  // Strava-derived run and fell back to manually-logged runs only. Whatever source this
+  // migrates to must be all-sports, or this downstream split has nothing to split.
+  var ded=(typeof allRidesLegacy_==='function')?allRidesLegacy_():(st.rides||[]).filter(function(r){return r&&!r.deleted;});
   function sport(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }
   function nm(r){ return String((r&&r.name)||''); }
   function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sport(r)); }
