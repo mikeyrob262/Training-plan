@@ -3779,6 +3779,17 @@ function rideResolveIdx_(ref){
   var rec=rideHandleLookup_(String(ref==null?'':ref));
   return (rec===undefined) ? -1 : (st.rides||[]).indexOf(rec);
 }
+// Serialises a ride reference for an INLINE HTML onclick attribute. A number goes in bare,
+// exactly as before. A handle is a STRING and must be quoted, in single quotes, because the
+// attribute itself is delimited by double quotes. Unquoted, a handle like k:2026-04-01_0_3639
+// parses as an identifier expression and throws ReferenceError the moment the button is
+// clicked — silently, since nothing catches it. The character whitelist is defensive: rideKey
+// only ever emits [A-Za-z0-9:_.-] so it is a no-op today, but it guarantees a future key
+// format cannot break out of the attribute.
+function rideRefAttr_(ref){
+  if(typeof ref==='number') return String(ref);
+  return "'" + String(ref==null?'':ref).replace(/[^A-Za-z0-9:_.-]/g, '') + "'";
+}
 function storeV2HandleDryRun_(){
   return loadStoreV2_(true).then(function(s){
     function run(label, list){
@@ -22407,10 +22418,14 @@ function injectRideStats(w){
 
       if(a.type==='ride'){
         var r=a.data;
-        var rideIdx = st.rides.indexOf(a.data);
+        // MIGRATED to a durable handle (Fork B). This is the FIRST producer to hand a WRITE
+        // handler a handle directly — every earlier one fed openRideDetail, which resolves to
+        // a number at its boundary. The reference is interpolated into inline HTML, so it goes
+        // through rideRefAttr_ for quoting; a bare handle would be a ReferenceError on click.
+        var rideIdx = (STORE_V2_HANDLES && typeof rideHandle_==='function') ? rideHandle_(a.data) : st.rides.indexOf(a.data);
         aDiv.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+(r.name||'Activity')+'</div>'
-          +'<button onclick="deleteRideFromCard('+rideIdx+')" style="font-size:11px;color:#ef4444;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
+          +'<button onclick="deleteRideFromCard('+rideRefAttr_(rideIdx)+')" style="font-size:11px;color:#ef4444;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
           +'</div>';
         var statsGrid=document.createElement('div');
         statsGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
