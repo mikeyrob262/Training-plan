@@ -3386,6 +3386,8 @@ var STORE_V2_RUN_RE  = /^(run|trailrun|virtualrun|treadmill)$/i;
 var STORE_V2_RIDE_RE = /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i;
 // Any deletion-shaped FIELD NAME, not one hardcoded key — see the tombstone note in loadStoreV2_.
 var STORE_V2_DEL_RE  = /delet|tomb|remov/i;
+// Any indoor/trainer-shaped FIELD NAME — diagnostics for the indoor-vs-outdoor split.
+var STORE_V2_INDOOR_RE = /trainer|indoor|virtual|zwift/i;
 var _storeV2Cache=null;
 // Reads /store_v2 once per session and resolves a classified view of it. Wired to
 // NOTHING — step 2 repoints allRidesDeduped_() here; until then the only entry
@@ -3401,6 +3403,7 @@ function loadStoreV2_(force){
   }).then(function(j){
     var f=storeV2Flatten_(j);
     var byType={}, rides=[], runs=[], virt=[], other=[], deleted=0, deletedAny=0, delFields={};
+    var trainerField=0, trainerTrue=0, zwiftNamed=0, indoorFields={};
     f.all.forEach(function(a){
       var s=rideSport_(a);
       var k=s||'(none)';
@@ -3421,13 +3424,29 @@ function loadStoreV2_(force){
         any=true;
       });
       if(any) deletedAny++;
+      // Indoor detection must match the app's canonical isVirt(): sport OR a
+      // zwift-named ride OR trainer:true. My first pass checked only sport+trainer
+      // and reported virtual=0, which reads as "the snapshot has no indoor rides"
+      // when it may just mean Zwift rides are tagged by NAME (they are, cross-year,
+      // for rides imported before VirtualRide existed as a sport).
       if(STORE_V2_RUN_RE.test(s)) runs.push(a);
-      else if(STORE_V2_RIDE_RE.test(s)){ rides.push(a); if(/virtual/i.test(s) || a.trainer===true) virt.push(a); }
+      else if(STORE_V2_RIDE_RE.test(s)){
+        rides.push(a);
+        if(/virtual/i.test(s) || /zwift/i.test(String(a.name||'')) || a.trainer===true) virt.push(a);
+      }
       else other.push(a);
+      // Diagnostics for the indoor/outdoor question: does the snapshot carry the
+      // fields the split depends on at all? A field that is absent everywhere is a
+      // different problem from a field that is present and uniformly false.
+      if(Object.prototype.hasOwnProperty.call(a,'trainer')) trainerField++;
+      if(a.trainer===true) trainerTrue++;
+      if(/zwift/i.test(String(a.name||''))) zwiftNamed++;
+      Object.keys(a).forEach(function(kk){ if(STORE_V2_INDOOR_RE.test(kk)) indoorFields[kk]=(indoorFields[kk]||0)+1; });
     });
     return { shape:f.shape, total:f.all.length, dropped:f.dropped, topKeys:f.topKeys,
              all:f.all, byType:byType, rides:rides, runs:runs, virtual:virt, other:other,
-             deleted:deleted, deletedAny:deletedAny, delFields:delFields };
+             deleted:deleted, deletedAny:deletedAny, delFields:delFields,
+             trainerField:trainerField, trainerTrue:trainerTrue, zwiftNamed:zwiftNamed, indoorFields:indoorFields };
   }).catch(function(e){
     _storeV2Cache=null;
     console.error('[store_v2] read failed: ' + ((e && e.message) || e));
@@ -3470,6 +3489,16 @@ function storeV2Verify_(){
       : ('FAIL — deleted:true=' + s.deleted + ', any-deletion-field=' + s.deletedAny
          + ', fields seen: ' + (df.length ? df.map(function(k){ return k + ' x' + s.delFields[k]; }).join(', ') : 'none')
          + ' — STOP, do not point a reader at this snapshot')));
+    var idf=Object.keys(s.indoorFields);
+    console.log('[store_v2] indoor signals: virtual-subset=' + s.virtual.length
+      + '  trainer-field-present=' + s.trainerField + ' (of which true=' + s.trainerTrue + ')'
+      + '  zwift-named=' + s.zwiftNamed
+      + '  indoor-shaped fields: ' + (idf.length ? idf.map(function(k){ return k + ' x' + s.indoorFields[k]; }).join(', ') : 'NONE'));
+    if(s.virtual.length===0){
+      console.log('[store_v2] NOTE virtual=0 -> ' + (s.trainerField===0 && s.zwiftNamed===0
+        ? 'the snapshot carries NO trainer field and NO zwift-named rides, so indoor/outdoor CANNOT be split from it. Any surface that splits indoor vs outdoor must not migrate until the snapshot carries an indoor signal.'
+        : 'trainer/zwift signals ARE present (see counts above) — the split is recoverable; classification needs to read them.'));
+    }
     var okR=(s.rides.length===409), okU=(s.runs.length===1760);
     console.log('[store_v2] expected ride=409 run=1760 -> ' + ((okR && okU) ? 'MATCH'
       : ('MISMATCH (ride ' + (okR ? 'ok' : ('off by ' + (s.rides.length-409))) + ', run ' + (okU ? 'ok' : ('off by ' + (s.runs.length-1760))) + ')')));
@@ -13070,7 +13099,67 @@ function rideSport_(r){ if(!r) return ''; var s=(r.sportType!=null&&r.sportType!
 // all non-deleted rides, deduped by canonical rideKey preferring the GPS-bearing
 // copy, NO sport-type filter (VirtualRide/Zwift included). This is THE source any
 // aggregate that must not undercount virtual rides should read from.
+// ---- store_v2 read repoint (migration step 2) ----------------------------
+// ROLLBACK IS THIS ONE LINE: set STORE_V2_READS to false and every reader below
+// falls back to the untouched st.rides path on the next render. The legacy body
+// of allRidesDeduped_ is deliberately NOT modified — only short-circuited — so a
+// rollback restores exactly the previous behaviour, not an approximation of it.
+var STORE_V2_READS = true;
+// The synchronous ride-typed cache. allRidesDeduped_ has ~17 callers that use it
+// INLINE inside render functions (var rides=ded||allRidesDeduped_()), so it cannot
+// become async without rewriting all of them — which would defeat the one-line
+// rollback. Instead primeStoreV2_ fills this once at boot and the accessor reads it
+// synchronously. Null means "not primed yet", and the accessor falls through to
+// st.rides, so a slow or failed snapshot read degrades to the old behaviour rather
+// than to an empty library.
+var _storeV2Rides = null;
+// Loads the snapshot and arms the sync cache with the RIDE-TYPED subset only.
+// The filter is the point: st.rides held ~838 live records, while /store_v2 is a
+// single typed collection of 2,451 (409 ride + 1,760 run + 282 other). Repointing
+// without it would push 2,042 non-ride records through every ride-facing aggregate
+// downstream of this accessor — a 6x inflation that would look like a data win.
+function primeStoreV2_(){
+  if(!STORE_V2_READS) return Promise.resolve(null);
+  return loadStoreV2_().then(function(s){
+    _storeV2Rides = s.rides;
+    var was=(st.rides||[]).filter(function(r){ return r && !r.deleted; }).length;
+    console.log('[store_v2] reads ARMED — allRidesDeduped_ now serves ' + s.rides.length
+      + ' ride-typed records (st.rides live was ' + was + '). Excluded: ' + s.runs.length
+      + ' run, ' + s.other.length + ' other. Set STORE_V2_READS=false to roll back.');
+    if(s.virtual.length===0) console.warn('[store_v2] indoor/outdoor split is NOT available from this snapshot (virtual=0) — see storeV2Verify_() indoor signals before migrating any surface that splits them.');
+    try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
+    try{ showHomeDash(); }catch(e){}
+    return s;
+  }).catch(function(e){
+    console.error('[store_v2] prime FAILED — allRidesDeduped_ stays on st.rides: ' + ((e && e.message) || e));
+    return null;
+  });
+}
+// Reads the /store_v2 snapshot when primed, else the legacy st.rides path. This is
+// the MIGRATED accessor — the 13 Athlete Intelligence sites read through it.
+//
+// NOT every caller of the old accessor moved with it. Three callers are pinned to
+// allRidesLegacy_() for this pass (see the note there): both calendar renderers and
+// recentRides_. They are separate migration passes with their own verification, and
+// recentRides_ additionally has an all-sports contract this accessor's ride filter
+// would silently break.
 function allRidesDeduped_(){
+  // Primed snapshot wins. Returns a copy so a caller that sorts in place (recentRides_
+  // does) cannot reorder the shared cache for every subsequent reader.
+  if(STORE_V2_READS && _storeV2Rides) return _storeV2Rides.slice();
+  return allRidesLegacy_();
+}
+// The pre-migration read path, byte-for-byte unchanged. Two kinds of caller reach it:
+// allRidesDeduped_ when the snapshot has not primed (or STORE_V2_READS is false), and
+// the three callers deliberately held back from this pass —
+//   dsShowCalendar / showCalendarTab — calendar is its own pass, and both renderers
+//     must migrate together, so neither moves until that pass runs.
+//   recentRides_ — feeds Recent Activity on both dashboards, whose documented contract
+//     is NO sport-type filter (every activity type shows). allRidesDeduped_ now returns
+//     the RIDE-TYPED subset, so routing the feed through it would quietly drop runs,
+//     walks and strength from a surface that is supposed to show them.
+// When those surfaces migrate, repoint them and this function loses its extra callers.
+function allRidesLegacy_(){
   // Filter deleted FIRST, then run the canonical FUZZY dedup on LIVE rides only. Feeding the
   // ~1000 null-tombstones into dedupeRides_ was catastrophic: each live ride clustered with its
   // deleted twin, the winner-merge copied deleted:true onto the live winner, and it got filtered
@@ -13091,7 +13180,10 @@ function allRidesDeduped_(){
   return out;
 }
 function recentRides_(n){
-  var out=allRidesDeduped_();
+  // PINNED to the legacy path — Recent Activity shows every activity type, and
+  // allRidesDeduped_ is now ride-typed. Migrate with the dashboard pass (Group E),
+  // which has to decide what an all-sports feed means once 1,760 runs are in scope.
+  var out=allRidesLegacy_();
   out.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
   return out.slice(0, n);
 }
@@ -16992,7 +17084,9 @@ function dsShowCalendar(){
     // ---- data (deduped, all activity types; honors the type + completed filter) ----
     var ridesByDate={};
     if(calFilter.completed){
-      allRidesDeduped_().forEach(function(r){ if(!r||!r.date||!passType(r)) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
+      // PINNED to legacy — calendar is its own migration pass, and it must move on the
+      // desktop and mobile renderers together. See allRidesLegacy_.
+      allRidesLegacy_().forEach(function(r){ if(!r||!r.date||!passType(r)) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
     }
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
     var firstDow=new Date(viewYear,viewMonth,1).getDay();
@@ -27069,7 +27163,8 @@ function showCalendarTab(){
     var todayD=mNow.getDate();
     // Actual-activity lookup for the weekly rollups (deduped, all types).
     var mRidesByDate={};
-    (typeof allRidesDeduped_==='function'?allRidesDeduped_():(st.rides||[]).filter(function(r){return r&&!r.deleted;})).forEach(function(r){
+    // PINNED to legacy — pairs with the desktop calendar above; both renderers migrate together.
+    (typeof allRidesLegacy_==='function'?allRidesLegacy_():(st.rides||[]).filter(function(r){return r&&!r.deleted;})).forEach(function(r){
       if(!r||!r.date) return; var nd=normDate(r.date); if(!mRidesByDate[nd]) mRidesByDate[nd]=[]; mRidesByDate[nd].push(r);
     });
     // Slots -> week rows (7 each): leading/trailing padding contributes nothing.
@@ -29234,6 +29329,12 @@ window.onload = function(){
         }
       }).catch(function(e){ console.warn('[idb] boot load failed:', e&&e.message); })
     : Promise.resolve();
+  // Arm the /store_v2 read path once the local library has settled. Deliberately a
+  // SEPARATE chain from the Firebase start below: the snapshot read must not be able
+  // to delay or break sync, and a sync failure must not leave the reader unprimed.
+  // It only fills _storeV2Rides — it never touches st — so the two cannot interleave
+  // badly. If it fails or is slow, allRidesDeduped_ keeps serving the st.rides path.
+  _idbReady.then(function(){ try{ primeStoreV2_(); }catch(e){ console.error('[store_v2] prime threw:', e && e.message); } });
   // Start Firebase SSE real-time sync AFTER the IDB full-state load settles
   _idbReady.then(function(){
     initFirebaseSync();
