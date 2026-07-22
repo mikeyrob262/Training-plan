@@ -3505,6 +3505,72 @@ function storeV2Verify_(){
     return s;
   });
 }
+// Read-only shape probe for the runs migration (Group H). Wired to NOTHING — the only
+// entry point is storeV2RunShape_() from the console. It changes no state and repoints
+// no reader; it exists to answer one question with data instead of assumption.
+//
+// getRuns() does not return activities. It returns a PROJECTION of a two-source union:
+// Strava-derived runs out of st.rides (renamed duration->time, elev->elevation)
+// concatenated with the manually logged runs in st.runs. Manual runs carry fields that
+// exist nowhere in the activity library — z1pct..z5pct, rpe, rss, shoe, stride, weather,
+// notes — and the run screen reads them heavily (the zone percentages alone are read five
+// times each). So before getRuns can be repointed we have to know whether merge.py folded
+// st.runs into the snapshot, and whether those records kept their run-card fields.
+//
+// Matching is by date + distance ONLY. Duration is deliberately NOT in the key: manual
+// runs store it as a string ("30:00") and library records as a number, so a numeric
+// compare yields NaN and silently matches nothing. _durSec_ normalises both formats and
+// is used here to REPORT duration readability — never to match.
+function storeV2RunShape_(){
+  return loadStoreV2_(true).then(function(s){
+    var runs=s.runs||[];
+    var PROJECTED=['time','elevation'];                 // the names renderRun reads
+    var RAW=['duration','elev','movingSecs'];           // the names the library stores
+    var COMMON=['date','distance','pace','name','type','sportType','avgHR','maxHR','cadence','stravaId','source'];
+    var MANUAL=['z1pct','z2pct','z3pct','z4pct','z5pct','rpe','rss','shoe','stride','weather','notes'];
+    var has=function(a,k){ return !!a && a[k]!=null && a[k]!==''; };
+    var tally=function(list){
+      var o={}; list.forEach(function(k){ o[k]=0; });
+      runs.forEach(function(a){ list.forEach(function(k){ if(has(a,k)) o[k]++; }); });
+      return o;
+    };
+    var fmt=function(o){ return Object.keys(o).map(function(k){ return k+'='+o[k]; }).join('  '); };
+    var pj=tally(PROJECTED), rw=tally(RAW), cm=tally(COMMON), mn=tally(MANUAL);
+    var anyManual=runs.filter(function(a){ return MANUAL.some(function(k){ return has(a,k); }); }).length;
+    var durOK=runs.filter(function(a){ return ((typeof _durSec_==='function')?_durSec_(a):0)>0; }).length;
+
+    var dayKey=function(r){ var d=String((r&&r.date)||'').split('T')[0]; return (typeof normDate==='function')?normDate(d):d; };
+    var mkey=function(r){ return dayKey(r)+'|'+Math.round((parseFloat(r&&r.distance)||0)*10); };
+    var snapKeys={}; runs.forEach(function(a){ snapKeys[mkey(a)]=1; });
+    var manualAll=(st.runs||[]).filter(function(r){ return r && r.date; });
+    var manual=manualAll.filter(function(r){ return !r.deleted; });
+    var manKeys={}; manual.forEach(function(r){ manKeys[mkey(r)]=1; });
+    var snapMatched=runs.filter(function(a){ return manKeys[mkey(a)]; }).length;
+    var lost=manual.filter(function(r){ return !snapKeys[mkey(r)]; });
+
+    console.log('[run-shape] snapshot run records: ' + runs.length);
+    console.log('[run-shape] projected names (what renderRun reads): ' + fmt(pj));
+    console.log('[run-shape] raw names (what the library stores):    ' + fmt(rw));
+    console.log('[run-shape] duration readable via _durSec_: ' + durOK + ' of ' + runs.length);
+    console.log('[run-shape] common fields: ' + fmt(cm));
+    console.log('[run-shape] manual-only fields: ' + fmt(mn));
+    console.log('[run-shape] records carrying ANY manual-only field: ' + anyManual);
+    console.log('[run-shape] st.runs entries: ' + manualAll.length + ' dated, ' + manual.length + ' live');
+    console.log('[run-shape] snapshot runs matching a live st.runs entry (date+distance): ' + snapMatched);
+    console.log('[run-shape] live st.runs with NO snapshot match: ' + lost.length
+      + (lost.length ? '  <-- LOST if getRuns is repointed as-is' : ''));
+    if(lost.length) console.log('[run-shape] first unmatched keys: ' + lost.slice(0,8).map(mkey).join('  '));
+    console.log('[run-shape] VERDICT: ' + (
+      anyManual===0
+        ? 'snapshot run records carry NO manual-only fields — st.runs is a source the re-snapshot never captured. Group H DEFERS until step 4 folds it in.'
+        : (lost.length===0
+            ? 'manual runs ARE folded in WITH their fields — getRuns can migrate behind a duration->time / elev->elevation rename shim, plus dedup and a tombstone filter at the accessor.'
+            : 'PARTIAL — manual fields present but ' + lost.length + ' live st.runs entries have no match. Do NOT repoint; reconcile at step 4.')));
+    return { runs:runs.length, projected:pj, raw:rw, common:cm, manual:mn, anyManual:anyManual, durOK:durOK,
+             manualDated:manualAll.length, manualLive:manual.length, snapMatched:snapMatched,
+             lost:lost.length, lostKeys:lost.map(mkey) };
+  });
+}
 
 // -- Per-ride GPS storage --------------------------------------------------
 // Heavy GPS + chart streams are kept OUT of the monolithic st blob (which
@@ -14331,7 +14397,14 @@ function _msCard_(color,icon,big,label,sub){
   +'</div>';
 }
 function _msCycling_(){
-  var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+  // PINNED to legacy — the second self-splitting reader. Unlike aiRenderRacing_ this
+  // one loses nothing today (it wants cycling, and a ride-typed source is a subset it
+  // would have selected anyway), so this is a precaution, not a repair: its isRide is
+  // BROADER than the accessor's ride filter — it also accepts zwift-named and
+  // trainer-flagged records whose sportType alone would not qualify. Feeding it a
+  // pre-filtered source silently narrows a filter that is deliberately wide, so it
+  // migrates with the pass that settles the indoor/outdoor signal, not before.
+  var ded=(typeof allRidesLegacy_==='function')?allRidesLegacy_():[];
   var sp=function(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }, nm=function(r){ return String((r&&r.name)||''); };
   var isRun=function(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sp(r)); };
   var isRide=function(r){ return !isRun(r)&&(/ride/i.test(sp(r))||/virtual/i.test(sp(r))||/zwift/i.test(nm(r))||r.trainer===true); };
