@@ -18632,9 +18632,23 @@ function dsShowRidesList(){
   var _sorted=_pool.filter(function(r){return r && !r.deleted && r.date;}).sort(function(a,b){return normDate(b.date||'')>normDate(a.date||'')?1:-1;});
   if(_sorted.length>0){
     var _first=_sorted[0];
-    var _firstIdx=(st.rides||[]).indexOf(_first);
-    if(_firstIdx<0 && _first.stravaId){ _firstIdx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===_first.stravaId;}); }
-    if(_firstIdx>=0){ openDesktopRideDetail(_firstIdx); return; }
+    // MIGRATED to a durable handle (Fork B, second producer). _pool comes from
+    // dedupeRides_().kept, whose winners are not guaranteed to be st.rides objects by
+    // identity — which is why indexOf carries a stravaId fallback here at all. Measured
+    // against the real library that fallback is currently DEAD: 0 of 301 rendered rows miss
+    // by identity, so this migration is behaviour-identical today, not a coverage fix. The
+    // gain is durability — the captured value survives st.rides being reordered under the
+    // closure. Worth noting the fallback could only ever have covered rides that HAVE a
+    // stravaId (89 of 258 locally), whereas a content-derived handle covers all of them.
+    var _firstIdx=(STORE_V2_HANDLES && typeof rideHandle_==='function')
+      ? rideHandle_(_first)
+      : (function(){
+          var i=(st.rides||[]).indexOf(_first);
+          if(i<0 && _first.stravaId) i=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===_first.stravaId;});
+          return i;
+        })();
+    var _firstOk=(typeof _firstIdx==='number') ? (_firstIdx>=0) : !!_firstIdx;
+    if(_firstOk){ openDesktopRideDetail(_firstIdx); return; }
   }
   var rp3=document.getElementById('ds-right-panel'); if(rp3) rp3.style.display='none';
   var mc=document.getElementById('ds-content');
@@ -18689,8 +18703,16 @@ function dsShowRidesList(){
     tbTitle.textContent='Activities ('+filtered.length+')';
 
     filtered.slice(0,visCount).forEach(function(r){
-      var ridx=(st.rides||[]).indexOf(r);
-      if(ridx<0) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
+      // MIGRATED to a durable handle — same reasoning as the auto-open above. The captured
+      // value is passed straight into the row closure below; openDesktopRideDetail and
+      // openRideDetail both dual-accept, so nothing downstream changes.
+      var ridx=(STORE_V2_HANDLES && typeof rideHandle_==='function')
+        ? rideHandle_(r)
+        : (function(){
+            var i=(st.rides||[]).indexOf(r);
+            if(i<0 && r.stravaId) i=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
+            return i;
+          })();
 
       var row=document.createElement('div');
       row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
