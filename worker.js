@@ -6618,6 +6618,32 @@ function fetchCoachNote(elId){
 // render, priced to current FTP) so both Home surfaces show the same content: name, ride band + %
 // of FTP + HR + duration + TSS, or the movement list (sets x reps @ %1RM), plus the note. Rest
 // renders distinctly. Tapping opens the day editor for THAT session. One function, both renderers.
+// Cycle a mobility session to the NEXT routine in the pool (A -> B -> C -> D -> A).
+// Changes the session's INTENT and nothing else — same type, same slot, same duration — so
+// the prescription re-derives from SESSION_DEFS and it persists and syncs down the SAME
+// path every other session edit uses. Mobility does not periodize, so there is no block
+// state to carry across the swap.
+function swapMobility_(dateKey, sessId){
+  try{
+    if(typeof planSessionsForDate_!=='function' || typeof planUpsertSession_!=='function') return;
+    var list=planSessionsForDate_(dateKey)||[];
+    var sess=null;
+    for(var i=0;i<list.length;i++){ if(String(list[i].id||'')===String(sessId||'')){ sess=list[i]; break; } }
+    if(!sess || sess.type!=='mobility') return;
+    var pool=(typeof MOBILITY_POOL_!=='undefined')?MOBILITY_POOL_:['mobility'];
+    var at=pool.indexOf(sess.intent);
+    var next=pool[(at<0?0:(at+1))%pool.length];
+    var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[next]:null;
+    if(!def) return;
+    // The stored name is what planResolve_ preserves for a renamed session, so it has to move
+    // with the intent or the card would keep the old routine's title.
+    var patch={ id:sess.id, type:'mobility', intent:next, name:def.name, status:(sess.status==='completed'?sess.status:'planned') };
+    planUpsertSession_(dateKey, patch, ['type','intent','name','status'], 'user');
+    try{ sv(); }catch(e){}
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Swapped to '+def.name); }catch(e){}
+  }catch(e){ try{ console.error('[mobility-swap]', e && e.message); }catch(_e){} }
+}
 function planCardHTML_(s, dateKey){
   var r=(typeof planResolve_==='function')?planResolve_(s):s;
   var esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
@@ -6632,7 +6658,7 @@ function planCardHTML_(s, dateKey){
     if(meta.length) lines.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+meta.join(' · ')+'</div>');
   } else if((type==='strength'||type==='mobility') && r.exercises && r.exercises.length){
     var _cues=[];
-    lines.push(r.exercises.map(function(e){ if(e.loadCue && _cues.indexOf(e.loadCue)<0) _cues.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+gTerm_('% 1RM','pct1rm')):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+    lines.push(r.exercises.map(function(e){ if(e.loadCue && _cues.indexOf(e.loadCue)<0) _cues.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+gTerm_('% 1RM','pct1rm')):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
     if(_cues.length) lines.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+esc(_cues.join('; '))+'</div>');
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
@@ -6643,6 +6669,11 @@ function planCardHTML_(s, dateKey){
   return '<div'+oc+'background:var(--s2);border-radius:14px;padding:14px 16px;margin:0 0 10px;border-left:3px solid '+border+'">'
     +'<div style="display:flex;align-items:center;gap:10px'+(lines.length?';margin-bottom:8px':'')+'">'+ic
     +'<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name)+'</div>'
+    // Swap cycles the routine. stopPropagation is essential: the whole card already carries
+    // an openDayEditor onclick, so without it a tap would swap AND open the editor.
+    +((type==='mobility' && dateKey && !done)
+        ? ('<span onclick="event.stopPropagation();swapMobility_(\\''+dateKey+'\\',\\''+(r.id||'')+'\\')" title="Swap routine" style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--t3);border:1px solid var(--b1);border-radius:7px;padding:3px 8px;cursor:pointer">Swap</span>')
+        : '')
     +(done?'<span style="font-size:14px;color:#1D9E75;flex-shrink:0">✓</span>':'')
     +'</div>'+lines.join('')+'</div>';
 }
@@ -22883,7 +22914,13 @@ function planClearDay_(dateKey){
 var SESSION_DEFS={
   strengthA:{ type:'strength', name:'Strength A',  exGroup:'strengthA', note:'Lower & axial load — the bone and structural stimulus cycling never provides.' },
   strengthB:{ type:'strength', name:'Strength B',  exGroup:'strengthB', note:'Posterior chain, single-leg and core — opposes the flexed riding position.' },
-  mobility: { type:'mobility', name:'Mobility',    exGroup:'mobility', durationMin:15, note:'15 min. Prescribed, not optional — this is what lets you hold a five-hour position.' },
+  // Mobility pool. Four fixed routines that ROTATE BY SWAP, not by periodization — see the
+  // deload exemption in _planExercises_. 'mobility' stays the key for A so every session
+  // already stored with intent:'mobility' keeps resolving; B/C/D are additive.
+  mobility: { type:'mobility', name:'Mobility A',  exGroup:'mobility', durationMin:15, note:'15 min. Prescribed, not optional — undoes what riding does to your body.' },
+  mobilityB:{ type:'mobility', name:'Mobility B',  exGroup:'mobility-b', durationMin:15, note:'15 min. Prescribed, not optional — undoes what riding does to your body.' },
+  mobilityC:{ type:'mobility', name:'Mobility C',  exGroup:'mobility-c', durationMin:15, note:'15 min. Prescribed, not optional — undoes what riding does to your body.' },
+  mobilityD:{ type:'mobility', name:'Mobility D',  exGroup:'mobility-d', durationMin:15, note:'15 min. Prescribed, not optional — undoes what riding does to your body.' },
   z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, durationMin:90,  note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
   threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  durationMin:60,  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
   vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], durationMin:45,  note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
@@ -22892,14 +22929,16 @@ var SESSION_DEFS={
   recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  durationMin:45,  note:'Genuinely easy. Spin the legs; add no fatigue.' },
   rest:     { type:'rest', name:'Rest',            body:null,    note:'Full rest. Recovery is part of the plan, not a gap in it.' }
 };
-var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','z2','threshold','vo2','group','long','recovery','rest'];
+var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','rest'];
+// The rotation order Swap cycles through, A -> B -> C -> D -> A.
+var MOBILITY_POOL_=['mobility','mobilityB','mobilityC','mobilityD'];
 // Strength-first weekly layout (§3.1), index 0=Mon .. 6=Sun, as SESSION_DEFS keys. Two loaded +
 // two mobility; heavy work never sits the day before quality bike work.
 var PLAN_TEMPLATE_=[
   ['strengthA'],              // Mon
   ['mobility','threshold'],   // Tue
   ['z2'],                     // Wed
-  ['mobility','group'],       // Thu
+  ['mobilityB','group'],      // Thu
   ['strengthB'],              // Fri
   ['long'],                   // Sat
   ['rest']                    // Sun
@@ -22927,9 +22966,11 @@ function _planReplaceable_(s){ if(!s || s.deleted || s.status==='completed') ret
 // estimate exists (no-fake-data) — we prescribe the % band, not a weight.
 function _planExercises_(group, blockWeek){
   var lib=(typeof EX_LIBRARY!=='undefined' && Array.isArray(EX_LIBRARY))?EX_LIBRARY:[];
-  var deload=(blockWeek===4);
+  // Mobility does NOT periodize. It was silently inheriting the strength deload, so on
+  // week 4 every mobility routine dropped to ~60% sets — a stretch does not deload.
+  var deload=(blockWeek===4) && String(group||'').indexOf('mobility')!==0;
   return lib.filter(function(e){ return e.group===group; }).map(function(e){
-    return { name:e.name, sets:(deload?Math.max(1,Math.round(e.sets*0.6)):e.sets), reps:e.reps, pct1RM:e.pct1RM };
+    return { name:e.name, sets:(deload?Math.max(1,Math.round(e.sets*0.6)):e.sets), reps:e.reps, pct1RM:e.pct1RM, perSide:!!e.perSide, secs:!!e.secs };
   });
 }
 function _planBlockMeta_(blockWeek){
@@ -28221,11 +28262,36 @@ var EX_LIBRARY=[
   {name:'Single-leg RDL', sets:2, reps:8, pct1RM:'', group:'strengthB'},
   {name:'Dead bug', sets:2, reps:10, pct1RM:'', group:'strengthB'},
   {name:'Bird dog', sets:2, reps:10, pct1RM:'', group:'strengthB'},
-  {name:'Thoracic rotation (open-book)', sets:2, reps:8, pct1RM:'', group:'mobility'},
-  {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'mobility'},
-  {name:'90/90 hip rotations', sets:2, reps:8, pct1RM:'', group:'mobility'},
-  {name:'Wall ankle dorsiflexion', sets:2, reps:10, pct1RM:'', group:'mobility'},
-  {name:'Adductor rock-back', sets:2, reps:8, pct1RM:'', group:'mobility'}
+  // Mobility A (hip / ankle) — the original routine. sets/reps values are UNCHANGED; the
+  // perSide/secs flags are presentation only, so the card reads "2×45s /side" instead of
+  // the ambiguous "2×45". Group stays 'mobility' so every stored session keeps resolving.
+  {name:'Thoracic rotation (open-book)', sets:2, reps:8, pct1RM:'', group:'mobility', perSide:true},
+  {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'mobility', secs:true, perSide:true},
+  {name:'90/90 hip rotations', sets:2, reps:8, pct1RM:'', group:'mobility', perSide:true},
+  {name:'Wall ankle dorsiflexion', sets:2, reps:10, pct1RM:'', group:'mobility', perSide:true},
+  {name:'Adductor rock-back', sets:2, reps:8, pct1RM:'', group:'mobility'},
+  // Mobility B (T-spine / posterior chain / shoulders)
+  {name:'Cat-cow', sets:2, reps:8, pct1RM:'', group:'mobility-b'},
+  {name:"World's greatest stretch", sets:2, reps:5, pct1RM:'', group:'mobility-b', perSide:true},
+  {name:'Thread-the-needle (T-spine rotation)', sets:2, reps:6, pct1RM:'', group:'mobility-b', perSide:true},
+  {name:'Deep squat hold with pry', sets:2, reps:30, pct1RM:'', group:'mobility-b', secs:true},
+  {name:'Glute bridge', sets:2, reps:10, pct1RM:'', group:'mobility-b'},
+  {name:'Standing hamstring / toe-touch flow', sets:2, reps:8, pct1RM:'', group:'mobility-b'},
+  {name:'Doorway pec + shoulder stretch', sets:2, reps:30, pct1RM:'', group:'mobility-b', secs:true},
+  // Mobility C (lower body / hips deep dive)
+  {name:'Couch stretch (quad + hip flexor)', sets:2, reps:45, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
+  {name:'Pigeon pose', sets:2, reps:45, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
+  {name:'Frog stretch', sets:2, reps:30, pct1RM:'', group:'mobility-c', secs:true},
+  {name:'Cossack squat', sets:2, reps:6, pct1RM:'', group:'mobility-c', perSide:true},
+  {name:'Hamstring floss (supine, band or towel)', sets:2, reps:8, pct1RM:'', group:'mobility-c', perSide:true},
+  {name:'Calf + soleus wall stretch', sets:2, reps:30, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
+  // Mobility D (spine / core / shoulders)
+  {name:'Cat-cow', sets:2, reps:8, pct1RM:'', group:'mobility-d'},
+  {name:'Bird-dog', sets:2, reps:8, pct1RM:'', group:'mobility-d', perSide:true},
+  {name:'Dead bug', sets:2, reps:8, pct1RM:'', group:'mobility-d', perSide:true},
+  {name:'Prone press-up (cobra)', sets:2, reps:8, pct1RM:'', group:'mobility-d'},
+  {name:'Wall slides (shoulder)', sets:2, reps:10, pct1RM:'', group:'mobility-d'},
+  {name:'Side-lying thoracic openers', sets:2, reps:6, pct1RM:'', group:'mobility-d', perSide:true}
 ];
 function openDayEditor(dateKey, targetId){
   var existing=document.getElementById('day-editor-modal');
@@ -28377,7 +28443,7 @@ function openDayEditor(dateKey, targetId){
         if(_dl.length) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+_dl.join(' · ')+'</div>');
       } else if((type==='strength'||type==='mobility') && ex.length){
         var _ec=[];
-        rows.push(ex.map(function(e){ if(e.loadCue && _ec.indexOf(e.loadCue)<0) _ec.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+'% 1RM'):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+        rows.push(ex.map(function(e){ if(e.loadCue && _ec.indexOf(e.loadCue)<0) _ec.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+'% 1RM'):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
         if(_ec.length) rows.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+_esc_(_ec.join('; '))+'</div>');
       } else if(type==='rest'){
         rows.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
