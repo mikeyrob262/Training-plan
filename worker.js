@@ -3350,6 +3350,47 @@ function fbAuthedUrl_(token){ return FB_URL + '?auth=' + encodeURIComponent(toke
 function fbStoreV2Url_(token){
   return FB_URL.replace('/data.json','') + '/store_v2.json?auth=' + encodeURIComponent(token);
 }
+// Export vocabulary -> app vocabulary. merge.py builds the snapshot from the Garmin and
+// Strava exports and keeps THEIR field names and units; the app reads its own. Nothing was
+// ever missing from the snapshot — the two sides simply never spoke the same language, and
+// reading it raw is what made distance look like 0 and every metric look dropped.
+//
+// NON-DESTRUCTIVE on purpose: the source keys are kept, so the paired field audit still has
+// both vocabularies to compare and nothing that reads the raw form breaks. A target field is
+// only written when the source is actually present, so a null can never overwrite a real value.
+var STORE_V2_M_PER_MI = 1609.344, STORE_V2_FT_PER_M = 3.28084;
+function storeV2Normalize_(rec){
+  if(!rec || typeof rec!=='object') return rec;
+  var r=rec;
+  var put=function(k,v){ if(v!==null && v!==undefined && !isNaN(v)) r[k]=v; };
+  if(r.distanceM!=null)  put('distance', Math.round((+r.distanceM/STORE_V2_M_PER_MI)*100)/100);
+  if(r.elevGainM!=null)  put('elev',     Math.round(+r.elevGainM*STORE_V2_FT_PER_M));
+  if(r.movingSec!=null)  put('movingSecs', +r.movingSec);
+  if(r.elapsedSec!=null) put('elapsed',    +r.elapsedSec);
+  // _durSec_ prefers movingSecs and falls back to duration. movingSec is null on 812 of the
+  // 1,760 runs (a real Garmin export gap), so elapsedSec becomes their duration — but ONLY
+  // when there is no moving time, so it never shadows the more accurate value.
+  if(r.movingSec==null && r.elapsedSec!=null) put('duration', +r.elapsedSec);
+  if(r.avgHr!=null)      put('avgHR', +r.avgHr);
+  if(r.maxHr!=null)      put('maxHR', +r.maxHr);
+  if(r.avgPower!=null)   put('avgPwr', +r.avgPower);
+  if(r.normPower!=null)  put('np', +r.normPower);
+  if(r.avgCadence!=null) put('cadence', +r.avgCadence);
+  // The highest-impact line. Every sport read goes through rideSport_ (sportType||type), and
+  // merge.py collapses Virtual Ride into type:'ride' while preserving the original here — so
+  // this is what recovers the 228 virtual rides. It also means sportType now carries SPACED
+  // Strava strings ("Virtual Ride"), which is why the classifier strips separators below.
+  if(r.stravaType) r.sportType = r.stravaType;
+  return r;
+}
+// Sport string for MATCHING: strips spaces/underscores/hyphens so the spaced Strava forms
+// ("Virtual Ride", "Trail Run", "E-Bike Ride") and the app's CamelCase forms ("VirtualRide")
+// both hit the same pattern. Matching on the raw string would silently drop the 228 virtual
+// rides out of the ride bucket and move the gate counts.
+function storeV2Sport_(a){
+  var s=(typeof rideSport_==='function') ? rideSport_(a) : String((a && (a.sportType||a.type)) || '');
+  return String(s).replace(/[ _-]/g, '');
+}
 // Firebase returns an ARRAY when the node's keys are dense 0..n-1 and an OBJECT
 // otherwise, and the snapshot may be a bare collection or wrapped. Resolve every
 // one of those to a flat array and REPORT which shape was seen, so a wrong guess
@@ -3371,6 +3412,11 @@ function storeV2Flatten_(j){
   // Keep only records that actually look like activities; count the rest rather
   // than dropping them silently, so a wrapper we did not anticipate is visible.
   var acts=coll.filter(function(a){ return a && typeof a==='object' && (a.date!=null || a.sportType!=null || a.type!=null); });
+  // Normalise HERE — the single funnel every reader sits downstream of (loadStoreV2_ ->
+  // _storeV2Rides -> allRidesDeduped_). Doing it at the entry point means no downstream
+  // reader needs to know the snapshot speaks a different vocabulary, and the probes
+  // automatically re-measure normalised records.
+  acts.forEach(function(a){ storeV2Normalize_(a); });
   return {
     shape: shape,
     all: acts,
@@ -3405,7 +3451,8 @@ function loadStoreV2_(force){
     var byType={}, rides=[], runs=[], virt=[], other=[], deleted=0, deletedAny=0, delFields={};
     var trainerField=0, trainerTrue=0, zwiftNamed=0, indoorFields={};
     f.all.forEach(function(a){
-      var s=rideSport_(a);
+      var s=rideSport_(a);              // raw, so the histogram still shows "Virtual Ride" distinctly
+      var sc=storeV2Sport_(a);          // separator-stripped, for matching
       var k=s||'(none)';
       byType[k]=(byType[k]||0)+1;
       // Tombstone detection gates step 2, so do NOT trust a single field name. This
@@ -3429,10 +3476,10 @@ function loadStoreV2_(force){
       // and reported virtual=0, which reads as "the snapshot has no indoor rides"
       // when it may just mean Zwift rides are tagged by NAME (they are, cross-year,
       // for rides imported before VirtualRide existed as a sport).
-      if(STORE_V2_RUN_RE.test(s)) runs.push(a);
-      else if(STORE_V2_RIDE_RE.test(s)){
+      if(STORE_V2_RUN_RE.test(sc)) runs.push(a);
+      else if(STORE_V2_RIDE_RE.test(sc)){
         rides.push(a);
-        if(/virtual/i.test(s) || /zwift/i.test(String(a.name||'')) || a.trainer===true) virt.push(a);
+        if(/virtual/i.test(sc) || /zwift/i.test(String(a.name||'')) || a.trainer===true) virt.push(a);
       }
       else other.push(a);
       // Diagnostics for the indoor/outdoor question: does the snapshot carry the
