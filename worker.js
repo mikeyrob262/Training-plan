@@ -3745,6 +3745,40 @@ function rideHandleIndex_(list){
   });
   return { idx:idx, collisions:collisions, spans:spans };
 }
+// ---- dual-accept resolution (Fork B, phase 1) -----------------------------
+// ROLLBACK IS THIS ONE LINE: set STORE_V2_HANDLES to false and handle strings stop
+// resolving, so any producer that has already migrated fails closed (nothing found)
+// rather than resolving to a neighbouring ride. Numbers are untouched either way.
+var STORE_V2_HANDLES = true;
+// Handle -> position, resolved AT USE TIME. That is the whole safety property: the old bug
+// is not that positions are wrong, it is that a position captured in a click closure goes
+// stale when the array changes underneath it. A handle is durable, so the position is
+// re-derived from the CURRENT array at the moment the handler runs and is never stored.
+var _handleIdxCache={arr:null, len:0, idx:null};
+function rideHandleLookup_(h){
+  if(!h) return undefined;
+  var list=st.rides||[];
+  var fresh=(_handleIdxCache.arr===list && _handleIdxCache.len===list.length);
+  if(!fresh) _handleIdxCache={arr:list, len:list.length, idx:rideHandleIndex_(list).idx};
+  var got=_handleIdxCache.idx[h];
+  // A sync can give a ride its stravaId without changing the array length, which changes
+  // that ride's handle and leaves the cache stale. A miss on a cache we believed fresh is
+  // exactly that case, so rebuild once and retry before reporting not-found.
+  if(got===undefined && fresh){
+    _handleIdxCache={arr:list, len:list.length, idx:rideHandleIndex_(list).idx};
+    got=_handleIdxCache.idx[h];
+  }
+  return got;
+}
+// Accepts EITHER a number or a handle string. A number behaves exactly as before, which is
+// what lets producers migrate one at a time instead of atomically. Returns -1 when a handle
+// cannot be resolved so callers hit their existing if(!r) return guard.
+function rideResolveIdx_(ref){
+  if(typeof ref==='number') return ref;
+  if(!STORE_V2_HANDLES) return -1;
+  var rec=rideHandleLookup_(String(ref==null?'':ref));
+  return (rec===undefined) ? -1 : (st.rides||[]).indexOf(rec);
+}
 function storeV2HandleDryRun_(){
   return loadStoreV2_(true).then(function(s){
     function run(label, list){
@@ -3789,6 +3823,61 @@ function storeV2HandleDryRun_(){
         + (full.unresolved||full.noHandle ? 'Some records produce no usable handle. ' : '')));
     return { full:full, live:live, snapshot:snap, safe:ok };
   });
+}
+// Verifies the handler path itself, not just the index. All six handlers reduce to the same
+// two lines — idx = rideResolveIdx_(ref); r = st.rides[idx] — so exercising rideResolveIdx_
+// over the whole library exercises every one of them, including the four that WRITE.
+//
+// Pass a name fragment (or a position) to get a targeted read-out for ONE known ride: what
+// renameRide and deleteRide would actually land on, with its neighbours printed, so
+// "landed on the right ride" is demonstrated rather than asserted. NOTHING is mutated.
+function storeV2HandlerVerify_(target){
+  var list=st.rides||[];
+  var same=0, diff=0, unres=0, samples=[];
+  list.forEach(function(r,i){
+    if(!r) return;
+    var h=rideHandle_(r);
+    var got=rideResolveIdx_(h);
+    if(got<0){ unres++; return; }
+    if(list[got]===r) same++;
+    else {
+      diff++;
+      if(samples.length<5) samples.push('pos ' + i + ' h=' + h + ' -> landed on pos ' + got
+        + ' [' + String(list[got] && list[got].date) + ' ' + ((list[got]&&parseFloat(list[got].distance))||0) + 'mi]');
+    }
+  });
+  // The dual-accept guarantee: a number must still behave exactly as before.
+  var numOK=0, numBad=0;
+  for(var n=0;n<list.length;n++){ if(rideResolveIdx_(n)===n) numOK++; else numBad++; }
+  console.log('[handler] handle path: n=' + list.length + '  identical=' + same + '  WRONG-RIDE=' + diff + '  unresolvable=' + unres);
+  console.log('[handler] number path (must be unchanged): pass=' + numOK + '  fail=' + numBad);
+  if(samples.length) console.log('[handler] WRONG-RIDE samples: ' + samples.join(' | '));
+
+  if(target!==undefined && target!==null && target!==''){
+    var pos=-1;
+    if(typeof target==='number') pos=target;
+    else {
+      var q=String(target).toLowerCase();
+      for(var j=0;j<list.length;j++){
+        var r2=list[j]; if(!r2||r2.deleted) continue;
+        if(String(r2.name||'').toLowerCase().indexOf(q)>=0){ pos=j; break; }
+      }
+    }
+    var tr=list[pos];
+    if(!tr){ console.log('[handler] TARGET: no live ride matching ' + JSON.stringify(target)); }
+    else {
+      var th=rideHandle_(tr), tp=rideResolveIdx_(th), hit=list[tp];
+      var show=function(k,x){ return k + '=' + (x ? (String(x.date) + ' ' + ((parseFloat(x.distance)||0)) + 'mi "' + String(x.name||'') + '"' + (x.deleted?' TOMB':'')) : 'none'); };
+      console.log('[handler] TARGET at position ' + pos + ': ' + show('ride', tr));
+      console.log('[handler]   handle: ' + th);
+      console.log('[handler]   renameRide(handle) / deleteRide(handle) would resolve to position ' + tp + ': ' + show('lands-on', hit));
+      console.log('[handler]   neighbours — ' + show('pos-1', list[pos-1]) + ' | ' + show('pos+1', list[pos+1]));
+      console.log('[handler]   VERDICT: ' + (hit===tr
+        ? 'EXACT MATCH — the handle lands on the same object, not a neighbour.'
+        : 'MISMATCH — the handle does NOT land on the target ride. Do not migrate further producers.'));
+    }
+  }
+  return { n:list.length, same:same, diff:diff, unresolvable:unres, numberPathPass:numOK, numberPathFail:numBad };
 }
 // Read-only field audit. Wired to NOTHING — console entry is storeV2FieldAudit_().
 // No matching, no keys, no writes: raw per-field presence counts on the snapshot and
@@ -12005,7 +12094,12 @@ function renderRideList(container, limit){
   var listGroup=document.createElement('div');
   listGroup.style.cssText='margin:0 16px';
   rides.forEach(function(r,idx){
-    var realIdx=st.rides.indexOf(r);
+    // MIGRATED to a durable handle (Fork B, first producer). The position this used to
+    // capture went stale the moment st.rides changed under the closure — a sync, an import
+    // or a delete would leave the row pointing at whatever slid into that slot. The handle
+    // is re-resolved to a position inside openRideDetail at click time instead. Falls back
+    // to the old position when handles are rolled back, so this line is safe either way.
+    var realIdx=(STORE_V2_HANDLES && typeof rideHandle_==='function') ? rideHandle_(r) : st.rides.indexOf(r);
     var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
     var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
     if(rideIsIndoor(r) && /run|jog/i.test(sport)) sport='Treadmill';
@@ -13465,6 +13559,7 @@ function importRideFile(input){
 
 
 function renameRide(idx){
+  idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var r = st.rides[idx]; if(!r) return;
   var newName = prompt('Rename ride:', r.name||'Activity');
   if(newName===null) return;
@@ -18693,6 +18788,7 @@ function rideKj_(r){
   return Math.round(r.avgPwr*s/1000);
 }
 function openDesktopRideDetail(idx, _noFetch){
+  idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var rpEl=document.getElementById('ds-right-panel');
   if(rpEl) rpEl.style.display='flex';
   var r=st.rides[idx];
@@ -19254,6 +19350,7 @@ window.addEventListener('load', function(){
 // ─────────────────────────────────────────────────────────────────────────────
 
 function openRideDetail(idx, _noFetch){
+  idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var r = st.rides[idx];
   if(!r) return;
   if(typeof evenTrack_==='function') evenTrack_(r);          // guard mismatched lats/lons before drawing
@@ -20961,6 +21058,7 @@ function renderAnalysisContent(wrap, text){
 }
 
 function deleteRide(idx, e){
+  idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   if(e) e.stopPropagation();
   var old = document.getElementById('delete-confirm');
   if(old) old.remove();
@@ -21022,6 +21120,7 @@ function closeRideDetail(){
 // fact - e.g. when the Garmin kept recording during the drive home and baked
 // extra miles into the activity. Reached from the ride-detail "more" menu.
 function editRideData(idx){
+  idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var r=st.rides[idx]; if(!r) return;
   var old=document.getElementById('ride-edit-modal');
   if(old) old.remove();
@@ -22365,6 +22464,10 @@ function injectRideStats(w){
 
 async function deleteRideFromCard(idx){
   if(!(await uiConfirm('Delete this ride?',{danger:true}))) return;
+  // Resolved AFTER the await, not before: the confirm is a suspension point, and a sync or
+  // another delete can reorder st.rides while it is open. A position captured beforehand
+  // would splice whatever slid into that slot; a handle re-resolved here cannot.
+  idx = rideResolveIdx_(idx);
   if(st.rides&&st.rides[idx]!==undefined){
     st.rides.splice(idx,1);
     sv();
