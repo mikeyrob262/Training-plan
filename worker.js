@@ -3434,19 +3434,23 @@ var STORE_V2_RIDE_RE = /^(ride|virtualride|ebikeride|gravelride|mountainbikeride
 var STORE_V2_DEL_RE  = /delet|tomb|remov/i;
 // Any indoor/trainer-shaped FIELD NAME — diagnostics for the indoor-vs-outdoor split.
 var STORE_V2_INDOOR_RE = /trainer|indoor|virtual|zwift/i;
+// Expected counts for the CURRENT snapshot generation — a tripwire for "did the PUT land",
+// not a law. Named rather than inlined in the log string because they WILL go stale on every
+// regeneration, and a magic number buried in a template reads as a real failure when it is
+// only drift. run moved 1760 -> 2201 when the st.runs fold landed (847 matched and enriched
+// in place, 438 union-appended, 3 ambiguous kept-both); ride stayed 409 because the 11
+// post-export backfilled activities restored the exact parity the regeneration had lost.
+var STORE_V2_EXPECT_RIDE = 409;
+var STORE_V2_EXPECT_RUN  = 2201;
 var _storeV2Cache=null;
 // Reads /store_v2 once per session and resolves a classified view of it. Wired to
 // NOTHING — step 2 repoints allRidesDeduped_() here; until then the only entry
 // point is storeV2Verify_() from the console. A failure is never cached, so the
 // next call retries instead of pinning a null for the session.
-function loadStoreV2_(force){
-  if(_storeV2Cache && !force) return _storeV2Cache;
-  _storeV2Cache = ensureFbAuth_().then(function(tok){
-    return _withTimeout_(fetch(fbStoreV2Url_(tok)), 60000, 'store_v2 read');
-  }).then(function(r){
-    if(!(r && r.ok)) throw new Error('store_v2 GET failed status ' + (r ? r.status : 'no response'));
-    return r.json();
-  }).then(function(j){
+// THE classifier. Extracted so the pre-PUT validator and the live read go through the
+// SAME path — a check that classifies differently from the reader is worthless, which is
+// exactly how 441 folded runs passed every offline gate while landing as 'other' in the app.
+function storeV2Classify_(j){
     var f=storeV2Flatten_(j);
     var byType={}, rides=[], runs=[], virt=[], other=[], deleted=0, deletedAny=0, delFields={};
     var trainerField=0, trainerTrue=0, zwiftNamed=0, indoorFields={};
@@ -3494,12 +3498,112 @@ function loadStoreV2_(force){
              all:f.all, byType:byType, rides:rides, runs:runs, virtual:virt, other:other,
              deleted:deleted, deletedAny:deletedAny, delFields:delFields,
              trainerField:trainerField, trainerTrue:trainerTrue, zwiftNamed:zwiftNamed, indoorFields:indoorFields };
+}
+function loadStoreV2_(force){
+  if(_storeV2Cache && !force) return _storeV2Cache;
+  _storeV2Cache = ensureFbAuth_().then(function(tok){
+    return _withTimeout_(fetch(fbStoreV2Url_(tok)), 60000, 'store_v2 read');
+  }).then(function(r){
+    if(!(r && r.ok)) throw new Error('store_v2 GET failed status ' + (r ? r.status : 'no response'));
+    return r.json();
+  }).then(function(j){
+    return storeV2Classify_(j);
   }).catch(function(e){
     _storeV2Cache=null;
     console.error('[store_v2] read failed: ' + ((e && e.message) || e));
     throw e;
   });
   return _storeV2Cache;
+}
+// ---- /store_v2 WRITE path -------------------------------------------------
+// The ONLY writer to /store_v2 in the app, and it is console-invoked, never automatic.
+// A bare REST PUT to the node is refused (Permission denied) because the database rules
+// require auth, so this goes through ensureFbAuth_ — the same authenticated channel every
+// /data write already uses.
+//
+// It CANNOT touch /data: the URL comes from fbStoreV2Url_, which is the root-sibling
+// store_v2.json path, and nothing here constructs fbAuthedUrl_.
+//
+// Validation runs through storeV2Classify_ — the SAME classifier the app reads with — so
+// what is checked is exactly what the app will see. Counting raw record types instead is
+// what let 441 misclassified runs pass every gate. A payload that fails any check is NOT
+// written; the refusal is the point.
+function storeV2PutCheck_(j){
+  var out={ ok:false, reasons:[], counts:{} };
+  if(!j || typeof j!=='object'){ out.reasons.push('payload is not an object'); return out; }
+  if(!Array.isArray(j.activities)){ out.reasons.push('no activities[] array — wrong file?'); return out; }
+  var s;
+  try{ s=storeV2Classify_(j.activities); }
+  catch(e){ out.reasons.push('classifier threw: '+((e&&e.message)||e)); return out; }
+  var none=(s.byType && s.byType['(none)'])||0;
+  out.counts={ total:s.total, ride:s.rides.length, run:s.runs.length, other:s.other.length,
+               virtual:s.virtual.length, none:none, deleted:s.deleted, deletedAny:s.deletedAny };
+  if(s.rides.length!==STORE_V2_EXPECT_RIDE) out.reasons.push('ride='+s.rides.length+' expected '+STORE_V2_EXPECT_RIDE);
+  if(s.runs.length!==STORE_V2_EXPECT_RUN)   out.reasons.push('run='+s.runs.length+' expected '+STORE_V2_EXPECT_RUN);
+  if(none>0)                                out.reasons.push(none+' records have a sport the reader cannot classify');
+  if(s.deleted>0 || s.deletedAny>0)         out.reasons.push('tombstones present (deleted='+s.deleted+', any-convention='+s.deletedAny+')');
+  if(!s.total)                              out.reasons.push('zero activities');
+  out.ok=(out.reasons.length===0);
+  return out;
+}
+// Console entry. Opens a file picker, validates, shows the counts, asks, PUTs, then RE-READS
+// the node and re-validates what actually landed — a write that reports success without
+// reading back is a claim, not a verification.
+function storeV2Put_(){
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='.json,application/json';
+  inp.onchange=function(){
+    var file=inp.files && inp.files[0];
+    if(!file){ console.warn('[store_v2-put] no file chosen'); return; }
+    var rd=new FileReader();
+    rd.onerror=function(){ console.error('[store_v2-put] could not read the file'); };
+    rd.onload=function(){
+      var txt=String(rd.result||''), j=null;
+      try{ j=JSON.parse(txt); }
+      catch(e){ console.error('[store_v2-put] ABORT — not valid JSON: '+((e&&e.message)||e)); return; }
+      var chk=storeV2PutCheck_(j), c=chk.counts;
+      console.log('[store_v2-put] file: '+file.name+'  '+(txt.length/1048576).toFixed(2)+' MB');
+      console.log('[store_v2-put] classified AS THE APP READS IT: total='+c.total+'  ride='+c.ride
+        +'  run='+c.run+'  other='+c.other+'  virtual='+c.virtual+'  unclassifiable='+c.none
+        +'  tombstones='+c.deleted+'/'+c.deletedAny);
+      if(!chk.ok){
+        console.error('[store_v2-put] ABORT — nothing written. Failed checks: '+chk.reasons.join(' | '));
+        return;
+      }
+      // Newline via fromCharCode, not an escape: this file is served inside a template
+      // literal, which converts a backslash-n escape (even one in a comment) into a real
+      // newline mid-string-literal and breaks the whole block.
+      var _nl=String.fromCharCode(10)+String.fromCharCode(10);
+      var msg='PUT this snapshot to /store_v2?'+_nl+c.total+' activities — '+c.ride+' ride, '+c.run
+             +' run, '+c.other+' other.'+_nl+'This REPLACES the whole node. /data is not touched.';
+      var go=(typeof uiConfirm==='function') ? uiConfirm(msg,{danger:true}) : Promise.resolve(window.confirm(msg));
+      Promise.resolve(go).then(function(ok){
+        if(!ok){ console.log('[store_v2-put] cancelled — nothing written'); return; }
+        console.log('[store_v2-put] writing...');
+        return ensureFbAuth_().then(function(tok){
+          return _withTimeout_(fetch(fbStoreV2Url_(tok), {
+            method:'PUT', headers:{'Content-Type':'application/json'}, body:txt
+          }), 180000, 'store_v2 PUT');
+        }).then(function(r){
+          if(!(r && r.ok)) throw new Error('PUT failed status '+(r?r.status:'no response'));
+          console.log('[store_v2-put] PUT accepted — reading the node back to verify...');
+          _storeV2Cache=null;                       // never verify against the pre-PUT cache
+          return loadStoreV2_(true);
+        }).then(function(s){
+          var okR=(s.rides.length===STORE_V2_EXPECT_RIDE), okU=(s.runs.length===STORE_V2_EXPECT_RUN);
+          console.log('[store_v2-put] READ-BACK: total='+s.total+'  ride='+s.rides.length+'  run='+s.runs.length
+            +'  other='+s.other.length+'  virtual='+s.virtual.length);
+          console.log('[store_v2-put] ' + ((okR&&okU)
+            ? 'VERIFIED — the node now serves what was written. Hard-refresh to arm the readers.'
+            : 'WARNING — read-back does not match expectations. Do NOT assume the write is good.'));
+        });
+      }).catch(function(e){
+        console.error('[store_v2-put] FAILED: '+((e&&e.message)||e)+' — treat the node as unknown and re-read before retrying.');
+      });
+    };
+    rd.readAsText(file);
+  };
+  inp.click();
 }
 // The type-filtered accessor. kind: 'all' | 'ride' | 'run' | 'virtual' | 'other',
 // or any literal sport string (matched case-insensitively via rideSport_).
@@ -3546,9 +3650,9 @@ function storeV2Verify_(){
         ? 'the snapshot carries NO trainer field and NO zwift-named rides, so indoor/outdoor CANNOT be split from it. Any surface that splits indoor vs outdoor must not migrate until the snapshot carries an indoor signal.'
         : 'trainer/zwift signals ARE present (see counts above) — the split is recoverable; classification needs to read them.'));
     }
-    var okR=(s.rides.length===409), okU=(s.runs.length===1760);
-    console.log('[store_v2] expected ride=409 run=1760 -> ' + ((okR && okU) ? 'MATCH'
-      : ('MISMATCH (ride ' + (okR ? 'ok' : ('off by ' + (s.rides.length-409))) + ', run ' + (okU ? 'ok' : ('off by ' + (s.runs.length-1760))) + ')')));
+    var okR=(s.rides.length===STORE_V2_EXPECT_RIDE), okU=(s.runs.length===STORE_V2_EXPECT_RUN);
+    console.log('[store_v2] expected ride=' + STORE_V2_EXPECT_RIDE + ' run=' + STORE_V2_EXPECT_RUN + ' -> ' + ((okR && okU) ? 'MATCH'
+      : ('MISMATCH (ride ' + (okR ? 'ok' : ('off by ' + (s.rides.length-STORE_V2_EXPECT_RIDE))) + ', run ' + (okU ? 'ok' : ('off by ' + (s.runs.length-STORE_V2_EXPECT_RUN))) + ')')));
     return s;
   });
 }
