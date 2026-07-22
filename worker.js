@@ -6618,6 +6618,39 @@ function fetchCoachNote(elId){
 // render, priced to current FTP) so both Home surfaces show the same content: name, ride band + %
 // of FTP + HR + duration + TSS, or the movement list (sets x reps @ %1RM), plus the note. Rest
 // renders distinctly. Tapping opens the day editor for THAT session. One function, both renderers.
+// Open a YouTube SEARCH for a movement name. Search-by-name rather than stored links: the
+// exercise arrays carry no link field, so this covers every movement including ones added
+// later, with zero data entry — and curated per-movement links go stale and get lost.
+function watchExercise_(q){
+  try{
+    var name=decodeURIComponent(String(q||'')).trim();
+    if(!name) return;
+    window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(name), '_blank', 'noopener');
+  }catch(e){ try{ console.error('[watch]', e && e.message); }catch(_e){} }
+}
+// THE shared planned-exercise row. Every surface that lists prescribed movements renders
+// through this ONE function. That is deliberate durability: the Watch button has been lost
+// three times across rebuilds by living in per-surface copies, so it lives here and any
+// future surface inherits it by construction rather than by remembering to re-add it.
+function exerciseRowHTML_(e){
+  if(!e) return '';
+  var esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
+  var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)')
+          :(e.pct1RM?(e.pct1RM+((typeof gTerm_==='function')?gTerm_('% 1RM','pct1rm'):'% 1RM')):'');
+  var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):'');
+  // encodeURIComponent leaves the apostrophe UNRESERVED, and this value sits inside a quoted
+  // JS string in an inline onclick — so "World's greatest stretch" would terminate the
+  // argument early and the handler would never fire. Escaped explicitly. The surrounding
+  // quotes are HTML entities, not backslash escapes: a backslash here would be stripped by
+  // the served template literal (the same trap preflight step 2 exists to catch).
+  var q=encodeURIComponent(String(e.name||'')).replace(/'/g,'%27');
+  return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px">'
+    +'<span style="color:var(--t1);flex:1;min-width:0">'+esc(e.name)+'</span>'
+    +'<span style="color:var(--t3);white-space:nowrap">'+d+'</span>'
+    +'<span onclick="event.stopPropagation();watchExercise_(&#39;'+q+'&#39;)" title="Watch a demo"'
+    +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>'
+    +'</div>';
+}
 // Cycle a mobility session to the NEXT routine in the pool (A -> B -> C -> D -> A).
 // Changes the session's INTENT and nothing else — same type, same slot, same duration — so
 // the prescription re-derives from SESSION_DEFS and it persists and syncs down the SAME
@@ -6658,7 +6691,13 @@ function planCardHTML_(s, dateKey){
     if(meta.length) lines.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+meta.join(' · ')+'</div>');
   } else if((type==='strength'||type==='mobility') && r.exercises && r.exercises.length){
     var _cues=[];
-    lines.push(r.exercises.map(function(e){ if(e.loadCue && _cues.indexOf(e.loadCue)<0) _cues.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+gTerm_('% 1RM','pct1rm')):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+esc(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+    // Row markup lives in exerciseRowHTML_ so the Watch button cannot be dropped by a
+    // rebuild of this card. Only the load-cue collection stays here — it aggregates across
+    // rows, so it belongs to the card, not the row.
+    lines.push(r.exercises.map(function(e){
+      if(e.loadCue && _cues.indexOf(e.loadCue)<0) _cues.push(e.loadCue);
+      return (typeof exerciseRowHTML_==='function')?exerciseRowHTML_(e):'';
+    }).join(''));
     if(_cues.length) lines.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+esc(_cues.join('; '))+'</div>');
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
