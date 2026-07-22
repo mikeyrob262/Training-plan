@@ -3571,6 +3571,97 @@ function storeV2RunShape_(){
              lost:lost.length, lostKeys:lost.map(mkey) };
   });
 }
+// Read-only identity probe for the index->identity refactor. Wired to NOTHING — console
+// entry is storeV2IdentityProbe_(). No handler edits, no renderer changes.
+//
+// Every clickable surface currently hands out st.rides.indexOf(r) as the ride handle, and
+// five handlers resolve it as st.rides[idx] — four of which WRITE. A positional index is
+// only valid against the exact array it was computed from, so no renderer can move to the
+// snapshot until the handle is an identity instead of a position. This probe asks whether
+// rideKey can BE that identity.
+//
+// rideKey has two forms with very different stability, and the probe reports them apart:
+//   s<stravaId>  — immutable, safe.
+//   k:<date>_<miles>_<secs> — the fallback for non-Strava rides (Garmin-only, manual). It
+//     embeds duration and rounds distance to WHOLE MILES, so a re-synced movingSecs or two
+//     same-day rides of similar length can drift or collide. normDate also does not strip a
+//     T time component, so an ISO date and a plain date yield DIFFERENT keys for one ride —
+//     the exact cross-source mismatch that would make a handle resolve to the wrong record.
+function storeV2IdentityProbe_(){
+  return loadStoreV2_(true).then(function(s){
+    var snap=s.rides||[];
+    var local=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
+    var kf=function(r){ return (typeof rideKey==='function') ? String(rideKey(r)||'') : ''; };
+    var day=function(r){ return String((r&&r.date)||'').split('T')[0]; };
+    var mi=function(r){ return Math.round((parseFloat(r&&r.distance)||0)*10)/10; };
+    var sec=function(r){ return (typeof _durSec_==='function')?_durSec_(r):0; };
+
+    function survey(list,label){
+      var noKey=0, sForm=0, kForm=0, withSid=0, sidStr=0, sidNum=0, tDates=0, degenerate=0;
+      var seen={}, dupes={};
+      list.forEach(function(r){
+        var k=kf(r);
+        if(!k){ noKey++; } else {
+          if(k.charAt(0)==='s') sForm++; else if(k.slice(0,2)==='k:') kForm++;
+          if(seen[k]) dupes[k]=(dupes[k]||1)+1; else seen[k]=1;
+        }
+        if(r.stravaId!=null && r.stravaId!==''){ withSid++; if(typeof r.stravaId==='string') sidStr++; else sidNum++; }
+        if(String((r&&r.date)||'').indexOf('T')>=0) tDates++;
+        // No stable identity: no stravaId AND the composite has nothing to bite on.
+        if(!(r.stravaId!=null && r.stravaId!=='') && (!day(r) || (mi(r)===0 && sec(r)===0))) degenerate++;
+      });
+      var dk=Object.keys(dupes);
+      console.log('[identity] ' + label + ': ' + list.length + ' records');
+      console.log('[identity]   rideKey: present=' + (list.length-noKey) + ' missing=' + noKey
+        + '  (s-form=' + sForm + ', k-form=' + kForm + ')');
+      console.log('[identity]   stravaId: present=' + withSid + ' absent=' + (list.length-withSid)
+        + '  (string=' + sidStr + ', number=' + sidNum + ')');
+      console.log('[identity]   dates carrying a T component: ' + tDates + (tDates&&label.indexOf('snapshot')>=0 ? '  <-- key-drift risk vs plain-dated local records' : ''));
+      console.log('[identity]   duplicate rideKeys (collisions): ' + dk.length
+        + (dk.length ? ('  e.g. ' + dk.slice(0,5).map(function(k){ return k+' x'+dupes[k]; }).join('  ')) : ''));
+      console.log('[identity]   records with NO stable identity: ' + degenerate
+        + (degenerate ? '  <-- these are why indexOf was used; they cannot get a handle' : ''));
+      return { n:list.length, noKey:noKey, sForm:sForm, kForm:kForm, withSid:withSid,
+               dupes:dk.length, dupeKeys:dk.slice(0,20), degenerate:degenerate, tDates:tDates, index:seen };
+    }
+
+    var L=survey(local,'st.rides (live)');
+    var S=survey(snap,'snapshot (ride-typed)');
+
+    // Cross-array resolution: for every key in BOTH, does it name the same activity?
+    var lmap={}; local.forEach(function(r){ var k=kf(r); if(k && !lmap[k]) lmap[k]=r; });
+    var shared=0, onlySnap=0, agree=0, mismatch=0, secDrift=0, samples=[];
+    snap.forEach(function(a){
+      var k=kf(a); if(!k) return;
+      var r=lmap[k];
+      if(!r){ onlySnap++; return; }
+      shared++;
+      var sameDay=(day(a)===day(r)), sameMi=(Math.abs(mi(a)-mi(r))<0.15);
+      if(sameDay && sameMi){ agree++; if(sec(a)!==sec(r)) secDrift++; }
+      else { mismatch++; if(samples.length<6) samples.push(k+' snap['+day(a)+' '+mi(a)+'mi] vs local['+day(r)+' '+mi(r)+'mi]'); }
+    });
+    var onlyLocal=0; var skeys={}; snap.forEach(function(a){ var k=kf(a); if(k) skeys[k]=1; });
+    local.forEach(function(r){ var k=kf(r); if(k && !skeys[k]) onlyLocal++; });
+
+    console.log('[identity] CROSS: shared keys=' + shared + '  snapshot-only=' + onlySnap + '  local-only=' + onlyLocal);
+    console.log('[identity] CROSS: of the shared keys, same activity=' + agree + '  MISMATCH=' + mismatch
+      + (mismatch ? '  <-- a handle would resolve to the WRONG record' : ''));
+    if(samples.length) console.log('[identity] CROSS: mismatch samples: ' + samples.join(' | '));
+    console.log('[identity] CROSS: agreeing keys whose duration differs: ' + secDrift
+      + (secDrift ? '  (k-form keys built from these would drift)' : ''));
+
+    var safe=(L.noKey===0 && S.noKey===0 && L.dupes===0 && S.dupes===0 && mismatch===0 && L.degenerate===0 && S.degenerate===0);
+    console.log('[identity] VERDICT: ' + (safe
+      ? 'rideKey is a sound handle on its own — universal, collision-free, and it names the same record in both arrays. The refactor can swap indexOf for a rideKey lookup.'
+      : 'rideKey is NOT sufficient alone. ' +
+        (L.dupes||S.dupes ? 'Collisions exist, so a composite (rideKey || stravaId || date+distance) is needed. ' : '') +
+        (L.degenerate||S.degenerate ? 'Some records have NO stable identity — those need a synthesised id before any handle can address them. ' : '') +
+        (mismatch ? 'Some shared keys name DIFFERENT activities — resolving by key would open/edit the wrong ride. ' : '') +
+        (L.noKey||S.noKey ? 'Some records produce no key at all. ' : '')));
+    return { local:L, snapshot:S, shared:shared, onlySnap:onlySnap, onlyLocal:onlyLocal,
+             agree:agree, mismatch:mismatch, secDrift:secDrift, safe:safe };
+  });
+}
 
 // -- Per-ride GPS storage --------------------------------------------------
 // Heavy GPS + chart streams are kept OUT of the monolithic st blob (which
