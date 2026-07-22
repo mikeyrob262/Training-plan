@@ -3709,6 +3709,87 @@ function storeV2IdentityProbe_(){
              agree:agree, mismatch:mismatch, secDrift:secDrift, safe:safe };
   });
 }
+// ---- index -> durable handle refactor: DRY RUN ONLY -----------------------
+// Wired to NOTHING. No handler is changed by this; storeV2HandleDryRun_() only measures
+// whether the swap would be safe. Every clickable surface currently hands out
+// st.rides.indexOf(r) and five handlers resolve it as st.rides[idx] — four of which WRITE
+// (renameRide, deleteRide, editRideData, deleteRideFromCard). The failure being guarded
+// against is a clicked row renaming or deleting a DIFFERENT ride.
+//
+// The handle is rideKey UNCHANGED. That is a measured choice, not a default: a bucketed
+// variant (duration rounded to tolerate re-sync drift) was tested against the real library
+// and introduced 19 collisions across 38 records, 18 of them spanning a live record and a
+// tombstone — exactly the wrong-record case. rideKey as-is is unique across all 3,747
+// records including tombstones. Drift costs a handle that fails to resolve, which is
+// recoverable; a collision silently mutates the wrong ride, which is not.
+//
+// rideHandle_ is a thin alias so the handle has ONE definition to change later. It must
+// never be conflated with rideKey's other job — rideKey is the storage key for /gps and
+// bike assignments, so its FORMAT cannot change without orphaning those.
+function rideHandle_(r){ return (typeof rideKey==='function') ? String(rideKey(r)||'') : ''; }
+// Build handle -> record. The handlers index the FULL st.rides array (tombstones included),
+// because renderRideList calls indexOf on the raw array even though it renders a filtered
+// list. So the index is built over the full array too, and on the (currently empty) event of
+// a collision it prefers the LIVE record — a tombstone must never win a click.
+function rideHandleIndex_(list){
+  var idx={}, collisions={}, spans=0;
+  (list||[]).forEach(function(r){
+    if(!r) return;
+    var h=rideHandle_(r); if(!h) return;
+    var ex=idx[h];
+    if(ex===undefined){ idx[h]=r; return; }
+    collisions[h]=(collisions[h]||1)+1;
+    var exDead=!!ex.deleted, rDead=!!r.deleted;
+    if(exDead!==rDead) spans++;
+    if(exDead && !rDead) idx[h]=r;   // live beats tombstone
+  });
+  return { idx:idx, collisions:collisions, spans:spans };
+}
+function storeV2HandleDryRun_(){
+  return loadStoreV2_(true).then(function(s){
+    function run(label, list){
+      var built=rideHandleIndex_(list);
+      var same=0, diff=0, unresolved=0, noHandle=0, samples=[];
+      (list||[]).forEach(function(r, i){
+        if(!r){ return; }
+        var h=rideHandle_(r);
+        if(!h){ noHandle++; return; }
+        var got=built.idx[h];
+        if(got===undefined){ unresolved++; return; }
+        // The invariant the refactor depends on: resolving the handle must land on the
+        // SAME OBJECT the old positional index would have returned.
+        if(got===r){ same++; }
+        else {
+          diff++;
+          if(samples.length<6) samples.push('idx=' + i + ' h=' + h + ' old[' + String(r.date) + ' ' + (parseFloat(r.distance)||0)
+            + 'mi' + (r.deleted?' TOMB':'') + '] new[' + String(got.date) + ' ' + (parseFloat(got.distance)||0) + 'mi' + (got.deleted?' TOMB':'') + ']');
+        }
+      });
+      var ck=Object.keys(built.collisions);
+      console.log('[handle] ' + label + ': n=' + (list||[]).length
+        + '  identical=' + same + '  DIFFERENT=' + diff + '  unresolvable=' + unresolved + '  no-handle=' + noHandle);
+      console.log('[handle]   collisions=' + ck.length + ' (records involved=' + ck.reduce(function(a,k){ return a+built.collisions[k]; },0)
+        + ', live/tombstone spans=' + built.spans + ')'
+        + (ck.length ? ('  e.g. ' + ck.slice(0,4).join('  ')) : ''));
+      if(samples.length) console.log('[handle]   MISRESOLUTION samples: ' + samples.join(' | '));
+      return { n:(list||[]).length, same:same, diff:diff, unresolved:unresolved, noHandle:noHandle,
+               collisions:ck.length, spans:built.spans };
+    }
+    // FULL array first — that is what the handlers actually index into.
+    var full=run('st.rides FULL (as handlers index it)', st.rides||[]);
+    var live=run('st.rides live only', (st.rides||[]).filter(function(r){ return r && !r.deleted; }));
+    var snap=run('snapshot ride-typed', s.rides||[]);
+    var ok=(full.diff===0 && full.unresolved===0 && full.noHandle===0 && full.collisions===0
+            && snap.diff===0 && snap.unresolved===0 && snap.collisions===0);
+    console.log('[handle] VERDICT: ' + (ok
+      ? 'SAFE — every record resolves through its handle to the identical object, on the full tombstone-laden array and on the snapshot. The five idx handlers can take a handle instead of a position.'
+      : 'NOT SAFE — do not flip any renderer. '
+        + (full.collisions||snap.collisions ? 'Handle collisions exist. ' : '')
+        + (full.diff||snap.diff ? 'Some handles resolve to a DIFFERENT record — that is the rename/delete-the-wrong-ride case. ' : '')
+        + (full.unresolved||full.noHandle ? 'Some records produce no usable handle. ' : '')));
+    return { full:full, live:live, snapshot:snap, safe:ok };
+  });
+}
 // Read-only field audit. Wired to NOTHING — console entry is storeV2FieldAudit_().
 // No matching, no keys, no writes: raw per-field presence counts on the snapshot and
 // the SAME counts on live st.rides / st.runs, so the difference between them is a
