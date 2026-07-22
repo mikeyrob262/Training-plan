@@ -3662,6 +3662,73 @@ function storeV2IdentityProbe_(){
              agree:agree, mismatch:mismatch, secDrift:secDrift, safe:safe };
   });
 }
+// Read-only field audit. Wired to NOTHING — console entry is storeV2FieldAudit_().
+// No matching, no keys, no writes: raw per-field presence counts on the snapshot and
+// the SAME counts on live st.rides / st.runs, so the difference between them is a
+// measured field list rather than an inference.
+//
+// Three states per field, because they mean different things to a re-snapshot:
+//   absent  — the key is missing entirely; merge.py never carried it.
+//   zero    — the key survived but the VALUE is 0/empty; it was carried and flattened.
+//   pos     — a real value.
+// Comparison is by RATE, not raw count, since the arrays are different sizes.
+//
+// Field names are audited in BOTH dialects on purpose. Rides store elevation as elev
+// and power as avgPwr/np; the run-card shape uses elevation and time. Auditing one
+// dialect would report a field as absent when it is merely stored under its other name.
+function _fpAudit_(list, fields){
+  var out={};
+  fields.forEach(function(f){ out[f]={abs:0, zero:0, pos:0}; });
+  list.forEach(function(r){
+    fields.forEach(function(f){
+      var v=r?r[f]:null;
+      if(v===null || v===undefined || v==='') { out[f].abs++; return; }
+      // Increment through an explicit branch: a conditional expression is not a valid
+      // postfix target, and inside the served template literal that is a load-time throw
+      // for the whole script block, not a local error.
+      if(typeof v==='boolean'){ if(v) out[f].pos++; else out[f].zero++; return; }
+      var n=parseFloat(v);
+      if(isNaN(n)){ if(String(v).length) out[f].pos++; else out[f].zero++; return; }  // non-numeric strings count as present
+      if(n>0) out[f].pos++; else out[f].zero++;
+    });
+  });
+  return out;
+}
+function storeV2FieldAudit_(){
+  return loadStoreV2_(true).then(function(s){
+    var snapRides=s.rides||[], snapRuns=s.runs||[];
+    var locRides=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
+    var locRuns=(st.runs||[]).filter(function(r){ return r && !r.deleted; });
+    var RIDE_F=['distance','duration','movingSecs','elev','elevation','avgHR','maxHR','avgPwr','np','cadence','tss','calories','avgSpeed','pace','trainer','name','date','stravaId'];
+    var RUN_F =['distance','duration','movingSecs','time','elev','elevation','avgHR','maxHR','cadence','pace','rss','rpe','name','date','stravaId'];
+    var durOK=function(l){ return l.filter(function(r){ return ((typeof _durSec_==='function')?_durSec_(r):0)>0; }).length; };
+    var pct=function(n,d){ return d ? Math.round(n*1000/d)/10 : 0; };
+
+    function table(label, fields, snap, loc){
+      console.log('[field-audit] ===== ' + label + ' — snapshot n=' + snap.length + '  vs  local n=' + loc.length + ' =====');
+      var A=_fpAudit_(snap,fields), B=_fpAudit_(loc,fields), dropped=[], thinned=[];
+      fields.forEach(function(f){
+        var a=A[f], b=B[f], ar=pct(a.pos,snap.length), br=pct(b.pos,loc.length);
+        var flag='';
+        if(br>0 && ar===0){ flag='  <-- DROPPED'; dropped.push(f); }
+        else if(br>0 && ar < br/2){ flag='  <-- THINNED'; thinned.push(f); }
+        console.log('[field-audit]   ' + (f+'                ').slice(0,14)
+          + ' snap pos=' + a.pos + ' zero=' + a.zero + ' abs=' + a.abs + ' (' + ar + '%)'
+          + '   local pos=' + b.pos + ' zero=' + b.zero + ' abs=' + b.abs + ' (' + br + '%)' + flag);
+      });
+      var sd=durOK(snap), ld=durOK(loc);
+      console.log('[field-audit]   [record-level] duration parseable via _durSec_ >0: snapshot ' + sd + '/' + snap.length
+        + ' (' + pct(sd,snap.length) + '%)   local ' + ld + '/' + loc.length + ' (' + pct(ld,loc.length) + '%)');
+      console.log('[field-audit]   FIX LIST for ' + label + ': dropped=[' + dropped.join(', ') + ']  thinned=[' + thinned.join(', ') + ']');
+      return { snap:A, local:B, dropped:dropped, thinned:thinned, snapDurOK:sd, locDurOK:ld };
+    }
+
+    var R=table('RIDES', RIDE_F, snapRides, locRides);
+    var U=table('RUNS',  RUN_F,  snapRuns,  locRuns);
+    console.log('[field-audit] NOTE: "zero" means merge.py carried the key but flattened the value; "abs" means it never carried the key at all. They need different fixes.');
+    return { rides:R, runs:U, counts:{snapRides:snapRides.length, snapRuns:snapRuns.length, locRides:locRides.length, locRuns:locRuns.length} };
+  });
+}
 
 // -- Per-ride GPS storage --------------------------------------------------
 // Heavy GPS + chart streams are kept OUT of the monolithic st blob (which
