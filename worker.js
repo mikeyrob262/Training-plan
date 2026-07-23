@@ -5405,6 +5405,11 @@ function mergeItemFast_(a, b){
 function genEntryId_(){
   return Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 }
+// Chokepoint guard for a food-log entry's name. Every push into st.nl routes through this so a
+// missing/blank name can NEVER be persisted (an unnamed entry renders as "undefined" and is
+// impossible to identify later). Belt-and-suspenders: the individual add paths mostly guard
+// already, but this makes it structural regardless of the upstream source.
+function _nlName_(x){ var s=(x==null)?'':String(x).trim(); return s || 'Food'; }
 // One-time cleanup for rides duplicated by the since-fixed movingSecs dedup
 // bug (Strava-synced rides never set movingSecs, so FIT/TCX imports never
 // recognized them as already existing). Groups rides by date, clusters
@@ -9440,7 +9445,7 @@ function nutStepFood_(meal, id, delta){
   // Scale ALL nutrients by the new quantity — including the scanned micros
   // (potassium/calcium/iron/magnesium), which the old rebuild silently dropped.
   var base={cal:(cur.cal||0)/curQty,p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty,potassium:(cur.potassium||0)/curQty,calcium:(cur.calcium||0)/curQty,iron:(cur.iron||0)/curQty,magnesium:(cur.magnesium||0)/curQty};
-  nd.meals[meal][i]={id:cur.id||genEntryId_(),n:cur._baseName||cur.n,_baseName:cur._baseName||cur.n,_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10,potassium:Math.round(base.potassium*newQty),calcium:Math.round(base.calcium*newQty),iron:Math.round(base.iron*newQty*10)/10,magnesium:Math.round(base.magnesium*newQty)};
+  nd.meals[meal][i]={id:cur.id||genEntryId_(),n:_nlName_(cur._baseName||cur.n),_baseName:_nlName_(cur._baseName||cur.n),_qty:newQty,cal:Math.round(base.cal*newQty),p:Math.round(base.p*newQty*10)/10,c:Math.round(base.c*newQty*10)/10,f:Math.round(base.f*newQty*10)/10,fiber:Math.round(base.fiber*newQty*10)/10,satFat:Math.round(base.satFat*newQty*10)/10,sodium:Math.round(base.sodium*newQty),sugar:Math.round(base.sugar*newQty*10)/10,potassium:Math.round(base.potassium*newQty),calcium:Math.round(base.calcium*newQty),iron:Math.round(base.iron*newQty*10)/10,magnesium:Math.round(base.magnesium*newQty)};
   sv(); nutRefresh();
 }
 function nutEditFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) editFoodItem(meal,i); }
@@ -10651,8 +10656,8 @@ function renderFoodRows(container, list){
           if(!nd.meals[curMeal]) nd.meals[curMeal] = [];
           nd.meals[curMeal].push({
             id: genEntryId_(),
-            n: f.n,
-            _baseName: f.n,
+            n: _nlName_(f.n),
+            _baseName: _nlName_(f.n),
             _qty: q,
             cal: Math.round((f.cal||0)*q),
             p: Math.round((f.p||0)*q*10)/10,
@@ -10717,7 +10722,7 @@ function renderFoodRows(container, list){
     if(!st.cf)st.cf=[];
     st.cf.push(food);
     if(!nutrDate) nutrDate=getTodayKey();
-    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
+    getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
     sv();
     document.getElementById('food-modal').remove();
     nutRefresh();
@@ -24824,7 +24829,7 @@ function renderMyFoods(container){
         addBtn.disabled=true;
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
-        nd.meals[curMeal].push({id:genEntryId_(),n:food.n,cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
+        nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
         sv();
         renderNutr();
         showScreen('NUTR');
@@ -24878,7 +24883,7 @@ function renderMyMeals(container){
         if(!nutrDate) nutrDate=getTodayKey();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
-          nd.meals[curMeal].push({id:genEntryId_(),n:f.n,cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
+          nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(f.n),cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
         });
         sv();
         renderNutr();
