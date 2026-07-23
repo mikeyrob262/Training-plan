@@ -3757,6 +3757,121 @@ function storeV2RunShape_(){
 // if the records still look un-normalised.
 var STORE_V2_MANUAL_RUN_F  = ['z1pct','z2pct','z3pct','z4pct','z5pct','stride','rpe','rss','shoe','weather'];
 var STORE_V2_MEASURED_RUN_F= ['distance','movingSecs','elev','maxHR','avgHR'];
+// Read-only coverage probe for You vs. You. Wired to NOTHING — console entry
+// storeV2CoverageProbe_(). Answers the one question the page's all-time claims depend on:
+// which months can be HONESTLY ranked against, per sport. A month with 2 recorded rides is a
+// gap, not a month he competed in; ranking "#4 of N" against it makes the headline a lie.
+//
+// A month is RANKABLE at >= this many activities in the sport. 4 = roughly one a week; below
+// that it is scattered records, not a training month. The distribution is printed so the
+// choice is visible and can be corrected against the real break, not accepted blind.
+var STORE_V2_RANKABLE_MIN = 4;
+function storeV2CoverageProbe_(){
+  return loadStoreV2_(true).then(function(s){
+    var all=s.all||[];
+    var ym=function(a){ var d=String((a&&a.date)||''); return d.length>=7 ? d.slice(0,7) : ''; };
+    var yr=function(a){ var d=String((a&&a.date)||''); return d.length>=4 ? d.slice(0,4) : ''; };
+    var moOf=function(k){ return k.slice(5,7); };
+    var mi=function(a){ return parseFloat(a&&a.distance)||0; };
+    var sec=function(a){ return (typeof _durSec_==='function')?_durSec_(a):(+(a&&a.movingSecs)||0); };
+
+    function sport(kind, list){
+      var byMonth={};
+      list.forEach(function(a){ var k=ym(a); if(!k) return;
+        if(!byMonth[k]) byMonth[k]={n:0, mi:0, sec:0};
+        byMonth[k].n++; byMonth[k].mi+=mi(a); byMonth[k].sec+=sec(a);
+      });
+      var months=Object.keys(byMonth).sort();
+      if(!months.length){ console.log('[coverage] '+kind+': no records'); return null; }
+      var first=months[0], last=months[months.length-1];
+      // total calendar span first..last inclusive
+      var span=(function(){ var a=first.split('-'), b=last.split('-');
+        return (parseInt(b[0],10)-parseInt(a[0],10))*12 + (parseInt(b[1],10)-parseInt(a[1],10)) + 1; })();
+      var rankable=months.filter(function(k){ return byMonth[k].n>=STORE_V2_RANKABLE_MIN; });
+
+      // Honest window start: walk BACK from the latest month; the earliest month from which
+      // rankable months are >=75% of the calendar months in that tail. A single off month does
+      // not break it, but a sparse early era does. This is the denominator the page may quote
+      // as "since YYYY" instead of the raw span.
+      var idx={}; months.forEach(function(k){ idx[k]=byMonth[k]; });
+      var calMonths=function(a,b){ var x=a.split('-'),y=b.split('-'); return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10))+1; };
+      var addMonth=function(k,d){ var p=k.split('-'); var t=(parseInt(p[0],10)*12+parseInt(p[1],10)-1)+d; return Math.floor(t/12)+'-'+('0'+(t%12+1)).slice(-2); };
+      var honest=last, cur=last;
+      while(true){
+        var prev=addMonth(cur,-1);
+        if(calMonths(prev,last) > span) break;             // ran past the first record
+        var rk=0, cal=calMonths(prev,last);
+        months.forEach(function(k){ if(k>=prev && idx[k].n>=STORE_V2_RANKABLE_MIN) rk++; });
+        if(rk/cal >= 0.75){ honest=prev; cur=prev; if(prev<=first) break; }
+        else break;
+      }
+
+      // per-year density
+      var byYear={};
+      months.forEach(function(k){ var y=k.slice(0,4); if(!byYear[y]) byYear[y]={acts:0, months:0, rankMonths:0};
+        byYear[y].acts+=byMonth[k].n; byYear[y].months++; if(byMonth[k].n>=STORE_V2_RANKABLE_MIN) byYear[y].rankMonths++; });
+
+      // per month-of-year rankable count (the July question)
+      var byMoY={}; for(var m=1;m<=12;m++) byMoY[('0'+m).slice(-2)]=0;
+      rankable.forEach(function(k){ byMoY[moOf(k)]++; });
+
+      // distribution of per-month counts
+      var distc={}; months.forEach(function(k){ var n=byMonth[k].n; distc[n]=(distc[n]||0)+1; });
+
+      console.log('[coverage] ===== '+kind.toUpperCase()+' =====');
+      console.log('[coverage]   '+list.length+' activities, '+months.length+' months with data, span '+span+' calendar months ('+first+' .. '+last+')');
+      console.log('[coverage]   RANKABLE months (>='+STORE_V2_RANKABLE_MIN+' acts): '+rankable.length+'  <-- the honest denominator, NOT the '+span+'-month span');
+      console.log('[coverage]   honest window (>=75% rankable tail): from '+honest+' to '+last);
+      var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      console.log('[coverage]   rankable per month-of-year: '+MN.map(function(m,i){ return m+'='+byMoY[('0'+(i+1)).slice(-2)]; }).join(' '));
+      console.log('[coverage]   per-year (year: acts / rankable-months / months-with-data):');
+      Object.keys(byYear).sort().forEach(function(y){ var v=byYear[y];
+        console.log('[coverage]      '+y+': '+v.acts+' acts / '+v.rankMonths+' rankable / '+v.months+' months'); });
+      var db=Object.keys(distc).map(Number).sort(function(a,b){return a-b;}).map(function(n){ return n+':'+distc[n]; });
+      console.log('[coverage]   per-month count distribution (acts:months): '+db.join('  '));
+      return { kind:kind, activities:list.length, monthsWithData:months.length, span:span,
+               rankable:rankable.length, honestStart:honest, last:last, byMoY:byMoY, byYear:byYear };
+    }
+
+    // Currency: the most recent RANKABLE month per sport, vs the latest record across ALL
+    // sports. "This month vs history" needs a current month; a sport whose last rankable month
+    // is long past has deep history but nothing current to rank — a different problem from
+    // having shallow history. This is the distinction the raw honest-window number hides.
+    var globalLast=all.reduce(function(mx,a){ var k=ym(a); return k>mx?k:mx; }, '');
+    function lastRankable(list){
+      var by={}; list.forEach(function(a){ var k=ym(a); if(k){ by[k]=(by[k]||0)+1; } });
+      var ks=Object.keys(by).filter(function(k){ return by[k]>=STORE_V2_RANKABLE_MIN; }).sort();
+      return ks.length?ks[ks.length-1]:'';
+    }
+    var monthsBetween=function(a,b){ if(!a||!b) return 0; var x=a.split('-'),y=b.split('-'); return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10)); };
+
+    var R=sport('ride', all.filter(function(a){ return a && a.type==='ride'; }));
+    var U=sport('run',  all.filter(function(a){ return a && a.type==='run'; }));
+    console.log('[coverage] ---- verdict ----');
+    [ [R,all.filter(function(a){return a&&a.type==='ride';})], [U,all.filter(function(a){return a&&a.type==='run';})] ].forEach(function(pair){
+      var x=pair[0]; if(!x) return;
+      var lr=lastRankable(pair[1]); var staleBy=monthsBetween(lr, globalLast);
+      var cur=(staleBy<=3) ? 'CURRENT' : ('STALE — last rankable month '+lr+', '+staleBy+' months before now ('+globalLast+')');
+      console.log('[coverage] '+x.kind.toUpperCase()+': '+x.activities+' activities, '+x.rankable+' rankable months, deep history '
+        + Object.keys(x.byYear).sort()[0]+'..'+x.last+'; coverage '+cur);
+    });
+    if(R&&U){
+      var julR=R.byMoY['07'], julU=U.byMoY['07'];
+      console.log('[coverage] JULY: rankable Julys — ride='+julR+', run='+julU
+        + '. "second-best July in N years" is honest for RUN (N='+julU+'); for RIDE only '+julR+' Julys exist, so a July claim is not meaningful.');
+      console.log('[coverage] RECOMMENDATION:');
+      console.log('[coverage]   RIDE — CURRENT but shallow: rank "this month vs history" against its '+R.rankable
+        + ' rankable months from '+R.honestStart+'. Works for the live-comparison headline; do NOT make month-of-year claims (only '+julR+' Julys).');
+      console.log('[coverage]   RUN — deep but STALE: '+U.rankable+' rankable months / '+julU
+        + ' rankable Julys make all-time and month-of-year claims honest AS HISTORY, but the last rankable run month is old, so "THIS month vs history" has no current month to place. Frame run ranking as historical, not live.');
+      console.log('[coverage]   Any "#k of N" quotes the per-sport rankable count ('+R.rankable+' ride / '+U.rankable+' run), never the calendar span ('+R.span+' / '+U.span+').');
+    }
+    return { ride:R, run:U };
+  }).catch(function(e){
+    console.error('[coverage] FAILED: '+((e&&e.message)||e)+' — read failure, not zero coverage.');
+    throw e;
+  });
+}
 function storeV2RunMatchProbe_(){
   return loadStoreV2_(true).then(function(s){
     var snapRuns=(s && s.runs) || [];
