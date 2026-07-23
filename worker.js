@@ -15282,6 +15282,123 @@ var _YVY_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 var _YVY_RANK_MIN=4;
 function _yvySum_(l,f){ var s=0; (l||[]).forEach(function(r){ s+=f(r); }); return s; }
 
+// ==================== You vs. You — phase 2: power/physiology KPI row ====================
+// A second same-day-vs-last-month KPI row (Avg Power, Normalized Power, TSS, Avg HR) that does
+// NOT assume one history floor for the whole page. The volume row (distance/time/elev/acts) is
+// recorded on effectively every ride, so it ranks across the full ride window. Power/physio
+// fields are not: they only start being carried densely around 2025-01, and TSS is sparse
+// throughout. So each metric computes its OWN rankable window — reusing the >=4-rides-per-month
+// rankable rule from storeV2CoverageProbe_, applied per FIELD (a month counts for a metric only
+// if >=4 of that month's rides carry the field) — and the UI states that window when it is
+// shorter than the page's full ride window, rather than silently ranking against fewer months.
+// Field aliases: primed snapshot rides are normalised to the app vocab (avgPwr/np/avgHR); the
+// export vocab (avgPower/normPower/avgHr) is read too so the legacy fallback source also works.
+function _yvyAvgPwr_(r){ var v=(r&&r.avgPwr!=null)?+r.avgPwr:((r&&r.avgPower!=null)?+r.avgPower:NaN); return (v>0&&v<2000)?v:null; }
+function _yvyNp_(r){ var v=(r&&r.np!=null)?+r.np:((r&&r.normPower!=null)?+r.normPower:NaN); return (v>0&&v<2000)?v:null; }
+function _yvyTssV_(r){ var v=parseFloat(r&&r.tss); return (v>0&&v<=600)?v:null; }   // 600 = constRideTSS_ ceiling
+function _yvyHrV_(r){ var v=(r&&r.avgHR!=null)?+r.avgHR:((r&&r.avgHr!=null)?+r.avgHr:NaN); return (v>0&&v<240)?v:null; }
+function _yvyAddMonth_(k,d){ var p=String(k).split('-'); var t=(parseInt(p[0],10)*12+parseInt(p[1],10)-1)+d; return Math.floor(t/12)+'-'+('0'+(t%12+1)).slice(-2); }
+function _yvyCalMonths_(a,b){ if(!a||!b) return 0; var x=String(a).split('-'),y=String(b).split('-'); return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10))+1; }
+function _yvyMonLabel_(ym){ var p=String(ym).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+' '+p[0]; }
+function _yvyMonShort_(ym){ var p=String(ym).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+" '"+String(p[0]).slice(2); }
+
+// Per-field rankable window. Counts, per COMPLETE month (<= lastYM so the partial current month
+// never inflates coverage), how many rides carry the field; a month is rankable at >=_YVY_RANK_MIN.
+// Then walks back from the newest rankable month while rankable months stay >=75% of the calendar
+// tail — the same honest-window rule the coverage probe uses — to find how far back the metric can
+// legitimately reach. Returns null start when nothing is rankable (current-value-only metric).
+function _yvyFieldWindow_(rides, acc, lastYM){
+  var cnt={};
+  (rides||[]).forEach(function(r){ if(acc(r)!=null){ var k=_yvyYM_(r); if(k && k<=lastYM) cnt[k]=(cnt[k]||0)+1; } });
+  var months=Object.keys(cnt).sort();
+  if(!months.length) return {rankableMonths:0, start:null, months:0, anchor:null};
+  var rankable=months.filter(function(k){ return cnt[k]>=_YVY_RANK_MIN; });
+  if(!rankable.length) return {rankableMonths:0, start:null, months:0, anchor:null};
+  var anchor=rankable[rankable.length-1], first=months[0];
+  var honest=anchor, cur=anchor;
+  while(true){
+    var prev=_yvyAddMonth_(cur,-1);
+    if(prev<first) break;                       // ran past the first record for this field
+    var cal=_yvyCalMonths_(prev,anchor), rk=0;
+    months.forEach(function(k){ if(k>=prev && k<=anchor && cnt[k]>=_YVY_RANK_MIN) rk++; });
+    if(rk/cal >= 0.75){ honest=prev; cur=prev; } else break;
+  }
+  return { rankableMonths:rankable.length, start:honest, months:_yvyCalMonths_(honest,anchor), anchor:anchor };
+}
+
+// Per-metric view model. curVal is this month's aggregate (mean for intensities, sum for TSS load);
+// lastVal is last month capped at the same day-of-month (so a partial month never reads as a loss).
+// A delta is shown ONLY when last month is itself rankable for the field (>=_YVY_RANK_MIN carriers) —
+// that is the per-field gate. shortWindow flags a metric whose honest history floors out later than
+// the page's full ride window, which the render then states explicitly.
+function _yvyPhys_(rides, now){
+  var y=now.getFullYear(), m=now.getMonth();
+  var curYM=y+'-'+('0'+(m+1)).slice(-2);
+  var lmY=(m===0)?y-1:y, lmM=(m===0)?11:m-1;
+  var lastYM=lmY+'-'+('0'+(lmM+1)).slice(-2);
+  var domNow=now.getDate();
+  var cur=(rides||[]).filter(function(r){ return _yvyYM_(r)===curYM; });
+  var lastSD=(rides||[]).filter(function(r){ return _yvyYM_(r)===lastYM && _yvyDom_(r)<=domNow; });
+  // Page reference window: first ride month .. last COMPLETE month. Every metric's own window is
+  // measured against this so "shorter than the ride window" is a real, shared denominator.
+  var allM={}; (rides||[]).forEach(function(r){ var k=_yvyYM_(r); if(k) allM[k]=1; });
+  var mk=Object.keys(allM).sort();
+  var fullStart=mk.length?mk[0]:lastYM, fullMonths=_yvyCalMonths_(fullStart, lastYM);
+  var SPECS=[
+    {key:'pwr', label:'Avg Power',        unit:'W',   agg:'avg', acc:_yvyAvgPwr_},
+    {key:'np',  label:'Normalized Power', unit:'W',   agg:'avg', acc:_yvyNp_},
+    {key:'tss', label:'TSS',              unit:'',    agg:'sum', acc:_yvyTssV_},
+    {key:'hr',  label:'Avg HR',           unit:'bpm', agg:'avg', acc:_yvyHrV_}
+  ];
+  return SPECS.map(function(sp){
+    function agg(list){ var v=[]; list.forEach(function(r){ var x=sp.acc(r); if(x!=null) v.push(x); });
+      if(!v.length) return {n:0, val:0};
+      var s=0; v.forEach(function(x){ s+=x; }); return {n:v.length, val:(sp.agg==='sum'?s:s/v.length)}; }
+    var c=agg(cur), L=agg(lastSD), win=_yvyFieldWindow_(rides, sp.acc, lastYM);
+    var hasDelta=(L.n>=_YVY_RANK_MIN && c.n>=1);
+    var pct=hasDelta ? (L.val>0?Math.round((c.val-L.val)/L.val*100):(c.val>0?100:0)) : 0;
+    return { key:sp.key, label:sp.label, unit:sp.unit, agg:sp.agg,
+      curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct, up:(c.val>=L.val), hasDelta:hasDelta,
+      winStart:win.start, winMonths:win.months, rankableMonths:win.rankableMonths,
+      fullStart:fullStart, fullMonths:fullMonths, shortWindow:!!(win.start && win.start>fullStart) };
+  });
+}
+function _yvyPhysKpi_(ic, mv, first){
+  var valStr = (mv.curN===0) ? '&mdash;' : Math.round(mv.curVal).toLocaleString();
+  var pctHtml = mv.hasDelta ? (' '+_yvyPct_(mv.pct, mv.up)) : '';
+  var sub;
+  if(mv.curN===0) sub='no rides carry this yet';
+  else if(mv.hasDelta) sub='vs last month, same days';
+  else sub='current month &middot; no rankable last month';
+  var win='';
+  if(mv.curN>0){
+    if(mv.rankableMonths===0) win='<div style="font-size:10px;color:#f59e0b;margin-top:2px">history too sparse to rank</div>';
+    else if(mv.shortWindow) win='<div style="font-size:10px;color:#7c8598;margin-top:2px">ranks from '+_yvyMonShort_(mv.winStart)+' &middot; '+mv.winMonths+' of '+mv.fullMonths+' mo</div>';
+  }
+  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:'+(first?'none':'1px solid #1c2130')+'">'
+    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+mv.label+'</span></div>'
+    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+valStr+'</span>'
+    +((mv.unit&&mv.curN>0)?'<span style="font-size:13px;color:#94a3b8">'+mv.unit+'</span>':'')+pctHtml+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div>'+win+'</div>';
+}
+function _yvyPhysRow_(vm){
+  var ic={pwr:'&#9889;', np:'&#128200;', tss:'&#128293;', hr:'&#10084;&#65039;'};
+  var cells=vm.phys.map(function(mv,i){ return _yvyPhysKpi_(ic[mv.key], mv, i===0); }).join('');
+  var notes=[], fullMonths=(vm.phys[0]&&vm.phys[0].fullMonths)||0;
+  vm.phys.forEach(function(mv){
+    if(mv.curN===0) return;
+    if(mv.rankableMonths===0) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few rides carry it to rank against history.');
+    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' ('+mv.winMonths+' of '+fullMonths+' ride-months); earlier rides do not carry it.');
+  });
+  var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 18px 6px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Power &amp; Physiology</span>'
+    +'<span style="font-size:11px;color:#5b6678">this month, same-day vs last</span></div>'
+    +'<div style="display:flex;flex-wrap:wrap">'+cells+'</div>'+foot+'</div>';
+}
+
 function _yvyVM_(rides, now){
   var y=now.getFullYear(), m=now.getMonth();
   var curYM=y+'-'+('0'+(m+1)).slice(-2);
@@ -15341,7 +15458,7 @@ function _yvyVM_(rides, now){
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, bestEver:bestEver, rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
-    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length };
+    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length, phys:_yvyPhys_(rides, now) };
 }
 
 function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
@@ -15472,6 +15589,7 @@ function _yvyRenderVM_(vm){
   // layout: main col + right rail
   return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'
     +hero
+    +_yvyPhysRow_(vm)
     +'<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">'
     +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
