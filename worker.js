@@ -19034,6 +19034,72 @@ function taperVerdict_(fit, iq, ctlRamp){
     load:(tsb>-10?'Optimal':'Productive'), loadNote:'Balanced training zone.',
     readyLabel:'Balanced', readyNote:'Form readiness (TSB '+(tsb>=0?'+':'')+tsb+')'};
 }
+// ==================== Pw:Hr aerobic decoupling (HR DRIFT card) ====================
+// Replaces the old raw two-halves HR delta, which was power-blind, kept the warm-up in the
+// first half, and fired on any ride — so short/variable indoor sessions read "high drift"
+// routinely. This computes real aerobic decoupling the way Joe Friel / TrainingPeaks define
+// it: on a STEADY, endurance-paced ride, drop the warm-up, split the remaining steady segment
+// in half, take the power:HR ratio of each half, and report how far the ratio fell (HR rising
+// for the same power). Under ~5% is "coupled" — good aerobic durability; over 5% is decoupling.
+//   Refs: Joe Friel, "Aerobic Endurance and Decoupling" (joefrielsblog.com, 2011);
+//         TrainingPeaks "Pw:Hr" / Efficiency Factor decoupling metric (5% convention).
+// The gate is the whole point: decoupling on a sub-60-min, surging, or threshold+ ride measures
+// the workout's shape, not durability. Non-qualifying rides return {applicable:false, reason}
+// and the card shows an explicit not-applicable state — no number, no color verdict.
+var _HRD_COUPLED_PCT = 5;      // Friel/TrainingPeaks coupling threshold
+var _HRD_MIN_SEC     = 3600;   // 60+ min: below this, cardiac drift hasn't had time to mean anything
+var _HRD_MAX_VI      = 1.1;    // variability index NP/avg: steady rides only (a Zwift interval set blows past this)
+var _HRD_MAX_IF      = 0.85;   // above this it's a tempo/threshold+ effort, not the endurance context decoupling is for
+function _hrdMean_(a){ var s=0,n=0; for(var i=0;i<a.length;i++){ var v=+a[i]; if(v>0){ s+=v; n++; } } return n?s/n:0; }
+function _hrdNP_(pw, durSec){
+  // Approximate NP from a downsampled power stream: 30s rolling average, ^4, mean, 4th root.
+  var n=pw.length; if(!n) return 0;
+  var per=durSec>0?durSec/n:1, w=Math.max(1,Math.round(30/per));
+  var roll=[], acc=0, q=[];
+  for(var i=0;i<n;i++){ var v=Math.max(0,+pw[i]||0); q.push(v); acc+=v; if(q.length>w) acc-=q.shift(); roll.push(acc/q.length); }
+  var s=0; for(var j=0;j<roll.length;j++) s+=Math.pow(roll[j],4);
+  return Math.pow(s/roll.length, 0.25);
+}
+function _hrDecoupling_(r, ftp){
+  if(!r) return {applicable:false, reason:'no ride'};
+  var hr=r.chartHR, pw=r.chartPwr;
+  var durSec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
+  if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream'};
+  if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data'};
+  if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min'};
+  // steadiness: variability index. Prefer the stored NP/avg power; fall back to the stream.
+  var avgP = (+r.avgPwr>0) ? +r.avgPwr : _hrdMean_(pw);
+  var np   = (+r.np>0)     ? +r.np     : _hrdNP_(pw, durSec);
+  var vi   = avgP>0 ? np/avgP : 99;
+  if(vi > _HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
+  // endurance pace: IF = NP / FTP. Only gate when FTP and NP are known.
+  var iff = (ftp>0 && np>0) ? np/ftp : null;
+  if(iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
+  // align both streams onto a common index, drop the first 10 min (capped at 25%), split the rest.
+  var N=Math.min(hr.length, pw.length), H=[], P=[];
+  for(var i=0;i<N;i++){ H.push(+hr[Math.floor(i*hr.length/N)]||0); P.push(+pw[Math.floor(i*pw.length/N)]||0); }
+  var warm=Math.min(0.25, durSec>0 ? (10*60)/durSec : 0.15);
+  var start=Math.floor(N*warm), seg=N-start;
+  if(seg < 10) return {applicable:false, reason:'too short after warm-up'};
+  var mid=start+Math.floor(seg/2);
+  function ratio(a,b){ var ps=0,hs=0,n=0; for(var i=a;i<b;i++){ if(P[i]>0&&H[i]>0){ ps+=P[i]; hs+=H[i]; n++; } } return (n&&hs>0)?((ps/n)/(hs/n)):null; }
+  var r1=ratio(start,mid), r2=ratio(mid,N);
+  if(r1==null||r2==null||r1<=0) return {applicable:false, reason:'gaps in power/HR data'};
+  var dec=Math.round((r1-r2)/r1*100*10)/10;   // + = HR drifted up relative to power
+  return {applicable:true, decoupling:dec, r1:r1, r2:r2, durMin:Math.round(durSec/60),
+    iff:iff, vi:Math.round(vi*100)/100, segFrom:start, N:N, H:H};
+}
+function _hrdReasonText_(reason){
+  var m={ 'no power data':'No power data on this ride.',
+    'no heart-rate stream':'No heart-rate stream on this ride.',
+    'ride under 60 min':'Ride under 60 min — too short to read drift.',
+    'effort too variable':'Effort too variable (intervals/surges).',
+    'not an endurance-pace ride':'Too hard — not endurance pace.',
+    'too short after warm-up':'Too short once warm-up is dropped.',
+    'gaps in power/HR data':'Gaps in the power/HR data.',
+    'no ride':'No recent ride to read.' };
+  return m[reason] || 'Not enough steady data.';
+}
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
   if(!mc){ setTimeout(dsShowDashboard,300); return; }
@@ -19080,15 +19146,14 @@ function dsShowDashboard(){
   var wkgSeries=(wtr.pts||[]).map(function(p){return p.wkg;});
   // Today's plan (real).
   var twk=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_((typeof getTodayKey==='function')?getTodayKey():''):null;
-  // HR drift last ride (real).
-  var hdRides=(st.rides||[]).filter(function(rx){return rx.chartHR&&rx.chartHR.length>20;}).slice(-1);
-  var hdDrift=0, hdSeries=[];
-  if(hdRides.length){ var hr=hdRides[0].chartHR; var half=Math.floor(hr.length/2);
-    var f=hr.slice(0,half), s=hr.slice(half);
-    var af=f.reduce(function(a,b){return a+b;},0)/(f.length||1), as2=s.reduce(function(a,b){return a+b;},0)/(s.length||1);
-    hdDrift=af>0?Math.round((as2-af)/af*100*10)/10:0;
-    var step=Math.max(1,Math.floor(hr.length/24)); for(var hi=0;hi<hr.length;hi+=step) hdSeries.push(hr[hi]);
-  }
+  // HR drift last ride — real Pw:Hr aerobic decoupling. Pick the most recent ride BY DATE
+  // (not array position) and skip tombstones; both were selection bugs in the old version.
+  var hdLast=null, hdKey='';
+  (st.rides||[]).forEach(function(rx){ if(!rx||rx.deleted||!rx.date) return; var k=normDate(rx.date); if(k>=hdKey){ hdKey=k; hdLast=rx; } });
+  var hdFtp=parseInt((st&&st.ftp)||186)||186;
+  var hdRes=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdLast, hdFtp):{applicable:false,reason:'unavailable'};
+  var hdSeries=[];
+  if(hdRes.applicable && hdRes.H){ var _seg=hdRes.H.slice(hdRes.segFrom); var _st=Math.max(1,Math.floor(_seg.length/24)); for(var hi=0;hi<_seg.length;hi+=_st) hdSeries.push(_seg[hi]); }
   // Nutrition (real, today).
   var nf=(typeof nutritionForDate==='function')?nutritionForDate():{consumed:{cal:0,pro:0,carb:0,fat:0,fiber:0},goals:{cal:2000,pro:150,carb:250,fat:70}};
   // Consistency this month (real active days).
@@ -19214,13 +19279,24 @@ function dsShowDashboard(){
     ra+='</div></div>';
   });
   H+=card(ra);
-  // HR Drift
-  var hdCol=Math.abs(hdDrift)<3?ACC.green:Math.abs(hdDrift)<6?ACC.amber:ACC.red;
+  // HR Drift — Pw:Hr aerobic decoupling (Friel/TrainingPeaks 5% convention). Only steady,
+  // endurance-pace, 60+ min power rides get a verdict; everything else shows a not-applicable
+  // state — no number, no color — because decoupling on those rides measures workout shape.
   var hd=lbl('HR DRIFT');
-  hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride</div>';
-  hd+='<div style="font-size:30px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(hdDrift>=0?'+':'')+hdDrift+'%</div>';
-  hd+='<div style="font-size:12px;font-weight:600;color:'+hdCol+';margin:4px 0 8px">'+(Math.abs(hdDrift)<3?'Excellent efficiency':Math.abs(hdDrift)<6?'Moderate — check fuel':'High — review pacing')+'</div>';
-  hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,56):'<div style="font-size:10px;color:#5b6678">No HR stream on the last ride.</div>')+'</div>';
+  hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride · Pw:Hr decoupling</div>';
+  if(hdRes.applicable){
+    var dec=hdRes.decoupling;
+    var hdCol=dec<_HRD_COUPLED_PCT?ACC.green:(dec<10?ACC.amber:ACC.red);
+    var hdMsg=dec<_HRD_COUPLED_PCT?'Aerobically coupled':(dec<10?'Mild decoupling':'High — review pacing');
+    hd+='<div style="font-size:30px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>';
+    hd+='<div style="font-size:12px;font-weight:600;color:'+hdCol+';margin:4px 0 2px">'+hdMsg+'</div>';
+    hd+='<div style="font-size:10px;color:#5b6678;margin-bottom:8px">Steady segment, warm-up dropped · '+hdRes.durMin+' min</div>';
+    hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,56):'')+'</div>';
+  } else {
+    hd+='<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>';
+    hd+='<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+_hrdReasonText_(hdRes.reason)+'</div>';
+    hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power. This one doesn&#39;t qualify.</div></div>';
+  }
   H+=card(hd);
   // Nutrition
   var calPct=nf.goals.cal?Math.min(1,nf.consumed.cal/nf.goals.cal):0;
@@ -19230,7 +19306,10 @@ function dsShowDashboard(){
   nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:#5b6678">kcal</div></div></div>';
   nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
-    nu+='<div style="display:flex;align-items:center;justify-content:space-between;gap:6px"><span style="display:flex;align-items:center;gap:6px;min-width:0"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+';flex-shrink:0"></span><span style="font-size:12px;color:#cbd5e1;white-space:nowrap">'+m[1]+'</span></span><span style="font-size:12px;color:#e8edf5;font-weight:700;white-space:nowrap;flex-shrink:0">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
+    // Three flex siblings: dot (fixed) · label (flex:1, truncates with ellipsis if space is
+    // tight) · value (never shrinks). The old layout let the nowrap label overflow onto the
+    // value on a narrow column — which is why it collided once values hit two/three digits.
+    nu+='<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+';flex-shrink:0"></span><span style="font-size:12px;color:#cbd5e1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+m[1]+'</span><span style="font-size:12px;color:#e8edf5;font-weight:700;white-space:nowrap;flex-shrink:0;padding-left:8px">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
   });
   nu+='</div></div>';
   if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:#64748b">Fiber <b style="color:#e8edf5">'+nf.consumed.fiber+'g</b></div>'; }
@@ -28726,10 +28805,12 @@ function showCalendarTab(){
   h+='      </svg>';
   h+='      <div style="flex:1;min-width:0">';
   macros.forEach(function(m){
+    // Label truncates with ellipsis if tight; value never shrinks — so they can't collide at
+    // any value width (mirrors the desktop nutrition-row fix).
     h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">';
     h+='  <span style="width:9px;height:9px;border-radius:50%;background:'+m.c+';flex-shrink:0"></span>';
-    h+='  <span style="font-size:12px;color:var(--t2);flex:1">'+m.n+'</span>';
-    h+='  <span style="font-size:13px;font-weight:700;color:var(--t1)">'+m.v+' <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+m.t+(m.u||'g')+'</span></span>';
+    h+='  <span style="font-size:12px;color:var(--t2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+m.n+'</span>';
+    h+='  <span style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;flex-shrink:0;padding-left:8px">'+m.v+' <span style="font-size:11px;color:var(--t3);font-weight:400">/ '+m.t+(m.u||'g')+'</span></span>';
     h+='</div>';
   });
   h+='      </div>';
