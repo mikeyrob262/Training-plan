@@ -12300,8 +12300,16 @@ function renderRideList(container, limit){
   // ── Elevation climbed (cumulative, outdoor vs indoor) ─────────────────
   // Apple Health-style cumulative climb: two rising lines (outdoor green,
   // indoor/virtual blue) accumulating monthly from 2023 to now, each
-  // ascending to its all-time total. Indoor = VirtualRide sportType or the
-  // Strava trainer flag (Zwift climbs). Only real recorded gain summed.
+  // ascending to its all-time total. Only real recorded gain summed.
+  //
+  // This AGGREGATE (Group D, Option A) reads the /store_v2 snapshot, not st.rides — the ONE
+  // place the ride surfaces touch the snapshot, and only because it needs no per-ride click,
+  // no detail, no GPS/streams (which the snapshot does not carry). st.rides classifies indoor
+  // off the trainer flag, populated on 4.9% of records, so the indoor/outdoor split never
+  // actually worked (57 local vs 228 real). The snapshot carries stravaType, so the split is
+  // correct here for the first time. The clickable list/detail stay on st.rides — see the
+  // tombstone-divergence finding; they cannot resolve against the snapshot.
+  var STORE_V2_INDOOR = true;   // one-line rollback: false -> chart reverts to the st.rides source below
   (function(){
     var START_YR=2025;
     var now=new Date();
@@ -12318,8 +12326,15 @@ function renderRideList(container, limit){
       if(y<START_YR) return 0; // fold anything older into the first bucket
       return (function(){ var idx=0; for(var yy=START_YR;yy<y;yy++){ idx+=(yy===nowYr?now.getMonth()+1:12); } return idx+m; })();
     }
+    // Source: the snapshot's ride-typed records (cycling, correct stravaType) year-filtered the
+    // SAME way the list's year subset is, so the chart's time range is unchanged — only the
+    // sport classification improves. Falls through to the st.rides source when the flag is off
+    // or the snapshot has not primed, so a slow/failed read degrades to today's behaviour.
+    var chartSrc = (STORE_V2_INDOOR && typeof _storeV2Rides!=='undefined' && _storeV2Rides && _storeV2Rides.length)
+      ? _storeV2Rides.filter(function(r){ return !r.date || new Date(r.date).getFullYear()===activityYearFilter; })
+      : rides;
     var any=false;
-    (rides||[]).forEach(function(r){
+    (chartSrc||[]).forEach(function(r){
       if(!r.date) return;
       var d=new Date(r.date);
       if(isNaN(d) || d.getFullYear()<START_YR) return;
@@ -12327,7 +12342,17 @@ function renderRideList(container, limit){
       if(!el) return;
       var idx=monthIdx(d);
       if(idx<0||idx>=months.length) return;
-      var indoor=/virtual/i.test(rideSport_(r)) || r.trainer===true;
+      // Classifier reverts with the flag so rollback is byte-identical to today. ON: despaced
+      // via storeV2Sport_ (snapshot sportType is "Virtual Ride", spaced — a raw /virtualride/
+      // regex misses it, the same trap that hit the run classifier) plus zwift-name for older
+      // Zwift rides tagged plain "Ride". OFF: the original st.rides expression, unchanged.
+      var indoor;
+      if(STORE_V2_INDOOR){
+        var sc=(typeof storeV2Sport_==='function')?storeV2Sport_(r):String(r.sportType||r.type||'');
+        indoor=/virtual/i.test(sc) || /zwift/i.test(String(r.name||'')) || r.trainer===true;
+      } else {
+        indoor=/virtual/i.test(rideSport_(r)) || r.trainer===true;
+      }
       if(indoor) months[idx].ind+=el; else months[idx].out+=el;
       any=true;
     });
@@ -15195,7 +15220,11 @@ function _msCycling_(){
   // migrates with the pass that settles the indoor/outdoor signal, not before.
   var ded=(typeof allRidesLegacy_==='function')?allRidesLegacy_():[];
   var sp=function(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }, nm=function(r){ return String((r&&r.name)||''); };
-  var isRun=function(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sp(r)); };
+  // isRun is anchored, so a SPACED "Virtual Run" (snapshot vocab) fails it and would fall
+  // through to isRide — a silent miscount. Despace via storeV2Sport_ first (harmless on the
+  // unspaced st.rides values this currently reads; correct if it ever reads the snapshot).
+  var scOf=function(r){ return (typeof storeV2Sport_==='function')?storeV2Sport_(r):String(sp(r)).replace(/[ _-]/g,''); };
+  var isRun=function(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(scOf(r)); };
   var isRide=function(r){ return !isRun(r)&&(/ride/i.test(sp(r))||/virtual/i.test(sp(r))||/zwift/i.test(nm(r))||r.trainer===true); };
   return ded.filter(function(r){ return r&&r.date&&isRide(r); }).map(function(r){
     var d=_ryDate_(r.date), mi=parseFloat(r.distance)||0, sec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
