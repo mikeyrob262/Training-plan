@@ -19069,17 +19069,26 @@ function _hrDecoupling_(r, ftp){
   // Jul 23 Zwift VO2 ride is exactly this: 52 min, and its chartHR/chartPwr are empty.)
   var durSec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
   if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min'};
+  // SCALAR gates first — IF and VI are determinable from the sync SUMMARY (np/avgPwr), which
+  // exist even on a stream-less ride. Rejecting a too-hard or too-variable ride here (before the
+  // stream checks) means a "no heart-rate stream"/"no power data" reason is reached ONLY by a
+  // ride that passed every intrinsic gate — which is exactly the condition the point-of-use
+  // fetch keys on. A ride that is N/A regardless never gets that far, so it never triggers a fetch.
+  var npS=(+r.np>0)?+r.np:null, avgS=(+r.avgPwr>0)?+r.avgPwr:null;
+  var iffS=(ftp>0&&npS)?npS/ftp:null;
+  if(iffS!=null && iffS>_HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
+  var viS=(npS&&avgS)?npS/avgS:null;
+  if(viS!=null && viS>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
   var hr=r.chartHR, pw=r.chartPwr;
   if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream'};
   if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data'};
-  // steadiness: variability index. Prefer the stored NP/avg power; fall back to the stream.
-  var avgP = (+r.avgPwr>0) ? +r.avgPwr : _hrdMean_(pw);
-  var np   = (+r.np>0)     ? +r.np     : _hrdNP_(pw, durSec);
-  var vi   = avgP>0 ? np/avgP : 99;
-  if(vi > _HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
-  // endurance pace: IF = NP / FTP. Only gate when FTP and NP are known.
+  // Streams present — refine VI/IF from the stream ONLY where the summary scalars were absent.
+  var avgP = avgS!=null ? avgS : _hrdMean_(pw);
+  var np   = npS!=null ? npS : _hrdNP_(pw, durSec);
+  var vi   = (viS!=null) ? viS : (avgP>0 ? np/avgP : 99);
+  if(viS==null && vi>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
   var iff = (ftp>0 && np>0) ? np/ftp : null;
-  if(iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
+  if(iffS==null && iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
   // align both streams onto a common index, drop the first 10 min (capped at 25%), split the rest.
   var N=Math.min(hr.length, pw.length), H=[], P=[];
   for(var i=0;i<N;i++){ H.push(+hr[Math.floor(i*hr.length/N)]||0); P.push(+pw[Math.floor(i*pw.length/N)]||0); }
@@ -19104,6 +19113,32 @@ function _hrdReasonText_(reason){
     'gaps in power/HR data':'Gaps in the power/HR data.',
     'no ride':'No recent ride to read.' };
   return m[reason] || 'Not enough steady data.';
+}
+// One attempt per ride, keyed by rideKey. States: undefined (untried) | 'pending' (in flight) |
+// 'done' (streams landed) | 'failed' (fetch returned nothing usable). Guards against re-fetching
+// on every dashboard render, and lets a failed attempt render "stream data unavailable" on
+// subsequent renders instead of reverting to the misleading "no HR stream".
+var _hdStreamAttempts = {};
+// Point-of-use stream fetch for the HR-drift card. Deliberately NOT ensureRideStreams: that one
+// treats chartEle+lats as "complete" and short-circuits before fetching HR/power, so a ride with
+// an elevation backfill + polyline GPS would never get its HR/power. This checks the /gps cache
+// first (cross-device/session), then falls through to fetchStravaStreams_ (which fetches watts +
+// heartrate, downsamples to 200, and persists to /gps + the blob) only if HR/power are still
+// missing. Never rejects — resolves with the (possibly still stream-less) ride.
+function _hdEnsureStreams_(r){
+  if(!r || !r.stravaId) return Promise.resolve(r);
+  var have=function(){ return (r.chartHR&&r.chartHR.length>=20) && (r.chartPwr&&r.chartPwr.length>=20); };
+  if(have()) return Promise.resolve(r);
+  var ds=function(a,n){ if(!a||a.length<2) return null; if(a.length<=n) return a.slice(); var s=Math.ceil(a.length/n),o=[]; for(var i=0;i<a.length;i+=s) o.push(a[i]); return o; };
+  var maxOf=function(a,cap){ var m=0; for(var i=0;i<a.length;i++){ var v=a[i]; if(v!=null&&v<cap&&v>m) m=v; } return m||null; };
+  var cache=(typeof gpsGetAny_==='function')?gpsGetAny_(r):Promise.resolve(null);
+  return cache.then(function(p){
+    if(p){ if(p.chartHR) r.chartHR=p.chartHR; if(p.chartPwr) r.chartPwr=p.chartPwr;
+      if(p.lats&&!(r.lats&&r.lats.length)){ r.lats=p.lats; r.lons=p.lons; } }
+    if(have()) return r;                                       // cache carried what we need
+    if(typeof fetchStravaStreams_==='function') return fetchStravaStreams_(r, ds, maxOf);
+    return r;
+  }).catch(function(){ return r; });
 }
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
@@ -19162,8 +19197,6 @@ function dsShowDashboard(){
   (st.rides||[]).forEach(function(rx){ if(!rx||rx.deleted||!rx.date||!_hdIsRide(rx)) return; var k=normDate(rx.date); if(k>=hdKey){ hdKey=k; hdLast=rx; } });
   var hdFtp=parseInt((st&&st.ftp)||186)||186;
   var hdRes=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdLast, hdFtp):{applicable:false,reason:'unavailable'};
-  var hdSeries=[];
-  if(hdRes.applicable && hdRes.H){ var _seg=hdRes.H.slice(hdRes.segFrom); var _st=Math.max(1,Math.floor(_seg.length/24)); for(var hi=0;hi<_seg.length;hi+=_st) hdSeries.push(_seg[hi]); }
   // Nutrition (real, today).
   var nf=(typeof nutritionForDate==='function')?nutritionForDate():{consumed:{cal:0,pro:0,carb:0,fat:0,fiber:0},goals:{cal:2000,pro:150,carb:250,fat:70}};
   // Consistency this month (real active days).
@@ -19292,22 +19325,63 @@ function dsShowDashboard(){
   // HR Drift — Pw:Hr aerobic decoupling (Friel/TrainingPeaks 5% convention). Only steady,
   // endurance-pace, 60+ min power rides get a verdict; everything else shows a not-applicable
   // state — no number, no color — because decoupling on those rides measures workout shape.
+  // Shared body renderer for the four states. Lives inside dsShowDashboard so it can use ACC/spark.
+  function _hdSeriesOf(res){ var s=[]; if(res&&res.applicable&&res.H){ var seg=res.H.slice(res.segFrom); var st2=Math.max(1,Math.floor(seg.length/24)); for(var i=0;i<seg.length;i+=st2) s.push(seg[i]); } return s; }
+  function hdBody(res, mode){
+    if(mode==='loading'){
+      var sp='<svg width="20" height="20" viewBox="0 0 40 40" style="flex-shrink:0"><circle cx="20" cy="20" r="16" fill="none" stroke="#1c2130" stroke-width="5"/><path d="M20 4a16 16 0 0 1 16 16" fill="none" stroke="#64748b" stroke-width="5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 20 20" to="360 20 20" dur="0.8s" repeatCount="indefinite"/></path></svg>';
+      return '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 6px">'+sp+'<div style="font-size:15px;font-weight:700;color:#94a3b8">Checking last ride…</div></div>'
+        +'<div style="font-size:11px;color:#5b6678;line-height:1.5">Fetching stream data to measure decoupling.</div>'
+        +'<div style="flex:1;min-height:48px"></div>';
+    }
+    if(mode==='unavailable'){
+      return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
+        +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">Stream data unavailable</div>'
+        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Could not load HR/power streams for this ride &mdash; Strava didn&#39;t return them. Not a claim about the ride itself.</div></div>';
+    }
+    if(res && res.applicable){
+      var dec=res.decoupling;
+      var col=dec<_HRD_COUPLED_PCT?ACC.green:(dec<10?ACC.amber:ACC.red);
+      var msg=dec<_HRD_COUPLED_PCT?'Aerobically coupled':(dec<10?'Mild decoupling':'High — review pacing');
+      var series=_hdSeriesOf(res);
+      return '<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>'
+        +'<div style="font-size:12px;font-weight:600;color:'+col+';margin:4px 0 2px">'+msg+'</div>'
+        +'<div style="font-size:10px;color:#5b6678;margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
+        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>1?spark(series,col,100,56):'')+'</div>';
+    }
+    return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
+      +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+_hrdReasonText_(res?res.reason:'no ride')+'</div>'
+      +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power. This one doesn&#39;t qualify.</div></div>';
+  }
   var hd=lbl('HR DRIFT');
   hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride · Pw:Hr decoupling</div>';
-  if(hdRes.applicable){
-    var dec=hdRes.decoupling;
-    var hdCol=dec<_HRD_COUPLED_PCT?ACC.green:(dec<10?ACC.amber:ACC.red);
-    var hdMsg=dec<_HRD_COUPLED_PCT?'Aerobically coupled':(dec<10?'Mild decoupling':'High — review pacing');
-    hd+='<div style="font-size:30px;font-weight:800;color:'+hdCol+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>';
-    hd+='<div style="font-size:12px;font-weight:600;color:'+hdCol+';margin:4px 0 2px">'+hdMsg+'</div>';
-    hd+='<div style="font-size:10px;color:#5b6678;margin-bottom:8px">Steady segment, warm-up dropped · '+hdRes.durMin+' min</div>';
-    hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(hdSeries.length>1?spark(hdSeries,hdCol,100,56):'')+'</div>';
-  } else {
-    hd+='<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>';
-    hd+='<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+_hrdReasonText_(hdRes.reason)+'</div>';
-    hd+='<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power. This one doesn&#39;t qualify.</div></div>';
-  }
+  // Fetch trigger: the ride passed every intrinsic/scalar gate (so the ONLY reason it's N/A is a
+  // missing stream) and it has a Strava id to fetch from. One attempt per ride via _hdStreamAttempts.
+  var hdKeyK=hdLast?rideKey(hdLast):'';
+  var hdAttempt=hdKeyK?_hdStreamAttempts[hdKeyK]:null;
+  var hdMissing=hdRes && !hdRes.applicable && (hdRes.reason==='no heart-rate stream'||hdRes.reason==='no power data');
+  var hdMode=null;
+  if(hdAttempt==='failed'){ hdMode='unavailable'; }
+  else if(hdMissing && hdLast && hdLast.stravaId && hdAttempt==null){ hdMode='loading'; _hdStreamAttempts[hdKeyK]='pending'; }
+  else if(hdAttempt==='pending'){ hdMode='loading'; }
+  hd+='<div id="ds-hrdrift-body">'+(hdMode?hdBody(null,hdMode):hdBody(hdRes,null))+'</div>';
   H+=card(hd);
+  // Kick off the one-time fetch AFTER the card HTML is committed (the async callback repaints
+  // #ds-hrdrift-body in place — loading -> number, or -> "stream data unavailable" if nothing lands).
+  if(hdMode==='loading' && hdAttempt==null){
+    (function(ride, ftp, key){
+      _hdEnsureStreams_(ride).then(function(){
+        var res2=(typeof _hrDecoupling_==='function')?_hrDecoupling_(ride, ftp):{applicable:false,reason:'unavailable'};
+        var stillMissing=!res2.applicable && (res2.reason==='no heart-rate stream'||res2.reason==='no power data');
+        _hdStreamAttempts[key]=stillMissing?'failed':'done';
+        var el=document.getElementById('ds-hrdrift-body'); if(!el) return;
+        el.innerHTML=stillMissing?hdBody(null,'unavailable'):hdBody(res2,null);
+      }).catch(function(){
+        _hdStreamAttempts[key]='failed';
+        var el=document.getElementById('ds-hrdrift-body'); if(el) el.innerHTML=hdBody(null,'unavailable');
+      });
+    })(hdLast, hdFtp, hdKeyK);
+  }
   // Nutrition
   var calPct=nf.goals.cal?Math.min(1,nf.consumed.cal/nf.goals.cal):0;
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
