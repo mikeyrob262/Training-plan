@@ -19146,10 +19146,15 @@ function dsShowDashboard(){
   var wkgSeries=(wtr.pts||[]).map(function(p){return p.wkg;});
   // Today's plan (real).
   var twk=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_((typeof getTodayKey==='function')?getTodayKey():''):null;
-  // HR drift last ride — real Pw:Hr aerobic decoupling. Pick the most recent ride BY DATE
-  // (not array position) and skip tombstones; both were selection bugs in the old version.
+  // HR drift last ride — real Pw:Hr aerobic decoupling. Pick the most recent CYCLING ride BY
+  // DATE (not array position), skipping tombstones AND non-cycling activities. st.rides mixes
+  // sports (a same-day "Morning Weight" strength session sorts to the same date and, with the
+  // >= tie-break, would win — then bail at the HR check before the duration gate, mislabelling
+  // a 52-min Zwift ride as "no HR stream"). Same exclusion set the You-vs-You page uses, so
+  // Zwift/virtual rides stay in and strength/run/swim/walk/etc. drop out.
+  var _hdIsRide=function(rx){ var s=(typeof storeV2Sport_==='function')?storeV2Sport_(rx):String((rx&&(rx.sportType||rx.type))||'').replace(/[ _-]/g,''); return !/^(run|trailrun|virtualrun|treadmill|swim|openwaterswim|opanwaterswim|walk|hike|weighttraining|workout|strength|crossfit|yoga|elliptical|rowing)$/i.test(s); };
   var hdLast=null, hdKey='';
-  (st.rides||[]).forEach(function(rx){ if(!rx||rx.deleted||!rx.date) return; var k=normDate(rx.date); if(k>=hdKey){ hdKey=k; hdLast=rx; } });
+  (st.rides||[]).forEach(function(rx){ if(!rx||rx.deleted||!rx.date||!_hdIsRide(rx)) return; var k=normDate(rx.date); if(k>=hdKey){ hdKey=k; hdLast=rx; } });
   var hdFtp=parseInt((st&&st.ftp)||186)||186;
   var hdRes=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdLast, hdFtp):{applicable:false,reason:'unavailable'};
   var hdSeries=[];
