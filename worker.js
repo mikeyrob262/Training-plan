@@ -19062,11 +19062,16 @@ function _hrdNP_(pw, durSec){
 }
 function _hrDecoupling_(r, ftp){
   if(!r) return {applicable:false, reason:'no ride'};
-  var hr=r.chartHR, pw=r.chartPwr;
+  // Suitability BEFORE data-availability: duration is intrinsic to the ride (a 52-min ride is
+  // too short whether or not streams were ever fetched), so it is the more fundamental reason
+  // and must be reported first. Otherwise a short ride with no streams reads "no HR stream",
+  // which is technically true but misleading — the ride was never a decoupling candidate. (The
+  // Jul 23 Zwift VO2 ride is exactly this: 52 min, and its chartHR/chartPwr are empty.)
   var durSec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
+  if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min'};
+  var hr=r.chartHR, pw=r.chartPwr;
   if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream'};
   if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data'};
-  if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min'};
   // steadiness: variability index. Prefer the stored NP/avg power; fall back to the stream.
   var avgP = (+r.avgPwr>0) ? +r.avgPwr : _hrdMean_(pw);
   var np   = (+r.np>0)     ? +r.np     : _hrdNP_(pw, durSec);
