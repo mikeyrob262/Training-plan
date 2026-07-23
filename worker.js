@@ -5710,12 +5710,18 @@ function _nlConvergeRemote_(){
   if(typeof ensureFbAuth_!=='function' || typeof _withTimeout_!=='function') return;
   _nlConverged=true;
   var padk=function(k){ var p=String(k).split('-'); return p.length===3?(p[0]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[2]).slice(-2)):String(k); };
+  // Identity by CONTENT, not by _nlFp_ (which prefers id). The id backfill assigns ids to
+  // legacy id-less entries WITHOUT changing content, so a backfilled local entry ('i:nlb:…')
+  // and its still-id-less remote twin ('f:name|cal|…') would look like different identities
+  // under _nlFp_ and abort this converge forever — which is exactly what keeps the cloud copy
+  // dirty. contentFingerprint_ excludes id, so pre/post-backfill twins match and the guarded
+  // PATCH can finally complete. Multiset counts still catch a genuinely remote-only entry.
   var sigOf=function(nl){
     var out={};
     Object.keys(nl||{}).forEach(function(k){
       var d=nl[k]; if(!d||!d.meals) return; var pk=padk(k);
       Object.keys(d.meals).forEach(function(m){
-        (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted){ var x=pk+'|'+m+'|'+_nlFp_(i); out[x]=(out[x]||0)+1; } });
+        (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted){ var x=pk+'|'+m+'|'+contentFingerprint_(i); out[x]=(out[x]||0)+1; } });
       });
     });
     return out;
@@ -5802,6 +5808,76 @@ function migrateNlKeyPadding_(s){
   try{ setTimeout(_nlConvergeRemote_, 0); }catch(e){}
   return folded+moved+dropped;
 }
+// ---- Nutrition entry id backfill (the deferred pass from 99deb40) --------------------
+// The ~62 legacy id-less entries (predating genEntryId_) merge by CONTENT fingerprint, which
+// drifts the moment one is edited on a device — turning the same entry into two identities and
+// duplicating it across devices. This assigns each a stable id.
+//
+// Deliberately NOT genEntryId_(): that is Date.now()+Math.random(), so two devices backfilling
+// the SAME entry before they sync would mint DIFFERENT ids, and itemsMatch_ (id===id) would then
+// treat them as two entries — the exact divergence this pass removes. The id is instead DERIVED
+// deterministically from the entry's own content, so every device computes the SAME id
+// independently and concurrent per-device runs converge instead of colliding. That is why this is
+// safe to run per-device rather than needing a central, serialized pass.
+function _nlHash_(s){
+  var h1=0x811c9dc5>>>0, h2=0xc2b2ae35>>>0;
+  for(var i=0;i<s.length;i++){ var c=s.charCodeAt(i);
+    h1=(h1^c)>>>0; h1=Math.imul(h1,0x01000193)>>>0;
+    h2=(h2^c)>>>0; h2=Math.imul(h2,0x85ebca6b)>>>0;
+  }
+  return ('0000000'+h1.toString(16)).slice(-8)+('0000000'+h2.toString(16)).slice(-8);   // 64-bit hex
+}
+// Idempotent (skips entries that already have an id), additive-only (never changes content or
+// entry count), and rollback-guarded. Persistence-pure: mutates s.nl and returns a change count;
+// the CALLER saves.
+function backfillNlEntryIds_(s){
+  if(!s || !isPlainObj_(s.nl)) return 0;
+  var MEAL=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
+  var pad_=function(k){ var p=String(k).split('-'); return p.length===3?(p[0]+'-'+('0'+p[1]).slice(-2)+'-'+('0'+p[2]).slice(-2)):String(k); };
+  var sig=function(){ var out={}; Object.keys(s.nl).forEach(function(k){ var d=s.nl[k]; if(!d||!d.meals) return; var pk=pad_(k);
+    MEAL.forEach(function(m){ (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted){ var x=pk+'|'+m+'|'+contentFingerprint_(i); out[x]=(out[x]||0)+1; } }); }); }); return out; };
+  // Free once every live entry already carries an id.
+  var todo=0;
+  Object.keys(s.nl).forEach(function(k){ var d=s.nl[k]; if(!d||!d.meals) return; MEAL.forEach(function(m){ (d.meals[m]||[]).forEach(function(i){ if(i&&!i.deleted&&(i.id==null||i.id==='')) todo++; }); }); });
+  if(!todo) return 0;
+  // A food log has NO external source to rebuild from. Write a one-time pre-backfill snapshot and
+  // read it back before touching anything; the earliest snapshot is kept and never overwritten.
+  try{
+    if(typeof localStorage!=='undefined' && !localStorage.getItem('nlBackupPreIdBackfill')){
+      localStorage.setItem('nlBackupPreIdBackfill', JSON.stringify({savedAt:new Date().toISOString(), nl:s.nl}));
+      if(!localStorage.getItem('nlBackupPreIdBackfill')) throw new Error('readback empty');
+    }
+  }catch(e){ console.error('[nl-idfill] ABORT — pre-backfill backup failed: '+(e&&e.message)); return 0; }
+  var snapshot=JSON.stringify(s.nl), sigBefore=sig(), assigned=0;
+  Object.keys(s.nl).forEach(function(k){
+    var d=s.nl[k]; if(!d||!isPlainObj_(d.meals)) return; var pk=pad_(k);
+    MEAL.forEach(function(m){
+      var arr=d.meals[m]; if(!Array.isArray(arr)) return;
+      // occ = how many prior LIVE entries in this bucket share this content. Counts id-bearing
+      // ones too, so a device that already identified the first of a duplicate pair still gives
+      // the second the same occ index (and thus the same id) as a device starting fresh.
+      var occ={};
+      arr.forEach(function(i){
+        if(!i || i.deleted) return;
+        var fp=contentFingerprint_(i), n=(occ[fp]||0); occ[fp]=n+1;
+        if(i.id!=null && i.id!=='') return;                 // already identified — idempotent skip
+        i.id='nlb:'+_nlHash_(pk+'|'+m+'|'+fp+'|'+n);         // deterministic → every device agrees
+        assigned++;
+      });
+    });
+  });
+  // Additive-only invariant: contentFingerprint_ excludes id, so adding ids must leave the live
+  // content multiset IDENTICAL. Any difference means something touched content — roll back.
+  var sigAfter=sig(), keys=Object.keys(sigBefore).concat(Object.keys(sigAfter)), drift=false;
+  for(var ci=0; ci<keys.length; ci++){ if((sigBefore[keys[ci]]||0)!==(sigAfter[keys[ci]]||0)){ drift=true; break; } }
+  if(drift){ console.error('[nl-idfill] content drift — rolled back, nothing persisted. Backup: localStorage.nlBackupPreIdBackfill');
+    try{ s.nl=JSON.parse(snapshot); }catch(e){} return 0; }
+  console.log('[nl-idfill] assigned '+assigned+' deterministic id(s) to legacy id-less entries');
+  // Remote still holds the id-less copies; let the (now content-keyed) converge push the identified
+  // nl once so the cloud copy is cleaned. Other devices would derive the SAME ids anyway.
+  if(assigned>0){ _nlConverged=false; try{ setTimeout(_nlConvergeRemote_, 0); }catch(e){} }
+  return assigned;
+}
 function normalizeState_(s){
   if(!isPlainObj_(s)) return s;
   ['rides','cf','runs'].forEach(function(k){
@@ -5832,6 +5908,7 @@ function normalizeState_(s){
   // old code keeps reintroducing unpadded keys through the merge, so a one-shot guard would
   // let them creep back. The early-out above makes this free once the dialect is clean.
   try{ migrateNlKeyPadding_(s); }catch(e){ console.error('[nl-migrate] threw: '+(e&&e.message)); }
+  try{ backfillNlEntryIds_(s); }catch(e){ console.error('[nl-idfill] threw: '+(e&&e.message)); }
   if(!isPlainObj_(s.strength.oneRM)) s.strength.oneRM = {};
   if(!isPlainObj_(s.strength.log)) s.strength.log = {};
   // Collapse duplicate plan sessions per date. Independently-migrated copies had
@@ -9280,6 +9357,7 @@ function nutRefresh(){
   // multi-day readers manufacture fresh empty shells mid-migration. Boot does not route
   // through normalizeState_, so this is also the guarantee for a cold open of Nutrition.
   try{ if(migrateNlKeyPadding_(st)>0 && typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+  try{ if(backfillNlEntryIds_(st)>0 && typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowNutrition==='function'){ dsShowNutrition(); return; } }catch(e){}
   // Preserve scroll across the mobile re-render. renderNutr rebuilds #NUTR via
   // innerHTML; as the content briefly empties, the browser clamps window scroll
