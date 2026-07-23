@@ -15273,40 +15273,233 @@ function _racingChart_(title, acts){
   }
   return aiCard_(inner);
 }
+function _yvyMi_(r){ return parseFloat(r.distance)||0; }
+function _yvyElev_(r){ return parseFloat(r.elev||r.elevation)||0; }
+function _yvySec_(r){ return (typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0); }
+function _yvyYM_(r){ return String(r.date||'').slice(0,7); }
+function _yvyDom_(r){ return parseInt(String(r.date||'').slice(8,10),10)||0; }
+var _YVY_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var _YVY_RANK_MIN=4;
+function _yvySum_(l,f){ var s=0; (l||[]).forEach(function(r){ s+=f(r); }); return s; }
+
+function _yvyVM_(rides, now){
+  var y=now.getFullYear(), m=now.getMonth();
+  var curYM=y+'-'+('0'+(m+1)).slice(-2);
+  var lmY=(m===0)?y-1:y, lmM=(m===0)?11:m-1;
+  var lastYM=lmY+'-'+('0'+(lmM+1)).slice(-2);
+  var domNow=now.getDate();
+  var daysInCur=new Date(y,m+1,0).getDate();
+  var cur=rides.filter(function(r){ return _yvyYM_(r)===curYM; });
+  var last=rides.filter(function(r){ return _yvyYM_(r)===lastYM; });
+  var lastSD=last.filter(function(r){ return _yvyDom_(r)<=domNow; });
+
+  function kpi(f){ var c=_yvySum_(cur,f), L=_yvySum_(lastSD,f); return {cur:c, last:L, pct:(L>0?Math.round((c-L)/L*100):(c>0?100:0)), up:(c>=L)}; }
+  var kDist=kpi(_yvyMi_), kElev=kpi(_yvyElev_), kTime=kpi(_yvySec_);
+  var kActs={cur:cur.length, last:lastSD.length, pct:(lastSD.length?Math.round((cur.length-lastSD.length)/lastSD.length*100):(cur.length?100:0)), up:(cur.length>=lastSD.length)};
+
+  function cum(l,days){ var by={}; l.forEach(function(r){ var d=_yvyDom_(r); by[d]=(by[d]||0)+_yvyMi_(r); }); var out=[],run=0; for(var d=1;d<=days;d++){ run+=by[d]||0; out.push(Math.round(run*10)/10); } return out; }
+  var cumCur=cum(cur,domNow), cumLast=cum(last,domNow), lastFull=Math.round(_yvySum_(last,_yvyMi_)*10)/10, curTot=cumCur[cumCur.length-1]||0;
+
+  var bym={}, cnt={};
+  rides.forEach(function(r){ var k=_yvyYM_(r); if(!k) return; bym[k]=(bym[k]||0)+_yvyMi_(r); cnt[k]=(cnt[k]||0)+1; });
+  var rankable=Object.keys(bym).filter(function(k){ return cnt[k]>=_YVY_RANK_MIN; }).sort(function(a,b){ return bym[b]-bym[a]; });
+  var rank=rankable.indexOf(curYM)+1, rankTot=rankable.length;
+  var bestEver=rankable.length?Math.round(bym[rankable[0]]):0;
+
+  var start6=new Date(now.getTime()-42*86400000);
+  var t6=rides.filter(function(r){ var d=_ryDate_(r.date); return d && !isNaN(d.getTime()) && d>=start6 && d<=now; });
+  var rate=Math.round(_yvySum_(t6,_yvyMi_)/6*10)/10;
+  var daysLeft=Math.max(0, daysInCur-domNow);
+  var proj=Math.round(rate/7*daysLeft*10)/10;
+  var need=Math.round((lastFull-curTot)*10)/10;
+  var projTot=Math.round((curTot+proj)*10)/10;
+  var onTrack=projTot>=lastFull;
+  var needPerWk=daysLeft>0?Math.round(need/(daysLeft/7)*10)/10:0;
+
+  var byJ={}, byL={};
+  cur.forEach(function(r){ var d=_yvyDom_(r); byJ[d]=(byJ[d]||0)+_yvyMi_(r); });
+  last.forEach(function(r){ var d=_yvyDom_(r); byL[d]=(byL[d]||0)+_yvyMi_(r); });
+  var best=Object.keys(byJ).map(function(d){ return {dom:+d, mi:Math.round(byJ[d]*10)/10, delta:Math.round((byJ[d]-(byL[d]||0))*10)/10}; }).sort(function(a,b){ return b.mi-a.mi; }).slice(0,3);
+
+  function heat(l,days){ var by={},mx=0; l.forEach(function(r){ var d=_yvyDom_(r); by[d]=(by[d]||0)+_yvyMi_(r); if(by[d]>mx)mx=by[d]; }); var out=[]; for(var d=1;d<=days;d++){ out.push(mx>0?(by[d]||0)/mx:0); } return out; }
+  var daysInLast=new Date(lmY,lmM+1,0).getDate();
+
+  var ratios=[kDist,kElev,kTime].map(function(k){ return k.last>0?k.cur/k.last:(k.cur>0?1.3:1); });
+  ratios.push(kActs.last>0?kActs.cur/kActs.last:1);
+  var avg=ratios.reduce(function(a,b){ return a+b; },0)/ratios.length;
+  var score=Math.max(0, Math.min(100, Math.round(70*avg)));
+  var scoreBand=score>=80?'Ahead of your pace':(score>=65?'On pace':'Behind, but closable');
+
+  var mets=[{k:'Distance',pct:kDist.pct,up:kDist.up,note:(kDist.cur>=kDist.last?('You are '+Math.round(kDist.cur-kDist.last)+' mi ahead'):('Beat by '+Math.round(kDist.last-kDist.cur)+' mi to catch up'))},
+            {k:'Elevation',pct:kElev.pct,up:kElev.up,note:(kElev.up?('You climbed '+Math.round(kElev.cur-kElev.last)+' ft more'):('Climb '+Math.round(kElev.last-kElev.cur)+' ft more to catch up'))},
+            {k:'Time',pct:kTime.pct,up:kTime.up,note:(kTime.up?('You rode '+Math.round((kTime.cur-kTime.last)/3600)+'h more'):('Ride '+Math.round((kTime.last-kTime.cur)/3600)+'h more to catch up'))}];
+  mets.sort(function(a,b){ return b.pct-a.pct; });
+  var winning=mets[0], focus=mets[mets.length-1], even=null;
+  mets.forEach(function(x){ if(Math.abs(x.pct)<=5) even=x; });
+
+  return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
+    kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
+    rank:rank, rankTot:rankTot, bestEver:bestEver, rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
+    best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
+    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length };
+}
+
+function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
+function _yvyPct_(p, up){ var c=up?'#22c55e':'#ff5c5c', ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
+function _yvyKpi_(ic, label, big, unit, pct, up, sub){
+  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid #1c2130">'
+    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+label+'</span></div>'
+    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+big+'</span>'
+    +(unit?'<span style="font-size:13px;color:#94a3b8">'+unit+'</span>':'')+' '+_yvyPct_(pct,up)+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div></div>';
+}
+// Cumulative SVG: this month solid orange, last month same-days dashed grey, last-month full as a faint ceiling line.
+function _yvyCumChart_(vm){
+  var W=560,H=230,PL=38,PR=14,PT=14,PB=26, iw=W-PL-PR, ih=H-PT-PB;
+  var maxY=Math.max(vm.lastFull, vm.cumCur[vm.cumCur.length-1]||0, 1)*1.08;
+  var nx=vm.daysInCur;
+  function X(day){ return PL + (day-1)/(nx-1)*iw; }
+  function Y(v){ return PT + ih - (v/maxY)*ih; }
+  function path(arr){ var p=''; for(var i=0;i<arr.length;i++){ p+=(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(arr[i]).toFixed(1)+' '; } return p; }
+  var g=''; for(var t=0;t<=4;t++){ var v=maxY*t/4, yy=Y(v); g+='<line x1="'+PL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+yy.toFixed(1)+'" stroke="#1c2130" stroke-width="1"/>'
+    +'<text x="'+(PL-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#5b6678">'+Math.round(v)+'</text>'; }
+  var xl=''; [1,6,11,16,21,26,vm.daysInCur].forEach(function(d){ if(d>vm.daysInCur)return; xl+='<text x="'+X(d).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#5b6678">'+_YVY_MON[vm.m]+' '+d+'</text>'; });
+  var ceilY=Y(vm.lastFull);
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+g
+    +'<line x1="'+PL+'" y1="'+ceilY.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+ceilY.toFixed(1)+'" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>'
+    +'<text x="'+(W-PR)+'" y="'+(ceilY-4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#94a3b8">last month total '+vm.lastFull+'</text>'
+    +'<path d="'+path(vm.cumLast)+'" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round"/>'
+    +'<path d="'+path(vm.cumCur)+'" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    +'</svg>';
+}
+function _yvyRing_(score, band){
+  var R=52, C=2*Math.PI*R, off=C*(1-score/100);
+  var col=score>=80?'#22c55e':(score>=65?'#FC4C02':'#f59e0b');
+  return '<svg viewBox="0 0 130 130" style="width:130px;height:130px">'
+    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="10"/>'
+    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>'
+    +'<text x="65" y="62" text-anchor="middle" font-size="34" font-weight="800" fill="#f1f5f9">'+score+'</text>'
+    +'<text x="65" y="82" text-anchor="middle" font-size="11" fill="#5b6678">/100</text></svg>';
+}
+function _yvyHeatRow_(label, arr){
+  var cells='';
+  arr.forEach(function(v){ var a=v<=0?0.08:(0.25+v*0.75); var bg=v<=0?'#1c2130':('rgba(252,76,2,'+a.toFixed(2)+')'); cells+='<span style="width:13px;height:13px;border-radius:3px;background:'+bg+';flex-shrink:0"></span>'; });
+  return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="font-size:10px;color:#94a3b8;width:74px;flex-shrink:0">'+label+'</span><div style="display:flex;gap:3px;flex-wrap:wrap">'+cells+'</div></div>';
+}
+function _yvySumRow_(color, tag, metric, note){
+  var ic=(tag==='Winning')?'&#9650;':(tag==='Even'?'&#61;':'&#9660;');
+  return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid #14181f"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
+    +'<div><div style="font-size:11px;font-weight:700;color:'+color+'">'+tag+'</div><div style="font-size:13px;font-weight:700;color:#f1f5f9">'+metric+'</div><div style="font-size:11px;color:#94a3b8">'+note+'</div></div></div>';
+}
+function _yvyCard_(inner){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px">'+inner+'</div>'; }
+function _yvyHdr_(t){ return '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
+
+function _yvyRenderVM_(vm){
+  var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
+  var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
+  // hero
+  var hero='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
+    +'<div style="min-width:230px;flex:1;padding-right:12px">'
+    +'<div style="font-size:22px;font-weight:800;color:#f1f5f9;line-height:1.1">You vs. You.</div>'
+    +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:#f1f5f9">'+aheadN+' of 4</b>. '
+    +'This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> ride-months &mdash; mid-pack; the bar is '+vm.bestEver+' mi.</div></div>'
+    +_yvyKpi_(ic.ride,'Total Distance',vm.kDist.cur.toFixed(1),'mi',vm.kDist.pct,vm.kDist.up,'vs last month, same days')
+    +_yvyKpi_(ic.clock,'Total Time',_yvyFmtH_(vm.kTime.cur),'',vm.kTime.pct,vm.kTime.up,'vs last month, same days')
+    +_yvyKpi_(ic.mtn,'Elevation',Math.round(vm.kElev.cur).toLocaleString(),'ft',vm.kElev.pct,vm.kElev.up,'vs last month, same days')
+    +_yvyKpi_(ic.act,'Activities',String(vm.kActs.cur),'',vm.kActs.pct,vm.kActs.up,'vs last month, same days')
+    +'</div>';
+
+  // cumulative chart card
+  var lead=Math.round((vm.curTot-vm.cumLast[vm.cumLast.length-1])*10)/10;
+  var leadUp=lead>=0;
+  var chart=_yvyCard_(
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Cumulative Distance</div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+(leadUp?'#22c55e':'#ff5c5c')+'">'+(leadUp?'&#9650; '+lead+' mi ahead':'&#9660; '+Math.abs(lead)+' mi behind')+'</div></div>'
+    +'<div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px"><span style="color:#FC4C02">&#9644; This month</span><span style="color:#64748b">&#9644; Last month (same days)</span></div>'
+    +_yvyCumChart_(vm)
+    +'<div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5">You have logged <b style="color:#f1f5f9">'+vm.curTot+' mi</b> this month, '
+    +(leadUp?('<b style="color:#22c55e">'+Math.abs(vm.kDist.pct)+'% ahead</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
+    +' your pace by this point in '+_YVY_MONF[_yvyLastMonthIdx_(vm)]+'.</div>');
+
+  // right rail
+  var score=_yvyCard_('<div style="text-align:center">'+_yvyHdr_('Self Competition Score')
+    +'<div style="display:flex;justify-content:center">'+_yvyRing_(vm.score,vm.scoreBand)+'</div>'
+    +'<div style="font-size:14px;font-weight:800;color:'+(vm.score>=80?'#22c55e':'#FC4C02')+';margin-top:6px">'+vm.scoreBand+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">vs last month, same days</div></div>');
+
+  // Three DISTINCT metrics (sorted desc), each labeled by its OWN delta so no row repeats.
+  var summary=_yvyCard_(_yvyHdr_('Monthly Summary')+vm.mets.map(function(x){
+    var tag, col;
+    if(Math.abs(x.pct)<=5){ tag='Even'; col='#60a5fa'; }
+    else if(x.pct>5){ tag='Winning'; col='#22c55e'; }
+    else { tag='Needs focus'; col='#f59e0b'; }
+    return _yvySumRow_(col, tag, x.k, x.note);
+  }).join(''));
+
+  var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #14181f">'
+    +'<span style="font-size:13px;color:#cbd5e1">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:#f1f5f9">'+b.mi+' mi</span>'
+    +'<span style="font-size:12px;font-weight:700;color:'+(up?'#22c55e':'#ff5c5c')+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
+  var best=_yvyCard_(_yvyHdr_('Best Days vs Last Month')+bestRows);
+
+  var heat=_yvyCard_(_yvyHdr_('Daily Activity Heatmap')+_yvyHeatRow_('This month',vm.heatCur)+_yvyHeatRow_('Last month',vm.heatLast)
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:#5b6678">Less <span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.25)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.55)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.9)"></span> More</div>');
+
+  // challenge engine (the headline)
+  var conf=vm.projTot>=vm.lastFull*1.05?'High':(vm.onTrack?'Medium':'Reachable');
+  var confPct=Math.max(35, Math.min(95, Math.round(vm.projTot/vm.lastFull*82)));
+  var chalCol=vm.onTrack?'#22c55e':'#f59e0b';
+  var challenge='<div style="background:#0e1117;border:1px solid '+(vm.onTrack?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
+    +'<div style="flex:1;min-width:260px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="color:'+chalCol+'">'+ic.cal+'</span>'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">The Challenge &mdash; beat last month</span></div>'
+    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;line-height:1.25">'
+    +(vm.onTrack?('On track to pass last month by '+Math.round(vm.projTot-vm.lastFull)+' mi.'):('You are '+vm.need+' mi short &mdash; but it is closable.'))+'</div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;margin-top:8px;line-height:1.55">Your trailing 6-week rate is <b style="color:#f1f5f9">'+vm.rate+' mi/wk</b>. '
+    +'Over the '+vm.daysLeft+' days left that projects <b style="color:'+chalCol+'">+'+vm.proj+' mi</b> &rarr; <b style="color:#f1f5f9">'+vm.projTot+' mi</b>, '
+    +'against the <b style="color:#f1f5f9">'+vm.lastFull+'</b> to beat. You need '+vm.needPerWk+' mi/wk from here.</div></div>'
+    +'<div style="text-align:center;min-width:130px"><div style="position:relative">'+_yvyConfRing_(confPct,chalCol)+'</div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+chalCol+';margin-top:2px">'+conf+' confidence</div></div></div>';
+
+  // insight
+  var wkend=_yvyWeekendShare_(vm);
+  var insight=_yvyCard_('<div style="display:flex;gap:12px"><span style="width:34px;height:34px;border-radius:9px;background:#f59e0b22;color:#f59e0b;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic.bulb+'</span>'
+    +'<div><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Insight</div>'
+    +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin:3px 0 6px">'+(vm.best[0]?('Your big day carried the month.'):('Consistency is carrying you.'))+'</div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Your best day ('+_YVY_MON[vm.m]+' '+(vm.best[0]?vm.best[0].dom:'')+', '+(vm.best[0]?vm.best[0].mi:0)+' mi) is '
+    +Math.round((vm.best[0]?vm.best[0].mi:0)/(vm.curTot||1)*100)+'% of the month. Keep the weekend long rides and the '+vm.rate+' mi/wk rate and you pass last month by '+_YVY_dateAdd_(vm)+'.</div></div></div>');
+
+  // layout: main col + right rail
+  return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'
+    +hero
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">'
+    +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
+    +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
+    +'</div>'
+    +'<div style="margin-top:14px">'+insight+'</div>'
+    +'</div>';
+}
+// small helpers used above
+var _YVY_MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function _yvyLastMonthIdx_(vm){ var p=vm.lastYM.split('-'); return (+p[1])-1; }
+function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+function _yvyConfRing_(pct,col){ var R=44,C=Math.PI*R, off=C*(1-pct/100);
+  return '<svg viewBox="0 0 110 66" style="width:110px;height:66px"><path d="M11 60 A44 44 0 0 1 99 60" fill="none" stroke="#1c2130" stroke-width="9"/>'
+   +'<path d="M11 60 A44 44 0 0 1 99 60" fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'"/>'
+   +'<text x="55" y="52" text-anchor="middle" font-size="20" font-weight="800" fill="#f1f5f9">'+pct+'%</text></svg>'; }
+function _yvyWeekendShare_(vm){ return 0; }
+function _yvyOrd_(n){ return _yvyOrdComment_(n); }
+function _YVY_dateAdd_(vm){ var need=vm.need, rate=vm.rate/7; if(rate<=0||need<=0) return 'month end'; var days=Math.ceil(need/rate); var d=new Date(vm.y, vm.m, vm.domNow+days); return _YVY_MON[d.getMonth()]+' '+d.getDate(); }
+
 function aiRenderRacing_(){
-  // PINNED to legacy — this is a RUN-consuming surface, so it belongs to the runs pass,
-  // not the ride pass. It reads its source as ALL-SPORTS and does its own sport split
-  // below (isRide / isVirt / isRun). Step 2 made allRidesDeduped_ ride-typed, which is
-  // right for the 11 Intelligence readers that do NOT filter by sport, but it silently
-  // emptied the isRun half of this function's run union — the Run chart lost every
-  // Strava-derived run and fell back to manually-logged runs only. Whatever source this
-  // migrates to must be all-sports, or this downstream split has nothing to split.
-  var ded=(typeof allRidesLegacy_==='function')?allRidesLegacy_():(st.rides||[]).filter(function(r){return r&&!r.deleted;});
-  function sport(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); }
-  function nm(r){ return String((r&&r.name)||''); }
-  function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(sport(r)); }
-  // Virtual detection MUST be consistent across the athlete's FULL history, or a prior-year figure
-  // silently becomes combined. Newer Zwift rides carry Strava's VirtualRide sportType, but OLDER
-  // ones import as plain "Ride" — the reliable cross-year signals are the "Zwift" name ("Zwift -
-  // Montmartre") and the trainer flag. Without these, pre-VirtualRide Zwift rides leak into the
-  // OUTDOOR bucket, so the outdoor chart's current month reads outdoor-only while its YoY reads
-  // outdoor+virtual. Both sides use this identical filter — the fix is making the filter robust.
-  function isVirt(r){ if(isRun(r)) return false; return /virtual/i.test(sport(r)) || /zwift/i.test(nm(r)) || r.trainer===true; }
-  function isRide(r){ if(isRun(r)) return false; return /ride/i.test(sport(r)) || isVirt(r); }   // cycling (excl runs/swims), incl any virtual
-  function mi(r){ return parseFloat(r.distance)||0; }
-  function toAct(r){ return { d:_ryDate_(r.date), mi:mi(r) }; }
-  var outdoor=[], virtual=[];
-  ded.forEach(function(r){ if(!r||!r.date||!isRide(r)) return; (isVirt(r)?virtual:outdoor).push(toAct(r)); });
-  // runs live in BOTH st.rides (run sportType) AND st.runs — union, deduped by date+distance
-  var seen={}, runs=[];
-  ded.filter(function(r){ return r&&r.date&&isRun(r); }).concat((st.runs||[]).filter(function(r){ return r&&!r.deleted&&r.date; }))
-     .forEach(function(r){ var k=String(r.date).split('T')[0]+'|'+Math.round(mi(r)*10); if(!seen[k]){ seen[k]=1; runs.push(toAct(r)); } });
-  function clean(l){ return l.filter(function(a){ return a.d && !isNaN(a.d.getTime()); }); }
-  var H='<div style="max-width:760px;margin:0 auto;padding-bottom:10px">';
-  H+='<div style="font-size:13px;color:#64748b;margin:2px 0 16px;line-height:1.55">Cumulative distance this month against your <b style="color:#94a3b8">same-day pace last month</b>. The dashed line is last month&#8217;s full total &#8212; the ceiling to chase. <b style="color:#22c55e">Green</b> means ahead of your past self; <b style="color:#ff5c5c">red</b> means behind.</div>';
-  H+=[_racingChart_('Outdoor Ride', clean(outdoor)), '<div style="height:12px"></div>', _racingChart_('Virtual Ride', clean(virtual)), '<div style="height:12px"></div>', _racingChart_('Run', clean(runs))].join('');
-  H+='</div>';
-  return H;
+  // You vs. You (phase 1: RIDE ONLY). Reads the coverage-validated snapshot rides via
+  // allRidesDeduped_ (ride-typed). Ranks against rankable months only, frames deficits as
+  // closable gaps, makes NO month-of-year claim. now = real today in the live app.
+  var src=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st.rides||[]).filter(function(r){return r&&!r.deleted;}));
+  // Cycling only, in case the fallback source is all-sports (the snapshot set already is).
+  var cyc=src.filter(function(r){ if(!r||!r.date) return false; var s=(typeof storeV2Sport_==='function')?storeV2Sport_(r):String(r.sportType||r.type||'').replace(/[ _-]/g,''); return !/^(run|trailrun|virtualrun|treadmill|swim|opanwaterswim|walk|hike|weighttraining|workout|rowing)$/i.test(s); });
+  try{ var vm=_yvyVM_(cyc, new Date()); return _yvyRenderVM_(vm); }
+  catch(e){ try{ console.error('[yvy]', e&&e.message); }catch(_e){} return '<div style="padding:48px 20px;text-align:center;color:#94a3b8;font-size:13px">You vs. You is unavailable right now.</div>'; }
 }
 
 // ==================== Milestones — cycling, recent era (last ~3 years) ====================
