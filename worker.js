@@ -27665,6 +27665,7 @@ function bnavGo(tab){
     else if(tab==='calendar'){if(pm)pm.remove();if(am)am.remove();showCalendarTab();}
     else if(tab==='analytics'||tab==='activities'){if(am)am.remove();showAnalytics();}
     else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
+    else if(tab==='run'){if(pm)pm.remove();if(am)am.remove();showRun();}
     else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
   }catch(e){
     console.error('bnavGo error ('+tab+'):', e);
@@ -27675,6 +27676,7 @@ function bnavGo(tab){
       else if(tab==='calendar'){showCalendarTab();}
       else if(tab==='analytics'||tab==='activities'){showAnalytics();}
       else if(tab==='nutrition'){showNutr();}
+      else if(tab==='run'){showRun();}
       else if(tab==='more'){showMoreSheet();}
     }catch(e2){
       console.error('bnavGo retry also failed ('+tab+'):', e2);
@@ -28034,11 +28036,14 @@ function showMoreSheet(){
   overlay.style.cssText='position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center';
 
   var items = [
+    // Run Training sits FIRST. The app is built around an October half marathon and the run screen
+    // now carries both history exhibits (growth chart + PR board), so burying it mid-list under a
+    // sheet of sync utilities put the most-used screen behind the most-rarely-used ones.
+    {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
     {n:'Athlete Intelligence', i:'M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 0V4a3 3 0 0 0-3-1zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 0', fn:'showAthleteIntel', c:'#f59e0b'},
     {n:'Constellation', i:'M12 2l2.4 5.9 6.4.5-4.9 4.1 1.5 6.2L12 17l-5.8 3.7 1.5-6.2-4.9-4.1 6.4-.5z',                            fn:'showConstellation', c:'#F5C518'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
-    {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
     {n:'Conditioning',  i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'showCond',         c:'#FFB938'},
     {n:'Core',          i:'M12 2a4 4 0 0 1 4 4v1a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z',                                                  fn:'showCore',         c:'#ef4444'},
     {n:'Mobility',      i:'M12 7v5l-3 5 M12 12l3 5 M9 17h6',                                                                       fn:'showMob',          c:'#a855f7'},
@@ -32279,8 +32284,21 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-16-desk-cal-scroll';
-try{ console.log('[training-plan] build', window.__BUILD__); }catch(e){}
+window.__BUILD__ = '2026-07-24-pr-board';
+// The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
+// moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
+// three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
+// So the boot line also prints a FEATURE PROBE: a list of the newest functions and whether they
+// actually exist in the running bundle. That part cannot go stale, because it is not a claim
+// about the build — it is a measurement of it. Same doctrine as builtAt on the snapshot: a stamp
+// you cannot argue with beats a stamp someone has to remember to change.
+try{
+  var _feat=['_prSection_','_rgSection_','_covFor_','storeV2Stamp_'];
+  var _have=_feat.filter(function(f){ return typeof window[f]==='function'; });
+  console.log('[training-plan] build', window.__BUILD__,
+              '| features ' + _have.length + '/' + _feat.length,
+              _feat.map(function(f){ return (typeof window[f]==='function'?'+':'-')+f; }).join(' '));
+}catch(e){}
 window.onload = function(){
   // Build stamp — read window.__BUILD__ in the console to confirm you are on
   // the latest deploy (settles "is it serving stale code?" instantly).
