@@ -16162,6 +16162,24 @@ function _alCard_(r, i, n, selYM){
     +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
     +'</div>';
 }
+// A scoped-board card. Leads with the z-score, NOT a re-based /100, on purpose: the z is the same
+// number in any window, so the same month never carries two different scores across the two boards
+// — the one-number-two-populations trap this page keeps avoiding. The rank badge is explicitly
+// "within the era", and the all-time /100 lives only on the all-time cards. Same handle, so it
+// selects and repoints the factor panel like every other month.
+function _alEraCard_(r, rankInEra, selYM){
+  var isSel=(r.ym===selYM);
+  var mix=[]; if(r.mi.ride!=null) mix.push(Math.round(r.mi.ride)+' mi ride'); if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
+  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:150px;background:#111318;border:1px solid '+(isSel?'#f1f5f9':'#1c2130')+';border-radius:12px;padding:11px 12px;cursor:pointer">'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:'+(rankInEra===1?_AL_G:'#5b6678')+'">#'+rankInEra+'</span>'
+    +(rankInEra===1?('<span style="font-size:9px;font-weight:800;color:'+_AL_G+';letter-spacing:.04em;text-transform:uppercase">era best</span>'):'')+'</div>'
+    +'<div style="font-size:13px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
+    +'<div style="display:flex;align-items:baseline;gap:3px;margin-top:4px"><span style="font-size:18px;font-weight:800;color:'+_AL_G+';letter-spacing:-.01em">'+(r.score>=0?'+':'')+r.score.toFixed(2)+'</span>'
+    +'<span style="font-size:10px;color:#5b6678">z</span></div>'
+    +'<div style="margin-top:6px">'+_alSpark_(r)+'</div>'
+    +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
+    +'</div>';
+}
 // Every scored month in date order. Bar height is the combined z floored at zero for display, which
 // is a display choice and nothing else: a below-average month is still a month he trained, and
 // drawing it as negative space would read as a hole in the record rather than a quiet month.
@@ -16289,10 +16307,32 @@ function _alSection_(){
     +'<div style="font-size:10.5px;color:#5b6678;margin-top:1px">'+gaugeLabel+'</div></div>';
 
   var cards='<div style="flex:1;min-width:250px">'
-    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months</div>'
+    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months &middot; all time</div>'
     +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
     + top.map(function(r,i){ return _alCard_(r,i,N,selYM); }).join('')
     +'</div></div>';
+
+  // Tier 2 — the scoped board. The all-time board is structurally frozen on 2019-2021 runs: per-
+  // sport z-scoring gives a run plateau with peaks a low SD, so those months score enormously,
+  // while the rising ride series has a high SD that compresses every ride z inside it. No ride month
+  // enters the all-time five, and the Ven-Top block is DESIGNED to drop monthly distance — so the
+  // all-time board would tell him he is losing for four months. The fix is the PR board's grammar,
+  // not a new one: an all-time tier that is permanent history, and a scoped tier over the current
+  // era that MOVES. Same z-score, just filtered to the era — no second normalization, because the
+  // z is window-invariant. Rendered only when the era actually surfaces months the all-time board
+  // does not, so it is never a redundant echo of the five cards above it.
+  var eraStart=(typeof _AM_ERA_START!=='undefined')?_AM_ERA_START:2024;
+  var eraRows=rows.filter(function(r){ return parseInt(String(r.ym).slice(0,4),10)>=eraStart; });  // rows is score-desc; filter is stable, so era rank = position+1
+  var eraTop=eraRows.slice(0,5);
+  var eraBoard='';
+  if(eraTop.length>=3 && eraTop.some(function(r){ return !topSet[r.ym]; })){
+    eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid #1c2130">'
+      +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+eraStart+'</div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">The board above is your all-time peak and does not move. This is your current era &mdash; it climbs as you train, and it is where a month you can actually still beat lives.</div>'
+      +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
+      + eraTop.map(function(r,i){ return _alEraCard_(r,i+1,selYM); }).join('')
+      +'</div></div>';
+  }
 
   var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
@@ -16326,7 +16366,7 @@ function _alSection_(){
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
     +head
     +'<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+gauge+cards+'</div>'
-    +timeline+factors
+    +eraBoard+timeline+factors
     +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
     +'</div>';
 }
