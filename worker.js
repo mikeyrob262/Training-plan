@@ -3843,18 +3843,28 @@ function _covCompute_(list, horizon, noun){
   var first=months[0], last=months[months.length-1], span=_covCalMonths_(first,last);
   var rankable=months.filter(function(k){ return byMonth[k]>=STORE_V2_RANKABLE_MIN; });
   if(rankable.length<_COV_MIN_RANKABLE) return null;      // thin: say nothing rather than a little
+  var lastRankable=rankable[rankable.length-1];
 
-  var honest=last, cur=last;
+  // The walk anchors at the last RANKABLE month, not the last month with data. Anchoring at the
+  // latter opens the window on months that carry nothing rankable: run's last data month is
+  // 2026-04 (five scattered activities, none of them a rankable month) while its last rankable
+  // month is 2025-08, so the window read "since April 2026" for a library spanning 2011-2025.
+  // The current flag stops the this-month claim but windowStart renders independently, so it has
+  // to be right on its own. span stays first..last — that is the true calendar span of the data
+  // and is reported for context, never as a denominator.
+  var anchor=lastRankable, walkSpan=_covCalMonths_(first,anchor);
+  var honest=anchor, cur=anchor;
   while(true){
     var prev=_covAddMonth_(cur,-1);
-    if(_covCalMonths_(prev,last)>span) break;
-    var rk=0, cal=_covCalMonths_(prev,last);
-    months.forEach(function(k){ if(k>=prev && byMonth[k]>=STORE_V2_RANKABLE_MIN) rk++; });
+    if(_covCalMonths_(prev,anchor)>walkSpan) break;
+    var rk=0, cal=_covCalMonths_(prev,anchor);
+    // The k<=anchor bound is required once the anchor stops being the newest month: without it,
+    // rankable months AFTER the anchor would count toward a tail they are not part of.
+    months.forEach(function(k){ if(k>=prev && k<=anchor && byMonth[k]>=STORE_V2_RANKABLE_MIN) rk++; });
     if(rk/cal>=0.75){ honest=prev; cur=prev; if(prev<=first) break; } else break;
   }
   var moy=[0,0,0,0,0,0,0,0,0,0,0,0];
   rankable.forEach(function(k){ moy[parseInt(k.slice(5,7),10)-1]++; });
-  var lastRankable=rankable[rankable.length-1];
   // Guarded against the empty case: with no rankable month, monthsBetween('',horizon) returns 0
   // and the sport reads CURRENT while having nothing rankable to be current about. Unreachable
   // from here because of the _COV_MIN_RANKABLE return above, but the flag is computed honestly
@@ -3919,12 +3929,19 @@ function storeV2CoverageProbe_(){
       var idx={}; months.forEach(function(k){ idx[k]=byMonth[k]; });
       var calMonths=function(a,b){ var x=a.split('-'),y=b.split('-'); return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10))+1; };
       var addMonth=function(k,d){ var p=k.split('-'); var t=(parseInt(p[0],10)*12+parseInt(p[1],10)-1)+d; return Math.floor(t/12)+'-'+('0'+(t%12+1)).slice(-2); };
-      var honest=last, cur=last;
+      // Anchored at the last RANKABLE month, matching _covCompute_. Anchoring at the last month
+      // WITH DATA opened the window on months carrying nothing rankable — run reported a window
+      // of 2026-04 (its last data month, zero rankable) for a library spanning 2011-2025. Fixed in
+      // both places in the same change: repairing only the helper would rebuild exactly the
+      // helper-vs-probe divergence the _YVY_RANK_MIN alias collapse just removed.
+      var anchor=rankable.length?rankable[rankable.length-1]:last;
+      var walkSpan=calMonths(first,anchor);
+      var honest=anchor, cur=anchor;
       while(true){
         var prev=addMonth(cur,-1);
-        if(calMonths(prev,last) > span) break;             // ran past the first record
-        var rk=0, cal=calMonths(prev,last);
-        months.forEach(function(k){ if(k>=prev && idx[k].n>=STORE_V2_RANKABLE_MIN) rk++; });
+        if(calMonths(prev,anchor) > walkSpan) break;        // ran past the first record
+        var rk=0, cal=calMonths(prev,anchor);
+        months.forEach(function(k){ if(k>=prev && k<=anchor && idx[k].n>=STORE_V2_RANKABLE_MIN) rk++; });
         if(rk/cal >= 0.75){ honest=prev; cur=prev; if(prev<=first) break; }
         else break;
       }
@@ -3944,7 +3961,8 @@ function storeV2CoverageProbe_(){
       console.log('[coverage] ===== '+kind.toUpperCase()+' =====');
       console.log('[coverage]   '+list.length+' activities, '+months.length+' months with data, span '+span+' calendar months ('+first+' .. '+last+')');
       console.log('[coverage]   RANKABLE months (>='+STORE_V2_RANKABLE_MIN+' acts): '+rankable.length+'  <-- the honest denominator, NOT the '+span+'-month span');
-      console.log('[coverage]   honest window (>=75% rankable tail): from '+honest+' to '+last);
+      console.log('[coverage]   honest window (>=75% rankable tail): from '+honest+' to '+anchor
+        + (anchor!==last ? ('   (last month WITH DATA is '+last+', but it carries no rankable month)') : ''));
       var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       console.log('[coverage]   rankable per month-of-year: '+MN.map(function(m,i){ return m+'='+byMoY[('0'+(i+1)).slice(-2)]; }).join(' '));
       console.log('[coverage]   per-year (year: acts / rankable-months / months-with-data):');
