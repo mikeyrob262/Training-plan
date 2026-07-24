@@ -15560,6 +15560,129 @@ function _yvyPhysRow_(vm){
     +'<div style="display:flex;flex-wrap:wrap">'+cells+'</div>'+foot+'</div>';
 }
 
+// ==================== You vs. You — Personal Bests with "Beat by" ====================
+// Every record is stated as a CLOSABLE GAP, not a trophy: record, your best in the last
+// _PB_FORM_DAYS (current form), and the amount you must add to that form to take it.
+//
+// SCOPE IS THE HONESTY MECHANISM (the Milestones doctrine): the local library is lossy, so a
+// single-ride best drawn from the whole log cannot honestly be called all-time. Everything here
+// is bounded to a trailing _PB_ERA_YEARS window, stated ONCE in the section header, and the copy
+// never says "ever" or "all-time". Records that need a field not densely carried in the window
+// (power) are DROPPED rather than shown with a caveat — with one footnote saying they were, so
+// the omission is never silent.
+var _PB_ERA_YEARS=3, _PB_FORM_DAYS=90, _PB_MIN_RIDES=10, _PB_FAST_MIN_MI=10, _PB_MPH_CEIL=50;
+var _PB_PWR_MIN_ERA=12, _PB_PWR_MIN_FORM=3;   // carriers needed before a power record is trustworthy
+
+function _pbNorm_(r){
+  var mi=_yvyMi_(r), sec=_yvySec_(r), elev=_yvyElev_(r);
+  var mph=parseFloat(r&&r.avgSpeed); if(!(mph>0)) mph=(mi>0&&sec>0)?(mi/(sec/3600)):0;
+  return { date:String((r&&r.date)||'').slice(0,10), t:_ryDate_(r&&r.date), mi:mi, sec:sec, elev:elev, mph:mph,
+           pwr:_yvyAvgPwr_(r), np:_yvyNp_(r), name:String((r&&r.name)||'') };
+}
+function _pbDays_(a,b){ return Math.max(0, Math.round((b.getTime()-a.getTime())/86400000)); }
+function _pbFmtMi_(v){ return (Math.round(v*10)/10)+' mi'; }
+function _pbFmtFt_(v){ return Math.round(v).toLocaleString()+' ft'; }
+function _pbFmtMph_(v){ return (Math.round(v*10)/10)+' mph'; }
+function _pbFmtW_(v){ return Math.round(v)+'W'; }
+function _pbFmtDur_(sec){ var s=Math.max(0,Math.round(sec)), h=Math.floor(s/3600), m=Math.round((s%3600)/60);
+  if(m===60){ h++; m=0; } return h?(h+'h '+(m<10?'0':'')+m+'m'):(m+'m'); }
+function _pbFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return String(s);
+  return (_YVY_MON[(+p[1]||1)-1]||'')+' '+(+p[2]||1)+', '+p[0]; }
+// "stood for" in the largest honest unit — days under 60, then months, then years.
+function _pbStood_(days){
+  if(days<1) return 'set today';
+  if(days<60) return 'stood '+days+' day'+(days===1?'':'s');
+  var mo=Math.round(days/30.44);
+  if(mo<24) return 'stood '+mo+' month'+(mo===1?'':'s');
+  return 'stood '+(Math.round(days/365.25*10)/10)+' years';
+}
+// Best rolling 7-day distance total. The max always ends on a ride day, so only those are scanned.
+// endFrom bounds where the window may END, not where it may reach: the best recent week is allowed
+// to draw its seven days from across the cutoff, which a naive pre-filter would truncate.
+function _pbRoll7_(list, endFrom){
+  var best=null;
+  for(var i=0;i<list.length;i++){
+    if(endFrom && list[i].t<endFrom) continue;
+    var end=list[i].t.getTime(), s=0;
+    for(var j=i;j>=0;j--){ if((end-list[j].t.getTime())/86400000>6) break; s+=list[j].mi; }
+    if(s>0 && (!best || s>best.v)) best={ v:s, date:list[i].date, t:list[i].t };
+  }
+  return best;
+}
+// PURE. rides = raw cycling ride records; now = today. Returns null when the window is too thin
+// to talk about records at all.
+function _pbCompute_(rides, now){
+  var era=new Date(now.getFullYear()-_PB_ERA_YEARS, now.getMonth(), now.getDate()); era.setHours(0,0,0,0);
+  var form=new Date(now.getTime()-_PB_FORM_DAYS*86400000);
+  var all=(rides||[]).map(_pbNorm_).filter(function(x){ return x.t && !isNaN(x.t.getTime()) && x.t>=era && x.t<=now; })
+                     .sort(function(a,b){ return a.t-b.t; });
+  if(all.length<_PB_MIN_RIDES) return null;
+
+  var pwrEra=0, pwrForm=0, npEra=0, npForm=0;
+  all.forEach(function(x){ var inForm=(x.t>=form);
+    if(x.pwr!=null){ pwrEra++; if(inForm) pwrForm++; }
+    if(x.np!=null){ npEra++; if(inForm) npForm++; } });
+  var pwrOk=(pwrEra>=_PB_PWR_MIN_ERA && pwrForm>=_PB_PWR_MIN_FORM);
+  var npOk =(npEra >=_PB_PWR_MIN_ERA && npForm >=_PB_PWR_MIN_FORM);
+
+  var SPECS=[
+    { key:'dist', label:'Longest Ride',  fmt:_pbFmtMi_,  val:function(x){ return x.mi; },   ok:function(x){ return x.mi>0; } },
+    { key:'elev', label:'Biggest Climb', fmt:_pbFmtFt_,  val:function(x){ return x.elev; }, ok:function(x){ return x.elev>0; } },
+    { key:'time', label:'Longest Time',  fmt:_pbFmtDur_, val:function(x){ return x.sec; },  ok:function(x){ return x.sec>0; } },
+    { key:'mph',  label:'Fastest Ride',  fmt:_pbFmtMph_, val:function(x){ return x.mph; },
+      ok:function(x){ return x.mi>=_PB_FAST_MIN_MI && x.mph>0 && x.mph<_PB_MPH_CEIL; }, qual:_PB_FAST_MIN_MI+' mi minimum' },
+    { key:'pwr',  label:'Best Avg Power', fmt:_pbFmtW_,  val:function(x){ return x.pwr; },  ok:function(x){ return x.pwr!=null; }, need:!pwrOk },
+    { key:'np',   label:'Best Normalized Power', fmt:_pbFmtW_, val:function(x){ return x.np; }, ok:function(x){ return x.np!=null; }, need:!npOk }
+  ];
+
+  var out=[], dropped=0;
+  SPECS.forEach(function(sp){
+    if(sp.need){ dropped++; return; }
+    var q=all.filter(sp.ok);
+    if(!q.length) return;
+    var sorted=q.slice().sort(function(a,b){ return sp.val(b)-sp.val(a); });
+    var rec=sorted[0], runner=sorted[1]||null;
+    var inForm=q.filter(function(x){ return x.t>=form; });
+    var bestForm=inForm.length?inForm.slice().sort(function(a,b){ return sp.val(b)-sp.val(a); })[0]:null;
+    var recV=sp.val(rec), formV=bestForm?sp.val(bestForm):0;
+    var held=!!(bestForm && sp.val(bestForm)>=recV);   // the record IS current form
+    out.push({ key:sp.key, label:sp.label, qual:sp.qual||'', unit:'',
+      recVal:recV, recStr:sp.fmt(recV), recDate:rec.date, recName:rec.name,
+      stoodDays:_pbDays_(rec.t, now),
+      hasForm:!!bestForm, formVal:formV, formStr:bestForm?sp.fmt(formV):'',
+      formDate:bestForm?bestForm.date:'',
+      held:held, gap:held?0:(recV-formV), gapStr:held?'':sp.fmt(recV-formV),
+      pct:(recV>0)?Math.max(0,Math.min(100,Math.round(formV/recV*100))):0,
+      lead:(held&&runner)?(recV-sp.val(runner)):null,
+      leadStr:(held&&runner)?sp.fmt(recV-sp.val(runner)):'',
+      runnerDate:(held&&runner)?runner.date:'' });
+  });
+
+  // Biggest week is an aggregate, not a per-ride best, but it takes the identical gap treatment.
+  var wAll=_pbRoll7_(all), wForm=_pbRoll7_(all, form);
+  if(wAll){
+    var wHeld=!!(wForm && wForm.v>=wAll.v-1e-9);
+    out.push({ key:'week', label:'Biggest Week', qual:'rolling 7 days', unit:'',
+      recVal:wAll.v, recStr:_pbFmtMi_(wAll.v), recDate:wAll.date, recName:'',
+      stoodDays:_pbDays_(wAll.t, now),
+      hasForm:!!wForm, formVal:wForm?wForm.v:0, formStr:wForm?_pbFmtMi_(wForm.v):'', formDate:wForm?wForm.date:'',
+      held:wHeld, gap:wHeld?0:(wAll.v-(wForm?wForm.v:0)), gapStr:wHeld?'':_pbFmtMi_(wAll.v-(wForm?wForm.v:0)),
+      pct:(wAll.v>0)?Math.max(0,Math.min(100,Math.round((wForm?wForm.v:0)/wAll.v*100))):0,
+      lead:null, leadStr:'', runnerDate:'' });
+  }
+
+  // Closest gap first — the section leads with the record you can actually take this week.
+  // Held records sort last: they are the standard, not the target.
+  out.sort(function(a,b){
+    if(a.held!==b.held) return a.held?1:-1;
+    if(a.hasForm!==b.hasForm) return a.hasForm?-1:1;
+    var fa=(a.recVal>0)?a.gap/a.recVal:1, fb=(b.recVal>0)?b.gap/b.recVal:1;
+    return fa-fb;
+  });
+  return { recs:out, sinceYear:era.getFullYear(), eraYears:_PB_ERA_YEARS, formDays:_PB_FORM_DAYS,
+           nRides:all.length, droppedForCoverage:dropped };
+}
+
 function _yvyVM_(rides, now){
   var y=now.getFullYear(), m=now.getMonth();
   var curYM=y+'-'+('0'+(m+1)).slice(-2);
@@ -15639,7 +15762,8 @@ function _yvyVM_(rides, now){
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, bestEver:bestEver, rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
-    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length, phys:_yvyPhys_(rides, now) };
+    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length, phys:_yvyPhys_(rides, now),
+    pb:_pbCompute_(rides, now) };
 }
 
 function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
@@ -15696,6 +15820,72 @@ function _yvySumRow_(color, tag, metric, note){
 }
 function _yvyCard_(inner){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px">'+inner+'</div>'; }
 function _yvyHdr_(t){ return '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
+
+// ---- Personal Bests render. Flat, restrained, stroke icons — no badges, no neon. ----
+var _PB_ICON={
+  dist:'<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  elev:'<path d="M3 20h18L14 6l-4 7-3-3-4 10z"/>',
+  time:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  mph :'<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>',
+  pwr :'<path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>',
+  np  :'<path d="M3 17l5-6 4 4 5-8 4 5"/>',
+  week:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'
+};
+function _pbIcon_(k,c){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(_PB_ICON[k]||_PB_ICON.dist)+'</svg>'; }
+function _pbCardHtml_(p, formDays){
+  var accent=p.held?'#22c55e':'#FC4C02';
+  var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'
+    +'<span style="width:26px;height:26px;border-radius:7px;background:'+accent+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_pbIcon_(p.key,accent)+'</span>'
+    +'<span style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+p.label+'</span>'
+    +(p.qual?'<span style="font-size:10px;color:#5b6678">'+p.qual+'</span>':'')+'</div>';
+  // A record you are currently holding has not "stood" against you — you just set it.
+  var age=p.held
+    ? (p.stoodDays<1?'set today':('set '+p.stoodDays+' day'+(p.stoodDays===1?'':'s')+' ago'))
+    : _pbStood_(p.stoodDays);
+  var big='<div style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+p.recStr+'</div>'
+    +'<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+_pbFmtDate_(p.recDate)+' &middot; '+age+'</div>';
+  var foot;
+  if(p.held){
+    // The record sits inside the form window: there is no gap to quote, so state the margin
+    // over your own next-best instead of inventing a target.
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+      +'<div style="font-size:12px;font-weight:700;color:#22c55e">This is current form</div>'
+      +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'
+      +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only ride at this mark.'))
+      +'</div></div>';
+  } else if(!p.hasForm){
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+      +'<div style="font-size:12px;font-weight:700;color:#94a3b8">No qualifying ride in '+formDays+' days</div>'
+      +'<div style="font-size:11.5px;color:#5b6678;margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
+  } else {
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+      +'<div style="height:5px;border-radius:3px;background:#1c2130;overflow:hidden;margin-bottom:8px">'
+      +'<div style="height:100%;width:'+p.pct+'%;background:'+accent+';border-radius:3px"></div></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
+      +'<span style="font-size:11.5px;color:#94a3b8">Recent best '+p.formStr+'</span>'
+      +'<span style="font-size:12.5px;font-weight:800;color:'+accent+'">Beat by '+p.gapStr+'</span></div></div>';
+  }
+  return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
+}
+function _pbSection_(vm){
+  var pb=vm.pb;
+  if(!pb || !pb.recs.length) return '';
+  var cards=pb.recs.map(function(p){ return _pbCardHtml_(p, pb.formDays); }).join('');
+  var closable=pb.recs.filter(function(p){ return !p.held && p.hasForm; }).length;
+  var lead=closable
+    ? ('<b style="color:#f1f5f9">'+closable+'</b> of these are a gap you can close from current form.')
+    : ('You are holding every one of these at current form.');
+  var foot=pb.droppedForCoverage
+    ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">Power records are hidden here &mdash; too few rides in this window carry power for a best to mean anything.</div>'
+    : '';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
+    +'<span style="font-size:11px;color:#5b6678">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' rides since '+pb.sinceYear+'</span></div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">Each bar is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
+    +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:12px">'+cards+'</div>'
+    +foot+'</div>';
+}
 
 function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
@@ -15782,6 +15972,7 @@ function _yvyRenderVM_(vm){
     +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
     +'</div>'
+    +_pbSection_(vm)
     +'<div style="margin-top:14px">'+insight+'</div>'
     +'</div>';
 }
