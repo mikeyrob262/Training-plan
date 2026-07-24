@@ -3804,6 +3804,90 @@ var STORE_V2_MEASURED_RUN_F= ['distance','movingSecs','elev','maxHR','avgHR'];
 // that it is scattered records, not a training month. The distribution is printed so the
 // choice is visible and can be corrected against the real break, not accepted blind.
 var STORE_V2_RANKABLE_MIN = 4;
+// ==================== the coverage helper ====================
+// _covFor_(sport) is the one call a surface makes BEFORE stating a historical claim, so no section
+// invents its own denominator or its own window. It returns the honest framing, or null meaning
+// "do not make the claim" — null is an answer, not a failure.
+//
+// The axis is DEPTH x CURRENCY and both halves decide different things. Ride is current but
+// shallow: 29 rankable months from 2023-10, only 2 rankable Julys. Run is deep but stale: 147
+// rankable months and 12 rankable Julys, but its last rankable month is 2025-08. A helper that
+// reported depth alone would happily let a run section say "this July" against a library whose
+// last real July is a year old. So currency is a returned flag, computed here once, rather than a
+// judgment each section makes for itself.
+//
+// Every rule below is the coverage probe's rule, not a second implementation: the >=
+// STORE_V2_RANKABLE_MIN month gate, the 75%-rankable-tail window walk, and staleness measured
+// against the data horizon (the newest month across ALL sports) rather than the wall clock — the
+// app cannot be more current than its own data.
+var _COV_MAX_STALE_MO = 3;
+// Rankable months below which a sport cannot carry ranking AT ALL. This is a different question
+// from STORE_V2_RANKABLE_MIN, which asks whether one MONTH is rankable; this asks whether the
+// sport has enough rankable months to put a number in front of someone. Twelve is one year: below
+// it "#k of N" is too thin to headline and month-of-year claims are impossible by construction.
+// It is what excludes swim (3 rankable months) and strength (8) while admitting ride (29).
+var _COV_MIN_RANKABLE = 12;
+function _covMonthsBetween_(a,b){ if(!a||!b) return 0; var x=String(a).split('-'), y=String(b).split('-');
+  return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10)); }
+function _covCalMonths_(a,b){ var x=String(a).split('-'), y=String(b).split('-');
+  return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10))+1; }
+function _covAddMonth_(k,d){ var p=String(k).split('-'); var t=(parseInt(p[0],10)*12+parseInt(p[1],10)-1)+d;
+  return Math.floor(t/12)+'-'+('0'+(t%12+1)).slice(-2); }
+// PURE and clock-free. list = activities for ONE sport; horizon = newest month across all sports;
+// noun = the singular word the copy uses. Returns null when the sport cannot support ranking.
+function _covCompute_(list, horizon, noun){
+  var byMonth={};
+  (list||[]).forEach(function(a){ var k=String((a&&a.date)||'').slice(0,7); if(k.length===7) byMonth[k]=(byMonth[k]||0)+1; });
+  var months=Object.keys(byMonth).sort();
+  if(!months.length) return null;
+  var first=months[0], last=months[months.length-1], span=_covCalMonths_(first,last);
+  var rankable=months.filter(function(k){ return byMonth[k]>=STORE_V2_RANKABLE_MIN; });
+  if(rankable.length<_COV_MIN_RANKABLE) return null;      // thin: say nothing rather than a little
+
+  var honest=last, cur=last;
+  while(true){
+    var prev=_covAddMonth_(cur,-1);
+    if(_covCalMonths_(prev,last)>span) break;
+    var rk=0, cal=_covCalMonths_(prev,last);
+    months.forEach(function(k){ if(k>=prev && byMonth[k]>=STORE_V2_RANKABLE_MIN) rk++; });
+    if(rk/cal>=0.75){ honest=prev; cur=prev; if(prev<=first) break; } else break;
+  }
+  var moy=[0,0,0,0,0,0,0,0,0,0,0,0];
+  rankable.forEach(function(k){ moy[parseInt(k.slice(5,7),10)-1]++; });
+  var lastRankable=rankable[rankable.length-1];
+  // Guarded against the empty case: with no rankable month, monthsBetween('',horizon) returns 0
+  // and the sport reads CURRENT while having nothing rankable to be current about. Unreachable
+  // from here because of the _COV_MIN_RANKABLE return above, but the flag is computed honestly
+  // rather than relying on that ordering.
+  var staleBy=lastRankable?_covMonthsBetween_(lastRankable,horizon):null;
+  return {
+    sport: noun,
+    activities: (list||[]).length,
+    span: span,                                  // calendar span — returned for context, never a denominator
+    rankable: rankable.length,                   // THE number for "#k of N"
+    windowStart: honest,
+    lastRankable: lastRankable,
+    staleBy: staleBy,
+    current: (staleBy!==null && staleBy<=_COV_MAX_STALE_MO),
+    moy: moy,                                    // rankable months per month-of-year, index 0=Jan
+    unrankableTxt: _yvyUnrankableTxt_({rankTot:rankable.length}, noun)
+  };
+}
+// Resolves the sport's records from the primed snapshot and hands them to _covCompute_. Returns
+// null when reads are not armed yet — an unprimed store cannot support a historical claim either,
+// and that is the same answer as a sport too thin to rank.
+function _covFor_(sport){
+  var rides=(typeof _storeV2Rides!=='undefined')?_storeV2Rides:null;
+  var runs=(typeof _storeV2Runs!=='undefined')?_storeV2Runs:null;
+  if(!rides && !runs) return null;
+  var horizon='';
+  [rides,runs].forEach(function(l){ (l||[]).forEach(function(a){ var k=String((a&&a.date)||'').slice(0,7); if(k>horizon) horizon=k; }); });
+  var s=String(sport||'').toLowerCase();
+  if(s==='ride') return _covCompute_(rides, horizon, 'ride');
+  if(s==='run')  return _covCompute_(runs,  horizon, 'run');
+  return null;                                   // every other sport is too thin — see _COV_MIN_RANKABLE
+}
+
 function storeV2CoverageProbe_(){
   return loadStoreV2_(true).then(function(s){
     console.log('[coverage] ' + storeV2Stamp_(s.builtAt));
@@ -15478,7 +15562,11 @@ function _yvySec_(r){ return (typeof _durSec_==='function')?_durSec_(r):(+(r.mov
 function _yvyYM_(r){ return String(r.date||'').slice(0,7); }
 function _yvyDom_(r){ return parseInt(String(r.date||'').slice(8,10),10)||0; }
 var _YVY_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-var _YVY_RANK_MIN=4;
+// ONE gate for "is this month rankable", shared with the coverage probe rather than re-declared.
+// It was two constants holding 4 — _YVY_RANK_MIN here and STORE_V2_RANKABLE_MIN on the store side —
+// which is a divergence waiting to happen the first time one of them is tuned. Same value, one
+// source. STORE_V2_RANKABLE_MIN is assigned far earlier in load order, so this alias is safe.
+var _YVY_RANK_MIN=STORE_V2_RANKABLE_MIN;
 // THE band rule for the whole page. Hoisted deliberately: three defects here have been one number
 // classified in two places by two rules, and the Even/ahead contradiction was exactly this — rows
 // tagged on |pct|<=5 while their copy was written on cur>=last. Every surface that says a metric is
@@ -16561,8 +16649,12 @@ function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(
 // The one sentence for "this month cannot be ranked yet". Shared so the hero and Rank Against
 // Yourself state the same requirement and the same denominator, rather than two near-copies that
 // can drift apart — the failure this page keeps producing.
-function _yvyUnrankableTxt_(vm){
-  return 'This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' rides to sit alongside your '+vm.rankTot+' ranked ride-months.';
+// noun defaults to 'ride' so every existing caller is unchanged. It exists because the same
+// sentence has to serve runs, and hardcoding "rides" would have forced a second sentence for the
+// run side — which is the thing this function was extracted to prevent.
+function _yvyUnrankableTxt_(vm, noun){
+  var n=noun||'ride';
+  return 'This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' '+n+'s to sit alongside your '+vm.rankTot+' ranked '+n+'-months.';
 }
 function _yvyRankBand_(rank,tot){
   if(!(tot>1)) return 'your only ranked month';
