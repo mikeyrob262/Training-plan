@@ -29433,7 +29433,11 @@ function openDayEditor(dateKey, targetId){
     } else if(type==='strength'){
       _sect('Planned — exercises (sets x reps @ %1RM)');
       var exWrap=document.createElement('div'); var exRows=[];
-      function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 50px;gap:5px;margin-bottom:6px;align-items:start'; var s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); var nf=_exNameField(ex.name,function(lib){ s.value=lib.sets; rp.value=lib.reps; pc.value=(lib.pct1RM===''?'':lib.pct1RM); }); rw.appendChild(nf.el);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({nf:nf,s:s,rp:rp,pc:pc}); }
+      // %1RM column widened to 66px: at 50px the input's padding+border left only ~30px of text
+      // area, clipping the 4-char "%1RM" placeholder to "%1RI" (a wrong-but-plausible string — a
+      // placeholder can't ellipsize, so the only honest fix is to make the full label fit). The
+      // 1fr name column absorbs the extra width.
+      function addEx(ex){ ex=ex||{}; var rw=document.createElement('div'); rw.style.cssText='display:grid;grid-template-columns:1fr 42px 42px 66px;gap:5px;margin-bottom:6px;align-items:start'; var s=_mkI(ex.sets!=null?ex.sets:'','set'),rp=_mkI(ex.reps!=null?ex.reps:'','rep'),pc=_mkI(ex.pct1RM!=null?ex.pct1RM:'','%1RM'); var nf=_exNameField(ex.name,function(lib){ s.value=lib.sets; rp.value=lib.reps; pc.value=(lib.pct1RM===''?'':lib.pct1RM); }); rw.appendChild(nf.el);rw.appendChild(s);rw.appendChild(rp);rw.appendChild(pc); exWrap.appendChild(rw); exRows.push({nf:nf,s:s,rp:rp,pc:pc}); }
       ((eff.exercises&&eff.exercises.length)?eff.exercises:[{}]).forEach(addEx);
       bodyEl.appendChild(exWrap);
       var addB=document.createElement('button'); addB.textContent='+ exercise'; addB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addB.onclick=function(){ addEx({}); }; bodyEl.appendChild(addB);
