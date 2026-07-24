@@ -15463,9 +15463,9 @@ function _yvyFieldWindow_(rides, acc, lastYM){
   var cnt={};
   (rides||[]).forEach(function(r){ if(acc(r)!=null){ var k=_yvyYM_(r); if(k && k<=lastYM) cnt[k]=(cnt[k]||0)+1; } });
   var months=Object.keys(cnt).sort();
-  if(!months.length) return {rankableMonths:0, start:null, months:0, anchor:null};
+  if(!months.length) return {rankableMonths:0, inWindow:0, start:null, months:0, anchor:null};
   var rankable=months.filter(function(k){ return cnt[k]>=_YVY_RANK_MIN; });
-  if(!rankable.length) return {rankableMonths:0, start:null, months:0, anchor:null};
+  if(!rankable.length) return {rankableMonths:0, inWindow:0, start:null, months:0, anchor:null};
   var anchor=rankable[rankable.length-1], first=months[0];
   var honest=anchor, cur=anchor;
   while(true){
@@ -15475,7 +15475,11 @@ function _yvyFieldWindow_(rides, acc, lastYM){
     months.forEach(function(k){ if(k>=prev && k<=anchor && cnt[k]>=_YVY_RANK_MIN) rk++; });
     if(rk/cal >= 0.75){ honest=prev; cur=prev; } else break;
   }
-  return { rankableMonths:rankable.length, start:honest, months:_yvyCalMonths_(honest,anchor), anchor:anchor };
+  // inWindow = rankable months that actually sit inside the honest window. This, NOT the
+  // calendar span, is what the UI quotes: a window can be 30 calendar months wide and still
+  // only rank in 24 of them, and the page's honesty rule counts rankable months, not calendar.
+  var inWindow=rankable.filter(function(k){ return k>=honest && k<=anchor; }).length;
+  return { rankableMonths:rankable.length, inWindow:inWindow, start:honest, months:_yvyCalMonths_(honest,anchor), anchor:anchor };
 }
 
 // Per-metric view model. curVal is this month's aggregate (mean for intensities, sum for TSS load);
@@ -15491,11 +15495,15 @@ function _yvyPhys_(rides, now){
   var domNow=now.getDate();
   var cur=(rides||[]).filter(function(r){ return _yvyYM_(r)===curYM; });
   var lastSD=(rides||[]).filter(function(r){ return _yvyYM_(r)===lastYM && _yvyDom_(r)<=domNow; });
-  // Page reference window: first ride month .. last COMPLETE month. Every metric's own window is
-  // measured against this so "shorter than the ride window" is a real, shared denominator.
-  var allM={}; (rides||[]).forEach(function(r){ var k=_yvyYM_(r); if(k) allM[k]=1; });
-  var mk=Object.keys(allM).sort();
-  var fullStart=mk.length?mk[0]:lastYM, fullMonths=_yvyCalMonths_(fullStart, lastYM);
+  // Page reference denominator: the count of COMPLETED RANKABLE ride-months — months through the
+  // last complete month that clear the same >=_YVY_RANK_MIN gate the hero ranks against. It is NOT
+  // the calendar span from the first ride: a 113-month calendar span is not 113 ride-months, and
+  // quoting it as one ("30 of 113 mo") broke the page's own rule that it only ever quotes months
+  // it can legitimately rank. Every metric's own coverage is stated against this shared count.
+  var mcnt={};
+  (rides||[]).forEach(function(r){ var k=_yvyYM_(r); if(k && k<=lastYM) mcnt[k]=(mcnt[k]||0)+1; });
+  var pageRk=Object.keys(mcnt).filter(function(k){ return mcnt[k]>=_YVY_RANK_MIN; }).sort();
+  var pageRankable=pageRk.length, fullStart=pageRk.length?pageRk[0]:lastYM;
   var SPECS=[
     {key:'pwr', label:'Avg Power',        unit:'W',   agg:'avg', acc:_yvyAvgPwr_},
     {key:'np',  label:'Normalized Power', unit:'W',   agg:'avg', acc:_yvyNp_},
@@ -15511,8 +15519,9 @@ function _yvyPhys_(rides, now){
     var pct=hasDelta ? (L.val>0?Math.round((c.val-L.val)/L.val*100):(c.val>0?100:0)) : 0;
     return { key:sp.key, label:sp.label, unit:sp.unit, agg:sp.agg,
       curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct, up:(c.val>=L.val), hasDelta:hasDelta,
-      winStart:win.start, winMonths:win.months, rankableMonths:win.rankableMonths,
-      fullStart:fullStart, fullMonths:fullMonths, shortWindow:!!(win.start && win.start>fullStart) };
+      winStart:win.start, winRankable:win.inWindow, rankableMonths:win.rankableMonths,
+      fullStart:fullStart, pageRankable:pageRankable,
+      shortWindow:!!(win.inWindow && win.inWindow<pageRankable) };
   });
 }
 function _yvyPhysKpi_(ic, mv, first){
@@ -15525,7 +15534,7 @@ function _yvyPhysKpi_(ic, mv, first){
   var win='';
   if(mv.curN>0){
     if(mv.rankableMonths===0) win='<div style="font-size:10px;color:#f59e0b;margin-top:2px">history too sparse to rank</div>';
-    else if(mv.shortWindow) win='<div style="font-size:10px;color:#7c8598;margin-top:2px">ranks from '+_yvyMonShort_(mv.winStart)+' &middot; '+mv.winMonths+' of '+mv.fullMonths+' mo</div>';
+    else if(mv.shortWindow) win='<div style="font-size:10px;color:#7c8598;margin-top:2px">ranks from '+_yvyMonShort_(mv.winStart)+' &middot; '+mv.winRankable+' of '+mv.pageRankable+' rankable mo</div>';
   }
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:'+(first?'none':'1px solid #1c2130')+'">'
     +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
@@ -15537,11 +15546,11 @@ function _yvyPhysKpi_(ic, mv, first){
 function _yvyPhysRow_(vm){
   var ic={pwr:'&#9889;', np:'&#128200;', tss:'&#128293;', hr:'&#10084;&#65039;'};
   var cells=vm.phys.map(function(mv,i){ return _yvyPhysKpi_(ic[mv.key], mv, i===0); }).join('');
-  var notes=[], fullMonths=(vm.phys[0]&&vm.phys[0].fullMonths)||0;
+  var notes=[], pageRankable=(vm.phys[0]&&vm.phys[0].pageRankable)||0;
   vm.phys.forEach(function(mv){
     if(mv.curN===0) return;
     if(mv.rankableMonths===0) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few rides carry it to rank against history.');
-    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' ('+mv.winMonths+' of '+fullMonths+' ride-months); earlier rides do not carry it.');
+    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' — '+mv.winRankable+' of your '+pageRankable+' completed rankable ride-months; earlier rides do not carry it.');
   });
   var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
@@ -15599,12 +15608,32 @@ function _yvyVM_(rides, now){
   var score=Math.max(0, Math.min(100, Math.round(70*avg)));
   var scoreBand=score>=80?'Ahead of your pace':(score>=65?'On pace':'Behind, but closable');
 
-  var mets=[{k:'Distance',pct:kDist.pct,up:kDist.up,note:(kDist.cur>=kDist.last?('You are '+Math.round(kDist.cur-kDist.last)+' mi ahead'):('Beat by '+Math.round(kDist.last-kDist.cur)+' mi to catch up'))},
-            {k:'Elevation',pct:kElev.pct,up:kElev.up,note:(kElev.up?('You climbed '+Math.round(kElev.cur-kElev.last)+' ft more'):('Climb '+Math.round(kElev.last-kElev.cur)+' ft more to catch up'))},
-            {k:'Time',pct:kTime.pct,up:kTime.up,note:(kTime.up?('You rode '+Math.round((kTime.cur-kTime.last)/3600)+'h more'):('Ride '+Math.round((kTime.last-kTime.cur)/3600)+'h more to catch up'))}];
+  // ONE classification per metric feeds BOTH the row tag and the row note, so a row can never be
+  // tagged Even while its note claims a lead (or a deficit) — the band is decided here and the
+  // render only reads it. Deltas are formatted at the resolution of the metric, never rounded to
+  // a whole hour: a +19% month can be 28 minutes, and "0h more" against a 19% KPI is a lie.
+  function band(pct){ return (Math.abs(pct)<=5)?'even':(pct>5?'win':'focus'); }
+  function met(k,kp,fmt,ahead,behind){
+    var d=kp.cur-kp.last, b=band(kp.pct), s=fmt(d), note;
+    // A delta that rounds away at the metric's OWN resolution must never be printed as a quantity —
+    // that is what produced "0h more" and "within 0m". A big pct on a negligible delta means last
+    // month's base was tiny, so say that instead of quoting a zero.
+    var negligible=(s===fmt(0));
+    if(b==='even') note=negligible?'Level with last month':('Level with last month &mdash; within '+s);
+    else if(negligible) note=(b==='win')?'Ahead, but off a very small base':'Behind, but off a very small base';
+    else note=(b==='win')?ahead(s):behind(s);
+    return {k:k, pct:kp.pct, up:kp.up, band:b, note:note};
+  }
+  function fMi(v){ return (Math.round(Math.abs(v)*10)/10)+' mi'; }
+  function fFt(v){ return Math.round(Math.abs(v)).toLocaleString()+' ft'; }
+  var mets=[
+    met('Distance', kDist, fMi,        function(s){ return 'You are '+s+' ahead'; },   function(s){ return 'Beat by '+s+' to catch up'; }),
+    met('Elevation',kElev, fFt,        function(s){ return 'You climbed '+s+' more'; },function(s){ return 'Climb '+s+' more to catch up'; }),
+    met('Time',     kTime, _yvyFmtHD_, function(s){ return 'You rode '+s+' more'; },   function(s){ return 'Ride '+s+' more to catch up'; })
+  ];
   mets.sort(function(a,b){ return b.pct-a.pct; });
   var winning=mets[0], focus=mets[mets.length-1], even=null;
-  mets.forEach(function(x){ if(Math.abs(x.pct)<=5) even=x; });
+  mets.forEach(function(x){ if(x.band==='even') even=x; });
 
   return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
@@ -15614,6 +15643,10 @@ function _yvyVM_(rides, now){
 }
 
 function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
+// Delta duration: magnitude only, and it drops the leading "0h" so a sub-hour gap reads "28m"
+// instead of the "0h" that used to sit next to a double-digit percentage.
+function _yvyFmtHD_(sec){ var s=Math.abs(Math.round(sec)), h=Math.floor(s/3600), m=Math.round((s%3600)/60);
+  if(m===60){ h++; m=0; } return h?(h+'h '+(m<10?'0':'')+m+'m'):(m+'m'); }
 function _yvyPct_(p, up){ var c=up?'#22c55e':'#ff5c5c', ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
 function _yvyKpi_(ic, label, big, unit, pct, up, sub){
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid #1c2130">'
@@ -15673,7 +15706,10 @@ function _yvyRenderVM_(vm){
     +'<div style="font-size:22px;font-weight:800;color:#f1f5f9;line-height:1.1">You vs. You.</div>'
     +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:#f1f5f9">'+aheadN+' of 4</b>. '
-    +'This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> ride-months &mdash; mid-pack; the bar is '+vm.bestEver+' mi.</div></div>'
+    +(vm.rank>0
+      ? ('This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> ride-months &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+'; the bar is '+vm.bestEver+' mi.')
+      : ('This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' rides to sit alongside your '+vm.rankTot+' ranked ride-months. The bar is '+vm.bestEver+' mi.'))
+    +'</div></div>'
     +_yvyKpi_(ic.ride,'Total Distance',vm.kDist.cur.toFixed(1),'mi',vm.kDist.pct,vm.kDist.up,'vs last month, same days')
     +_yvyKpi_(ic.clock,'Total Time',_yvyFmtH_(vm.kTime.cur),'',vm.kTime.pct,vm.kTime.up,'vs last month, same days')
     +_yvyKpi_(ic.mtn,'Elevation',Math.round(vm.kElev.cur).toLocaleString(),'ft',vm.kElev.pct,vm.kElev.up,'vs last month, same days')
@@ -15689,7 +15725,7 @@ function _yvyRenderVM_(vm){
     +'<div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px"><span style="color:#FC4C02">&#9644; This month</span><span style="color:#64748b">&#9644; Last month (same days)</span></div>'
     +_yvyCumChart_(vm)
     +'<div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5">You have logged <b style="color:#f1f5f9">'+vm.curTot+' mi</b> this month, '
-    +(leadUp?('<b style="color:#22c55e">'+Math.abs(vm.kDist.pct)+'% ahead</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
+    +(leadUp?('<b style="color:#22c55e">'+Math.abs(vm.kDist.pct)+'% ahead of</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
     +' your pace by this point in '+_YVY_MONF[_yvyLastMonthIdx_(vm)]+'.</div>');
 
   // right rail
@@ -15699,11 +15735,11 @@ function _yvyRenderVM_(vm){
     +'<div style="font-size:11px;color:#5b6678;margin-top:2px">vs last month, same days</div></div>');
 
   // Three DISTINCT metrics (sorted desc), each labeled by its OWN delta so no row repeats.
+  // Tag and note come from the SAME band decided in the VM — never re-derived here, which is how
+  // an "Even" row ended up carrying an "ahead" note.
   var summary=_yvyCard_(_yvyHdr_('Monthly Summary')+vm.mets.map(function(x){
-    var tag, col;
-    if(Math.abs(x.pct)<=5){ tag='Even'; col='#60a5fa'; }
-    else if(x.pct>5){ tag='Winning'; col='#22c55e'; }
-    else { tag='Needs focus'; col='#f59e0b'; }
+    var tag=(x.band==='even')?'Even':((x.band==='win')?'Winning':'Needs focus');
+    var col=(x.band==='even')?'#60a5fa':((x.band==='win')?'#22c55e':'#f59e0b');
     return _yvySumRow_(col, tag, x.k, x.note);
   }).join(''));
 
@@ -15753,6 +15789,12 @@ function _yvyRenderVM_(vm){
 var _YVY_MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function _yvyLastMonthIdx_(vm){ var p=vm.lastYM.split('-'); return (+p[1])-1; }
 function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+// Was hardcoded "mid-pack" next to a live rank, so a #1 month read as mid-pack. Derived now.
+function _yvyRankBand_(rank,tot){
+  if(!(tot>1)) return 'your only ranked month';
+  var p=rank/tot;
+  return p<=0.25?'top quarter':(p<=0.5?'upper half':(p<=0.75?'lower half':'bottom quarter'));
+}
 function _yvyConfRing_(pct,col){ var R=44,C=Math.PI*R, off=C*(1-pct/100);
   return '<svg viewBox="0 0 110 66" style="width:110px;height:66px"><path d="M11 60 A44 44 0 0 1 99 60" fill="none" stroke="#1c2130" stroke-width="9"/>'
    +'<path d="M11 60 A44 44 0 0 1 99 60" fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'"/>'
