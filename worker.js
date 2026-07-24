@@ -571,6 +571,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
       <div class="ds-ni" onclick="dsNav('nutrition')"><i class="ti ti-apple"></i>Nutrition</div>
       <div class="ds-ni" onclick="dsNav('weather')"><i class="ti ti-cloud"></i>Weather</div>
+      <div class="ds-ni" onclick="dsNav('plan')"><i class="ti ti-target-arrow"></i>Plan</div>
       <div class="ds-ni" onclick="dsNav('ai')"><i class="ti ti-brain"></i>Athlete Intelligence</div>
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
@@ -18065,6 +18066,291 @@ function showAthleteIntel(){
   aiRenderOverview_(body);
 }
 // ==================== end Athlete Intelligence page ====================
+
+// ==================== Training Block tracker (Group 3) ====================
+// A separate page over the SHARED data layer. It reads st.ftp and getFitness_ — the same FTP and
+// fitness model as everything else — and never introduces a second FTP. Two rules define it:
+//   - Sessions and conditions GATE the week; weekly TSS is a READOUT and never a verdict. Three
+//     clean sessions at 190 TSS pass; three sloppy ones at 250 TSS do not. TSS is never in the
+//     pass boolean, by construction (see _blockWeekAssess_).
+//   - There is deliberately NO makeup affordance. A missed session does not move to Sunday; the
+//     week fails its own rule and starts clean Monday. Building a "move it" control would erode the
+//     rest structure without anyone deciding to, so it is simply absent.
+// Runs are excluded from the pass rule — running is the variable being introduced (3.7).
+
+// Milestone dates are authoritative constants (the coach's plan), not derived. Everything from the
+// four-weeks-complete date onward SLIDES when a week is missed — the slide is stated explicitly,
+// because the slide IS the behavioural point of the streak.
+var _BLOCK_START='2026-07-21';                 // Monday of the block's first week
+var _BLOCK_MILESTONES=[
+  {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest'},
+  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest',            note:'a discontinuity — power and zone history mean two different things across it'},
+  {slug:'chalet',     date:'2026-09-13', label:'Chalet Reynard',        note:''},
+  {slug:'alpe',       date:'2026-10-13', label:'Alpe sub-70',           note:''},
+  {slug:'tenk',       date:'2026-10-18', label:'10k run',               note:''},
+  {slug:'ventop',     date:'2026-11-10', label:'Ven-Top summit',        note:'the attempt the whole block points at'}
+];
+var _BLOCK_RETEST_YM='2026-08';                // the FTP-retest month — the TSS/zone discontinuity
+// Condition thresholds. The threshold cap 181W is ~0.97*186; the flat proxy stands in for a route
+// name the library does not carry (3.8). Weekly TSS band is CONTEXT only.
+var _BLOCK_Z2_HR=135, _BLOCK_THR_W=181, _BLOCK_VO2_FLAT_FT=650;
+var _BLOCK_TSS_LO=200, _BLOCK_TSS_HI=280;
+var _BLOCK_WEEKS_TARGET=4;
+
+function _blockDay_(s){ var p=String(s||'').slice(0,10).split('-'); if(p.length<3) return null; var d=new Date(+p[0],(+p[1]||1)-1,(+p[2]||1)); d.setHours(0,0,0,0); return d; }
+function _blockDaysBetween_(a,b){ if(!a||!b) return null; return Math.round((b.getTime()-a.getTime())/86400000); }
+function _blockFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return String(s);
+  return (_YVY_MON[(+p[1]||1)-1]||'')+' '+(+p[2]||1); }
+function _blockFmtDateD_(d){ if(!d) return ''; return (_YVY_MON[d.getMonth()]||'')+' '+d.getDate(); }
+// Monday-start week containing d, matching the convention every other week reader on this page uses.
+function _blockWeekStart_(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-(x.getDay()===0?6:x.getDay()-1)); x.setHours(0,0,0,0); return x; }
+
+// Next milestone at or after today, with days remaining. Null when the block is behind us.
+function _blockNextMilestone_(now){
+  var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
+  for(var i=0;i<_BLOCK_MILESTONES.length;i++){
+    var d=_blockDay_(_BLOCK_MILESTONES[i].date);
+    if(d && d.getTime()>=t.getTime()) return {m:_BLOCK_MILESTONES[i], days:_blockDaysBetween_(t,d), idx:i};
+  }
+  return null;
+}
+
+// Cycling only — runs are not in the pass rule and cannot be. Power preferred as NP, else average.
+function _blockCyc_(rides){
+  return (rides||[]).filter(function(r){
+    if(!r||!r.date) return false;
+    var s=(typeof storeV2Sport_==='function')?storeV2Sport_(r):String(r.sportType||r.type||'').replace(/[ _-]/g,'');
+    return !/^(run|trailrun|virtualrun|treadmill|swim|openwaterswim|opanwaterswim|walk|hike|weighttraining|workout|strength|rowing)$/i.test(s);
+  });
+}
+function _blockPwr_(r){ var v=(r&&r.np!=null)?+r.np:((r&&r.avgPwr!=null)?+r.avgPwr:NaN); return (v>0&&v<2000)?v:null; }
+function _blockHr_(r){ var v=(r&&r.avgHR!=null)?+r.avgHR:((r&&r.avgHr!=null)?+r.avgHr:NaN); return (v>0&&v<240)?v:null; }
+function _blockElev_(r){ return Math.round(parseFloat((r&&r.elev!=null)?r.elev:(r&&r.elevation))||0); }
+function _blockTss_(r){ var v=parseFloat(r&&r.tss); return (v>0&&v<=600)?v:0; }
+
+// Infer a ride's session type from its intensity vs FTP. Stated as inference, not read from a field,
+// because no session-type field exists: intensity = (NP or avg power)/FTP. A ride with no power is
+// unclassifiable for threshold/VO2, so it is reported as coverage, not silently bucketed.
+function _blockSessionOf_(r, ftp){
+  var pw=_blockPwr_(r); if(pw==null || !(ftp>0)) return null;
+  var ratio=pw/ftp;
+  if(ratio>=1.06) return 'vo2';
+  if(ratio>=0.80) return 'threshold';
+  return 'z2';
+}
+
+// PURE. rides = live rides (runs excluded internally by sport), ftp, now. Assesses the CURRENT
+// Monday-start week. PASS is (all three sessions present) AND (each condition met) AND (three
+// separate days) — TSS is computed and returned but NEVER referenced in the pass boolean.
+function _blockWeekAssess_(rides, ftp, now){
+  var ws=_blockWeekStart_(now), we=new Date(ws.getTime()+7*86400000);
+  var cyc=_blockCyc_(rides).filter(function(r){ var d=_blockDay_(r.date); return d && d>=ws && d<we; });
+  var withPwr=cyc.filter(function(r){ return _blockPwr_(r)!=null; }).length;
+
+  var sess={ threshold:[], vo2:[], z2:[] };
+  cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp); if(t) sess[t].push(r); });
+  function pick(list){ return (list&&list.length)?list[0]:null; }
+  var thrRide=pick(sess.threshold), vo2Ride=pick(sess.vo2), z2Ride=pick(sess.z2);
+
+  var checks=[
+    { key:'threshold', label:'Threshold', ride:thrRide, done:!!thrRide,
+      cond:'avg power under '+_BLOCK_THR_W+'W',
+      ok:!!(thrRide && _blockPwr_(thrRide)!=null && _blockPwr_(thrRide)<_BLOCK_THR_W),
+      val:thrRide?(_blockPwr_(thrRide)!=null?(_blockPwr_(thrRide)+'W'):'no power recorded'):'' },
+    { key:'vo2', label:'VO2', ride:vo2Ride, done:!!vo2Ride,
+      cond:'flat route, under '+_BLOCK_VO2_FLAT_FT+' ft (elevation proxy)',
+      ok:!!(vo2Ride && _blockElev_(vo2Ride)<_BLOCK_VO2_FLAT_FT),
+      val:vo2Ride?(_blockElev_(vo2Ride).toLocaleString()+' ft'):'' },
+    { key:'z2', label:'Zone 2', ride:z2Ride, done:!!z2Ride,
+      cond:'avg HR under '+_BLOCK_Z2_HR,
+      ok:!!(z2Ride && _blockHr_(z2Ride)!=null && _blockHr_(z2Ride)<_BLOCK_Z2_HR),
+      val:z2Ride?(_blockHr_(z2Ride)!=null?(_blockHr_(z2Ride)+' bpm'):'no HR recorded'):'' }
+  ];
+  var days={}; [thrRide,vo2Ride,z2Ride].forEach(function(r){ if(r) days[String(r.date).slice(0,10)]=1; });
+  var allThree=checks.every(function(c){ return c.done; });
+  var distinctDays=(allThree && Object.keys(days).length>=3);
+  var conditionsMet=checks.every(function(c){ return c.ok; });
+  // THE pass boolean. TSS is NOT here — a week cannot pass or fail on TSS.
+  var pass=allThree && conditionsMet && distinctDays;
+
+  var tss=0; cyc.forEach(function(r){ tss+=_blockTss_(r); }); tss=Math.round(tss);
+
+  return { weekStart:ws, checks:checks, allThree:allThree, conditionsMet:conditionsMet,
+           distinctDays:distinctDays, pass:pass, tss:tss, nCyc:cyc.length, withPwr:withPwr };
+}
+
+// Consecutive clean-week streak since block start, plus the slid four-weeks-complete date. A week is
+// judged only once COMPLETE (its Monday is before the current week's Monday); the in-progress week
+// never counts. When a completed week fails, the streak resets and the target slides — the slide is
+// returned so the render can state it, because the slide is the behavioural point of the rule.
+function _blockStreak_(rides, ftp, now){
+  var start=_blockWeekStart_(_blockDay_(_BLOCK_START)||now);
+  var curWS=_blockWeekStart_(now);
+  var weeks=[]; var w=new Date(start.getTime());
+  while(w.getTime()<curWS.getTime()){
+    var mid=new Date(w.getTime()+3*86400000);
+    weeks.push(_blockWeekAssess_(rides, ftp, mid));
+    w=new Date(w.getTime()+7*86400000);
+  }
+  var completed=weeks.length, streak=0;
+  for(var i=weeks.length-1;i>=0;i--){ if(weeks[i].pass) streak++; else break; }
+  var need=Math.max(0, _BLOCK_WEEKS_TARGET-streak);
+  var base=_blockDay_(_BLOCK_MILESTONES[0].date);
+  var slideWeeks=Math.max(0, completed-streak);
+  var reset=(slideWeeks>0);
+  var projected=new Date(base.getTime()+slideWeeks*7*86400000);
+  return { completed:completed, streak:streak, need:need, reset:reset, slideWeeks:slideWeeks,
+           base:base, projected:projected, target:_BLOCK_WEEKS_TARGET };
+}
+
+// Form window: only within ~10 days of an actual attempt (not the retest or the four-weeks gate).
+// Returns the nearest attempt inside the window, else null — outside the window the section is
+// omitted entirely, because a TSB projection weeks out is close to fiction and would revise on
+// every ride.
+var _BLOCK_ATTEMPT_SLUGS={chalet:1, alpe:1, tenk:1, ventop:1};
+function _blockFormWindow_(now){
+  var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
+  var best=null;
+  _BLOCK_MILESTONES.forEach(function(m){
+    if(!_BLOCK_ATTEMPT_SLUGS[m.slug]) return;
+    var d=_blockDay_(m.date); if(!d) return;
+    var days=_blockDaysBetween_(t,d);
+    if(days!=null && days>=0 && days<=10){ if(!best || days<best.days) best={m:m, days:days}; }
+  });
+  return best;
+}
+
+function _blockCheckRow_(c){
+  var ok=c.ok, col=ok?'#22c55e':'#f59e0b';
+  var mark=ok
+    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>';
+  var status=c.done ? (ok?('met &middot; '+c.val):('logged, but '+c.val+' &mdash; over the cap')) : 'not logged this week';
+  return '<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid #14181f">'
+    +'<span style="flex:0 0 auto;margin-top:1px">'+mark+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#f1f5f9">'+c.label
+    +' <span style="font-size:11px;font-weight:600;color:#5b6678">&middot; '+c.cond+'</span></div>'
+    +'<div style="font-size:11.5px;color:'+(c.done?(ok?'#22c55e':'#f59e0b'):'#5b6678')+';margin-top:1px">'+status+'</div></div></div>';
+}
+
+// container-mounted, mirroring aiRenderOverview_ so ONE renderer serves both desktop and mobile.
+function renderBlockPlan_(container){
+  if(!container) return;
+  var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  try{ if(typeof getRuns==='function'){ rides=rides.concat(getRuns()); } }catch(e){}   // runs included so _blockCyc_ excludes them by sport, not by source
+  var now=new Date();
+
+  var H='<div style="max-width:820px;margin:0 auto;padding:20px 18px 48px">';
+  H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Training Block</div>';
+  H+='<div style="font-size:13px;color:#94a3b8;margin-top:4px;line-height:1.5">Your structured block to the Ven-Top attempt. Four weeks consistent &rarr; FTP retest &rarr; Chalet Reynard &rarr; Alpe sub-70 &rarr; Ven-Top summit.</div>';
+
+  // ---- Days to Next Milestone ----
+  var nm=_blockNextMilestone_(now);
+  var today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  H+='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:16px">';
+  H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Days to next milestone</div>';
+  if(nm){
+    H+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">'
+      +'<span style="font-size:34px;font-weight:800;color:#FC4C02;letter-spacing:-.02em">'+nm.days+'</span>'
+      +'<span style="font-size:13px;color:#94a3b8">day'+(nm.days===1?'':'s')+' to <b style="color:#f1f5f9">'+nm.m.label+'</b> &middot; '+_blockFmtDate_(nm.m.date)+'</span></div>';
+    if(nm.m.note) H+='<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+nm.m.note+'</div>';
+    H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;display:flex;flex-direction:column;gap:5px">';
+    _BLOCK_MILESTONES.forEach(function(m,i){
+      if(i<=nm.idx) return;
+      var d=_blockDay_(m.date), days=_blockDaysBetween_(today0, d);
+      H+='<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#94a3b8">'+m.label+'</span>'
+        +'<span style="color:#5b6678">'+_blockFmtDate_(m.date)+' &middot; '+days+'d</span></div>';
+    });
+    H+='</div>';
+  }else{
+    H+='<div style="font-size:13px;color:#94a3b8">The block is complete. Nothing ahead on the calendar.</div>';
+  }
+  H+='</div>';
+
+  // ---- This Week's Consistency ----
+  var wk=_blockWeekAssess_(rides, ftp, now);
+  var stk=_blockStreak_(rides, ftp, now);
+  var passCol=wk.pass?'#22c55e':'#f59e0b';
+  H+='<div style="background:#0e1117;border:1px solid '+(wk.pass?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;margin-top:14px">';
+  H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
+    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; consistency</span>'
+    +'<span style="font-size:12px;font-weight:800;color:'+passCol+'">'+(wk.pass?'CLEAN WEEK':'INCOMPLETE')+'</span></div>';
+  H+='<div style="font-size:11.5px;color:#5b6678;margin-bottom:10px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'
+    +(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
+  wk.checks.forEach(function(c){ H+=_blockCheckRow_(c); });
+  // distinct-days condition, shown as the fourth gate
+  H+='<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid #14181f">'
+    +'<span style="flex:0 0 auto;margin-top:1px">'+(wk.distinctDays
+        ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+        :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>')+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#f1f5f9">Three separate days <span style="font-size:11px;font-weight:600;color:#5b6678">&middot; no stacking, protects the rest cadence</span></div>'
+    +'<div style="font-size:11.5px;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+';margin-top:1px">'+(wk.distinctDays?'met':(wk.allThree?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div></div>';
+
+  // TSS as a READOUT — a number with context, never a verdict. Stated as such.
+  var tssIn=(wk.tss>=_BLOCK_TSS_LO && wk.tss<=_BLOCK_TSS_HI);
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'
+    +'<div><div style="font-size:12px;font-weight:700;color:#cbd5e1">Weekly load <span style="font-size:10.5px;font-weight:600;color:#5b6678">&middot; readout, not a pass rule</span></div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:1px">target band '+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+' TSS</div></div>'
+    +'<div style="font-size:22px;font-weight:800;color:'+(wk.tss>0?'#f1f5f9':'#5b6678')+'">'+(wk.tss>0?wk.tss:'&mdash;')+'<span style="font-size:11px;color:#5b6678;font-weight:600"> TSS</span></div></div>';
+
+  // Streak + reset rule, stated explicitly.
+  H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">';
+  H+='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:#f1f5f9">'+stk.streak+' of '+stk.target+'</span>'
+    +'<span style="font-size:12px;color:#94a3b8">clean weeks banked</span></div>';
+  if(stk.reset){
+    H+='<div style="font-size:12px;color:#f59e0b;line-height:1.5;margin-top:4px">A week was missed, so the clock reset. The four-weeks gate has slid '+stk.slideWeeks+' week'+(stk.slideWeeks===1?'':'s')+' to <b>'+_blockFmtDateD_(stk.projected)+'</b>, and the retest and every date behind it move with it.</div>';
+  }else if(stk.streak>=stk.target){
+    H+='<div style="font-size:12px;color:#22c55e;line-height:1.5;margin-top:4px">Four clean weeks banked &mdash; the retest gate is open.</div>';
+  }else{
+    H+='<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-top:4px">'+stk.need+' more clean week'+(stk.need===1?'':'s')+' to '+_blockFmtDateD_(stk.base)+'. Miss one and the clock resets to zero and the retest slides &mdash; that reset is the whole point of the rule.</div>';
+  }
+  H+='</div></div>';
+
+  // ---- Current Form (only within ~10 days of an attempt) ----
+  var fw=_blockFormWindow_(now);
+  if(fw){
+    var fit=(typeof getFitness_==='function')?getFitness_():null;
+    var tsb=fit?fit.tsb:null;
+    H+='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">';
+    H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Current form &middot; '+fw.m.label+' in '+fw.days+' day'+(fw.days===1?'':'s')+'</div>';
+    if(tsb!=null){
+      // Target freshness band for an attempt: TSB roughly +5 to +20. Stated as the coach band.
+      var inBand=(tsb>=5 && tsb<=20);
+      H+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:30px;font-weight:800;color:'+(inBand?'#22c55e':'#f59e0b')+'">'+(tsb>=0?'+':'')+tsb+'</span>'
+        +'<span style="font-size:13px;color:#94a3b8">Form (TSB) &middot; target <b style="color:#f1f5f9">+5 to +20</b> for the attempt</span></div>';
+      H+='<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+(inBand?'You are in the freshness window.':(tsb<5?'Still carrying fatigue &mdash; ease off to arrive fresh.':'Very fresh &mdash; a short opener keeps the edge.'))+'</div>';
+    }else{
+      H+='<div style="font-size:12.5px;color:#94a3b8">Form needs the fitness model, which is not available right now &mdash; not shown rather than guessed.</div>';
+    }
+    H+='</div>';
+  }
+
+  H+='</div>';
+  container.innerHTML=H;
+}
+// mobile mount: full-screen overlay, same shared renderer into its body (mirrors showAthleteIntel).
+function showBlockPlan(){
+  var old=document.getElementById('BLOCK_PAGE'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='BLOCK_PAGE';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#0d0f14;overflow-y:auto;-webkit-overflow-scrolling:touch';
+  var close='<div onclick="var e=document.getElementById(&#39;BLOCK_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:#161b28;border:1px solid #2a3550;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
+  var body=document.createElement('div');
+  ov.appendChild(body);
+  ov.insertAdjacentHTML('beforeend', close);
+  (document.getElementById('app-shell')||document.body).appendChild(ov);
+  renderBlockPlan_(body);
+}
+// desktop mount: into #ds-content (mirrors dsShowAthleteIntel).
+function dsShowBlockPlan(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc){ setTimeout(dsShowBlockPlan,200); return; }
+  mc.innerHTML='';
+  var wrap=document.createElement('div'); wrap.style.cssText='flex:1;overflow-y:auto;height:100%;box-sizing:border-box';
+  mc.appendChild(wrap);
+  renderBlockPlan_(wrap);
+}
+
 // Single rollup used by BOTH the Calendar month footer AND each week-row summary
 // so they can never diverge. Sums ALL activity types (Miles + TSS include Zwift/
 // VirtualRide); rideCount stays type-scoped for the "Rides" label only.
@@ -18191,6 +18477,8 @@ function dsNav(section){
     dsShowNutrition();
   } else if(section === 'weather') {
     dsShowWeather();
+  } else if(section === 'plan') {
+    dsShowBlockPlan();
   } else if(section === 'ai') {
     dsShowAthleteIntel();
   } else if(section === 'gear') {
@@ -28626,6 +28914,7 @@ function showMoreSheet(){
     // now carries both history exhibits (growth chart + PR board), so burying it mid-list under a
     // sheet of sync utilities put the most-used screen behind the most-rarely-used ones.
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
+    {n:'Training Block', i:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M12 12h.01',              fn:'showBlockPlan',    c:'#FC4C02'},
     {n:'Athlete Intelligence', i:'M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 0V4a3 3 0 0 0-3-1zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 0', fn:'showAthleteIntel', c:'#f59e0b'},
     {n:'Constellation', i:'M12 2l2.4 5.9 6.4.5-4.9 4.1 1.5 6.2L12 17l-5.8 3.7 1.5-6.2-4.9-4.1 6.4-.5z',                            fn:'showConstellation', c:'#F5C518'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
