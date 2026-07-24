@@ -15740,10 +15740,23 @@ function _yvyVM_(rides, now){
   var bestMonthYM=doneRank.length?doneRank[0]:null;
   var bestMonthMi=bestMonthYM?Math.round(bym[bestMonthYM]*10)/10:0;
   var completedRankable=doneRank.length;
+  // The completed-rankable months themselves, from the SAME sorted array above. Anything that
+  // ranks a PROJECTED month must rank against this list, not rankList: a month still in progress
+  // cannot be one of the months its own projection is measured against.
+  var doneList=doneRank.map(function(k){ return {ym:k, mi:Math.round(bym[k]*10)/10}; });
 
   var start6=new Date(now.getTime()-42*86400000);
   var t6=rides.filter(function(r){ var d=_ryDate_(r.date); return d && !isNaN(d.getTime()) && d>=start6 && d<=now; });
   var rate=Math.round(_yvySum_(t6,_yvyMi_)/6*10)/10;
+  // Typical ride length over the same trailing window the rate uses. MEDIAN, not mean: the library
+  // carries several centuries and one of them drags a mean far above any ride actually likely to
+  // happen on a given Saturday.
+  var med6=(function(){
+    var v=t6.map(_yvyMi_).filter(function(x){ return x>0; }).sort(function(a,b){ return a-b; });
+    if(!v.length) return 0;
+    var h=Math.floor(v.length/2);
+    return Math.round((v.length%2?v[h]:(v[h-1]+v[h])/2)*10)/10;
+  })();
   var daysLeft=Math.max(0, daysInCur-domNow);
   var proj=Math.round(rate/7*daysLeft*10)/10;
   var need=Math.round((lastFull-curTot)*10)/10;
@@ -15801,6 +15814,7 @@ function _yvyVM_(rides, now){
   return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
+    doneList:doneList, med6:med6,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
@@ -16185,6 +16199,87 @@ function _raSection_(vm){
     +'</div>';
 }
 
+// ==================== You vs. You — Regret Simulator ====================
+// The forward half of the question Month Race asks backward: skip this weekend, or ride it, and
+// where does the month land. Two branches, both ranked, one sentence.
+//
+// Both projections rank against vm.doneList — the COMPLETED rankable months. A month still in
+// progress cannot rank itself into its own bar, so the projected total is placed among finished
+// months only, and the denominator is vm.rankTot, which equals doneList.length + 1 exactly
+// whenever the current month is rankable. That is the same count the hero and Rank Against
+// Yourself quote; no new denominator is introduced here.
+//
+// This is a decision, not a forecast: no confidence figure anywhere. It states what each choice
+// produces and stops.
+function _rsRank_(done, total){
+  var above=0;
+  for(var i=0;i<done.length;i++){ if(done[i].mi>total) above++; }
+  return above+1;
+}
+// Remaining days split by kind. The skip branch trickles on weekdays only; the ride branch adds
+// one typical weekend ride on top of that.
+function _rsDays_(vm){
+  var wd=0, we=0;
+  for(var d=vm.domNow+1; d<=vm.daysInCur; d++){
+    var g=new Date(vm.y, vm.m, d).getDay();
+    if(g===0||g===6) we++; else wd++;
+  }
+  return { weekday:wd, weekend:we };
+}
+function _rsCompute_(vm){
+  var done=vm.doneList||[];
+  if(!(vm.rank>0)) return null;                       // not rankable yet: no rank to move, no "#0"
+  if(!done.length || vm.rankTot<_RA_MIN_MONTHS) return null;
+  var curMi=(vm.rankList&&vm.rankList[vm.rank-1])?vm.rankList[vm.rank-1].mi:Math.round(vm.curTot*10)/10;
+  var nextUp=(vm.rank>1)?done[vm.rank-2]:null;
+
+  if(vm.daysLeft<=0){
+    // Out of days is _mrGap_'s condition and _mrGap_ owns the wording. Nothing is added here.
+    if(!nextUp) return null;
+    return { outOfDays:true, curMi:curMi, nextUp:nextUp, nextRank:vm.rank-1,
+             gap:_mrGap_(nextUp.mi, curMi, vm.rate, 0), tot:vm.rankTot };
+  }
+  var d=_rsDays_(vm);
+  if(d.weekend<=0) return null;                       // no weekend left: there is no choice to simulate
+  if(!(vm.med6>0)) return null;                       // no typical ride to add
+
+  var perDay=(vm.rate>0)?(vm.rate/7):0;
+  var skipTot=Math.round((curMi+perDay*d.weekday)*10)/10;
+  var rideTot=Math.round((skipTot+vm.med6)*10)/10;
+  var skipRank=_rsRank_(done, skipTot), rideRank=_rsRank_(done, rideTot);
+  var above=(rideRank>1)?done[rideRank-2]:null;
+  return { outOfDays:false, curMi:curMi, med:vm.med6, weekday:d.weekday, weekend:d.weekend,
+           skipTot:skipTot, rideTot:rideTot, skipRank:skipRank, rideRank:rideRank,
+           moves:(skipRank!==rideRank), above:above, aboveRank:(above?(rideRank-1):0),
+           aboveGap:(above?Math.round((above.mi-rideTot)*10)/10:0), tot:vm.rankTot };
+}
+function _rsSection_(vm){
+  var rs=_rsCompute_(vm);
+  if(!rs) return '';
+  var MON=_YVY_MONF[vm.m]||_yvyMonLabel_(vm.curYM);
+  function rk(n,col){ return '<b style="color:'+col+'">#'+n+'</b>'; }
+  var sentence;
+  if(rs.outOfDays){
+    sentence=MON+' finishes '+rk(vm.rank,'#f1f5f9')+' of '+rs.tot+'. To pass '+_yvyMonLabel_(rs.nextUp.ym)
+      +' at '+rk(rs.nextRank,'#f1f5f9')+': <span style="color:'+rs.gap.tone+';font-weight:700">'
+      +rs.gap.text.replace(/^Beat by/,'beat by')+'</span>';
+  } else if(!rs.moves){
+    // Same rank both ways. Say that once and give the distance that would actually change it,
+    // rather than printing the identical number twice as if it were two outcomes.
+    sentence='This weekend does not move your rank &mdash; '+MON+' finishes '+rk(rs.rideRank,'#f1f5f9')+' of '+rs.tot+' either way'
+      +(rs.above ? ('. The gap to '+rk(rs.aboveRank,'#f1f5f9')+' is '+_mrMi_(rs.aboveGap)+' mi.') : ', and nothing sits above it.');
+  } else {
+    sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
+      +'. Ride Saturday and it finishes '+rk(rs.rideRank,'#22c55e')+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
+  }
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Regret Simulator</span>'
+    +'<span style="font-size:11px;color:#5b6678">the weekend decision, ranked against your finished months</span></div>'
+    +'<div style="font-size:15px;color:#cbd5e1;line-height:1.6">'+sentence+'</div>'
+    +'</div>';
+}
+
 function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
@@ -16267,6 +16362,7 @@ function _yvyRenderVM_(vm){
     +hero
     +_yvyPhysRow_(vm)
     +_mrSection_(vm)
+    +_rsSection_(vm)
     +'<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">'
     +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
