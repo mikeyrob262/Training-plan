@@ -16211,7 +16211,11 @@ function _alSection_(){
   if(pos){
     subject=pos.row; subjRank=pos.rank;
     gaugeLabel='This month &middot; '+_alFmtYM_(curYM);
-    lead='This month sits <b style="color:#f1f5f9">#'+subjRank+' of '+N+'</b> scored months across your athletic life.';
+    // The current month scored, so it carries the partial-vs-complete caveat the ride hero already
+    // states: its miles-so-far are z-scored against COMPLETE months, so it sits low for a reason
+    // that is not effort, and it climbs as the month fills. Same shared sentence, cross-sport noun.
+    lead='This month sits <b style="color:#f1f5f9">#'+subjRank+' of '+N+'</b> scored months across your athletic life. '
+        +_yvyPartialTxt_(now.getDate(), subjRank===1, 'training');
   }else{
     subject=asc[asc.length-1];
     for(var i=0;i<rows.length;i++) if(rows[i].ym===subject.ym) subjRank=i+1;
@@ -16759,8 +16763,7 @@ function _raSection_(vm){
   }
   var foot;
   if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' rides, which is the same gate the rest of this page ranks on.';
-  else if(vm.rank===1) foot='This month is ranked on its '+vm.domNow+' days so far against complete months, and it already leads &mdash; the margin only grows as the month fills in.';
-  else foot='This month is ranked on its '+vm.domNow+' days so far against complete months, so it sits lower than it will finish &mdash; that gap is the calendar, not your riding.';
+  else foot=_yvyPartialTxt_(vm.domNow, vm.rank===1, 'riding');
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
@@ -17056,6 +17059,20 @@ function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(
 function _yvyUnrankableTxt_(vm, noun){
   var n=noun||'ride';
   return 'This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' '+n+'s to sit alongside your '+vm.rankTot+' ranked '+n+'-months.';
+}
+// The one sentence for "this month IS ranked, but on partial data". A DIFFERENT condition from
+// unrankable above, and it lives here beside it deliberately so the two are never conflated: a
+// month with too few activities is not rankable at all (the sentence above); a month that qualifies
+// but is still in progress ranks LOW for a reason that is not performance, and that has to be said
+// or a reader reads the calendar as a result. domNow = days elapsed; leads flips the wording for a
+// month already sitting #1; noun credits the closing clause ('riding', 'training'). Byte-identical
+// to the ride hero's prior inline wording, now shared with the Athletic Life hero.
+function _yvyPartialTxt_(domNow, leads, noun){
+  var n=noun||'riding';
+  var base='This month is ranked on its '+domNow+' days so far against complete months';
+  return leads
+    ? (base+', and it already leads &mdash; the margin only grows as the month fills in.')
+    : (base+', so it sits lower than it will finish &mdash; that gap is the calendar, not your '+n+'.');
 }
 function _yvyRankBand_(rank,tot){
   if(!(tot>1)) return 'your only ranked month';
@@ -17917,7 +17934,10 @@ function aiRenderOverview_(container){
   if(rides.length) _hdrBits.push(rides.length.toLocaleString()+' ride'+(rides.length===1?'':'s'));
   if(_hdrRuns.length) _hdrBits.push(_hdrRuns.length.toLocaleString()+' run'+(_hdrRuns.length===1?'':'s'));
   var _hdrWhat=_hdrBits.length?_hdrBits.join(' and '):'your activities';
-  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' years of data. Real numbers only.</div>';
+  // "16 calendar years", not "16 years": Dec 2011 to Jul 2026 is 14.6 elapsed years spanning 16
+  // calendar years, and the looser phrasing sits two inches from "Real numbers only". _hdrYrs is a
+  // span of calendar years by construction (max-min+1), so this names it for what it is.
+  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' calendar years of data. Real numbers only.</div>';
   // tabs
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
