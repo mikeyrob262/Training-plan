@@ -15727,6 +15727,10 @@ function _yvyVM_(rides, now){
   rides.forEach(function(r){ var k=_yvyYM_(r); if(!k) return; bym[k]=(bym[k]||0)+_yvyMi_(r); cnt[k]=(cnt[k]||0)+1; });
   var rankable=Object.keys(bym).filter(function(k){ return cnt[k]>=_YVY_RANK_MIN; }).sort(function(a,b){ return bym[b]-bym[a]; });
   var rank=rankable.indexOf(curYM)+1, rankTot=rankable.length;
+  // The ranked months themselves, exposed from the SAME sorted array that produced rank/rankTot.
+  // Any consumer that draws the distribution therefore cannot disagree with the rank: position
+  // in rankList IS the rank. Do not rebuild this list anywhere.
+  var rankList=rankable.map(function(k){ return {ym:k, mi:Math.round(bym[k]*10)/10}; });
   // The bar to beat must be a COMPLETED month. Ranking the in-progress month into it meant that
   // whenever this month was your best, the page said "the bar is <this month's own total>" — you
   // racing yourself in the present tense — and Month Race would draw You and Best as one bar.
@@ -15796,7 +15800,7 @@ function _yvyVM_(rides, now){
 
   return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
-    rank:rank, rankTot:rankTot, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
+    rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
@@ -16085,6 +16089,102 @@ function _wcSection_(vm){
     +body+foot+'</div>';
 }
 
+// ==================== You vs. You — Rank Against Yourself ====================
+// Where this month sits across EVERY rankable ride-month, not just against the top one. That is
+// the whole reason this is not a duplicate of Month Race: Month Race races you against last month
+// and your best, while this places you in the distribution and turns the gap into the NEXT RUNG.
+// Passing one place is usually a handful of miles; passing your best is usually out of reach, and
+// Month Race already says so. Same closable-gap grammar, useful granularity.
+//
+// ONE denominator here, and it is vm.rankTot — the count the hero quotes. This section never
+// mentions the completed-rankable count or bestMonthMi, so there is no second number to reconcile
+// and no way for it to disagree with the hero about "of N". The bars are vm.rankList, which is the
+// same sorted array rank came from, so a bar's position IS its rank by construction.
+//
+// The partial-month caveat is unavoidable and therefore stated: this month is ranked on the days
+// it has so far against complete months, which understates it, and its place climbs as it fills.
+// The projected finish rank is shown separately and labelled a projection, never as the rank.
+var _RA_MIN_MONTHS=4;
+function _raCompute_(vm){
+  var list=(vm.rankList||[]);
+  if(list.length<_RA_MIN_MONTHS) return null;
+  var max=list[0]?list[0].mi:0;
+  if(!(max>0)) return null;
+  var idx=(vm.rank>0)?(vm.rank-1):-1;
+  var curMi=(idx>=0)?list[idx].mi:Math.round(vm.curTot*10)/10;
+  var next=(idx>0)?list[idx-1]:null;                       // one place above
+  var runner=(idx===0&&list.length>1)?list[1]:null;        // already top; who is second
+  // Projected finish is built on curMi — the SAME figure the rank came from — not on vm.projTot,
+  // which is based on the day-indexed cumulative. The two agree for real data, but deriving the
+  // projection from a different base is how a section ends up saying "#1" and "would place it #8"
+  // in consecutive sentences. One base, no contradiction possible.
+  var proj=null;
+  if(idx>=0 && vm.daysLeft>0 && vm.rate>0){
+    var pt=Math.round((curMi+(vm.proj||0))*10)/10, above=0;
+    list.forEach(function(x){ if(x.ym!==vm.curYM && x.mi>pt) above++; });
+    proj={ rank:above+1, tot:pt };
+  }
+  return { list:list, max:max, min:list[list.length-1].mi, idx:idx, curMi:curMi,
+           next:next, runner:runner, proj:proj,
+           gap:next?_mrGap_(next.mi, curMi, vm.rate, vm.daysLeft):null,
+           lead:runner?Math.round((curMi-runner.mi)*10)/10:null };
+}
+function _raStrip_(ra, vm){
+  var bars=ra.list.map(function(x,i){
+    var isCur=(x.ym===vm.curYM);
+    var h=10+Math.round(x.mi/ra.max*54);
+    var bg=isCur?_MR_YOU:((i===0)?'#46536b':'#2a3341');
+    return '<div title="'+_yvyMonLabel_(x.ym)+' &ndash; '+x.mi.toLocaleString()+' mi" style="flex:1;min-width:3px;height:'+h+'px;background:'+bg+';border-radius:2px 2px 0 0"></div>';
+  }).join('');
+  // Endpoints are NAMED, never called "best". This strip ranks the in-progress month alongside
+  // complete ones, so its top can exceed Month Race's Best Month bar (which cannot include a month
+  // still running). Two different numbers both labelled "best" on one screen is exactly the
+  // collision this page keeps producing; naming the months removes the superlative entirely.
+  var top=ra.list[0], bot=ra.list[ra.list.length-1];
+  return '<div style="display:flex;align-items:flex-end;gap:2px;height:64px;margin:2px 0 6px">'+bars+'</div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#5b6678">'
+    +'<span>'+_yvyMonShort_(top.ym)+' '+top.mi.toLocaleString()+' mi</span>'
+    +'<span>'+_yvyMonShort_(bot.ym)+' '+bot.mi.toLocaleString()+' mi</span></div>';
+}
+function _raSection_(vm){
+  var ra=_raCompute_(vm);
+  if(!ra) return '';
+  var head, lines=[];
+  if(ra.idx<0){
+    // Same branch, same sentence, same denominator as the hero.
+    head='<div style="font-size:14px;font-weight:800;color:#f1f5f9;line-height:1.4">'+_yvyUnrankableTxt_(vm)+'</div>'
+      +'<div style="font-size:12px;color:#94a3b8;margin-top:4px">The strip below is those ranked months. This one joins it once it qualifies.</div>';
+  } else {
+    head='<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+      +'<span style="font-size:32px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;line-height:1">#'+vm.rank+'</span>'
+      +'<span style="font-size:13px;color:#94a3b8">of '+vm.rankTot+' ride-months</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+_MR_BEST+'">'+_yvyRankBand_(vm.rank,vm.rankTot)+'</span></div>';
+    if(ra.next){
+      lines.push('<b style="color:#f1f5f9">Next rung:</b> pass '+_yvyMonLabel_(ra.next.ym)+' at '+ra.next.mi.toLocaleString()+' mi &mdash; <span style="color:'+ra.gap.tone+';font-weight:700">'+ra.gap.text.replace(/^Beat by/,'beat by')+'</span>');
+    } else if(ra.runner){
+      lines.push('<b style="color:#f1f5f9">Top of your own table.</b> You lead '+_yvyMonLabel_(ra.runner.ym)+' by '+_mrMi_(ra.lead)+' mi.');
+    }
+    if(ra.proj){
+      lines.push(ra.proj.rank===vm.rank
+        ? ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi and holds <b style="color:#f1f5f9">#'+vm.rank+'</b>.')
+        : ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi, which would place it <b style="color:#f1f5f9">#'+ra.proj.rank+'</b>. That is a projection, not your rank.'));
+    }
+  }
+  var foot;
+  if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' rides, which is the same gate the rest of this page ranks on.';
+  else if(vm.rank===1) foot='This month is ranked on its '+vm.domNow+' days so far against complete months, and it already leads &mdash; the margin only grows as the month fills in.';
+  else foot='This month is ranked on its '+vm.domNow+' days so far against complete months, so it sits lower than it will finish &mdash; that gap is the calendar, not your riding.';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
+    +'<span style="font-size:11px;color:#5b6678">every ride-month you can be ranked on, tallest first</span></div>'
+    +head
+    +'<div style="margin-top:14px">'+_raStrip_(ra,vm)+'</div>'
+    +(lines.length?('<div style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-top:12px">'+lines.join('<br>')+'</div>'):'')
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'</div>';
+}
+
 function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
@@ -16096,7 +16196,7 @@ function _yvyRenderVM_(vm){
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:#f1f5f9">'+aheadN+' of 4</b>. '
     +(vm.rank>0
       ? ('This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> ride-months &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+(vm.bestMonthMi>0?('; the bar is '+_mrMi_(vm.bestMonthMi)+' mi'):'')+'.')
-      : ('This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' rides to sit alongside your '+vm.rankTot+' ranked ride-months.'+(vm.bestMonthMi>0?(' The bar is '+_mrMi_(vm.bestMonthMi)+' mi.'):'')))
+      : (_yvyUnrankableTxt_(vm)+(vm.bestMonthMi>0?(' The bar is '+_mrMi_(vm.bestMonthMi)+' mi.'):'')))
     +'</div></div>'
     +_yvyKpi_(ic.ride,'Total Distance',vm.kDist.cur.toFixed(1),'mi',vm.kDist.pct,vm.kDist.up,'vs last month, same days')
     +_yvyKpi_(ic.clock,'Total Time',_yvyFmtH_(vm.kTime.cur),'',vm.kTime.pct,vm.kTime.up,'vs last month, same days')
@@ -16172,6 +16272,7 @@ function _yvyRenderVM_(vm){
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
     +'</div>'
     +_wcSection_(vm)
+    +_raSection_(vm)
     +_pbSection_(vm)
     +'<div style="margin-top:14px">'+insight+'</div>'
     +'</div>';
@@ -16181,6 +16282,12 @@ var _YVY_MONF=['January','February','March','April','May','June','July','August'
 function _yvyLastMonthIdx_(vm){ var p=vm.lastYM.split('-'); return (+p[1])-1; }
 function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
 // Was hardcoded "mid-pack" next to a live rank, so a #1 month read as mid-pack. Derived now.
+// The one sentence for "this month cannot be ranked yet". Shared so the hero and Rank Against
+// Yourself state the same requirement and the same denominator, rather than two near-copies that
+// can drift apart — the failure this page keeps producing.
+function _yvyUnrankableTxt_(vm){
+  return 'This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' rides to sit alongside your '+vm.rankTot+' ranked ride-months.';
+}
 function _yvyRankBand_(rank,tot){
   if(!(tot>1)) return 'your only ranked month';
   var p=rank/tot;
