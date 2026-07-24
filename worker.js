@@ -15998,8 +15998,38 @@ function _zsCompute_(){
       all[k].sum+=p.z[k]; all[k].n++; all[k].parts[p.noun]=Math.round(p.mi[k]*10)/10;
     });
   });
+  // Per-month DESCRIPTIVE extras for the surfaces that draw this. Gathered here rather than in the
+  // renderer so a chart cannot re-walk the activity lists and quietly disagree with the scores it
+  // is drawing. These do NOT affect scoring or rankability — the gate above already decided which
+  // months exist; this only describes them. Cross-sport totals, because the month is the unit.
+  var extra={};
+  [rides||[], runs||[]].forEach(function(list){
+    list.forEach(function(a){
+      var d=String((a&&a.date)||''); if(d.length<10) return;
+      var k=d.slice(0,7); if(!all[k]) return;                 // scored months only
+      if(!extra[k]) extra[k]={elev:0, acts:0, byDay:{}, wk:{}};
+      var e=extra[k];
+      e.elev+=parseFloat((a&&a.elev!=null)?a.elev:(a&&a.elevation))||0;
+      e.acts++;
+      var dom=parseInt(d.slice(8,10),10)||0;
+      if(dom){
+        e.byDay[dom]=(e.byDay[dom]||0)+(parseFloat(a&&a.distance)||0);
+        // "Active weeks" counted as 7-day blocks from the 1st, not ISO weeks. A calendar week that
+        // straddles two months would otherwise let one ride mark a week active in both, which
+        // overstates consistency in exactly the months a reader is most likely to check.
+        e.wk[Math.floor((dom-1)/7)]=1;
+      }
+    });
+  });
   var rows=Object.keys(all).map(function(k){
-    return {ym:k, score:all[k].sum/all[k].n, sports:all[k].n, mi:all[k].parts};
+    var e=extra[k]||{elev:0, acts:0, byDay:{}, wk:{}};
+    var p=k.split('-');
+    var dim=new Date(parseInt(p[0],10), parseInt(p[1],10), 0).getDate();
+    var totalMi=0; Object.keys(all[k].parts).forEach(function(s){ totalMi+=all[k].parts[s]; });
+    return {ym:k, score:all[k].sum/all[k].n, sports:all[k].n, mi:all[k].parts,
+            totalMi:Math.round(totalMi*10)/10, elev:Math.round(e.elev), acts:e.acts,
+            byDay:e.byDay, daysInMonth:dim,
+            activeWeeks:Object.keys(e.wk).length, weeksInMonth:Math.ceil(dim/7)};
   }).sort(function(a,b){ return b.score-a.score; });
   return {rows:rows, sports:parts.map(function(p){ return p.noun; }), scored:rows.length};
 }
@@ -16021,6 +16051,116 @@ function _zsRankOf_(ym){
 // no this-month claim at all unless the current month actually scored. When it did not, it says so
 // once and shows the standings anyway — the history is the point, and hiding it because today is
 // quiet would be the same mistake as drawing run's 2026 as a flat line at zero.
+// ---- Athletic Life dashboard helpers. Green accent: this view is cross-sport, and the orange is
+// ---- the ride identity everywhere else on the page.
+var _AL_G='#22c55e', _AL_G_DIM='#16a34a', _AL_TRACK='#1c2130', _AL_BAR='#2a3341';
+function _alFmtYM_(k){ var p=String(k).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+' '+p[0]; }
+// Percentile position expressed 0-100, where 100 is the best month. Deliberately NOT the raw z:
+// a z of +2.4 means nothing to a reader without the distribution, whereas "you were above 97 of
+// every 100 of your own months" is the same fact in a unit anyone can hold. The z is still shown
+// on the cards, labelled as what it is.
+function _alScore100_(rank, n){ return (n>1) ? Math.round((n-rank)/(n-1)*100) : 100; }
+function _alTopPct_(rank, n){ return Math.max(1, Math.round(rank/n*100)); }
+function _alGauge_(pct){
+  var R=46, C=2*Math.PI*R, off=C*(1-Math.max(0,Math.min(100,pct))/100);
+  return '<svg viewBox="0 0 120 120" style="width:118px;height:118px;display:block">'
+    +'<circle cx="60" cy="60" r="'+R+'" fill="none" stroke="'+_AL_TRACK+'" stroke-width="9"/>'
+    +'<circle cx="60" cy="60" r="'+R+'" fill="none" stroke="'+_AL_G+'" stroke-width="9" stroke-linecap="round"'
+    +' stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 60 60)"/>'
+    +'<text x="60" y="58" text-anchor="middle" font-size="31" font-weight="800" fill="#f1f5f9">'+Math.round(pct)+'</text>'
+    +'<text x="60" y="77" text-anchor="middle" font-size="10" fill="#5b6678">/100</text></svg>';
+}
+// Cumulative miles across the month, from the real per-day totals. Cumulative rather than per-day
+// because the shape then reads as the month's build; a per-day spike chart at this size is noise.
+function _alSpark_(r){
+  var n=r.daysInMonth||30, run=0, pts=[], mx=0, d;
+  for(d=1; d<=n; d++){ run+=(r.byDay&&r.byDay[d])?r.byDay[d]:0; pts.push(run); if(run>mx) mx=run; }
+  if(!(mx>0)) return '<div style="height:34px"></div>';
+  var W=150, H=34, path='';
+  for(d=0; d<pts.length; d++){
+    var x=(pts.length>1?(d/(pts.length-1)):0)*(W-2)+1;
+    var y=H-1-(pts[d]/mx)*(H-4);
+    path+=(d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' ';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px;display:block">'
+    +'<path d="'+path+'" fill="none" stroke="'+_AL_G+'" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+}
+function _alCrown_(){
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="'+_AL_G+'" style="display:block">'
+    +'<path d="M3 8l4.5 3.5L12 5l4.5 6.5L21 8l-1.8 10H4.8L3 8z"/></svg>';
+}
+function _alCard_(r, i, n){
+  var top=(i===0);
+  var s100=_alScore100_(i+1, n);
+  var mix=[];
+  if(r.mi.ride!=null) mix.push(Math.round(r.mi.ride)+' mi ride');
+  if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
+  return '<div style="flex:0 0 auto;width:186px;background:#111318;border:1px solid '+(top?_AL_G_DIM:'#1c2130')+';border-radius:13px;padding:13px 13px 11px">'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
+    +(top?_alCrown_():'')
+    +'<span style="font-size:11px;font-weight:800;color:'+(top?_AL_G:'#5b6678')+'">#'+(i+1)+'</span>'
+    +(top?'<span style="font-size:9.5px;font-weight:800;color:'+_AL_G+';letter-spacing:.04em;text-transform:uppercase">Best month ever</span>':'')
+    +'</div>'
+    +'<div style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
+    +'<div style="display:flex;align-items:baseline;gap:4px;margin-top:5px">'
+    +'<span style="font-size:22px;font-weight:800;color:'+_AL_G+';letter-spacing:-.01em">'+s100+'</span>'
+    +'<span style="font-size:11px;color:#5b6678">/100</span></div>'
+    +'<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">'+(r.score>=0?'+':'')+r.score.toFixed(2)+' z vs your average month</div>'
+    +'<div style="margin-top:8px">'+_alSpark_(r)+'</div>'
+    +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
+    +'</div>';
+}
+// Every scored month in date order. Bar height is the combined z floored at zero for display, which
+// is a display choice and nothing else: a below-average month is still a month he trained, and
+// drawing it as negative space would read as a hole in the record rather than a quiet month.
+//
+// MOBILE: the strip scrolls rather than shrinking. 164 bars squeezed into 380px is four device
+// pixels each, which is not a chart. A floor of 5px per bar plus horizontal scroll keeps every
+// month legible at any width and costs nothing on desktop, where it simply fits.
+function _alTimeline_(asc, topSet){
+  var mx=0; asc.forEach(function(r){ if(r.score>mx) mx=r.score; });
+  if(!(mx>0)) mx=1;
+  var H=52, bars='', labels='', seen={};
+  asc.forEach(function(r){
+    var h=Math.max(2, Math.round(Math.max(0,r.score)/mx*H));
+    var isTop=!!topSet[r.ym];
+    bars+='<div title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+'"'
+      +' style="flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">'
+      +(isTop?('<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-bottom:3px"></span>')
+             :('<span style="height:10px"></span>'))
+      +'<span style="width:100%;height:'+h+'px;background:'+(isTop?_AL_G:_AL_BAR)+';border-radius:2px 2px 0 0"></span></div>';
+    var y=String(r.ym).slice(0,4), first=!seen[y]; if(first) seen[y]=1;
+    labels+='<div style="flex:1;min-width:5px;position:relative;height:13px">'
+      +(first?('<span style="position:absolute;left:0;top:0;font-size:9px;color:#5b6678;white-space:nowrap">'+y+'</span>'):'')
+      +'</div>';
+  });
+  var minW=Math.max(560, asc.length*7);
+  return '<div style="overflow-x:auto;padding-bottom:2px">'
+    +'<div style="min-width:'+minW+'px">'
+    +'<div style="display:flex;align-items:flex-end;gap:1px;height:'+(H+12)+'px">'+bars+'</div>'
+    +'<div style="display:flex;gap:1px;margin-top:3px">'+labels+'</div>'
+    +'</div></div>';
+}
+// Volume, consistency, climbing. These three only. Each bar is scaled against his own best scored
+// month on that factor, so the length means "how close to your ceiling", not a share of some
+// invented target. There is no fitness curve here on purpose: CTL/ATL need TSS, which only about
+// a quarter of the rides carry, and a smooth line drawn through that would be invention.
+function _alFactors_(r, mx){
+  function bar(label, val, frac, note){
+    var w=Math.max(2, Math.min(100, Math.round((frac||0)*100)));
+    return '<div style="margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px">'
+      +'<span style="font-size:12px;font-weight:700;color:#cbd5e1">'+label+'</span>'
+      +'<span style="font-size:12.5px;font-weight:800;color:#f1f5f9">'+val+'</span></div>'
+      +'<div style="height:6px;border-radius:3px;background:#141922;overflow:hidden">'
+      +'<div style="height:100%;width:'+w+'%;background:'+_AL_G+';border-radius:3px"></div></div>'
+      +(note?('<div style="font-size:10px;color:#5b6678;margin-top:3px">'+note+'</div>'):'')
+      +'</div>';
+  }
+  return bar('Volume', r.totalMi.toLocaleString()+' mi', mx.mi?(r.totalMi/mx.mi):0, r.acts+' activities')
+    + bar('Consistency', r.activeWeeks+' of '+r.weeksInMonth+' weeks', r.weeksInMonth?(r.activeWeeks/r.weeksInMonth):0, 'weeks with at least one activity')
+    + bar('Climbing', r.elev.toLocaleString()+' ft', mx.elev?(r.elev/mx.elev):0, '');
+}
 function _alSection_(){
   var g=(typeof _zsCompute_==='function')?_zsCompute_():null;
   if(!g || !g.rows.length) return '';                       // unprimed, or nothing scoreable
@@ -16028,45 +16168,71 @@ function _alSection_(){
   var curYM=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2);
   var pos=(typeof _zsRankOf_==='function')?_zsRankOf_(curYM):null;
   var rows=g.rows, N=rows.length;
-  var span=(function(){ var ks=rows.map(function(r){ return r.ym; }).sort(); 
-    return {first:ks[0], last:ks[ks.length-1], years:(parseInt(ks[ks.length-1],10)-parseInt(ks[0],10)+1)}; })();
-  var fmtYM=function(k){ var p=k.split('-'); return _YVY_MON[(+p[1]||1)-1]+' '+p[0]; };
-  var mixOf=function(r){
-    var out=[]; if(r.mi.ride!=null) out.push(_mrMi_?_mrMi_(r.mi.ride):r.mi.ride+'');
-    var s=[]; if(r.mi.ride!=null) s.push(Math.round(r.mi.ride)+' mi ride');
-    if(r.mi.run!=null) s.push(Math.round(r.mi.run)+' mi run');
-    return s.join(' &middot; ');
-  };
-  // Lead line. Two branches, and the difference is honest rather than cosmetic: a month that scored
-  // gets a position; a month that did not gets told why, in the same do-not-claim language the
-  // coverage helper uses everywhere else.
-  var lead = pos
-    ? ('This month sits <b style="color:#f1f5f9">#'+pos.rank+' of '+N+'</b> scored months across your athletic life.')
-    : ('This month has not scored yet &mdash; it needs '+((typeof STORE_V2_RANKABLE_MIN==='number')?STORE_V2_RANKABLE_MIN:4)
-       +' activities in a sport to join the '+N+' scored months below.');
-  var top=rows.slice(0,5);
-  var body='';
-  top.forEach(function(r,i){
-    var isCur=(r.ym===curYM);
-    body+='<div style="display:flex;align-items:baseline;gap:10px;padding:9px 0;border-bottom:1px solid #1c2130">'
-      +'<span style="font-size:12px;font-weight:800;color:'+(i===0?'#FC4C02':'#5b6678')+';min-width:22px">#'+(i+1)+'</span>'
-      +'<span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:700;color:'+(isCur?'#FC4C02':'#f1f5f9')+'">'+fmtYM(r.ym)+'</span>'
-      +'<span style="font-size:11px;color:#64748b;display:block;margin-top:1px">'+mixOf(r)+'</span></span>'
-      +'<span style="font-size:12px;font-weight:700;color:#94a3b8">'+(r.score>=0?'+':'')+r.score.toFixed(2)+'</span>'
-      +'</div>';
-  });
-  // The footer carries the whole normalization argument in one sentence, because a reader who sees
-  // a run month above a ride month deserves to know why that is legitimate rather than a bug.
+  var asc=rows.slice().sort(function(a,b){ return a.ym<b.ym?-1:(a.ym>b.ym?1:0); });
+  var span={first:asc[0].ym, last:asc[asc.length-1].ym};
+
+  // The gauge subject. A scored current month gets the gauge; an unscored one does NOT get a
+  // fabricated position — it falls back to the most recent month that actually scored and says so.
+  // Same null contract as _covFor_: no position beats position zero.
+  var subject, subjRank, gaugeLabel, lead;
+  if(pos){
+    subject=pos.row; subjRank=pos.rank;
+    gaugeLabel='This month &middot; '+_alFmtYM_(curYM);
+    lead='This month sits <b style="color:#f1f5f9">#'+subjRank+' of '+N+'</b> scored months across your athletic life.';
+  }else{
+    subject=asc[asc.length-1];
+    for(var i=0;i<rows.length;i++) if(rows[i].ym===subject.ym) subjRank=i+1;
+    gaugeLabel='Most recent scored &middot; '+_alFmtYM_(subject.ym);
+    lead='This month has not scored yet &mdash; it needs '+((typeof STORE_V2_RANKABLE_MIN==='number')?STORE_V2_RANKABLE_MIN:4)
+        +' activities in a sport to join the '+N+' scored months. The gauge shows your most recent scored month instead.';
+  }
+  var s100=_alScore100_(subjRank, N), tp=_alTopPct_(subjRank, N);
+
+  var top=rows.slice(0,5), topSet={};
+  top.forEach(function(r){ topSet[r.ym]=1; });
+  var mx={mi:0, elev:0};
+  rows.forEach(function(r){ if(r.totalMi>mx.mi) mx.mi=r.totalMi; if(r.elev>mx.elev) mx.elev=r.elev; });
+
+  var head='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
+    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athletic Life</span>'
+    +'<span style="font-size:11px;color:#5b6678">'+g.sports.join(' and ')+' &middot; '+N+' scored months &middot; '
+    +_alFmtYM_(span.first)+' to '+_alFmtYM_(span.last)+'</span></div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">'+lead+'</div>';
+
+  var gauge='<div style="flex:0 0 auto;width:150px;text-align:center">'
+    +'<div style="display:flex;justify-content:center">'+_alGauge_(s100)+'</div>'
+    +'<div style="font-size:12.5px;font-weight:800;color:'+_AL_G+';margin-top:6px">Top '+tp+'% of your months</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+gaugeLabel+'</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:1px">#'+subjRank+' of '+N+'</div></div>';
+
+  var cards='<div style="flex:1;min-width:250px">'
+    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months</div>'
+    +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
+    + top.map(function(r,i){ return _alCard_(r,i,N); }).join('')
+    +'</div></div>';
+
+  var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<span style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em">Timeline</span>'
+    +'<span style="font-size:10.5px;color:#5b6678">every scored month &middot; taller is a stronger month for you &middot; dots mark your top five</span></div>'
+    +_alTimeline_(asc, topSet)+'</div>';
+
+  var best=rows[0];
+  var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
+    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made these months great?</div>'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-bottom:11px">'+_alFmtYM_(best.ym)+', your strongest month, broken into what it was actually made of.</div>'
+    +_alFactors_(best, mx)
+    +'<div style="font-size:10px;color:#5b6678;margin-top:-2px">Bars are scaled against your own best scored month on each factor.</div></div>';
+
   var foot='Months are scored against your own history <b style="color:#94a3b8">within each sport</b>, then averaged &mdash; '
     +'so a strong run month and a strong ride month are comparable even though the miles are not. '
-    +'Scored across '+g.sports.join(' and ')+', '+fmtYM(span.first)+' to '+fmtYM(span.last)+'.';
+    +'The 0-100 score is your percentile among scored months; the z-score on each card is the raw distance from your average.';
+
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
-    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athletic Life</span>'
-    +'<span style="font-size:11px;color:#5b6678">all sports &middot; '+N+' scored months</span></div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">'+lead+'</div>'
-    +body
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +head
+    +'<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+gauge+cards+'</div>'
+    +timeline+factors
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
     +'</div>';
 }
 
@@ -17696,7 +17862,22 @@ function aiRenderOverview_(container){
   H+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
   H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Athlete Intelligence</div>';
   H+='<span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:#0d0f14;background:#f59e0b;border-radius:6px;padding:3px 7px">BETA</span></div>';
-  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+rides.length.toLocaleString()+' rides across '+yrs+' years of data. Real numbers only.</div>';
+  // Cross-sport note. Athletic Life scores rides AND runs, so counting only rides understated the
+  // span by more than a decade — the run log opens in 2011, the ride log in 2017. Runs come from
+  // the same primed source the scoring reads, and the year range spans whichever sports are there.
+  var _hdrRuns=(typeof _storeV2Runs!=='undefined' && _storeV2Runs)?_storeV2Runs:[];
+  var _hdrYrs=yrs;
+  (function(){
+    var ys=[];
+    rides.forEach(function(r){ var y=r.date?parseInt(String(r.date).slice(0,4),10):0; if(y) ys.push(y); });
+    _hdrRuns.forEach(function(r){ var y=r.date?parseInt(String(r.date).slice(0,4),10):0; if(y) ys.push(y); });
+    if(ys.length) _hdrYrs=(Math.max.apply(null,ys)-Math.min.apply(null,ys))+1;
+  })();
+  var _hdrBits=[];
+  if(rides.length) _hdrBits.push(rides.length.toLocaleString()+' ride'+(rides.length===1?'':'s'));
+  if(_hdrRuns.length) _hdrBits.push(_hdrRuns.length.toLocaleString()+' run'+(_hdrRuns.length===1?'':'s'));
+  var _hdrWhat=_hdrBits.length?_hdrBits.join(' and '):'your activities';
+  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' years of data. Real numbers only.</div>';
   // tabs
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
