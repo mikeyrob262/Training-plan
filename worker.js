@@ -3441,9 +3441,25 @@ function storeV2Flatten_(j){
     shape: shape,
     all: acts,
     dropped: coll.length - acts.length,
+    // First-class, not merely a name in topKeys. Every count taken off this snapshot needs the
+    // generation it was taken from travelling beside it — see storeV2Stamp_ for why.
+    builtAt: (j && typeof j==='object' && !Array.isArray(j) && j.builtAt!=null && j.builtAt!=='') ? String(j.builtAt) : null,
     topKeys: (j && typeof j==='object' && !Array.isArray(j)) ? Object.keys(j).slice(0,12) : []
   };
 }
+// The generation stamp for any reported count. RAW value, never reformatted: an ISO string is the
+// thing you compare against a commit time, and a prettified local-time rendering is one more step
+// that can be wrong in a way that looks right.
+//
+// Why this exists at all: a count with no generation stamp cannot be argued with, because it cannot
+// distinguish WRONG from STALE. That is the same class of problem as a stale CDN edge serving an old
+// bundle — the reading is not false, it is just answering about a different version than you think.
+// It is what left the 441-run gap sitting between "the classifier drops them" and "the snapshot
+// never landed" after the classification question had already been settled: both sub-cases produce
+// an identical count line, and nothing in the read path could tell them apart.
+//
+// Absent is PRINTED, never defaulted or blanked. A snapshot with no build stamp is itself a finding.
+function storeV2Stamp_(b){ return 'builtAt: ' + (b ? b : 'absent'); }
 // Same sport vocabularies the app already classifies by, so counts off this
 // snapshot are comparable to counts off st.rides: the run set matches getRuns(),
 // the cycling set matches the isCyc() filter. Sport is read via rideSport_ so a
@@ -3514,7 +3530,7 @@ function storeV2Classify_(j){
       if(/zwift/i.test(String(a.name||''))) zwiftNamed++;
       Object.keys(a).forEach(function(kk){ if(STORE_V2_INDOOR_RE.test(kk)) indoorFields[kk]=(indoorFields[kk]||0)+1; });
     });
-    return { shape:f.shape, total:f.all.length, dropped:f.dropped, topKeys:f.topKeys,
+    return { shape:f.shape, total:f.all.length, dropped:f.dropped, topKeys:f.topKeys, builtAt:f.builtAt,
              all:f.all, byType:byType, rides:rides, runs:runs, virtual:virt, other:other,
              deleted:deleted, deletedAny:deletedAny, delFields:delFields,
              trainerField:trainerField, trainerTrue:trainerTrue, zwiftNamed:zwiftNamed, indoorFields:indoorFields };
@@ -3646,6 +3662,7 @@ function storeV2ByType_(kind){
 function storeV2Verify_(){
   return loadStoreV2_(true).then(function(s){
     console.log('[store_v2] shape=' + s.shape + ' total=' + s.total + (s.dropped ? (' non-activity-records-dropped=' + s.dropped) : ''));
+    console.log('[store_v2] ' + storeV2Stamp_(s.builtAt));
     if(s.topKeys && s.topKeys.length) console.log('[store_v2] top-level keys: ' + s.topKeys.join(', '));
     console.log('[store_v2] RIDE=' + s.rides.length + '  (virtual subset=' + s.virtual.length + ', outdoor=' + (s.rides.length - s.virtual.length) + ')');
     console.log('[store_v2] RUN =' + s.runs.length);
@@ -3694,6 +3711,7 @@ function storeV2Verify_(){
 // is used here to REPORT duration readability — never to match.
 function storeV2RunShape_(){
   return loadStoreV2_(true).then(function(s){
+    console.log('[run-shape] ' + storeV2Stamp_(s.builtAt));
     var runs=s.runs||[];
     var PROJECTED=['time','elevation'];                 // the names renderRun reads
     var RAW=['duration','elev','movingSecs'];           // the names the library stores
@@ -3768,6 +3786,7 @@ var STORE_V2_MEASURED_RUN_F= ['distance','movingSecs','elev','maxHR','avgHR'];
 var STORE_V2_RANKABLE_MIN = 4;
 function storeV2CoverageProbe_(){
   return loadStoreV2_(true).then(function(s){
+    console.log('[coverage] ' + storeV2Stamp_(s.builtAt));
     var all=s.all||[];
     var ym=function(a){ var d=String((a&&a.date)||''); return d.length>=7 ? d.slice(0,7) : ''; };
     var yr=function(a){ var d=String((a&&a.date)||''); return d.length>=4 ? d.slice(0,4) : ''; };
