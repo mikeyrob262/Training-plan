@@ -16054,6 +16054,26 @@ function _zsRankOf_(ym){
 // ---- Athletic Life dashboard helpers. Green accent: this view is cross-sport, and the orange is
 // ---- the ride identity everywhere else on the page.
 var _AL_G='#22c55e', _AL_G_DIM='#16a34a', _AL_TRACK='#1c2130', _AL_BAR='#2a3341';
+// Colour carries information here, it is not decoration. Green stays the achievement thread; the
+// other three exist so a reader can read standing, factor identity and the single peak WITHOUT
+// reading the numbers. Four hues total — accents on a dark ground, not a rainbow.
+var _AL_TEAL='#14b8a6', _AL_AMBER='#f59e0b', _AL_COOL='#64748b';
+// Tier is taken from _yvyRankBand_, the same quartile language the ride surfaces already use, so
+// "lower half" means the same thing on both pages. The colour is a mapping of that band and
+// nothing more — if the band rule ever moves, the colour follows it automatically.
+function _alTierBand_(rank, n){
+  return (typeof _yvyRankBand_==='function') ? _yvyRankBand_(rank, n)
+    : ((n>1) ? (rank/n<=0.25?'top quarter':(rank/n<=0.5?'upper half':(rank/n<=0.75?'lower half':'bottom quarter'))) : 'your only ranked month');
+}
+function _alTierColor_(rank, n){
+  var b=_alTierBand_(rank, n);
+  if(b==='top quarter') return _AL_G;
+  if(b==='upper half') return _AL_TEAL;
+  if(b==='lower half') return _AL_AMBER;
+  if(b==='bottom quarter') return _AL_COOL;
+  return _AL_G;                                        // single-month case: nothing to grade against
+}
+function _alCap_(s){ return String(s).charAt(0).toUpperCase()+String(s).slice(1); }
 function _alFmtYM_(k){ var p=String(k).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+' '+p[0]; }
 // Percentile position expressed 0-100, where 100 is the best month. Deliberately NOT the raw z:
 // a z of +2.4 means nothing to a reader without the distribution, whereas "you were above 97 of
@@ -16061,11 +16081,13 @@ function _alFmtYM_(k){ var p=String(k).split('-'); return (_YVY_MON[(+p[1]||1)-1
 // on the cards, labelled as what it is.
 function _alScore100_(rank, n){ return (n>1) ? Math.round((n-rank)/(n-1)*100) : 100; }
 function _alTopPct_(rank, n){ return Math.max(1, Math.round(rank/n*100)); }
-function _alGauge_(pct){
+// The ring takes the TIER colour, not a fixed green. A gauge that reads green at "top 53%" is
+// congratulating a middling month, which is the same species of lie as a flat line at zero.
+function _alGauge_(pct, col){
   var R=46, C=2*Math.PI*R, off=C*(1-Math.max(0,Math.min(100,pct))/100);
   return '<svg viewBox="0 0 120 120" style="width:118px;height:118px;display:block">'
     +'<circle cx="60" cy="60" r="'+R+'" fill="none" stroke="'+_AL_TRACK+'" stroke-width="9"/>'
-    +'<circle cx="60" cy="60" r="'+R+'" fill="none" stroke="'+_AL_G+'" stroke-width="9" stroke-linecap="round"'
+    +'<circle cx="60" cy="60" r="'+(R)+'" fill="none" stroke="'+(col||_AL_G)+'" stroke-width="9" stroke-linecap="round"'
     +' stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 60 60)"/>'
     +'<text x="60" y="58" text-anchor="middle" font-size="31" font-weight="800" fill="#f1f5f9">'+Math.round(pct)+'</text>'
     +'<text x="60" y="77" text-anchor="middle" font-size="10" fill="#5b6678">/100</text></svg>';
@@ -16085,8 +16107,11 @@ function _alSpark_(r){
   return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px;display:block">'
     +'<path d="'+path+'" fill="none" stroke="'+_AL_G+'" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>';
 }
+// Gold, matching the warm marker the timeline puts on the same month. One peak, one colour, in
+// both places a reader might look for it. The card's border and score stay green — the tier is
+// still an achievement; it is the SINGULARITY that is warm.
 function _alCrown_(){
-  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="'+_AL_G+'" style="display:block">'
+  return '<svg width="13" height="13" viewBox="0 0 24 24" fill="'+_AL_AMBER+'" style="display:block">'
     +'<path d="M3 8l4.5 3.5L12 5l4.5 6.5L21 8l-1.8 10H4.8L3 8z"/></svg>';
 }
 function _alCard_(r, i, n){
@@ -16099,7 +16124,7 @@ function _alCard_(r, i, n){
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
     +(top?_alCrown_():'')
     +'<span style="font-size:11px;font-weight:800;color:'+(top?_AL_G:'#5b6678')+'">#'+(i+1)+'</span>'
-    +(top?'<span style="font-size:9.5px;font-weight:800;color:'+_AL_G+';letter-spacing:.04em;text-transform:uppercase">Best month ever</span>':'')
+    +(top?'<span style="font-size:9.5px;font-weight:800;color:'+_AL_AMBER+';letter-spacing:.04em;text-transform:uppercase">Best month ever</span>':'')
     +'</div>'
     +'<div style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
     +'<div style="display:flex;align-items:baseline;gap:4px;margin-top:5px">'
@@ -16117,18 +16142,22 @@ function _alCard_(r, i, n){
 // MOBILE: the strip scrolls rather than shrinking. 164 bars squeezed into 380px is four device
 // pixels each, which is not a chart. A floor of 5px per bar plus horizontal scroll keeps every
 // month legible at any width and costs nothing on desktop, where it simply fits.
-function _alTimeline_(asc, topSet){
+// peakYM is the all-time #1 and takes a WARM marker while the rest of the top five stay green.
+// Without it the peak is just one of five identical dots, and the single best month of sixteen
+// years is the one thing on this strip a reader is actually hunting for.
+function _alTimeline_(asc, topSet, peakYM){
   var mx=0; asc.forEach(function(r){ if(r.score>mx) mx=r.score; });
   if(!(mx>0)) mx=1;
   var H=52, bars='', labels='', seen={};
   asc.forEach(function(r){
     var h=Math.max(2, Math.round(Math.max(0,r.score)/mx*H));
-    var isTop=!!topSet[r.ym];
-    bars+='<div title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+'"'
+    var isTop=!!topSet[r.ym], isPeak=(r.ym===peakYM);
+    var col=isPeak?_AL_AMBER:(isTop?_AL_G:_AL_BAR);
+    bars+='<div title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+(isPeak?' &middot; your best month':'')+'"'
       +' style="flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">'
-      +(isTop?('<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-bottom:3px"></span>')
+      +(isTop?('<span style="width:'+(isPeak?9:7)+'px;height:'+(isPeak?9:7)+'px;border-radius:50%;background:'+(isPeak?_AL_AMBER:_AL_G)+';margin-bottom:'+(isPeak?2:3)+'px"></span>')
              :('<span style="height:10px"></span>'))
-      +'<span style="width:100%;height:'+h+'px;background:'+(isTop?_AL_G:_AL_BAR)+';border-radius:2px 2px 0 0"></span></div>';
+      +'<span style="width:100%;height:'+h+'px;background:'+col+';border-radius:2px 2px 0 0"></span></div>';
     var y=String(r.ym).slice(0,4), first=!seen[y]; if(first) seen[y]=1;
     labels+='<div style="flex:1;min-width:5px;position:relative;height:13px">'
       +(first?('<span style="position:absolute;left:0;top:0;font-size:9px;color:#5b6678;white-space:nowrap">'+y+'</span>'):'')
@@ -16145,21 +16174,25 @@ function _alTimeline_(asc, topSet){
 // month on that factor, so the length means "how close to your ceiling", not a share of some
 // invented target. There is no fitness curve here on purpose: CTL/ATL need TSS, which only about
 // a quarter of the rides carry, and a smooth line drawn through that would be invention.
+// One hue per factor, so the three read as three things at a glance rather than as one bar drawn
+// three times. The hue identifies the factor and carries no ranking — length is the only quantity
+// here, and a reader should not have to check the label to know which bar is which.
 function _alFactors_(r, mx){
-  function bar(label, val, frac, note){
+  function bar(label, val, frac, note, col){
     var w=Math.max(2, Math.min(100, Math.round((frac||0)*100)));
     return '<div style="margin-bottom:12px">'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px">'
-      +'<span style="font-size:12px;font-weight:700;color:#cbd5e1">'+label+'</span>'
+      +'<span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#cbd5e1">'
+      +'<span style="width:7px;height:7px;border-radius:2px;background:'+col+';flex:0 0 auto"></span>'+label+'</span>'
       +'<span style="font-size:12.5px;font-weight:800;color:#f1f5f9">'+val+'</span></div>'
       +'<div style="height:6px;border-radius:3px;background:#141922;overflow:hidden">'
-      +'<div style="height:100%;width:'+w+'%;background:'+_AL_G+';border-radius:3px"></div></div>'
+      +'<div style="height:100%;width:'+w+'%;background:'+col+';border-radius:3px"></div></div>'
       +(note?('<div style="font-size:10px;color:#5b6678;margin-top:3px">'+note+'</div>'):'')
       +'</div>';
   }
-  return bar('Volume', r.totalMi.toLocaleString()+' mi', mx.mi?(r.totalMi/mx.mi):0, r.acts+' activities')
-    + bar('Consistency', r.activeWeeks+' of '+r.weeksInMonth+' weeks', r.weeksInMonth?(r.activeWeeks/r.weeksInMonth):0, 'weeks with at least one activity')
-    + bar('Climbing', r.elev.toLocaleString()+' ft', mx.elev?(r.elev/mx.elev):0, '');
+  return bar('Volume', r.totalMi.toLocaleString()+' mi', mx.mi?(r.totalMi/mx.mi):0, r.acts+' activities', _AL_G)
+    + bar('Consistency', r.activeWeeks+' of '+r.weeksInMonth+' weeks', r.weeksInMonth?(r.activeWeeks/r.weeksInMonth):0, 'weeks with at least one activity', _AL_TEAL)
+    + bar('Climbing', r.elev.toLocaleString()+' ft', mx.elev?(r.elev/mx.elev):0, '', _AL_AMBER);
 }
 function _alSection_(){
   var g=(typeof _zsCompute_==='function')?_zsCompute_():null;
@@ -16199,11 +16232,15 @@ function _alSection_(){
     +_alFmtYM_(span.first)+' to '+_alFmtYM_(span.last)+'</span></div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">'+lead+'</div>';
 
+  // Ring, headline and figure all take the tier colour, so the standing is legible before a single
+  // number is read. The band name is the headline because it is the honest summary; the percentile
+  // sits under it as the precise version of the same fact.
+  var tierCol=_alTierColor_(subjRank, N), tierBand=_alTierBand_(subjRank, N);
   var gauge='<div style="flex:0 0 auto;width:150px;text-align:center">'
-    +'<div style="display:flex;justify-content:center">'+_alGauge_(s100)+'</div>'
-    +'<div style="font-size:12.5px;font-weight:800;color:'+_AL_G+';margin-top:6px">Top '+tp+'% of your months</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+gaugeLabel+'</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-top:1px">#'+subjRank+' of '+N+'</div></div>';
+    +'<div style="display:flex;justify-content:center">'+_alGauge_(s100, tierCol)+'</div>'
+    +'<div style="font-size:12.5px;font-weight:800;color:'+tierCol+';margin-top:6px">'+_alCap_(tierBand)+'</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:2px">Top '+tp+'% &middot; #'+subjRank+' of '+N+'</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:1px">'+gaugeLabel+'</div></div>';
 
   var cards='<div style="flex:1;min-width:250px">'
     +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months</div>'
@@ -16214,8 +16251,11 @@ function _alSection_(){
   var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em">Timeline</span>'
-    +'<span style="font-size:10.5px;color:#5b6678">every scored month &middot; taller is a stronger month for you &middot; dots mark your top five</span></div>'
-    +_alTimeline_(asc, topSet)+'</div>';
+    +'<span style="font-size:10.5px;color:#5b6678">every scored month &middot; taller is a stronger month for you</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#5b6678">'
+    +'<span style="width:8px;height:8px;border-radius:50%;background:'+_AL_AMBER+'"></span>best ever'
+    +'<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-left:6px"></span>top five</span></div>'
+    +_alTimeline_(asc, topSet, rows[0].ym)+'</div>';
 
   var best=rows[0];
   var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
