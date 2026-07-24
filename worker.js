@@ -9215,7 +9215,12 @@ function sportKeyFor_(t){
   t=String(t||'').toLowerCase();
   if(/swim/.test(t)) return 'swim';
   if(/strength|core|gym|lift|weight/.test(t)) return 'strength';
-  if(/\bwalk\b|hike/.test(t)) return 'walk';
+  // Word boundaries need DOUBLE backslashes here. The served template consumes a single backslash-b
+  // at emit time and writes a literal backspace (0x08) into the regex, so this shipped with the two
+  // word-boundary markers replaced by backspace characters and matched nothing. Silent: it never
+  // threw, it just quietly stopped classifying walks. Note the escape is spelled out in words above
+  // rather than written literally, so the comment itself does not emit a backspace.
+  if(/\\bwalk\\b|hike/.test(t)) return 'walk';
   if(/run|jog/.test(t)) return 'run';
   return 'bike';
 }
@@ -9238,7 +9243,7 @@ function getMissedWorkouts(){
     var key=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
     var plan=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(key):null;
     if(!plan || !plan.name) continue;            // rest / no plan -> not a miss
-    if(/rest|off\b|recovery day/i.test(plan.name)) continue; // explicit rest
+    if(/rest|off\\b|recovery day/i.test(plan.name)) continue; // explicit rest (double backslash: see the walk/hike note)
     var done=(typeof isDayComplete==='function') && isDayComplete(key);
     var act=(typeof findActivityForDate==='function') ? findActivityForDate(key) : null;
     if(done || act) continue;                    // completed or has a recorded activity
@@ -23868,7 +23873,13 @@ function _depWrite_(src, fname, tok){
   _depStatus_('Picked '+fname+' &middot; '+Math.round(src.length/1024)+' KB &middot; build <b>'+outgoing+'</b><br>Getting current SHA…');
   fetch(api,{headers:hdr}).then(function(r){ return r.json(); }).then(function(cur){
     if(!cur||!cur.sha){ _depStatus_('Could not read current worker.js — check the token has repo scope.','#E74C3C'); return; }
-    if(!confirm('Deploy '+fname+' ('+Math.round(src.length/1024)+' KB, build '+outgoing+') to '+_DEP_OWNER+'/'+_DEP_REPO+'/'+_DEP_PATH+'?\n\nThis replaces the live file.')) { _depStatus_('Cancelled.'); return; }
+    // Newline via fromCharCode, NOT an escape. This file is served inside a template literal, so a
+    // backslash-n here is consumed at EMIT time and becomes a real newline in the middle of this
+    // string literal — the emitted script then ends mid-string and the whole block dies with
+    // "Invalid or unexpected token" at load. Exactly what took the app down at (index):23813:136.
+    // storeV2Put_ already does it this way; this is the same rule, not a new one.
+    var _dnl=String.fromCharCode(10)+String.fromCharCode(10);
+    if(!confirm('Deploy '+fname+' ('+Math.round(src.length/1024)+' KB, build '+outgoing+') to '+_DEP_OWNER+'/'+_DEP_REPO+'/'+_DEP_PATH+'?'+_dnl+'This replaces the live file.')) { _depStatus_('Cancelled.'); return; }
     _depStatus_('Uploading…');
     var body={message:'Deploy worker.js — '+outgoing, content:btoa(unescape(encodeURIComponent(src))), sha:cur.sha};
     return fetch(api,{method:'PUT',headers:hdr,body:JSON.stringify(body)})
