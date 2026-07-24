@@ -16074,6 +16074,30 @@ function _alTierColor_(rank, n){
   return _AL_G;                                        // single-month case: nothing to grade against
 }
 function _alCap_(s){ return String(s).charAt(0).toUpperCase()+String(s).slice(1); }
+
+// ---- Month-handle namespace. A handle here is the bare 'YYYY-MM' string and NOTHING else. It
+// ---- deliberately borrows nothing from Fork B — not rideKey, not rideHandle_, not rideRefOf_ —
+// ---- because that grammar resolves positionally against st.rides, and this hero is computed off
+// ---- the snapshot. This is a parallel vocabulary, not an extension of the ride one.
+var _AL_SEL_YM=null;                                      // the selected month, or null = show the #1 default
+function _alHandleOf_(row){ return row && row.ym; }        // the handle of a scored-month row IS its ym
+// Resolve a handle against the SAME sorted array that produced rank/rankTot. The list is never
+// rebuilt: position in g.rows IS the rank, by construction, so index+1 is the rank with no separate
+// lookup that could disagree. Returns null for a handle that is not a scored month — the same
+// do-not-claim contract used everywhere on this page.
+function _alResolveMonth_(ym, g){
+  if(!ym || !g || !g.rows) return null;
+  for(var i=0;i<g.rows.length;i++) if(g.rows[i].ym===ym) return {row:g.rows[i], rank:i+1, of:g.rows.length};
+  return null;
+}
+// The one selection entry point, wired to both surfaces because both mount through the shared
+// aiRenderOverview_(_aiMount) — there is no desktop/mobile split to mirror here. Clicking the
+// already-selected month clears the selection and returns to the #1 default, so the strip is a
+// toggle rather than a trap. Re-render is the established aiSetTab_ pattern: set state, repaint.
+function alSelectMonth_(ym){
+  _AL_SEL_YM=(ym && ym===_AL_SEL_YM) ? null : (ym||null);
+  try{ if(typeof _aiMount!=='undefined' && _aiMount && typeof aiRenderOverview_==='function') aiRenderOverview_(_aiMount); }catch(e){}
+}
 function _alFmtYM_(k){ var p=String(k).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+' '+p[0]; }
 // Percentile position expressed 0-100, where 100 is the best month. Deliberately NOT the raw z:
 // a z of +2.4 means nothing to a reader without the distribution, whereas "you were above 97 of
@@ -16114,13 +16138,16 @@ function _alCrown_(){
   return '<svg width="13" height="13" viewBox="0 0 24 24" fill="'+_AL_AMBER+'" style="display:block">'
     +'<path d="M3 8l4.5 3.5L12 5l4.5 6.5L21 8l-1.8 10H4.8L3 8z"/></svg>';
 }
-function _alCard_(r, i, n){
-  var top=(i===0);
+function _alCard_(r, i, n, selYM){
+  var top=(i===0), isSel=(r.ym===selYM);
   var s100=_alScore100_(i+1, n);
   var mix=[];
   if(r.mi.ride!=null) mix.push(Math.round(r.mi.ride)+' mi ride');
   if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
-  return '<div style="flex:0 0 auto;width:186px;background:#111318;border:1px solid '+(top?_AL_G_DIM:'#1c2130')+';border-radius:13px;padding:13px 13px 11px">'
+  // A card is the same month handle as its bar, so it selects too. A selected card takes a white
+  // border; otherwise the #1 keeps its green edge and the rest the default.
+  var border=isSel?'#f1f5f9':(top?_AL_G_DIM:'#1c2130');
+  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:186px;background:#111318;border:1px solid '+border+';border-radius:13px;padding:13px 13px 11px;cursor:pointer">'
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
     +(top?_alCrown_():'')
     +'<span style="font-size:11px;font-weight:800;color:'+(top?_AL_G:'#5b6678')+'">#'+(i+1)+'</span>'
@@ -16145,19 +16172,25 @@ function _alCard_(r, i, n){
 // peakYM is the all-time #1 and takes a WARM marker while the rest of the top five stay green.
 // Without it the peak is just one of five identical dots, and the single best month of sixteen
 // years is the one thing on this strip a reader is actually hunting for.
-function _alTimeline_(asc, topSet, peakYM){
+function _alTimeline_(asc, topSet, peakYM, selYM){
   var mx=0; asc.forEach(function(r){ if(r.score>mx) mx=r.score; });
   if(!(mx>0)) mx=1;
   var H=52, bars='', labels='', seen={};
   asc.forEach(function(r){
     var h=Math.max(2, Math.round(Math.max(0,r.score)/mx*H));
-    var isTop=!!topSet[r.ym], isPeak=(r.ym===peakYM);
+    var isTop=!!topSet[r.ym], isPeak=(r.ym===peakYM), isSel=(r.ym===selYM);
     var col=isPeak?_AL_AMBER:(isTop?_AL_G:_AL_BAR);
-    bars+='<div title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+(isPeak?' &middot; your best month':'')+'"'
-      +' style="flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center">'
-      +(isTop?('<span style="width:'+(isPeak?9:7)+'px;height:'+(isPeak?9:7)+'px;border-radius:50%;background:'+(isPeak?_AL_AMBER:_AL_G)+';margin-bottom:'+(isPeak?2:3)+'px"></span>')
-             :('<span style="height:10px"></span>'))
-      +'<span style="width:100%;height:'+h+'px;background:'+col+';border-radius:2px 2px 0 0"></span></div>';
+    // Every bar drawn IS a scored month (asc is g.rows) — so every bar is a legitimate target and an
+    // unscored month is never rendered as clickable. Selection is shown by a white ring on the bar
+    // and a white marker above it, distinct from the amber peak and green top-five dots.
+    var marker=isSel
+      ? '<span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #f1f5f9;box-sizing:border-box;margin-bottom:'+(isTop?1:3)+'px"></span>'
+      : (isTop?('<span style="width:'+(isPeak?9:7)+'px;height:'+(isPeak?9:7)+'px;border-radius:50%;background:'+(isPeak?_AL_AMBER:_AL_G)+';margin-bottom:'+(isPeak?2:3)+'px"></span>')
+             :('<span style="height:10px"></span>'));
+    bars+='<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+(isPeak?' &middot; your best month':'')+'"'
+      +' style="flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:pointer">'
+      +marker
+      +'<span style="width:100%;height:'+h+'px;background:'+col+';border-radius:2px 2px 0 0'+(isSel?';box-shadow:0 0 0 1.5px #f1f5f9':'')+'"></span></div>';
     var y=String(r.ym).slice(0,4), first=!seen[y]; if(first) seen[y]=1;
     labels+='<div style="flex:1;min-width:5px;position:relative;height:13px">'
       +(first?('<span style="position:absolute;left:0;top:0;font-size:9px;color:#5b6678;white-space:nowrap">'+y+'</span>'):'')
@@ -16230,6 +16263,15 @@ function _alSection_(){
   var mx={mi:0, elev:0};
   rows.forEach(function(r){ if(r.totalMi>mx.mi) mx.mi=r.totalMi; if(r.elev>mx.elev) mx.elev=r.elev; });
 
+  // Selection resolves against g (the same sorted array), and a stale handle that no longer scores
+  // falls back to the #1 default rather than showing an empty panel. selYM is what actually drives
+  // the highlight, so it is cleared too when the handle does not resolve — the strip never shows a
+  // selection ring on a month the panel is not showing.
+  var selRes=_AL_SEL_YM?_alResolveMonth_(_AL_SEL_YM, g):null;
+  var panelRow=selRes?selRes.row:rows[0];
+  var panelRank=selRes?selRes.rank:1;
+  var selYM=selRes?_AL_SEL_YM:null;
+
   var head='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
     +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athletic Life</span>'
     +'<span style="font-size:11px;color:#5b6678">'+g.sports.join(' and ')+' &middot; '+N+' scored months &middot; '
@@ -16249,7 +16291,7 @@ function _alSection_(){
   var cards='<div style="flex:1;min-width:250px">'
     +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months</div>'
     +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
-    + top.map(function(r,i){ return _alCard_(r,i,N); }).join('')
+    + top.map(function(r,i){ return _alCard_(r,i,N,selYM); }).join('')
     +'</div></div>';
 
   var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
@@ -16258,14 +16300,23 @@ function _alSection_(){
     +'<span style="font-size:10.5px;color:#5b6678">every scored month &middot; taller is a stronger month for you</span>'
     +'<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#5b6678">'
     +'<span style="width:8px;height:8px;border-radius:50%;background:'+_AL_AMBER+'"></span>best ever'
-    +'<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-left:6px"></span>top five</span></div>'
-    +_alTimeline_(asc, topSet, rows[0].ym)+'</div>';
+    +'<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-left:6px"></span>top five'
+    +'<span style="margin-left:6px;color:#94a3b8">&middot; tap any month</span></span></div>'
+    +_alTimeline_(asc, topSet, rows[0].ym, selYM)+'</div>';
 
-  var best=rows[0];
+  // The panel names the month it is showing, ALWAYS — default or selected. A strip that highlights
+  // one month while the panel silently shows another is the one-number-two-populations shape in
+  // visual form, so the header is bound to panelRow, never to a fixed rows[0].
+  var panelHdr=(panelRank===1)
+    ? (_alFmtYM_(panelRow.ym)+', your strongest month, broken into what it was actually made of.')
+    : (_alFmtYM_(panelRow.ym)+' &mdash; your #'+panelRank+' of '+N+' month, broken into what it was made of.');
+  var resetLink=selYM
+    ? ' <span onclick="alSelectMonth_(&#39;'+selYM+'&#39;)" style="color:'+_AL_G+';cursor:pointer;font-weight:700">&middot; show your best</span>'
+    : '';
   var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
-    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made these months great?</div>'
-    +'<div style="font-size:11.5px;color:#94a3b8;margin-bottom:11px">'+_alFmtYM_(best.ym)+', your strongest month, broken into what it was actually made of.</div>'
-    +_alFactors_(best, mx)
+    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month'+(panelRank===1?'s':'')+' great?</div>'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-bottom:11px">'+panelHdr+resetLink+'</div>'
+    +_alFactors_(panelRow, mx)
     +'<div style="font-size:10px;color:#5b6678;margin-top:-2px">Bars are scaled against your own best scored month on each factor.</div></div>';
 
   var foot='Months are scored against your own history <b style="color:#94a3b8">within each sport</b>, then averaged &mdash; '
