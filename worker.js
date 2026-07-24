@@ -15814,7 +15814,7 @@ function _yvyVM_(rides, now){
   return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
-    doneList:doneList, med6:med6,
+    doneList:doneList, med6:med6, monthMi:bym,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
@@ -16280,6 +16280,95 @@ function _rsSection_(vm){
     +'</div>';
 }
 
+// ==================== You vs. You — Athlete Momentum ====================
+// The widest zoom on the page: ride miles by year. Yearly totals are rolled up from vm.monthMi,
+// the same monthly totals every other section reads, so a year here cannot disagree with a month
+// there. Nothing re-scans rides.
+//
+// THE CURRENT YEAR IS NOT A PEER. It gets the ghost fill and dashed edge Month Race gives Best
+// Month, plus its own elapsed-days label, because seven months against twelve is not a comparison
+// and a partial bar sharing an axis with complete ones is the single easiest way to lie here.
+// Its projected finish is a separate dashed MARK, never part of the bar, and it comes off the same
+// trailing-rate path the Challenge Engine and Regret Simulator use — there is no second projection
+// method on this page.
+//
+// The window is stated once and is deliberately narrow: pre-2024 months do not clear the ride
+// count this page ranks on, and Momentum does not get a looser rule than the hero. Three years
+// inside a stated window cannot carry "best ever", so no superlative is used across years, and
+// there is no peak marker — at this n a trajectory claim is not supported. The year-over-year
+// change is stated in words instead.
+var _AM_ERA_START=2024;
+// Whole miles at year scale. A yearly total or a year-end projection quoted to the tenth of a mile
+// is precision the number does not have.
+function _amMi_(v){ return Math.round(v).toLocaleString(); }
+function _amDayOfYear_(dt){ return Math.round((dt-new Date(dt.getFullYear(),0,1))/86400000)+1; }
+function _amDaysInYear_(y){ return (((y%4===0)&&(y%100!==0))||(y%400===0))?366:365; }
+function _amCompute_(vm){
+  var bym=vm.monthMi||{}, curY=vm.y, tot={};
+  Object.keys(bym).forEach(function(k){
+    var y=parseInt(String(k).slice(0,4),10);
+    if(y>=_AM_ERA_START && y<=curY) tot[y]=(tot[y]||0)+bym[k];
+  });
+  var years=[];
+  for(var y=_AM_ERA_START;y<=curY;y++) years.push({ y:y, mi:Math.round((tot[y]||0)*10)/10, partial:(y===curY) });
+  var complete=years.filter(function(x){ return !x.partial && x.mi>0; });
+  if(complete.length<2) return null;                  // one complete year plus a partial is not momentum
+
+  var cur=years[years.length-1];
+  var today=new Date(curY, vm.m, vm.domNow);
+  var daysLeft=Math.max(0, Math.round((new Date(curY,11,31)-today)/86400000));
+  var proj=(vm.rate>0)?Math.round((cur.mi+vm.rate/7*daysLeft)*10)/10:null;
+
+  var a=complete[complete.length-1], b=complete[complete.length-2];
+  var pct=(b.mi>0)?Math.round((a.mi-b.mi)/b.mi*100):((a.mi>0)?100:0);
+  var mx=0; years.forEach(function(x){ if(x.mi>mx) mx=x.mi; });
+  if(proj!=null && proj>mx) mx=proj;
+  return { years:years, complete:complete, cur:cur, prevA:a, prevB:b, pct:pct, band:_yvyBand_(pct),
+           proj:proj, elapsed:_amDayOfYear_(today), inYear:_amDaysInYear_(curY),
+           max:Math.max(mx,1), eraStart:_AM_ERA_START };
+}
+function _amSection_(vm){
+  var am=_amCompute_(vm);
+  if(!am) return '';
+  var MONF=_YVY_MONF[vm.m]||'';
+  var rows=am.years.map(function(x){
+    var w=Math.max(0, Math.min(100, x.mi/am.max*100));
+    var fill=x.partial
+      ? '<div style="position:absolute;left:0;top:0;bottom:0;width:'+w.toFixed(2)+'%;background:'+_MR_YOU+'14;border:1.5px dashed '+_MR_YOU+'aa;border-radius:9px;box-sizing:border-box"></div>'
+      : '<div style="position:absolute;left:0;top:0;bottom:0;width:'+w.toFixed(2)+'%;background:#3b4a63;border-radius:9px"></div>';
+    var mark='';
+    if(x.partial && am.proj!=null && am.proj>x.mi){
+      var pw=Math.max(0, Math.min(99.4, am.proj/am.max*100));
+      mark='<div style="position:absolute;left:'+pw.toFixed(2)+'%;top:-4px;bottom:-4px;width:0;border-left:2px dashed #64748b"></div>';
+    }
+    var sub=x.partial
+      ? ('still running &middot; through '+MONF+' '+vm.domNow+' &middot; '+am.elapsed+' of '+am.inYear+' days')
+      : 'full year';
+    return '<div style="margin-bottom:13px">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap">'
+      +'<div style="min-width:0"><span style="font-size:13px;font-weight:800;color:#f1f5f9">'+x.y+'</span>'
+      +'<span style="font-size:11px;color:#5b6678;margin-left:8px">'+sub+'</span></div>'
+      +'<div style="white-space:nowrap"><span style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+_amMi_(x.mi)+'</span>'
+      +'<span style="font-size:12px;color:#94a3b8"> mi</span></div></div>'
+      +'<div style="position:relative;height:30px;border-radius:9px;background:#141922">'+fill+mark+'</div></div>';
+  }).join('');
+
+  var word=(am.band==='win')?'up from':((am.band==='focus')?'down from':'level with');
+  var sentence=am.prevA.y+' was <b style="color:#f1f5f9">'+_amMi_(am.prevA.mi)+' mi</b>, '+word+' <b style="color:#f1f5f9">'+_amMi_(am.prevB.mi)+'</b> in '+am.prevB.y+'. '
+    +am.cur.y+' sits at <b style="color:#f1f5f9">'+_amMi_(am.cur.mi)+' mi</b> through '+MONF+' '+vm.domNow+'.'
+    +((am.proj!=null && am.proj>am.cur.mi)?(' On your trailing rate that finishes near '+_amMi_(am.proj)+' mi &mdash; a projection, not a result.'):'');
+  var foot='Years start at '+am.eraStart+': earlier months do not clear the ride count this page ranks on. '
+    +am.cur.y+' is drawn as an outline because it is still running &mdash; '+am.elapsed+' of '+am.inYear+' days against full years is not a comparison, and the dashed line is where the trailing rate would finish it.';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athlete Momentum</span>'
+    +'<span style="font-size:11px;color:#5b6678">ride miles by year since '+am.eraStart+'</span></div>'
+    +rows
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-top:2px">'+sentence+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'</div>';
+}
+
 function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
@@ -16369,6 +16458,7 @@ function _yvyRenderVM_(vm){
     +'</div>'
     +_wcSection_(vm)
     +_raSection_(vm)
+    +_amSection_(vm)
     +_pbSection_(vm)
     +'<div style="margin-top:14px">'+insight+'</div>'
     +'</div>';
