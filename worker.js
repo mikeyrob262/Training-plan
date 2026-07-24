@@ -5410,6 +5410,22 @@ function genEntryId_(){
 // impossible to identify later). Belt-and-suspenders: the individual add paths mostly guard
 // already, but this makes it structural regardless of the upstream source.
 function _nlName_(x){ var s=(x==null)?'':String(x).trim(); return s || 'Food'; }
+// Validation chokepoint for a logged strength set (same pattern as _nlName_). RPE is only
+// meaningful on a 1-10 scale, so a value like 115 is not a hard set — it means the columns were
+// transposed (a weight typed into the RPE box). Anything clearly out of range is DROPPED to null
+// rather than clamped to a fake 10, which would hide the mistake behind a plausible-looking value.
+// Weight is coerced to a non-negative load and an absurd >2000 lb entry is dropped. reps is kept
+// as a sane non-negative count. Route every strength-set write through this.
+function _strSet_(weight, reps, rpe){
+  var w=+weight; if(!isFinite(w)||w<0) w=0; if(w>2000) w=null;                    // implausible load -> drop
+  var r=parseInt(reps,10); if(!isFinite(r)||r<0||r>1000) r=null;
+  var e=+rpe;
+  if(!isFinite(e) || e<0.5 || e>11){                                              // valid RPE band (tolerate a hair over 10)
+    if(rpe!=null && rpe!==''){ try{ console.warn('[strength] dropped out-of-range RPE '+rpe+' (valid 1-10) — check for transposed weight/RPE columns'); }catch(_e){} }
+    e=null;
+  } else { e=Math.round(Math.max(1,Math.min(10,e))*2)/2; }                         // snap to 0.5
+  return { weight:(w==null?null:w), reps:r, rpe:e };
+}
 // One-time cleanup for rides duplicated by the since-fixed movingSecs dedup
 // bug (Strava-synced rides never set movingSecs, so FIT/TCX imports never
 // recognized them as already existing). Groups rides by date, clusters
@@ -15278,6 +15294,59 @@ function _adhCardInner_(title, wk){
 }
 // Strength adherence and ride adherence — separate cards, same viz, different series.
 function aiCardStrengthAdherence_(){ return _adhCardInner_('STRENGTH ADHERENCE', (typeof strengthAdherenceTrend_==='function')?strengthAdherenceTrend_(st,8):[]); }
+// ==================== Strength progression — top-set load per lift ====================
+// Reads the SAME session-authoritative log _strTopSets_ uses. Honest at n=1: a single logged
+// session renders each lift as a BASELINE dot (dashed guide, no line) and says so — it never
+// draws a slope from one point. A per-lift line appears only once that lift has >=2 sessions.
+function _strProgressData_(){
+  var lifts={}, dateSet={}, seen={};
+  function add(dk,e){ if(!e||!e.name||!Array.isArray(e.sets)||!e.sets.length) return; var top=e.sets[0]||{}; var w=+top.weight; if(!(w>0)) return;
+    (lifts[e.name]=lifts[e.name]||[]).push({date:dk, weight:w, reps:+top.reps||0, rpe:(top.rpe!=null?+top.rpe:null)}); dateSet[dk]=1; }
+  try{
+    if(typeof st!=='undefined' && st.plan){ Object.keys(st.plan).forEach(function(dk){ var d=st.plan[dk]; if(!d||!Array.isArray(d.sessions)) return;
+      d.sessions.forEach(function(x){ if(!x||x.deleted||!Array.isArray(x.strengthLog)||!x.strengthLog.length) return; seen[dk]=1; x.strengthLog.forEach(function(e){ add(dk,e); }); }); }); }
+    var log=(typeof st!=='undefined'&&st.strength&&st.strength.log)?st.strength.log:{};
+    Object.keys(log).forEach(function(dk){ var nk=(typeof normDate==='function')?normDate(dk):dk; if(seen[nk]||seen[dk]) return; (log[dk]||[]).forEach(function(e){ add(nk,e); }); });
+  }catch(e){}
+  Object.keys(lifts).forEach(function(k){ lifts[k].sort(function(a,b){ return a.date<b.date?-1:1; }); });
+  return { lifts:lifts, dates:Object.keys(dateSet).sort() };
+}
+function aiCardStrengthProgress_(){
+  var d=_strProgressData_(), names=Object.keys(d.lifts);
+  if(!names.length) return '';                                    // nothing logged — adherence carries the "show up" story
+  var nSessions=d.dates.length, single=(nSessions<=1);
+  names.sort(function(a,b){ var la=d.lifts[a], lb=d.lifts[b]; return lb[lb.length-1].weight - la[la.length-1].weight; });
+  var inner=aiLbl_('STRENGTH PROGRESSION','<span style="font-size:11px;color:#5b6678">'+(single?'baseline':(nSessions+' sessions'))+'</span>');
+  inner+='<div style="font-size:11.5px;color:#94a3b8;line-height:1.45;margin-bottom:10px">'
+    +(single
+      ? ('Your starting point &mdash; '+_adhLbl_(d.dates[0])+'. One session logged, so these are baselines, not trends. Log another to chart progress.')
+      : ('Top-set load per lift across '+nSessions+' logged sessions.'))
+    +'</div>';
+  names.slice(0,8).forEach(function(nm){
+    var s=d.lifts[nm], last=s[s.length-1], first=s[0];
+    var W=88,H=26,pad=3, ws=s.map(function(p){return p.weight;}), mn=Math.min.apply(null,ws), mx=Math.max.apply(null,ws), rng=(mx-mn)||1;
+    function X(i){ return s.length>1 ? (pad+(i/(s.length-1))*(W-2*pad)) : W/2; }
+    function Y(w){ return H-pad-((w-mn)/rng)*(H-2*pad); }
+    var spark, up=last.weight>=first.weight, col=up?'#4ade80':'#f59e0b';
+    if(s.length>=2){
+      var pts=s.map(function(p,i){ return X(i).toFixed(1)+' '+Y(p.weight).toFixed(1); });
+      spark='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block"><path d="M'+pts.join(' L')+'" fill="none" stroke="'+col+'" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="'+X(s.length-1).toFixed(1)+'" cy="'+Y(last.weight).toFixed(1)+'" r="2.4" fill="'+col+'"/></svg>';
+    } else {
+      // n=1: a baseline dot on a dashed guide — NO line, no implied slope
+      spark='<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block"><line x1="'+pad+'" y1="'+(H/2)+'" x2="'+(W-pad)+'" y2="'+(H/2)+'" stroke="#1c2130" stroke-width="1" stroke-dasharray="2 3"/><circle cx="'+(W/2)+'" cy="'+(H/2)+'" r="3" fill="#60a5fa"/></svg>';
+    }
+    var setStr=last.weight+' lb'+(last.reps?(' &times; '+last.reps):'')+(last.rpe!=null?(' @ RPE '+last.rpe):'');
+    var delta=(s.length>=2)?(last.weight-first.weight):null;
+    var deltaHtml=(delta!=null&&delta!==0)?('<span style="font-size:10px;font-weight:700;color:'+(delta>0?'#4ade80':'#f59e0b')+'">'+(delta>0?'+':'')+delta+' lb</span>')
+                 :(single?'<span style="font-size:10px;color:#5b6678">start</span>':'<span style="font-size:10px;color:#5b6678">&mdash;</span>');
+    inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #14181f">'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+aiEsc_(nm)+'</div>'
+      +'<div style="font-size:10.5px;color:#5b6678">'+setStr+'</div></div>'
+      +'<div style="flex-shrink:0">'+spark+'</div>'
+      +'<div style="width:52px;text-align:right;flex-shrink:0">'+deltaHtml+'</div></div>';
+  });
+  return aiCard_(inner);
+}
 function aiCardRideAdherence_(){ return _adhCardInner_('RIDE ADHERENCE', (typeof rideAdherenceTrend_==='function')?rideAdherenceTrend_(st,8):[]); }
 
 // ==================== You vs. You — cumulative month-over-month ghost charts ====================
@@ -16484,13 +16553,14 @@ function aiRenderTab_(tab, ded){
   var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
   var recs=_aiSafe_('Records', function(){return aiCardRecords_();});
   var adh=_aiSafe_('StrengthAdherence', function(){return aiCardStrengthAdherence_();});
+  var strp=_aiSafe_('StrengthProgress', function(){return aiCardStrengthProgress_();});
   var ridh=_aiSafe_('RideAdherence', function(){return aiCardRideAdherence_();});
   var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
   // Mockup grid: hero row (DNA | Momentum | Watchlist), then the metric cards, and
   // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
   // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
   // Adherence leads the metric row — a declining completion rate is an early warning.
-  var grid=[dna, mom, watch, adh, ridh, changed, zones, weight, recs].filter(function(h){return h;});
+  var grid=[dna, mom, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
@@ -29378,7 +29448,7 @@ function openDayEditor(dateKey, targetId){
       var addLB=document.createElement('button'); addLB.textContent='+ logged exercise'; addLB.style.cssText='background:none;border:none;color:#2FA8E0;font-size:12px;font-weight:700;cursor:pointer;padding:2px 0'; addLB.onclick=function(){ addLg({}); }; bodyEl.appendChild(addLB);
       getData=function(){
         var exs=exRows.map(function(r){ return { name:r.nf.get(), sets:_num(r.s.value), reps:_num(r.rp.value), pct1RM:_num(r.pc.value) }; }).filter(function(e){ return e.name; });
-        var logs=lgRows.map(function(r){ var w=_num(r.wt.value), nm=r.nf.get(); var rpe=_num(r.rpe.value); if(rpe!=null) rpe=Math.max(1,Math.min(10,rpe)); return (nm&&w!=null)?{ name:nm, sets:[{ weight:w, reps:_num(r.rp.value), rpe:rpe }] }:null; }).filter(Boolean);
+        var logs=lgRows.map(function(r){ var nm=r.nf.get(), raw=_num(r.wt.value); if(!(nm&&raw!=null)) return null; var set=_strSet_(raw, _num(r.rp.value), _num(r.rpe.value)); return (set.weight!=null)?{ name:nm, sets:[set] }:null; }).filter(Boolean);
         return { type:'strength', name:_selName||'Strength', exercises:exs, strengthLog:logs };
       };
     } else {
