@@ -3876,6 +3876,16 @@ function _covCompute_(list, horizon, noun){
   var windowStart=(honest===anchor) ? null : honest;
   var moy=[0,0,0,0,0,0,0,0,0,0,0,0];
   rankable.forEach(function(k){ moy[parseInt(k.slice(5,7),10)-1]++; });
+  // Per-year rankable month counts. Here rather than in each surface: a chart that labels a year
+  // "11 of 12 months rankable" would otherwise re-apply the gate itself, which is how two
+  // implementations of one rule start. Surfaces own magnitude (miles); the helper owns
+  // rankability. The DENOMINATOR is still only the top-level rankable count.
+  var byYear={};
+  months.forEach(function(k){ var y=k.slice(0,4);
+    if(!byYear[y]) byYear[y]={months:0, rankable:0};
+    byYear[y].months++;
+    if(byMonth[k]>=STORE_V2_RANKABLE_MIN) byYear[y].rankable++;
+  });
   // Guarded against the empty case: with no rankable month, monthsBetween('',horizon) returns 0
   // and the sport reads CURRENT while having nothing rankable to be current about. Unreachable
   // from here because of the _COV_MIN_RANKABLE return above, but the flag is computed honestly
@@ -3891,6 +3901,7 @@ function _covCompute_(list, horizon, noun){
     staleBy: staleBy,
     current: (staleBy!==null && staleBy<=_COV_MAX_STALE_MO),
     moy: moy,                                    // rankable months per month-of-year, index 0=Jan
+    byYear: byYear,                              // year -> {months, rankable}; NOT a denominator
     unrankableTxt: _yvyUnrankableTxt_({rankTot:rankable.length}, noun)
   };
 }
@@ -23775,6 +23786,127 @@ function getRunsLegacy_(){
   return stravaRuns.concat(manualRuns);
 }
 
+// ==================== running growth graph — history only ====================
+// The run counterpart to the cycling cumulative chart, with NO current line and no placeholder for
+// one. Run carries 147 rankable months of real history and no current month to draw, so the chart
+// states that instead of rendering an empty present. A flat line at zero across 2026 reads as
+// failure; "your last rankable run month was August 2025" reads as fact, which is what it is.
+//
+// GHOST CHOICE — best year against the most recent rankable year, NOT year-over-year. Year-over-
+// year is the ride grammar because ride has a current year to compare against; run does not, so
+// YoY here means 2025 (2 rankable months) against 2024 (11), which is the partial-vs-complete trap
+// wearing a new coat and turns the exhibit into an apology for 2025. Best-vs-last says: here is the
+// peak, here is where you left off. The collapse between them is real history — the move to
+// cycling — so it is drawn, not smoothed.
+//
+// Everything about coverage comes from _covFor_('run'): the 147 denominator, the rankable-month
+// counts per year, the month-of-year depth, and lastRankable. This surface computes MILES and
+// nothing else. windowStart is null for run and is never rendered or substituted — the null is the
+// answer, and falling back to lastRankable or the first month to fill the slot would invent a
+// window the data does not support.
+var _RG_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Full names for prose. The abbreviations are for the chart, where space is the constraint; in a
+// sentence "one of 13 rankable Augs" reads as a typo.
+var _RG_MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function _rgCompute_(){
+  var cov=(typeof _covFor_==='function')?_covFor_('run'):null;
+  if(!cov || !cov.lastRankable) return null;                 // unprimed or unrankable: draw nothing
+  var runs=(typeof getRuns==='function')?getRuns():[];
+  if(!runs.length) return null;
+  var lastY=parseInt(String(cov.lastRankable).slice(0,4),10);
+  var lastM=parseInt(String(cov.lastRankable).slice(5,7),10); // 1..12, the cap for the subject year
+
+  var byYM={};
+  runs.forEach(function(r){
+    var k=String((r&&r.date)||'').slice(0,7); if(k.length!==7) return;
+    byYM[k]=(byYM[k]||0)+(parseFloat(r&&r.distance)||0);
+  });
+  // Years AFTER the last rankable year are excluded outright, not drawn flat. 2026 holds a handful
+  // of scattered runs and zero rankable months; plotting it would put points past lastRankable,
+  // which is the one thing this chart must never do.
+  var totals={};
+  Object.keys(byYM).forEach(function(k){
+    var y=parseInt(k.slice(0,4),10); if(y>lastY) return;
+    totals[y]=(totals[y]||0)+byYM[k];
+  });
+  var years=Object.keys(totals).map(Number).sort(function(a,b){ return a-b; });
+  if(!years.length) return null;
+
+  function series(y, cap){
+    var out=[], run=0, n=(cap||12);
+    for(var m=1;m<=n;m++){ run+=byYM[y+'-'+('0'+m).slice(-2)]||0; out.push(Math.round(run*10)/10); }
+    return out;
+  }
+  // Best = highest total miles among COMPLETE history years, excluding the subject year so the two
+  // lines can never be the same year.
+  var best=null;
+  years.forEach(function(y){ if(y===lastY) return; if(best===null || totals[y]>totals[best]) best=y; });
+  var rk=function(y){ var v=cov.byYear && cov.byYear[String(y)]; return v?v.rankable:0; };
+  var mo=function(y){ var v=cov.byYear && cov.byYear[String(y)]; return v?v.months:0; };
+  return {
+    cov: cov,
+    subjectYear: lastY, subjectCapMonth: lastM,
+    subject: series(lastY, lastM), subjectRankable: rk(lastY), subjectMonths: mo(lastY),
+    bestYear: best, best: (best!==null)?series(best,12):null,
+    bestRankable: (best!==null)?rk(best):0, bestTotal: (best!==null)?Math.round(totals[best]*10)/10:0,
+    subjectTotal: Math.round((totals[lastY]||0)*10)/10,
+    moyLast: cov.moy[lastM-1],                                 // rankable months sharing that month-of-year
+    years: years
+  };
+}
+function _rgChart_(g){
+  var W=560,H=210,PL=42,PR=14,PT=12,PB=26, iw=W-PL-PR, ih=H-PT-PB;
+  var maxY=Math.max(g.best?g.best[g.best.length-1]:0, g.subject[g.subject.length-1]||0, 1)*1.08;
+  function X(m){ return PL + (m-1)/11*iw; }
+  function Y(v){ return PT + ih - (v/maxY)*ih; }
+  function path(arr){ var p=''; for(var i=0;i<arr.length;i++){ p+=(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(arr[i]).toFixed(1)+' '; } return p; }
+  var grid=''; for(var t=0;t<=4;t++){ var v=maxY*t/4, yy=Y(v);
+    grid+='<line x1="'+PL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+yy.toFixed(1)+'" stroke="#1c2130" stroke-width="1"/>'
+      +'<text x="'+(PL-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#5b6678">'+Math.round(v)+'</text>'; }
+  var xl=''; [1,3,5,7,9,11,12].forEach(function(m){ xl+='<text x="'+X(m).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#5b6678">'+_RG_MON[m-1]+'</text>'; });
+  // The subject line simply ends at its last rankable month. No dashed continuation, no flat tail
+  // to December — the stop IS the information.
+  var endX=X(g.subject.length), endY=Y(g.subject[g.subject.length-1]||0);
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+grid+xl
+    +(g.best?('<path d="'+path(g.best)+'" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round"/>'):'')
+    +'<path d="'+path(g.subject)+'" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
+    +'<circle cx="'+endX.toFixed(1)+'" cy="'+endY.toFixed(1)+'" r="3.5" fill="#FC4C02"/>'
+    +'<text x="'+Math.min(W-PR, endX+7).toFixed(1)+'" y="'+(endY-7).toFixed(1)+'" font-size="9.5" fill="#FC4C02" font-weight="700">log ends '+_RG_MON[g.subjectCapMonth-1]+'</text>'
+    +'</svg>';
+}
+function _rgSection_(){
+  var g=_rgCompute_();
+  if(!g) return '';
+  var c=g.cov;
+  var MONF=_RG_MONF[g.subjectCapMonth-1];      // prose uses the full name; the chart label keeps the short one
+  // The currency branch exists so the copy cannot claim staleness that is not there. Run is stale
+  // today; if a future snapshot makes it current the chart stays history-only by design, but it
+  // must not go on saying there is nothing recent to draw.
+  var lead=c.current
+    ? ('Your run log is current through <b style="color:#f1f5f9">'+MONF+' '+g.subjectYear+'</b>. This chart is history only &mdash; it does not draw a month in progress.')
+    : ('Your last rankable run month was <b style="color:#f1f5f9">'+MONF+' '+g.subjectYear+'</b>. This chart is history &mdash; there is no current month to draw, so none is drawn.');
+  var legend='<div style="display:flex;gap:16px;margin:2px 0 8px;font-size:11px;flex-wrap:wrap">'
+    +'<span style="color:#FC4C02">&#9644; '+g.subjectYear+' &middot; '+g.subjectRankable+' of '+g.subjectMonths+' months rankable</span>'
+    +(g.best?('<span style="color:#64748b">&#9644; '+g.bestYear+' &middot; your biggest year, '+g.bestRankable+' rankable months</span>'):'')
+    +'</div>';
+  var moyLine=(g.moyLast>1)
+    ? ('<div style="font-size:12px;color:#94a3b8;line-height:1.55;margin-top:8px">'+MONF+' '+g.subjectYear
+       +' is one of <b style="color:#f1f5f9">'+g.moyLast+'</b> rankable '+MONF+'s in your run history &mdash; deep enough to compare like for like.</div>')
+    : '';
+  var foot='Ranked against <b style="color:#94a3b8">'+c.rankable+'</b> rankable run-months, never the '
+    +c.span+'-month calendar span. '
+    +(g.best?(g.bestYear+' totalled '+g.bestTotal.toLocaleString()+' mi against '+g.subjectTotal.toLocaleString()+' mi in '+g.subjectYear+'. '):'')
+    +'The gap is the move to cycling, not a missing record.';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin:0 16px 14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Running Growth</span>'
+    +'<span style="font-size:11px;color:#5b6678">cumulative miles by year &middot; history only</span></div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.55;margin-bottom:10px">'+lead+'</div>'
+    +legend+_rgChart_(g)+moyLine
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'</div>';
+}
+
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
   if(existing) existing.remove();
@@ -23789,6 +23921,13 @@ function renderRun(){
   title.innerHTML='<div style="font-size:22px;font-weight:800;color:var(--t1)">Run Training</div>'
     +'<div style="font-size:13px;color:var(--t3);margin-top:2px">Coach Parry · Zone 2 base build</div>';
   scr.appendChild(title);
+
+  // History exhibit, above the live stats. Renders nothing when the snapshot is unprimed or run
+  // cannot be ranked — the same do-not-claim contract _covFor_ returns.
+  try{
+    var _rg=(typeof _rgSection_==='function')?_rgSection_():'';
+    if(_rg){ var _rgw=document.createElement('div'); _rgw.innerHTML=_rg; scr.appendChild(_rgw); }
+  }catch(e){ try{ console.error('[run-growth] ' + ((e&&e.message)||e)); }catch(_e){} }
 
   var runs=getRuns();
   var now=new Date();
