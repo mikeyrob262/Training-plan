@@ -3863,6 +3863,17 @@ function _covCompute_(list, horizon, noun){
     months.forEach(function(k){ if(k>=prev && k<=anchor && byMonth[k]>=STORE_V2_RANKABLE_MIN) rk++; });
     if(rk/cal>=0.75){ honest=prev; cur=prev; if(prev<=first) break; } else break;
   }
+  // A window that collapses onto its own anchor is describing ONE month, and a one-month window is
+  // not a window. Run is the live case: 147 rankable months spanning 2011-2025, but the walk
+  // terminates immediately at 2025-08, so rendering "since August 2025" would describe the whole
+  // history by its last surviving month — worse than saying nothing.
+  //
+  // This is a DIFFERENT failure from the sport being unrankable, so it gets its own null rather
+  // than reusing the top-level one: run ranks perfectly well at 147 rankable months and 12 rankable
+  // Julys. Only the window is unusable. Nulling the field gives a reader the same "do not make the
+  // claim" contract at field granularity that _covFor_ already gives at sport granularity, and
+  // leaves the depth figures — which ARE run's honest framing — intact beside it.
+  var windowStart=(honest===anchor) ? null : honest;
   var moy=[0,0,0,0,0,0,0,0,0,0,0,0];
   rankable.forEach(function(k){ moy[parseInt(k.slice(5,7),10)-1]++; });
   // Guarded against the empty case: with no rankable month, monthsBetween('',horizon) returns 0
@@ -3875,7 +3886,7 @@ function _covCompute_(list, horizon, noun){
     activities: (list||[]).length,
     span: span,                                  // calendar span — returned for context, never a denominator
     rankable: rankable.length,                   // THE number for "#k of N"
-    windowStart: honest,
+    windowStart: windowStart,                    // null when the window collapses — see above
     lastRankable: lastRankable,
     staleBy: staleBy,
     current: (staleBy!==null && staleBy<=_COV_MAX_STALE_MO),
@@ -3961,7 +3972,14 @@ function storeV2CoverageProbe_(){
       console.log('[coverage] ===== '+kind.toUpperCase()+' =====');
       console.log('[coverage]   '+list.length+' activities, '+months.length+' months with data, span '+span+' calendar months ('+first+' .. '+last+')');
       console.log('[coverage]   RANKABLE months (>='+STORE_V2_RANKABLE_MIN+' acts): '+rankable.length+'  <-- the honest denominator, NOT the '+span+'-month span');
-      console.log('[coverage]   honest window (>=75% rankable tail): from '+honest+' to '+anchor
+      // Same collapse rule as _covCompute_: honest===anchor means the walk never stepped back, so
+      // there is no window to quote, only a single month. Report that instead of printing a range
+      // whose two ends are the same month.
+      var windowStart=(honest===anchor)?null:honest;
+      console.log('[coverage]   honest window (>=75% rankable tail): '
+        + (windowStart
+            ? ('from '+windowStart+' to '+anchor)
+            : ('NONE — the walk collapses onto its anchor ('+anchor+'), which is one month, not a window. Use the depth figures ('+rankable.length+' rankable months) instead.'))
         + (anchor!==last ? ('   (last month WITH DATA is '+last+', but it carries no rankable month)') : ''));
       var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       console.log('[coverage]   rankable per month-of-year: '+MN.map(function(m,i){ return m+'='+byMoY[('0'+(i+1)).slice(-2)]; }).join(' '));
@@ -3971,7 +3989,7 @@ function storeV2CoverageProbe_(){
       var db=Object.keys(distc).map(Number).sort(function(a,b){return a-b;}).map(function(n){ return n+':'+distc[n]; });
       console.log('[coverage]   per-month count distribution (acts:months): '+db.join('  '));
       return { kind:kind, activities:list.length, monthsWithData:months.length, span:span,
-               rankable:rankable.length, honestStart:honest, last:last, byMoY:byMoY, byYear:byYear };
+               rankable:rankable.length, honestStart:windowStart, last:last, byMoY:byMoY, byYear:byYear };
     }
 
     // Currency: the most recent RANKABLE month per sport, vs the latest record across ALL
@@ -4002,7 +4020,8 @@ function storeV2CoverageProbe_(){
         + '. "second-best July in N years" is honest for RUN (N='+julU+'); for RIDE only '+julR+' Julys exist, so a July claim is not meaningful.');
       console.log('[coverage] RECOMMENDATION:');
       console.log('[coverage]   RIDE — CURRENT but shallow: rank "this month vs history" against its '+R.rankable
-        + ' rankable months from '+R.honestStart+'. Works for the live-comparison headline; do NOT make month-of-year claims (only '+julR+' Julys).');
+        + ' rankable months'+(R.honestStart?(' from '+R.honestStart):' (no quotable window — its walk collapses)')
+        + '. Works for the live-comparison headline; do NOT make month-of-year claims (only '+julR+' Julys).');
       console.log('[coverage]   RUN — deep but STALE: '+U.rankable+' rankable months / '+julU
         + ' rankable Julys make all-time and month-of-year claims honest AS HISTORY, but the last rankable run month is old, so "THIS month vs history" has no current month to place. Frame run ranking as historical, not live.');
       console.log('[coverage]   Any "#k of N" quotes the per-sport rankable count ('+R.rankable+' ride / '+U.rankable+' run), never the calendar span ('+R.span+' / '+U.span+').');
