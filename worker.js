@@ -15432,6 +15432,13 @@ function _yvyYM_(r){ return String(r.date||'').slice(0,7); }
 function _yvyDom_(r){ return parseInt(String(r.date||'').slice(8,10),10)||0; }
 var _YVY_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var _YVY_RANK_MIN=4;
+// THE band rule for the whole page. Hoisted deliberately: three defects here have been one number
+// classified in two places by two rules, and the Even/ahead contradiction was exactly this — rows
+// tagged on |pct|<=5 while their copy was written on cur>=last. Every surface that says a metric is
+// up, down or level calls THIS. Nothing re-derives direction, and in particular nothing reads the
+// "up" field (still cur>=last) to decide a direction.
+var _YVY_EVEN_PCT=5;
+function _yvyBand_(pct){ return (Math.abs(pct)<=_YVY_EVEN_PCT)?'even':(pct>_YVY_EVEN_PCT?'win':'focus'); }
 function _yvySum_(l,f){ var s=0; (l||[]).forEach(function(r){ s+=f(r); }); return s; }
 
 // ==================== You vs. You — phase 2: power/physiology KPI row ====================
@@ -15504,11 +15511,15 @@ function _yvyPhys_(rides, now){
   (rides||[]).forEach(function(r){ var k=_yvyYM_(r); if(k && k<=lastYM) mcnt[k]=(mcnt[k]||0)+1; });
   var pageRk=Object.keys(mcnt).filter(function(k){ return mcnt[k]>=_YVY_RANK_MIN; }).sort();
   var pageRankable=pageRk.length, fullStart=pageRk.length?pageRk[0]:lastYM;
+  // signed = "higher is unambiguously better", which is what an improved/fell-off list requires.
+  // Avg HR is deliberately false: on its own a higher average is not a worse month and a lower one
+  // is not a better one — that reading only exists paired against power (the decoupling metric).
+  // nUnit is the suffix for gap-grammar copy, where a bare number would not read.
   var SPECS=[
-    {key:'pwr', label:'Avg Power',        unit:'W',   agg:'avg', acc:_yvyAvgPwr_},
-    {key:'np',  label:'Normalized Power', unit:'W',   agg:'avg', acc:_yvyNp_},
-    {key:'tss', label:'TSS',              unit:'',    agg:'sum', acc:_yvyTssV_},
-    {key:'hr',  label:'Avg HR',           unit:'bpm', agg:'avg', acc:_yvyHrV_}
+    {key:'pwr', label:'Avg Power',        unit:'W',   nUnit:'W',     agg:'avg', signed:true,  acc:_yvyAvgPwr_},
+    {key:'np',  label:'Normalized Power', unit:'W',   nUnit:'W',     agg:'avg', signed:true,  acc:_yvyNp_},
+    {key:'tss', label:'TSS',              unit:'',    nUnit:' TSS',  agg:'sum', signed:true,  acc:_yvyTssV_},
+    {key:'hr',  label:'Avg HR',           unit:'bpm', nUnit:' bpm',  agg:'avg', signed:false, acc:_yvyHrV_}
   ];
   return SPECS.map(function(sp){
     function agg(list){ var v=[]; list.forEach(function(r){ var x=sp.acc(r); if(x!=null) v.push(x); });
@@ -15517,7 +15528,18 @@ function _yvyPhys_(rides, now){
     var c=agg(cur), L=agg(lastSD), win=_yvyFieldWindow_(rides, sp.acc, lastYM);
     var hasDelta=(L.n>=_YVY_RANK_MIN && c.n>=1);
     var pct=hasDelta ? (L.val>0?Math.round((c.val-L.val)/L.val*100):(c.val>0?100:0)) : 0;
-    return { key:sp.key, label:sp.label, unit:sp.unit, agg:sp.agg,
+    // band is null unless this metric has a real same-day delta to band — a null band is the
+    // coverage gate, and any consumer that renders direction must skip on it rather than caveat.
+    var band=hasDelta?_yvyBand_(pct):null, d=c.val-L.val;
+    function nf(v){ return Math.round(Math.abs(v))+sp.nUnit; }
+    var note='';
+    if(band){
+      var negligible=(nf(d)===nf(0));
+      if(band==='even') note=negligible?'Level with last month':('Level with last month &mdash; within '+nf(d));
+      else if(negligible) note=(band==='win')?'Ahead, but off a very small base':'Behind, but off a very small base';
+      else note=(band==='win')?('Up '+nf(d)+' on last month'):('Beat by '+nf(d)+' to catch up');
+    }
+    return { key:sp.key, label:sp.label, unit:sp.unit, agg:sp.agg, signed:!!sp.signed, band:band, note:note,
       curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct, up:(c.val>=L.val), hasDelta:hasDelta,
       winStart:win.start, winRankable:win.inWindow, rankableMonths:win.rankableMonths,
       fullStart:fullStart, pageRankable:pageRankable,
@@ -15743,9 +15765,8 @@ function _yvyVM_(rides, now){
   // tagged Even while its note claims a lead (or a deficit) — the band is decided here and the
   // render only reads it. Deltas are formatted at the resolution of the metric, never rounded to
   // a whole hour: a +19% month can be 28 minutes, and "0h more" against a 19% KPI is a lie.
-  function band(pct){ return (Math.abs(pct)<=5)?'even':(pct>5?'win':'focus'); }
   function met(k,kp,fmt,ahead,behind){
-    var d=kp.cur-kp.last, b=band(kp.pct), s=fmt(d), note;
+    var d=kp.cur-kp.last, b=_yvyBand_(kp.pct), s=fmt(d), note;
     // A delta that rounds away at the metric's OWN resolution must never be printed as a quantity —
     // that is what produced "0h more" and "within 0m". A big pct on a negligible delta means last
     // month's base was tiny, so say that instead of quoting a zero.
@@ -15765,13 +15786,20 @@ function _yvyVM_(rides, now){
   mets.sort(function(a,b){ return b.pct-a.pct; });
   var winning=mets[0], focus=mets[mets.length-1], even=null;
   mets.forEach(function(x){ if(x.band==='even') even=x; });
+  // Ride count is the hero's fourth metric ("ahead in N of 4") but is not a Monthly Summary row.
+  // Built through the SAME met() factory so it cannot acquire its own threshold, and kept in a
+  // separate array so adding it here does not silently grow a shipped section.
+  function fAct(v){ var n=Math.round(Math.abs(v)); return n+' ride'+(n===1?'':'s'); }
+  var metsAll=mets.concat([met('Activities', kActs, fAct,
+    function(s){ return 'Up '+s+' on last month'; }, function(s){ return 'Beat by '+s+' to catch up'; })])
+    .sort(function(a,b){ return b.pct-a.pct; });
 
   return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
-    winning:winning, focus:focus, even:even, mets:mets, nCur:cur.length, phys:_yvyPhys_(rides, now),
+    winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
     pb:_pbCompute_(rides, now) };
 }
 
@@ -15982,6 +16010,81 @@ function _mrSection_(vm){
     +'</div>';
 }
 
+// ==================== You vs. You — What's Changed ====================
+// Two plain lists, not charts: what improved against last month same-day, and what fell off.
+//
+// This section CLASSIFIES NOTHING. It reads .band and .note off vm.metsAll and vm.phys, both of
+// which were banded by _yvyBand_ at construction. It never touches the "up" field (cur>=last) —
+// that mismatch is what produced the Even/ahead contradiction, and here it would render a down
+// item with an up arrow. Even-band metrics belong to neither column and are simply not listed.
+//
+// Coverage and direction are both drops, never caveats: a phys metric with a null band has no
+// honest same-day delta, and an unsigned metric (Avg HR) has no better direction to sort on. The
+// footnote says which of those happened so the omission is visible rather than silent.
+function _wcItems_(vm){
+  var out=[];
+  (vm.metsAll||[]).forEach(function(x){ if(x.band && x.band!=='even') out.push({ label:x.k, band:x.band, pct:x.pct, note:x.note }); });
+  (vm.phys||[]).forEach(function(p){ if(p.signed && p.band && p.band!=='even') out.push({ label:p.label, band:p.band, pct:p.pct, note:p.note }); });
+  return out;
+}
+function _wcRow_(x){
+  var win=(x.band==='win'), col=win?'#22c55e':'#f59e0b';
+  return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #14181f">'
+    +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';margin-top:7px;flex-shrink:0"></span>'
+    +'<div style="min-width:0;flex:1">'
+    +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    +'<span style="font-size:13px;font-weight:700;color:#f1f5f9">'+x.label+'</span>'
+    +_yvyPct_(x.pct, win)+'</div>'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'+x.note+'</div></div></div>';
+}
+function _wcCol_(eyebrow, head, col, items, emptyTxt){
+  var body=items.length ? items.map(_wcRow_).join('')
+    : '<div style="font-size:12px;color:#5b6678;line-height:1.55;padding:9px 0">'+emptyTxt+'</div>';
+  return '<div style="flex:1;min-width:240px">'
+    +'<div style="font-size:10.5px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em">'+eyebrow+'</div>'
+    +'<div style="font-size:16px;font-weight:800;color:'+col+';margin:1px 0 8px">'+head+'</div>'
+    +body+'</div>';
+}
+function _wcSection_(vm){
+  var items=_wcItems_(vm);
+  var up=items.filter(function(x){ return x.band==='win'; }).sort(function(a,b){ return b.pct-a.pct; });
+  var dn=items.filter(function(x){ return x.band==='focus'; }).sort(function(a,b){ return a.pct-b.pct; });
+  var evenN=0;
+  (vm.metsAll||[]).forEach(function(x){ if(x.band==='even') evenN++; });
+  (vm.phys||[]).forEach(function(p){ if(p.signed && p.band==='even') evenN++; });
+  if(!up.length && !dn.length && !evenN) return '';
+
+  var allEven=(!up.length && !dn.length);
+  var notes=[];
+  // When every metric is even the body already says so; repeating it as a footnote is noise.
+  if(evenN && !allEven) notes.push(evenN+(evenN===1?' metric is':' metrics are')+' within '+_YVY_EVEN_PCT+'% of last month, so '+(evenN===1?'it sits':'they sit')+' in neither column.');
+  var thin=0; (vm.phys||[]).forEach(function(p){ if(p.signed && !p.band && p.curN>0) thin++; });
+  if(thin) notes.push('Power and training load are left out &mdash; the compared months do not carry them densely enough to state a change.');
+  var hr=null; (vm.phys||[]).forEach(function(p){ if(p.key==='hr') hr=p; });
+  if(hr && hr.band) notes.push('Average heart rate is left out on purpose: on its own a higher average is not a worse month, so it has no side to be listed on.');
+  var foot=notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
+
+  var body;
+  if(allEven){
+    // Everything landed in the Even band. Say that once — do not manufacture two lists.
+    body='<div style="font-size:13.5px;color:#cbd5e1;line-height:1.6;padding:4px 0 2px">Nothing has moved enough to call. '
+      +'Every metric is within '+_YVY_EVEN_PCT+'% of where you were by the '+_yvyOrdComment_(vm.domNow)+' last month &mdash; '
+      +'this is the same month, run back.</div>';
+  } else {
+    var upEmpty='Nothing is ahead of last month yet'+(vm.daysLeft>0?(' &mdash; '+vm.daysLeft+' day'+(vm.daysLeft===1?'':'s')+' left to change that.'):'.');
+    var dnEmpty='Nothing has fallen off. Every metric is level or better than last month.';
+    body='<div style="display:flex;flex-wrap:wrap;gap:28px">'
+      +_wcCol_('You are&hellip;','Improving','#22c55e',up,upEmpty)
+      +_wcCol_('You are&hellip;','Chasing','#f59e0b',dn,dnEmpty)
+      +'</div>';
+  }
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">What&#8217;s Changed</span>'
+    +'<span style="font-size:11px;color:#5b6678">vs last month through the '+_yvyOrdComment_(vm.domNow)+'</span></div>'
+    +body+foot+'</div>';
+}
+
 function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
@@ -16068,6 +16171,7 @@ function _yvyRenderVM_(vm){
     +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
     +'</div>'
+    +_wcSection_(vm)
     +_pbSection_(vm)
     +'<div style="margin-top:14px">'+insight+'</div>'
     +'</div>';
