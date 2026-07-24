@@ -3443,7 +3443,7 @@ function storeV2Flatten_(j){
     dropped: coll.length - acts.length,
     // First-class, not merely a name in topKeys. Every count taken off this snapshot needs the
     // generation it was taken from travelling beside it — see storeV2Stamp_ for why.
-    builtAt: (j && typeof j==='object' && !Array.isArray(j) && j.builtAt!=null && j.builtAt!=='') ? String(j.builtAt) : null,
+    builtAt: storeV2BuiltAtOf_(j),
     topKeys: (j && typeof j==='object' && !Array.isArray(j)) ? Object.keys(j).slice(0,12) : []
   };
 }
@@ -3460,6 +3460,16 @@ function storeV2Flatten_(j){
 //
 // Absent is PRINTED, never defaulted or blanked. A snapshot with no build stamp is itself a finding.
 function storeV2Stamp_(b){ return 'builtAt: ' + (b ? b : 'absent'); }
+// ONE extraction rule to go with the one format rule. Both the flatten step and the PUT path need
+// a snapshot's stamp, and they read different objects — the live node versus a file on disk — so
+// the rule lives here rather than being spelled twice. The array guard matters: storeV2PutCheck_
+// classifies j.activities (a bare array), which has no top level and therefore no stamp to find.
+function storeV2BuiltAtOf_(j){
+  return (j && typeof j==='object' && !Array.isArray(j) && j.builtAt!=null && j.builtAt!=='') ? String(j.builtAt) : null;
+}
+// Where a surface prints snapshot counts NEXT TO local (st.rides/st.runs) counts, the stamp is
+// prefixed "snapshot" so it cannot be read as covering the local side too. Same reason the PUT
+// path labels its two stamps: one timestamp sitting beside two generations is a new collision.
 // Same sport vocabularies the app already classifies by, so counts off this
 // snapshot are comparable to counts off st.rides: the run set matches getRuns(),
 // the cycling set matches the isCyc() filter. Sport is read via rideSport_ so a
@@ -3599,6 +3609,12 @@ function storeV2Put_(){
       catch(e){ console.error('[store_v2-put] ABORT — not valid JSON: '+((e&&e.message)||e)); return; }
       var chk=storeV2PutCheck_(j), c=chk.counts;
       console.log('[store_v2-put] file: '+file.name+'  '+(txt.length/1048576).toFixed(2)+' MB');
+      // OUTGOING, and it must be read off j directly. storeV2PutCheck_ classifies j.activities —
+      // a bare array with no top level — so the check result carries no stamp to borrow. This is
+      // the one surface here holding two generations at once; both are labelled, because a write
+      // path printing a single unqualified timestamp beside a before and an after is a worse
+      // collision than no timestamp at all.
+      console.log('[store_v2-put] outgoing ' + storeV2Stamp_(storeV2BuiltAtOf_(j)));
       console.log('[store_v2-put] classified AS THE APP READS IT: total='+c.total+'  ride='+c.ride
         +'  run='+c.run+'  other='+c.other+'  virtual='+c.virtual+'  unclassifiable='+c.none
         +'  tombstones='+c.deleted+'/'+c.deletedAny);
@@ -3629,6 +3645,10 @@ function storeV2Put_(){
           var okR=(s.rides.length===STORE_V2_EXPECT_RIDE), okU=(s.runs.length===STORE_V2_EXPECT_RUN);
           console.log('[store_v2-put] READ-BACK: total='+s.total+'  ride='+s.rides.length+'  run='+s.runs.length
             +'  other='+s.other.length+'  virtual='+s.virtual.length);
+          // Read-back stamp against the outgoing one above: if they match, the node really is the
+          // file you just chose. That comparison is the direct answer to "did the write land",
+          // which is the question the whole 441-run investigation reduced to.
+          console.log('[store_v2-put] read-back ' + storeV2Stamp_(s.builtAt));
           console.log('[store_v2-put] ' + ((okR&&okU)
             ? 'VERIFIED — the node now serves what was written. Hard-refresh to arm the readers.'
             : 'WARNING — read-back does not match expectations. Do NOT assume the write is good.'));
@@ -3893,6 +3913,8 @@ function storeV2CoverageProbe_(){
 }
 function storeV2RunMatchProbe_(){
   return loadStoreV2_(true).then(function(s){
+    // Before the empty-snapshot guard, so a failure still says which generation it read.
+    console.log('[run-match] snapshot ' + storeV2Stamp_(s.builtAt));
     var snapRuns=(s && s.runs) || [];
     if(!snapRuns.length){ console.error('[run-match] snapshot returned NO run records — reporting the failure, not a zero match count.'); return null; }
     // Guard against silently measuring the raw path: normalised distance is in MILES, so a
@@ -4005,6 +4027,7 @@ function storeV2RunMatchProbe_(){
 //     the exact cross-source mismatch that would make a handle resolve to the wrong record.
 function storeV2IdentityProbe_(){
   return loadStoreV2_(true).then(function(s){
+    console.log('[identity] snapshot ' + storeV2Stamp_(s.builtAt));
     var snap=s.rides||[];
     var local=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
     var kf=function(r){ return (typeof rideKey==='function') ? String(rideKey(r)||'') : ''; };
@@ -4184,6 +4207,7 @@ function rideRefFromAttr_(s){
 }
 function storeV2HandleDryRun_(){
   return loadStoreV2_(true).then(function(s){
+    console.log('[handle-dryrun] ' + storeV2Stamp_(s.builtAt));
     function run(label, list){
       var built=rideHandleIndex_(list);
       var same=0, diff=0, unresolved=0, noHandle=0, samples=[];
@@ -4364,6 +4388,7 @@ var STORE_V2_RUN_PAIRS=[
 ];
 function storeV2FieldAudit_(){
   return loadStoreV2_(true).then(function(s){
+    console.log('[field-audit] snapshot ' + storeV2Stamp_(s.builtAt));
     var snapRides=s.rides||[], snapRuns=s.runs||[];
     var locRides=(st.rides||[]).filter(function(r){ return r && !r.deleted; });
     var locRuns=(st.runs||[]).filter(function(r){ return r && !r.deleted; });
@@ -14232,6 +14257,9 @@ var _storeV2Runs = null;
 function primeStoreV2_(){
   if(!STORE_V2_READS) return Promise.resolve(null);
   return loadStoreV2_().then(function(s){
+    // The arming line is the most-quoted count on this path — it states what allRidesDeduped_ is
+    // about to serve for the rest of the session. It gets the stamp first.
+    console.log('[store_v2] ' + storeV2Stamp_(s.builtAt));
     _storeV2Rides = s.rides;
     _storeV2Runs = s.runs;
     var was=(st.rides||[]).filter(function(r){ return r && !r.deleted; }).length;
