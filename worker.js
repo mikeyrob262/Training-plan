@@ -15631,9 +15631,38 @@ function _pbRoll7_(list, endFrom){
   }
   return best;
 }
-// PURE. rides = raw cycling ride records; now = today. Returns null when the window is too thin
-// to talk about records at all.
-function _pbCompute_(rides, now){
+// Price of a gap, in rides. Returns '' wherever a cost line would be invention rather than
+// information:
+//   - held records have no gap to price (the card already states the margin over your next-best);
+//   - a record with no qualifying recent ride shows no gap, so there is nothing to cost;
+//   - POWER records get nothing. Watts do not convert into a ride you can schedule, and these
+//     already drop out below _PB_PWR_MIN_ERA / _PB_PWR_MIN_FORM, so a cost sentence here would be
+//     manufactured rather than derived.
+// A single-ride record costs exactly one ride, by definition — you cannot accumulate your way to a
+// longest ride — so it names the ride that clears it rather than a plan. The week record is the
+// one gap that genuinely spreads, so it is priced against a typical week. Where a fraction of a
+// ride would be printed, it says so in words instead.
+function _pbCost_(p, rate, med){
+  if(p.held || !p.hasForm) return '';
+  if(p.key==='pwr' || p.key==='np') return '';
+  if(p.key==='week'){
+    if(!(rate>0)) return '';
+    if(med>0 && p.gap<med) return 'Across seven days that is less than one typical '+_pbFmtMi_(med)+' ride on top of your usual week.';
+    return 'Across seven days that is '+_pbFmtMi_(p.gap)+' on top of a typical '+_pbFmtMi_(rate)+' week.';
+  }
+  var one='One ride past '+p.recStr+' clears it';
+  // Only distance converts against a distance median. Elevation, duration and speed do not, and
+  // inventing a conversion for them would be exactly the move this section avoids.
+  if(p.key==='dist' && med>0){
+    var mult=Math.round(p.recVal/med*10)/10;
+    if(mult<=1) return one+' &mdash; inside a typical '+_pbFmtMi_(med)+' ride.';   // never a sub-1 ride
+    return one+' &mdash; about '+mult+'&times; a typical '+_pbFmtMi_(med)+' ride.';
+  }
+  return one+'.';
+}
+// PURE. rides = raw cycling ride records; now = today. rate/med are the trailing-window figures
+// _yvyVM_ already computed; they price the gaps and are never recomputed here.
+function _pbCompute_(rides, now, rate, med){
   var era=new Date(now.getFullYear()-_PB_ERA_YEARS, now.getMonth(), now.getDate()); era.setHours(0,0,0,0);
   var form=new Date(now.getTime()-_PB_FORM_DAYS*86400000);
   var all=(rides||[]).map(_pbNorm_).filter(function(x){ return x.t && !isNaN(x.t.getTime()) && x.t>=era && x.t<=now; })
@@ -15692,6 +15721,12 @@ function _pbCompute_(rides, now){
       pct:(wAll.v>0)?Math.max(0,Math.min(100,Math.round((wForm?wForm.v:0)/wAll.v*100))):0,
       lead:null, leadStr:'', runnerDate:'' });
   }
+
+  // What the gap COSTS, in terms you can put on a calendar. Not what it is likely to happen:
+  // there is no probability here, because a percentage on a single-ride PR prices a choice as if
+  // it were a forecast. Everything below comes off rate/med, the same trailing path Month Race and
+  // the Regret Simulator use — no second rate is introduced.
+  out.forEach(function(p){ p.cost=_pbCost_(p, rate, med); });
 
   // Closest gap first — the section leads with the record you can actually take this week.
   // Held records sort last: they are the standard, not the target.
@@ -15818,7 +15853,7 @@ function _yvyVM_(rides, now){
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
-    pb:_pbCompute_(rides, now) };
+    pb:_pbCompute_(rides, now, rate, med6) };
 }
 
 function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
@@ -15918,7 +15953,9 @@ function _pbCardHtml_(p, formDays){
       +'<div style="height:100%;width:'+p.pct+'%;background:'+accent+';border-radius:3px"></div></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
       +'<span style="font-size:11.5px;color:#94a3b8">Recent best '+p.formStr+'</span>'
-      +'<span style="font-size:12.5px;font-weight:800;color:'+accent+'">Beat by '+p.gapStr+'</span></div></div>';
+      +'<span style="font-size:12.5px;font-weight:800;color:'+accent+'">Beat by '+p.gapStr+'</span></div>'
+      +(p.cost?('<div style="font-size:11px;color:#5b6678;line-height:1.5;margin-top:7px">'+p.cost+'</div>'):'')
+      +'</div>';
   }
   return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
 }
@@ -16266,7 +16303,13 @@ function _rsSection_(vm){
   } else if(!rs.moves){
     // Same rank both ways. Say that once and give the distance that would actually change it,
     // rather than printing the identical number twice as if it were two outcomes.
-    sentence='This weekend does not move your rank &mdash; '+MON+' finishes '+rk(rs.rideRank,'#f1f5f9')+' of '+rs.tot+' either way'
+    // The assumed ride is named HERE too, and it is doing more visible work in this branch than in
+    // the one where the rank moves: a reader seeing "does not move your rank" beside "the gap to #4
+    // is 14.5 mi" will reasonably ask why a ride fails to close 14.5 miles. The answer is that both
+    // branches carry it and move together, which is not legible unless the ride is on screen.
+    // Naming it makes the no-move claim auditable instead of trusted.
+    sentence='This weekend does not move your rank &mdash; '+MON+' finishes '+rk(rs.rideRank,'#f1f5f9')+' of '+rs.tot
+      +' either way, on a typical '+_mrMi_(rs.med)+' mi ride'
       +(rs.above ? ('. The gap to '+rk(rs.aboveRank,'#f1f5f9')+' is '+_mrMi_(rs.aboveGap)+' mi.') : ', and nothing sits above it.');
   } else {
     sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
