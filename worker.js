@@ -5411,8 +5411,8 @@ function genEntryId_(){
 // already, but this makes it structural regardless of the upstream source.
 function _nlName_(x){ var s=(x==null)?'':String(x).trim(); return s || 'Food'; }
 // Validation chokepoint for a logged strength set (same pattern as _nlName_). RPE is only
-// meaningful on a 1-10 scale, so a value like 115 is not a hard set — it means the columns were
-// transposed (a weight typed into the RPE box). Anything clearly out of range is DROPPED to null
+// meaningful on a 1-10 scale, so a value like 70 or 115 is not a hard set — some other field (a
+// %1RM, a weight) has ended up in this column. Anything clearly out of range is DROPPED to null
 // rather than clamped to a fake 10, which would hide the mistake behind a plausible-looking value.
 // Weight is coerced to a non-negative load and an absurd >2000 lb entry is dropped. reps is kept
 // as a sane non-negative count. Route every strength-set write through this.
@@ -5421,7 +5421,7 @@ function _strSet_(weight, reps, rpe){
   var r=parseInt(reps,10); if(!isFinite(r)||r<0||r>1000) r=null;
   var e=+rpe;
   if(!isFinite(e) || e<0.5 || e>11){                                              // valid RPE band (tolerate a hair over 10)
-    if(rpe!=null && rpe!==''){ try{ console.warn('[strength] dropped out-of-range RPE '+rpe+' (valid 1-10) — check for transposed weight/RPE columns'); }catch(_e){} }
+    if(rpe!=null && rpe!==''){ try{ console.warn('[strength] dropped RPE '+rpe+' — RPE is 1-10; a %1RM or weight in this column is not a valid RPE'); }catch(_e){} }
     e=null;
   } else { e=Math.round(Math.max(1,Math.min(10,e))*2)/2; }                         // snap to 0.5
   return { weight:(w==null?null:w), reps:r, rpe:e };
@@ -29495,9 +29495,9 @@ function openDayEditor(dateKey, targetId){
         var _rk=(typeof normDate==='function')?normDate(dateKey):dateKey;
         (typeof planSessionsForDate_==='function'?planSessionsForDate_(dateKey):[]).forEach(function(x){ if(x && x.type!=='rest'){ x.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(x,['deleted']); if(typeof _planTrace_==='function') _planTrace_('rest-save['+dateKey+']', x); } });
         var rs=(sess && sess.type==='rest')?sess:{ id:'plan-'+_rk+'-rest', block:null };
-        rs.type='rest'; rs.name='Rest'; rs.deleted=false;
+        rs.type='rest'; rs.name='Rest'; rs.deleted=false; rs.intent='';   // rest has no intent — clear any stale one (masked below so it sticks)
         try{ delete rs.gen; delete rs.migrated; }catch(e){}   // user-set rest — claim it (source=user via param)
-        planUpsertSession_(dateKey, rs, ['type','name','status','deleted'], 'user');
+        planUpsertSession_(dateKey, rs, ['type','name','status','deleted','intent'], 'user');
       } else {
         // Reuse the existing session id; a NEW session gets NO id here — planUpsertSession_
         // assigns 'plan-<key>-<total>' from the day's TOTAL session count (incl. deleted).
@@ -29554,6 +29554,16 @@ function openDayEditor(dateKey, targetId){
           s2.status=d.completed?'completed':'planned';
           s2.executionScore = computeExecutionScore_(s2);   // null unless completed w/ target + actual
         }
+        // Intent MUST match type. A stale intent left by a prior type (e.g. a ride 'threshold'
+        // kept through a strength save, because the strength/mobility branches never set it)
+        // silently resolves to the wrong SESSION_DEF — wrong dropdown + wrong prescription. Enforce
+        // for EVERY non-rest branch here (one chokepoint) so it can't recur on an unaudited path.
+        // Source of truth is the SELECTED PRESET (_selIntent), never the free-text name; if neither
+        // the stored nor the selected intent is type-consistent, CLEAR it — a visibly-empty
+        // fallback beats a wrong intent that silently resolves to another type's def. 'intent' is
+        // already in the _ef mask below, so a cleared/derived value sticks across sync.
+        var _defType=function(iv){ return (iv && typeof SESSION_DEFS!=='undefined' && SESSION_DEFS[iv]) ? SESSION_DEFS[iv].type : null; };
+        if(_defType(s2.intent)!==s2.type){ s2.intent = (_defType(_selIntent)===s2.type) ? _selIntent : ''; }
         if(typeof planUpsertSession_!=='function') throw new Error('planUpsertSession_ unavailable');
         // executionScore is computed deterministically, but mask it so a recompute (new formula)
         // wins cross-device instead of the generic Math.max merge. Only when a real score exists —
