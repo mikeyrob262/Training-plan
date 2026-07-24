@@ -23907,6 +23907,151 @@ function _rgSection_(){
     +'</div>';
 }
 
+
+// ==================== running PR board — three tiers ====================
+// The section the masters thesis was written for. A board where every target is a 48-year-old's PR
+// quietly tells a 64-year-old he is losing; career bests as HISTORY plus an age-band best as the
+// LIVE target tells him where he actually is. Three tiers, and the tier that carries "beat by" is
+// decided by recent training, never by his age.
+//
+// TIERS
+//   CAREER  — the record with the year attached. Always visible, never carries a gap. The 1:41 half
+//             at 48 is not a target; it is what he did, and a page about his athletic life should
+//             not hide his fastest race.
+//   BAND    — best since _PR_BAND_START. The ladder rung. This is the tier that turns a wall into
+//             something climbable, because it is a PR he set as the athlete he is now.
+//   SEASON  — best this calendar year. Absent for run today (2026: 5 activities, 0 rankable), so
+//             the row simply does not render. Absent is absent, not a dash.
+//
+// EVENT OMISSION — an event with NO band entry is dropped ENTIRELY rather than rendering a
+// career-best-only row. A lone 16-year-old record is a monument, not a target, and the board exists
+// to show rungs. Same principle as _covFor_ returning null for swim rather than rendering "#2 of 3":
+// honest beats complete. This is computed per event at RUNTIME rather than from a hardcoded event
+// list, so the board stays correct as the data changes — the moment a new 10k lands, that event
+// starts rendering on its own with no code change.
+//
+// COVERAGE — every denominator comes from _covFor_('run'). This surface computes event bests and
+// nothing else: it does not apply the rankable gate, does not derive year labels, does not compute
+// a window. windowStart is null for run and is neither rendered nor substituted.
+var _PR_BAND_START='2022-01';   // the month he turned 60 — a stated constant, not derived at runtime
+var _PR_BAND_LABEL='60';
+// Race-distance matching. A GPS run is never exactly 3.107 mi, so each event takes a tolerance band.
+// Tolerances are tight enough that a long run cannot masquerade as a race distance.
+var _PR_EVENTS=[
+  {id:'5k',   name:'Fastest 5K',       lo:3.05,  hi:3.30,  kind:'time'},
+  {id:'10k',  name:'Fastest 10K',      lo:6.10,  hi:6.55,  kind:'time'},
+  {id:'half', name:'Fastest Half',     lo:13.00, hi:13.40, kind:'time'},
+  {id:'full', name:'Fastest Marathon', lo:26.00, hi:26.60, kind:'time'},
+  {id:'long', name:'Longest Run',      kind:'dist'}
+];
+function _prFmtTime_(s){
+  s=Math.round(s||0); if(s<=0) return '';
+  var h=Math.floor(s/3600), m=Math.floor((s%3600)/60), ss=s%60;
+  var p=function(n){ return (n<10?'0':'')+n; };
+  return h>0 ? (h+':'+p(m)+':'+p(ss)) : (m+':'+p(ss));
+}
+function _prFmtGap_(s){
+  s=Math.round(Math.abs(s||0)); var m=Math.floor(s/60), ss=s%60;
+  return m>0 ? (m+':'+(ss<10?'0':'')+ss) : (ss+'s');
+}
+function _prCompute_(){
+  var cov=(typeof _covFor_==='function')?_covFor_('run'):null;
+  if(!cov) return null;                                    // unprimed or run cannot be ranked
+  var runs=(typeof getRuns==='function')?getRuns():[];
+  if(!runs.length) return null;
+  var thisYear=String(new Date().getFullYear());
+  var rows=[];
+  _PR_EVENTS.forEach(function(ev){
+    // Candidates for a TIME event are runs inside the distance tolerance; for a DIST event every
+    // run qualifies and the metric is the distance itself. Lower-is-better for time,
+    // higher-is-better for distance — one comparator, flipped.
+    var pool=[];
+    runs.forEach(function(r){
+      var d=parseFloat(r&&r.distance)||0, t=(typeof _durSec_==='function')?_durSec_(r):0;
+      var day=String((r&&r.date)||''); if(day.length<7) return;
+      if(ev.kind==='time'){
+        if(d<ev.lo || d>ev.hi || t<=0) return;
+        pool.push({date:day, val:t, mi:d});
+      }else{
+        if(d<=0) return;
+        pool.push({date:day, val:d, mi:d, secs:t});
+      }
+    });
+    if(!pool.length) return;
+    var better=function(a,b){ return ev.kind==='time' ? (a.val<b.val) : (a.val>b.val); };
+    var pick=function(list){ var best=null; list.forEach(function(p){ if(!best||better(p,best)) best=p; }); return best; };
+    var career=pick(pool);
+    var band=pick(pool.filter(function(p){ return p.date.slice(0,7)>=_PR_BAND_START; }));
+    // THE OMISSION. No band entry means no rung on this event, so the event does not appear.
+    if(!band) return;
+    var season=pick(pool.filter(function(p){ return p.date.slice(0,4)===thisYear; }));
+    // Which tier carries the live target. The career best is reachable only if the band best is
+    // within a plausible margin of it; otherwise the career best is history and the band best is
+    // the thing to beat. Judged on the gap between two of HIS OWN results, so it is a statement
+    // about current form and never an assumption about being 64.
+    var reachable;
+    if(career===band){ reachable=true; }
+    else if(ev.kind==='time'){ reachable=(band.val-career.val)/career.val<=0.05; }
+    else { reachable=(career.val-band.val)/career.val<=0.05; }
+    rows.push({ev:ev, career:career, band:band, season:season, reachable:reachable,
+               careerIsBand:(career===band)});
+  });
+  if(!rows.length) return null;
+  return {cov:cov, rows:rows};
+}
+function _prSection_(){
+  var g=_prCompute_();
+  if(!g) return '';
+  var c=g.cov;
+  var fmt=function(ev,p){ return ev.kind==='time' ? _prFmtTime_(p.val) : (Math.round(p.val*10)/10+' mi'); };
+  var yr=function(p){ return p.date.slice(0,4); };
+  var html='';
+  g.rows.forEach(function(r){
+    var ev=r.ev;
+    // The target line. When the career best is out of reach the band best carries "beat by" and the
+    // career best renders as a plain fact with its year; when it is reachable the career best is
+    // the target. Either way the career best is always shown.
+    var target=r.reachable?r.career:r.band;
+    var gap=null;
+    if(r.season && target && r.season!==target){
+      gap=(ev.kind==='time') ? (r.season.val-target.val) : (target.val-r.season.val);
+      if(gap<=0) gap=null;                                  // already beaten — no gap to close
+    }
+    html+='<div style="padding:11px 0;border-bottom:1px solid #1c2130">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'
+      +'<span style="font-size:13px;font-weight:700;color:#f1f5f9">'+ev.name+'</span>'
+      +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+fmt(ev,target)+'</span>'
+      +'</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'
+      +(r.reachable
+         ? ('career best &middot; '+yr(r.career)+(r.careerIsBand?'':' &middot; still your target'))
+         : ('best since '+_PR_BAND_LABEL+' &middot; '+yr(r.band)))
+      +'</div>';
+    // Career best as history. Shown separately only when it is NOT the target, so the fastest thing
+    // he ever did stays on the page without being posed as something to chase.
+    if(!r.reachable){
+      html+='<div style="font-size:11px;color:#5b6678;margin-top:2px">'
+        +'career best '+fmt(ev,r.career)+' &middot; '+yr(r.career)+' &middot; history</div>';
+    }
+    if(r.season && r.season!==target){
+      html+='<div style="font-size:11px;color:#64748b;margin-top:2px">this year '+fmt(ev,r.season)
+        +(gap!==null ? (' &middot; beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ' &middot; ahead')
+        +'</div>';
+    }
+    html+='</div>';
+  });
+  var foot='Ranked against <b style="color:#94a3b8">'+c.rankable+'</b> rankable run-months. '
+    +'Events with no result since '+_PR_BAND_LABEL+' are left off &mdash; this board shows what you can still climb, '
+    +'not everything you have ever done.';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin:0 16px 14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
+    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
+    +'<span style="font-size:11px;color:#5b6678">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
+    +html
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'</div>';
+}
+
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
   if(existing) existing.remove();
@@ -23928,6 +24073,13 @@ function renderRun(){
     var _rg=(typeof _rgSection_==='function')?_rgSection_():'';
     if(_rg){ var _rgw=document.createElement('div'); _rgw.innerHTML=_rg; scr.appendChild(_rgw); }
   }catch(e){ try{ console.error('[run-growth] ' + ((e&&e.message)||e)); }catch(_e){} }
+
+  // PR board, below the history exhibit. Same do-not-claim contract: renders nothing when the
+  // snapshot is unprimed, when run cannot be ranked, or when no event has a band entry.
+  try{
+    var _pr=(typeof _prSection_==='function')?_prSection_():'';
+    if(_pr){ var _prw=document.createElement('div'); _prw.innerHTML=_pr; scr.appendChild(_prw); }
+  }catch(e){ try{ console.error('[run-pr] ' + ((e&&e.message)||e)); }catch(_e){} }
 
   var runs=getRuns();
   var now=new Date();
