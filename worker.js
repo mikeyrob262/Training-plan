@@ -24027,11 +24027,19 @@ function _prSection_(){
          ? ('career best &middot; '+yr(r.career)+(r.careerIsBand?'':' &middot; still your target'))
          : ('best since '+_PR_BAND_LABEL+' &middot; '+yr(r.band)))
       +'</div>';
-    // Career best as history. Shown separately only when it is NOT the target, so the fastest thing
-    // he ever did stays on the page without being posed as something to chase.
+    // The OTHER tier always renders. Two ways this row can be wrong by omission:
+    //   - career unreachable -> career best must still appear, as HISTORY, so the fastest thing he
+    //     ever did stays on the page without being posed as something to chase.
+    //   - career reachable but NOT the band best -> the band best must still appear, because it is
+    //     the rung he set as the athlete he is now. Showing only a 2015 time on a row whose target
+    //     is a 2015 time is the exact failure the three tiers were built to prevent: a board where
+    //     the only number in front of him is from an athlete he no longer is.
     if(!r.reachable){
       html+='<div style="font-size:11px;color:#5b6678;margin-top:2px">'
         +'career best '+fmt(ev,r.career)+' &middot; '+yr(r.career)+' &middot; history</div>';
+    }else if(!r.careerIsBand){
+      html+='<div style="font-size:11px;color:#5b6678;margin-top:2px">'
+        +'best since '+_PR_BAND_LABEL+' '+fmt(ev,r.band)+' &middot; '+yr(r.band)+'</div>';
     }
     if(r.season && r.season!==target){
       html+='<div style="font-size:11px;color:#64748b;margin-top:2px">this year '+fmt(ev,r.season)
