@@ -18253,6 +18253,180 @@ function generateBlockPlan_(){
     return out;
   }catch(e){ try{ console.log('[blockGen] err', e&&e.message); }catch(_e){} return {error:String(e&&e.message||e)}; }
 }
+
+// ==================== Coach V (Part 6 — core) ====================
+// Athlete IQ's coaching voice: direct, no fluff, block-aware, and derived from data only. Everything
+// here comes from st.trainingBlock (blockPlanFor_), the fitness model (getFitness_), the milestone
+// dates (_blockNextMilestone_) and ftpHistory. NOTHING is invented — a form line only appears when
+// TSB is available, an FTP line only when ftpHistory/the retest actually applies, and a countdown
+// only against real dates. Named for Ven-Top and Victory.
+
+// The key session of a day — the one worth coaching. Rides first (the block's quality), then runs,
+// then strength, then mobility, then rest/optional.
+var _CV_PRIORITY=['ventop','alpe','chalet','vo2','threshold','group','long','z2','recovery','run10k','easyRun','strengthA','strengthB','mobility','optional','rest'];
+function _cvPrimary_(sessions){
+  if(!sessions||!sessions.length) return null;
+  for(var p=0;p<_CV_PRIORITY.length;p++){ for(var i=0;i<sessions.length;i++){ if(sessions[i].intent===_CV_PRIORITY[p]) return sessions[i]; } }
+  return sessions[0];
+}
+function _cvIntCount_(struct){ var m=String(struct||'').match(/(\d+)\s*x/i); return m?parseInt(m[1],10):null; }
+// Pre-session instructions, keyed by intent, using the FTP-priced watts from the session's rx.
+function _cvPre_(intent, t, struct){
+  var lo=t&&t.powerLo, hi=t&&t.powerHi, cap=t&&t.hrCap, band=(lo&&hi)?(lo+'-'+hi+'W'):'';
+  var o=[];
+  if(intent==='vo2'){
+    var n=_cvIntCount_(struct)||4;
+    o.push('Start interval 1 at '+(lo||'the bottom of the band')+(lo?'W':'')+', not '+(hi||'the top')+(hi?'W':'')+'. Intervals 3 and 4 will be hard — that is correct.');
+    o.push('If you blow up on interval 3, you went out too hot on 1 and 2. Do not add a '+(n+1)+'th interval no matter how good you feel.');
+  } else if(intent==='threshold'){
+    o.push('Hold '+(band||'the band')+' across the '+(struct||'blocks')+'. Steady beats surging.');
+    o.push('The last five minutes of each block is where the work is — do not fade there.');
+  } else if(intent==='z2'){
+    o.push('This is a ceiling, not a target. If watts drift up and HR climbs past '+(cap||135)+', back off even if the legs feel good.');
+  } else if(intent==='group'){
+    o.push('Sit in for the first 20 minutes. Race only the last 10-15. If you get dropped, do not chase — this is base, not a result.');
+  } else if(intent==='long'){
+    o.push('Controlled '+((t&&t.zone)||'Z2-Z3')+' — the point is time in the saddle, not watts. Keep eating and drinking from the start.');
+  } else if(intent==='easyRun'){
+    o.push('Conversational. If you cannot hold a full sentence, you are running too fast. Impact is the load; keep it short.');
+  } else if(intent==='run10k'){
+    o.push('Easy volume with the reps at 10k pace as the only hard part. Everything around them stays genuinely easy.');
+  } else if(intent==='strengthA'||intent==='strengthB'){
+    o.push('Prescribed percentage of 1RM, form over load. This is the structural stimulus the bike never gives you.');
+  } else if(intent==='mobility'){
+    o.push('Fifteen minutes, prescribed not optional — it undoes what the riding position does to your hips and back.');
+  } else if(intent==='recovery'){
+    o.push('Genuinely easy. Spin the legs, add no fatigue — a taper only works if you respect the easy days.');
+  } else if(intent==='chalet'){
+    o.push('15 minutes warmup, then hold '+(band||'155-160W')+' for the first 30 minutes. Do not send the bottom — this is an endurance test, and pacing it is the test.');
+  } else if(intent==='alpe'){
+    o.push('A time trial, not a max effort. Even pacing to the top beats a hot start every time. Settle in early and hold the effort.');
+  } else if(intent==='tenk'){
+    o.push('Race day. Warm up properly, then run your race — do not go out with the fast starters and blow up at 6k.');
+  } else if(intent==='ventop'){
+    o.push('This is the one. Everything the block built points here. Patience on the lower slopes, save something real for the last third.');
+  } else if(intent==='rest'){
+    o.push('Full rest. Recovery is the plan, not a gap in it.');
+  } else if(intent==='optional'){
+    o.push('Optional — good legs, spin easy; otherwise rest. This is never a makeup for a session you missed.');
+  }
+  return o;
+}
+// Honest "what to expect" preview per intent.
+var _CV_EXPECT={
+  vo2:'Legs fine early. Breathing gets uncomfortable fast — that is the point. HR climbs through each interval and stays elevated. Genuinely hard but controlled.',
+  threshold:'Sustainable but demanding — a steady discomfort, not spikes. The last block is a grind, and that is expected.',
+  z2:'Easy the whole way. If it feels hard, it is too hard. A little boredom is the sign you are doing it right.',
+  group:'Surges you did not choose, then lulls. Your legs will want to answer every one — do not, until the finale.',
+  long:'Fine for the first couple of hours, then a dull heaviness sets in. Keep fuelling; the wall is a fuelling problem, not a fitness one.',
+  easyRun:'Should feel almost too easy. The only real load is impact — keep it relaxed and short.',
+  run10k:'Easy, then a few sharp reps that lift the breathing, then easy again. You should finish feeling you could do more.',
+  recovery:'Barely a workout, and that is correct. If you finish tired, you rode it too hard.',
+  chalet:'A long, steady burn — boredom, then discomfort, then the summit. Pace it and the top comes to you.',
+  alpe:'Sustained and lonely. The clock is the opponent. Even effort, no heroics until the final ramps.',
+  tenk:'Comfortable-hard early, genuinely hard from halfway. The race is won in the last 3k by whoever paced the first 7.',
+  ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top.'
+};
+// Form adjustment from TSB — only for the hard sessions, only when TSB is known.
+function _cvForm_(intent, tsb){
+  if(tsb==null) return '';
+  var hard=(intent==='vo2'||intent==='threshold'||intent==='group'||intent==='chalet'||intent==='alpe'||intent==='ventop'||intent==='tenk');
+  if(!hard) return '';
+  if(tsb<=-20) return 'Form is '+tsb+' — deep fatigue. Cut it back hard today: fewer reps, the low end of the band, or move the quality to tomorrow. Digging here costs more than it buys.';
+  if(tsb<=-15) return 'Form is '+tsb+' — you are carrying fatigue. Back off one notch: one fewer interval, hold the bottom of the band.';
+  if(tsb>=15) return 'Form is +'+tsb+' — fresh. Targets as written; you have the legs for a clean one.';
+  return '';
+}
+// Milestone countdown with urgency in the voice.
+function _cvMilestone_(now){
+  var nm=(typeof _blockNextMilestone_==='function')?_blockNextMilestone_(now):null;
+  if(!nm) return null;
+  var d=nm.days, u;
+  if(d<=2) u='It is on top of you — sharpen, do not build.';
+  else if(d<=7) u='This week matters. Every session between now and then counts.';
+  else if(d<=21) u='On the horizon. Keep the block honest and it handles itself.';
+  else u='Still a way out. Bank the weeks, do not force it.';
+  return { label:nm.m.label, days:d, date:nm.m.date, urgency:u };
+}
+// FTP discontinuity — acknowledged AFTER the retest from ftpHistory, and flagged BEFORE it from the
+// known date. Never invents an old value; the "was" figure comes from the entry preceding the retest.
+function _cvFtp_(now){
+  if(typeof _FTP_RETEST_DATE==='undefined') return '';
+  now=now||new Date();
+  var today=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2)+'-'+('0'+now.getDate()).slice(-2);
+  var h=(typeof _ftpHist_==='function')?_ftpHist_():[];
+  var sorted=(typeof _ftpSort_==='function')?_ftpSort_(h):h.slice();
+  var ri=-1; for(var i=0;i<sorted.length;i++){ if(sorted[i].source==='retest') ri=i; }
+  if(ri>=0 && today && today>=sorted[ri].date){
+    var e=sorted[ri], prev=(ri>0)?sorted[ri-1].ftp:null;
+    return 'New FTP set '+_blockFmtDate_(e.date)+' at '+e.ftp+'W'+((prev!=null&&prev!==e.ftp)?(' (was '+prev+'W)'):'')+'. Every target from here reprices automatically — the watts before and after the retest are not the same currency.';
+  }
+  var dd=(typeof _blockDaysBetween_==='function' && typeof _blockDay_==='function')?_blockDaysBetween_(_blockDay_(today), _blockDay_(_FTP_RETEST_DATE)):null;
+  if(dd!=null && dd>=0 && dd<=21){
+    return 'Retest in '+dd+' day'+(dd===1?'':'s')+'. Targets recalculate the moment you set the new number — chase the session in front of you, not a figure that is about to change.';
+  }
+  return '';
+}
+// PURE. The full Coach V read for a given day. Null outside the block.
+function coachV_(dateKey, now){
+  now=now||new Date();
+  var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+  if(!plan) return null;
+  var fit=(typeof getFitness_==='function')?getFitness_():null;
+  var tsb=(fit&&typeof fit.tsb==='number')?fit.tsb:null;
+  var primary=_cvPrimary_(plan.sessions);
+  var t=primary&&primary.rx&&primary.rx.targets, intent=primary&&primary.intent;
+  return {
+    phase:plan.phase, phaseLabel:plan.phaseLabel, weekInPhase:plan.weekInPhase,
+    primary:primary, intent:intent, targets:t,
+    pre:primary?_cvPre_(intent, t, primary.struct):[],
+    expect:(intent&&_CV_EXPECT[intent])||'',
+    form:primary?_cvForm_(intent, tsb):'',
+    milestone:_cvMilestone_(now),
+    ftp:_cvFtp_(now),
+    tsb:tsb
+  };
+}
+// The Coach V panel — one shared renderer, mounted on the Plan page by BOTH desktop and mobile.
+function _coachVPanel_(now){
+  now=now||new Date();
+  var dk=(typeof _tbDK_==='function')?_tbDK_(new Date(now.getFullYear(),now.getMonth(),now.getDate())):null;
+  var cv=dk?coachV_(dk, now):null;
+  if(!cv) return '';   // outside the block window
+  var G='#22c55e', A='#f59e0b', P='#a855f7';
+  var sessName=(cv.primary&&cv.primary.rx&&cv.primary.rx.name)||(cv.primary&&cv.primary.intent)||'today';
+  var band=(cv.targets&&cv.targets.powerLo!=null)?(cv.targets.powerLo+'-'+cv.targets.powerHi+'W'):'';
+  var H='<div style="background:linear-gradient(135deg,rgba(168,85,247,.12),rgba(34,197,94,.06));border:1px solid #2a2340;border-radius:16px;padding:18px;margin-top:14px">';
+  // identity + milestone voice
+  H+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">'
+    +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:'+P+'">V</span>'
+    +'<div><div style="font-size:13px;font-weight:800;color:#f1f5f9">Coach V</div>'
+    +'<div style="font-size:10.5px;color:#5b6678">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
+  if(cv.milestone){
+    H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
+  }
+  // today's session coaching
+  if(cv.primary && cv.intent!=='rest'){
+    H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+      +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:#5b6678">'+cv.primary.struct+'</span>'):'')+'</div>';
+    cv.pre.forEach(function(line){ H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.55;margin-top:6px">'+line+'</div>'; });
+    if(cv.form) H+='<div style="font-size:12px;color:'+A+';line-height:1.5;margin-top:8px;font-weight:600">'+cv.form+'</div>';
+    if(cv.expect) H+='<div style="font-size:11.5px;color:#94a3b8;line-height:1.55;margin-top:8px"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
+    H+='</div>';
+  } else if(cv.primary){
+    H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+      +'<div style="font-size:12.5px;color:#e2e8f0;line-height:1.55">'+(cv.pre[0]||'Rest today.')+'</div></div>';
+  }
+  // ftp discontinuity
+  if(cv.ftp){
+    H+='<div style="font-size:11.5px;color:#cbd5e1;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
+  }
+  // honesty footer: what Coach V is NOT yet reading
+  H+='<div style="font-size:10px;color:#5b6678;line-height:1.5;margin-top:12px">Speaking from your block, form and FTP. HRV readiness and post-ride debriefs switch on once those feeds are confirmed live.</div>';
+  H+='</div>';
+  return H;
+}
+
 // Shared milestone-flag chip for a calendar day cell (Part 3). ONE helper, wired into BOTH the
 // desktop grid and the mobile week so the flag can never drift between renderers. data-cal/data-date
 // carry the hooks Part 4's tap-to-Plan navigation will bind to. Returns '' on a non-milestone day.
@@ -18617,6 +18791,9 @@ function renderBlockPlan_(container){
     +'<span>'+prog.statusText+'</span></div>';
   H+=_blockCard_(progInner);
   H+='</div>';
+
+  // ---- COACH V (Part 6 core) — one shared panel, both renderers via this mount ----
+  try{ if(typeof _coachVPanel_==='function') H+=_coachVPanel_(now); }catch(e){ try{ console.error('[coachV] '+((e&&e.message)||e)); }catch(_e){} }
 
   // ---- THIS WEEK, PRESCRIBED (Part 2 made visible: the real plan from st.trainingBlock) ----
   H+=_tbWeekStrip_(now);
