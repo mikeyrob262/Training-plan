@@ -18213,6 +18213,19 @@ function _tbMilestoneOn_(dateKey){
   for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].date===dateKey) return _BLOCK_MILESTONES[i]; }
   return null;
 }
+// Shared milestone-flag chip for a calendar day cell (Part 3). ONE helper, wired into BOTH the
+// desktop grid and the mobile week so the flag can never drift between renderers. data-cal/data-date
+// carry the hooks Part 4's tap-to-Plan navigation will bind to. Returns '' on a non-milestone day.
+function _calMilestoneFlag_(dateKey, compact){
+  var m=(typeof _tbMilestoneOn_==='function')?_tbMilestoneOn_(dateKey):null;
+  if(!m) return '';
+  if(compact){   // narrow mobile column — glyph only, full label on hover
+    return '<div data-cal="milestone" data-date="'+dateKey+'" title="'+m.label+'" style="margin:0 auto 3px;font-size:12px;color:#f59e0b;line-height:1">&#9873;</div>';
+  }
+  return '<div data-cal="milestone" data-date="'+dateKey+'" title="'+m.label+'" style="margin-top:4px;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:6px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.4);cursor:pointer">'
+    +'<span style="font-size:10px;line-height:1">&#9873;</span>'
+    +'<span style="font-size:9.5px;font-weight:800;color:#f59e0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+m.label+'</span></div>';
+}
 
 function _blockCyc_(rides){
   return (rides||[]).filter(function(r){
@@ -20836,6 +20849,7 @@ function dsShowCalendar(){
           } else {
             H+='<div style="position:relative;font-size:12.5px;font-weight:'+(isToday?'800':'600')+';color:'+(!c.inMonth?'#39424f':(isToday?'#4ade80':'#c7d0dd'))+'">'+c.d+'</div>';
           }
+          if(c.inMonth && typeof _calMilestoneFlag_==='function'){ H+=_calMilestoneFlag_(c.date); }
           if(isRest){
             H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
           } else {
@@ -31403,6 +31417,7 @@ function showCalendarTab(){
     if(dayDone){ h+='<div style="position:absolute;top:4px;right:5px;width:13px;height:13px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:900">&#10003;</div>'; }
     h+='  <div style="font-size:10px;font-weight:600;color:var(--t3)">'+dayNames[i]+'</div>';
     h+='  <div style="font-size:17px;font-weight:800;color:var(--t1);margin-bottom:7px">'+d.getDate()+'</div>';
+    if(typeof _calMilestoneFlag_==='function'){ h+=_calMilestoneFlag_(normDate(dKey), true); }
     h+='  <div style="min-height:44px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;margin:2px 0 3px">';
     entries.slice(0,2).forEach(function(en){
       var ecol=en.rest?'#8E8E93':actColor(en.type);
