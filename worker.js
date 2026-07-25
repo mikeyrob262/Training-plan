@@ -16390,6 +16390,11 @@ function _alFactors_(r, mx){
     + bar('Consistency', r.activeWeeks+' of '+r.weeksInMonth+' weeks', r.weeksInMonth?(r.activeWeeks/r.weeksInMonth):0, 'weeks with at least one activity', _AL_TEAL)
     + bar('Climbing', r.elev.toLocaleString()+' ft', mx.elev?(r.elev/mx.elev):0, '', _AL_AMBER);
 }
+// The scoped-months board's era anchor. A MONTH boundary, not the year-scale _AM_ERA_START (2024)
+// the Momentum chart uses: this board ranks months, so Oct 2023 — where the ride log first becomes
+// dense enough to rank (the ~29-month window the coverage probe reports) — is the honest start, and
+// a calendar-year cutoff would silently drop the real Oct-Dec 2023 era months.
+var _AL_ERA_START_YM='2023-10';
 function _alSection_(){
   var g=(typeof _zsCompute_==='function')?_zsCompute_():null;
   if(!g || !g.rows.length) return '';                       // unprimed, or nothing scoreable
@@ -16466,14 +16471,26 @@ function _alSection_(){
   // era that MOVES. Same z-score, just filtered to the era — no second normalization, because the
   // z is window-invariant. Rendered only when the era actually surfaces months the all-time board
   // does not, so it is never a redundant echo of the five cards above it.
-  var eraStart=(typeof _AM_ERA_START!=='undefined')?_AM_ERA_START:2024;
-  var eraRows=rows.filter(function(r){ return parseInt(String(r.ym).slice(0,4),10)>=eraStart; });  // rows is score-desc; filter is stable, so era rank = position+1
+  // Anchored to the ride era (_AL_ERA_START_YM, Oct 2023), NOT a calendar-year cutoff — a month
+  // boundary keeps the real Oct-Dec 2023 era months. String compare on 'YYYY-MM' is correct + cheap.
+  var eraRows=rows.filter(function(r){ return String(r.ym)>=_AL_ERA_START_YM; });   // rows is score-desc; filter is stable, so era rank = position+1
   var eraTop=eraRows.slice(0,5);
   var eraBoard='';
   if(eraTop.length>=3 && eraTop.some(function(r){ return !topSet[r.ym]; })){
+    // Where the SUBJECT month stands WITHIN the era — the "moves" half of the grammar, and the whole
+    // point during the Ven-Top block: the all-time board freezes, but the era board still places him.
+    // Reuses the gauge's rank-of-N wording (no new framing), and only when the subject is itself in
+    // the era and scored — same do-not-claim contract as the gauge; else the board just shows the top.
+    var eraRankLine='';
+    var subjEraIdx=-1; for(var _e=0;_e<eraRows.length;_e++){ if(eraRows[_e].ym===subject.ym){ subjEraIdx=_e; break; } }
+    if(subjEraIdx>=0 && String(subject.ym)>=_AL_ERA_START_YM){
+      eraRankLine='<div style="font-size:11.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">'
+        +(pos?'This month':_alFmtYM_(subject.ym))+' sits <b style="color:#f1f5f9">#'+(subjEraIdx+1)+' of '+eraRows.length+'</b> in your current era.</div>';
+    }
     eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+eraStart+'</div>'
+      +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+_alFmtYM_(_AL_ERA_START_YM)+'</div>'
       +'<div style="font-size:11.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">The board above is your all-time peak and does not move. This is your current era &mdash; it climbs as you train, and it is where a month you can actually still beat lives.</div>'
+      +eraRankLine
       +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
       + eraTop.map(function(r,i){ return _alEraCard_(r,i+1,selYM); }).join('')
       +'</div></div>';
