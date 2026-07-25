@@ -19427,6 +19427,7 @@ function _sessionSteps_(intent, struct, targets){
     steps.push({kind:'warmup', title:'Warm-up', meta:'15 min · '+easyTxt, sub:'Easy spin, then a couple of short openers to prime the legs.'});
     for(var i=1;i<=n;i++){
       steps.push({kind:'work', title:'Interval '+i+' of '+n,
+        workMin:work, bandLo:targets.powerLo, bandHi:targets.powerHi, n:n,   // structured targets for the post-ride debrief matcher
         meta:work+' min @ '+bandTxt+(zone?(' · '+zone):''),
         sub:(i<n?('Then '+recTxt+'.'):'Last one — hold the band to the end, then stop. No junk after.')});
     }
@@ -19464,6 +19465,88 @@ function openSessionOrEditor_(dateKey, sid){
 // check; the single "Mark session complete" button is inert until every step is checked. Marking
 // complete links a recorded ride for the day when one exists (ride-verified, the same evidence the
 // consistency ring reads) and otherwise records an honest self-report that does NOT feed that count.
+// ==================== Coach V — post-ride interval debrief (piece 3) ====================
+// Lines a completed ride's Intervals.icu interval data up against the prescribed _sessionSteps_. The
+// prescription (N intervals of M min @ X–Y W) comes from the app; the ACTUAL work intervals come from
+// Intervals (tagged WORK, with real avg power/HR/duration). Debriefs ONLY when the ride's intervals
+// clearly map to the structure — an outdoor ride's auto-detected surges don't, and it says so rather
+// than forcing a comparison. Fetch is cached slim on the ride; icuId resolves lazily for new rides.
+function _fmtMMSS_(sec){ sec=Math.round(sec||0); var m=Math.floor(sec/60), s=sec%60; return m+':'+('0'+s).slice(-2); }
+// Resolve a ride's icuId: its own i-id, else the strava_id map via a one-day activities lookup. Caches
+// r.icuId on success and r._icuNone when confirmed absent (guard on SUCCESS, so a network error retries).
+function _icuResolveLazy_(r, cb){
+  if(!r){ cb(null); return; }
+  if(r.icuId){ cb(r.icuId); return; }
+  if(typeof r.id==='string' && /^i\d+$/.test(r.id)){ r.icuId=r.id; try{sv();}catch(e){} cb(r.icuId); return; }
+  if(r.stravaId==null || r.stravaId==='' || r._icuNone){ cb(null); return; }
+  var d=(typeof normDate==='function')?normDate(r.date):r.date; if(!d){ cb(null); return; }
+  fetch('/api/intervals-activities?oldest='+d+'&newest='+d,{headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
+    .then(function(x){ return x.ok?x.json():null; })
+    .then(function(arr){
+      if(!Array.isArray(arr)){ cb(null); return; }   // error/non-array: no guard set, retry allowed
+      var hit=null; arr.forEach(function(a){ if(a && String(a.strava_id)===String(r.stravaId)) hit=String(a.id); });
+      if(hit){ r.icuId=hit; try{sv();}catch(e){} cb(hit); }
+      else { r._icuNone=true; try{sv();}catch(e){} cb(null); }   // confirmed not in Intervals
+    }).catch(function(){ cb(null); });
+}
+// Fetch + slim-cache a ride's tagged intervals. r._icuIv = {work:[{dur,watts,hr}], groups:[{count,dur,watts}]}.
+function _icuFetchIntervals_(r, cb){
+  if(r && r._icuIv){ cb(r._icuIv); return; }
+  _icuResolveLazy_(r, function(icuId){
+    if(!icuId){ cb(null); return; }
+    fetch('/api/intervals-activity-intervals?id='+encodeURIComponent(icuId),{headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
+      .then(function(x){ return x.ok?x.json():null; })
+      .then(function(j){
+        if(!j || !Array.isArray(j.icu_intervals)){ cb(null); return; }
+        var work=j.icu_intervals.filter(function(v){ return v.type==='WORK'; }).map(function(v){
+          return { dur:(v.moving_time||v.elapsed_time||0), watts:(v.average_watts!=null?Math.round(v.average_watts):null), hr:(v.average_heartrate!=null?Math.round(v.average_heartrate):null) }; });
+        var groups=(j.icu_groups||[]).map(function(g){ return { count:g.count||1, dur:(g.moving_time||0), watts:(g.average_watts!=null?Math.round(g.average_watts):null) }; });
+        r._icuIv={ work:work, groups:groups, at:Date.now() };
+        try{ sv(); }catch(e){}
+        cb(r._icuIv);
+      }).catch(function(){ cb(null); });
+  });
+}
+// Resolve the completed ride for a session: its linked ride, else the day's activity.
+function _debriefRideFor_(dateKey, s){
+  if(s && s.completedRideKey && st.rides){ for(var i=0;i<st.rides.length;i++){ var r=st.rides[i]; if(r && !r.deleted && (typeof rideKey==='function'?rideKey(r):r.id)===s.completedRideKey) return r; } }
+  if(typeof findActivityForDate==='function'){ var a=findActivityForDate(dateKey); if(a && a.obj) return a.obj; }
+  return null;
+}
+// PURE. Match prescribed work intervals (from steps) to the ride's actual WORK intervals. Maps only
+// when the count of near-duration efforts lines up with the prescription; else declines with why.
+function _debriefMatch_(steps, icu){
+  var presc=(steps||[]).filter(function(s){ return s.kind==='work' && s.workMin; });
+  if(!presc.length) return { mapped:false, reason:'not-structured' };
+  var N=presc.length, M=presc[0].workMin, lo=presc[0].bandLo, hi=presc[0].bandHi;
+  var targetSec=M*60, tol=Math.max(45, Math.round(targetSec*0.35));
+  var work=(icu.work||[]);
+  var near=work.filter(function(w){ return Math.abs(w.dur-targetSec)<=tol; });
+  if(!(near.length>=N-1 && near.length<=N+1)) return { mapped:false, reason:'no-structure', found:work.length, targetN:N, targetM:M };
+  var pairs=near.slice(0,N).map(function(w,i){
+    return { i:i+1, actual:{ sec:w.dur, watts:w.watts, hr:w.hr },
+             inBand:(w.watts!=null && lo!=null && hi!=null && w.watts>=lo && w.watts<=hi),
+             over:(w.watts!=null && hi!=null && w.watts>hi), under:(w.watts!=null && lo!=null && w.watts<lo) }; });
+  return { mapped:true, N:N, M:M, lo:lo, hi:hi, pairs:pairs };
+}
+function _debriefHead_(ACC){ return '<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+ACC+';margin-bottom:6px">Coach V · Session debrief</div>'; }
+function _debriefRender_(m, ACC){
+  var head=_debriefHead_(ACC);
+  if(!m || !m.mapped){
+    if(m && m.reason==='not-structured') return head+'<div style="font-size:12px;color:var(--t3);line-height:1.5">A continuous ride, not an interval session — nothing to break down effort by effort.</div>';
+    return head+'<div style="font-size:12px;color:var(--t3);line-height:1.5">Your ride didn’t record a clean '+(m?m.targetN:'')+'×'+(m?m.targetM:'')+' — Intervals found '+(m?m.found:0)+' efforts that don’t line up to the prescription, so no forced comparison.</div>';
+  }
+  var nIn=m.pairs.filter(function(p){ return p.inBand; }).length;
+  var H=head+'<div style="font-size:12.5px;color:var(--t2);line-height:1.5;margin-bottom:8px"><b style="color:var(--t1)">'+nIn+' of '+m.pairs.length+'</b> intervals landed in the '+m.lo+'–'+m.hi+'W band.</div>';
+  m.pairs.forEach(function(p){
+    var col=p.inBand?'#22c55e':(p.over?'#f59e0b':'#ef4444');
+    var verdict=(p.actual.watts==null)?'no power':(p.inBand?'in band':(p.over?('+'+(p.actual.watts-m.hi)+'W over'):((m.lo-p.actual.watts)+'W under')));
+    H+='<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--b1)">'
+      +'<span style="font-size:12.5px;color:var(--t2)">Interval '+p.i+' · '+_fmtMMSS_(p.actual.sec)+(p.actual.hr?(' · '+p.actual.hr+' bpm'):'')+'</span>'
+      +'<span style="font-size:12.5px;font-weight:800;color:'+col+'">'+(p.actual.watts!=null?p.actual.watts+'W':'—')+' · '+verdict+'</span></div>';
+  });
+  return H;
+}
 function showSessionDetail_(dateKey, sid){
   var s=_sessionForDetail_(dateKey, sid);
   if(!s || s.type!=='ride'){ if(typeof openDayEditor==='function') openDayEditor(dateKey, sid||undefined); return; }
@@ -19543,6 +19626,22 @@ function showSessionDetail_(dateKey, sid){
   });
   btn.onclick=function(){ if(btn.disabled) return; _sdCompleteSession_(dateKey, s.id, ov); };
   sync();
+  // Post-ride debrief: when the session is complete, pull the linked ride's Intervals interval data
+  // and line the actuals up against the prescribed work intervals. Async; declines cleanly.
+  if(done){
+    var dbg=document.createElement('div'); dbg.id='sd-debrief'; dbg.style.cssText='margin-top:16px;padding-top:14px;border-top:1px solid var(--b1)';
+    sheet.appendChild(dbg);
+    var ride=_debriefRideFor_(dateKey, s);
+    if(!ride){ dbg.innerHTML=_debriefHead_(ACC)+'<div style="font-size:12px;color:var(--t3);line-height:1.5">No recorded ride linked to this session yet, so there’s nothing to debrief.</div>'; }
+    else {
+      dbg.innerHTML=_debriefHead_(ACC)+'<div style="font-size:12px;color:var(--t3)">Reading your interval data…</div>';
+      _icuFetchIntervals_(ride, function(icu){
+        if(!document.getElementById('sd-debrief')) return;   // overlay closed before the fetch returned
+        if(!icu){ dbg.innerHTML=_debriefHead_(ACC)+'<div style="font-size:12px;color:var(--t3);line-height:1.5">This ride isn’t in Intervals.icu (or carries no interval data), so there’s nothing to line up against the plan.</div>'; return; }
+        dbg.innerHTML=_debriefRender_(_debriefMatch_(steps, icu), ACC);
+      });
+    }
+  }
 }
 // Persist a session-detail completion. Explicit self-report of the whole session; links a recorded
 // ride for the day when one exists (ride-verified + scored), otherwise records status only.
