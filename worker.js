@@ -12136,13 +12136,13 @@ function renderPerf(container){
 
   // YTD stats (cycling only)
   var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
-  var yearMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
+  // Plausibility-guarded sums: an absurd single distance is excluded and logged rather than summed
+  // into a wrong YTD headline (see _sumRideMi_).
+  var ytdCycMi = Math.round(_sumRideMi_(yearRides.filter(isCyc)));
+  var yearMi = ytdCycMi;
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
-  
-  // Training log: Today rings + YTD rings
-  var ytdCycMi = Math.round(yearRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0));
-  var ytdRunMi = Math.round(yearRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0));
+  var ytdRunMi = Math.round(_sumRideMi_(yearRides.filter(isRun)));
   var sportDefs = [
     {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',color:'#FC4C02',
      todayV:parseFloat(todayCycMi),todayMax:50,todayUnit:'mi',
@@ -12195,6 +12195,9 @@ function renderPerf(container){
   html += '<div style="width:1px;background:var(--b1);margin:0 2px"></div>';
   html += makeRings(sportDefs, true, 'YTD');
   html += '</div>';
+  // Honest computed pace vs the annual cycling goal — a real "+X ahead / X behind a linear pace"
+  // readout, never a hardcoded figure. Renders only when a goal is set.
+  html += _paceLine_(ytdCycMi, yearMiGoal);
   html += '</div>';
 
   // -- W/KG HERO CARD
@@ -19986,6 +19989,65 @@ function _goalTargets_(){
   if(g.annualMi==null) g.annualMi=parseInt(st.yearlyMileageGoal)||5000;
   if(g.ctl==null) g.ctl=65;
   return g;
+}
+
+// ==================== Mileage integrity: plausibility, honest pace, Strava reconciliation ====================
+// Three pieces, all read-only and all computed — nothing here hardcodes a number or rewrites data.
+//
+// (1) A ride distance is miles as a positive real; anything absurd (a single ride over the ceiling)
+//     is a data fault, not a ride, so it is excluded from totals and LOGGED rather than silently
+//     summed into a wrong headline. Never throws — a bad row costs its own value, not the surface.
+var _MILE_RIDE_MAX=1000;
+function _sumRideMi_(list){
+  var mi=0, bad=0;
+  (list||[]).forEach(function(r){ var v=parseFloat(r&&r.distance);
+    if(v>0 && v<=_MILE_RIDE_MAX) mi+=v;
+    else if(v>_MILE_RIDE_MAX){ bad++; try{ console.warn('[mileage] implausible ride distance '+v+' mi on '+((r&&r.date)||'?')+' — excluded'); }catch(e){} } });
+  if(bad>1){ try{ console.warn('[mileage] '+bad+' rides excluded as implausible (> '+_MILE_RIDE_MAX+' mi)'); }catch(e){} }
+  return mi;
+}
+// App YTD cycling miles from the same deduped source the rest of the app reads.
+function _appYtdCycMi_(){
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st.rides||[]).filter(function(r){ return r&&!r.deleted; }));
+  var y=String(new Date().getFullYear());
+  var yr=rides.filter(function(r){ return r&&r.date && String(r.date).slice(0,4)===y; });
+  var cyc=yr.filter(function(r){ var s=(typeof rideSport_==='function')?rideSport_(r):''; return !s || /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i.test(s); });
+  return Math.round(_sumRideMi_(cyc));
+}
+// (2) LINEAR-pace status vs an annual goal. Linear is a STATED simplification — real training is not
+//     linear — so the copy always says "linear pace", never "on pace" as if the target were destiny.
+function _paceStatus_(ytdMi, goalMi, now){
+  now=now||new Date();
+  var y=now.getFullYear();
+  var daysInYear=((((y%4)===0)&&((y%100)!==0))||((y%400)===0))?366:365;
+  var doy=Math.max(1, Math.round((now-new Date(y,0,0))/86400000));
+  var target=goalMi*doy/daysInYear;
+  var delta=Math.round(ytdMi-target);
+  return { ytd:Math.round(ytdMi), goal:goalMi, target:Math.round(target), delta:delta, ahead:(delta>=0), doy:doy, daysInYear:daysInYear };
+}
+function _paceLine_(ytdMi, goalMi, now){
+  if(!(goalMi>0)) return '';
+  var p=_paceStatus_(ytdMi, goalMi, now);
+  var col=p.ahead?'#22c55e':'#f59e0b';
+  return '<div style="display:flex;align-items:baseline;gap:7px;margin-top:8px;font-size:12px;flex-wrap:wrap">'
+    +'<span style="font-weight:800;color:'+col+'">'+(p.ahead?'+':'')+p.delta.toLocaleString()+' mi</span>'
+    +'<span style="color:var(--t3)">'+(p.ahead?'ahead of':'behind')+' a '+goalMi.toLocaleString()+'-mile linear pace</span>'
+    +'<span style="color:var(--t3);opacity:.7">('+p.target.toLocaleString()+' mi by today)</span></div>';
+}
+// (3) Reconcile app YTD cycling miles against Strava YTD (authoritative) when it has been synced.
+//     Logs a flagged discrepancy over _RECON_PCT and returns the comparison. Read-only: it reports,
+//     it never rewrites. Strava YTD comes from the extended syncAthleteStats_ (ytdRideMeters).
+var _RECON_PCT=5;
+function reconcileStrava_(){
+  var app=_appYtdCycMi_();
+  var as=st.athleteStats||{};
+  var sYtdMi=(as.ytdRideMeters!=null && as.ytdRideMeters>0)?(as.ytdRideMeters/1609.344):null;
+  if(sYtdMi==null){ try{ console.log('[reconcile] Strava YTD not synced yet (run Sync Lifetime Stats). app YTD='+app+' mi'); }catch(e){} return { have:false, app:app }; }
+  var strava=Math.round(sYtdMi), delta=app-strava;
+  var pct=strava>0?Math.abs(delta/strava*100):(app>0?100:0);
+  var flag=pct>_RECON_PCT;
+  try{ console.log('[reconcile] YTD cycling — app='+app+' mi, Strava='+strava+' mi, delta='+(delta>=0?'+':'')+delta+' ('+pct.toFixed(1)+'%) '+(flag?('*** FLAG: over '+_RECON_PCT+'% — investigate ***'):'within tolerance')); }catch(e){}
+  return { have:true, app:app, strava:strava, delta:delta, pct:pct, flag:flag };
 }
 
 function dsShowAnalytics(){
@@ -29287,9 +29349,14 @@ function syncAthleteStats_(silent, cb){
       fetch('https://www.strava.com/api/v3/athletes/'+id+'/stats',{headers:{'Authorization':'Bearer '+token}})
       .then(function(r){ return r.ok?r.json():null; }).then(function(s){
         if(!s){ done(false,'no stats'); return; }
-        var rt=s.all_ride_totals||{}, run=s.all_run_totals||{};
+        var rt=s.all_ride_totals||{}, run=s.all_run_totals||{}, ytr=s.ytd_ride_totals||{};
         st.athleteStats={ rideCount:rt.count||0, rideMeters:rt.distance||0, rideElevM:rt.elevation_gain||0, rideSecs:rt.moving_time||0,
-          runCount:run.count||0, runMeters:run.distance||0, updatedAt:Date.now() };
+          runCount:run.count||0, runMeters:run.distance||0,
+          ytdRideMeters:(ytr.distance!=null?ytr.distance:null), ytdRideCount:(ytr.count!=null?ytr.count:null),
+          updatedAt:Date.now() };
+        // Cross-reference the app's YTD against Strava's now that we have the authoritative figure.
+        // Read-only — it logs a flag if they diverge, it does not rewrite anything.
+        try{ if(typeof reconcileStrava_==='function') reconcileStrava_(); }catch(e){}
         try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
         done(true);
       }).catch(function(e){ done(false,(e&&e.message)||'fetch'); });
