@@ -4937,6 +4937,107 @@ function runZoneBackfill(){
   });
 }
 // --------------------------------------------------------------------------
+// TEMPERATURE BACKFILL (G4) — for each OUTDOOR ride with a date and no r.temp yet,
+// look up the historical temperature at the ride's OWN start coordinate + hour from
+// Open-Meteo's archive API and store r.temp (°F, avg over the ride window) plus a
+// r.tempSource provenance field. Indoor is decided by rideIsIndoor() (NOT r.trainer,
+// which is false on every Zwift ride — /virtual/ catches them). The coordinate comes
+// from the ride's GPS start (r.lats[0], else /gps) — never a hardcoded home location.
+// temp/tempSource are NOT heavy fields, so they survive slimForStorage_ like zoneTime.
+// SCAN first (tempBackfillScan_ reports candidates, writes nothing); the write
+// (runTempBackfill) is a separate, count-confirmed action. Sequential, rate-limited,
+// resumable (candidates exclude rides already done).
+var _tempBackfill={running:false, stop:false};
+function tempBackfillCandidates_(){
+  return (st.rides||[]).filter(function(r){
+    if(!r || r.deleted) return false;
+    if(typeof rideIsIndoor==='function' && rideIsIndoor(r)) return false;   // Zwift/virtual/trainer excluded
+    if(r.temp!=null) return false;                                          // already has a temperature
+    return !!r.date;                                                        // need a date to look up
+  });
+}
+// The ride's start coordinate: in-memory GPS if present, else resolve from /gps. Never a fallback
+// home location — a ride with no obtainable coordinate is skipped, not guessed.
+function _tempStartCoord_(r){
+  if(r && r.lats && r.lats.length && r.lons && r.lons.length) return Promise.resolve([+r.lats[0], +r.lons[0]]);
+  if(typeof gpsGetAny_!=='function') return Promise.resolve(null);
+  return gpsGetAny_(r).then(function(p){
+    var la=p&&(p.lats||p.gpsLats), lo=p&&(p.lons||p.gpsLons);
+    return (la&&la.length&&lo&&lo.length)?[+la[0],+lo[0]]:null;
+  }).catch(function(){ return null; });
+}
+// REPORT-ONLY: count + sample of what a run would touch. Writes nothing.
+function tempBackfillScan_(){
+  var NL=String.fromCharCode(10);   // a newline escape in source is consumed by the served template literal
+  var list=tempBackfillCandidates_();
+  var withCoordNow=list.filter(function(r){ return r.lats&&r.lats.length; }).length;
+  var sport=function(r){ return (typeof rideSport_==='function')?rideSport_(r):String(r.sportType||r.type||''); };
+  var sample=list.slice(0,10).map(function(r){
+    var nm=(r.name&&String(r.name).trim())?String(r.name).trim().slice(0,30):(sport(r)||'ride');
+    return '  • '+(r.date||'?')+'  '+nm+'  ['+(sport(r)||'?')+']'+((r.lats&&r.lats.length)?'  coord✓':'  coord→/gps');
+  });
+  var msg=list.length+' outdoor rides missing a temperature ('+withCoordNow+' have a GPS start in memory; the rest resolve from /gps during the run).'+NL+'Sample:'+NL+sample.join(NL);
+  try{ console.log('[tempBackfill] '+msg); }catch(e){}
+  var el=document.getElementById('temp-backfill-status');
+  if(el) el.textContent=list.length+' outdoor rides missing temp ('+withCoordNow+' with GPS start in memory). Sample in console. Nothing written yet — click Backfill to commit.';
+  return {count:list.length, withCoordNow:withCoordNow, sample:list.slice(0,10)};
+}
+function stopTempBackfill(){ _tempBackfill.stop=true; }
+function runTempBackfill(){
+  var el=document.getElementById('temp-backfill-status');
+  function say(t){ if(el) el.textContent=t; }
+  if(_tempBackfill.running){ say('Already running…'); return; }
+  var list=tempBackfillCandidates_();
+  if(!list.length){ say('Every outdoor ride already has a temperature — nothing to backfill.'); return; }
+  var go=function(){
+    _tempBackfill.running=true; _tempBackfill.stop=false;
+    var i=0, got=0, noCoord=0, noWx=0, err=0, total=list.length;
+    say('Starting… '+total+' outdoor rides. Rate-limited (~2/sec) and resumable.');
+    function finish(msg){
+      _tempBackfill.running=false;
+      try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      var left=tempBackfillCandidates_().length;
+      say(msg+' — '+got+' rides now carry a temperature'+(noCoord?(', '+noCoord+' had no GPS start'):'')+(noWx?(', '+noWx+' had no archive data'):'')+(err?(', '+err+' errors'):'')+(left?('. '+left+' still to do — run again to continue.'):'. All done!'));
+    }
+    function step(){
+      if(_tempBackfill.stop) return finish('Stopped');
+      if(i>=list.length) return finish('Complete');
+      var r=list[i++];
+      say('Backfilling '+i+'/'+total+'… '+got+' with temp'+(noCoord?(', '+noCoord+' no-GPS'):''));
+      _tempStartCoord_(r).then(function(coord){
+        if(!coord || !isFinite(coord[0]) || !isFinite(coord[1])){ noCoord++; return setTimeout(step, 120); }
+        var d=normDate(r.date);
+        var url='https://archive-api.open-meteo.com/v1/archive?latitude='+coord[0].toFixed(4)+'&longitude='+coord[1].toFixed(4)
+          +'&start_date='+d+'&end_date='+d+'&hourly=temperature_2m&temperature_unit=fahrenheit&timezone=auto';
+        fetch(url).then(function(x){
+          if(x.status===429){ finish('Open-Meteo rate limit reached (run again later to continue)'); throw 'rl'; }
+          return x.ok?x.json():null;
+        }).then(function(j){
+          var temps=j&&j.hourly&&j.hourly.temperature_2m;
+          if(temps && temps.length){
+            // Narrow to the ride's own hour window when we have a start time; else the whole-day mean.
+            var sh=0, eh=temps.length-1;
+            if(r.startTime){ var sd=new Date(r.startTime); sh=sd.getHours(); var dm=r.duration?parseDurationToMinutes_(r.duration):90; eh=Math.min(temps.length-1, sh+Math.ceil((dm||90)/60)); }
+            var slice=temps.slice(sh, eh+1).filter(function(v){ return typeof v==='number' && isFinite(v); });
+            if(slice.length){
+              r.temp=Math.round(slice.reduce(function(a,b){return a+b;},0)/slice.length);
+              r.tempSource='openmeteo-archive';
+              got++;
+            } else noWx++;
+          } else noWx++;
+          if(got && got%25===0){ try{ sv(); }catch(e){} }
+          setTimeout(step, 500);                    // ~2/sec — polite to Open-Meteo's free archive
+        }).catch(function(e){ if(e==='rl') return; err++; setTimeout(step, 500); });
+      });
+    }
+    step();
+  };
+  // The commit gate: confirm the count before a single write.
+  if(typeof uiConfirm==='function'){
+    uiConfirm('Backfill historical temperature for '+list.length+' outdoor rides? Writes r.temp + tempSource to the store, using each ride’s own GPS start location.',{title:'Temperature backfill', okText:'Backfill'}).then(function(ok){ if(ok) go(); else say('Cancelled — nothing written.'); });
+  } else go();
+}
+// --------------------------------------------------------------------------
 // BULK GPS BACKFILL — heal every outdoor Strava ride that has no /gps track,
 // IGNORING the stale _gpsTried/_streamsTried flags that block on-open retries.
 // Fetches only the latlng stream (1 call/ride), downsamples, writes to
@@ -19431,6 +19532,7 @@ function dsShowSettings(){
   var _G=_goalTargets_();
   var _zbCount=(typeof zoneBackfillCandidates_==='function')?zoneBackfillCandidates_().length:0;
   var _gpsbCount=(typeof gpsBackfillCandidates_==='function')?gpsBackfillCandidates_().length:0;
+  var _tbCount=(typeof tempBackfillCandidates_==='function')?tempBackfillCandidates_().length:0;
   function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Settings</div>'
@@ -19469,6 +19571,14 @@ function dsShowSettings(){
     +'<div id="zone-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
     +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
     +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Temperature Backfill</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Looks up each OUTDOOR ride&#39;s historical temperature from Open-Meteo&#39;s archive, using the ride&#39;s own GPS start location + hour, and stores r.temp (&deg;F) + a tempSource field. Indoor/Zwift rides are skipped. Rate-limited (~2/sec), resumable. <b>Scan</b> reports candidates and writes nothing; <b>Backfill</b> confirms the count first. '+_tbCount+' outdoor rides need it.</div>'
+    +'<div id="temp-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="tempBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
+    +' <button onclick="runTempBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Temps</button>'
+    +' <button onclick="stopTempBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">GPS Track Backfill</div>'
