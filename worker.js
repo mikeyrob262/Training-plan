@@ -18086,9 +18086,11 @@ function showAthleteIntel(){
 // way "62% complete" sitting next to "0 of 4 clean weeks" would if the ring claimed weeks banked.
 var _BLOCK_START='2026-07-24';                 // the day the block started (spec: +28 days = Aug 21)
 var _BLOCK_MILESTONES=[
-  {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest', road:true,
+  // slidable: internal block gates that move WITH the streak on a missed week. The real-world events
+  // below (chalet/alpe/tenk/ventop) have no slidable flag — the mountain does not move.
+  {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest', road:true, slidable:true,
    icon:'M20 6L9 17l-5-5', sTitle:'Consistent week', sSub:'All 4 sessions, on 3 separate days', benefit:'Unlocks the retest'},
-  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true,
+  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true, slidable:true,
    icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
   {slug:'chalet', date:'2026-09-13', label:'Chalet Reynard', note:'', road:true,
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
@@ -18123,9 +18125,12 @@ function _blockWeekStart_(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getD
 
 function _blockNextMilestone_(now){
   var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
-  for(var i=0;i<_BLOCK_MILESTONES.length;i++){
-    var d=_blockDay_(_BLOCK_MILESTONES[i].date);
-    if(d && d.getTime()>=t.getTime()) return {m:_BLOCK_MILESTONES[i], days:_blockDaysBetween_(t,d), idx:i};
+  // Effective (post-slide) dates, re-sorted — a slid gate can move past a fixed event.
+  var eff=((typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(now):_BLOCK_MILESTONES).slice()
+    .sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+  for(var i=0;i<eff.length;i++){
+    var d=_blockDay_(eff[i].date);
+    if(d && d.getTime()>=t.getTime()) return {m:eff[i], days:_blockDaysBetween_(t,d), idx:i};
   }
   return null;
 }
@@ -18207,10 +18212,37 @@ function blockPlanFor_(dateKey){
   return { phase:p.id, phaseLabel:p.label, weekInPhase:weekInPhase, via:via, dateKey:dateKey,
            weekday:mon, sessions:sessions };
 }
-// The block's own milestone dates, for the calendar flags and cross-nav (Part 3/4). Reuses the
-// authoritative _BLOCK_MILESTONES so there is one date list, not two.
+// Weeks the block has slipped: the streak's slideWeeks, read from live data. 0 when on track.
+function _blockSlideWeeks_(now){
+  try{
+    var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+    try{ if(typeof getRuns==='function') rides=rides.concat(getRuns()); }catch(e){}
+    var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
+    var stk=(typeof _blockStreak_==='function')?_blockStreak_(rides, ftp, now||new Date()):null;
+    return stk?(stk.slideWeeks||0):0;
+  }catch(e){ return 0; }
+}
+// THE effective milestone list — the single source both the Plan roadmap and the calendar flags
+// read, so a slide can never show two different dates. Only milestones flagged slidable (the
+// four-weeks gate and the retest window) move, and only by whole weeks the streak has lost. The
+// real-world events (Chalet, Alpe, 10k, Ven-Top) are returned unchanged, always — the mountain does
+// not move because a Tuesday was missed. Each slid entry carries baseDate + slidWeeks so a reader
+// can say "moved from X".
+function _blockMilestonesEffective_(now){
+  var slide=_blockSlideWeeks_(now);
+  return _BLOCK_MILESTONES.map(function(m){
+    if(m.slidable && slide>0){
+      var nd=new Date(_blockDay_(m.date).getTime()+slide*7*86400000);
+      var o={}; for(var k in m) o[k]=m[k]; o.date=_tbDK_(nd); o.baseDate=m.date; o.slidWeeks=slide; return o;
+    }
+    return m;
+  });
+}
+// The block's milestone on a date (calendar flags + cross-nav). Reads the EFFECTIVE list so a flag
+// lands on the slid date, not the original — one date list, never two.
 function _tbMilestoneOn_(dateKey){
-  for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].date===dateKey) return _BLOCK_MILESTONES[i]; }
+  var eff=(typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(new Date()):_BLOCK_MILESTONES;
+  for(var i=0;i<eff.length;i++){ if(eff[i].date===dateKey) return eff[i]; }
   return null;
 }
 // OPTION C — generate the block into st.plan for the block window, so the calendar, the completion
@@ -18376,6 +18408,19 @@ function _cvFtp_(now){
   return '';
 }
 // PURE. The full Coach V read for a given day. Null outside the block.
+// The honest thing to say when a week slips: the internal gates slide, the real events do not, and
+// the gap between them changes. Empty when nothing has slid.
+function _cvSlide_(now){
+  var slide=(typeof _blockSlideWeeks_==='function')?_blockSlideWeeks_(now):0;
+  if(!(slide>0) || typeof _blockMilestonesEffective_!=='function') return '';
+  var eff=_blockMilestonesEffective_(now), retest=null, chalet=null;
+  eff.forEach(function(m){ if(m.slug==='ftp-retest') retest=m; if(m.slug==='chalet') chalet=m; });
+  if(!retest||!chalet) return '';
+  var base=null; for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].slug==='ftp-retest') base=_BLOCK_MILESTONES[i]; }
+  var gapNow=_blockDaysBetween_(_blockDay_(retest.date), _blockDay_(chalet.date));
+  var gapBase=base?_blockDaysBetween_(_blockDay_(base.date), _blockDay_(chalet.date)):null;
+  return 'A missed week slid the retest to '+_blockFmtDate_(retest.date)+', but Chalet Reynard is still '+_blockFmtDate_(chalet.date)+' — the mountain does not move. You now have '+gapNow+' day'+(gapNow===1?'':'s')+' between them'+((gapBase!=null&&gapBase!==gapNow)?(' instead of '+gapBase):'')+'. That compresses the taper; build the recovery around it.';
+}
 function coachV_(dateKey, now){
   now=now||new Date();
   var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
@@ -18392,6 +18437,7 @@ function coachV_(dateKey, now){
     form:primary?_cvForm_(intent, tsb):'',
     milestone:_cvMilestone_(now),
     ftp:_cvFtp_(now),
+    slide:_cvSlide_(now),
     tsb:tsb
   };
 }
@@ -18413,6 +18459,7 @@ function _coachVPanel_(now){
   if(cv.milestone){
     H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
+  if(cv.slide){ H+='<div style="font-size:12px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
   // today's session coaching
   if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -18616,7 +18663,10 @@ function _blockCheckRow_(c){
 }
 function _blockRoadmap_(now){
   var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  var road=_BLOCK_MILESTONES.filter(function(m){ return m.road; });
+  // Effective dates (slidable gates moved, fixed events unchanged), re-sorted so the roadmap reads
+  // in true chronological order after a slide.
+  var road=((typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(now):_BLOCK_MILESTONES)
+    .filter(function(m){ return m.road; }).sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
   var nextIdx=-1;
   for(var i=0;i<road.length;i++){ var d=_blockDay_(road[i].date); if(d && d.getTime()>=today.getTime()){ nextIdx=i; break; } }
   var cells=road.map(function(m,i){
