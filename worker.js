@@ -18074,38 +18074,49 @@ function showAthleteIntel(){
 //     clean sessions at 190 TSS pass; three sloppy ones at 250 TSS do not. TSS is never in the
 //     pass boolean, by construction (see _blockWeekAssess_).
 //   - There is deliberately NO makeup affordance. A missed session does not move to Sunday; the
-//     week fails its own rule and starts clean Monday. Building a "move it" control would erode the
-//     rest structure without anyone deciding to, so it is simply absent.
+//     week fails its own rule and starts clean Monday.
 // Runs are excluded from the pass rule — running is the variable being introduced (3.7).
-
-// Milestone dates are authoritative constants (the coach's plan), not derived. Everything from the
-// four-weeks-complete date onward SLIDES when a week is missed — the slide is stated explicitly,
-// because the slide IS the behavioural point of the streak.
-var _BLOCK_START='2026-07-21';                 // Monday of the block's first week
+//
+// The progress ring is CALENDAR time through the four-week window; clean-weeks-banked is a separate
+// QUALITY metric. They are labelled as different axes precisely so they can never contradict — the
+// way "62% complete" sitting next to "0 of 4 clean weeks" would if the ring claimed weeks banked.
+var _BLOCK_START='2026-07-24';                 // the day the block started (spec: +28 days = Aug 21)
 var _BLOCK_MILESTONES=[
-  {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest'},
-  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest',            note:'a discontinuity — power and zone history mean two different things across it'},
-  {slug:'chalet',     date:'2026-09-13', label:'Chalet Reynard',        note:''},
-  {slug:'alpe',       date:'2026-10-13', label:'Alpe sub-70',           note:''},
-  {slug:'tenk',       date:'2026-10-18', label:'10k run',               note:''},
-  {slug:'ventop',     date:'2026-11-10', label:'Ven-Top summit',        note:'the attempt the whole block points at'}
+  {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest', road:true,
+   icon:'M20 6L9 17l-5-5', sTitle:'Consistent week', sSub:'All 4 sessions, on 3 separate days', benefit:'Unlocks the retest'},
+  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true,
+   icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
+  {slug:'chalet', date:'2026-09-13', label:'Chalet Reynard', note:'', road:true,
+   icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
+  {slug:'alpe', date:'2026-10-13', label:'Alpe sub-70', note:'', road:true,
+   icon:'M2 20l7-14 5 9 3-5 5 10z', sTitle:'Alpe sub-70', sSub:'Sub-70-minute goal', benefit:'Confidence boost'},
+  {slug:'tenk', date:'2026-10-18', label:'10k run', note:'', road:false,
+   icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'10k run', sSub:'The running variable', benefit:'Base transferred'},
+  {slug:'ventop', date:'2026-11-10', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
+   icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
 var _BLOCK_RETEST_YM='2026-08';                // the FTP-retest month — the TSS/zone discontinuity
-// Condition thresholds. The threshold cap 181W is ~0.97*186; the flat proxy stands in for a route
-// name the library does not carry (3.8). Weekly TSS band is CONTEXT only.
 var _BLOCK_Z2_HR=135, _BLOCK_THR_W=181, _BLOCK_VO2_FLAT_FT=650;
 var _BLOCK_TSS_LO=200, _BLOCK_TSS_HI=280;
 var _BLOCK_WEEKS_TARGET=4;
+// Risks are the block's KNOWN structural failure modes, each mapped to a real rule — not a data-mined
+// claim. "active" flags the one currently biting (a reset makes missed-sessions the live risk).
+var _BLOCK_RISKS=[
+  {slug:'stacking', title:'Stacking fatigue', sub:'Back-to-back hard days raise injury risk', sol:'The three-separate-days rule',
+   icon:'M12 3l9 16H3z M12 10v4 M12 17h.01'},
+  {slug:'recovery', title:'Under-recovery', sub:'Low HRV or poor sleep stalls progress', sol:'Protect sleep and fuelling',
+   icon:'M12 21s-8-5-8-11a4 4 0 018-1 4 4 0 018 1c0 6-8 11-8 11z'},
+  {slug:'missed', title:'Missed sessions', sub:'One miss resets the clock', sol:'Protect the key workouts',
+   icon:'M12 3a9 9 0 100 18 9 9 0 000-18z M12 7v5l3 2'}
+];
 
 function _blockDay_(s){ var p=String(s||'').slice(0,10).split('-'); if(p.length<3) return null; var d=new Date(+p[0],(+p[1]||1)-1,(+p[2]||1)); d.setHours(0,0,0,0); return d; }
 function _blockDaysBetween_(a,b){ if(!a||!b) return null; return Math.round((b.getTime()-a.getTime())/86400000); }
 function _blockFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return String(s);
   return (_YVY_MON[(+p[1]||1)-1]||'')+' '+(+p[2]||1); }
 function _blockFmtDateD_(d){ if(!d) return ''; return (_YVY_MON[d.getMonth()]||'')+' '+d.getDate(); }
-// Monday-start week containing d, matching the convention every other week reader on this page uses.
 function _blockWeekStart_(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()-(x.getDay()===0?6:x.getDay()-1)); x.setHours(0,0,0,0); return x; }
 
-// Next milestone at or after today, with days remaining. Null when the block is behind us.
 function _blockNextMilestone_(now){
   var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
   for(var i=0;i<_BLOCK_MILESTONES.length;i++){
@@ -18115,7 +18126,6 @@ function _blockNextMilestone_(now){
   return null;
 }
 
-// Cycling only — runs are not in the pass rule and cannot be. Power preferred as NP, else average.
 function _blockCyc_(rides){
   return (rides||[]).filter(function(r){
     if(!r||!r.date) return false;
@@ -18128,9 +18138,6 @@ function _blockHr_(r){ var v=(r&&r.avgHR!=null)?+r.avgHR:((r&&r.avgHr!=null)?+r.
 function _blockElev_(r){ return Math.round(parseFloat((r&&r.elev!=null)?r.elev:(r&&r.elevation))||0); }
 function _blockTss_(r){ var v=parseFloat(r&&r.tss); return (v>0&&v<=600)?v:0; }
 
-// Infer a ride's session type from its intensity vs FTP. Stated as inference, not read from a field,
-// because no session-type field exists: intensity = (NP or avg power)/FTP. A ride with no power is
-// unclassifiable for threshold/VO2, so it is reported as coverage, not silently bucketed.
 function _blockSessionOf_(r, ftp){
   var pw=_blockPwr_(r); if(pw==null || !(ftp>0)) return null;
   var ratio=pw/ftp;
@@ -18139,29 +18146,27 @@ function _blockSessionOf_(r, ftp){
   return 'z2';
 }
 
-// PURE. rides = live rides (runs excluded internally by sport), ftp, now. Assesses the CURRENT
-// Monday-start week. PASS is (all three sessions present) AND (each condition met) AND (three
-// separate days) — TSS is computed and returned but NEVER referenced in the pass boolean.
+// PURE. Assesses the CURRENT Monday-start week. PASS is (all three sessions present) AND (each
+// condition met) AND (three separate days) — TSS is computed and returned but NEVER in the pass
+// boolean. Each check carries a one-line description for the UI.
 function _blockWeekAssess_(rides, ftp, now){
   var ws=_blockWeekStart_(now), we=new Date(ws.getTime()+7*86400000);
   var cyc=_blockCyc_(rides).filter(function(r){ var d=_blockDay_(r.date); return d && d>=ws && d<we; });
   var withPwr=cyc.filter(function(r){ return _blockPwr_(r)!=null; }).length;
-
   var sess={ threshold:[], vo2:[], z2:[] };
   cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp); if(t) sess[t].push(r); });
   function pick(list){ return (list&&list.length)?list[0]:null; }
   var thrRide=pick(sess.threshold), vo2Ride=pick(sess.vo2), z2Ride=pick(sess.z2);
-
   var checks=[
-    { key:'threshold', label:'Threshold', ride:thrRide, done:!!thrRide,
+    { key:'threshold', label:'Threshold', desc:'Build sustainable power without overreaching', ride:thrRide, done:!!thrRide,
       cond:'avg power under '+_BLOCK_THR_W+'W',
       ok:!!(thrRide && _blockPwr_(thrRide)!=null && _blockPwr_(thrRide)<_BLOCK_THR_W),
       val:thrRide?(_blockPwr_(thrRide)!=null?(_blockPwr_(thrRide)+'W'):'no power recorded'):'' },
-    { key:'vo2', label:'VO2', ride:vo2Ride, done:!!vo2Ride,
+    { key:'vo2', label:'VO2', desc:'Lift the aerobic ceiling and efficiency', ride:vo2Ride, done:!!vo2Ride,
       cond:'flat route, under '+_BLOCK_VO2_FLAT_FT+' ft (elevation proxy)',
       ok:!!(vo2Ride && _blockElev_(vo2Ride)<_BLOCK_VO2_FLAT_FT),
       val:vo2Ride?(_blockElev_(vo2Ride).toLocaleString()+' ft'):'' },
-    { key:'z2', label:'Zone 2', ride:z2Ride, done:!!z2Ride,
+    { key:'z2', label:'Zone 2', desc:'Build the aerobic base and recovery capacity', ride:z2Ride, done:!!z2Ride,
       cond:'avg HR under '+_BLOCK_Z2_HR,
       ok:!!(z2Ride && _blockHr_(z2Ride)!=null && _blockHr_(z2Ride)<_BLOCK_Z2_HR),
       val:z2Ride?(_blockHr_(z2Ride)!=null?(_blockHr_(z2Ride)+' bpm'):'no HR recorded'):'' }
@@ -18170,19 +18175,13 @@ function _blockWeekAssess_(rides, ftp, now){
   var allThree=checks.every(function(c){ return c.done; });
   var distinctDays=(allThree && Object.keys(days).length>=3);
   var conditionsMet=checks.every(function(c){ return c.ok; });
-  // THE pass boolean. TSS is NOT here — a week cannot pass or fail on TSS.
-  var pass=allThree && conditionsMet && distinctDays;
-
+  var pass=allThree && conditionsMet && distinctDays;   // TSS is NOT here
   var tss=0; cyc.forEach(function(r){ tss+=_blockTss_(r); }); tss=Math.round(tss);
-
   return { weekStart:ws, checks:checks, allThree:allThree, conditionsMet:conditionsMet,
-           distinctDays:distinctDays, pass:pass, tss:tss, nCyc:cyc.length, withPwr:withPwr };
+           distinctDays:distinctDays, distinctCount:Object.keys(days).length, pass:pass, tss:tss,
+           nCyc:cyc.length, withPwr:withPwr };
 }
 
-// Consecutive clean-week streak since block start, plus the slid four-weeks-complete date. A week is
-// judged only once COMPLETE (its Monday is before the current week's Monday); the in-progress week
-// never counts. When a completed week fails, the streak resets and the target slides — the slide is
-// returned so the render can state it, because the slide is the behavioural point of the rule.
 function _blockStreak_(rides, ftp, now){
   var start=_blockWeekStart_(_blockDay_(_BLOCK_START)||now);
   var curWS=_blockWeekStart_(now);
@@ -18203,16 +18202,59 @@ function _blockStreak_(rides, ftp, now){
            base:base, projected:projected, target:_BLOCK_WEEKS_TARGET };
 }
 
-// Form window: only within ~10 days of an actual attempt (not the retest or the four-weeks gate).
-// Returns the nearest attempt inside the window, else null — outside the window the section is
-// omitted entirely, because a TSB projection weeks out is close to fiction and would revise on
-// every ride.
-var _BLOCK_ATTEMPT_SLUGS={chalet:1, alpe:1, tenk:1, ventop:1};
+// Calendar progress through the four-week window, plus the streak-derived status. pct is TIME, not
+// clean weeks — the two are kept separate on purpose (see the file header).
+function _blockProgress_(rides, ftp, now){
+  var start=_blockDay_(_BLOCK_START), gate=_blockDay_(_BLOCK_MILESTONES[0].date);
+  var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var windowDays=Math.max(1,_blockDaysBetween_(start,gate));
+  var elapsed=Math.max(0,Math.min(windowDays,_blockDaysBetween_(start,today)));
+  var pct=Math.round(elapsed/windowDays*100);
+  var stk=_blockStreak_(rides, ftp, now);
+  var onTrack=!stk.reset, statusText, statusCol;
+  if(stk.streak>=stk.target){ statusText='Four clean weeks banked — retest gate open'; statusCol='#22c55e'; }
+  else if(stk.reset){ statusText='Clock reset — '+stk.need+' clean week'+(stk.need===1?'':'s')+' to rebuild'; statusCol='#f59e0b'; }
+  else if(stk.completed===0){ statusText='Week 1 — the clock is running'; statusCol='#22c55e'; }
+  else { statusText='On track — '+stk.streak+' clean, '+stk.need+' to go'; statusCol='#22c55e'; }
+  return { pct:pct, daysOnPlan:elapsed, windowDays:windowDays, onTrack:onTrack,
+           streak:stk.streak, target:stk.target, statusText:statusText, statusCol:statusCol };
+}
+
+// Weekly TSS across the block so far, for the graph. One point per completed-or-current week.
+function _blockWeeklyTss_(rides, ftp, now){
+  var start=_blockWeekStart_(_blockDay_(_BLOCK_START)||now), curWS=_blockWeekStart_(now);
+  var out=[]; var w=new Date(start.getTime()), idx=1;
+  while(w.getTime()<=curWS.getTime() && out.length<16){
+    var mid=new Date(w.getTime()+3*86400000);
+    var a=_blockWeekAssess_(rides, ftp, mid);
+    out.push({ label:'W'+idx, tss:a.tss, inBand:(a.tss>=_BLOCK_TSS_LO && a.tss<=_BLOCK_TSS_HI),
+               current:(w.getTime()===curWS.getTime()) });
+    w=new Date(w.getTime()+7*86400000); idx++;
+  }
+  return out;
+}
+
+// A DATA-DERIVED insight when the month scores are available, a plain principle otherwise. It never
+// claims a correlation it did not compute: the computed branch states an actual figure from his
+// scored months (how many of his best months banked every active week).
+function _blockInsight_(){
+  var g=null; try{ if(typeof _zsCompute_==='function') g=_zsCompute_(); }catch(e){}
+  if(g && g.rows && g.rows.length>=5){
+    var top=g.rows.slice(0,5);
+    var full=top.filter(function(r){ return r.weeksInMonth>0 && r.activeWeeks>=r.weeksInMonth; }).length;
+    if(full>=3) return { computed:true, text:full+' of your five best months banked every active week of the month — the pattern is consistency, not any single big day. Bank clean weeks and the fitness follows.' };
+    var sum=0,n=0; top.forEach(function(r){ if(r.weeksInMonth>0){ sum+=r.activeWeeks/r.weeksInMonth; n++; } });
+    var pct=n?Math.round(sum/n*100):0;
+    return { computed:true, text:'Across your five best months you were active in '+pct+'% of the weeks on average — gains track consistency, not hero days. Bank clean weeks.' };
+  }
+  return { computed:false, text:'Your biggest gains come from consistency, not hero days. The block rewards showing up over four weeks, not one big day — bank clean weeks.' };
+}
+
 function _blockFormWindow_(now){
   var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
   var best=null;
   _BLOCK_MILESTONES.forEach(function(m){
-    if(!_BLOCK_ATTEMPT_SLUGS[m.slug]) return;
+    if(!(m.slug==='chalet'||m.slug==='alpe'||m.slug==='tenk'||m.slug==='ventop')) return;
     var d=_blockDay_(m.date); if(!d) return;
     var days=_blockDaysBetween_(t,d);
     if(days!=null && days>=0 && days<=10){ if(!best || days<best.days) best={m:m, days:days}; }
@@ -18220,116 +18262,198 @@ function _blockFormWindow_(now){
   return best;
 }
 
+// ---- render helpers ----
+function _blockMiIcon_(path, col, sz){ sz=sz||18; return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+path+'"/></svg>'; }
+function _blockDot_(ok){ return ok
+  ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+  : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>'; }
 function _blockCheckRow_(c){
-  var ok=c.ok, col=ok?'#22c55e':'#f59e0b';
-  var mark=ok
-    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
-    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>';
-  var status=c.done ? (ok?('met &middot; '+c.val):('logged, but '+c.val+' &mdash; over the cap')) : 'not logged this week';
-  return '<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid #14181f">'
-    +'<span style="flex:0 0 auto;margin-top:1px">'+mark+'</span>'
-    +'<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#f1f5f9">'+c.label
-    +' <span style="font-size:11px;font-weight:600;color:#5b6678">&middot; '+c.cond+'</span></div>'
-    +'<div style="font-size:11.5px;color:'+(c.done?(ok?'#22c55e':'#f59e0b'):'#5b6678')+';margin-top:1px">'+status+'</div></div></div>';
+  var ok=c.ok, iconCol=c.key==='threshold'?'#FC4C02':(c.key==='vo2'?'#a855f7':'#14b8a6');
+  var status=c.done ? (ok?('met · '+c.val):('logged, but '+c.val+' — over the cap')) : 'not logged this week';
+  return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
+    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+iconCol+'1a;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(c.key==='threshold'?'M13 2L3 14h9l-1 8 10-12h-9l1-8z':(c.key==='vo2'?'M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z M8 12h8':'M3 12h4l2-5 4 10 2-5h6'), iconCol, 17)+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+c.label+'</span>'
+    +'<span style="font-size:11px;color:#5b6678">'+c.cond+'</span></div>'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">'+c.desc+'</div>'
+    +'<div style="font-size:11px;color:'+(c.done?(ok?'#22c55e':'#f59e0b'):'#5b6678')+';margin-top:2px">'+status+'</div></div>'
+    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+(ok?'#22c55e':'#5b6678')+'">'+(c.done?'1':'0')+' / 1</span></div>';
 }
+function _blockRoadmap_(now){
+  var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var road=_BLOCK_MILESTONES.filter(function(m){ return m.road; });
+  var nextIdx=-1;
+  for(var i=0;i<road.length;i++){ var d=_blockDay_(road[i].date); if(d && d.getTime()>=today.getTime()){ nextIdx=i; break; } }
+  var cells=road.map(function(m,i){
+    var d=_blockDay_(m.date), past=(d && d.getTime()<today.getTime()), isNext=(i===nextIdx);
+    var col=(isNext||past)?'#22c55e':'#5b6678';
+    var ring=isNext?'border:2px solid #22c55e;background:rgba(34,197,94,.13)':(past?'border:2px solid #22c55e;background:transparent':'border:2px solid #2a3341;background:transparent');
+    var lineCol=(nextIdx<0||i<nextIdx)?'#22c55e':'#1c2130';
+    var line=(i<road.length-1)?('<div style="position:absolute;top:22px;left:50%;right:-50%;height:2px;background:'+lineCol+';z-index:0"></div>'):'';
+    return '<div style="flex:1;position:relative;text-align:center;min-width:0">'+line
+      +'<div style="position:relative;z-index:1;width:44px;height:44px;border-radius:50%;'+ring+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+_blockMiIcon_(m.icon, col, 20)+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:'+(isNext?'#22c55e':'#cbd5e1')+';margin-top:7px;line-height:1.2">'+m.label+'</div>'
+      +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(m.date)+'</div></div>';
+  }).join('');
+  return '<div style="display:flex;align-items:flex-start;gap:2px">'+cells+'</div>';
+}
+function _blockRing_(pct, col){
+  var R=50, C=2*Math.PI*R, off=C*(1-Math.max(0,Math.min(100,pct))/100);
+  return '<svg viewBox="0 0 130 130" style="width:116px;height:116px">'
+    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="10"/>'
+    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+(col||'#22c55e')+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>'
+    +'<text x="65" y="61" text-anchor="middle" font-size="27" font-weight="800" fill="#f1f5f9">'+Math.round(pct)+'%</text>'
+    +'<text x="65" y="80" text-anchor="middle" font-size="8.5" fill="#5b6678" letter-spacing="1.2">OF WINDOW</text></svg>';
+}
+function _blockTssGraph_(weeks){
+  var W=340,H=118,PL=6,PR=6,PT=10,PB=18, iw=W-PL-PR, ih=H-PT-PB;
+  var mx=_BLOCK_TSS_HI+40; weeks.forEach(function(w){ if(w.tss>mx) mx=w.tss; }); mx=mx*1.04;
+  function X(i){ return PL + (weeks.length>1?(i/(weeks.length-1)):0.5)*iw; }
+  function Y(v){ return PT + ih - (v/mx)*ih; }
+  var bandTop=Y(_BLOCK_TSS_HI), bandBot=Y(_BLOCK_TSS_LO);
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  svg+='<rect x="'+PL+'" y="'+bandTop.toFixed(1)+'" width="'+iw+'" height="'+(bandBot-bandTop).toFixed(1)+'" fill="rgba(34,197,94,.10)"/>';
+  svg+='<line x1="'+PL+'" y1="'+bandTop.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+bandTop.toFixed(1)+'" stroke="#22c55e" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>';
+  svg+='<line x1="'+PL+'" y1="'+bandBot.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+bandBot.toFixed(1)+'" stroke="#22c55e" stroke-width="1" stroke-dasharray="3 3" opacity=".5"/>';
+  if(weeks.length>1){
+    var path=''; weeks.forEach(function(w,i){ path+=(i?'L':'M')+X(i).toFixed(1)+' '+Y(w.tss).toFixed(1)+' '; });
+    svg+='<path d="'+path+'" fill="none" stroke="#22c55e" stroke-width="2" stroke-linejoin="round"/>';
+  }
+  weeks.forEach(function(w,i){ var c=(w.tss>0&&!w.inBand)?'#f59e0b':'#22c55e';
+    svg+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(w.tss).toFixed(1)+'" r="'+(w.current?3.4:2.6)+'" fill="'+c+'"/>';
+    svg+='<text x="'+X(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="8.5" fill="#5b6678">'+w.label+'</text>'; });
+  svg+='</svg>';
+  return svg;
+}
+function _blockCard_(inner, extraStyle){ return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
+function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
-// container-mounted, mirroring aiRenderOverview_ so ONE renderer serves both desktop and mobile.
 function renderBlockPlan_(container){
   if(!container) return;
   var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
   var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
-  try{ if(typeof getRuns==='function'){ rides=rides.concat(getRuns()); } }catch(e){}   // runs included so _blockCyc_ excludes them by sport, not by source
+  try{ if(typeof getRuns==='function'){ rides=rides.concat(getRuns()); } }catch(e){}
   var now=new Date();
 
-  var H='<div style="max-width:820px;margin:0 auto;padding:20px 18px 48px">';
-  H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Training Block</div>';
+  var H='<style>.blk-top{display:grid;gap:14px;grid-template-columns:1fr 1.5fr 1.2fr}.blk-mid{display:grid;gap:14px;grid-template-columns:1.4fr 1fr;align-items:start}@media(max-width:920px){.blk-top{grid-template-columns:1fr}.blk-mid{grid-template-columns:1fr}}</style>';
+  H+='<div style="max-width:1180px;margin:0 auto;padding:20px 18px 44px">';
+  H+='<div style="font-size:25px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Training Block</div>';
   H+='<div style="font-size:13px;color:#94a3b8;margin-top:4px;line-height:1.5">Your structured block to the Ven-Top attempt. Four weeks consistent &rarr; FTP retest &rarr; Chalet Reynard &rarr; Alpe sub-70 &rarr; Ven-Top summit.</div>';
 
-  // ---- Days to Next Milestone ----
   var nm=_blockNextMilestone_(now);
   var today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  H+='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:16px">';
-  H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Days to next milestone</div>';
+  var prog=_blockProgress_(rides, ftp, now);
+
+  // ---- TOP ROW: Days | Roadmap | Progress ----
+  H+='<div class="blk-top" style="margin-top:16px">';
+  // days
+  var daysInner=_blockHdr_('Days to next milestone');
   if(nm){
-    H+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">'
-      +'<span style="font-size:34px;font-weight:800;color:#FC4C02;letter-spacing:-.02em">'+nm.days+'</span>'
-      +'<span style="font-size:13px;color:#94a3b8">day'+(nm.days===1?'':'s')+' to <b style="color:#f1f5f9">'+nm.m.label+'</b> &middot; '+_blockFmtDate_(nm.m.date)+'</span></div>';
-    if(nm.m.note) H+='<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+nm.m.note+'</div>';
-    H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;display:flex;flex-direction:column;gap:5px">';
-    _BLOCK_MILESTONES.forEach(function(m,i){
-      if(i<=nm.idx) return;
-      var d=_blockDay_(m.date), days=_blockDaysBetween_(today0, d);
-      H+='<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#94a3b8">'+m.label+'</span>'
-        +'<span style="color:#5b6678">'+_blockFmtDate_(m.date)+' &middot; '+days+'d</span></div>';
-    });
-    H+='</div>';
-  }else{
-    H+='<div style="font-size:13px;color:#94a3b8">The block is complete. Nothing ahead on the calendar.</div>';
-  }
+    daysInner+='<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:40px;font-weight:800;color:#FC4C02;letter-spacing:-.03em;line-height:1">'+nm.days+'</span><span style="font-size:13px;color:#94a3b8">day'+(nm.days===1?'':'s')+'</span></div>';
+    daysInner+='<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-top:8px">'+nm.m.label+'</div>';
+    daysInner+='<div style="font-size:11.5px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(nm.m.date)+(nm.m.note?(' &middot; '+nm.m.note):'')+'</div>';
+  }else{ daysInner+='<div style="font-size:13px;color:#94a3b8">The block is complete.</div>'; }
+  H+=_blockCard_(daysInner);
+  // roadmap
+  H+=_blockCard_(_blockHdr_('Milestone roadmap')+_blockRoadmap_(now));
+  // progress
+  var progInner=_blockHdr_('Block progress')
+    +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
+    +'<div style="flex:0 0 auto">'+_blockRing_(prog.pct)+'</div>'
+    +'<div style="min-width:120px"><div style="font-size:14px;font-weight:800;color:#f1f5f9">'+prog.daysOnPlan+' of '+prog.windowDays+' days</div>'
+    +'<div style="font-size:11.5px;color:#5b6678">on plan toward the gate</div>'
+    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9;margin-top:8px">'+prog.streak+' of '+prog.target+' clean weeks</div>'
+    +'<div style="font-size:11.5px;color:#5b6678">banked — the quality gate</div></div></div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;font-weight:700;color:'+prog.statusCol+'">'
+    +(prog.onTrack?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v5" stroke-linecap="round"/></svg>')
+    +'<span>'+prog.statusText+'</span></div>';
+  H+=_blockCard_(progInner);
   H+='</div>';
 
-  // ---- This Week's Consistency ----
+  // ---- MID ROW: This Week | (Success + Risks) ----
+  H+='<div class="blk-mid" style="margin-top:14px">';
+
+  // LEFT: This Week
   var wk=_blockWeekAssess_(rides, ftp, now);
-  var stk=_blockStreak_(rides, ftp, now);
   var passCol=wk.pass?'#22c55e':'#f59e0b';
-  H+='<div style="background:#0e1117;border:1px solid '+(wk.pass?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;margin-top:14px">';
-  H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; consistency</span>'
+  var twInner='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
+    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; consistency focus</span>'
     +'<span style="font-size:12px;font-weight:800;color:'+passCol+'">'+(wk.pass?'CLEAN WEEK':'INCOMPLETE')+'</span></div>';
-  H+='<div style="font-size:11.5px;color:#5b6678;margin-bottom:10px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'
-    +(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
-  wk.checks.forEach(function(c){ H+=_blockCheckRow_(c); });
-  // distinct-days condition, shown as the fourth gate
-  H+='<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid #14181f">'
-    +'<span style="flex:0 0 auto;margin-top:1px">'+(wk.distinctDays
-        ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
-        :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>')+'</span>'
-    +'<div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:700;color:#f1f5f9">Three separate days <span style="font-size:11px;font-weight:600;color:#5b6678">&middot; no stacking, protects the rest cadence</span></div>'
-    +'<div style="font-size:11.5px;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+';margin-top:1px">'+(wk.distinctDays?'met':(wk.allThree?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div></div>';
+  twInner+='<div style="font-size:11.5px;color:#5b6678;margin-bottom:6px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'+(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
+  wk.checks.forEach(function(c){ twInner+=_blockCheckRow_(c); });
+  // distinct-days row
+  twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
+    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:#14b8a61a;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M3 12h4l2-5 4 10 2-5h6','#14b8a6',17)+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:#f1f5f9">Three separate days</span><span style="font-size:11px;color:#5b6678">no stacking, protects the rest cadence</span></div>'
+    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">Space the efforts so each one adapts</div>'
+    +'<div style="font-size:11px;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+';margin-top:2px">'+(wk.distinctDays?'met':(wk.allThree?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div>'
+    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+'">'+Math.min(3,wk.distinctCount)+' / 3</span></div>';
+  // weekly load + graph
+  var tssWeeks=_blockWeeklyTss_(rides, ftp, now);
+  twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #1c2130">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+    +'<div><div style="font-size:12px;font-weight:800;color:#cbd5e1">Weekly load <span style="font-size:10.5px;font-weight:600;color:#5b6678">&middot; readout, not a pass rule</span></div>'
+    +'<div style="font-size:19px;font-weight:800;color:#22c55e;margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:#5b6678;font-weight:600"> TSS target</span></div></div>'
+    +'<div style="font-size:12px;color:#5b6678"><span style="display:inline-block;width:14px;border-top:2px dashed #22c55e;opacity:.6;vertical-align:middle"></span> band &middot; <span style="color:#22c55e">&#9679;</span> TSS</div></div>';
+  if(tssWeeks.length>=2){ twInner+='<div style="margin-top:8px">'+_blockTssGraph_(tssWeeks)+'</div>'; }
+  else { twInner+='<div style="font-size:11.5px;color:#5b6678;margin-top:6px">This fills in as weeks complete — '+(tssWeeks.length?('week 1 sits at '+tssWeeks[0].tss+' TSS so far'):'no weeks yet')+'.</div>'; }
+  twInner+='</div>';
+  // clean weeks banked
+  var stk=_blockStreak_(rides, ftp, now);
+  twInner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;display:flex;align-items:flex-start;gap:12px">'
+    +'<span style="flex:0 0 auto;width:40px;height:40px;border-radius:11px;background:#22c55e18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z','#22c55e',20)+'</span>'
+    +'<div style="flex:1"><div style="font-size:10.5px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Clean weeks banked</div>'
+    +'<div style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1.1">'+stk.streak+' of '+stk.target+'</div>'
+    +'<div style="font-size:11.5px;color:'+(stk.reset?'#f59e0b':'#94a3b8')+';line-height:1.5;margin-top:2px">'
+    +(stk.reset?('A week was missed, so the clock reset. The gate has slid to '+_blockFmtDateD_(stk.projected)+', and the retest and every date behind it move with it.')
+      :(stk.streak>=stk.target?'Four clean weeks banked — the retest gate is open.'
+        :(stk.need+' more clean week'+(stk.need===1?'':'s')+' to '+_blockFmtDateD_(stk.base)+'. Miss one and the clock resets to zero — that reset is the whole point of the rule.')))+'</div></div></div>';
+  H+=_blockCard_(twInner);
 
-  // TSS as a READOUT — a number with context, never a verdict. Stated as such.
-  var tssIn=(wk.tss>=_BLOCK_TSS_LO && wk.tss<=_BLOCK_TSS_HI);
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'
-    +'<div><div style="font-size:12px;font-weight:700;color:#cbd5e1">Weekly load <span style="font-size:10.5px;font-weight:600;color:#5b6678">&middot; readout, not a pass rule</span></div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:1px">target band '+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+' TSS</div></div>'
-    +'<div style="font-size:22px;font-weight:800;color:'+(wk.tss>0?'#f1f5f9':'#5b6678')+'">'+(wk.tss>0?wk.tss:'&mdash;')+'<span style="font-size:11px;color:#5b6678;font-weight:600"> TSS</span></div></div>';
+  // RIGHT: Success + Risks stacked
+  var succ=_blockHdr_('What success looks like');
+  _BLOCK_MILESTONES.filter(function(m){ return m.road; }).forEach(function(m){
+    succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
+      +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#22c55e14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(m.icon,'#22c55e',16)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#f1f5f9">'+m.sTitle+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+m.sSub+'</div></div>'
+      +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#22c55e;text-align:right;max-width:110px">'+m.benefit+'</span></div>';
+  });
+  var riskInner=_blockHdr_('Risks &amp; mitigations');
+  _BLOCK_RISKS.forEach(function(rk){
+    var active=(rk.slug==='missed' && stk.reset);
+    var col=active?'#ef4444':'#f59e0b';
+    riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
+      +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(rk.icon,col,16)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(active?'#ef4444':'#f1f5f9')+'">'+rk.title+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+rk.sub+'</div>'
+      +'<div style="font-size:11px;color:#5b6678;margin-top:3px"><b style="color:#94a3b8">Fix:</b> '+rk.sol+'</div></div></div>';
+  });
+  H+='<div style="display:flex;flex-direction:column;gap:14px">'+_blockCard_(succ)+_blockCard_(riskInner)+'</div>';
+  H+='</div>';
 
-  // Streak + reset rule, stated explicitly.
-  H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">';
-  H+='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:800;color:#f1f5f9">'+stk.streak+' of '+stk.target+'</span>'
-    +'<span style="font-size:12px;color:#94a3b8">clean weeks banked</span></div>';
-  if(stk.reset){
-    H+='<div style="font-size:12px;color:#f59e0b;line-height:1.5;margin-top:4px">A week was missed, so the clock reset. The four-weeks gate has slid '+stk.slideWeeks+' week'+(stk.slideWeeks===1?'':'s')+' to <b>'+_blockFmtDateD_(stk.projected)+'</b>, and the retest and every date behind it move with it.</div>';
-  }else if(stk.streak>=stk.target){
-    H+='<div style="font-size:12px;color:#22c55e;line-height:1.5;margin-top:4px">Four clean weeks banked &mdash; the retest gate is open.</div>';
-  }else{
-    H+='<div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-top:4px">'+stk.need+' more clean week'+(stk.need===1?'':'s')+' to '+_blockFmtDateD_(stk.base)+'. Miss one and the clock resets to zero and the retest slides &mdash; that reset is the whole point of the rule.</div>';
-  }
-  H+='</div></div>';
+  // ---- AI Coach Insight bar ----
+  var ins=_blockInsight_();
+  H+='<div style="background:linear-gradient(90deg,rgba(168,85,247,.14),rgba(34,197,94,.08));border:1px solid #2a2340;border-radius:16px;padding:16px 18px;margin-top:14px;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+    +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#a855f722;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z','#a855f7',18)+'</span>'
+    +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:#a855f7;text-transform:uppercase;letter-spacing:.06em">AI Coach insight'+(ins.computed?' &middot; from your data':'')+'</div>'
+    +'<div style="font-size:13px;color:#e2e8f0;line-height:1.5;margin-top:3px">'+ins.text+'</div></div></div>';
 
-  // ---- Current Form (only within ~10 days of an attempt) ----
+  // ---- Current Form (only within 10 days of an attempt) ----
   var fw=_blockFormWindow_(now);
   if(fw){
-    var fit=(typeof getFitness_==='function')?getFitness_():null;
+    var fit=null; try{ if(typeof getFitness_==='function') fit=getFitness_(); }catch(e){}
     var tsb=fit?fit.tsb:null;
-    H+='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">';
-    H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Current form &middot; '+fw.m.label+' in '+fw.days+' day'+(fw.days===1?'':'s')+'</div>';
+    var formInner=_blockHdr_('Current form &middot; '+fw.m.label+' in '+fw.days+' day'+(fw.days===1?'':'s'));
     if(tsb!=null){
-      // Target freshness band for an attempt: TSB roughly +5 to +20. Stated as the coach band.
       var inBand=(tsb>=5 && tsb<=20);
-      H+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:30px;font-weight:800;color:'+(inBand?'#22c55e':'#f59e0b')+'">'+(tsb>=0?'+':'')+tsb+'</span>'
-        +'<span style="font-size:13px;color:#94a3b8">Form (TSB) &middot; target <b style="color:#f1f5f9">+5 to +20</b> for the attempt</span></div>';
-      H+='<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+(inBand?'You are in the freshness window.':(tsb<5?'Still carrying fatigue &mdash; ease off to arrive fresh.':'Very fresh &mdash; a short opener keeps the edge.'))+'</div>';
-    }else{
-      H+='<div style="font-size:12.5px;color:#94a3b8">Form needs the fitness model, which is not available right now &mdash; not shown rather than guessed.</div>';
-    }
-    H+='</div>';
+      formInner+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:30px;font-weight:800;color:'+(inBand?'#22c55e':'#f59e0b')+'">'+(tsb>=0?'+':'')+tsb+'</span>'
+        +'<span style="font-size:13px;color:#94a3b8">Form (TSB) &middot; target <b style="color:#f1f5f9">+5 to +20</b> for the attempt</span></div>'
+        +'<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+(inBand?'You are in the freshness window.':(tsb<5?'Still carrying fatigue — ease off to arrive fresh.':'Very fresh — a short opener keeps the edge.'))+'</div>';
+    }else{ formInner+='<div style="font-size:12.5px;color:#94a3b8">Form needs the fitness model, which is not available right now — not shown rather than guessed.</div>'; }
+    H+='<div style="margin-top:14px">'+_blockCard_(formInner)+'</div>';
   }
 
   H+='</div>';
   container.innerHTML=H;
 }
-// mobile mount: full-screen overlay, same shared renderer into its body (mirrors showAthleteIntel).
 function showBlockPlan(){
   var old=document.getElementById('BLOCK_PAGE'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='BLOCK_PAGE';
@@ -18341,7 +18465,6 @@ function showBlockPlan(){
   (document.getElementById('app-shell')||document.body).appendChild(ov);
   renderBlockPlan_(body);
 }
-// desktop mount: into #ds-content (mirrors dsShowAthleteIntel).
 function dsShowBlockPlan(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc){ setTimeout(dsShowBlockPlan,200); return; }
