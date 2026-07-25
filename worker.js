@@ -18130,6 +18130,90 @@ function _blockNextMilestone_(now){
   return null;
 }
 
+// ==================== Training block model (Part 2) — st.trainingBlock ====================
+// Seven phases, Jul 24 - Nov 11. A day stores only a session IDENTITY (an intent key into
+// SESSION_DEFS); the full prescription — watts, HR, duration, TSS — is derived at render time by
+// planResolve_/_planSessionFromDef_ off the CURRENT st.ftp, so an FTP change reprices the whole
+// block with no regenerate and there is never a second FTP. A phase is either a weekly pattern
+// (week[0..6], Mon..Sun) or a date-keyed window (dates{}) for the taper/attempt runs; the resolver
+// checks the date map first. Mon is always Rest and Sun is always Optional by construction — the
+// Sunday slot is 'optional', which is NEVER a makeup, in the data itself, not just the UI.
+var _TB_VERSION='ventop-2026-1';
+function _trainingBlock_(){
+  if(typeof st==='undefined') return null;
+  if(st.trainingBlock && st.trainingBlock.v===_TB_VERSION) return st.trainingBlock;
+  var S=function(i,s){ return s?{i:i,s:s}:{i:i}; };
+  st.trainingBlock={
+    v:_TB_VERSION, start:'2026-07-24', end:'2026-11-11',
+    phases:[
+      { id:'P1', label:'Base build', start:'2026-07-24', end:'2026-08-21', week:[
+        [S('rest'),S('mobility')], [S('vo2','4x4 min, 3 min recovery, flat')], [S('easyRun','20-25 min')],
+        [S('z2','60-90 min')], [S('threshold','2x20 min'),S('strengthA')], [S('group','120 min, no HR ceiling')], [S('optional')] ] },
+      { id:'P2', label:'Base build 2', start:'2026-08-22', end:'2026-09-10', week:[
+        [S('rest'),S('mobility')], [S('vo2','4x4 progressing to 5x4')], [S('easyRun','25-30 min, 3x/week')],
+        [S('z2','60-90 min')], [S('threshold','2x20 to 3x15'),S('strengthA')], [S('group')], [S('optional')] ] },
+      { id:'P3', label:'Chalet taper + attempt', start:'2026-09-11', end:'2026-09-14', dates:{
+        '2026-09-11':[S('recovery','Easy spin + mobility only, no strength'),S('mobility')],
+        '2026-09-12':[S('recovery','Easy spin + mobility only, no strength'),S('mobility')],
+        '2026-09-13':[S('chalet','primary — or Sep 14')],
+        '2026-09-14':[S('optional','alternate Chalet day if Sep 13 is a no-go')] } },
+      { id:'P4', label:'Build to Alpe', start:'2026-09-15', end:'2026-10-12', week:[
+        [S('rest'),S('mobility')], [S('vo2','5x4 min')], [S('run10k','easy + one 10k-pace session (4x3 min)')],
+        [S('z2','60 min')], [S('threshold','2x25 min'),S('strengthA')], [S('group')], [S('optional')] ] },
+      { id:'P5', label:'Alpe + 10k week', start:'2026-10-13', end:'2026-10-18', dates:{
+        '2026-10-13':[S('alpe','primary — or Oct 14')],
+        '2026-10-14':[S('optional','alternate Alpe day if Oct 13 is a no-go')],
+        '2026-10-15':[S('rest'),S('mobility')],
+        '2026-10-16':[S('easyRun','20 min easy + 4x30 sec at 10k pace')],
+        '2026-10-17':[S('rest')],
+        '2026-10-18':[S('tenk')] } },
+      { id:'P6', label:'Final build', start:'2026-10-19', end:'2026-11-07', week:[
+        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-10k')],
+        [S('z2','60-90 min')], [S('threshold','3x20 min'),S('strengthA')], [S('long','building to 2.5-3 hrs with sustained tempo blocks')], [S('optional')] ] },
+      { id:'P7', label:'Ven-Top taper + summit', start:'2026-11-08', end:'2026-11-11', dates:{
+        '2026-11-08':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-11-09':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-11-10':[S('ventop','primary — or Nov 11')],
+        '2026-11-11':[S('optional','alternate summit day if Nov 10 is a no-go')] } }
+    ]
+  };
+  return st.trainingBlock;
+}
+// Which phase contains a date, or null when the date is outside the block.
+function _tbPhaseFor_(d){
+  var tb=_trainingBlock_(); if(!tb||!d) return null;
+  for(var i=0;i<tb.phases.length;i++){ var p=tb.phases[i], ps=_blockDay_(p.start), pe=_blockDay_(p.end);
+    if(ps&&pe&&d.getTime()>=ps.getTime()&&d.getTime()<=pe.getTime()) return {phase:p, idx:i}; }
+  return null;
+}
+// THE resolver: the prescribed session(s) for one date, each priced to current FTP via
+// _planSessionFromDef_. Returns null outside the block. weekInPhase is 1-based for the "P1 · Week 2"
+// label. A day with no slot (a gap in a date-window phase) resolves to an empty session list, not a
+// fabricated one.
+function blockPlanFor_(dateKey){
+  var d=_blockDay_(dateKey); if(!d) return null;
+  var pf=_tbPhaseFor_(d); if(!pf) return null;
+  var p=pf.phase;
+  var mon=(d.getDay()+6)%7;   // 0=Mon .. 6=Sun
+  var slots=null, via='week';
+  if(p.dates && p.dates[dateKey]){ slots=p.dates[dateKey]; via='date'; }
+  else if(p.week){ slots=p.week[mon]||[]; }
+  else slots=[];
+  var weekInPhase=Math.floor(Math.max(0,_blockDaysBetween_(_blockDay_(p.start), d))/7)+1;
+  var sessions=(slots||[]).map(function(sl){
+    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(sl.i, weekInPhase):null;
+    return { intent:sl.i, struct:sl.s||'', rx:rx };
+  });
+  return { phase:p.id, phaseLabel:p.label, weekInPhase:weekInPhase, via:via, dateKey:dateKey,
+           weekday:mon, sessions:sessions };
+}
+// The block's own milestone dates, for the calendar flags and cross-nav (Part 3/4). Reuses the
+// authoritative _BLOCK_MILESTONES so there is one date list, not two.
+function _tbMilestoneOn_(dateKey){
+  for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].date===dateKey) return _BLOCK_MILESTONES[i]; }
+  return null;
+}
+
 function _blockCyc_(rides){
   return (rides||[]).filter(function(r){
     if(!r||!r.date) return false;
@@ -18391,6 +18475,46 @@ function _blockTssGraph_(weeks){
 function _blockCard_(inner, extraStyle){ return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
 function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
+// The current week's PRESCRIBED sessions from st.trainingBlock, each priced to current FTP. This is
+// the block model (Part 2) made visible; the calendar (Part 3) and session-detail cards (Part 5)
+// read the same blockPlanFor_ resolver. Renders nothing when the week is outside the block.
+var _TB_ICOL={ rest:'#5b6678', mobility:'#a855f7', z2:'#14b8a6', threshold:'#FC4C02', vo2:'#a855f7',
+  group:'#22c55e', long:'#22c55e', recovery:'#64748b', easyRun:'#4D9FFF', run10k:'#4D9FFF',
+  optional:'#5b6678', strengthA:'#ef4444', strengthB:'#ef4444', chalet:'#f59e0b', alpe:'#f59e0b', tenk:'#f59e0b', ventop:'#f59e0b' };
+function _tbDK_(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _tbWeekStrip_(now){
+  if(typeof _trainingBlock_!=='function' || typeof blockPlanFor_!=='function') return '';
+  var ws=_blockWeekStart_(now), todayK=_tbDK_(new Date(now.getFullYear(),now.getMonth(),now.getDate()));
+  var DOW=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], rows='', any=false, phaseLabel='', phaseId='', wkInP=0;
+  for(var i=0;i<7;i++){
+    var d=new Date(ws.getTime()+i*86400000), dk=_tbDK_(d), plan=blockPlanFor_(dk);
+    if(!plan) continue; any=true; phaseLabel=plan.phaseLabel; phaseId=plan.phase; wkInP=plan.weekInPhase;
+    var ms=(typeof _tbMilestoneOn_==='function')?_tbMilestoneOn_(dk):null, isToday=(dk===todayK);
+    var cells=plan.sessions.map(function(x){
+      var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[x.intent]:null;
+      var nm=(x.rx&&x.rx.name)||(def&&def.name)||x.intent;
+      var col=_TB_ICOL[x.intent]||'#94a3b8';
+      var t=x.rx&&x.rx.targets, w=(t&&t.powerLo!=null)?(' &middot; '+t.powerLo+'-'+t.powerHi+'W'):(t&&t.durationMin?(' &middot; '+t.durationMin+' min'):'');
+      return '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;flex-wrap:wrap">'
+        +'<span style="width:7px;height:7px;border-radius:2px;background:'+col+'"></span>'
+        +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+nm+'</span>'
+        +(x.struct?('<span style="font-size:10.5px;color:#5b6678">'+x.struct+'</span>'):'')
+        +'<span style="font-size:10.5px;color:#94a3b8">'+w+'</span></span>';
+    }).join('');
+    rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #14181f'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
+      +'<div style="flex:0 0 46px"><div style="font-size:11px;font-weight:800;color:'+(isToday?'#FC4C02':'#94a3b8')+'">'+DOW[plan.weekday]+'</div>'
+      +'<div style="font-size:10px;color:#5b6678">'+(_YVY_MON[d.getMonth()]||'')+' '+d.getDate()+'</div></div>'
+      +'<div style="flex:1;min-width:0">'+(cells||'<span style="font-size:12px;color:#5b6678">&mdash;</span>')
+      +(ms?('<div style="font-size:10.5px;font-weight:700;color:#f59e0b;margin-top:3px">&#9873; '+ms.label+'</div>'):'')+'</div></div>';
+  }
+  if(!any) return '';
+  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
+    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
+    +'<span style="font-size:11px;color:#5b6678">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span></div>'
+    +rows+'</div>';
+}
+
 function renderBlockPlan_(container){
   if(!container) return;
   var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
@@ -18440,6 +18564,9 @@ function renderBlockPlan_(container){
     +'<span>'+prog.statusText+'</span></div>';
   H+=_blockCard_(progInner);
   H+='</div>';
+
+  // ---- THIS WEEK, PRESCRIBED (Part 2 made visible: the real plan from st.trainingBlock) ----
+  H+=_tbWeekStrip_(now);
 
   // ---- MID ROW: This Week | (Success + Risks) ----
   H+='<div class="blk-mid" style="margin-top:14px">';
@@ -26274,7 +26401,17 @@ var SESSION_DEFS={
   group:    { type:'ride', name:'Group Ride',      zone:'Z2–Z4', pctFtp:[60,88],  durationMin:120, note:'Sit in for the first 20 mi. Race only the last 10–15. Do not chase if dropped.' },
   long:     { type:'ride', name:'Long Ride',       zone:'Z2–Z3', pctFtp:[62,83],  durationMin:180, note:'Controlled Z2–Z3. Tolerable on tired legs after Friday strength.' },
   recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  durationMin:45,  note:'Genuinely easy. Spin the legs; add no fatigue.' },
-  rest:     { type:'rest', name:'Rest',            body:null,    note:'Full rest. Recovery is part of the plan, not a gap in it.' }
+  rest:     { type:'rest', name:'Rest',            body:null,    note:'Full rest. Recovery is part of the plan, not a gap in it.' },
+  // ---- Ven-Top block additions (Part 2). Runs and attempts carry no FTP band by default, so
+  // planResolve_ returns them as name+note+duration; chalet carries a starting power band so its
+  // watts still reprice off st.ftp. Attempts are their own type so a renderer can flag them.
+  easyRun:  { type:'run', name:'Easy Run',            durationMin:25, note:'Conversational pace — easy enough to hold a sentence. Run base, not a workout.' },
+  run10k:   { type:'run', name:'10k-pace Run',        durationMin:35, note:'Easy volume with 4x3 min at 10k race pace — the running-specific quality.' },
+  optional: { type:'optional', name:'Optional',                       note:'Nothing hard, and NEVER a makeup. Good legs, spin easy; otherwise rest.' },
+  chalet:   { type:'attempt', name:'Chalet Reynard attempt', pctFtp:[83,86], durationMin:90, note:'15 min warmup, then a conservative 155-160W band for the first 30 min. Long-climb endurance test — pace it, do not send the bottom.' },
+  alpe:     { type:'attempt', name:'Alpe du Zwift — sub-70',           note:'A time trial, not a max effort. Even pacing beats a hot start every time.' },
+  tenk:     { type:'attempt', name:'10k race',                         note:'Race day. Warm up properly, then run your race.' },
+  ventop:   { type:'attempt', name:'Ven-Top summit',                   note:'The full summit attempt — everything the block was built for.' }
 };
 var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','rest'];
 // The rotation order Swap cycles through, A -> B -> C -> D -> A.
