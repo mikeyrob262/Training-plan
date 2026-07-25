@@ -18991,9 +18991,14 @@ function coachV_(dateKey, now){
   var tsb=(fit&&typeof fit.tsb==='number')?fit.tsb:null;
   var primary=_cvPrimary_(plan.sessions);
   var t=primary&&primary.rx&&primary.rx.targets, intent=primary&&primary.intent;
+  // Post-ride state: once a ride is logged for the day, the pre-ride "what to expect" is stale — the
+  // session already happened. Only for ride-type sessions (a strength/mobility day isn't answered by
+  // a ride import).
+  var isRide=(typeof SESSION_DEFS!=='undefined' && intent && SESSION_DEFS[intent] && (SESSION_DEFS[intent].type==='ride'||SESSION_DEFS[intent].type==='attempt'));
+  var done=false; try{ done=!!(isRide && typeof findActivityForDate==='function' && findActivityForDate(dateKey)); }catch(e){}
   return {
     phase:plan.phase, phaseLabel:plan.phaseLabel, weekInPhase:plan.weekInPhase,
-    primary:primary, intent:intent, targets:t,
+    primary:primary, intent:intent, targets:t, done:done,
     pre:primary?_cvPre_(intent, t, primary.struct):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
@@ -19024,8 +19029,13 @@ function _coachVPanel_(now){
   }
   if(cv.slide){ H+='<div style="font-size:12px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
   if(cv.hrv){ H+='<div style="font-size:12px;color:#cbd5e1;line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
-  // today's session coaching
-  if(cv.primary && cv.intent!=='rest'){
+  // today's session coaching — POST-ride once a ride is logged (pre-ride tense is stale after import)
+  if(cv.done){
+    H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+      +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
+      +'<div style="font-size:13px;color:#e2e8f0;line-height:1.6;margin-top:8px">Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.</div>'
+      +'</div>';
+  } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
       +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:#5b6678">'+cv.primary.struct+'</span>'):'')+'</div>';
     cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
@@ -19140,7 +19150,10 @@ function _blockProgress_(rides, ftp, now){
   var start=_blockDay_(_BLOCK_START), gate=_blockDay_(_BLOCK_MILESTONES[0].date);
   var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   var windowDays=Math.max(1,_blockDaysBetween_(start,gate));
-  var elapsed=Math.max(0,Math.min(windowDays,_blockDaysBetween_(start,today)));
+  // Inclusive day count: the block's start day IS day 1, not day 0. _blockDaysBetween_ is exclusive
+  // (0 on the start day), so +1 — otherwise Jul 25 read "1 of 28" when Jul 24 started the block.
+  var _raw=_blockDaysBetween_(start,today);
+  var elapsed=(_raw<0)?0:Math.min(windowDays,_raw+1);
   var pct=Math.round(elapsed/windowDays*100);
   var stk=_blockStreak_(rides, ftp, now);
   var onTrack=!stk.reset, statusText, statusCol;
@@ -24272,19 +24285,82 @@ function renderCoachInsightContent(el, text){
 // is about "today," not a specific past ride) and asks for a short
 // multi-line coaching read: one headline + 2-3 bullet observations +
 // one recommendation, matching the reference design's "Coach" card.
+// Intents where deficit framing ("left on the table", "could have pushed") is WRONG — a base/
+// endurance/recovery/group ride is executed correctly by staying in the band, not by peak power.
+var _CV_BASE_INTENTS={z2:1, recovery:1, group:1, long:1, easyRun:1, run10k:1};
+// The prescription for a ride, resolved from that date's planned session (the intent Coach V holds).
+// Null when the date has no ride prescription — the caller must then NOT render an execution verdict.
+function _ridePrescriptionFor_(r){
+  if(!r || !r.date || typeof blockPlanFor_!=='function') return null;
+  var dk=(typeof normDate==='function')?normDate(r.date):r.date;
+  var bp; try{ bp=blockPlanFor_(dk); }catch(e){ bp=null; }
+  if(!bp || !bp.sessions || !bp.sessions.length) return null;
+  var defs=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS:{};
+  var rideSess=null;
+  bp.sessions.forEach(function(s){ var d=defs[s.intent]; if(!rideSess && d && (d.type==='ride'||d.type==='attempt')) rideSess=s; });
+  if(!rideSess) return null;
+  var t=(rideSess.rx && rideSess.rx.targets)||{}, def=defs[rideSess.intent]||{};
+  return { intent:rideSess.intent, name:def.name||rideSess.intent, lo:t.powerLo, hi:t.powerHi, zone:t.zone||'', rules:def.note||'', struct:rideSess.struct||'' };
+}
+// Deficit-framing phrases. Matched on the OUTPUT and removed for base intents / no-prescription rides —
+// a filter on the result, not a prompt request, same shape as the P3 hazard veto. Prompt-level asks
+// are not enough: the model still reaches for "left on the table" against its steady-state prior.
+var _CV_DEFICIT_RE=/on( the)? table|could have (pushed|gone harder|done more)|power (was )?(available|left|there|untapped)|more in the tank|room to push|held back|leav(e|ing) (fitness|power|watts|speed)|push(ed)? harder|under(cook|shot|-?cooked)|dig(ging)? deeper|should have (pushed|gone)|more available|left (watts|power|it|speed|on)/i;
+// Steadiness advice ("hold within X% of NP", "smoother power") is the wrong recommendation for a
+// base/group ride — variability is the point. Caught only on the Recommendation line, for base rides.
+var _CV_STEADY_RE=/within [0-9]+%? of (np|normalized)|hold(ing)? (power |it |them )?(steady|steadier|constant)|reduce (the )?variability|less variable|smoother power|flatten(ing)? (the )?power/i;
+// Strip deficit framing when the ride is base/endurance or has no prescription. Headline: drop a
+// deficit clause after a contrast word, or replace a wholly-deficit headline. Bullets: drop. A
+// deficit-framed Recommendation is replaced with compliance guidance.
+function _insightSuppressDeficit_(text, suppress, rx){
+  if(!text || !suppress) return text;
+  var NL=String.fromCharCode(10), lines=text.split(NL), out=[];
+  lines.forEach(function(ln, idx){
+    if(idx===0){
+      var m=ln.match(/^(.*?)[,;]? +(but|though|however|yet|although) /i);   // literal spaces on purpose — regex whitespace/word-boundary escapes are eaten by the served template literal
+      if(m && _CV_DEFICIT_RE.test(ln.slice(m[0].length))){ out.push(m[1].replace(/[,;\s]+$/,'')+'.'); return; }
+      if(_CV_DEFICIT_RE.test(ln)){ out.push(rx?('Executed to prescription — '+String(rx.name||'session').toLowerCase()):'Ride logged as recorded.'); return; }
+      out.push(ln); return;
+    }
+    var isRec=/^\s*recommendation:/i.test(ln);
+    if(isRec && (_CV_DEFICIT_RE.test(ln) || _CV_STEADY_RE.test(ln))){
+      out.push('Recommendation: '+(rx?'Keep executing the prescribed band — a base ride is won by staying in zone, not by peak power.':'No prescription on file; nothing to change.'));
+      return;
+    }
+    if(_CV_DEFICIT_RE.test(ln)) return;   // drop the deficit bullet
+    out.push(ln);
+  });
+  return out.join(NL).replace(new RegExp(NL+'{3,}','g'), NL+NL).trim();
+}
 function fetchRideCoachInsight(r, callback){
   var FTP=parseInt(st.ftp||186);
   var maxHR=parseInt(st.maxHR||172);
   var zonePct = r.avgHR ? Math.round((r.avgHR/maxHR)*100) : null;
-  var prompt = 'You are a personal cycling coach reviewing a completed ride. '
-    +'Ride: '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. '
+  var rx=_ridePrescriptionFor_(r);
+  var suppress = !rx || !!_CV_BASE_INTENTS[rx.intent];   // no prescription OR a base intent -> filter deficit framing
+  var tele='Ride: '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. '
     +'Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. '
     +'Avg HR: '+(r.avgHR||'unknown')+'bpm ('+(zonePct?zonePct+'% of max HR':'unknown zone')+'). '
-    +'TSS: '+(r.tss||'unknown')+'. Elevation gain: '+(r.elev||0)+'ft. '
-    +'Respond in this exact format, no markdown, no extra preamble: '
-    +'first line is one short punchy headline describing the ride (max 8 words). '
-    +'Then 2-3 short bullet-style observations, each starting with "- ", covering things like time in zone, power/HR steadiness, or fueling if relevant. '
-    +'Then a final line starting with "Recommendation: " giving one concrete suggestion for the next session.';
+    +'TSS: '+(r.tss||'unknown')+'. Elevation gain: '+(r.elev||0)+'ft. ';
+  var prompt;
+  if(rx){
+    var bandTxt=(rx.lo!=null&&rx.hi!=null)?(rx.lo+'-'+rx.hi+'W'):'no specific power band';
+    var baseNote=_CV_BASE_INTENTS[rx.intent]
+      ? 'This is a BASE / ENDURANCE ride ('+rx.name+'). If the average power sits in the prescribed band, the ride was executed CORRECTLY and that IS the success. Do NOT frame staying in the band as a shortfall, do NOT say power was left on the table, do NOT suggest pushing harder or holding steadier. High NP-to-average-power spread on a group or endurance ride is EXPECTED (rolling terrain, surges you sit in on), not a fault.'
+      : 'Judge execution strictly against THIS prescription and its intent, not a generic steady-state ideal.';
+    prompt='You are a cycling coach reviewing a completed ride AGAINST its prescription. '
+      +'Prescription: '+rx.name+', target power '+bandTxt+(rx.zone?(' ('+rx.zone+')'):'')+'. '
+      +(rx.rules?('Execution rules: '+rx.rules+' '):'')+baseNote+' '+tele
+      +'Respond in this exact format, no markdown, no preamble: first line one short punchy headline (max 8 words) reflecting whether the ride matched its prescription. '
+      +'Then 2-3 short "- " bullets on execution versus the prescription. '
+      +'Then a final line "Recommendation: " with one concrete next-session suggestion CONSISTENT with this prescription and intent.';
+  } else {
+    prompt='You are a cycling coach describing a completed ride that has NO prescription on file. '+tele
+      +'There is no target to compare against. Describe it factually ONLY: do NOT judge it good or bad, do NOT suggest what to do differently, do NOT frame anything as a shortfall, missed opportunity, or power left on the table. '
+      +'Respond in this exact format, no markdown, no preamble: first line one short NEUTRAL headline (max 8 words) describing the ride. '
+      +'Then 2-3 short "- " bullets of neutral facts (duration, zones, terrain). '
+      +'Then a final line exactly: "Recommendation: No prescription on file for this ride — logged as recorded."';
+  }
 
   // Time-box the coach call so the insight card can never hang on "Analyzing…"
   // forever when the proxy stalls (it has no server-side timeout of its own).
@@ -24300,7 +24376,8 @@ function fetchRideCoachInsight(r, callback){
   .then(function(d){
     clearTimeout(_to);
     var text = d.content && d.content[0] && d.content[0].text;
-    callback(null, (text||'').trim());
+    text = _insightSuppressDeficit_((text||'').trim(), suppress, rx);   // output filter — deficit framing veto
+    callback(null, text);
   })
   .catch(function(){ clearTimeout(_to); callback('Could not reach the coach right now.', null); });
 }
