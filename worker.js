@@ -18213,6 +18213,46 @@ function _tbMilestoneOn_(dateKey){
   for(var i=0;i<_BLOCK_MILESTONES.length;i++){ if(_BLOCK_MILESTONES[i].date===dateKey) return _BLOCK_MILESTONES[i]; }
   return null;
 }
+// OPTION C — generate the block into st.plan for the block window, so the calendar, the completion
+// hooks, the editor and the consistency tracker all inherit it with no second plan layer. Reuses
+// the exact write machinery the generic generator uses: identity-only sessions stamped 'gen' (so
+// planResolve_ reprices them off FTP), user-owned/completed days KEPT untouched, and prior gen
+// residue tombstoned. Past days are skipped (they show logged activity, not a plan). Block-specific
+// detail — phase, week-in-phase, interval struct — rides in s.block, which planResolve_ preserves.
+function generateBlockPlan_(){
+  try{
+    var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null; if(!tb) return null;
+    var start=_blockDay_(tb.start), end=_blockDay_(tb.end); if(!start||!end) return null;
+    if(typeof planUpsertSession_!=='function' || typeof planSessionsForDate_!=='function') return null;
+    var td=new Date(); td.setHours(0,0,0,0); var todayKey=_tbDK_(td);
+    var out={generated:0, kept:0, cleaned:0, skippedPast:0};
+    var cur=new Date(start.getTime());
+    while(cur.getTime()<=end.getTime()){
+      var key=_tbDK_(cur);
+      if(key < todayKey){ out.skippedPast++; cur=new Date(cur.getTime()+86400000); continue; }   // past = logged activity
+      var plan=blockPlanFor_(key);
+      var existing=planSessionsForDate_(key);
+      // Always clear replaceable gen/migrated residue, even on a kept day, so stale slots don't survive.
+      existing.forEach(function(s){ if(typeof _planReplaceable_==='function' && _planReplaceable_(s)){ s.deleted=true; if(typeof markPlanEdited_==='function') markPlanEdited_(s,['deleted']); out.cleaned++; } });
+      // Respect a day the user has planned or completed — leave it entirely.
+      if(existing.some(function(s){ return (typeof _planUserOwned_==='function'&&_planUserOwned_(s)) || (s&&s.status==='completed'); })){ out.kept++; cur=new Date(cur.getTime()+86400000); continue; }
+      if(plan && plan.sessions && plan.sessions.length){
+        plan.sessions.forEach(function(sl){
+          var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[sl.intent]:null; if(!def) return;
+          var s={ type:def.type, intent:(def.type==='rest'?'':sl.intent), name:def.name, status:'planned',
+                  block:{ name:plan.phaseLabel, phase:plan.phase, week:plan.weekInPhase, struct:sl.struct||'' } };
+          try{ planUpsertSession_(key, s, ['type','name','intent','status'], 'gen'); }catch(e){}
+        });
+        out.generated++;
+      }
+      cur=new Date(cur.getTime()+86400000);
+    }
+    try{ if(typeof sv==='function') sv(); }catch(e){}
+    try{ if(typeof fbPush==='function') fbPush(true); }catch(e){}
+    try{ console.log('[blockGen] '+out.generated+' day(s) generated, '+out.kept+' kept, '+out.cleaned+' cleaned, '+out.skippedPast+' past skipped'); }catch(e){}
+    return out;
+  }catch(e){ try{ console.log('[blockGen] err', e&&e.message); }catch(_e){} return {error:String(e&&e.message||e)}; }
+}
 // Shared milestone-flag chip for a calendar day cell (Part 3). ONE helper, wired into BOTH the
 // desktop grid and the mobile week so the flag can never drift between renderers. data-cal/data-date
 // carry the hooks Part 4's tap-to-Plan navigation will bind to. Returns '' on a non-milestone day.
@@ -26604,6 +26644,9 @@ function generatePlanBlock_(startKey, weeks){
         var dt=new Date(start); dt.setDate(start.getDate()+w*7+d);
         var key=keyOf_(dt);
         if(key < _todayKey){ out.skippedPast++; continue; }   // HARD clamp: never write a date before today
+        // Option C: the Ven-Top block owns its window. Inside it, defer to generateBlockPlan_ so the
+        // generic strength template can never overwrite the block's prescribed sessions.
+        if(typeof _trainingBlock_==='function'){ var _tb=_trainingBlock_(); if(_tb && key>=_tb.start && key<=_tb.end){ continue; } }
         var existing=(typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
         // ALWAYS tombstone replaceable template / prior-gen residue — even on a day that also
         // has a user session — so leftover migrated slots get cleared instead of surviving.
@@ -33680,6 +33723,10 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        // Option C: fold st.trainingBlock into st.plan once per block version (after migration +
+        // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
+        // only gen sessions — so the version guard is an optimisation, not correctness.
+        try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
         // self-healing against key-union re-adds) — no separate one-time call needed here.
         try{ showHomeDash(); }catch(e){}
