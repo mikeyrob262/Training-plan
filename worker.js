@@ -12136,9 +12136,10 @@ function renderPerf(container){
 
   // YTD stats (cycling only)
   var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
-  // Plausibility-guarded sums: an absurd single distance is excluded and logged rather than summed
-  // into a wrong YTD headline (see _sumRideMi_).
-  var ytdCycMi = Math.round(_sumRideMi_(yearRides.filter(isCyc)));
+  // Authoritative YTD cycling miles (Strava-first, else deduped snapshot) — NOT the lossy st.rides
+  // sum, so the ring and the pace line below it match Strava instead of undercounting. Plausibility
+  // guarding still applies inside _appYtdCycMi_ -> _sumRideMi_.
+  var ytdCycMi = (typeof _ytdCycMi_==='function')?_ytdCycMi_():Math.round(_sumRideMi_(yearRides.filter(isCyc)));
   var yearMi = ytdCycMi;
   var yearMiGoal = st.yearlyMileageGoal || 5000;
   var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
@@ -20014,6 +20015,15 @@ function _appYtdCycMi_(){
   var cyc=yr.filter(function(r){ var s=(typeof rideSport_==='function')?rideSport_(r):''; return !s || /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i.test(s); });
   return Math.round(_sumRideMi_(cyc));
 }
+// THE authoritative YTD cycling miles. Strava's own figure when synced (it is the source of truth
+// for the year total), else the deduped snapshot via _appYtdCycMi_. It deliberately does NOT fall
+// through to raw st.rides: that library is lossy, and reading it directly is exactly what told the
+// coach "600 mi behind" while Strava's dashboard said 442 ahead — same athlete, a crippled copy.
+function _ytdCycMi_(){
+  var as=st.athleteStats;
+  if(as && as.ytdRideMeters!=null && as.ytdRideMeters>0) return Math.round(as.ytdRideMeters/1609.344);
+  return _appYtdCycMi_();
+}
 // (2) LINEAR-pace status vs an annual goal. Linear is a STATED simplification — real training is not
 //     linear — so the copy always says "linear pace", never "on pace" as if the target were destiny.
 function _paceStatus_(ytdMi, goalMi, now){
@@ -20953,12 +20963,15 @@ function dsAttention_(){
   try{
     var goal=parseFloat(st.yearlyMileageGoal||0);
     if(goal>0){
-      var yr=new Date().getFullYear();
-      var ytd=(st.rides||[]).filter(function(r){return r&&!r.deleted&&/ride|cycl/i.test(rideSport_(r))&&String(r.date||'').slice(0,4)==String(yr);}).reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
-      var doy=Math.floor((new Date()-new Date(yr,0,0))/86400000);
-      var expected=goal*(doy/365);
-      if(expected>50 && ytd<expected*0.85) push(1,'goals','You are behind your '+Math.round(goal)+' mi goal — about '+Math.round(ytd)+' logged vs roughly '+Math.round(expected)+' expected by now.');
-      else if(expected>50 && ytd>expected*1.1) out.positives.push('Ahead of your annual mileage goal');
+      // Authoritative YTD (Strava-first), NOT raw st.rides — the lossy library is what fabricated
+      // the false "600 mi behind" while the real figure is comfortably ahead. Pace comes from the
+      // one shared _paceStatus_ so the coach can never disagree with the dashboard readout.
+      var ytd=(typeof _ytdCycMi_==='function')?_ytdCycMi_():0;
+      var p=(typeof _paceStatus_==='function')?_paceStatus_(ytd, goal, new Date()):null;
+      if(p && p.target>50){
+        if(ytd < p.target*0.85) push(1,'goals','You are behind your '+Math.round(goal)+' mi goal — about '+ytd+' mi logged vs roughly '+p.target+' expected by now.');
+        else if(p.ahead && p.delta>=Math.max(25, Math.round(p.target*0.05))) out.positives.push('Ahead of your '+Math.round(goal)+' mi goal by ~'+p.delta+' mi');
+      }
     }
   }catch(e){}
   // Positives for the green-day checklist.
