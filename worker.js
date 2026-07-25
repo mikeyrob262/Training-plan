@@ -18121,11 +18121,245 @@ function watchDayGlobal_(){ try{ return _trWatchDay_(); }catch(e){ return null; 
 // Overview — they build into one array, where an uncaught throw would kill every card
 // and leave innerHTML unset. On failure the card is dropped and named in the console.
 function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.error('[ai] card "'+label+'" threw: '+(e&&e.message)); }catch(_){} return ''; } }
+// ==================== Athlete Intelligence — DNA v1 (G5) ====================
+// Built on the four fields every activity carries — date, sport, distance, duration — plus r.temp
+// where the G4 backfill supplied it, and r.startTime where the source recorded it. The running log
+// (getRuns, ~2,201) is the deep material; the ride log (allRidesDeduped_, cycling only) is the other
+// spine. Every surfaced number states its derivation, and a trait that lacks the observations to be
+// honest is LOCKED with what would unlock it — the coverage gate as a reason to return, not an
+// apology. Month-of-year is deliberately excluded (the Personal Heatmap collapse); day-of-week is in
+// (~300 obs/weekday across the run log). No scoring is invented here: the signature reads off the
+// existing per-sport z-scores (_zsCompute_), never a second normalization.
+function _dnaHour_(r){ if(r && r.startTime){ var t=new Date(r.startTime); if(!isNaN(t.getTime())) return t.getHours(); } return null; }
+function _dnaWeekKey_(dateStr){ var d=new Date(dateStr+'T00:00:00'); if(isNaN(d.getTime())) return null; var off=(d.getDay()+6)%7; d.setDate(d.getDate()-off); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _dnaMedian_(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}); var m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }
+function _dnaDaysBetween_(a,b){ return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000); }
+// Normalised activity stream: rides (cycling only, runs stripped so they are not double-counted with
+// the run log) plus the run log, each carrying only the honest four fields + temp/hour when present.
+function _dnaActs_(){
+  var out=[];
+  var isRun=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String(r&&(r.sportType||r.type)||'')); };
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+  rides.forEach(function(r){ if(!r||!r.date||isRun(r)) return; var d=String(r.date).slice(0,10); if(d.length<10) return;
+    out.push({date:d, sport:'ride', dist:parseFloat(r.distance)||0, sec:_durSec_(r), elev:parseFloat(r.elev)||0, temp:(r.temp!=null?+r.temp:null), hour:_dnaHour_(r)}); });
+  var runs=(typeof getRuns==='function')?getRuns():[];
+  runs.forEach(function(r){ if(!r||!r.date) return; var d=String(r.date).slice(0,10); if(d.length<10) return;
+    out.push({date:d, sport:'run', dist:parseFloat(r.distance)||0, sec:_durSec_(r), elev:parseFloat(r.elev)||0, temp:(r.temp!=null?+r.temp:null), hour:_dnaHour_(r)}); });
+  out.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+  return out;
+}
+// ---- ERAS: the spine. Group consecutive years by dominant sport into eras; each era gets an
+// archetype DERIVED from its own mix and cadence, so the label is a period's character, not a single
+// current tag that a two-ride swing could flip.
+function _dnaArchetype_(e){
+  var total=e.acts||1, runS=e.runs/total, rideS=e.rides/total, perYr=e.acts/Math.max(1,(e.endY-e.startY+1));
+  if(runS>=0.6) return { name:(perYr>=120?'The Devoted Runner':'The Runner'), why:Math.round(runS*100)+'% runs, ~'+Math.round(perYr)+' activities/yr' };
+  if(rideS>=0.6) return { name:((e.dist/total)>=28?'The Distance Cyclist':'The Cyclist'), why:Math.round(rideS*100)+'% rides, '+Math.round(e.dist/total)+' mi avg' };
+  return { name:'The Hybrid Athlete', why:Math.round(runS*100)+'% run / '+Math.round(rideS*100)+'% ride' };
+}
+function _dnaEras_(acts){
+  if(!acts.length) return [];
+  var byYear={};
+  acts.forEach(function(a){ var y=+a.date.slice(0,4); if(!byYear[y]) byYear[y]={run:0,ride:0,dist:0}; byYear[y][a.sport]++; byYear[y].dist+=a.dist; });
+  var years=Object.keys(byYear).map(Number).sort(function(a,b){return a-b;});
+  var eras=[], cur=null;
+  years.forEach(function(y){ var b=byYear[y]; var dom=(b.run>b.ride)?'run':(b.ride>b.run?'ride':'mixed');
+    if(cur && cur.dom===dom){ cur.endY=y; cur.acts+=b.run+b.ride; cur.dist+=b.dist; cur.runs+=b.run; cur.rides+=b.ride; }
+    else { if(cur) eras.push(cur); cur={startY:y, endY:y, dom:dom, acts:b.run+b.ride, dist:b.dist, runs:b.run, rides:b.ride}; }
+  });
+  if(cur) eras.push(cur);
+  eras.forEach(function(e){ var a=_dnaArchetype_(e); e.archetype=a.name; e.archWhy=a.why; });
+  // Merge consecutive eras that resolve to the SAME archetype — two adjacent Hybrid stretches read as
+  // one era of that character, and the spine should show a character change, not a dominant-sport blip.
+  var merged=[]; eras.forEach(function(e){ var last=merged[merged.length-1];
+    if(last && last.archetype===e.archetype){ last.endY=e.endY; last.acts+=e.acts; last.dist+=e.dist; last.runs+=e.runs; last.rides+=e.rides; var a=_dnaArchetype_(last); last.archWhy=a.why; }
+    else merged.push(e); });
+  return merged;
+}
+// ---- TRAITS: each returns a card object, or a LOCKED object stating what unlocks it. n is always
+// carried so the confidence is a real count, never a fabricated percentage.
+function _dnaTrait_(name, headline, detail, deriv, col){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false}; }
+function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:unlock, col:col}; }
+function _dnaTraits_(acts){
+  var T=[], G='#4ade80', A='#f59e0b', B='#60a5fa', P='#a855f7', TEAL='#2dd4bf';
+  var runs=acts.filter(function(a){return a.sport==='run';});
+  var rides=acts.filter(function(a){return a.sport==='ride';});
+  var dates=acts.map(function(a){return a.date;});
+  // 1) CONSISTENCY — active weeks over the logged span.
+  (function(){
+    var wk={}; acts.forEach(function(a){ var k=_dnaWeekKey_(a.date); if(k) wk[k]=1; });
+    var span=Math.max(1, Math.round(_dnaDaysBetween_(dates[0], dates[dates.length-1])/7)+1);
+    var aw=Object.keys(wk).length, pct=Math.round(aw/span*100);
+    T.push(_dnaTrait_('Consistency', pct+'% of weeks active', 'You logged at least one activity in '+aw.toLocaleString()+' of '+span.toLocaleString()+' weeks.', 'active weeks ÷ weeks in your logged span', G));
+  })();
+  // 2) LONGEST STREAK — most consecutive active weeks.
+  (function(){
+    var keys=Object.keys((function(){var w={};acts.forEach(function(a){var k=_dnaWeekKey_(a.date);if(k)w[k]=1;});return w;})()).sort();
+    if(keys.length<4) return;
+    var best=1, run=1; for(var i=1;i<keys.length;i++){ if(_dnaDaysBetween_(keys[i-1],keys[i])===7){ run++; best=Math.max(best,run); } else run=1; }
+    T.push(_dnaTrait_('Longest streak', best+' weeks unbroken', 'Your longest run of consecutive weeks with an activity.', 'max consecutive 7-day-adjacent active weeks', A));
+  })();
+  // 3) RETURN-AFTER-GAP — you always come back.
+  (function(){
+    var breaks=[]; for(var i=1;i<dates.length;i++){ var g=_dnaDaysBetween_(dates[i-1],dates[i]); if(g>=14) breaks.push(g); }
+    if(breaks.length<3) return;
+    var longest=Math.max.apply(null,breaks), med=Math.round(_dnaMedian_(breaks));
+    T.push(_dnaTrait_('You always come back', breaks.length+' breaks, every one ended', 'You went 14+ days without an activity '+breaks.length+' times; the longest was '+longest+' days, and you returned every time (median break '+med+' days).', 'gaps ≥14 days between consecutive activities', B));
+  })();
+  // 4) DAY OF WEEK — dominant training day (run log; ~n per weekday). Month-of-year stays OUT.
+  (function(){
+    var base=runs.length>=200?runs:acts; var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], c=[0,0,0,0,0,0,0];
+    base.forEach(function(a){ var d=new Date(a.date+'T00:00:00'); if(!isNaN(d.getTime())) c[d.getDay()]++; });
+    var tot=c.reduce(function(x,y){return x+y;},0); if(tot<70) return;
+    var mi=0; for(var i=1;i<7;i++) if(c[i]>c[mi]) mi=i;
+    var per=Math.round(tot/7);
+    T.push(_dnaTrait_('Your day is '+DOW[mi], Math.round(c[mi]/tot*100)+'% land on '+DOW[mi], DOW[mi]+' is your most frequent training day ('+c[mi].toLocaleString()+' of '+tot.toLocaleString()+' '+(base===runs?'runs':'activities')+').', '~'+per+' observations per weekday across the '+(base===runs?'run':'activity')+' log', TEAL));
+  })();
+  // 5) START HOUR — modal start time. LOCKED when too few activities carry a timestamp.
+  (function(){
+    var hrs=acts.map(function(a){return a.hour;}).filter(function(h){return h!=null;});
+    var MIN=40;
+    if(hrs.length<MIN){ T.push(_dnaLock_('Start-time signature', 'needs '+(MIN-hrs.length)+' more timed activities — only '+hrs.length+' of your activities carry a start time', P)); return; }
+    var b=new Array(24).fill(0); hrs.forEach(function(h){ b[h]++; });
+    var mi=0; for(var i=1;i<24;i++) if(b[i]>b[mi]) mi=i;
+    var h12=(mi%12)||12, ap=mi<12?'AM':'PM';
+    T.push(_dnaTrait_('You start at '+h12+' '+ap, Math.round(b[mi]/hrs.length*100)+'% of timed starts', 'Of the '+hrs.length.toLocaleString()+' activities that recorded a start time, most begin around '+h12+' '+ap+'.', 'modal hour of r.startTime', P));
+  })();
+  // 6) VOLUME PERCENTILE within sport — recent month vs the sport's own monthly history.
+  (function(){
+    var by={}; runs.forEach(function(a){ var k=a.date.slice(0,7); by[k]=(by[k]||0)+a.dist; });
+    var months=Object.keys(by).sort(); if(months.length<12) return;
+    var vals=months.map(function(k){return by[k];}), recent=by[months[months.length-1]];
+    var below=vals.filter(function(v){return v<recent;}).length; var pctl=Math.round(below/vals.length*100);
+    T.push(_dnaTrait_('Recent run volume', Math.round(recent)+' mi last month', 'Your most recent month is higher than '+pctl+'% of your '+months.length+' logged run months.', 'percentile of the latest month within your own run-month distribution', G));
+  })();
+  // 7) PACE AFTER REST — do runs after a break come out faster or slower?
+  (function(){
+    var rr=runs.filter(function(a){return a.dist>0 && a.sec>0;});
+    if(rr.length<60) return;
+    var post=[], base=[];
+    for(var i=0;i<rr.length;i++){ var pace=(rr[i].sec/60)/rr[i].dist; if(!(pace>3&&pace<20)) continue;
+      if(i>0 && _dnaDaysBetween_(rr[i-1].date, rr[i].date)>=3) post.push(pace); else base.push(pace); }
+    if(post.length<15 || base.length<15) return;
+    var mp=_dnaMedian_(post), mb=_dnaMedian_(base), d=Math.round((mp-mb)*60);
+    var faster=mp<mb;
+    var fmtPace=function(p){ var m=Math.floor(p), s=Math.round((p-m)*60); if(s===60){m++;s=0;} return m+':'+('0'+s).slice(-2); };
+    T.push(_dnaTrait_('Pace after rest: '+(faster?'faster':'steadier'), (faster?'-':'+')+Math.abs(d)+' sec/mi', 'Runs after a 3+ day break come in at '+fmtPace(mp)+'/mi vs '+fmtPace(mb)+'/mi normally ('+post.length+' post-rest runs).', 'median pace of post-rest runs vs all other runs', faster?G:A));
+  })();
+  // 8) TEMPERATURE SPLIT — hot vs cold ride speed. LOCKED until enough rides carry a backfilled temp.
+  (function(){
+    var wt=rides.filter(function(a){return a.temp!=null && a.dist>0 && a.sec>0;});
+    var MIN=8;
+    var hot=wt.filter(function(a){return a.temp>=75;}), cold=wt.filter(function(a){return a.temp<=45;});
+    if(hot.length<MIN || cold.length<MIN){
+      var need=Math.max(0,MIN-hot.length)+Math.max(0,MIN-cold.length);
+      T.push(_dnaLock_('Heat vs cold performance', (wt.length?('needs a fuller temperature spread — '+hot.length+' hot / '+cold.length+' cold rides so far'):'run the Temperature Backfill in Settings first'), '#ef4444'));
+      return;
+    }
+    var mph=function(g){ return _dnaMedian_(g.map(function(a){return a.dist/(a.sec/3600);})); };
+    var hs=mph(hot), cs=mph(cold), faster=hs>cs;
+    T.push(_dnaTrait_('You ride '+(faster?'hotter':'colder')+' better', (Math.round(Math.abs(hs-cs)*10)/10)+' mph '+(faster?'in heat':'in cold'), 'Median speed '+hs.toFixed(1)+' mph at 75°F+ ('+hot.length+' rides) vs '+cs.toFixed(1)+' mph at 45°F- ('+cold.length+' rides).', 'median speed split on rides carrying a backfilled temperature', faster?A:B));
+  })();
+  return T;
+}
+// ---- SIGNATURE: reads the recent window's per-sport z DIRECTLY off _zsCompute_ (the same numbers
+// the Athletic Life board ranks on). No second normalization — the z is window-invariant, so a sport's
+// recent mean z is exactly its standing vs the athlete's own average month. Display floors at 0 like
+// the Athletic Life timeline (a quiet month is a real month, not negative space).
+function _dnaSignature_(){
+  var g=(typeof _zsCompute_==='function')?_zsCompute_():null; if(!g||!g.rows.length) return null;
+  var recent=g.rows.slice().sort(function(a,b){return a.ym<b.ym?1:-1;}).slice(0,6);   // last 6 scored months
+  var acc={}; recent.forEach(function(r){ Object.keys(r.mi||{}).forEach(function(sp){ if(!acc[sp]) acc[sp]={n:0,z:0}; }); });
+  // Per-sport recent mean z: re-derive each sport's z the same way _zsCompute_ does, but only report
+  // the mean of the recent months so the signature answers "how are you riding/running LATELY".
+  var axes=[];
+  g.sports.forEach(function(sp){
+    var zs=recent.filter(function(r){ return r.mi && r.mi[sp]!=null; }).map(function(r){ return r.score; });
+    if(!zs.length) return;
+    var mean=zs.reduce(function(a,b){return a+b;},0)/zs.length;
+    axes.push({label:sp.charAt(0).toUpperCase()+sp.slice(1)+' form', z:mean, mag:Math.max(0,Math.min(1,(mean+2)/4))});
+  });
+  return axes.length?{axes:axes, months:recent.length}:null;
+}
+
+// ---- RENDERER: the DNA tab. Era spine → signature → unlocked traits → locked traits (the unlock
+// mechanic). Surface-agnostic; both desktop and mobile mount it through aiRenderTab_('dna').
+function _dnaEraColor_(dom){ return dom==='run'?'#2dd4bf':(dom==='ride'?'#f59e0b':'#a855f7'); }
+function aiRenderDNA_(){
+  var acts=_dnaActs_();
+  if(acts.length<50) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Your DNA reads off your activity history — a little more logged data and it will fill in.</div>';
+  var eras=_dnaEras_(acts), traits=_dnaTraits_(acts), sig=_dnaSignature_();
+  var unlocked=traits.filter(function(t){return !t.locked;}), locked=traits.filter(function(t){return t.locked;});
+  var span=acts[0].date.slice(0,4)+'–'+acts[acts.length-1].date.slice(0,4);
+  var nRun=acts.filter(function(a){return a.sport==='run';}).length, nRide=acts.length-nRun;
+  var H='<div style="max-width:1120px;margin:0 auto">';
+  H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
+    +nRun.toLocaleString()+' runs and '+nRide.toLocaleString()+' rides, '+span+'. Every trait states its derivation; a trait without enough observations to be honest is locked, with what would unlock it.</div>';
+  // ERA SPINE
+  H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
+  H+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-bottom:22px">';
+  eras.forEach(function(e){
+    var col=_dnaEraColor_(e.dom), yl=(e.startY===e.endY)?(''+e.startY):(e.startY+'–'+e.endY);
+    H+='<div style="flex:1 0 auto;min-width:150px;position:relative;padding:0 10px">'
+      +'<div style="height:4px;background:'+col+';border-radius:2px;margin-bottom:9px"></div>'
+      +'<div style="font-size:10.5px;font-weight:800;color:'+col+';letter-spacing:.03em">'+yl+'</div>'
+      +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
+      +'<div style="font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.4">'+aiEsc_(e.archWhy)+'</div>'
+      +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+e.acts.toLocaleString()+' activities</div>'
+      +'</div>';
+  });
+  H+='</div>';
+  // SIGNATURE — reads off _zsCompute_ z. Floored at 0 for display; the z is printed as the honest value.
+  if(sig){
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;margin-bottom:18px">';
+    H+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:#5b6678">z vs your own average month</span>');
+    sig.axes.forEach(function(ax){
+      var w=Math.max(3,Math.round(ax.mag*100)), pos=ax.z>=0;
+      H+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
+        +'<span style="font-size:12.5px;font-weight:700;color:#cbd5e1">'+aiEsc_(ax.label)+'</span>'
+        +'<span style="font-size:12.5px;font-weight:800;color:'+(pos?'#4ade80':'#f59e0b')+'">'+(pos?'+':'')+ax.z.toFixed(2)+' z</span></div>'
+        +'<div style="height:7px;border-radius:4px;background:#141922;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+';border-radius:4px"></div></div></div>';
+    });
+    H+='<div style="font-size:10px;color:#5b6678;margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
+    H+='</div>';
+  }
+  // UNLOCKED TRAITS
+  H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
+  H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';
+  unlocked.forEach(function(t){
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+t.col+';flex:0 0 auto"></span>'
+      +'<span style="font-size:14px;font-weight:800;color:#f1f5f9">'+aiEsc_(t.name)+'</span></div>'
+      +'<div style="font-size:19px;font-weight:800;color:'+t.col+';letter-spacing:-.01em;margin-bottom:5px">'+aiEsc_(t.headline)+'</div>'
+      +'<div style="font-size:12px;color:#94a3b8;line-height:1.45;margin-bottom:7px">'+aiEsc_(t.detail)+'</div>'
+      +'<div style="font-size:10px;color:#5b6678;border-top:1px solid #1c2130;padding-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
+      +'</div>';
+  });
+  H+='</div>';
+  // LOCKED TRAITS — the unlock mechanic. A reason to return, not an apology.
+  if(locked.length){
+    H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Locked <span style="color:#3a4150">&middot; earn these</span></div>';
+    H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">';
+    locked.forEach(function(t){
+      H+='<div style="background:#0e1015;border:1px dashed #2a3140;border-radius:14px;padding:15px 16px">'
+        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+        +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
+        +'<span style="font-size:14px;font-weight:800;color:#8592a6">'+aiEsc_(t.name)+'</span></div>'
+        +'<div style="font-size:12px;color:#94a3b8;line-height:1.45">'+aiEsc_(t.unlock)+'.</div>'
+        +'</div>';
+    });
+    H+='</div>';
+  }
+  H+='</div>';
+  return H;
+}
+
 function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
+  if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">DNA — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
