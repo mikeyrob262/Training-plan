@@ -6644,9 +6644,10 @@ var FBB=[["Back Squat","3","8","Bar on traps, depth parallel"],["Single-Leg RDL"
 
 function toast(m){var t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(function(){t.style.opacity='0';t.style.transition='opacity .4s';setTimeout(function(){t.remove();},400);},2500);}
 
-// Shared in-app modal replacing native confirm()/alert(). Promise-based:
-// uiConfirm(msg[,opts]) -> Promise<boolean>, uiAlert(msg[,opts]) -> Promise<void>.
-// opts: {title, danger, okText, cancelText}. Enter=OK, Escape/backdrop=cancel.
+// Shared in-app modal replacing native confirm()/alert()/prompt(). Promise-based:
+// uiConfirm(msg[,opts]) -> Promise<boolean>, uiAlert(msg[,opts]) -> Promise<void>,
+// uiPrompt(msg,default[,opts]) -> Promise<string|null> (null on cancel).
+// opts: {title, danger, okText, cancelText, placeholder, password}. Enter=OK, Escape/backdrop=cancel.
 function uiEsc_(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':'&quot;';});}
 function uiModal_(opts){
   opts=opts||{};
@@ -6656,26 +6657,41 @@ function uiModal_(opts){
     var card=document.createElement('div');card.className='ui-modal-card';
     var html='';
     if(opts.title)html+='<div class="ui-modal-title">'+uiEsc_(opts.title)+'</div>';
-    html+='<div class="ui-modal-msg">'+uiEsc_(opts.message||'')+'</div>';
+    if(opts.message)html+='<div class="ui-modal-msg">'+uiEsc_(opts.message)+'</div>';
     card.innerHTML=html;
+    // Text-input mode (uiPrompt): a styled field in the same card, OK resolves its value.
+    var input=null;
+    if(opts.input){
+      input=document.createElement('input');
+      input.type=opts.password?'password':'text';
+      input.value=(opts.defaultValue!=null?String(opts.defaultValue):'');
+      if(opts.placeholder)input.placeholder=opts.placeholder;
+      input.style.cssText='width:100%;box-sizing:border-box;margin-top:4px;padding:11px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:15px;font-family:inherit;outline:none';
+      input.onfocus=function(){input.style.borderColor='#2FA8E0';};
+      input.onblur=function(){input.style.borderColor='var(--b1)';};
+      card.appendChild(input);
+    }
     var btns=document.createElement('div');btns.className='ui-modal-btns';
     var done=false;
+    var okVal=function(){return opts.input?(input?input.value:''):true;};
+    var cancelVal=function(){return opts.input?null:(opts.confirm?false:true);};
     function finish(v){if(done)return;done=true;document.removeEventListener('keydown',onKey);ov.style.opacity='0';setTimeout(function(){if(ov.parentNode)ov.remove();},150);resolve(v);}
-    function onKey(e){if(e.key==='Escape')finish(opts.confirm?false:true);else if(e.key==='Enter')finish(true);}
-    if(opts.confirm){
-      var cancel=document.createElement('button');cancel.className='ui-modal-btn ui-modal-cancel';cancel.textContent=opts.cancelText||'Cancel';cancel.onclick=function(){finish(false);};btns.appendChild(cancel);
+    function onKey(e){if(e.key==='Escape')finish(cancelVal());else if(e.key==='Enter'){if(opts.input)e.preventDefault();finish(okVal());}}
+    if(opts.confirm||opts.input){
+      var cancel=document.createElement('button');cancel.className='ui-modal-btn ui-modal-cancel';cancel.textContent=opts.cancelText||'Cancel';cancel.onclick=function(){finish(cancelVal());};btns.appendChild(cancel);
     }
-    var ok=document.createElement('button');ok.className='ui-modal-btn '+(opts.danger?'ui-modal-danger':'ui-modal-ok');ok.textContent=opts.okText||(opts.confirm?'Confirm':'OK');ok.onclick=function(){finish(true);};btns.appendChild(ok);
+    var ok=document.createElement('button');ok.className='ui-modal-btn '+(opts.danger?'ui-modal-danger':'ui-modal-ok');ok.textContent=opts.okText||(opts.confirm?'Confirm':'OK');ok.onclick=function(){finish(okVal());};btns.appendChild(ok);
     card.appendChild(btns);ov.appendChild(card);
-    ov.addEventListener('click',function(e){if(e.target===ov)finish(opts.confirm?false:true);});
+    ov.addEventListener('click',function(e){if(e.target===ov)finish(cancelVal());});
     document.addEventListener('keydown',onKey);
     document.body.appendChild(ov);
     requestAnimationFrame(function(){ov.style.opacity='1';});
-    setTimeout(function(){try{ok.focus();}catch(_){}},0);
+    setTimeout(function(){try{if(input){input.focus();input.select();}else ok.focus();}catch(_){}},0);
   });
 }
 function uiConfirm(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:true,danger:opts.danger,okText:opts.okText,cancelText:opts.cancelText});}
 function uiAlert(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:false,okText:opts.okText});}
+function uiPrompt(message,defaultValue,opts){opts=opts||{};return uiModal_({input:true,message:message,defaultValue:defaultValue,title:opts.title,placeholder:opts.placeholder,password:opts.password,okText:opts.okText||'OK',cancelText:opts.cancelText});}
 
 function updDots(){
   var row=document.getElementById('dots-row');
@@ -6709,19 +6725,20 @@ function updHdr(){
 
 function logWeightQuick(){
   var cur = st.weight || '';
-  var val = prompt('Log your weight (lbs):', cur);
-  if(val===null) return;
-  var num = parseFloat(val);
-  if(isNaN(num)||num<=0){ toast('Enter a valid weight'); return; }
-  st.weight = num;
-  if(!st.weightLog) st.weightLog = [];
-  var today = getTodayKey();
-  var existing = st.weightLog.find(function(w){return w.date===today;});
-  if(existing) existing.weight = num;
-  else st.weightLog.push({date:today, weight:num});
-  sv(); fbPush(true);
-  toast('Weight logged: '+num+' lbs');
-  renderHomeTSSAndPR();
+  uiPrompt('Log your weight (lbs)', cur, {title:'Log weight', okText:'Save', placeholder:'e.g. 162.5'}).then(function(val){
+    if(val===null) return;
+    var num = parseFloat(val);
+    if(isNaN(num)||num<=0){ toast('Enter a valid weight'); return; }
+    st.weight = num;
+    if(!st.weightLog) st.weightLog = [];
+    var today = getTodayKey();
+    var existing = st.weightLog.find(function(w){return w.date===today;});
+    if(existing) existing.weight = num;
+    else st.weightLog.push({date:today, weight:num});
+    sv(); fbPush(true);
+    toast('Weight logged: '+num+' lbs');
+    renderHomeTSSAndPR();
+  });
 }
 
 // Computes a comparable training-stress number for any activity type.
@@ -7689,9 +7706,10 @@ function doSwap(w,idx,btn){
   select.addEventListener('change',function(){
     var val=select.value;
     if(val==='Custom...'){
-      var custom=prompt('Enter activity name:');
-      overlay.remove();
-      if(custom&&custom.trim()) applySwap(w,idx,custom.trim());
+      uiPrompt('Enter activity name', '', {title:'Custom activity', okText:'Add', placeholder:'Activity name'}).then(function(custom){
+        overlay.remove();
+        if(custom&&custom.trim()) applySwap(w,idx,custom.trim());
+      });
       return;
     }
     overlay.remove();
@@ -14345,16 +14363,17 @@ function importRideFile(input){
 function renameRide(idx){
   idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var r = st.rides[idx]; if(!r) return;
-  var newName = prompt('Rename ride:', r.name||'Activity');
-  if(newName===null) return;
-  newName = newName.trim();
-  if(!newName) return;
-  st.rides[idx].name = newName;
-  markRideEdited_(st.rides[idx], ['name']);   // survives Strava/Intervals sync + cross-device
-  sv();
-  var el = document.getElementById('ride-detail-name');
-  if(el) el.textContent = newName;
-  toast('Renamed!');
+  uiPrompt('Rename this ride', r.name||'Activity', {title:'Rename ride', okText:'Save', placeholder:'Activity name'}).then(function(newName){
+    if(newName===null) return;                       // cancelled — no write
+    newName = String(newName).trim();
+    if(!newName || newName===(r.name||'')) return;    // empty or unchanged — no write
+    st.rides[idx].name = newName;
+    markRideEdited_(st.rides[idx], ['name']);   // survives Strava/Intervals sync + cross-device
+    sv();
+    var el = document.getElementById('ride-detail-name');   // present on both surfaces — live title update
+    if(el) el.textContent = newName;
+    toast('Renamed!');
+  });
 }
 
 // ─── DESKTOP 3-PANEL ───────────────────────────────────────────────────────
@@ -25513,10 +25532,15 @@ function _depStatus_(msg,col){
 function deployWorkerPick_(){
   var tok=(st&&st.ghToken)||'';
   if(!tok){
-    var t=prompt('GitHub personal access token (repo scope). Stored locally for next time.');
-    if(!t) return;
-    st.ghToken=t.trim(); try{ sv(); }catch(e){}
-    tok=st.ghToken;
+    // Async modal can't keep the file-picker's user-gesture, so save the token and have the user
+    // click Deploy again — the second click hits the stored-token path and opens the picker directly.
+    uiPrompt('GitHub personal access token (repo scope). Stored locally for next time.', '', {title:'GitHub token', okText:'Save', password:true, placeholder:'ghp_…'}).then(function(t){
+      if(t===null) return;
+      t=String(t).trim(); if(!t) return;
+      st.ghToken=t; try{ sv(); }catch(e){}
+      try{ _depStatus_('Token saved — click Deploy again to pick the file.'); }catch(e){}
+    });
+    return;
   }
   var inp=document.createElement('input');
   inp.type='file'; inp.accept='.js,text/javascript';
@@ -25558,7 +25582,8 @@ function _depWrite_(src, fname, tok){
     // "Invalid or unexpected token" at load. Exactly what took the app down at (index):23813:136.
     // storeV2Put_ already does it this way; this is the same rule, not a new one.
     var _dnl=String.fromCharCode(10)+String.fromCharCode(10);
-    if(!confirm('Deploy '+fname+' ('+Math.round(src.length/1024)+' KB, build '+outgoing+') to '+_DEP_OWNER+'/'+_DEP_REPO+'/'+_DEP_PATH+'?'+_dnl+'This replaces the live file.')) { _depStatus_('Cancelled.'); return; }
+    return uiConfirm('Deploy '+fname+' ('+Math.round(src.length/1024)+' KB, build '+outgoing+') to '+_DEP_OWNER+'/'+_DEP_REPO+'/'+_DEP_PATH+'?'+_dnl+'This replaces the live file.',{title:'Deploy worker.js', okText:'Deploy', danger:true}).then(function(_okDep){
+    if(!_okDep) { _depStatus_('Cancelled.'); return; }
     _depStatus_('Uploading…');
     var body={message:'Deploy worker.js — '+outgoing, content:btoa(unescape(encodeURIComponent(src))), sha:cur.sha};
     return fetch(api,{method:'PUT',headers:hdr,body:JSON.stringify(body)})
@@ -25581,6 +25606,7 @@ function _depWrite_(src, fname, tok){
             }
           });
       });
+    });
   }).catch(function(e){ _depStatus_('Error: '+((e&&e.message)||e),'#E74C3C'); });
 }
 
@@ -27298,7 +27324,6 @@ function openPlanGenerator_(){
     try{ if(typeof uiAlert==='function') uiAlert(summary,{title:'Plan generated'}); else if(typeof toast==='function') toast(summary); }catch(e){}
   };
   if(typeof uiConfirm==='function'){ uiConfirm(msg,{title:'Generate 4-week block',okText:'Generate'}).then(function(ok){ if(ok) run(); }); }
-  else if(typeof confirm==='function'){ if(confirm(msg)) run(); }
   else run();
 }
 function planDay_(dateKey, create){
@@ -28164,13 +28189,17 @@ function renderMyMeals(container){
     var nd=getNDay(nutrDate);
     var foods=nd.meals[curMeal]||[];
     if(foods.length===0){toast('No foods logged in '+curMeal+' yet');return;}
-    var name=prompt('Name this meal:',curMeal.charAt(0).toUpperCase()+curMeal.slice(1)+' '+new Date().toLocaleDateString());
-    if(!name) return;
-    if(!st.myMeals) st.myMeals=getMyMeals();
-    st.myMeals.push({name:name,emoji:'🍽️',foods:foods.map(function(f){return{n:f.n,cal:f.cal,p:f.p||0,c:f.c||0,f:f.f||0};})});
-    sv();
-    renderMyMeals(container);
-    toast('Saved: '+name);
+    var _defName=curMeal.charAt(0).toUpperCase()+curMeal.slice(1)+' '+new Date().toLocaleDateString();
+    uiPrompt('Name this meal', _defName, {title:'Save meal', okText:'Save', placeholder:'Meal name'}).then(function(name){
+      if(name===null) return;
+      name=String(name).trim();
+      if(!name) return;
+      if(!st.myMeals) st.myMeals=getMyMeals();
+      st.myMeals.push({name:name,emoji:'🍽️',foods:foods.map(function(f){return{n:f.n,cal:f.cal,p:f.p||0,c:f.c||0,f:f.f||0};})});
+      sv();
+      renderMyMeals(container);
+      toast('Saved: '+name);
+    });
   };
 }
 
@@ -32823,7 +32852,6 @@ function openDayEditor(dateKey, targetId){
         try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsShowCalendar==='function') dsShowCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
       };
       if(typeof uiConfirm==='function'){ uiConfirm('Delete "'+_nm+'"? You can restore it later with planReviveDay_.', {title:'Delete session', danger:true, okText:'Delete'}).then(function(ok){ if(ok) go(); }); }
-      else if(typeof confirm==='function'){ if(confirm('Delete "'+_nm+'"?')) go(); }
       else { go(); }
     };
     sheet.appendChild(delBtn);
@@ -33140,7 +33168,7 @@ function mergeCrossSourceDupes_(){
       if(cl.length>1){ cl.sort(function(x,y){return rich_(y)-rich_(x);}); for(var m=1;m<cl.length;m++) toTomb.push(cl[m]); }
     }
   });
-  if(!toTomb.length){ try{uiAlert('No cross-source duplicate rides found — nothing to merge.');}catch(e){alert('No cross-source duplicates found.');} return; }
+  if(!toTomb.length){ try{uiAlert('No cross-source duplicate rides found — nothing to merge.');}catch(e){} return; }
   var mix={}; toTomb.forEach(function(r){ var s=r.source||'?'; mix[s]=(mix[s]||0)+1; });
   var mixStr=Object.keys(mix).map(function(s){return s+':'+mix[s];}).join(', ');
   var NL=String.fromCharCode(10);
