@@ -18267,16 +18267,29 @@ function _blockMiIcon_(path, col, sz){ sz=sz||18; return '<svg width="'+sz+'" he
 function _blockDot_(ok){ return ok
   ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
   : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg>'; }
+// Three states, three colours, and green ONLY for a session that was actually done AND met its
+// condition. A session logged but over the cap is a real miss — red X, not a soft grey. A session
+// not logged is simply grey and empty. The category badge is muted until the session is met, so an
+// empty week never reads as a row of coloured, done-looking icons.
 function _blockCheckRow_(c){
-  var ok=c.ok, iconCol=c.key==='threshold'?'#FC4C02':(c.key==='vo2'?'#a855f7':'#14b8a6');
-  var status=c.done ? (ok?('met · '+c.val):('logged, but '+c.val+' — over the cap')) : 'not logged this week';
+  var met=(c.done && c.ok), missed=(c.done && !c.ok);
+  var catCol=c.key==='threshold'?'#FC4C02':(c.key==='vo2'?'#a855f7':'#14b8a6');
+  var catPath=c.key==='threshold'?'M13 2L3 14h9l-1 8 10-12h-9l1-8z':(c.key==='vo2'?'M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z M8 12h8':'M3 12h4l2-5 4 10 2-5h6');
+  // Left status badge: green check when met, red X when missed, muted category icon when not logged.
+  var badge, badgeBg, badgeIcon;
+  if(met){ badgeBg='#22c55e22'; badgeIcon=_blockMiIcon_('M20 6L9 17l-5-5','#22c55e',17); }
+  else if(missed){ badgeBg='#ef444422'; badgeIcon=_blockMiIcon_('M6 6l12 12M18 6L6 18','#ef4444',16); }
+  else { badgeBg='#1a1f29'; badgeIcon=_blockMiIcon_(catPath,'#3a4150',16); }
+  var status=met ? ('met · '+c.val) : (missed ? ('logged, but '+c.val+' — over the cap') : 'not logged this week');
+  var statusCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
+  var countCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
   return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
-    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+iconCol+'1a;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(c.key==='threshold'?'M13 2L3 14h9l-1 8 10-12h-9l1-8z':(c.key==='vo2'?'M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z M8 12h8':'M3 12h4l2-5 4 10 2-5h6'), iconCol, 17)+'</span>'
-    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+c.label+'</span>'
+    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+badgeBg+';display:flex;align-items:center;justify-content:center">'+badgeIcon+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(met?'#f1f5f9':'#cbd5e1')+'">'+c.label+'</span>'
     +'<span style="font-size:11px;color:#5b6678">'+c.cond+'</span></div>'
     +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">'+c.desc+'</div>'
-    +'<div style="font-size:11px;color:'+(c.done?(ok?'#22c55e':'#f59e0b'):'#5b6678')+';margin-top:2px">'+status+'</div></div>'
-    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+(ok?'#22c55e':'#5b6678')+'">'+(c.done?'1':'0')+' / 1</span></div>';
+    +'<div style="font-size:11px;color:'+statusCol+';margin-top:2px">'+status+'</div></div>'
+    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+countCol+'">'+(c.done?'1':'0')+' / 1</span></div>';
 }
 function _blockRoadmap_(now){
   var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -18285,24 +18298,71 @@ function _blockRoadmap_(now){
   for(var i=0;i<road.length;i++){ var d=_blockDay_(road[i].date); if(d && d.getTime()>=today.getTime()){ nextIdx=i; break; } }
   var cells=road.map(function(m,i){
     var d=_blockDay_(m.date), past=(d && d.getTime()<today.getTime()), isNext=(i===nextIdx);
-    var col=(isNext||past)?'#22c55e':'#5b6678';
-    var ring=isNext?'border:2px solid #22c55e;background:rgba(34,197,94,.13)':(past?'border:2px solid #22c55e;background:transparent':'border:2px solid #2a3341;background:transparent');
-    var lineCol=(nextIdx<0||i<nextIdx)?'#22c55e':'#1c2130';
+    // past = done (green), next = current focus (amber), future = muted (grey). Green is never spent
+    // on a milestone that has not actually happened.
+    var col=past?'#22c55e':(isNext?'#f59e0b':'#5b6678');
+    var ring=past?'border:2px solid #22c55e;background:transparent':(isNext?'border:2px solid #f59e0b;background:rgba(245,158,11,.12)':'border:2px solid #2a3341;background:transparent');
+    // A connector is green only between two COMPLETED milestones; the leg into the next one and
+    // everything ahead stays grey.
+    var lineCol=(i<road.length-1 && _blockDay_(road[i+1].date) && _blockDay_(road[i+1].date).getTime()<today.getTime())?'#22c55e':'#1c2130';
     var line=(i<road.length-1)?('<div style="position:absolute;top:22px;left:50%;right:-50%;height:2px;background:'+lineCol+';z-index:0"></div>'):'';
     return '<div style="flex:1;position:relative;text-align:center;min-width:0">'+line
-      +'<div style="position:relative;z-index:1;width:44px;height:44px;border-radius:50%;'+ring+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+_blockMiIcon_(m.icon, col, 20)+'</div>'
-      +'<div style="font-size:11px;font-weight:700;color:'+(isNext?'#22c55e':'#cbd5e1')+';margin-top:7px;line-height:1.2">'+m.label+'</div>'
+      +'<div style="position:relative;z-index:1;width:44px;height:44px;border-radius:50%;'+ring+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+_blockMiIcon_(past?'M20 6L9 17l-5-5':m.icon, col, 20)+'</div>'
+      +'<div style="font-size:11px;font-weight:700;color:'+(isNext?'#f59e0b':(past?'#22c55e':'#cbd5e1'))+';margin-top:7px;line-height:1.2">'+m.label+'</div>'
       +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(m.date)+'</div></div>';
   }).join('');
   return '<div style="display:flex;align-items:flex-start;gap:2px">'+cells+'</div>';
 }
-function _blockRing_(pct, col){
-  var R=50, C=2*Math.PI*R, off=C*(1-Math.max(0,Math.min(100,pct))/100);
-  return '<svg viewBox="0 0 130 130" style="width:116px;height:116px">'
-    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="10"/>'
-    +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+(col||'#22c55e')+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>'
-    +'<text x="65" y="61" text-anchor="middle" font-size="27" font-weight="800" fill="#f1f5f9">'+Math.round(pct)+'%</text>'
-    +'<text x="65" y="80" text-anchor="middle" font-size="8.5" fill="#5b6678" letter-spacing="1.2">OF WINDOW</text></svg>';
+// The first upcoming road milestone's slug, and a past/next/future state for any milestone. Green
+// is reserved for what is actually DONE; the current focus is amber; everything ahead is muted.
+function _blockNextRoadSlug_(now){
+  var t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
+  var road=_BLOCK_MILESTONES.filter(function(m){ return m.road; });
+  for(var i=0;i<road.length;i++){ var d=_blockDay_(road[i].date); if(d && d.getTime()>=t.getTime()) return road[i].slug; }
+  return null;
+}
+function _blockMiState_(m, nextSlug, now){
+  var d=_blockDay_(m.date), t=new Date(now.getFullYear(),now.getMonth(),now.getDate()); t.setHours(0,0,0,0);
+  if(d && d.getTime()<t.getTime()) return 'past';
+  if(m.slug===nextSlug) return 'next';
+  return 'future';
+}
+var _BLOCK_STATE_COL={ past:'#22c55e', next:'#f59e0b', future:'#5b6678', clean:'#22c55e', failed:'#ef4444', active:'#f59e0b', none:'#2a3341' };
+
+// The ring's four segments are the four weeks ending with the current one — each coloured by what
+// actually happened: green banked-clean, red completed-but-failed, amber the week in progress, dark
+// for a slot that predates the block. The CENTRE number is calendar time in a NEUTRAL grey, because
+// time passing is not an achievement — it carries no green. This is the whole point: a fresh block
+// reads as one amber segment on a dark ring at 0%, not an all-green "done".
+function _blockRingWeeks_(rides, ftp, now){
+  var startWS=_blockWeekStart_(_blockDay_(_BLOCK_START)||now);
+  var curWS=_blockWeekStart_(now);
+  var states=[];
+  for(var k=3;k>=0;k--){
+    var ws=new Date(curWS.getTime()-k*7*86400000);
+    if(ws.getTime()<startWS.getTime()){ states.push('none'); continue; }   // before the block
+    if(k===0){ states.push('active'); continue; }                          // current, in progress
+    var mid=new Date(ws.getTime()+3*86400000);
+    states.push(_blockWeekAssess_(rides, ftp, mid).pass?'clean':'failed');
+  }
+  return states;   // chronological: [oldest .. current]
+}
+function _blockArc_(cx,cy,r,startDeg,endDeg,color,sw){
+  var s=startDeg*Math.PI/180, e=endDeg*Math.PI/180;
+  var x0=cx+r*Math.cos(s), y0=cy+r*Math.sin(s), x1=cx+r*Math.cos(e), y1=cy+r*Math.sin(e);
+  var large=(endDeg-startDeg)>180?1:0;
+  return '<path d="M'+x0.toFixed(1)+' '+y0.toFixed(1)+' A'+r+' '+r+' 0 '+large+' 1 '+x1.toFixed(1)+' '+y1.toFixed(1)+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'" stroke-linecap="round"/>';
+}
+function _blockRing_(pct, states){
+  states=states||['none','none','none','active'];
+  var cx=65,cy=65,R=50,sw=10,gap=8, arcs='';
+  for(var i=0;i<4;i++){
+    var a0=-90+i*90+gap/2, a1=-90+(i+1)*90-gap/2;
+    arcs+=_blockArc_(cx,cy,R,a0,a1,_BLOCK_STATE_COL[states[i]]||'#2a3341',sw);
+  }
+  return '<svg viewBox="0 0 130 130" style="width:116px;height:116px">'+arcs
+    +'<text x="65" y="61" text-anchor="middle" font-size="24" font-weight="800" fill="#94a3b8">'+Math.round(pct)+'%</text>'
+    +'<text x="65" y="79" text-anchor="middle" font-size="8" fill="#5b6678" letter-spacing="1.1">TIME ELAPSED</text></svg>';
 }
 function _blockTssGraph_(weeks){
   var W=340,H=118,PL=6,PR=6,PT=10,PB=18, iw=W-PL-PR, ih=H-PT-PB;
@@ -18356,14 +18416,22 @@ function renderBlockPlan_(container){
   // roadmap
   H+=_blockCard_(_blockHdr_('Milestone roadmap')+_blockRoadmap_(now));
   // progress
+  var ringStates=_blockRingWeeks_(rides, ftp, now);
+  var hasClean=ringStates.indexOf('clean')>=0, hasFailed=ringStates.indexOf('failed')>=0;
   var progInner=_blockHdr_('Block progress')
     +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
-    +'<div style="flex:0 0 auto">'+_blockRing_(prog.pct)+'</div>'
+    +'<div style="flex:0 0 auto">'+_blockRing_(prog.pct, ringStates)+'</div>'
     +'<div style="min-width:120px"><div style="font-size:14px;font-weight:800;color:#f1f5f9">'+prog.daysOnPlan+' of '+prog.windowDays+' days</div>'
-    +'<div style="font-size:11.5px;color:#5b6678">on plan toward the gate</div>'
-    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9;margin-top:8px">'+prog.streak+' of '+prog.target+' clean weeks</div>'
+    +'<div style="font-size:11.5px;color:#5b6678">time on plan (grey — no valence)</div>'
+    +'<div style="font-size:14px;font-weight:800;color:'+(prog.streak>0?'#22c55e':'#94a3b8')+';margin-top:8px">'+prog.streak+' of '+prog.target+' clean weeks</div>'
     +'<div style="font-size:11.5px;color:#5b6678">banked — the quality gate</div></div></div>'
-    +'<div style="display:flex;align-items:center;gap:6px;margin-top:12px;font-size:12px;font-weight:700;color:'+prog.statusCol+'">'
+    // legend so the ring colours are legible
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:#5b6678">'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#22c55e;vertical-align:middle;margin-right:4px"></span>banked</span>'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#f59e0b;vertical-align:middle;margin-right:4px"></span>this week</span>'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px"></span>missed</span>'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2a3341;vertical-align:middle;margin-right:4px"></span>to come</span></div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;font-weight:700;color:'+prog.statusCol+'">'
     +(prog.onTrack?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v5" stroke-linecap="round"/></svg>')
     +'<span>'+prog.statusText+'</span></div>';
   H+=_blockCard_(progInner);
@@ -18380,13 +18448,17 @@ function renderBlockPlan_(container){
     +'<span style="font-size:12px;font-weight:800;color:'+passCol+'">'+(wk.pass?'CLEAN WEEK':'INCOMPLETE')+'</span></div>';
   twInner+='<div style="font-size:11.5px;color:#5b6678;margin-bottom:6px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'+(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
   wk.checks.forEach(function(c){ twInner+=_blockCheckRow_(c); });
-  // distinct-days row
+  // distinct-days row — same three-state colouring: met green, stacked-but-done red, else grey.
+  var ddMet=wk.distinctDays, ddMissed=(wk.allThree && !wk.distinctDays);
+  var ddBg=ddMet?'#22c55e22':(ddMissed?'#ef444422':'#1a1f29');
+  var ddIcon=ddMet?_blockMiIcon_('M20 6L9 17l-5-5','#22c55e',17):(ddMissed?_blockMiIcon_('M6 6l12 12M18 6L6 18','#ef4444',16):_blockMiIcon_('M3 12h4l2-5 4 10 2-5h6','#3a4150',16));
+  var ddCol=ddMet?'#22c55e':(ddMissed?'#ef4444':'#5b6678');
   twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
-    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:#14b8a61a;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M3 12h4l2-5 4 10 2-5h6','#14b8a6',17)+'</span>'
-    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:#f1f5f9">Three separate days</span><span style="font-size:11px;color:#5b6678">no stacking, protects the rest cadence</span></div>'
+    +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+ddBg+';display:flex;align-items:center;justify-content:center">'+ddIcon+'</span>'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(ddMet?'#f1f5f9':'#cbd5e1')+'">Three separate days</span><span style="font-size:11px;color:#5b6678">no stacking, protects the rest cadence</span></div>'
     +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">Space the efforts so each one adapts</div>'
-    +'<div style="font-size:11px;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+';margin-top:2px">'+(wk.distinctDays?'met':(wk.allThree?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div>'
-    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+(wk.distinctDays?'#22c55e':'#5b6678')+'">'+Math.min(3,wk.distinctCount)+' / 3</span></div>';
+    +'<div style="font-size:11px;color:'+ddCol+';margin-top:2px">'+(ddMet?'met':(ddMissed?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div>'
+    +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+ddCol+'">'+Math.min(3,wk.distinctCount)+' / 3</span></div>';
   // weekly load + graph
   var tssWeeks=_blockWeeklyTss_(rides, ftp, now);
   twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #1c2130">'
@@ -18410,12 +18482,16 @@ function renderBlockPlan_(container){
   H+=_blockCard_(twInner);
 
   // RIGHT: Success + Risks stacked
+  // Success list mirrors the roadmap's status colours: an outcome is green only once it has actually
+  // happened, amber for the one in focus now, muted for what is still ahead.
+  var _succNext=_blockNextRoadSlug_(now);
   var succ=_blockHdr_('What success looks like');
   _BLOCK_MILESTONES.filter(function(m){ return m.road; }).forEach(function(m){
+    var stt=_blockMiState_(m, _succNext, now), col=_BLOCK_STATE_COL[stt];
     succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
-      +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#22c55e14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(m.icon,'#22c55e',16)+'</span>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:#f1f5f9">'+m.sTitle+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+m.sSub+'</div></div>'
-      +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:#22c55e;text-align:right;max-width:110px">'+m.benefit+'</span></div>';
+      +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(stt==='past'?'M20 6L9 17l-5-5':m.icon,col,16)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:#f59e0b;letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+m.sSub+'</div></div>'
+      +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:'+col+';text-align:right;max-width:110px">'+m.benefit+'</span></div>';
   });
   var riskInner=_blockHdr_('Risks &amp; mitigations');
   _BLOCK_RISKS.forEach(function(rk){
