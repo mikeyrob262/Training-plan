@@ -18476,8 +18476,6 @@ function _coachVPanel_(now){
   if(cv.ftp){
     H+='<div style="font-size:11.5px;color:#cbd5e1;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
   }
-  // honesty footer: what Coach V is NOT yet reading
-  H+='<div style="font-size:10px;color:#5b6678;line-height:1.5;margin-top:12px">Speaking from your block, form and FTP. HRV readiness and post-ride debriefs switch on once those feeds are confirmed live.</div>';
   H+='</div>';
   return H;
 }
