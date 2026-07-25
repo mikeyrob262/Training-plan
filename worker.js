@@ -11592,7 +11592,8 @@ function showHomeDash(){
     +'<div style="display:flex;align-items:center;gap:8px">'
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
     +'<span style="font-size:15px;font-weight:800;letter-spacing:-.2px;color:var(--t1)">ATHLETE IQ</span></div>'
-    +'<div style="display:flex;align-items:center;gap:14px">'
+    +'<div style="display:flex;align-items:center;gap:12px">'
+    +'<div onclick="if(window.stravaBackfill)stravaBackfill()" title="Pull your latest rides from Strava" style="display:flex;align-items:center;gap:6px;background:#FC4C02;color:#fff;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:800;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>'
     +'<div style="position:relative;cursor:pointer" onclick="showNotifications()">'
     +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
     +(bellCount>0?'<div style="position:absolute;top:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#E24B4A;color:white;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center">'+bellCount+'</div>':'')
@@ -23087,7 +23088,7 @@ function dsShowDashboard(){
     var a=t.getAttribute('data-act');
     if(a==='plan'){ if(typeof openDayEditor==='function' && typeof getTodayKey==='function') openDayEditor(getTodayKey()); }
     else if(a==='recovery'){ if(typeof openRecoveryEditor_==='function') openRecoveryEditor_(); }
-    else if(a==='sync'){ if(typeof fbPull==='function') fbPull(false); }
+    else if(a==='sync'){ if(typeof stravaBackfill==='function') stravaBackfill(); else if(typeof fbPull==='function') fbPull(false); }   // "Sync" = pull rides from Strava (the primary "get data in" action); cloud pull has its own affordance
     else if(a==='gear'){ if(typeof dsShowGear==='function') dsShowGear(); else dsNav('gear'); }
     else if(a==='addrace'){ if(typeof openRaceEditor==='function') openRaceEditor(undefined, dsShowDashboard); }
     else if(a==='events'||a==='calendar'){ dsNav('calendar'); }
@@ -25807,7 +25808,7 @@ function openRideDetailMoreMenu(idx){
   if(old) old.remove();
   var overlay=document.createElement('div');
   overlay.id='ride-more-menu';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:flex-end;justify-content:center';  // >=1000 to clear #desktop-shell (999); at 400 the menu opened BEHIND the desktop shell and read as a dead button
   overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--s1);border-radius:18px 18px 0 0;width:100%;max-width:480px;padding:10px 0 max(10px,env(safe-area-inset-bottom))';
