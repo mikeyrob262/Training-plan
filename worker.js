@@ -22891,8 +22891,9 @@ function openDesktopRideDetail(idx, _noFetch){
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
-        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share</div>'+
-        '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</div>'+
+        // Share + Export removed — neither had a real implementation (a dead button on a primary
+        // surface is the same failure as fake data). Export returns as a GPX/FIT download of the
+        // ride's GPS track once specced; Share is a separate, undecided call.
         '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
       '</div>'+
     '</div>'+
