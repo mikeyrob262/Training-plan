@@ -50,21 +50,6 @@ export default {
           return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
         }
 
-        // TEMPORARY probe route — lists recent activities so the build can find a real structured-ride
-        // id to validate the intervals endpoint against. Removed after the one-time probe; not part of
-        // the client. (Read-only, same auth pattern.)
-        if (_u.pathname === '/api/intervals-activities-probe') {
-          if (request.method !== 'GET') return J({ error: 'method_not_allowed' }, 405);
-          const key = env && env.INTERVALS_API_KEY;
-          const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
-          if (!key) return J({ error: 'not_configured' }, 503);
-          const oldest = _u.searchParams.get('oldest') || '';
-          const newest = _u.searchParams.get('newest') || '';
-          const so = /^\d{4}-\d{2}-\d{2}$/.test(oldest) ? oldest : '';
-          const sn = /^\d{4}-\d{2}-\d{2}$/.test(newest) ? newest : '';
-          const r = await fetch('https://intervals.icu/api/v1/athlete/' + aid + '/activities?oldest=' + so + '&newest=' + sn, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
-          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-        }
 
         // Strava OAuth token exchange (POST). client_secret stays server-side; only
         // the two grants the app uses are honored, and only their whitelisted fields.
