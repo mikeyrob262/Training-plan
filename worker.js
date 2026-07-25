@@ -8473,7 +8473,7 @@ function saveProfile(){
   var mh=document.getElementById('set-maxhr');
   if(n)st.profileName=n.value;
   if(w&&w.value)st.weight=w.value;
-  if(f&&f.value)st.ftp=parseInt(f.value);
+  if(f&&f.value){ st.ftp=parseInt(f.value); if(typeof ftpRecord_==='function') ftpRecord_(st.ftp,null); }
   if(mh&&mh.value)st.maxHR=parseInt(mh.value);
   if(v&&v.value){
     var newVo2=parseFloat(v.value);
@@ -18889,7 +18889,7 @@ function dsShowSettings(){
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:8px">FTP</div>'
     +'<div style="display:flex;gap:8px;align-items:center"><input id="ftp-input" type="number" value="'+(window.st&&window.st.ftp?window.st.ftp:186)+'" style="width:80px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px">'
-    +'<button onclick="if(window.st){window.st.ftp=parseInt(document.getElementById(&#39;ftp-input&#39;).value)||186;sv();fbPush(true);toast(&#39;FTP saved&#39;);}" style="background:#FC4C02;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save</button></div>'
+    +'<button onclick="if(window.st){window.st.ftp=parseInt(document.getElementById(&#39;ftp-input&#39;).value)||186;if(window.ftpRecord_)window.ftpRecord_(window.st.ftp,null);sv();fbPush(true);toast(&#39;FTP saved&#39;);}" style="background:#FC4C02;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save</button></div>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Goals</div>'
@@ -20172,6 +20172,51 @@ function _goalTargets_(){
   return g;
 }
 
+// ==================== FTP history: append-only log over time (Coach V dependency) ====================
+// Every FTP change appends {date, ftp, source}; ftpOn_(date) returns the FTP effective on any date,
+// so a session is priceable to the FTP that was true when it happened. Aug 27 2026 is the block's
+// planned retest — a KNOWN discontinuity where power and zone history change meaning. No fake data:
+// an empty log returns the current st.ftp, and a date before the log uses the FIRST recorded FTP,
+// never an invented past value.
+var _FTP_DEFAULT=186, _FTP_RETEST_DATE='2026-08-27';
+function _ftpToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _ftpHist_(){ if(typeof st==='undefined'||!st) return []; if(!Array.isArray(st.ftpHistory)) st.ftpHistory=[]; return st.ftpHistory; }
+function _ftpSort_(h){ return h.slice().sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); }); }
+// Append (or same-day correct) an FTP entry. No-op when the value equals the current latest, so the
+// log records genuine CHANGES only. source: 'baseline'|'manual'|'retest'.
+function ftpRecord_(ftp, source, dateStr){
+  ftp=parseInt(ftp,10); if(!(ftp>0)) return null;
+  var h=_ftpHist_(), date=dateStr||_ftpToday_();
+  var sorted=_ftpSort_(h), last=sorted.length?sorted[sorted.length-1]:null;
+  // Auto-tag the first change dated on/after the retest as a retest, so Coach V can see the discontinuity.
+  if(!source){ source=(date>=_FTP_RETEST_DATE && (!last || last.date<_FTP_RETEST_DATE))?'retest':'manual'; }
+  // Same-day correction: overwrite today's entry rather than stacking two.
+  var same=null; for(var i=0;i<h.length;i++){ if(h[i].date===date){ same=h[i]; break; } }
+  if(same){ if(same.ftp!==ftp){ same.ftp=ftp; same.source=source; } return same; }
+  if(last && last.ftp===ftp) return last;          // no change -> no new entry
+  var e={date:date, ftp:ftp, source:source}; h.push(e); return e;
+}
+// The FTP effective ON a given date: the latest entry with date <= dateStr. Before the log begins,
+// the first recorded FTP; with no log at all, the current st.ftp, then the default. Never invents.
+function ftpOn_(dateStr){
+  var h=_ftpHist_(); dateStr=dateStr||_ftpToday_();
+  if(!h.length) return parseInt((typeof st!=='undefined'&&st&&st.ftp)||_FTP_DEFAULT,10)||_FTP_DEFAULT;
+  var sorted=_ftpSort_(h), eff=null;
+  for(var i=0;i<sorted.length;i++){ if(sorted[i].date<=dateStr) eff=sorted[i]; else break; }
+  return eff?eff.ftp:sorted[0].ftp;
+}
+// True when a [from,to] date range crosses the planned retest — the discontinuity Coach V flags.
+function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETEST_DATE && String(toDate)>=_FTP_RETEST_DATE; }
+// Reconcile the log with the current st.ftp: seed on first run, append when st.ftp changed outside a
+// recorded write (self-healing, so no write site can silently escape the log). Idempotent.
+function ftpSyncHistory_(){
+  if(typeof st==='undefined'||!st) return;
+  var cur=parseInt(st.ftp||0,10); if(!(cur>0)) return;
+  var h=_ftpHist_();
+  if(!h.length){ ftpRecord_(cur,'baseline'); return; }
+  var sorted=_ftpSort_(h);
+  if(sorted[sorted.length-1].ftp!==cur) ftpRecord_(cur, null);
+}
 // ==================== Mileage integrity: plausibility, honest pace, Strava reconciliation ====================
 // Three pieces, all read-only and all computed — nothing here hardcodes a number or rewrites data.
 //
@@ -33727,6 +33772,8 @@ window.onload = function(){
         // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
         // only gen sessions — so the version guard is an optimisation, not correctness.
         try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
+        // Seed / self-heal the append-only FTP log so no write site can escape it (Coach V dependency).
+        try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
         // self-healing against key-union re-adds) — no separate one-time call needed here.
         try{ showHomeDash(); }catch(e){}
