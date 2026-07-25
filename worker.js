@@ -19353,7 +19353,12 @@ var VIEW_ACTIONS = {
   progress:  function(){ showNutr(); },
   // parseInt would NaN a handle and editRideData's if(!r) return would swallow it silently.
   // rideRefFromAttr_ decides by shape, so it reads both a legacy position and a handle.
-  editRide:  function(a){ if(typeof editRideData==='function') editRideData(rideRefFromAttr_(a)); }
+  editRide:  function(a){ if(typeof editRideData==='function') editRideData(rideRefFromAttr_(a)); },
+  // Title pencil -> the proven single-field rename path (stamps markRideEdited_(['name']) so the
+  // name holds across Strava/Intervals sync). Full multi-field editor lives behind the [...] menu.
+  renameRide:function(a){ if(typeof renameRide==='function') renameRide(rideRefFromAttr_(a)); },
+  // Ride-detail [...] overflow -> the shared more-menu (Edit ride data / Rename / Delete).
+  rideMore:  function(a){ if(typeof openRideDetailMoreMenu==='function') openRideDetailMoreMenu(rideRefFromAttr_(a)); }
 };
 document.addEventListener('click', function(e){
   var el = (e.target && e.target.closest) ? e.target.closest('[data-view]') : null;
@@ -22879,8 +22884,8 @@ function openDesktopRideDetail(idx, _noFetch){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></div>'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
-            '<span style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
-            '<span data-view="editRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
+            '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
+            '<span data-view="renameRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="Rename" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
           '<div style="font-size:11px;color:#64748b;margin-top:2px">'+dtStr+'</div>'+
         '</div>'+
@@ -22888,7 +22893,7 @@ function openDesktopRideDetail(idx, _noFetch){
       '<div style="display:flex;align-items:center;gap:6px">'+
         '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>Share</div>'+
         '<div style="font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export</div>'+
-        '<div style="font-size:13px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
+        '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
       '</div>'+
     '</div>'+
 
@@ -25067,24 +25072,51 @@ function editRideData(idx){
   save.style.cssText='width:100%;padding:13px;background:#2FA8E0;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-top:6px';
   save.onclick=function(){
     var _ef=[];
-    if(nameI.value.trim()){ r.name=nameI.value.trim(); _ef.push('name'); }
-    if(distI.value!==''){ r.distance=parseFloat(distI.value); _ef.push('distance'); }
-    if(durI.value!==''){ r.duration=parseFloat(durI.value); _ef.push('duration'); }
-    if(tssI.value!==''){ r.tss=parseFloat(tssI.value); _ef.push('tss'); }
-    if(npI.value!==''){ r.np=parseFloat(npI.value); _ef.push('np'); }
-    if(apI.value!==''){ r.avgPwr=parseFloat(apI.value); _ef.push('avgPwr'); }
-    if(elevI.value!==''){ r.elev=parseFloat(elevI.value); _ef.push('elev'); }
-    // Recompute avg speed from the corrected distance + duration if both present.
-    if(r.distance && r.duration){ r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10; _ef.push('avgSpeed'); }
-    // Record each manually-changed field so the sync merge lets these corrections
-    // win over a stale remote/Strava copy (and so the mask propagates to devices).
-    markRideEdited_(r, _ef);
-    try{ if(typeof sv==='function') sv(); }catch(e){}
-    try{ if(typeof toast==='function') toast('Ride updated'); }catch(e){}
+    // Write ONLY fields the user actually changed. The inputs are prefilled from the stored ride,
+    // so the old "write every non-empty field" logic coerced untouched values back onto the ride —
+    // notably Duration, which is 0/absent on many rides — AND stamped them markRideEdited_, letting
+    // a wrong/zero value win over every future sync. Compare against the stored value; leave
+    // anything untouched exactly as it is.
+    var nm=nameI.value.trim();
+    if(nm && nm!==(r.name||'')){ r.name=nm; _ef.push('name'); }
+    function numEdit(inp, key){
+      var raw=(inp.value==null?'':String(inp.value)).trim();
+      if(raw==='') return;                             // blank -> do not touch the stored value
+      var v=parseFloat(raw); if(isNaN(v)) return;      // garbage -> ignore
+      var cur=(r[key]!=null && r[key]!=='')?parseFloat(r[key]):null;
+      if(cur!==v){ r[key]=v; _ef.push(key); }          // write + stamp ONLY on a real change
+    }
+    numEdit(distI,'distance');
+    numEdit(durI,'duration');
+    numEdit(tssI,'tss');
+    numEdit(npI,'np');
+    numEdit(apI,'avgPwr');
+    numEdit(elevI,'elev');
+    // Recompute avg speed only when distance or duration actually changed this save.
+    if((_ef.indexOf('distance')>=0 || _ef.indexOf('duration')>=0) && r.distance && r.duration){
+      r.avgSpeed=Math.round((r.distance/(r.duration/60))*10)/10;
+      if(_ef.indexOf('avgSpeed')<0) _ef.push('avgSpeed');
+    }
+    if(_ef.length){
+      // Record each manually-changed field so the sync merge lets these corrections win over a
+      // stale remote/Strava copy (and so the mask propagates to devices).
+      markRideEdited_(r, _ef);
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      try{ if(typeof toast==='function') toast('Ride updated'); }catch(e){}
+    } else {
+      try{ if(typeof toast==='function') toast('No changes'); }catch(e){}
+    }
     overlay.remove();
-    // Refresh the ride detail view so the corrected numbers show.
-    var rdm=document.getElementById('ride-detail-modal'); if(rdm) rdm.remove();
-    try{ openRideDetail(idx); }catch(e){}
+    // Refresh whichever detail is showing. The old code always reopened the MOBILE modal, which on
+    // desktop layered it over the panel; branch on the surface.
+    try{
+      if(typeof isDesktop==='function' && isDesktop()){
+        if(typeof openDesktopRideDetail==='function') openDesktopRideDetail(idx, true);
+      } else {
+        var rdm=document.getElementById('ride-detail-modal'); if(rdm) rdm.remove();
+        if(typeof openRideDetail==='function') openRideDetail(idx);
+      }
+    }catch(e){}
   };
   sheet.appendChild(save);
 
