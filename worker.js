@@ -18361,6 +18361,14 @@ function _cvFtp_(now){
     var e=sorted[ri], prev=(ri>0)?sorted[ri-1].ftp:null;
     return 'New FTP set '+_blockFmtDate_(e.date)+' at '+e.ftp+'W'+((prev!=null&&prev!==e.ftp)?(' (was '+prev+'W)'):'')+'. Every target from here reprices automatically — the watts before and after the retest are not the same currency.';
   }
+  // The current week STRADDLES the retest — the specific case ftpCrossesRetest_ answers. More urgent
+  // than a plain countdown: some of this week's watts change mid-week the moment the number is set.
+  if(typeof ftpCrossesRetest_==='function' && typeof _blockWeekStart_==='function' && typeof _tbDK_==='function'){
+    var ws=_blockWeekStart_(now), we=new Date(ws.getTime()+6*86400000);
+    if(ftpCrossesRetest_(_tbDK_(ws), _tbDK_(we))){
+      return 'This week straddles the retest ('+_blockFmtDate_(_FTP_RETEST_DATE)+'). Sessions before it hold your current FTP; the moment you set the new number, the rest of the week reprices around it.';
+    }
+  }
   var dd=(typeof _blockDaysBetween_==='function' && typeof _blockDay_==='function')?_blockDaysBetween_(_blockDay_(today), _blockDay_(_FTP_RETEST_DATE)):null;
   if(dd!=null && dd>=0 && dd<=21){
     return 'Retest in '+dd+' day'+(dd===1?'':'s')+'. Targets recalculate the moment you set the new number — chase the session in front of you, not a figure that is about to change.';
