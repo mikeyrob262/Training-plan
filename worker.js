@@ -50,6 +50,22 @@ export default {
           return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
         }
 
+        // Intervals.icu activities list (GET) for a date range. Powers the icuId backfill: each activity
+        // carries strava_id + its Intervals i-id, so matching strava_id to a ride's stravaId yields the
+        // i-id the intervals endpoint requires. oldest/newest are date-whitelisted; key stays server-side.
+        if (_u.pathname === '/api/intervals-activities') {
+          if (request.method !== 'GET') return J({ error: 'method_not_allowed' }, 405);
+          const key = env && env.INTERVALS_API_KEY;
+          const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
+          if (!key) return J({ error: 'not_configured' }, 503);
+          const oldest = _u.searchParams.get('oldest') || '';
+          const newest = _u.searchParams.get('newest') || '';
+          const so = /^\d{4}-\d{2}-\d{2}$/.test(oldest) ? oldest : '';
+          const sn = /^\d{4}-\d{2}-\d{2}$/.test(newest) ? newest : '';
+          const r = await fetch('https://intervals.icu/api/v1/athlete/' + aid + '/activities?oldest=' + so + '&newest=' + sn, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+
 
         // Strava OAuth token exchange (POST). client_secret stays server-side; only
         // the two grants the app uses are honored, and only their whitelisted fields.
@@ -5051,6 +5067,83 @@ function runTempBackfill(){
   if(typeof uiConfirm==='function'){
     uiConfirm('Backfill historical temperature for '+list.length+' outdoor rides? Writes r.temp + tempSource to the store, using each ride’s own GPS start location.',{title:'Temperature backfill', okText:'Backfill'}).then(function(ok){ if(ok) go(); else say('Cancelled — nothing written.'); });
   } else go();
+}
+// --------------------------------------------------------------------------
+// icuId BACKFILL (G-intervals) — map each ride to its Intervals.icu activity id (i-prefixed) so the
+// post-ride interval debrief can fetch /activity/{icuId}/intervals with NO per-open lookup. The
+// intervals endpoint REJECTS a raw Strava id (HTTP 422 "Cannot read Strava activities via the API");
+// it needs the i-id. Intervals-CSV rides already carry it as r.id; Strava-synced rides are matched by
+// strava_id from the activities list. Scan-then-commit like the temperature backfill: scan reports the
+// match count and writes nothing; Backfill confirms first. icuId is not a heavy field, so it persists.
+var _icuBackfill={running:false, stop:false, map:null};
+function _icuYears_(){
+  var ys={}, all=(st.rides||[]).concat((typeof getRuns==='function')?getRuns():[]);
+  all.forEach(function(r){ if(r&&r.date){ var y=parseInt(String(r.date).slice(0,4),10); if(y>=2010&&y<=2030) ys[y]=1; } });
+  return Object.keys(ys).map(Number).sort(function(a,b){return a-b;});
+}
+// Rides that could take an icuId and do not have one: an Intervals-native r.id, or a stravaId to match.
+function icuIdBackfillCandidates_(){
+  return (st.rides||[]).filter(function(r){
+    if(!r || r.deleted || r.icuId) return false;
+    if(typeof r.id==='string' && /^i\d+$/.test(r.id)) return true;
+    return r.stravaId!=null && r.stravaId!=='';
+  });
+}
+// Fetch the Intervals activities list year-by-year and build { String(strava_id): 'i<id>' }. Cached on
+// _icuBackfill.map so scan and commit do not double-fetch. Rate-limited; a failed year just maps fewer.
+function _icuFetchMap_(onProgress){
+  var years=_icuYears_(), map={}, i=0;
+  return new Promise(function(resolve){
+    function step(){
+      if(i>=years.length){ resolve(map); return; }
+      var y=years[i++]; if(onProgress) onProgress(i, years.length, Object.keys(map).length);
+      fetch('/api/intervals-activities?oldest='+y+'-01-01&newest='+y+'-12-31',{headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
+        .then(function(r){ return r.ok?r.json():[]; })
+        .then(function(arr){ if(Array.isArray(arr)){ arr.forEach(function(a){ if(a && a.strava_id!=null && a.id!=null) map[String(a.strava_id)]=String(a.id); }); } setTimeout(step, 350); })
+        .catch(function(){ setTimeout(step, 350); });
+    }
+    step();
+  });
+}
+// Resolve a ride's icuId from its own i-id, else the strava_id map. Returns the i-id or null.
+function _icuResolve_(r, map){
+  if(r && typeof r.id==='string' && /^i\d+$/.test(r.id)) return r.id;
+  if(r && r.stravaId!=null && map){ var hit=map[String(r.stravaId)]; if(hit) return hit; }
+  return null;
+}
+function icuIdBackfillScan_(){
+  var el=document.getElementById('icuid-backfill-status'); function say(t){ if(el) el.textContent=t; }
+  var cands=icuIdBackfillCandidates_();
+  if(!cands.length){ say('Every ride already has an icuId (or none can take one) — nothing to scan.'); return; }
+  var direct=cands.filter(function(r){ return typeof r.id==='string' && /^i\d+$/.test(r.id); }).length;
+  say('Fetching your Intervals.icu activity list…');
+  _icuFetchMap_(function(i,n,m){ say('Fetching activities '+i+'/'+n+' years… '+m+' Strava-linked so far'); }).then(function(map){
+    _icuBackfill.map=map;
+    var matched=cands.filter(function(r){ return _icuResolve_(r,map); }).length, viaMap=matched-direct;
+    var sample=cands.filter(function(r){ return _icuResolve_(r,map); }).slice(0,8).map(function(r){ return '  • '+(r.date||'?')+'  '+((r.name&&String(r.name).slice(0,30))||'ride'); });
+    try{ console.log('[icuId] '+matched+' of '+cands.length+' rides match an Intervals activity ('+direct+' direct i-id, '+viaMap+' via strava_id). map='+Object.keys(map).length+String.fromCharCode(10)+sample.join(String.fromCharCode(10))); }catch(e){}
+    say(matched+' of '+cands.length+' rides matched an Intervals activity ('+direct+' already carry an i-id, '+viaMap+' via strava_id). '+Object.keys(map).length+' Strava-linked activities in your Intervals log. Sample in console. Nothing written — click Backfill to commit.');
+  });
+}
+function runIcuIdBackfill_(){
+  var el=document.getElementById('icuid-backfill-status'); function say(t){ if(el) el.textContent=t; }
+  if(_icuBackfill.running){ say('Already running…'); return; }
+  var cands=icuIdBackfillCandidates_();
+  if(!cands.length){ say('Every ride already has an icuId — nothing to backfill.'); return; }
+  function doWrite(map, matched){
+    var wrote=0; cands.forEach(function(r){ var id=_icuResolve_(r,map); if(id){ r.icuId=id; wrote++; } });
+    try{ if(wrote){ sv(); if(typeof fbPush==='function') fbPush(true); } }catch(e){}
+    say('Done — wrote icuId to '+wrote+' rides. Interval debriefs can now fetch with no lookup; rides not in Intervals.icu have no icuId and the debrief declines.');
+  }
+  function commit(map){
+    var matched=cands.filter(function(r){ return _icuResolve_(r,map); }).length;
+    if(!matched){ say('No rides matched an Intervals activity — nothing written.'); return; }
+    if(typeof uiConfirm==='function'){
+      uiConfirm('Write icuId to '+matched+' rides that match an Intervals.icu activity? Maps each ride to its Intervals id so interval debriefs need no lookup.',{title:'icuId backfill', okText:'Backfill'}).then(function(ok){ if(ok) doWrite(map, matched); else say('Cancelled — nothing written.'); });
+    } else doWrite(map, matched);
+  }
+  if(_icuBackfill.map){ commit(_icuBackfill.map); }
+  else { say('Fetching your Intervals.icu activity list…'); _icuFetchMap_(function(i,n,m){ say('Fetching activities '+i+'/'+n+' years…'); }).then(function(map){ _icuBackfill.map=map; commit(map); }); }
 }
 // --------------------------------------------------------------------------
 // BULK GPS BACKFILL — heal every outdoor Strava ride that has no /gps track,
@@ -19845,6 +19938,13 @@ function dsShowSettings(){
     +'<button onclick="tempBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="runTempBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Temps</button>'
     +' <button onclick="stopTempBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Intervals.icu ID Backfill</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Maps each ride to its Intervals.icu activity id (needed for post-ride interval debriefs — the intervals endpoint rejects a raw Strava id). Matches your rides against the Intervals activity list by strava_id and writes r.icuId. Rides already imported from Intervals keep their id directly. <b>Scan</b> reports the match count and writes nothing; <b>Backfill</b> confirms first. Rides not in Intervals.icu simply get no id.</div>'
+    +'<div id="icuid-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="icuIdBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
+    +' <button onclick="runIcuIdBackfill_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill icuIds</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">GPS Track Backfill</div>'
