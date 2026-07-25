@@ -18835,6 +18835,175 @@ function _calScrollFocus_(){
   }catch(e){}
   _calFocusDate=null;   // consumed — a later plain calendar open uses the current month
 }
+
+// ==================== Part 5 — Session detail (step-by-step interval cards) ====================
+// A bike session's step list, built from the structure string the block stored on the session
+// (s.block.struct, e.g. "4x4 min, 3 min recovery") and its power band. The band is passed in ALREADY
+// PRICED to the current st.ftp (targets.powerLo/Hi from _planSessionFromDef_), so a changed FTP
+// reprices every step and there is no second FTP. Interval sessions (NxM min) become warm-up + one
+// step per interval + cool-down; anything else is a single continuous main block. No band (a run or
+// an attempt with no pctFtp) -> watts render as an em dash, never a fabricated number.
+function _sessionSteps_(intent, struct, targets){
+  targets=targets||{}; struct=String(struct||'');
+  var ftp=parseInt(targets.ftp,10)||0;
+  var hasBand=(targets.powerLo!=null && targets.powerHi!=null);
+  var EN='–';   // en dash for ranges
+  var bandTxt=hasBand?(targets.powerLo+EN+targets.powerHi+'W'):'—';
+  var zone=targets.zone||'';
+  // Easy = a recovery-zone ceiling off FTP (50-55%); a warm-up prescription, not a data claim.
+  var easyTxt=ftp?(Math.round(ftp*0.5)+EN+Math.round(ftp*0.55)+'W'):'easy spin';
+  var steps=[];
+  // Leading "NxM" = N intervals of M minutes. No mandatory "min" so a progression struct
+  // ("4x4 progressing to 5x4", "2x20 to 3x15") still breaks into its base prescription — the full
+  // struct text is shown in the header so the progression is never hidden. Ride-only, so the second
+  // number is always minutes (never strength reps).
+  var iv=struct.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  var recM=struct.match(/(\d+)\s*min[^,]*recover/i);               // "3 min recovery"
+  var recTxt=recM?(recM[1]+' min easy'):'recover, easy spin';
+  if(iv && hasBand){
+    var n=parseInt(iv[1],10)||1, work=parseInt(iv[2],10)||0;
+    steps.push({kind:'warmup', title:'Warm-up', meta:'15 min · '+easyTxt, sub:'Easy spin, then a couple of short openers to prime the legs.'});
+    for(var i=1;i<=n;i++){
+      steps.push({kind:'work', title:'Interval '+i+' of '+n,
+        meta:work+' min @ '+bandTxt+(zone?(' · '+zone):''),
+        sub:(i<n?('Then '+recTxt+'.'):'Last one — hold the band to the end, then stop. No junk after.')});
+    }
+    steps.push({kind:'cooldown', title:'Cool-down', meta:'10 min · '+easyTxt, sub:'Spin down, easy.'});
+  } else {
+    // Continuous ride: no interval pattern in the struct. Warm-up / main / cool-down, the main block
+    // carrying the real duration (from the struct range, else the def's durationMin).
+    var dm=struct.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*min/i);
+    var one=struct.match(/(\d+)\s*min/i);
+    var durTxt=dm?(dm[1]+EN+dm[2]+' min'):(one?(one[1]+' min'):(targets.durationMin!=null?(targets.durationMin+' min'):null));
+    steps.push({kind:'warmup', title:'Warm-up', meta:easyTxt, sub:'Ease in — build to the working effort over the first few minutes.'});
+    steps.push({kind:'work', title:'Main effort', meta:(durTxt?(durTxt+' @ '):'')+bandTxt+(zone?(' · '+zone):''), sub:''});
+    steps.push({kind:'cooldown', title:'Cool-down', meta:easyTxt, sub:'Spin down, easy.'});
+  }
+  return steps;
+}
+// Resolve the live st.plan session for a (date, id). Prefers the id; falls back to the day's first
+// live session. Returns null when the day has none.
+function _sessionForDetail_(dateKey, sid){
+  if(typeof st==='undefined' || !st.plan) return null;
+  var nk=(typeof normDate==='function')?normDate(dateKey):dateKey;
+  var day=st.plan[nk]; if(!day||!Array.isArray(day.sessions)) return null;
+  var live=day.sessions.filter(function(s){ return s && !s.deleted; });
+  if(sid){ var m=live.filter(function(s){ return s.id===sid; })[0]; if(m) return m; }
+  return live[0]||null;
+}
+// Router used by the calendar tap: a bike session opens the step-by-step detail; strength / mobility /
+// rest keep the day editor (their own detail — the anatomy view — is a separate effort).
+function openSessionOrEditor_(dateKey, sid){
+  var s=_sessionForDetail_(dateKey, sid);
+  if(s && s.type==='ride' && typeof showSessionDetail_==='function'){ showSessionDetail_(dateKey, s.id||sid||''); }
+  else if(typeof openDayEditor==='function'){ openDayEditor(dateKey, sid||undefined); }
+}
+// The step-by-step session detail overlay. Same sheet on both surfaces (parity). Each step has one
+// check; the single "Mark session complete" button is inert until every step is checked. Marking
+// complete links a recorded ride for the day when one exists (ride-verified, the same evidence the
+// consistency ring reads) and otherwise records an honest self-report that does NOT feed that count.
+function showSessionDetail_(dateKey, sid){
+  var s=_sessionForDetail_(dateKey, sid);
+  if(!s || s.type!=='ride'){ if(typeof openDayEditor==='function') openDayEditor(dateKey, sid||undefined); return; }
+  var esc=function(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var struct=(s.block && s.block.struct) || '';
+  // Reprice at read off CURRENT FTP — the watts shown are live, never the value frozen at generation.
+  var targets=s.targets||{};
+  try{ if(s.intent && typeof _planSessionFromDef_==='function'){ var fr=_planSessionFromDef_(s.intent, (s.block&&s.block.week)||1); if(fr && fr.targets && fr.targets.powerLo!=null) targets=fr.targets; } }catch(e){}
+  var steps=_sessionSteps_(s.intent, struct, targets);
+  var done=(s.status==='completed');
+  var ACC=(typeof sportColor_==='function')?sportColor_('Ride'):'#2FA8E0';
+  // Header context: phase + week, session name, date.
+  var phaseLabel=''; try{ var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null; if(bp) phaseLabel=bp.phaseLabel+' · wk '+bp.weekInPhase; }catch(e){}
+  var dObj=(typeof parseDayKey==='function')?parseDayKey(dateKey):null;
+  var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var dateTxt=dObj?(DAY[dObj.getDay()]+', '+MON[dObj.getMonth()]+' '+dObj.getDate()):dateKey;
+  var note=s.note || (typeof SESSION_DEFS!=='undefined' && SESSION_DEFS[s.intent] && SESSION_DEFS[s.intent].note) || '';
+  // Derived target summary (honest, FTP-independent load): duration / TSS / IF.
+  var summ=[]; if(targets.durationMin!=null) summ.push('~'+targets.durationMin+' min');
+  if(targets.tssTarget!=null) summ.push('TSS ~'+targets.tssTarget);
+  if(targets.ifTarget!=null) summ.push('IF '+targets.ifTarget);
+
+  var old=document.getElementById('session-detail-modal'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='session-detail-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1100;display:flex;align-items:flex-end;justify-content:center';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var sheet=document.createElement('div');
+  sheet.style.cssText='background:var(--s1);width:100%;max-width:480px;border-radius:20px 20px 0 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch';
+
+  var H='';
+  H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">';
+  H+='<div style="min-width:0">';
+  if(phaseLabel) H+='<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+ACC+'">'+esc(phaseLabel)+'</div>';
+  H+='<div style="font-size:20px;font-weight:800;color:var(--t1);line-height:1.15;margin-top:1px">'+esc(s.name||'Session')+'</div>';
+  H+='<div style="font-size:12px;color:var(--t3);margin-top:2px">'+esc(dateTxt)+(struct?(' · '+esc(struct)):'')+'</div>';
+  H+='</div>';
+  H+='<button id="sd-x" style="flex:0 0 auto;background:none;border:none;color:var(--t3);font-size:28px;line-height:1;cursor:pointer;padding:0 4px">&times;</button>';
+  H+='</div>';
+  if(summ.length) H+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;font-weight:700;color:var(--t2)">'+summ.map(function(x){return '<span>'+esc(x)+'</span>';}).join('<span style="color:var(--b1)">|</span>')+'</div>';
+  if(note) H+='<div style="margin-top:10px;padding:9px 12px;border-radius:10px;background:'+ACC+'12;border:1px solid '+ACC+'2e;font-size:12.5px;color:var(--t2);line-height:1.45">'+esc(note)+'</div>';
+  if(done) H+='<div style="margin-top:10px;font-size:12px;font-weight:800;color:#22c55e">Completed ✓</div>';
+  H+='<div id="sd-steps" style="margin-top:12px"></div>';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px">';
+  H+='<span id="sd-prog" style="font-size:12px;font-weight:700;color:var(--t3)"></span>';
+  H+='<button id="sd-done" style="border:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:800;font-family:inherit;color:#08210f;background:#22c55e">'+(done?'Completed ✓':'Mark session complete')+'</button>';
+  H+='</div>';
+  sheet.innerHTML=H; ov.appendChild(sheet); document.body.appendChild(ov);
+  document.getElementById('sd-x').onclick=function(){ ov.remove(); };
+
+  var wrap=document.getElementById('sd-steps');
+  var checks=steps.map(function(){ return done; });
+  var prog=document.getElementById('sd-prog');
+  var btn=document.getElementById('sd-done');
+  var CHK='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#08210f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+  function sync(){
+    var all=checks.every(Boolean);
+    prog.textContent=checks.filter(Boolean).length+' / '+checks.length+' steps';
+    if(done){ btn.disabled=true; btn.style.opacity='1'; btn.style.cursor='default'; return; }
+    btn.disabled=!all; btn.style.opacity=all?'1':'.4'; btn.style.cursor=all?'pointer':'default';
+    btn.style.background=all?'#22c55e':'#1f6f45';
+  }
+  steps.forEach(function(step, i){
+    var kindCol=step.kind==='work'?ACC:'var(--t3)';
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;gap:12px;padding:12px 2px;border-bottom:1px solid var(--b1);align-items:flex-start';
+    var chk=document.createElement('button');
+    chk.style.cssText='flex:0 0 auto;width:26px;height:26px;border-radius:50%;border:2px solid '+ACC+'66;background:transparent;cursor:'+(done?'default':'pointer')+';display:flex;align-items:center;justify-content:center;padding:0;margin-top:1px';
+    function paint(){ chk.style.background=checks[i]?'#22c55e':'transparent'; chk.style.borderColor=checks[i]?'#22c55e':(ACC+'66'); chk.innerHTML=checks[i]?CHK:''; }
+    chk.onclick=function(){ if(done) return; checks[i]=!checks[i]; paint(); sync(); };
+    paint();
+    var body=document.createElement('div'); body.style.cssText='flex:1;min-width:0';
+    body.innerHTML='<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+kindCol+'">'+esc(step.title)+'</div>'
+      +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-top:1px">'+esc(step.meta)+'</div>'
+      +(step.sub?('<div style="font-size:11.5px;color:var(--t3);margin-top:2px;line-height:1.4">'+esc(step.sub)+'</div>'):'');
+    row.appendChild(chk); row.appendChild(body); wrap.appendChild(row);
+  });
+  btn.onclick=function(){ if(btn.disabled) return; _sdCompleteSession_(dateKey, s.id, ov); };
+  sync();
+}
+// Persist a session-detail completion. Explicit self-report of the whole session; links a recorded
+// ride for the day when one exists (ride-verified + scored), otherwise records status only.
+function _sdCompleteSession_(dateKey, sid, ov){
+  if(typeof st==='undefined' || !st.plan){ if(ov) ov.remove(); return; }
+  var nk=(typeof normDate==='function')?normDate(dateKey):dateKey;
+  var day=st.plan[nk]; var s=(day&&Array.isArray(day.sessions))?day.sessions.filter(function(x){ return x&&x.id===sid; })[0]:null;
+  if(!s){ if(ov) ov.remove(); return; }
+  s.status='completed';
+  try{
+    var act=(typeof findActivityForDate==='function')?findActivityForDate(dateKey):null;
+    if(act && act.obj){
+      s.completedRideKey=(typeof rideKey==='function'?rideKey(act.obj):(act.obj.id||null));
+      if(typeof computeRideExecutionScore_==='function') s.executionScore=computeRideExecutionScore_(s, act.obj);
+    }
+  }catch(e){}
+  try{ if(typeof markPlanEdited_==='function'){ var ef=['status']; if(s.completedRideKey!=null) ef.push('completedRideKey'); if(s.executionScore!=null) ef.push('executionScore'); markPlanEdited_(s, ef); } }catch(e){}
+  try{ if(typeof sv==='function') sv(); }catch(e){}
+  try{ if(typeof toast==='function') toast('Session marked complete'); }catch(e){}
+  if(ov) ov.remove();
+  try{ if(typeof isDesktop==='function' && isDesktop()){ if(typeof renderCalendar==='function') renderCalendar(); } else if(typeof showCalendarTab==='function'){ showCalendarTab(); } }catch(e){}
+}
+
 function renderBlockPlan_(container){
   if(!container) return;
   var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
@@ -21293,7 +21462,7 @@ function dsShowCalendar(){
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
       else if(a==='gen'){ calFilterOpen=false; if(typeof openPlanGenerator_==='function') openPlanGenerator_(); }
-      else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
+      else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openSessionOrEditor_==='function') openSessionOrEditor_(pd, psid||undefined); else if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
       else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
         // parseInt would turn a handle into NaN and openRideDetail would silently no-op.
         if(idx!=null) openRideDetail(rideRefFromAttr_(idx));
@@ -32243,6 +32412,15 @@ function openDayEditor(dateKey, targetId){
     sheetEl.appendChild(swRow);
   };
   _mkSwitcher(sheet, modal);
+  // Part 5: a ride session offers the step-by-step interval view. Same overlay on both surfaces;
+  // strength/mobility keep the editor as their detail (the anatomy view is a separate effort).
+  if(sess && sess.type==='ride' && typeof showSessionDetail_==='function'){
+    var sbBtn=document.createElement('button');
+    sbBtn.style.cssText='width:100%;margin:2px 0 12px;padding:11px 14px;border-radius:11px;border:1px solid '+((typeof sportColor_==='function')?sportColor_('Ride'):'#2FA8E0')+'55;background:'+((typeof sportColor_==='function')?sportColor_('Ride'):'#2FA8E0')+'14;color:var(--t1);font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:space-between';
+    sbBtn.innerHTML='<span>Step-by-step session</span><span style="color:'+((typeof sportColor_==='function')?sportColor_('Ride'):'#2FA8E0')+'">›</span>';
+    sbBtn.onclick=function(){ modal.remove(); showSessionDetail_(dateKey, sess.id); };
+    sheet.appendChild(sbBtn);
+  }
   var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
   if(!/^(ride|strength|mobility)$/.test(curType)) curType='ride';
   // Current preset: match the session's intent (or type) to a named preset; unknown -> Other.
