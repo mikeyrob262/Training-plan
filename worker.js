@@ -18629,7 +18629,7 @@ function _blockRoadmap_(now){
     // everything ahead stays grey.
     var lineCol=(i<road.length-1 && _blockDay_(road[i+1].date) && _blockDay_(road[i+1].date).getTime()<today.getTime())?'#22c55e':'#1c2130';
     var line=(i<road.length-1)?('<div style="position:absolute;top:22px;left:50%;right:-50%;height:2px;background:'+lineCol+';z-index:0"></div>'):'';
-    return '<div style="flex:1;position:relative;text-align:center;min-width:0">'+line
+    return '<div onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+m.date+'&#39;)" title="Jump to '+m.label+' on the calendar" style="flex:1;position:relative;text-align:center;min-width:0;cursor:pointer">'+line
       +'<div style="position:relative;z-index:1;width:44px;height:44px;border-radius:50%;'+ring+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+_blockMiIcon_(past?'M20 6L9 17l-5-5':m.icon, col, 20)+'</div>'
       +'<div style="font-size:11px;font-weight:700;color:'+(isNext?'#f59e0b':(past?'#22c55e':'#cbd5e1'))+';margin-top:7px;line-height:1.2">'+m.label+'</div>'
       +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(m.date)+'</div></div>';
@@ -18746,10 +18746,45 @@ function _tbWeekStrip_(now){
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
-    +'<span style="font-size:11px;color:#5b6678">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span></div>'
+    +'<span style="font-size:11px;color:#5b6678">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
+    +'<span onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+todayK+'&#39;)" style="font-size:11px;font-weight:700;color:#FC4C02;cursor:pointer;margin-left:auto">On the calendar &rarr;</span></div>'
     +rows+'</div>';
 }
 
+// ==================== Two-way Plan <-> Calendar navigation (Part 4) ====================
+// One shared pair of helpers, surface-detected via isDesktop(), so the taps behave identically on
+// desktop and mobile. navToCalDate_ stashes a focus date the calendar opens ON (both renderers init
+// their view-month from it) and then scrolls to + flashes the day cell using the data-date hooks the
+// Part 3 cells already carry. The focus is cleared after the flash so a later plain calendar open
+// lands on the current month, not a stale target.
+var _calFocusDate=null;
+function navToCalDate_(dateKey){
+  _calFocusDate=dateKey||null;
+  try{
+    if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsNav==='function') dsNav('calendar'); }
+    else if(typeof showCalendarTab==='function'){ showCalendarTab(); }
+  }catch(e){}
+  try{ setTimeout(_calScrollFocus_, 140); }catch(e){}
+}
+function navToPlan_(){
+  try{
+    if(typeof isDesktop==='function' && isDesktop()){ if(typeof dsNav==='function') dsNav('plan'); }
+    else if(typeof showBlockPlan==='function'){ showBlockPlan(); }
+  }catch(e){}
+}
+function _calScrollFocus_(){
+  var dk=_calFocusDate; if(!dk) return;
+  try{
+    var el=document.querySelector('[data-date="'+dk+'"]');
+    if(el){
+      try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
+      var prev=el.style.boxShadow; el.style.transition='box-shadow .3s';
+      el.style.boxShadow='0 0 0 2px #FC4C02, 0 0 18px rgba(252,76,2,.55)';
+      setTimeout(function(){ try{ el.style.boxShadow=prev||''; }catch(e){} }, 2000);
+    }
+  }catch(e){}
+  _calFocusDate=null;   // consumed — a later plain calendar open uses the current month
+}
 function renderBlockPlan_(container){
   if(!container) return;
   var ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
@@ -18774,6 +18809,7 @@ function renderBlockPlan_(container){
     daysInner+='<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:40px;font-weight:800;color:#FC4C02;letter-spacing:-.03em;line-height:1">'+nm.days+'</span><span style="font-size:13px;color:#94a3b8">day'+(nm.days===1?'':'s')+'</span></div>';
     daysInner+='<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-top:8px">'+nm.m.label+'</div>';
     daysInner+='<div style="font-size:11.5px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(nm.m.date)+(nm.m.note?(' &middot; '+nm.m.note):'')+'</div>';
+    daysInner+='<div onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+nm.m.date+'&#39;)" style="font-size:11px;font-weight:700;color:#FC4C02;margin-top:8px;cursor:pointer">View on calendar &rarr;</div>';
   }else{ daysInner+='<div style="font-size:13px;color:#94a3b8">The block is complete.</div>'; }
   H+=_blockCard_(daysInner);
   // roadmap
@@ -20908,7 +20944,9 @@ function dsShowCalendar(){
   var mc=document.getElementById('ds-content'); if(!mc) return;
 
   var now=new Date();
-  var viewYear=now.getFullYear(), viewMonth=now.getMonth();
+  // Part 4: open ON the focus date's month when arriving from a Plan tap, else the current month.
+  var _cf=(typeof _calFocusDate!=='undefined'&&_calFocusDate&&typeof _blockDay_==='function')?_blockDay_(_calFocusDate):null;
+  var viewYear=_cf?_cf.getFullYear():now.getFullYear(), viewMonth=_cf?_cf.getMonth():now.getMonth();
   var calView='month';
   // Filter state (persisted): which completed activity TYPES show/count, and
   // whether Planned workouts + Completed activities + Rest days are shown.
@@ -21144,11 +21182,11 @@ function dsShowCalendar(){
             if(_psAll.length){
               if(dl.length){
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
                 });
               } else {
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div>'+((ps.block&&ps.block.phase)?('<div onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer">'+ps.block.phase+' &middot; wk '+(ps.block.week||1)+'</div>'):'')+'</div>';
                 });
               }
             }
@@ -31708,7 +31746,8 @@ function showCalendarTab(){
     // as desktop so virtual rides count and totals never double-count. Day cells
     // still show the PLANNED workout; the week column summarizes ACTUAL load.
     var mNow=new Date();
-    var mMonth=mNow.getMonth(), mYear=mNow.getFullYear();
+    var _mcf=(typeof _calFocusDate!=='undefined'&&_calFocusDate&&typeof _blockDay_==='function')?_blockDay_(_calFocusDate):null;   // Part 4: focus month from a Plan tap
+    var mMonth=_mcf?_mcf.getMonth():mNow.getMonth(), mYear=_mcf?_mcf.getFullYear():mNow.getFullYear();
     var monthNamesFull=['January','February','March','April','May','June','July','August','September','October','November','December'];
     var firstDay=new Date(mYear, mMonth, 1);
     var startPad=(firstDay.getDay()===0)?6:firstDay.getDay()-1; // Mon-anchored
