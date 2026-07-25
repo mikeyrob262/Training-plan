@@ -18464,9 +18464,9 @@ function _coachVPanel_(now){
   if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
       +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:#5b6678">'+cv.primary.struct+'</span>'):'')+'</div>';
-    cv.pre.forEach(function(line){ H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.55;margin-top:6px">'+line+'</div>'; });
-    if(cv.form) H+='<div style="font-size:12px;color:'+A+';line-height:1.5;margin-top:8px;font-weight:600">'+cv.form+'</div>';
-    if(cv.expect) H+='<div style="font-size:11.5px;color:#94a3b8;line-height:1.55;margin-top:8px"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
+    cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
+    if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
+    if(cv.expect) H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
     H+='</div>';
   } else if(cv.primary){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -19020,8 +19020,12 @@ function renderBlockPlan_(container){
   var today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   var prog=_blockProgress_(rides, ftp, now);
 
-  // ---- TOP ROW: Days | Roadmap | Progress ----
-  H+='<div class="blk-top" style="margin-top:16px">';
+  // ---- ROW 1: COACH V (Part 6) — the actionable pre-ride read, full width above the reference
+  // strip. One shared panel, both renderers via this mount.
+  try{ if(typeof _coachVPanel_==='function') H+=_coachVPanel_(now); }catch(e){ try{ console.error('[coachV] '+((e&&e.message)||e)); }catch(_e){} }
+
+  // ---- REFERENCE STRIP: Days | Roadmap | Progress (drops below Coach V) ----
+  H+='<div class="blk-top" style="margin-top:14px">';
   // days
   var daysInner=_blockHdr_('Days to next milestone');
   if(nm){
@@ -19054,9 +19058,6 @@ function renderBlockPlan_(container){
     +'<span>'+prog.statusText+'</span></div>';
   H+=_blockCard_(progInner);
   H+='</div>';
-
-  // ---- COACH V (Part 6 core) — one shared panel, both renderers via this mount ----
-  try{ if(typeof _coachVPanel_==='function') H+=_coachVPanel_(now); }catch(e){ try{ console.error('[coachV] '+((e&&e.message)||e)); }catch(_e){} }
 
   // ---- THIS WEEK, PRESCRIBED (Part 2 made visible: the real plan from st.trainingBlock) ----
   H+=_tbWeekStrip_(now);
