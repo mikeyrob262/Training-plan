@@ -11577,6 +11577,11 @@ function fetchLiveIntervalsWellness(callback){
       var ctl=Math.round(data.ctl||data.fitness||0);
       var atl=Math.round(data.atl||data.fatigue||0);
       var tsb=Math.round((data.ctl!=null&&data.atl!=null)?(data.ctl-data.atl):(data.form||0));
+      // Garmin HRV (rMSSD) + resting HR now flow through Intervals wellness (confirmed live from
+      // ~Jul 24 2026). hrvSDNN is null on this account, so read only data.hrv. A missing reading is
+      // a gap, not a zero — keep it null so the baseline never counts a non-measurement.
+      var hrv=(typeof data.hrv==='number' && data.hrv>0)?Math.round(data.hrv):null;
+      var rhr=(typeof data.restingHR==='number' && data.restingHR>0)?Math.round(data.restingHR):null;
 
       var readinessRaw=5+(tsb/6);
       var readiness=Math.max(0,Math.min(10,readinessRaw));
@@ -11606,7 +11611,22 @@ function fetchLiveIntervalsWellness(callback){
       // Fitness/Fatigue/Form) so every part of the app agrees on the same
       // current fitness numbers instead of each recomputing its own,
       // inconsistent version.
-      window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, fetchedAt:Date.now()};
+      window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, hrv:hrv, rhr:rhr, fetchedAt:Date.now()};
+      // Persist today's HRV/RHR into the accumulating daily store the rolling baseline reads
+      // (st.hrvDaily, keyed by Y-M-D). Only real values, and only when the stored value actually
+      // changes, so the ~10-min refetch does not thrash saves. Capped at ~180 days.
+      try{
+        if((hrv!=null || rhr!=null) && typeof st!=='undefined' && st){
+          if(!st.hrvDaily || typeof st.hrvDaily!=='object') st.hrvDaily={};
+          var _prev=st.hrvDaily[todayStr];
+          if(!_prev || _prev.hrv!==hrv || _prev.rhr!==rhr){
+            st.hrvDaily[todayStr]={hrv:hrv, rhr:rhr, at:Date.now()};
+            var _hk=Object.keys(st.hrvDaily);
+            if(_hk.length>180){ _hk.sort(); _hk.slice(0,_hk.length-180).forEach(function(k){ delete st.hrvDaily[k]; }); }
+            if(typeof sv==='function') sv();
+          }
+        }
+      }catch(e){}
       if(callback) callback();
     })
     .catch(function(){
@@ -18421,6 +18441,69 @@ function _cvSlide_(now){
   var gapBase=base?_blockDaysBetween_(_blockDay_(base.date), _blockDay_(chalet.date)):null;
   return 'A missed week slid the retest to '+_blockFmtDate_(retest.date)+', but Chalet Reynard is still '+_blockFmtDate_(chalet.date)+' — the mountain does not move. You now have '+gapNow+' day'+(gapNow===1?'':'s')+' between them'+((gapBase!=null&&gapBase!==gapNow)?(' instead of '+gapBase):'')+'. That compresses the taper; build the recovery around it.';
 }
+// Rolling HRV baseline from the accumulating daily rMSSD values (st.hrvDaily, written by
+// fetchLiveIntervalsWellness). Readiness is ALWAYS vs this baseline, never a single-day read —
+// rMSSD swings day to day (27->38 observed). Window: the last 7 AVAILABLE daily values PRIOR to the
+// asOf day (robust to the feed's gaps), expanding to all-available before 7 exist. Manual entries
+// (st.recoveryLog) are NOT folded into the baseline — a different measurement source; they only fill
+// a null day's current reading downstream. nTotal counts every day WITH an automated value up to
+// asOf (the "N of 14" gate). Returns null-ish fields, never throws, when there is no data.
+function hrvBaseline_(asOfKey){
+  var out={ nTotal:0, todayVal:null, mean:null, sd:null, n:0, asOf:asOfKey };
+  var daily=(typeof st!=='undefined' && st && st.hrvDaily && typeof st.hrvDaily==='object') ? st.hrvDaily : null;
+  if(!daily) return out;
+  var rows=[];
+  for(var k in daily){ if(!Object.prototype.hasOwnProperty.call(daily,k)) continue;
+    var v=daily[k] && daily[k].hrv;
+    if(typeof v==='number' && v>0 && k<=asOfKey) rows.push({date:k, hrv:v}); }
+  rows.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+  out.nTotal=rows.length;
+  var todayRow=rows.filter(function(r){ return r.date===asOfKey; })[0];
+  out.todayVal=todayRow?todayRow.hrv:null;
+  var win=rows.filter(function(r){ return r.date<asOfKey; }).slice(-7);   // last 7 available PRIOR values
+  out.n=win.length;
+  if(win.length>=1){
+    var sum=0; win.forEach(function(r){ sum+=r.hrv; }); var m=sum/win.length; out.mean=m;
+    if(win.length>=2){ var ss=0; win.forEach(function(r){ ss+=(r.hrv-m)*(r.hrv-m); }); out.sd=Math.sqrt(ss/(win.length-1)); }
+  }
+  return out;
+}
+// Coach V's HRV readiness line. Gate (per the build brief):
+//   < 14 accumulated days -> "Establishing baseline - N of 14 days" (count only, no verdict).
+//   >= 14 days            -> readiness vs the rolling baseline (within / above / below ~1 SD).
+//   automated null today  -> fall back to a manual st.recoveryLog entry for the SAME date, labelled.
+//   no reading at all      -> say so; never fabricate a call.
+// Date is derived from the now argument (not real today) so it is testable with simulated dates.
+function _cvHrv_(now){
+  now=now||new Date();
+  var key=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2)+'-'+('0'+now.getDate()).slice(-2);
+  var b=hrvBaseline_(key);
+  // Current reading: automated first; else a manual entry for the same date (the gap-filler).
+  var reading=b.todayVal, src='auto';
+  if(reading==null){
+    try{
+      var man=(typeof st!=='undefined' && st && Array.isArray(st.recoveryLog))
+        ? st.recoveryLog.filter(function(x){ return x && x.date===key && x.hrv!=null; })[0] : null;
+      if(man){ reading=Math.round(man.hrv); src='manual'; }
+    }catch(e){}
+  }
+  var NEED=14;
+  if(b.nTotal<NEED){
+    var line='Establishing HRV baseline — '+b.nTotal+' of '+NEED+' days.';
+    if(reading!=null) line+=' This morning: '+reading+' ms'+(src==='manual'?' (logged manually)':'')+'. No readiness call until the baseline fills.';
+    else line+=' No reading this morning — check tomorrow, or log one manually.';
+    return line;
+  }
+  if(reading==null){ return 'No HRV reading this morning (the watch did not sync). No readiness call today — log one manually if you measured.'; }
+  if(b.mean==null){ return 'HRV this morning: '+reading+' ms. Baseline still forming — no comparison yet.'; }
+  var band=(b.sd!=null && b.sd>0)?b.sd:Math.max(3, b.mean*0.08);   // guard: never divide by a zero SD
+  var z=(reading-b.mean)/band, mean=Math.round(b.mean);
+  var verdict;
+  if(z>=1){ verdict='elevated — well recovered. Green light for the hard session; hit the band with confidence.'; }
+  else if(z<=-1){ verdict='suppressed — your body is still absorbing load. The session stands, but treat the top of the band as optional and stop if it feels flat.'; }
+  else { verdict='in your normal range — recovery is on track. Train as planned.'; }
+  return 'HRV '+reading+' ms'+(src==='manual'?' (logged manually)':'')+' vs a '+mean+' ms baseline — '+verdict;
+}
 function coachV_(dateKey, now){
   now=now||new Date();
   var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
@@ -18438,6 +18521,7 @@ function coachV_(dateKey, now){
     milestone:_cvMilestone_(now),
     ftp:_cvFtp_(now),
     slide:_cvSlide_(now),
+    hrv:_cvHrv_(now),
     tsb:tsb
   };
 }
@@ -18460,6 +18544,7 @@ function _coachVPanel_(now){
     H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
   if(cv.slide){ H+='<div style="font-size:12px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
+  if(cv.hrv){ H+='<div style="font-size:12px;color:#cbd5e1;line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
   // today's session coaching
   if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
