@@ -19332,10 +19332,24 @@ function coachV_(dateKey, now){
   var primary=_cvPrimary_(plan.sessions);
   var t=primary&&primary.rx&&primary.rx.targets, intent=primary&&primary.intent;
   // Post-ride state: once a ride is logged for the day, the pre-ride "what to expect" is stale — the
-  // session already happened. Only for ride-type sessions (a strength/mobility day isn't answered by
-  // a ride import).
-  var isRide=(typeof SESSION_DEFS!=='undefined' && intent && SESSION_DEFS[intent] && (SESSION_DEFS[intent].type==='ride'||SESSION_DEFS[intent].type==='attempt'));
-  var done=false; try{ done=!!(isRide && typeof findActivityForDate==='function' && findActivityForDate(dateKey)); }catch(e){}
+  // session already happened. Gated on BOTH sides:
+  //   session side — only a day whose prescription is a ride flips. A strength/mobility/rest day is
+  //     not answered by a ride import. 'optional' counts: it prescribes "good legs, spin easy",
+  //     i.e. an optional RIDE, so a ride logged on one is that session and the pre-ride copy is
+  //     just as stale. Leaving it out meant Sunday could never flip no matter what was logged.
+  //   activity side — the match must actually BE a ride. findActivityForDate returns rides OR runs,
+  //     so without this an easy run on a threshold day flipped Coach V to "session is in the books"
+  //     and hid the ride prescription. That is the same error as a strength day being answered by a
+  //     ride, just in the other direction.
+  var _cvDef=(typeof SESSION_DEFS!=='undefined' && intent)?SESSION_DEFS[intent]:null;
+  var isRide=!!(_cvDef && (_cvDef.type==='ride' || _cvDef.type==='attempt' || _cvDef.type==='optional'));
+  var done=false;
+  try{
+    if(isRide && typeof findActivityForDate==='function'){
+      var _cvAct=findActivityForDate(dateKey);
+      done=!!(_cvAct && _cvAct.kind==='ride');
+    }
+  }catch(e){}
   return {
     phase:plan.phase, phaseLabel:plan.phaseLabel, weekInPhase:plan.weekInPhase,
     primary:primary, intent:intent, targets:t, done:done,
