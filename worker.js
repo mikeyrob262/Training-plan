@@ -7570,6 +7570,7 @@ var ANATOMY_MAP={
   'Hack Squat':                   { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
   'Band Squat':                   { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
   'Squat':                        { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
+  'Stability Ball Wall Squat':    { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
   'Leg Press':                    { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor'] },
   'Step-Up (Plyo Box)':           { pri:['m-f-quad','m-b-glute-max'], sec:['m-b-glute-med','m-f-adductor'] },
   'Lateral Box Jump to Squat':    { pri:['m-f-quad','m-b-glute-max'], sec:['m-b-glute-med','m-b-gastroc','m-f-adductor'] },
@@ -7627,7 +7628,8 @@ var ANATOMY_ALIAS={
   'stability ball dumbbell press':'Dumbbell press',
   'dumbbell floor press':'Dumbbell press',
   'stability ball db row':'Dumbbell Row',
-  'band hip thrust':'Glute bridge'
+  'band hip thrust':'Glute bridge',
+  'incline dumbbell press':'Dumbbell press'
 };
 var _ANAT_IDX_=null;
 function _anatFor_(name){
