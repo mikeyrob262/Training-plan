@@ -19323,6 +19323,65 @@ function _cvHrv_(now){
   else { verdict='in your normal range — recovery is on track. Train as planned.'; }
   return 'HRV '+reading+' ms'+(src==='manual'?' (logged manually)':'')+' vs a '+mean+' ms baseline — '+verdict;
 }
+// Which sport answers a prescribed session, or '' when nothing does (strength/mobility/rest).
+// Mostly derivable from SESSION_DEFS.type; the exception is the ATTEMPT type, which covers both the
+// cycling attempts and the 10k race, so those are named explicitly rather than guessed at.
+var _CV_RUN_ATTEMPTS={ tenk:1 };
+function _cvWantSport_(intent, def){
+  if(!intent || !def) return '';
+  if(def.type==='run') return 'run';
+  if(def.type==='attempt') return _CV_RUN_ATTEMPTS[intent]?'run':'ride';
+  if(def.type==='ride' || def.type==='optional') return 'ride';
+  return '';
+}
+// Post-session line. Ride copy points at the interval debrief; a run has splits, not intervals, and
+// a race has a result, not a workout debrief.
+function _cvDoneNote_(sport, def){
+  var isRace=!!(def && def.type==='attempt');
+  if(sport==='run') return isRace
+    ? 'Race logged. Check the calendar for your result.'
+    : 'Run logged. Check the calendar for your splits.';
+  return 'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.';
+}
+// One-line recap of the previous day, built ONLY from values actually recorded on the activity.
+// Every figure is omitted when absent rather than defaulted — a missing TSS must read as nothing,
+// never as 0. The closing verdict is bucketed off recorded TSS with fixed thresholds, so it is a
+// restatement of a real number rather than a judgement invented on top of one; no TSS, no verdict.
+function _cvYesterdayLine_(act){
+  if(!act || !act.obj) return '';
+  var o=act.obj, esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
+  var name=String(o.name||'').trim() || (act.sport==='run'?'Run':'Ride');
+  if(name.length>42) name=name.slice(0,41)+'…';
+  var bits=[];
+  var dist=parseFloat(o.distance);
+  if(isFinite(dist) && dist>0) bits.push((Math.round(dist*10)/10)+'mi');
+  var pw=parseFloat(o.avgPwr);
+  if(act.sport!=='run' && isFinite(pw) && pw>0) bits.push(Math.round(pw)+'W avg');
+  var tss=parseFloat(o.tss);
+  var hasTss=isFinite(tss) && tss>0;
+  if(hasTss) bits.push(Math.round(tss)+' TSS');
+  var verdict='';
+  if(hasTss) verdict=(tss>=150)?' Big day — respect the recovery.'
+                   :(tss>=80)?' Solid base work.'
+                   :' Light day, which is the point.';
+  return 'Yesterday: '+esc(name)+(bits.length?(' — '+bits.join(', ')+'.'):'.')+verdict;
+}
+function _cvYesterday_(dateKey){
+  if(typeof activitiesForDate_!=='function' || typeof parseDayKey!=='function') return null;
+  var d=parseDayKey(dateKey); if(isNaN(d.getTime())) return null;
+  d.setDate(d.getDate()-1);
+  var yk=(typeof _tbDK_==='function')?_tbDK_(d):null; if(!yk) return null;
+  var acts=activitiesForDate_(yk).filter(function(a){ return a.sport==='ride'||a.sport==='run'; });
+  if(!acts.length) return null;
+  // Richest first: the entry carrying TSS/power says more than a bare distance row, and a day can
+  // hold both a synced ride and a stub.
+  acts.sort(function(a,b){
+    var sc=function(x){ return (parseFloat(x.obj.tss)>0?2:0)+(parseFloat(x.obj.avgPwr)>0?1:0); };
+    return sc(b)-sc(a);
+  });
+  var line=_cvYesterdayLine_(acts[0]);
+  return line?{line:line, sport:acts[0].sport}:null;
+}
 function coachV_(dateKey, now){
   now=now||new Date();
   var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
@@ -19331,28 +19390,30 @@ function coachV_(dateKey, now){
   var tsb=(fit&&typeof fit.tsb==='number')?fit.tsb:null;
   var primary=_cvPrimary_(plan.sessions);
   var t=primary&&primary.rx&&primary.rx.targets, intent=primary&&primary.intent;
-  // Post-ride state: once a ride is logged for the day, the pre-ride "what to expect" is stale — the
-  // session already happened. Gated on BOTH sides:
-  //   session side — only a day whose prescription is a ride flips. A strength/mobility/rest day is
-  //     not answered by a ride import. 'optional' counts: it prescribes "good legs, spin easy",
-  //     i.e. an optional RIDE, so a ride logged on one is that session and the pre-ride copy is
-  //     just as stale. Leaving it out meant Sunday could never flip no matter what was logged.
-  //   activity side — the match must actually BE a ride. findActivityForDate returns rides OR runs,
-  //     so without this an easy run on a threshold day flipped Coach V to "session is in the books"
-  //     and hid the ride prescription. That is the same error as a strength day being answered by a
-  //     ride, just in the other direction.
+  // Post-session state: once the day's work is logged, the pre-ride "what to expect" is stale.
+  // Gated on BOTH sides, by SPORT rather than by which list the activity came from:
+  //   session side — the day must prescribe something a ride or a run can answer. Strength/mobility/
+  //     rest never flip. 'optional' counts: it prescribes "good legs, spin easy", an optional RIDE.
+  //   activity side — the logged activity's sport must match what the day prescribed. A run on a
+  //     threshold day is not that session, and a ride on an easy-run day is not either.
   var _cvDef=(typeof SESSION_DEFS!=='undefined' && intent)?SESSION_DEFS[intent]:null;
-  var isRide=!!(_cvDef && (_cvDef.type==='ride' || _cvDef.type==='attempt' || _cvDef.type==='optional'));
-  var done=false;
+  var wantSport=_cvWantSport_(intent, _cvDef);
+  var done=false, doneAct=null;
   try{
-    if(isRide && typeof findActivityForDate==='function'){
-      var _cvAct=findActivityForDate(dateKey);
-      done=!!(_cvAct && _cvAct.kind==='ride');
+    if(wantSport && typeof activitiesForDate_==='function'){
+      var _cvActs=activitiesForDate_(dateKey);
+      for(var _ci=0;_ci<_cvActs.length;_ci++){ if(_cvActs[_ci].sport===wantSport){ doneAct=_cvActs[_ci]; break; } }
+      done=!!doneAct;
     }
   }catch(e){}
+  // Yesterday recap: only when today has nothing logged against it yet — a finished session today
+  // owns the panel, and two "here is what happened" lines would compete.
+  var yesterday=null;
+  try{ if(!done) yesterday=_cvYesterday_(dateKey); }catch(e){}
   return {
     phase:plan.phase, phaseLabel:plan.phaseLabel, weekInPhase:plan.weekInPhase,
     primary:primary, intent:intent, targets:t, done:done,
+    doneNote:done?_cvDoneNote_(wantSport, _cvDef):'', yesterday:yesterday,
     pre:primary?_cvPre_(intent, t, primary.struct):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
@@ -19378,6 +19439,11 @@ function _coachVPanel_(now){
     +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:'+P+'">V</span>'
     +'<div><div style="font-size:13px;font-weight:800;color:#f1f5f9">Coach V</div>'
     +'<div style="font-size:10.5px;color:#5b6678">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
+  // Yesterday recap sits above the milestone voice — it is the most recent fact Coach V has, and it
+  // only ever renders when today has nothing logged against it (coachV_ gates that).
+  if(cv.yesterday && cv.yesterday.line){
+    H+='<div style="font-size:12.5px;color:#cbd5e1;line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid #2a3341;overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
+  }
   if(cv.milestone){
     H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
@@ -19387,7 +19453,7 @@ function _coachVPanel_(now){
   if(cv.done){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
       +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
-      +'<div style="font-size:13px;color:#e2e8f0;line-height:1.6;margin-top:8px">Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.</div>'
+      +'<div style="font-size:13px;color:#e2e8f0;line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -33532,27 +33598,51 @@ function _scoreDaySessions_(dateKey){
   if(changed){ try{ if(typeof sv==='function') sv(); }catch(e){} }
 }
 
-// Find a completed activity (ride or run) for a given date key (Y-M-D).
-function findActivityForDate(dateKey){
+// Day match for an activity date. Extracted so findActivityForDate and activitiesForDate_ share ONE
+// rule — a second copy of this comparison is exactly how the timezone bug below would come back.
+// A date-only (or leading-date) string like '2026-07-25' must be compared AS WRITTEN. new Date()
+// treats it as UTC midnight, which rolls back a calendar day in a behind-UTC timezone (Michigan) —
+// so today's ride read as yesterday and Coach V never flipped to its post-ride state. Compare the
+// normalized YYYY-MM-DD directly; only fall back to Date parsing for a genuine timestamp value.
+function _actSameDay_(ds, keyNorm, target){
+  if(!ds) return false;
+  var s=String(ds);
+  var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m){ return ((typeof normDate==='function')?normDate(s.slice(0,10)):s.slice(0,10))===keyNorm; }
+  var d=new Date(s);
+  return d.getFullYear()===target.getFullYear() && d.getMonth()===target.getMonth() && d.getDate()===target.getDate();
+}
+// The SPORT of an activity, which is NOT the array it was found in. st.rides holds every sport —
+// a Strava-imported run lives there too — so 'kind' only ever meant "which list", and reading it as
+// "is a bike ride" let a run satisfy a ride day. Classify off the sport field, same vocabulary the
+// You-vs-You page uses.
+function _actSport_(obj, fallback){
+  var s=(typeof rideSport_==='function')?rideSport_(obj):String((obj&&(obj.sportType||obj.type))||'');
+  s=String(s).replace(/[ _-]/g,'');
+  if(/^(run|trailrun|virtualrun|treadmill)$/i.test(s)) return 'run';
+  if(/^(swim|openwaterswim|opanwaterswim|walk|hike|weighttraining|workout|strength|crossfit|yoga|elliptical|rowing)$/i.test(s)) return 'other';
+  if(!s) return fallback||'ride';
+  return 'ride';
+}
+// EVERY completed activity for a date key (Y-M-D), each tagged with its real sport. Callers that
+// need a specific modality filter on .sport; callers that just want "something happened" take [0].
+function activitiesForDate_(dateKey){
   var target=parseDayKey(dateKey);
   var keyNorm=(typeof normDate==='function')?normDate(dateKey):String(dateKey||'');
-  function sameDay(ds){
-    if(!ds) return false;
-    var s=String(ds);
-    // A date-only (or leading-date) string like '2026-07-25' must be compared AS WRITTEN. new Date()
-    // treats it as UTC midnight, which rolls back a calendar day in a behind-UTC timezone (Michigan) —
-    // so today's ride read as yesterday and Coach V never flipped to its post-ride state. Compare the
-    // normalized YYYY-MM-DD directly; only fall back to Date parsing for a genuine timestamp value.
-    var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if(m){ return ((typeof normDate==='function')?normDate(s.slice(0,10)):s.slice(0,10))===keyNorm; }
-    var d=new Date(s);
-    return d.getFullYear()===target.getFullYear() && d.getMonth()===target.getMonth() && d.getDate()===target.getDate();
-  }
+  var out=[];
   var rides=(st.rides||[]);
-  for(var i=0;i<rides.length;i++){ if(!rides[i].deleted && sameDay(rides[i].date)){ return {kind:'ride', obj:rides[i], idx:i}; } }
+  for(var i=0;i<rides.length;i++){ var r=rides[i];
+    if(r && !r.deleted && _actSameDay_(r.date, keyNorm, target)) out.push({kind:'ride', obj:r, idx:i, sport:_actSport_(r,'ride')}); }
   var runs=(st.runs||[]);
-  for(var j=0;j<runs.length;j++){ if(!runs[j].deleted && sameDay(runs[j].date)){ return {kind:'run', obj:runs[j], idx:j}; } }
-  return null;
+  for(var j=0;j<runs.length;j++){ var u=runs[j];
+    if(u && !u.deleted && _actSameDay_(u.date, keyNorm, target)) out.push({kind:'run', obj:u, idx:j, sport:'run'}); }
+  return out;
+}
+// Find a completed activity (ride or run) for a given date key (Y-M-D). Unchanged semantics: the
+// first st.rides match, else the first st.runs match.
+function findActivityForDate(dateKey){
+  var all=activitiesForDate_(dateKey);
+  return all.length?all[0]:null;
 }
 
 // Tap a day -> open the day-detail editor. Dual-mode:
