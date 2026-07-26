@@ -4887,33 +4887,16 @@ function healStaleLaps_(){
     return n;
   }catch(e){ try{ console.error('[laps] heal: '+((e&&e.message)||e)); }catch(_e){} return 0; }
 }
-// TRACE ONLY (no behaviour change) — one tagged line per decision point on the lap path, so the
-// console shows exactly which gate the ride stops at instead of it being reasoned about again.
-function _lapTrace_(where, r, extra){
-  try{
-    var n=(r&&r.laps&&r.laps.length)||0;
-    var t0=(r&&r.laps&&r.laps[0]&&r.laps[0].time)!=null?r.laps[0].time:'-';
-    console.log('[laps] '+where
-      +' | id='+((r&&r.stravaId)||'-')
-      +' laps='+n+' lap1time='+t0
-      +' src='+((r&&r.lapSource)||'(none)')
-      +' basis='+((r&&r.lapTimeBasis)||'(none)')
-      +' needFix='+((typeof lapsNeedMovingFix_==='function')?lapsNeedMovingFix_(r):'?')
-      +' hasEle='+!!(r&&r.chartEle&&r.chartEle.length)
-      +' hasGps='+!!(r&&r.lats&&r.lats.length)
-      +(extra?(' | '+extra):''));
-  }catch(e){}
-}
 function ensureRideStreams(r){
   if(!r || !r.stravaId) return Promise.resolve(r);
-  _lapTrace_('ensureRideStreams ENTRY', r);
   // Require BOTH streams and GPS before treating the ride as complete — a ride
   // with chartEle but no lats (its /gps entry was never written, or streams were
   // fetched before latlng was added) must still re-fetch to recover the track.
-  if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)){
-    _lapTrace_('EARLY RETURN #1 (streams+GPS present) - cache read AND fetch both skipped', r);
-    return Promise.resolve(r);
-  }
+  // Stale laps count as incomplete too. This gate fires BEFORE the /gps read and before the
+  // second short-circuit below, so without the lap check a ride holding streams + GPS in memory
+  // returned here and the lap mapper was never reached — confirmed on device: 14 laps, no
+  // lapSource, no lapTimeBasis, needFix true, and no Strava request made at all.
+  if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)) return Promise.resolve(r);
   // Downsample to n points for charts; compute maxes on the FULL-res stream.
   function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
   function maxOf(arr,cap){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v<cap && v>m) m=v; } return m||null; }
@@ -4936,12 +4919,7 @@ function ensureRideStreams(r){
     // that does the rewrite was never reached. Forcing one re-fetch repairs the ride and stamps
     // lapTimeBasis, after which this condition is false forever. Garmin laps are already
     // moving-based and are excluded.
-    _lapTrace_('after /gps cache read', r, 'cacheHadLaps='+!!(p&&p.laps));
-    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)){
-      _lapTrace_('EARLY RETURN #2 (cache complete, laps not stale) - no API call', r);
-      return r;
-    }
-    _lapTrace_('proceeding to fetchStravaStreams_', r);
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
@@ -4997,17 +4975,6 @@ function fetchStravaStreams_(r, ds, maxOf){
         // stay wrong forever, since this block only ever ran on rides with no laps. Garmin laps are
         // still never touched: they are authoritative and already moving-based.
         var _lapsStale=(r.lapSource!=='garmin' && r.lapTimeBasis!=='moving');
-        // TRACE ONLY — what the detailed-activity endpoint actually handed back, and whether the
-        // rewrite gate opens. lap[0] raw values answer "does Strava even send moving_time here".
-        try{
-          var _l0=(a&&a.laps&&a.laps[0])||null;
-          _lapTrace_('detailed activity RESPONSE', r,
-            'a='+(a?'obj':'NULL')+' a.laps='+((a&&a.laps)?a.laps.length:'none')
-            +(_l0?(' lap1.moving_time='+_l0.moving_time+' lap1.elapsed_time='+_l0.elapsed_time
-                   +' lap1.distance='+_l0.distance):'')
-            +' | gateOpens='+!!(a && a.laps && a.laps.length && r.lapSource!=='garmin'
-                                && (!(r.laps&&r.laps.length) || _lapsStale)));
-        }catch(_te){}
         if(a && a.laps && a.laps.length && r.lapSource!=='garmin' && (!(r.laps&&r.laps.length) || _lapsStale)){
           r.lapSource='strava';
           r.lapTimeBasis='moving';
@@ -5029,7 +4996,6 @@ function fetchStravaStreams_(r, ds, maxOf){
             };
           }).filter(function(lp){return lp.distance>0||lp.time>0;});
           r.laps=_lapDedupe_(r.laps).slice(0,200);
-          _lapTrace_('REWRITE APPLIED', r);
         }
         // Persist heavy streams to /gps (like FIT), scalar maxes to the blob.
         var payload=gpsPayload_(r);
@@ -24171,9 +24137,6 @@ function openDesktopRideDetail(idx, _noFetch){
   // neither want fires, ensureRideStreams is never called, and the corrected mapper never runs.
   // Self-limiting: the fetch stamps lapTimeBasis='moving' and the predicate goes false for good.
   var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
-  if(typeof _lapTrace_==='function') _lapTrace_('openDesktopRideDetail gate', r,
-    'noFetch='+!!_noFetch+' wantStr='+_wantStr+' wantGps='+_wantGps+' wantLaps='+_wantLaps
-    +' -> willCallEnsure='+!!(!_noFetch && r.stravaId && (_wantStr||_wantGps||_wantLaps)));
   if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
     if(_wantStr) r._streamsTried=true;
     ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx, true); });
