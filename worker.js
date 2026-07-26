@@ -7634,13 +7634,14 @@ function planCardHTML_(s, dateKey){
     // resets to the session. One diagram per card, off the shared renderer, so both surfaces inherit it.
     try{ if(typeof _anatCombined_==='function' && typeof anatomyDiagram_==='function'){
       var _ahl=_anatCombined_(r.exercises);
+      try{ console.log('[anat] planCardHTML_ '+type+' card rendered — '+(r.exercises||[]).length+' exercises, mapped='+_ahl.mapped+', names=['+(r.exercises||[]).map(function(x){return x&&x.name;}).join(', ')+']'); }catch(_le){}
       var _ahlJson=JSON.stringify({pri:_ahl.pri,sec:_ahl.sec,len:_ahl.len}).replace(/"/g,'&quot;');
       lines.push('<div data-anat-card data-anat-hl="'+_ahlJson+'" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)" onclick="event.stopPropagation()">'
         +'<div onclick="if(window.anatReset_)anatReset_(this)" style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;cursor:pointer"><span class="anat-title">Muscles worked</span> <span style="color:var(--b2);text-transform:none;letter-spacing:0">· tap a movement, or here to reset</span></div>'
         +anatomyDiagram_(_ahl)
         +(_ahl.mapped?anatLegend_(_ahl):'<div style="font-size:11px;color:var(--t3);text-align:center;margin-top:6px">Not mapped yet.</div>')
         +'</div>');
-    } }catch(_ae){}
+    } else { try{ console.warn('[anat] mount skipped — _anatCombined_='+(typeof _anatCombined_)+' anatomyDiagram_='+(typeof anatomyDiagram_)); }catch(_le){} } }catch(_ae){ try{ console.error('[anat] diagram mount THREW: '+((_ae&&_ae.message)||_ae)); }catch(_e){} }
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
   }
