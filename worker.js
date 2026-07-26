@@ -7448,12 +7448,20 @@ var ANATOMY_MAP={
 // variants ('Bird dog' vs 'Bird-dog'). Non-alphanumerics collapse to single spaces. Regex whitespace
 // and word-boundary escapes are avoided on purpose — the served template literal eats them.
 function _anatKey_(name){ var s=String(name==null?'':name).toLowerCase().replace(/[^a-z0-9]+/g,' '); return s.replace(/^ +/,'').replace(/ +$/,'').replace(/  +/g,' '); }
+// Spelling aliases ONLY — a legacy surface's name for a movement the map ALREADY holds. This is not
+// a place to add movements: an entry here must resolve to an existing key, so it carries no new
+// muscle assignments. Anything that would need its own anatomy (Bench Press, Back Squat, Plank, the
+// rest of the FBA/FBB/CORE_EX list) stays unmapped until those assignments are authored.
+var ANATOMY_ALIAS={ 'romanian deadlift rdl':'Romanian deadlift' };
 var _ANAT_IDX_=null;
 function _anatFor_(name){
   if(!name) return null;
   if(ANATOMY_MAP[name]) return ANATOMY_MAP[name];
   if(!_ANAT_IDX_){ _ANAT_IDX_={}; for(var n in ANATOMY_MAP){ if(Object.prototype.hasOwnProperty.call(ANATOMY_MAP,n)) _ANAT_IDX_[_anatKey_(n)]=ANATOMY_MAP[n]; } }
-  return _ANAT_IDX_[_anatKey_(name)]||null;
+  var k=_anatKey_(name);
+  if(_ANAT_IDX_[k]) return _ANAT_IDX_[k];
+  var al=ANATOMY_ALIAS[k];
+  return al?(ANATOMY_MAP[al]||null):null;
 }
 // Combine one or more exercises into a single highlight set. Primary wins over secondary (spec §5); a
 // muscle that is 'working' anywhere wins over 'lengthening' (so a mixed movement never reads two ways).
@@ -7559,6 +7567,51 @@ function anatReset_(el){
   var hl={}; try{ hl=JSON.parse(dac.getAttribute('data-anat-hl')||'{}'); }catch(e){}
   _anatSet_(dac, hl, 'Muscles worked');
 }
+// ---- Shared mount --------------------------------------------------------------------------
+// The per-row 'Muscles' control, standalone. exerciseRowHTML_ builds the HTML surfaces' rows, but
+// the logging modals (openStr / openCore) build their rows in the DOM and need the same control —
+// one definition, so the button can't exist on one surface and not another. Returns '' for a
+// movement the map doesn't know, so an unmapped row never offers a button that would do nothing.
+function anatChipHTML_(name){
+  if(typeof _anatFor_!=='function' || !_anatFor_(name)) return '';
+  // encodeURIComponent leaves the apostrophe UNRESERVED and this sits in a quoted JS string inside
+  // an inline onclick, so "World's greatest stretch" would terminate the argument early. Escaped
+  // explicitly; the surrounding quotes are HTML entities, not backslashes (the served template
+  // literal eats those — the trap preflight step 2 exists to catch).
+  var q=encodeURIComponent(String(name||'')).replace(/'/g,'%27');
+  return '<span onclick="event.stopPropagation();if(window.anatFocus_)anatFocus_(this,&#39;'+q+'&#39;)" title="Show muscles worked" style="flex-shrink:0;font-size:10px;font-weight:700;color:#FC4C02;border:1px solid rgba(252,76,2,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Muscles</span>';
+}
+// The body-map block for a list of movements: combined highlight, tap-to-reset title, legend.
+// EVERY surface that lists movements mounts through this. It was inline in planCardHTML_ for the
+// first drop, which is exactly why it never appeared — the strength surfaces Mikey actually opens
+// (the day editor, the logging modals) render their rows elsewhere and inherited nothing.
+// opts.style overrides the container style (the modals want a standalone card, not a card footer).
+// opts.hideUnmapped drops the block entirely when NOTHING in the list maps.
+function anatBlockHTML_(exercises, opts){
+  opts=opts||{};
+  try{
+    if(typeof _anatCombined_!=='function' || typeof anatomyDiagram_!=='function') return '';
+    var list=(exercises||[]).filter(Boolean);
+    if(!list.length) return '';
+    var hl=_anatCombined_(list);
+    if(!hl.mapped && opts.hideUnmapped) return '';
+    var json=JSON.stringify({pri:hl.pri,sec:hl.sec,len:hl.len}).replace(/"/g,'&quot;');
+    var style=opts.style||'margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)';
+    return '<div data-anat-card data-anat-hl="'+json+'" style="'+style+'" onclick="event.stopPropagation()">'
+      +'<div onclick="if(window.anatReset_)anatReset_(this)" style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;cursor:pointer"><span class="anat-title">Muscles worked</span> <span style="color:var(--b2);text-transform:none;letter-spacing:0">&middot; tap a movement, or here to reset</span></div>'
+      +anatomyDiagram_(hl)
+      +(hl.mapped?anatLegend_(hl):'<div style="font-size:11px;color:var(--t3);text-align:center;margin-top:6px">Not mapped yet.</div>')
+      +'</div>';
+  }catch(e){ try{ console.error('[anat] block mount threw: '+((e&&e.message)||e)); }catch(_e){} return ''; }
+}
+// DOM node form, for the two modals that build their sheets with createElement.
+function anatBlockEl_(exercises, opts){
+  var html=anatBlockHTML_(exercises, opts); if(!html) return null;
+  var w=document.createElement('div'); w.innerHTML=html; return w.firstChild;
+}
+// Name list -> the {name:...} shape the map reader expects. The legacy modals hold their movements
+// as positional arrays (["Goblet Squat","3","12","cue"]), not objects.
+function anatNamesToEx_(names){ return (names||[]).map(function(n){ return {name:(n&&n.name!=null)?n.name:n}; }); }
 
 function exerciseRowHTML_(e){
   if(!e) return '';
@@ -7576,8 +7629,8 @@ function exerciseRowHTML_(e){
     +'<span style="color:var(--t1);flex:1;min-width:0">'+esc(e.name)+'</span>'
     +'<span style="color:var(--t3);white-space:nowrap">'+d+'</span>'
     // Muscle-focus tap — swaps the card's body map to THIS movement (spec §5), alongside Watch, off the
-    // shared row renderer so it can never be dropped on one surface. Shown only when the movement maps.
-    +((typeof _anatFor_==='function' && _anatFor_(e.name)) ? ('<span onclick="event.stopPropagation();if(window.anatFocus_)anatFocus_(this,&#39;'+q+'&#39;)" title="Show muscles worked" style="flex-shrink:0;font-size:10px;font-weight:700;color:#FC4C02;border:1px solid rgba(252,76,2,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Muscles</span>') : '')
+    // shared chip builder so it can never be dropped on one surface. Empty when the movement is unmapped.
+    +((typeof anatChipHTML_==='function')?anatChipHTML_(e.name):'')
     +'<span onclick="event.stopPropagation();watchExercise_(&#39;'+q+'&#39;)" title="Watch a demo"'
     +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>'
     +'</div>';
@@ -7631,17 +7684,8 @@ function planCardHTML_(s, dateKey){
     }).join(''));
     if(_cues.length) lines.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+esc(_cues.join('; '))+'</div>');
     // Body map — the session's COMBINED muscle coverage; each row taps to focus one movement, the title
-    // resets to the session. One diagram per card, off the shared renderer, so both surfaces inherit it.
-    try{ if(typeof _anatCombined_==='function' && typeof anatomyDiagram_==='function'){
-      var _ahl=_anatCombined_(r.exercises);
-      try{ console.log('[anat] planCardHTML_ '+type+' card rendered — '+(r.exercises||[]).length+' exercises, mapped='+_ahl.mapped+', names=['+(r.exercises||[]).map(function(x){return x&&x.name;}).join(', ')+']'); }catch(_le){}
-      var _ahlJson=JSON.stringify({pri:_ahl.pri,sec:_ahl.sec,len:_ahl.len}).replace(/"/g,'&quot;');
-      lines.push('<div data-anat-card data-anat-hl="'+_ahlJson+'" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)" onclick="event.stopPropagation()">'
-        +'<div onclick="if(window.anatReset_)anatReset_(this)" style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;cursor:pointer"><span class="anat-title">Muscles worked</span> <span style="color:var(--b2);text-transform:none;letter-spacing:0">· tap a movement, or here to reset</span></div>'
-        +anatomyDiagram_(_ahl)
-        +(_ahl.mapped?anatLegend_(_ahl):'<div style="font-size:11px;color:var(--t3);text-align:center;margin-top:6px">Not mapped yet.</div>')
-        +'</div>');
-    } else { try{ console.warn('[anat] mount skipped — _anatCombined_='+(typeof _anatCombined_)+' anatomyDiagram_='+(typeof anatomyDiagram_)); }catch(_le){} } }catch(_ae){ try{ console.error('[anat] diagram mount THREW: '+((_ae&&_ae.message)||_ae)); }catch(_e){} }
+    // resets to the session. Off the shared mount, same as every other surface.
+    if(typeof anatBlockHTML_==='function') lines.push(anatBlockHTML_(r.exercises));
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
   }
@@ -8279,7 +8323,14 @@ function openStr(letter,w){
       });
     })(ei,sel);
 
-    exhdr.appendChild(exinfo);exhdr.appendChild(sel);
+    // Muscles chip, same control the HTML surfaces get. It sits beside the Swap select and is
+    // re-rendered by swEx when the movement changes, so it always describes the CURRENT name.
+    var exright=document.createElement('div');
+    exright.style.cssText='display:flex;align-items:center;gap:6px;flex-shrink:0';
+    var chip=document.createElement('span'); chip.className='anat-chip'; chip.id='ac_'+letter+'_'+ei;
+    chip.innerHTML=(typeof anatChipHTML_==='function')?anatChipHTML_(ex[0]):'';
+    exright.appendChild(chip); exright.appendChild(sel);
+    exhdr.appendChild(exinfo);exhdr.appendChild(exright);
     card.appendChild(exhdr);
 
     // Column headers
@@ -8334,6 +8385,16 @@ function openStr(letter,w){
     sheet.appendChild(card);
   });
 
+  // Body map for the whole session — combined coverage of every movement in this Full Body
+  // block, each row's Muscles chip focuses one. Mounted on the sheet so _anatDac_ resolves it
+  // from any exercise card (chip -> header -> .ex-c -> sheet, well inside its 8-step walk).
+  // id so swEx can repaint it when a movement is swapped out.
+  if(typeof anatBlockEl_==='function'){
+    var _anB=anatBlockEl_((typeof anatNamesToEx_==='function')?anatNamesToEx_(exs.map(function(x){return x[0];})):[],
+      {style:'background:var(--s2);margin:8px 16px;border-radius:12px;border:1px solid var(--b1);padding:12px 14px'});
+    if(_anB){ _anB.setAttribute('id','anat-str-'+letter); sheet.appendChild(_anB); }
+  }
+
   // Finish button
   var finbtn=document.createElement('button');
   finbtn.className='fin-btn';finbtn.textContent='Finish Workout v';
@@ -8382,7 +8443,23 @@ function togSet(l,ei,si){
 
 
 
-function swEx(l,ei,v){if(!v)return;var e=document.getElementById('en_'+l+'_'+ei);if(e)e.textContent=v;}
+function swEx(l,ei,v){
+  if(!v)return;
+  var e=document.getElementById('en_'+l+'_'+ei);if(e)e.textContent=v;
+  // The swapped-in movement has its own muscle profile — repaint this row's chip and the
+  // session diagram, or both would keep describing the movement that is no longer prescribed.
+  try{
+    var chip=document.getElementById('ac_'+l+'_'+ei);
+    if(chip) chip.innerHTML=(typeof anatChipHTML_==='function')?anatChipHTML_(v):'';
+    var host=document.getElementById('anat-str-'+l);
+    if(host && typeof anatBlockEl_==='function'){
+      var names=[]; var base=(l==='A')?FBA:FBB;
+      for(var i=0;i<base.length;i++){ var nm=document.getElementById('en_'+l+'_'+i); names.push(nm?nm.textContent:base[i][0]); }
+      var next=anatBlockEl_(anatNamesToEx_(names), {style:host.getAttribute('style')||''});
+      if(next){ next.setAttribute('id','anat-str-'+l); host.parentNode.replaceChild(next, host); }
+    }
+  }catch(_e){ try{ console.error('[anat] swap repaint: '+((_e&&_e.message)||_e)); }catch(_e2){} }
+}
 
 function savStr(l){
   var s=ws(curSW);if(!s.str)s.str={};if(!s.str[l])s.str[l]={};
@@ -28814,6 +28891,12 @@ function openCore(w){
     var extip = document.createElement('div'); extip.className = 'ex-tip'; extip.textContent = ex[3];
     exinfo.appendChild(exnm); exinfo.appendChild(extip);
     exhdr.appendChild(exinfo);
+    // Muscles chip — same control as every other movement list. Core has no swap, so it is
+    // built once and never repainted.
+    if(typeof anatChipHTML_==='function'){
+      var cchip = document.createElement('span'); cchip.innerHTML = anatChipHTML_(ex[0]);
+      if(cchip.innerHTML) exhdr.appendChild(cchip);
+    }
     card.appendChild(exhdr);
 
     var colhdr = document.createElement('div'); colhdr.className = 'set-hr';
@@ -28873,6 +28956,13 @@ function openCore(w){
     }
     sheet.appendChild(card);
   });
+
+  // Body map for the core session — combined coverage across every movement in the sheet.
+  if(typeof anatBlockEl_==='function'){
+    var _anC=anatBlockEl_((typeof anatNamesToEx_==='function')?anatNamesToEx_(CORE_EX.map(function(x){return x[0];})):[],
+      {style:'background:var(--s2);margin:8px 16px;border-radius:12px;border:1px solid var(--b1);padding:12px 14px'});
+    if(_anC) sheet.appendChild(_anC);
+  }
 
   var finbtn = document.createElement('button');
   finbtn.className = 'fin-btn'; finbtn.textContent = 'Finish Core v';
@@ -33611,8 +33701,17 @@ function openDayEditor(dateKey, targetId){
         if(_dl.length) rows.push('<div style="font-size:12px;color:var(--t2);margin-top:2px">'+_dl.join(' · ')+'</div>');
       } else if((type==='strength'||type==='mobility') && ex.length){
         var _ec=[];
-        rows.push(ex.map(function(e){ if(e.loadCue && _ec.indexOf(e.loadCue)<0) _ec.push(e.loadCue); var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)'):(e.pct1RM?(e.pct1RM+'% 1RM'):''); var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):''); return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;gap:10px"><span style="color:var(--t1)">'+_esc_(e.name)+'</span><span style="color:var(--t3);white-space:nowrap">'+d+'</span></div>'; }).join(''));
+        // Rows come off the SHARED renderer (exerciseRowHTML_) rather than a private copy of the
+        // same markup. The private copy is why the Muscles and Watch controls were missing here:
+        // the day editor is the strength/mobility DETAIL surface — openSessionOrEditor_ routes
+        // both types straight to it — so it was the one place the buttons mattered most.
+        rows.push(ex.map(function(e){
+          if(e.loadCue && _ec.indexOf(e.loadCue)<0) _ec.push(e.loadCue);
+          return (typeof exerciseRowHTML_==='function')?exerciseRowHTML_(e):'';
+        }).join(''));
         if(_ec.length) rows.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+_esc_(_ec.join('; '))+'</div>');
+        // Body map for the prescription, same block every other surface gets.
+        if(typeof anatBlockHTML_==='function') rows.push(anatBlockHTML_(ex));
       } else if(type==='rest'){
         rows.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
       }
