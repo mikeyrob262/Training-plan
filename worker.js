@@ -20304,6 +20304,18 @@ function _calScrollFocus_(){
 // reprices every step and there is no second FTP. Interval sessions (NxM min) become warm-up + one
 // step per interval + cool-down; anything else is a single continuous main block. No band (a run or
 // an attempt with no pctFtp) -> watts render as an em dash, never a fabricated number.
+// The interval pattern in a struct string ("4x4 min, 3 min recovery" / "2x20 to 3x15"). ONE parser,
+// shared by the step list and the .zwo builder — two copies of these regexes would eventually
+// disagree about how many intervals a session has, and the file would not match the screen.
+// Leading "NxM" = N intervals of M minutes; the second number is always minutes on a ride.
+function _structIntervals_(struct){
+  var s=String(struct||'');
+  var iv=s.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  if(!iv) return null;
+  var recM=s.match(/(\d+)\s*min[^,]*recover/i);
+  return { n:(parseInt(iv[1],10)||1), workMin:(parseInt(iv[2],10)||0),
+           recMin:(recM?(parseInt(recM[1],10)||null):null) };
+}
 function _sessionSteps_(intent, struct, targets){
   targets=targets||{}; struct=String(struct||'');
   var ftp=parseInt(targets.ftp,10)||0;
@@ -20318,11 +20330,13 @@ function _sessionSteps_(intent, struct, targets){
   // ("4x4 progressing to 5x4", "2x20 to 3x15") still breaks into its base prescription — the full
   // struct text is shown in the header so the progression is never hidden. Ride-only, so the second
   // number is always minutes (never strength reps).
-  var iv=struct.match(/(\d+)\s*[x×]\s*(\d+)/i);
-  var recM=struct.match(/(\d+)\s*min[^,]*recover/i);               // "3 min recovery"
-  var recTxt=recM?(recM[1]+' min easy'):'recover, easy spin';
+  // typeof-guarded like every other cross-function call here: unguarded, a missing parser throws
+  // out of _sessionSteps_ and takes the whole session-detail sheet with it.
+  var _si=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+  var iv=_si?[null,String(_si.n),String(_si.workMin)]:null;
+  var recTxt=(_si&&_si.recMin!=null)?(_si.recMin+' min easy'):'recover, easy spin';
   if(iv && hasBand){
-    var n=parseInt(iv[1],10)||1, work=parseInt(iv[2],10)||0;
+    var n=_si.n, work=_si.workMin;
     steps.push({kind:'warmup', title:'Warm-up', meta:'15 min · '+easyTxt, sub:'Easy spin, then a couple of short openers to prime the legs.'});
     for(var i=1;i<=n;i++){
       steps.push({kind:'work', title:'Interval '+i+' of '+n,
@@ -20353,6 +20367,96 @@ function _sessionMoveSteps_(exercises){
     return { kind:'move', name:e.name, title:String(e.name||'Movement'), meta:(rx||'—'),
              sub:(e.loadCue||''), chips:true };
   });
+}
+// ==================== .zwo export (Zwift custom workout) ====================
+// Builds a valid Zwift workout file from the SAME prescription the app shows. Zwift stores power as
+// a fraction of FTP, so every value here is watts/FTP off the FTP in force for that date — the same
+// repricing rule as the watt bands on screen. Change FTP and a regenerated file moves with it.
+// Returns null when no honest ERG target exists (a group ride has no ceiling to hold, and a session
+// with no band cannot be turned into one) rather than inventing a number for the trainer to chase.
+var _ZWO_WARM_SEC=600, _ZWO_COOL_SEC=300, _ZWO_REC_PWR=0.55;
+function _zwoEsc_(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&apos;'; }); }
+function _zwoPwr_(w, ftp){ return (ftp>0 && w>0) ? (Math.round(w/ftp*1000)/1000) : null; }
+function _zwoFor_(s, dateKey){
+  try{
+    if(!s || s.type!=='ride') return null;
+    var intent=s.intent||'';
+    if(intent==='group') return null;                 // no ERG target makes sense for a group ride
+    // Derive-at-read, exactly like the session detail sheet.
+    var t=s.targets||{};
+    try{ if(intent && typeof _planSessionFromDef_==='function'){
+      var fr=_planSessionFromDef_(intent,(s.block&&s.block.week)||1);
+      if(fr && fr.targets && fr.targets.powerLo!=null) t=fr.targets; } }catch(e){}
+    var lo=parseFloat(t.powerLo), hi=parseFloat(t.powerHi);
+    if(!(lo>0) || !(hi>0)) return null;               // no band -> no ERG target
+    var ftp=parseFloat(t.ftp);
+    if(!(ftp>0) && typeof ftpOn_==='function') ftp=parseFloat(ftpOn_(dateKey));
+    if(!(ftp>0)) ftp=parseFloat((typeof st!=='undefined'&&st&&st.ftp)||0);
+    if(!(ftp>0)) return null;                         // cannot express power without an FTP
+    var mid=_zwoPwr_((lo+hi)/2, ftp);
+    if(mid==null) return null;
+    var struct=(s.block&&s.block.struct)||'';
+    var iv=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+    var blocks=[], warm=_zwoPwr_(lo*0.62,ftp);
+    if(iv && iv.workMin>0 && (intent==='vo2')){
+      // Repeated short efforts -> one IntervalsT block, which is what Zwift's ERG follows cleanly.
+      blocks.push("<Warmup Duration='"+_ZWO_WARM_SEC+"' PowerLow='0.5' PowerHigh='0.75'/>");
+      blocks.push("<IntervalsT Repeat='"+iv.n+"' OnDuration='"+(iv.workMin*60)
+        +"' OffDuration='"+((iv.recMin!=null?iv.recMin:3)*60)+"' OnPower='"+mid+"' OffPower='"+_ZWO_REC_PWR+"'/>");
+      blocks.push("<Cooldown Duration='"+_ZWO_COOL_SEC+"' PowerLow='0.75' PowerHigh='0.4'/>");
+    } else if(iv && iv.workMin>0 && intent==='threshold'){
+      // Long blocks are written out individually so the recovery between them is explicit.
+      blocks.push("<Warmup Duration='"+_ZWO_WARM_SEC+"' PowerLow='0.5' PowerHigh='0.75'/>");
+      for(var i=0;i<iv.n;i++){
+        blocks.push("<SteadyState Duration='"+(iv.workMin*60)+"' Power='"+mid+"'/>");
+        if(i<iv.n-1) blocks.push("<SteadyState Duration='"+((iv.recMin!=null?iv.recMin:5)*60)+"' Power='"+_ZWO_REC_PWR+"'/>");
+      }
+      blocks.push("<Cooldown Duration='"+_ZWO_COOL_SEC+"' PowerLow='0.75' PowerHigh='0.4'/>");
+    } else {
+      // Continuous ride (Z2, recovery, long): one steady block at the band midpoint for the whole
+      // prescribed duration. No warm-up/cool-down blocks — they would be ridden at the same
+      // intensity anyway, and adding them would lengthen the session beyond what was prescribed.
+      var dm=parseFloat(t.durationMin);
+      if(!(dm>0)){ var m=struct.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*min/i)||struct.match(/(\d+)\s*min/i);
+        if(m) dm=parseInt(m[1],10); }
+      if(!(dm>0)) return null;                        // no duration -> nothing to write
+      blocks.push("<SteadyState Duration='"+Math.round(dm*60)+"' Power='"+mid+"'/>");
+    }
+    if(!blocks.length) return null;
+    var nm=(s.name||intent||'Session');
+    var bp=null; try{ bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null; }catch(e){}
+    var desc=(bp?(bp.phaseLabel+' - week '+bp.weekInPhase+' - '):'')+intent
+      +' - '+Math.round(lo)+'-'+Math.round(hi)+'W at FTP '+Math.round(ftp)
+      +(struct?(' - '+struct):'');
+    // NL via fromCharCode, not a backslash-n literal: the whole file is served inside one template
+    // literal, so a backslash-n here becomes a REAL newline at serve time and splits the string
+    // across two lines — "Invalid or unexpected token" at load. Same trap as the backtick rule.
+    var NL=String.fromCharCode(10);
+    var xml=['<workout_file>',
+      '  <name>'+_zwoEsc_(nm)+'</name>',
+      '  <description>'+_zwoEsc_(desc)+'</description>',
+      '  <sportType>bike</sportType>',
+      '  <workout>']
+      .concat(blocks.map(function(b){ return '    '+b; }))
+      .concat(['  </workout>','</workout_file>','']).join(NL);
+    var fn=String(nm).replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
+    return { xml:xml, name:nm, filename:(dateKey||'workout')+'-'+(fn||'session')+'.zwo',
+             ftp:Math.round(ftp), lo:Math.round(lo), hi:Math.round(hi), blocks:blocks.length };
+  }catch(e){ try{ console.error('[zwo] '+((e&&e.message)||e)); }catch(_e){} return null; }
+}
+function _zwoDownload_(dateKey, sid){
+  try{
+    var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
+    var z=_zwoFor_(s, dateKey);
+    if(!z){ if(typeof toast==='function') toast('No ERG target for this session'); return; }
+    var blob=new Blob([z.xml], {type:'application/xml'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a'); a.href=url; a.download=z.filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ document.body.removeChild(a); URL.revokeObjectURL(url); }catch(e){} }, 0);
+    if(typeof toast==='function') toast('Saved '+z.filename);
+  }catch(e){ try{ if(typeof toast==='function') toast('Could not build the workout file'); }catch(_e){} }
 }
 // Resolve the live st.plan session for a (date, id). Prefers the id; falls back to the day's first
 // live session. Returns null when the day has none.
@@ -20513,6 +20617,22 @@ function showSessionDetail_(dateKey, sid){
   if(summ.length) H+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;font-weight:700;color:var(--t2)">'+summ.map(function(x){return '<span>'+esc(x)+'</span>';}).join('<span style="color:var(--b1)">|</span>')+'</div>';
   if(note) H+='<div style="margin-top:10px;padding:9px 12px;border-radius:10px;background:'+ACC+'12;border:1px solid '+ACC+'2e;font-size:12.5px;color:var(--t2);line-height:1.45">'+esc(note)+'</div>';
   if(done) H+='<div style="margin-top:10px;font-size:12px;font-weight:800;color:#22c55e">Completed ✓</div>';
+  // Zwift export — only when the session actually resolves to an ERG target (_zwoFor_ returns null
+  // for a group ride, a session with no band, or one with no FTP to express power against), so the
+  // button is never offered for a file that would be a guess.
+  var _zw=(isRide && typeof _zwoFor_==='function')?_zwoFor_(s, dateKey):null;
+  if(_zw){
+    var BS='&#92;';   // literal backslashes are stripped by the served template literal
+    H+='<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:'+ACC+'10;border:1px solid '+ACC+'2e">'
+      +'<div id="sd-zwo" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+ACC+';cursor:pointer">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+ACC+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>'
+      +'Download for Zwift (.zwo)</div>'
+      +'<div style="font-size:11px;color:var(--t3);line-height:1.5;margin-top:6px">'
+      +'ERG will hold '+_zw.lo+'&ndash;'+_zw.hi+'W (built off FTP '+_zw.ftp+'). Put the file in '
+      +'<b style="color:var(--t2)">Documents'+BS+'Zwift'+BS+'Workouts'+BS+'&lt;YourZwiftID&gt;'+BS+'</b> '
+      +'and restart Zwift &mdash; it appears under Custom Workouts.</div>'
+      +'</div>';
+  }
   H+='<div id="sd-steps" style="margin-top:12px"></div>';
   // ONE mark-complete button per session — the only one in this sheet, gated on every step being
   // ticked. Edit sits beside it as a plain link so the day editor stays reachable now that the
@@ -20528,6 +20648,8 @@ function showSessionDetail_(dateKey, sid){
   document.getElementById('sd-x').onclick=function(){ ov.remove(); };
   (function(){ var ed=document.getElementById('sd-edit'); if(!ed) return;
     ed.onclick=function(){ ov.remove(); if(typeof openDayEditor==='function') openDayEditor(dateKey, s.id||undefined); }; })();
+  (function(){ var zb=document.getElementById('sd-zwo'); if(!zb) return;
+    zb.onclick=function(){ if(typeof _zwoDownload_==='function') _zwoDownload_(dateKey, s.id||''); }; })();
 
   var wrap=document.getElementById('sd-steps');
   var checks=steps.map(function(){ return done; });
