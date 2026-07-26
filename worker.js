@@ -4670,7 +4670,11 @@ function gpsPayload_(r){
   if(r.chartHR)  p.chartHR  = r.chartHR;
   if(r.chartEle) p.chartEle = r.chartEle;
   if(r.chartCad) p.chartCad = r.chartCad;
-  if(r.laps && r.laps.length) p.laps = r.laps;
+  // lapSource/lapTimeBasis travel WITH the laps. Without them the cache hands back a lap array with
+  // no provenance, so a stale elapsed-time set reads as already-corrected and is never rewritten.
+  if(r.laps && r.laps.length){ p.laps = r.laps;
+    if(r.lapSource) p.lapSource = r.lapSource;
+    if(r.lapTimeBasis) p.lapTimeBasis = r.lapTimeBasis; }
   return Object.keys(p).length ? p : null;
 }
 // Douglas-Peucker: simplify a [lat,lon] track by KEEPING the points that carry
@@ -4847,10 +4851,19 @@ function ensureRideStreams(r){
       if(p.chartHR)  r.chartHR=p.chartHR;
       if(p.chartEle) r.chartEle=p.chartEle;
       if(p.chartCad) r.chartCad=p.chartCad;
-      if(p.laps) r.laps=p.laps;
+      if(p.laps){ r.laps=p.laps;
+        if(p.lapSource) r.lapSource=p.lapSource;
+        if(p.lapTimeBasis) r.lapTimeBasis=p.lapTimeBasis; }
     }
     evenTrack_(r);                                          // never let lats/lons drift
-    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)) return r; // cache hit (streams + GPS) — no API call
+    // Stale laps make the cache INCOMPLETE. Strava laps stored before the moving-time fix carry
+    // elapsed times (24:56 where the watch said 19:16), and this short-circuit is why correcting the
+    // mapper alone did nothing for rides already imported: streams + GPS were cached, so the fetch
+    // that does the rewrite was never reached. Forcing one re-fetch repairs the ride and stamps
+    // lapTimeBasis, after which this condition is false forever. Garmin laps are already
+    // moving-based and are excluded.
+    var _lapsStale=!!(r.stravaId && r.lapSource==='strava' && r.lapTimeBasis!=='moving');
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !_lapsStale) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
