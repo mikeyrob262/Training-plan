@@ -4834,6 +4834,38 @@ function ensureRideGps(r){
 // and Laps tabs, and Max values (power/HR/cadence/speed) all light up. Summary
 // sync only gives scalars, not the per-point profile. One Strava call per ride;
 // cached to /gps after the first fetch so it never re-fetches. Never rejects.
+// Does this ride still carry elapsed-time Strava laps? ONE definition, used by the cache
+// short-circuit AND by both ride-detail open paths — they gate the fetch independently, and the
+// short-circuit fix was useless on its own because those paths only call ensureRideStreams when
+// streams or GPS are MISSING. A ride with both cached never reached it, which is exactly why the
+// Saturday ride kept reading 24:56 after the mapper was corrected.
+// Garmin laps are excluded (already moving-based). lapSource must be 'strava' explicitly: a ride
+// with laps but NO lapSource predates that field and may hold Garmin laps, and replacing those with
+// Strava's differently-triggered set would be a downgrade, not a repair.
+function lapsNeedMovingFix_(r){
+  return !!(r && r.stravaId && r.laps && r.laps.length
+            && r.lapSource==='strava' && r.lapTimeBasis!=='moving');
+}
+// One-time heal. Does NOT call any API: it only clears the flags that would stop the next open from
+// fetching, so the rewrite happens lazily when a ride is actually opened. Idempotent, and stamped so
+// it runs once per client rather than on every load.
+var _LAP_HEAL_V='lapmoving-1';
+function healStaleLaps_(){
+  try{
+    if(typeof st==='undefined' || !Array.isArray(st.rides)) return 0;
+    if(st._lapHealV===_LAP_HEAL_V) return 0;
+    var n=0;
+    st.rides.forEach(function(r){
+      if(!lapsNeedMovingFix_(r)) return;
+      delete r._streamsTried;   // the only flag that can block the next open's stream fetch
+      n++;
+    });
+    st._lapHealV=_LAP_HEAL_V;
+    if(n){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    try{ console.log('[laps] heal armed '+n+' ride(s) for a moving-time rewrite on next open'); }catch(e){}
+    return n;
+  }catch(e){ try{ console.error('[laps] heal: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function ensureRideStreams(r){
   if(!r || !r.stravaId) return Promise.resolve(r);
   // Require BOTH streams and GPS before treating the ride as complete — a ride
@@ -4862,8 +4894,7 @@ function ensureRideStreams(r){
     // that does the rewrite was never reached. Forcing one re-fetch repairs the ride and stamps
     // lapTimeBasis, after which this condition is false forever. Garmin laps are already
     // moving-based and are excluded.
-    var _lapsStale=!!(r.stravaId && r.lapSource==='strava' && r.lapTimeBasis!=='moving');
-    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !_lapsStale) return r; // cache hit — no API call
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
@@ -7531,7 +7562,43 @@ var ANATOMY_MAP={
   'Copenhagen plank': { pri:['m-f-adductor','m-f-obliques'], sec:['m-f-abs','m-b-glute-med','m-f-delt-front'] },
   // NOT an alias of 'Glute bridge': the single-leg version does not lengthen the hip flexor the same
   // way, so it is its own entry with no 'len' rather than inheriting the mixed two-state treatment.
-  'Single-leg glute bridge': { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-b-glute-med','m-b-erector','m-f-abs'] }
+  'Single-leg glute bridge': { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-b-glute-med','m-b-erector','m-f-abs'] },
+  // ---- Swap-dropdown alternates that are genuinely different movements. Reviewed and grouped by
+  // pattern; all strengthening, so none carry a lengthening channel.
+  // Squat
+  'Box Squat':                    { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
+  'Hack Squat':                   { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
+  'Band Squat':                   { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
+  'Squat':                        { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-erector','m-f-abs'] },
+  'Leg Press':                    { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor'] },
+  'Step-Up (Plyo Box)':           { pri:['m-f-quad','m-b-glute-max'], sec:['m-b-glute-med','m-f-adductor'] },
+  'Lateral Box Jump to Squat':    { pri:['m-f-quad','m-b-glute-max'], sec:['m-b-glute-med','m-b-gastroc','m-f-adductor'] },
+  // Hinge
+  'Conventional Deadlift':        { pri:['m-b-glute-max','m-b-hamstring','m-b-erector'], sec:['m-f-quad','m-f-traps-upper','m-f-forearm-flex'] },
+  'Sumo Deadlift':                { pri:['m-b-glute-max','m-b-hamstring','m-b-erector'], sec:['m-f-quad','m-f-traps-upper','m-f-forearm-flex'] },
+  'Band Pull-Through':            { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-b-erector','m-f-abs'] },
+  'Nordic Curl':                  { pri:['m-b-hamstring'], sec:['m-b-glute-max','m-b-erector'] },
+  'Stability Ball Hamstring Curl':{ pri:['m-b-hamstring'], sec:['m-b-glute-max','m-b-erector'] },
+  'Single-Leg Hip Thrust':        { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-b-glute-med','m-b-erector'] },
+  // Push — horizontal
+  'Med Ball Chest Pass':          { pri:['m-f-pec','m-f-delt-front','m-b-triceps'], sec:['m-f-abs','m-f-obliques','m-f-serratus'] },
+  'Band Press':                   { pri:['m-f-pec','m-f-delt-front','m-b-triceps'], sec:['m-f-serratus'] },
+  // Push — vertical
+  'Overhead Press':               { pri:['m-f-delt-front','m-b-triceps'], sec:['m-f-traps-upper','m-f-abs','m-f-serratus'] },
+  'Landmine Press':               { pri:['m-f-delt-front','m-b-triceps'], sec:['m-f-traps-upper','m-f-abs','m-f-serratus'] },
+  'Med Ball Slam to Press':       { pri:['m-f-delt-front','m-b-lat','m-f-abs'], sec:['m-b-triceps','m-f-obliques','m-f-traps-upper'] },
+  // Pull
+  'Inverted Row':                 { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Chest-Supported Row':          { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Meadows Row':                  { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Single-Arm Cable Row':         { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Single-Arm Band Row':          { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Face Pull (Band)':             { pri:['m-b-rear-delt','m-b-rhomboid'], sec:['m-b-traps-mid','m-b-traps-upper'] },
+  'Band Pull-Apart':              { pri:['m-b-rear-delt','m-b-rhomboid'], sec:['m-b-traps-mid','m-b-traps-upper'] },
+  // Core
+  'Ab Wheel Rollout':             { pri:['m-f-abs'], sec:['m-f-obliques','m-b-lat','m-f-delt-front'] },
+  'Stability Ball Rollout':       { pri:['m-f-abs'], sec:['m-f-obliques','m-b-lat','m-f-delt-front'] },
+  'Stability Ball Pike':          { pri:['m-f-abs'], sec:['m-f-hip-flexor','m-f-delt-front','m-f-serratus'] }
 };
 // Normalize an exercise name so a library key resolves despite casing / punctuation / parenthetical
 // variants ('Bird dog' vs 'Bird-dog'). Non-alphanumerics collapse to single spaces. Regex whitespace
@@ -7541,7 +7608,27 @@ function _anatKey_(name){ var s=String(name==null?'':name).toLowerCase().replace
 // a place to add movements: an entry here must resolve to an existing key, so it carries no new
 // muscle assignments. Anything that would need its own anatomy (Bench Press, Back Squat, Plank, the
 // rest of the FBA/FBB/CORE_EX list) stays unmapped until those assignments are authored.
-var ANATOMY_ALIAS={ 'romanian deadlift rdl':'Romanian deadlift' };
+var ANATOMY_ALIAS={
+  'romanian deadlift rdl':'Romanian deadlift',
+  // ---- Swap-dropdown alternates that are the SAME movement under another name. Reviewed; each
+  // resolves to an existing key, so none of these carry new muscle assignments.
+  'pull up':'Pull-up / Lat Pulldown',
+  'band pulldown':'Pull-up / Lat Pulldown',
+  'pallof press band':'Pallof press',
+  'band pallof press':'Pallof press',
+  'band woodchop':'Woodchop',
+  'band push up':'Push-up',
+  'incline push up':'Push-up',
+  'decline push up feet on box':'Push-up',
+  'deficit push up on box':'Push-up',
+  'push up on box':'Push-up',
+  'med ball push up':'Push-up',
+  'incline bench press':'Bench press',
+  'stability ball dumbbell press':'Dumbbell press',
+  'dumbbell floor press':'Dumbbell press',
+  'stability ball db row':'Dumbbell Row',
+  'band hip thrust':'Glute bridge'
+};
 var _ANAT_IDX_=null;
 function _anatFor_(name){
   if(!name) return null;
@@ -24018,7 +24105,11 @@ function openDesktopRideDetail(idx, _noFetch){
   // re-attempts. Indoor rides are skipped (no GPS to fetch).
   var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
   var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
-  if(!_noFetch && r.stravaId && (_wantStr || _wantGps)){
+  // Elapsed-time laps are ALSO a reason to fetch. Without this the ride has streams and GPS, so
+  // neither want fires, ensureRideStreams is never called, and the corrected mapper never runs.
+  // Self-limiting: the fetch stamps lapTimeBasis='moving' and the predicate goes false for good.
+  var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
+  if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
     if(_wantStr) r._streamsTried=true;
     ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx, true); });
     return;
@@ -24576,7 +24667,10 @@ function openRideDetail(idx, _noFetch){
   // avoid a rapid loop. Skip indoor rides.
   var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
   var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
-  if(!_noFetch && r.stravaId && (_wantStr || _wantGps)){
+  // Same lap-staleness trigger as desktop — both renderers gate the fetch independently, so a fix
+  // applied to only one leaves the other reading elapsed times forever.
+  var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
+  if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
     if(_wantStr) r._streamsTried=true;
     ensureRideStreams(r).then(function(){ openRideDetail(idx, true); });
     return;
@@ -35781,6 +35875,10 @@ window.onload = function(){
         try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
         // Seed / self-heal the append-only FTP log so no write site can escape it (Coach V dependency).
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
+        // Arm rides still holding elapsed-time Strava laps for a moving-time rewrite. Runs AFTER the
+        // remote pull so it sees the merged library, clears only the flag that would block the next
+        // open's fetch, and makes no API calls itself — the rewrite happens when a ride is opened.
+        try{ if(typeof healStaleLaps_==='function') healStaleLaps_(); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
         // self-healing against key-union re-adds) — no separate one-time call needed here.
         try{ showHomeDash(); }catch(e){}
