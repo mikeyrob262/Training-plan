@@ -36,6 +36,64 @@ export default {
           return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
         }
 
+        // ---- Intervals.icu CALENDAR EVENTS (diagnostic: can we push a workout?) ----------------
+        // These are the only WRITE paths in this worker, so they are gated harder than the reads:
+        // each is method-locked, the athlete id is fixed server-side (never client-supplied), and
+        // the POST body is REBUILT here from validated fields rather than forwarded. A client can
+        // therefore only create the shape below — it cannot post arbitrary JSON to Intervals under
+        // the athlete's key.
+        if (_u.pathname === '/api/intervals-events') {
+          if (request.method !== 'GET') return J({ error: 'method_not_allowed' }, 405);
+          const key = env && env.INTERVALS_API_KEY;
+          if (!key) return J({ error: 'not_configured' }, 503);
+          const D = /^\d{4}-\d{2}-\d{2}$/;
+          const o = _u.searchParams.get('oldest') || '', n = _u.searchParams.get('newest') || '';
+          if (!D.test(o) || !D.test(n)) return J({ error: 'bad_date' }, 400);
+          const r = await fetch('https://intervals.icu/api/v1/athlete/0/events?oldest=' + o + '&newest=' + n,
+            { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+        if (_u.pathname === '/api/intervals-event-create') {
+          if (request.method !== 'POST') return J({ error: 'method_not_allowed' }, 405);
+          const key = env && env.INTERVALS_API_KEY;
+          if (!key) return J({ error: 'not_configured' }, 503);
+          let body = null;
+          try { body = await request.json(); } catch (e) { return J({ error: 'bad_json' }, 400); }
+          // Whitelist every field. Anything not listed here cannot reach Intervals.
+          const D = /^\d{4}-\d{2}-\d{2}$/;
+          const day = String((body && body.start_date_local) || '');
+          if (!D.test(day)) return J({ error: 'bad_start_date' }, 400);
+          const name = String((body && body.name) || '').slice(0, 80);
+          if (!name) return J({ error: 'bad_name' }, 400);
+          const extId = String((body && body.external_id) || '');
+          if (!/^athleteiq-[a-z0-9-]{1,40}$/.test(extId)) return J({ error: 'bad_external_id' }, 400);
+          const b64 = String((body && body.file_contents_base64) || '');
+          if (!/^[A-Za-z0-9+/=]{1,20000}$/.test(b64)) return J({ error: 'bad_file' }, 400);
+          const type = (String((body && body.type) || 'Ride') === 'Ride') ? 'Ride' : 'Ride';
+          const payload = [{
+            category: 'WORKOUT', start_date_local: day + 'T00:00:00', type: type,
+            name: name, filename: 'athleteiq-test.zwo', file_contents_base64: b64, external_id: extId
+          }];
+          const r = await fetch('https://intervals.icu/api/v1/athlete/0/events/bulk?upsert=true', {
+            method: 'POST',
+            headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key), 'content-type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+        if (_u.pathname === '/api/intervals-event-delete') {
+          if (request.method !== 'DELETE') return J({ error: 'method_not_allowed' }, 405);
+          const key = env && env.INTERVALS_API_KEY;
+          if (!key) return J({ error: 'not_configured' }, 503);
+          const id = _u.searchParams.get('id') || '';
+          if (!/^\d{1,20}$/.test(id)) return J({ error: 'bad_id' }, 400);
+          const r = await fetch('https://intervals.icu/api/v1/athlete/0/events/' + id, {
+            method: 'DELETE', headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+          const txt = await r.text();
+          return new Response(txt || JSON.stringify({ ok: r.ok, status: r.status }),
+            { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+        }
+
         // Intervals.icu activity intervals (GET). Tagged work/recovery intervals with target/actual
         // power/HR/duration for ONE activity. id is the Intervals activity id (= Strava activity id
         // for synced activities), optionally i-prefixed. Same key-server-side + verbatim passthrough
@@ -20445,6 +20503,98 @@ function _zwoFor_(s, dateKey){
              ftp:Math.round(ftp), lo:Math.round(lo), hi:Math.round(hi), blocks:blocks.length };
   }catch(e){ try{ console.error('[zwo] '+((e&&e.message)||e)); }catch(_e){} return null; }
 }
+// ==================== Intervals.icu workout-push DIAGNOSTIC ====================
+// Not a production feature. It answers one question the docs cannot: does an event created through
+// the API actually propagate to Zwift/Garmin, or does it only land on the Intervals calendar? A
+// forum report says API-created events did NOT reach a connected Garmin while manually-created ones
+// did — so this writes ONE disposable event and shows the raw response, and the delete button
+// removes it again. Nothing here reads or changes st.
+var _IVT_EXT_ID='athleteiq-test-001';
+var _ivtLastId=null;
+function _ivtOut_(txt, ok){
+  var el=document.getElementById('ivt-out'); if(!el) return;
+  el.style.display='block';
+  el.style.borderColor=(ok===true?'#22c55e55':(ok===false?'#ef444455':'var(--b1)'));
+  el.textContent=txt;
+}
+function _ivtHdr_(){ return {'x-proxy-token':(window.PROXY_TOKEN||''),'Content-Type':'application/json'}; }
+// Minimal valid .zwo: 10 min steady at 65% FTP. Built with fromCharCode for the newlines — a
+// backslash-n literal here would be eaten by the served template (the trap preflight step 2 catches).
+function _ivtZwo_(){
+  var NL=String.fromCharCode(10);
+  return ['<workout_file>','  <name>Athlete IQ Test Workout</name>',
+    '  <description>Diagnostic push from Athlete IQ. Safe to delete.</description>',
+    '  <sportType>bike</sportType>','  <workout>',
+    "    <SteadyState Duration='600' Power='0.65'/>",
+    '  </workout>','</workout_file>',''].join(NL);
+}
+function _ivtRun_(){
+  _ivtOut_('1/2  GET events (read check)...', null);
+  var oldest='2026-07-20', newest='2026-07-31';
+  fetch('/api/intervals-events?oldest='+oldest+'&newest='+newest,{headers:_ivtHdr_()})
+    .then(function(r){ return r.text().then(function(t){ return {ok:r.ok,status:r.status,text:t}; }); })
+    .then(function(g){
+      if(!g.ok){ _ivtOut_('READ FAILED  HTTP '+g.status+String.fromCharCode(10)+g.text.slice(0,800)
+        +String.fromCharCode(10)+String.fromCharCode(10)+'The key cannot reach the calendar API. Nothing was written.', false); return; }
+      var n='?'; try{ var a=JSON.parse(g.text); if(Array.isArray(a)) n=a.length; }catch(e){}
+      var d=new Date(); d.setDate(d.getDate()+1);
+      var p2=function(x){ return (x<10?'0':'')+x; };
+      var day=d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());
+      var b64; try{ b64=btoa(_ivtZwo_()); }catch(e){ _ivtOut_('Could not base64-encode the .zwo', false); return; }
+      _ivtOut_('1/2  GET ok — HTTP '+g.status+', '+n+' existing events'+String.fromCharCode(10)
+        +'2/2  POST test workout for '+day+'...', null);
+      fetch('/api/intervals-event-create',{method:'POST',headers:_ivtHdr_(),
+        body:JSON.stringify({start_date_local:day,name:'Athlete IQ Test Workout',type:'Ride',
+          external_id:_IVT_EXT_ID,file_contents_base64:b64})})
+        .then(function(r){ return r.text().then(function(t){ return {ok:r.ok,status:r.status,text:t}; }); })
+        .then(function(w){
+          var NL=String.fromCharCode(10);
+          var head='1/2  GET ok — HTTP '+g.status+', '+n+' existing events'+NL
+                  +'2/2  POST — HTTP '+w.status+NL+NL;
+          if(!w.ok){ _ivtOut_(head+'CALENDAR WRITE FAILED'+NL+w.text.slice(0,1200), false); return; }
+          try{ var j=JSON.parse(w.text); var ev=Array.isArray(j)?j[0]:j;
+            if(ev && ev.id!=null){ _ivtLastId=String(ev.id);
+              var db=document.getElementById('ivt-del'); if(db) db.style.display='inline-flex'; } }catch(e){}
+          _ivtOut_(head+'CALENDAR WRITE SUCCEEDED'+(_ivtLastId?(' — event id '+_ivtLastId):'')+NL
+            +'Now check Zwift (Custom Workouts) and Garmin Connect to see whether it PROPAGATED.'+NL
+            +'That is the open question; landing on the Intervals calendar alone is not enough.'+NL+NL
+            +'Raw response:'+NL+w.text.slice(0,1500), true);
+        }).catch(function(e){ _ivtOut_('POST threw: '+((e&&e.message)||e), false); });
+    }).catch(function(e){ _ivtOut_('GET threw: '+((e&&e.message)||e), false); });
+}
+function _ivtDelete_(){
+  if(!_ivtLastId){ _ivtOut_('No test event id from this session. Delete it in Intervals.icu if it is still there.', false); return; }
+  _ivtOut_('Deleting event '+_ivtLastId+'...', null);
+  fetch('/api/intervals-event-delete?id='+encodeURIComponent(_ivtLastId),{method:'DELETE',headers:_ivtHdr_()})
+    .then(function(r){ return r.text().then(function(t){ return {ok:r.ok,status:r.status,text:t}; }); })
+    .then(function(d){
+      var NL=String.fromCharCode(10);
+      if(d.ok){ _ivtOut_('DELETED event '+_ivtLastId+' — HTTP '+d.status+NL+(d.text||'').slice(0,600), true);
+        _ivtLastId=null; var db=document.getElementById('ivt-del'); if(db) db.style.display='none'; }
+      else _ivtOut_('DELETE FAILED — HTTP '+d.status+NL+d.text.slice(0,800), false);
+    }).catch(function(e){ _ivtOut_('DELETE threw: '+((e&&e.message)||e), false); });
+}
+function showIntervalsPushTest(){
+  var old=document.getElementById('ivt-modal'); if(old) old.remove();
+  var ov=document.createElement('div'); ov.id='ivt-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1200;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var c=document.createElement('div');
+  c.style.cssText='background:var(--s1);border-radius:18px;padding:20px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto';
+  c.innerHTML='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">'
+    +'<div><div style="font-size:16px;font-weight:800;color:var(--t1)">Intervals.icu Workout Push Test</div>'
+    +'<div style="font-size:11.5px;color:var(--t3);margin-top:3px;line-height:1.5">Diagnostic, not a feature. Writes ONE disposable event to your Intervals.icu calendar to find out whether an API-created workout propagates to Zwift and Garmin.</div></div>'
+    +'<button id="ivt-x" style="background:none;border:none;color:var(--t3);font-size:26px;line-height:1;cursor:pointer;padding:0 4px">&times;</button></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">'
+    +'<button id="ivt-run" style="border:none;border-radius:10px;padding:10px 15px;font-size:13px;font-weight:800;font-family:inherit;color:#08210f;background:#22c55e;cursor:pointer">Run push test</button>'
+    +'<button id="ivt-del" style="display:none;align-items:center;border:1px solid #ef444455;border-radius:10px;padding:10px 15px;font-size:13px;font-weight:800;font-family:inherit;color:#ef4444;background:transparent;cursor:pointer">Delete test event</button>'
+    +'</div>'
+    +'<pre id="ivt-out" style="display:none;margin-top:14px;padding:11px 12px;border:1px solid var(--b1);border-radius:10px;background:var(--s2);color:var(--t2);font-size:11px;line-height:1.55;white-space:pre-wrap;word-break:break-word;max-height:46vh;overflow:auto"></pre>';
+  ov.appendChild(c); document.body.appendChild(ov);
+  document.getElementById('ivt-x').onclick=function(){ ov.remove(); };
+  document.getElementById('ivt-run').onclick=_ivtRun_;
+  document.getElementById('ivt-del').onclick=_ivtDelete_;
+}
 function _zwoDownload_(dateKey, sid){
   try{
     var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
@@ -31974,6 +32124,7 @@ function showMoreSheet(){
     {n:'Reconnect',     i:'M9 17H7A5 5 0 0 1 7 7h2 M15 7h2a5 5 0 0 1 0 10h-2 M8 12h8',                                          fn:'reconnectStrava',  c:'#FC4C02'},
     {n:'Elev Stats',    i:'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z M3 17l4-4',                                           fn:'fetchStravaElevStats', c:'#27AE60'},
     {n:'Import / Drop', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8 12 3 7 8 M12 3 12 15',                                 fn:'showDropZone',     c:'#00C896'},
+    {n:'Workout Push Test', i:'M12 3v12 M7 11l5 5 5-5 M4 20h16',                                                                  fn:'showIntervalsPushTest', c:'#22c55e'},
     {n:'Clean Ride Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRideCleanup',   c:'#ef4444'},
     {n:'Clean Food Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runNutritionCleanup', c:'#f97316'},
     {n:'Clean Race Dupes', i:'M3 6h18 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z',       fn:'runRaceCleanup',   c:'#a855f7'},
