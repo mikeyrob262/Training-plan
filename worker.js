@@ -542,10 +542,15 @@ window.parseFitFile = function(arrayBuffer, callback) {
         if (data.laps && data.laps.length) {
           result.laps = data.laps.map(function(lp){
             var distMi = lp.total_distance!=null ? Math.round(lp.total_distance/1609.344*100)/100 : 0;
-            var timeSec = lp.total_elapsed_time!=null ? Math.round(lp.total_elapsed_time)
-                        : (lp.total_timer_time!=null ? Math.round(lp.total_timer_time) : 0);
+            // total_timer_time is the TIMER (moving) time the head unit displays for the lap;
+            // total_elapsed_time is wall clock and includes every stop. Preferring elapsed made even
+            // the authoritative Garmin path disagree with the number on the watch, so timer wins and
+            // elapsed is kept alongside for reference.
+            var timeSec = lp.total_timer_time!=null ? Math.round(lp.total_timer_time)
+                        : (lp.total_elapsed_time!=null ? Math.round(lp.total_elapsed_time) : 0);
+            var elapSec = lp.total_elapsed_time!=null ? Math.round(lp.total_elapsed_time) : null;
             return {
-              distance: distMi, time: timeSec,
+              distance: distMi, time: timeSec, elapsed: elapSec,
               avgPwr: lp.avg_power!=null ? Math.round(lp.avg_power) : null,
               maxPwr: lp.max_power!=null ? Math.round(lp.max_power) : null,
               avgHR: lp.avg_heart_rate!=null ? Math.round(lp.avg_heart_rate) : null,
@@ -554,6 +559,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
             };
           }).filter(function(lp){ return lp.distance>0 || lp.time>0; }).slice(0,200);
           result.lapSource='garmin';   // FIT device laps = the authoritative Garmin auto-lap source
+          result.lapTimeBasis='moving';
         }
 
         callback(null, result);
@@ -4882,13 +4888,24 @@ function fetchStravaStreams_(r, ds, maxOf){
         // Strava laps are a FALLBACK only — written when the ride has NO laps AND none from Garmin.
         // Garmin auto-lap is authoritative; the merge prefers it, so Strava never mixes with or overrides
         // Garmin laps (Strava's differently-triggered set was half of the 14-lap doubling).
-        if(a && a.laps && a.laps.length && !(r.laps&&r.laps.length) && r.lapSource!=='garmin'){
+        // Rewritten when the ride has no laps at all, OR when the stored Strava laps predate the
+        // moving-time basis (lapTimeBasis missing) — those carry elapsed times and would otherwise
+        // stay wrong forever, since this block only ever ran on rides with no laps. Garmin laps are
+        // still never touched: they are authoritative and already moving-based.
+        var _lapsStale=(r.lapSource==='strava' && r.lapTimeBasis!=='moving');
+        if(a && a.laps && a.laps.length && r.lapSource!=='garmin' && (!(r.laps&&r.laps.length) || _lapsStale)){
           r.lapSource='strava';
+          r.lapTimeBasis='moving';
           r.laps=a.laps.map(function(lp){
             var distMi=lp.distance!=null?Math.round(lp.distance/1609.344*100)/100:0;
-            var timeSec=lp.elapsed_time!=null?Math.round(lp.elapsed_time):(lp.moving_time!=null?Math.round(lp.moving_time):0);
+            // Strava lap objects carry BOTH times, and these ARE the device's laps — Strava preserves
+            // Garmin's lap splits and only differs in which clock it reports. Preferring elapsed_time
+            // is the whole bug: it showed 24:56 where the watch showed 19:16. moving_time is the
+            // watch's number; elapsed is kept alongside rather than discarded.
+            var timeSec=lp.moving_time!=null?Math.round(lp.moving_time):(lp.elapsed_time!=null?Math.round(lp.elapsed_time):0);
+            var elapSec=lp.elapsed_time!=null?Math.round(lp.elapsed_time):null;
             return {
-              distance:distMi, time:timeSec,
+              distance:distMi, time:timeSec, elapsed:elapSec,
               avgPwr:lp.average_watts!=null?Math.round(lp.average_watts):null,
               maxPwr:lp.max_watts!=null?Math.round(lp.max_watts):null,
               avgHR:lp.average_heartrate!=null?Math.round(lp.average_heartrate):null,
@@ -5758,15 +5775,22 @@ function mergeItemFast_(a, b){
   // two arrays with mergeArrays_ (a union), so a ride carrying Garmin auto-laps (7) and a re-synced copy
   // carrying Strava's differently-triggered laps (7) UNIONED into one 14-lap array. Laps must be atomic
   // — ONE source, REPLACE never append — resolved below (Garmin auto-lap is authoritative).
-  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource') aNoGps[k]=a[k]; });
-  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource') bNoGps[k]=b[k]; });
+  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis') aNoGps[k]=a[k]; });
+  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
-  // Atomic lap resolution: prefer the Garmin auto-lap source (distance-based, consistent); else whichever
-  // side actually carries laps. Never concatenate the two — that is the doubling this fixes.
+  // Atomic lap resolution: prefer the Garmin auto-lap source (distance-based, consistent); then a set
+  // already on the moving-time basis over a stale elapsed-time one; else whichever side has laps.
+  // Never concatenate the two — that is the doubling this fixes. lapTimeBasis rides along with the
+  // winner rather than being merged generically, or a stale set could inherit the corrected flag and
+  // never be rewritten.
   var _aLaps=Array.isArray(a.laps)?a.laps:null, _bLaps=Array.isArray(b.laps)?b.laps:null;
-  var _lapWin=(a.lapSource==='garmin'&&_aLaps)?a:((b.lapSource==='garmin'&&_bLaps)?b:(_aLaps?a:(_bLaps?b:null)));
-  if(_lapWin){ merged.laps=_lapWin.laps; if(_lapWin.lapSource) merged.lapSource=_lapWin.lapSource; }
-  else { delete merged.laps; delete merged.lapSource; }
+  var _lapWin=(a.lapSource==='garmin'&&_aLaps)?a:((b.lapSource==='garmin'&&_bLaps)?b
+             :((_aLaps&&a.lapTimeBasis==='moving')?a:((_bLaps&&b.lapTimeBasis==='moving')?b
+             :(_aLaps?a:(_bLaps?b:null)))));
+  if(_lapWin){ merged.laps=_lapWin.laps;
+    if(_lapWin.lapSource) merged.lapSource=_lapWin.lapSource;
+    if(_lapWin.lapTimeBasis) merged.lapTimeBasis=_lapWin.lapTimeBasis; else delete merged.lapTimeBasis; }
+  else { delete merged.laps; delete merged.lapSource; delete merged.lapTimeBasis; }
   // EDIT-WINS: a ride the user manually edited must beat a stale remote copy.
   // The generic merge above resolves numbers with Math.max, which silently
   // reverts any edit that LOWERS a value (e.g. correcting an inflated
@@ -22757,7 +22781,10 @@ function dsAttention_(){
         // decides today's work. Stated as a plain fact (sev 0, ctx) so it never drives the day state
         // and the narrator can never turn it into "add distance today / skip rest". (The old sev-1
         // "behind your goal" item was being rephrased into exactly that on a base-phase Saturday.)
-        if(ytd < p.target*0.85) push(0,'context',Math.max(0,p.target-ytd)+' mi behind your '+Math.round(goal)+'-mi annual pace — season context; the plan sets today.',true);
+        // Fact only. No verb, no urgency, no comparison to today's session — the training block is
+        // the authority for what to ride, and a mileage gap is season context that must never read
+        // as a reason to add distance. Rendered verbatim (see dsAttentionNarrate_), never rephrased.
+        if(ytd < p.target*0.85) push(0,'context',Math.max(0,p.target-ytd).toLocaleString()+' mi behind annual pace.',true);
         else if(p.ahead && p.delta>=Math.max(25, Math.round(p.target*0.05))) out.positives.push('Ahead of your '+Math.round(goal)+' mi goal by ~'+p.delta+' mi');
       }
     }
@@ -22862,12 +22889,25 @@ function dsRenderAttention_(el, d){
 // (\\n for newlines and double-quotes-in-single-quotes are deliberate — the file
 // is served inside one template literal.)
 function dsAttentionNarrate_(d, cb){
-  var items=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;}).slice(0,5);
-  if(!items.length){ if(cb) cb(null); return; }
-  var key=d.state+'|'+items.map(function(i){return i.text;}).join('~');
+  // CONTEXT items (the annual-mileage gap) never go to the model at all. Asking it not to turn a
+  // mileage gap into a directive and then regex-checking the answer is a losing game — it produced
+  // "today is a day to add purposeful distance, not rest" off a fact that said nothing of the kind.
+  // Splitting them out makes that failure structurally impossible: the fact is passed through
+  // verbatim, so there is no wording for a model to escalate. The regex veto below stays as a second
+  // layer, for a directive invented from the non-context signals.
+  var all=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;});
+  var ctxItems=all.filter(function(i){return i.ctx;}).slice(0,2);
+  var items=all.filter(function(i){return !i.ctx;}).slice(0,5-Math.min(ctxItems.length,1));
+  if(!items.length && !ctxItems.length){ if(cb) cb(null); return; }
+  if(!items.length){   // nothing but context: no model call, just state the facts
+    var only={bullets:ctxItems.map(function(i){return i.text;}), rec:''};
+    try{ window._dsAttnNarr={key:'ctxonly|'+only.bullets.join('~'), ts:Date.now(), val:only}; }catch(e){}
+    if(cb) cb(only); return;
+  }
+  var key=d.state+'|'+items.concat(ctxItems).map(function(i){return i.text;}).join('~');
   try{ if(window._dsAttnNarr && window._dsAttnNarr.key===key && (Date.now()-window._dsAttnNarr.ts)<10800000){ if(cb) cb(window._dsAttnNarr.val); return; } }catch(e){}
-  var lines=items.map(function(i){return '- ['+(i.ctx?'CONTEXT':(i.sev>=2?'ACTION':'WATCH'))+'] '+i.text;}).join('\\n');
-  var prompt='You are a professional cycling coach writing a one-glance briefing for a single athlete today. Below are the ONLY real, already-verified signals detected for today. Rephrase them into sharp, second-person coaching language focused on how each affects TODAY riding. Rules: use ONLY the signals listed; do NOT add, infer, or invent any metric, number, or signal that is not present (never mention HRV, sleep, resting heart rate, batteries, or equipment unless it appears below). A signal tagged [CONTEXT] is long-range background such as annual mileage pace: state it as a plain fact ONLY and keep its wording; NEVER turn it into a directive for today, never tell the athlete to add distance, ride more, log miles, or skip rest because of it. The training plan is the sole authority for today session. Keep each bullet under about 22 words. Do not use apostrophes.\\n\\nDAY STATE: '+String(d.state||'').toUpperCase()+'\\nSIGNALS:\\n'+lines+'\\n\\nReturn ONLY valid JSON and nothing else, exactly: {"bullets":["...","..."],"rec":"..."} with at most 5 bullets in priority order. If DAY STATE is RED, rec must be one concrete action sentence for today; otherwise rec must be an empty string.';
+  var lines=items.map(function(i){return '- ['+(i.sev>=2?'ACTION':'WATCH')+'] '+i.text;}).join('\\n');
+  var prompt='You are a professional cycling coach writing a one-glance briefing for a single athlete today. Below are the ONLY real, already-verified signals detected for today. Rephrase them into sharp, second-person coaching language focused on how each affects TODAY riding. Rules: use ONLY the signals listed; do NOT add, infer, or invent any metric, number, or signal that is not present (never mention HRV, sleep, resting heart rate, batteries, or equipment unless it appears below). Say NOTHING about annual mileage, season totals, distance owed, or being ahead or behind pace — that is handled elsewhere and is not yours to mention. Never tell the athlete to add distance, ride more, log miles, or skip rest. The training block is the sole authority for today session and its volume. Keep each bullet under about 22 words. Do not use apostrophes.\\n\\nDAY STATE: '+String(d.state||'').toUpperCase()+'\\nSIGNALS:\\n'+lines+'\\n\\nReturn ONLY valid JSON and nothing else, exactly: {"bullets":["...","..."],"rec":"..."} with at most 4 bullets in priority order. If DAY STATE is RED, rec must be one concrete action sentence for today; otherwise rec must be an empty string.';
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:'claude-sonnet-4-6', max_tokens:400, messages:[{role:'user',content:prompt}]})
@@ -22882,10 +22922,13 @@ function dsAttentionNarrate_(d, cb){
     // Output veto (same shape as the deficit-framing / hazard vetoes): a mileage/pace CONTEXT fact must
     // never come back as a today training-volume directive. If a bullet prescribes adding distance or
     // skipping rest off the mileage gap, restore the plain context fact instead of the directive.
-    var _ctxItem=items.filter(function(i){return i.ctx;})[0];
-    var _MILE_DIR=/add(ing)? (purposeful |more |extra )?(distance|miles|volume|mileage)|not rest|instead of rest|skip(ping)? rest|ride more|log (more )?miles|bank (the )?miles|make up (the )?(distance|miles|mileage)|purposeful (distance|miles)|chase (the )?(pace|miles)/i;
-    val.bullets=val.bullets.map(function(b){ return _MILE_DIR.test(b) ? (_ctxItem?_ctxItem.text:b) : b; });
-    if(_ctxItem && val.rec && _MILE_DIR.test(val.rec)) val.rec='';
+    var _MILE_DIR=/add(ing)? (purposeful |more |extra )?(distance|miles|volume|mileage)|not rest|instead of rest|skip(ping)? rest|ride more|log (more )?miles|bank (the )?miles|make up (the )?(distance|miles|mileage)|purposeful (distance|miles)|chase (the )?(pace|miles)|behind pace means|mileage gap is real/i;
+    // The model never saw the mileage fact, so anything matching here is invented — drop it outright
+    // rather than swapping in the context text (which is appended verbatim below regardless).
+    val.bullets=val.bullets.filter(function(b){ return !_MILE_DIR.test(b); });
+    if(val.rec && _MILE_DIR.test(val.rec)) val.rec='';
+    // Context facts appended last, unrephrased and unranked — they are the least urgent thing here.
+    ctxItems.forEach(function(i){ val.bullets.push(i.text); });
     if(!val.bullets.length){ if(cb) cb(null); return; }
     try{ window._dsAttnNarr={key:key, ts:Date.now(), val:val}; }catch(e){}
     if(cb) cb(val);
