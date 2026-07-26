@@ -594,7 +594,7 @@ window.AIQ_DESKTOP_MIN=1024;
      that card would silently blank the fills everywhere else. Kept in the shell so it outlives
      every innerHTML re-render; _anatEnsureDefs_ re-adds it if a surface ever renders without it. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<radialGradient id="anGradPri" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC6A1A"/><stop offset="100%" stop-color="#DC3A00"/></radialGradient>
+<radialGradient id="anGradPri" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC4C02"/><stop offset="100%" stop-color="#DC3A00"/></radialGradient>
 <radialGradient id="anGradSec" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/></radialGradient>
 <radialGradient id="anGradLen" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFD2A8"/><stop offset="45%" stop-color="#F97316"/><stop offset="100%" stop-color="#C2410C"/></radialGradient>
 <linearGradient id="anGradInert" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4C525B"/><stop offset="100%" stop-color="#3A3F47"/></linearGradient>
@@ -7561,7 +7561,7 @@ function _anatFigureSVG_(groups){
 var _AN_DEFS_ID = 'anGradPri';
 var ANAT_DEFS_SVG = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>'
   + '<radialGradient id="anGradPri" cx="42%" cy="34%" r="78%">'
-  +   '<stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC6A1A"/><stop offset="100%" stop-color="#DC3A00"/>'
+  +   '<stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC4C02"/><stop offset="100%" stop-color="#DC3A00"/>'
   + '</radialGradient>'
   + '<radialGradient id="anGradSec" cx="42%" cy="34%" r="78%">'
   +   '<stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/>'
