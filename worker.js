@@ -33336,12 +33336,17 @@ function openDayEditor(dateKey, targetId){
       var du=_fr('Duration',_mkI(t.durationMin!=null?t.durationMin:'','min'));
       var ts=_fr('Target TSS',_mkI(t.tssTarget!=null?t.tssTarget:'','TSS'));
       _sect('Completed');
-      var cD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:'','mi'));
-      var cU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:'','min'));
-      var cP=_fr('Pace/Spd',_mkI(o&&o.avgSpeed!=null?o.avgSpeed:'','mph'));
-      var cT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:'','-'));
-      var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:''),'W'));
-      var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:'','ft'));
+      // Prefill from the linked recorded ride (o) when one exists, else from actuals PREVIOUSLY SAVED
+      // on the session itself (sess.completed). Without the sess.completed fallback, a planned session
+      // with no linked ride showed blank Completed fields after Save — the values were persisted (masked
+      // 'completed' + sv), but the form only ever read them back from o, so they looked like they vanished.
+      var _c=(sess && sess.completed) || {};
+      var cD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:(_c.distance!=null?_c.distance:''),'mi'));
+      var cU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_c.duration!=null?_c.duration:''),'min'));
+      var cP=_fr('Pace/Spd',_mkI(o&&o.avgSpeed!=null?o.avgSpeed:(_c.avgSpeed!=null?_c.avgSpeed:''),'mph'));
+      var cT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:(_c.tss!=null?_c.tss:''),'-'));
+      var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:(_c.np!=null?_c.np:'')),'W'));
+      var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:(_c.elev!=null?_c.elev:''),'ft'));
       getData=function(){ return { type:'ride', intent:iSel.value, name:_selName, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
     } else if(type==='strength'){
       _sect('Planned — exercises (sets x reps @ %1RM)');
