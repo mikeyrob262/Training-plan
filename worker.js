@@ -252,6 +252,15 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-laps th{color:#64748b;font-weight:500;text-align:left;padding:3px 5px 5px;border-bottom:1px solid #1e2130;font-size:10px}
 .ds-laps td{padding:5px 5px;color:#94a3b8;border-bottom:1px solid #161b27}
 .ds-laps td:first-child{color:#64748b}
+.anx .m rect{fill:var(--s3);stroke:var(--b1);stroke-width:.6;transition:fill .16s}
+.anx .m .ml{fill:var(--t3);font-size:5px;font-weight:700;pointer-events:none;font-family:inherit}
+.anx .m.pri rect{fill:#FC4C02;stroke:#c23a00}
+.anx .m.sec rect{fill:#f59e0b;stroke:#c67908}
+.anx .m.len rect{fill:#2dd4bf;stroke:#159485}
+.anx .m.pri .ml,.anx .m.sec .ml,.anx .m.len .ml{fill:#1a0a00}
+.anleg{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.anlg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)}
+.answ{width:10px;height:10px;border-radius:3px;display:inline-block}
 .hdr{background:#FFFFFF;padding:14px 16px 10px;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--b1);box-shadow:0 1px 8px rgba(0,0,0,.06)}
 .hdr-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .logo{display:flex;align-items:center;gap:8px}
@@ -7372,6 +7381,170 @@ function watchExercise_(q){
 // through this ONE function. That is deliberate durability: the Watch button has been lost
 // three times across rebuilds by living in per-surface copies, so it lives here and any
 // future surface inherits it by construction rather than by remembering to re-add it.
+// ==================== Anatomy body map — mechanics (art is a later drop-in) ====================
+// Data + highlight + legend + a labelled placeholder body. Every muscle group is a <g id="m-f-*/m-b-*"
+// class="m"> whose fill swaps by CLASS (pri = orange-red working, sec = amber assisting, len = teal
+// lengthening). Swapping the ART later means replacing the shapes inside those groups — zero logic change.
+// ANATOMY_MAP is keyed to the exercise library; an unmapped movement renders the body with no highlight
+// and a "not mapped yet" note (honest, per spec).
+var ANATOMY_MAP={
+  // ---- Strength A ----
+  'Trap-bar deadlift':      { pri:['m-b-glute-max','m-b-hamstring','m-b-erector'], sec:['m-f-quad','m-f-traps-upper','m-f-forearm-flex'] },
+  'Front squat':            { pri:['m-f-quad','m-b-glute-max','m-b-erector'], sec:['m-f-abs','m-f-adductor','m-f-traps-upper'] },
+  'Goblet squat':           { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-f-abs'] },
+  'Loaded carry (farmer)':  { pri:['m-f-forearm-flex','m-f-traps-upper','m-b-traps-upper'], sec:['m-b-erector','m-f-abs','m-b-glute-med'] },
+  'Suitcase carry':         { pri:['m-f-obliques','m-b-glute-med'], sec:['m-f-forearm-flex','m-f-traps-upper','m-b-erector'] },
+  'Standing calf raise':    { pri:['m-b-gastroc','m-b-soleus'], sec:[] },
+  'Pallof press':           { pri:['m-f-obliques','m-f-abs'], sec:['m-f-delt-front','m-f-serratus'] },
+  // ---- Strength B ----
+  'Romanian deadlift':      { pri:['m-b-hamstring','m-b-glute-max','m-b-erector'], sec:['m-f-forearm-flex','m-f-traps-upper'] },
+  'Bulgarian split squat':  { pri:['m-f-quad','m-b-glute-max'], sec:['m-f-adductor','m-b-glute-med','m-f-abs'] },
+  'Hip thrust':             { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-f-quad','m-b-erector'] },
+  'Single-leg RDL':         { pri:['m-b-hamstring','m-b-glute-max'], sec:['m-b-glute-med','m-b-erector','m-f-forearm-flex'] },
+  'Dead bug':               { pri:['m-f-abs'], sec:['m-f-hip-flexor'] },                 // strengthening (orange), even inside mobility D
+  'Bird dog':               { pri:['m-b-erector','m-b-glute-max'], sec:['m-f-abs'] },     // strengthening (orange); 'Bird-dog' variant resolves via normalized key
+  // ---- Mobility A ----
+  'Thoracic rotation (open-book)':       { len:['m-b-traps-mid','m-b-erector'] },
+  'Half-kneeling hip flexor stretch':    { len:['m-f-hip-flexor','m-f-quad'] },
+  '90/90 hip rotations':                 { len:['m-b-glute-med','m-b-glute-max'] },
+  'Wall ankle dorsiflexion':             { len:['m-b-soleus','m-b-gastroc'] },
+  'Adductor rock-back':                  { len:['m-f-adductor'] },
+  // ---- Mobility B ----
+  'Cat-cow':                             { len:['m-b-erector','m-f-abs'] },
+  "World's greatest stretch":            { len:['m-f-hip-flexor','m-b-hamstring','m-b-traps-mid'] },
+  'Thread-the-needle (T-spine rotation)':{ len:['m-b-rhomboid','m-b-rear-delt'] },
+  'Deep squat hold with pry':            { len:['m-f-adductor','m-b-soleus','m-b-glute-max'] },
+  'Glute bridge':                        { pri:['m-b-glute-max'], len:['m-f-hip-flexor'] },  // MIXED: glute-max working, hip-flexor lengthening
+  'Standing hamstring / toe-touch flow': { len:['m-b-hamstring','m-b-gastroc'] },
+  'Doorway pec + shoulder stretch':      { len:['m-f-pec','m-f-delt-front'] },
+  // ---- Mobility C ----
+  'Couch stretch (quad + hip flexor)':   { len:['m-f-hip-flexor','m-f-quad'] },
+  'Pigeon pose':                         { len:['m-b-glute-max','m-b-glute-med'] },
+  'Frog stretch':                        { len:['m-f-adductor'] },
+  'Cossack squat':                       { len:['m-f-adductor','m-b-hamstring'] },
+  'Hamstring floss (supine, band or towel)': { len:['m-b-hamstring'] },
+  'Calf + soleus wall stretch':          { len:['m-b-gastroc','m-b-soleus'] },
+  // ---- Mobility D ----  ('Bird-dog' and 'Dead bug' resolve to the Strength B entries above via the normalized key)
+  'Prone press-up (cobra)':              { len:['m-f-abs','m-f-hip-flexor'] },
+  'Wall slides (shoulder)':              { len:['m-f-pec','m-b-lat'] },
+  'Side-lying thoracic openers':         { len:['m-b-traps-mid','m-f-pec'] }
+};
+// Normalize an exercise name so a library key resolves despite casing / punctuation / parenthetical
+// variants ('Bird dog' vs 'Bird-dog'). Non-alphanumerics collapse to single spaces. Regex whitespace
+// and word-boundary escapes are avoided on purpose — the served template literal eats them.
+function _anatKey_(name){ var s=String(name==null?'':name).toLowerCase().replace(/[^a-z0-9]+/g,' '); return s.replace(/^ +/,'').replace(/ +$/,'').replace(/  +/g,' '); }
+var _ANAT_IDX_=null;
+function _anatFor_(name){
+  if(!name) return null;
+  if(ANATOMY_MAP[name]) return ANATOMY_MAP[name];
+  if(!_ANAT_IDX_){ _ANAT_IDX_={}; for(var n in ANATOMY_MAP){ if(Object.prototype.hasOwnProperty.call(ANATOMY_MAP,n)) _ANAT_IDX_[_anatKey_(n)]=ANATOMY_MAP[n]; } }
+  return _ANAT_IDX_[_anatKey_(name)]||null;
+}
+// Combine one or more exercises into a single highlight set. Primary wins over secondary (spec §5); a
+// muscle that is 'working' anywhere wins over 'lengthening' (so a mixed movement never reads two ways).
+function _anatCombined_(exercises){
+  var pri={}, sec={}, len={}, any=false;
+  (exercises||[]).forEach(function(e){
+    var m=_anatFor_(e && e.name); if(!m) return; any=true;
+    (m.pri||[]).forEach(function(id){ pri[id]=1; });
+    (m.sec||[]).forEach(function(id){ sec[id]=1; });
+    (m.len||[]).forEach(function(id){ len[id]=1; });
+  });
+  var P=Object.keys(pri), S=Object.keys(sec).filter(function(id){ return !pri[id]; }),
+      L=Object.keys(len).filter(function(id){ return !pri[id] && !sec[id]; });
+  return { pri:P, sec:S, len:L, mapped:any };
+}
+function _anatOne_(name){ var m=_anatFor_(name); if(!m) return {pri:[],sec:[],len:[],mapped:false};
+  return { pri:(m.pri||[]).slice(), sec:(m.sec||[]).filter(function(id){return (m.pri||[]).indexOf(id)<0;}),
+           len:(m.len||[]).filter(function(id){return (m.pri||[]).indexOf(id)<0 && (m.sec||[]).indexOf(id)<0;}), mapped:true }; }
+// ---- PLACEHOLDER body: labelled muscle REGIONS, front + back. Simple rounded rects, not detailed art.
+// Region = [id, label, [[x,y,w,h],...]]. Bilateral groups carry two rects; the art swap replaces these
+// rects with real paths under the SAME id + class, so nothing downstream changes.
+var _AN_FRONT=[
+  ['m-f-neck','Neck',[[45,4,14,7]]],
+  ['m-f-traps-upper','Traps',[[30,13,44,8]]],
+  ['m-f-delt-front','Delt',[[16,22,15,12]]],
+  ['m-f-delt-side','Delt',[[73,22,15,12]]],
+  ['m-f-pec','Pecs',[[30,36,44,14]]],
+  ['m-f-serratus','Serr',[[30,52,9,7],[65,52,9,7]]],
+  ['m-f-biceps','Bi',[[8,40,13,20]]],
+  ['m-f-forearm-flex','F.arm',[[6,62,13,22]]],
+  ['m-f-abs','Abs',[[36,54,32,28]]],
+  ['m-f-obliques','Obl',[[27,56,8,22],[69,56,8,22]]],
+  ['m-f-hip-flexor','Hip',[[34,86,15,10],[55,86,15,10]]],
+  ['m-f-adductor','Add',[[42,100,20,30]]],
+  ['m-f-quad','Quads',[[24,100,17,44],[63,100,17,44]]],
+  ['m-f-tib-ant','Shin',[[28,158,12,28],[64,158,12,28]]]
+];
+var _AN_BACK=[
+  ['m-b-traps-upper','Traps',[[30,13,44,8]]],
+  ['m-b-rear-delt','Delt',[[16,22,15,12],[73,22,15,12]]],
+  ['m-b-traps-mid','Traps M',[[34,24,36,14]]],
+  ['m-b-rhomboid','Rhom',[[38,30,28,8]]],
+  ['m-b-teres','Teres',[[27,40,10,7],[67,40,10,7]]],
+  ['m-b-lat','Lats',[[26,42,20,22],[58,42,20,22]]],
+  ['m-b-triceps','Tri',[[8,40,13,20]]],
+  ['m-b-forearm-ext','F.arm',[[6,62,13,22]]],
+  ['m-b-erector','Erector',[[45,50,14,34]]],
+  ['m-b-glute-med','Glute M',[[28,86,14,12],[62,86,14,12]]],
+  ['m-b-glute-max','Glutes',[[30,98,44,20]]],
+  ['m-b-hamstring','Hams',[[26,120,20,38],[58,120,20,38]]],
+  ['m-b-gastroc','Calf',[[28,160,18,22],[58,160,18,22]]],
+  ['m-b-soleus','Soleus',[[30,184,14,12],[60,184,14,12]]]
+];
+function _anatRegionSVG_(regions){
+  var out='';
+  regions.forEach(function(rg){
+    var id=rg[0], label=rg[1], rects=rg[2], inner='';
+    rects.forEach(function(r){ inner+='<rect x="'+r[0]+'" y="'+r[1]+'" width="'+r[2]+'" height="'+r[3]+'" rx="4"/>'; });
+    // label sits on the first rect
+    var r0=rects[0], lx=r0[0]+r0[2]/2, ly=r0[1]+r0[3]/2+2.4;
+    out+='<g id="'+id+'" class="m">'+inner+'<text class="ml" x="'+lx+'" y="'+ly+'" text-anchor="middle">'+label+'</text></g>';
+  });
+  return out;
+}
+// The diagram for a highlight set. hl = {pri:[],sec:[],len:[]}. Returns the SVG (no legend).
+function anatomyDiagram_(hl){
+  hl=hl||{pri:[],sec:[],len:[]};
+  var cls={}; (hl.pri||[]).forEach(function(id){cls[id]='pri';}); (hl.sec||[]).forEach(function(id){if(!cls[id])cls[id]='sec';}); (hl.len||[]).forEach(function(id){if(!cls[id])cls[id]='len';});
+  var svg='<svg class="anx" viewBox="0 0 200 200" width="100%" style="max-width:280px;display:block;margin:0 auto">'
+    +'<g transform="translate(2,2)">'+_anatRegionSVG_(_AN_FRONT)+'</g>'
+    +'<g transform="translate(102,2)">'+_anatRegionSVG_(_AN_BACK)+'</g></svg>';
+  // apply classes by string injection (so it works in a static string context too)
+  Object.keys(cls).forEach(function(id){ svg=svg.replace('id="'+id+'" class="m"','id="'+id+'" class="m '+cls[id]+'"'); });
+  return svg;
+}
+// Legend — renders the WORDS, always, per whichever states are present (spec §4).
+function anatLegend_(hl){
+  hl=hl||{}; var parts=[];
+  if((hl.pri||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#FC4C02"></i>Working</span>');
+  if((hl.sec||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#f59e0b"></i>Assisting</span>');
+  if((hl.len||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#2dd4bf"></i>Lengthening</span>');
+  return parts.length?('<div class="anleg">'+parts.join('')+'</div>'):'';
+}
+// ---- Interactivity: swap the card's diagram highlights to one exercise (tap a row), or back to the
+// session-combined set (tap the title). Class-swap only; no re-render of the body.
+function _anatSet_(dac, hl, title){
+  if(!dac) return;
+  var svg=dac.querySelector('.anx'); if(!svg) return;
+  svg.querySelectorAll('.m').forEach(function(g){ g.setAttribute('class','m'); });
+  ['pri','sec','len'].forEach(function(c){ (hl&&hl[c]||[]).forEach(function(id){ var g=svg.querySelector('[id="'+id+'"]'); if(g) g.setAttribute('class','m '+c); }); });
+  var t=dac.querySelector('.anat-title'); if(t) t.textContent=title;
+  var lg=dac.querySelector('.anleg'), html=anatLegend_(hl);
+  if(lg){ if(html){ var w=document.createElement('div'); w.innerHTML=html; lg.parentNode.replaceChild(w.firstChild, lg); } else lg.remove(); }
+  else if(html){ var host=dac.querySelector('.anx'); if(host){ var w2=document.createElement('div'); w2.innerHTML=html; host.parentNode.appendChild(w2.firstChild); } }
+}
+function _anatDac_(el){ var p=el; for(var i=0;i<8 && p;i++){ if(p.querySelector && p.querySelector('[data-anat-card]')) return p.querySelector('[data-anat-card]'); if(p.getAttribute && p.getAttribute('data-anat-card')!=null) return p; p=p.parentElement; } return null; }
+function anatFocus_(el, q){
+  var name=q; try{ name=decodeURIComponent(String(q==null?'':q)); }catch(e){}
+  _anatSet_(_anatDac_(el), _anatOne_(name), name);
+}
+function anatReset_(el){
+  var dac=_anatDac_(el); if(!dac) return;
+  var hl={}; try{ hl=JSON.parse(dac.getAttribute('data-anat-hl')||'{}'); }catch(e){}
+  _anatSet_(dac, hl, 'Muscles worked');
+}
+
 function exerciseRowHTML_(e){
   if(!e) return '';
   var esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
@@ -7387,6 +7560,9 @@ function exerciseRowHTML_(e){
   return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px">'
     +'<span style="color:var(--t1);flex:1;min-width:0">'+esc(e.name)+'</span>'
     +'<span style="color:var(--t3);white-space:nowrap">'+d+'</span>'
+    // Muscle-focus tap — swaps the card's body map to THIS movement (spec §5), alongside Watch, off the
+    // shared row renderer so it can never be dropped on one surface. Shown only when the movement maps.
+    +((typeof _anatFor_==='function' && _anatFor_(e.name)) ? ('<span onclick="event.stopPropagation();if(window.anatFocus_)anatFocus_(this,&#39;'+q+'&#39;)" title="Show muscles worked" style="flex-shrink:0;font-size:10px;font-weight:700;color:#FC4C02;border:1px solid rgba(252,76,2,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Muscles</span>') : '')
     +'<span onclick="event.stopPropagation();watchExercise_(&#39;'+q+'&#39;)" title="Watch a demo"'
     +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>'
     +'</div>';
@@ -7439,6 +7615,17 @@ function planCardHTML_(s, dateKey){
       return (typeof exerciseRowHTML_==='function')?exerciseRowHTML_(e):'';
     }).join(''));
     if(_cues.length) lines.push('<div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.4">Load: '+esc(_cues.join('; '))+'</div>');
+    // Body map — the session's COMBINED muscle coverage; each row taps to focus one movement, the title
+    // resets to the session. One diagram per card, off the shared renderer, so both surfaces inherit it.
+    try{ if(typeof _anatCombined_==='function' && typeof anatomyDiagram_==='function'){
+      var _ahl=_anatCombined_(r.exercises);
+      var _ahlJson=JSON.stringify({pri:_ahl.pri,sec:_ahl.sec,len:_ahl.len}).replace(/"/g,'&quot;');
+      lines.push('<div data-anat-card data-anat-hl="'+_ahlJson+'" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--b1)" onclick="event.stopPropagation()">'
+        +'<div onclick="if(window.anatReset_)anatReset_(this)" style="font-size:10px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;cursor:pointer"><span class="anat-title">Muscles worked</span> <span style="color:var(--b2);text-transform:none;letter-spacing:0">· tap a movement, or here to reset</span></div>'
+        +anatomyDiagram_(_ahl)
+        +(_ahl.mapped?anatLegend_(_ahl):'<div style="font-size:11px;color:var(--t3);text-align:center;margin-top:6px">Not mapped yet.</div>')
+        +'</div>');
+    } }catch(_ae){}
   } else if(type==='rest'){
     lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
   }
