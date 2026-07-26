@@ -19347,58 +19347,81 @@ function _cvIntCount_(struct){ var m=String(struct||'').match(/(\d+)\s*x/i); ret
 function _cvPre_(intent, t, struct){
   var lo=t&&t.powerLo, hi=t&&t.powerHi, cap=t&&t.hrCap, band=(lo&&hi)?(lo+'-'+hi+'W'):'';
   var o=[];
+  // VOICE: second person, present tense, imperative. Numbers are always the real prescribed ones —
+  // never a placeholder, never rounded for effect. The Type A call-out appears ONLY on the sessions
+  // with a ceiling to blow past, because that is where the tendency actually costs something.
   if(intent==='vo2'){
     var n=_cvIntCount_(struct)||4;
-    o.push('Start interval 1 at '+(lo||'the bottom of the band')+(lo?'W':'')+', not '+(hi||'the top')+(hi?'W':'')+'. Intervals 3 and 4 will be hard — that is correct.');
-    o.push('If you blow up on interval 3, you went out too hot on 1 and 2. Do not add a '+(n+1)+'th interval no matter how good you feel.');
+    o.push((band?(band+' for each interval. '):'')+'Start interval 1 at '+(lo?(lo+'W'):'the bottom of the band')+'. Not '+(hi?(hi+'W'):'the top')+'. '+(lo?(lo+'W.'):''));
+    o.push('Intervals 3 and 4 are supposed to hurt; if you blow up on 3 you went out too hot on 1.');
+    o.push('Do not add a '+(n+1)+'th interval no matter how good you feel at the end — feeling good at the end means you paced it right, not that you left work undone.');
   } else if(intent==='threshold'){
-    o.push('Hold '+(band||'the band')+' across the '+(struct||'blocks')+'. Steady beats surging.');
-    o.push('The last five minutes of each block is where the work is — do not fade there.');
+    o.push((band||'The band')+' for '+(struct||'the prescribed blocks')+'. That is the job. Nothing more.');
+    if(lo) o.push('Start at '+lo+'W. Not '+Math.round((lo+(hi||lo))/2)+'. Not '+(hi||lo)+'. '+lo+'.');
+    o.push('When it feels easy early, that is correct; when you want to push harder, that is the Type A talking, and you ignore it.');
+    o.push('The last five minutes of each block is where the work is — hold the number there and the session is done.');
   } else if(intent==='z2'){
-    o.push('This is a ceiling, not a target. If watts drift up and HR climbs past '+(cap||135)+', back off even if the legs feel good.');
+    o.push((band?(band+' is a ceiling, not a target. '):'This is a ceiling, not a target. ')+'HR stays under '+(cap||135)+'.');
+    o.push('At minute 40 the legs will feel good and you will want more — that is the Type A talking.');
+    o.push('Riding 10W over the ceiling does not make this session better, it makes tomorrow worse.');
   } else if(intent==='group'){
-    o.push('Sit in for the first 20 minutes. Race only the last 10-15. If you get dropped, do not chase — this is base, not a result.');
+    o.push('Sit in for the first 20 minutes. Race only the last 10 to 15.');
+    o.push('If you get dropped you do not chase — this is base, not a result, and nobody is scoring it.');
   } else if(intent==='long'){
-    o.push('Controlled '+((t&&t.zone)||'Z2-Z3')+' — the point is time in the saddle, not watts. Keep eating and drinking from the start.');
+    o.push('Controlled '+((t&&t.zone)||'Z2-Z3')+'. Time in the saddle is the stimulus, not watts.');
+    o.push('Eat and drink from the first hour, not when you feel empty — by then it is already too late.');
   } else if(intent==='easyRun'){
-    o.push('Conversational. If you cannot hold a full sentence, you are running too fast. Impact is the load; keep it short.');
+    o.push('Conversational. If you cannot hold a full sentence you are running too fast.');
+    o.push('Impact is the load here, not pace — keep it short and keep it slow.');
   } else if(intent==='run10k'){
-    o.push('Easy volume with the reps at 10k pace as the only hard part. Everything around them stays genuinely easy.');
+    o.push('The reps at 10k pace are the only hard part; everything around them stays genuinely easy.');
+    o.push('You should finish this one thinking you could have done more. That is the design.');
   } else if(intent==='strengthA'||intent==='strengthB'){
-    o.push('Prescribed percentage of 1RM, form over load. This is the structural stimulus the bike never gives you.');
+    o.push('Prescribed percentage of 1RM. Form over load, every set.');
+    o.push('This is the structural stimulus the bike never gives you — adding weight to beat a number defeats the point.');
   } else if(intent==='mobility'){
-    o.push('Fifteen minutes, prescribed not optional — it undoes what the riding position does to your hips and back.');
+    o.push('Fifteen minutes, prescribed and not optional.');
+    o.push('It undoes what the riding position does to your hips and back; skip it and you pay for it on the long rides.');
   } else if(intent==='recovery'){
-    o.push('Genuinely easy. Spin the legs, add no fatigue — a taper only works if you respect the easy days.');
+    o.push('Genuinely easy. Spin the legs and add no fatigue.');
+    o.push('A taper only works if you respect the easy days — riding this one hard costs you the session it was protecting.');
   } else if(intent==='chalet'){
-    o.push('15 minutes warmup, then hold '+(band||'155-160W')+' for the first 30 minutes. Do not send the bottom — this is an endurance test, and pacing it is the test.');
+    o.push('15 minutes warmup, then hold '+(band||'155-160W')+' for the first 30 minutes.');
+    o.push('Do not send the bottom. This is an endurance test and pacing it IS the test.');
   } else if(intent==='alpe'){
-    o.push('A time trial, not a max effort. Even pacing to the top beats a hot start every time. Settle in early and hold the effort.');
+    o.push('A time trial, not a max effort. Even pacing to the top beats a hot start every time.');
+    o.push('Settle in early and hold the number — the mountain does not care how you felt in the first kilometre.');
   } else if(intent==='tenk'){
-    o.push('Race day. Warm up properly, then run your race — do not go out with the fast starters and blow up at 6k.');
+    o.push('Race day. Warm up properly, then run your race.');
+    o.push('Do not go out with the fast starters and blow up at 6k — the race is won in the last 3k by whoever paced the first 7.');
   } else if(intent==='ventop'){
-    o.push('This is the one. Everything the block built points here. Patience on the lower slopes, save something real for the last third.');
+    o.push('This is the one. Everything the block built points here.');
+    o.push('Patience on the lower slopes, and save something real for the last third — you get one attempt at this.');
   } else if(intent==='rest'){
     o.push('Full rest. Recovery is the plan, not a gap in it.');
   } else if(intent==='optional'){
-    o.push('Optional — good legs, spin easy; otherwise rest. This is never a makeup for a session you missed.');
+    o.push('Good legs, spin easy. Otherwise rest.');
+    o.push('This is never a makeup for a session you missed — a missed session is gone, and chasing it here costs you the next one.');
   }
   return o;
 }
 // Honest "what to expect" preview per intent.
+// Honest previews of how the session will actually feel, written so the uncomfortable part is
+// expected rather than alarming — and so the "I had more left" feeling reads as execution, not
+// as evidence you undertrained.
 var _CV_EXPECT={
-  vo2:'Legs fine early. Breathing gets uncomfortable fast — that is the point. HR climbs through each interval and stays elevated. Genuinely hard but controlled.',
-  threshold:'Sustainable but demanding — a steady discomfort, not spikes. The last block is a grind, and that is expected.',
-  z2:'Easy the whole way. If it feels hard, it is too hard. A little boredom is the sign you are doing it right.',
-  group:'Surges you did not choose, then lulls. Your legs will want to answer every one — do not, until the finale.',
-  long:'Fine for the first couple of hours, then a dull heaviness sets in. Keep fuelling; the wall is a fuelling problem, not a fitness one.',
-  easyRun:'Should feel almost too easy. The only real load is impact — keep it relaxed and short.',
-  run10k:'Easy, then a few sharp reps that lift the breathing, then easy again. You should finish feeling you could do more.',
-  recovery:'Barely a workout, and that is correct. If you finish tired, you rode it too hard.',
-  chalet:'A long, steady burn — boredom, then discomfort, then the summit. Pace it and the top comes to you.',
-  alpe:'Sustained and lonely. The clock is the opponent. Even effort, no heroics until the final ramps.',
+  vo2:'Legs feel fine early and the breathing turns uncomfortable fast, which is the point. HR climbs through each interval and stays up. If interval 4 is survivable you paced it correctly.',
+  threshold:'A steady discomfort that never spikes. The last block is a grind and that is expected. You should finish thinking you could have held it another five minutes — that means you did it right.',
+  z2:'Easy the whole way. If it feels hard, it is too hard. Boredom is the signal you are doing it correctly, and wanting to push is the signal to back off.',
+  group:'Surges you did not choose, then lulls. Your legs will want to answer every one. Answering them is how a base ride turns into a session you pay for on Sunday.',
+  long:'Fine for two hours, then a dull heaviness. Keep fuelling — the wall is a fuelling problem, not a fitness one, and it arrives whether or not you are strong.',
+  easyRun:'Almost too easy. The only real load is impact. If you are breathing hard you have turned a run base into a workout you did not need.',
+  run10k:'Easy, a few sharp reps that lift the breathing, then easy again. You finish feeling you could do more, because you could — that is the design, not a shortfall.',
+  recovery:'Barely a workout, and that is correct. If you finish tired you rode it too hard and cost yourself the session it was protecting.',
+  chalet:'A long steady burn: boredom, then discomfort, then the summit. Pace it and the top comes to you. Send the bottom and it does not.',
+  alpe:'Sustained and lonely. The clock is the opponent, not the rider ahead. Even effort, no heroics until the final ramps.',
   tenk:'Comfortable-hard early, genuinely hard from halfway. The race is won in the last 3k by whoever paced the first 7.',
-  ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top.'
+  ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top. You get one attempt at this.'
 };
 // Form adjustment from TSB — only for the hard sessions, only when TSB is known.
 function _cvForm_(intent, tsb){
@@ -19645,7 +19668,7 @@ function _cvDebrief_(dateKey, ride, sessType){
     if(intent==='group'){
       out.push('Group ride logged: '+dash(dist!=null?(Math.round(dist*10)/10):null,' mi')
         +', '+dash(avg!=null?Math.round(avg):null,'W avg')+', '+dash(tss!=null?Math.round(tss):null,' TSS')+'.');
-      out.push('No target to hold on a group ride — the number that matters is that you rode it.');
+      out.push('There is no ceiling to hold on a group ride, so there is nothing here to grade you against.');
       return out.join(' ');
     }
 
@@ -19653,42 +19676,55 @@ function _cvDebrief_(dateKey, ride, sessType){
     if(intent==='z2' || intent==='recovery'){
       if(avg!=null && lo!=null && hi!=null){
         out.push(avg>=lo && avg<=hi
-          ? ('Avg '+Math.round(avg)+'W sat inside the '+lo+'–'+hi+'W band. That is the session done right.')
-          : ('Avg '+Math.round(avg)+'W against a '+lo+'–'+hi+'W band.'));
+          ? ('You held the ceiling. Avg '+Math.round(avg)+'W inside '+lo+'–'+hi+'W, the whole ride.')
+          : (avg>hi ? ('You rode over the ceiling. Avg '+Math.round(avg)+'W against a '+lo+'–'+hi+'W band.')
+                    : ('Avg '+Math.round(avg)+'W, under the '+lo+'–'+hi+'W band. On this session that costs you nothing.')));
       } else if(avg==null){ out.push('No average power recorded for this ride, so there is nothing to read against the band.');
       } else { out.push('Avg '+Math.round(avg)+'W — no watt band on file for this session to read it against.'); }
       var cap=t?_cvdNum_(t.hrCap):null; var ceil=(cap!=null?cap:135);
       if(hr!=null) out.push(hr<=ceil ? ('HR averaged '+Math.round(hr)+', under the '+ceil+' ceiling.')
-                                     : ('HR averaged '+Math.round(hr)+', above the '+ceil+' ceiling — ease off sooner next time.'));
+                                     : ('HR averaged '+Math.round(hr)+' against a '+ceil+' ceiling — that is a tempo ride wearing a Z2 label, and it buys you fatigue you did not plan for.'));
+      if(avg!=null && lo!=null && hi!=null && avg>=lo && avg<=hi && (hr==null || hr<=ceil)){
+        out.push('If it felt easy and you wanted more, that is exactly what this session is supposed to feel like.');
+      }
       return out.join(' ');
     }
 
-    // ---- VO2 / Threshold: judged against the band, with a week-over-week read. ----
+    // ---- VO2 / Threshold: verdict first, then the numbers, then what it costs. ----
     if(intent==='vo2' || intent==='threshold'){
+      var inBand=(np!=null && lo!=null && hi!=null && np>=lo && np<=hi);
       if(np!=null && lo!=null && hi!=null){
-        out.push(np>=lo && np<=hi ? ('NP '+Math.round(np)+'W landed in the '+lo+'–'+hi+'W band.')
-          : (np>hi ? ('NP '+Math.round(np)+'W, '+Math.round(np-hi)+'W above the '+lo+'–'+hi+'W band.')
-                   : ('NP '+Math.round(np)+'W, '+Math.round(lo-np)+'W under the '+lo+'–'+hi+'W band.')));
+        out.push(inBand ? ('You stayed in range. NP '+Math.round(np)+'W against '+lo+'–'+hi+'W. That is what discipline looks like.')
+          : (np>hi ? ('You went over the ceiling. NP '+Math.round(np)+'W against '+lo+'–'+hi+'W, '+Math.round(np-hi)+'W above it. Riding over the top of the band does not bank fitness, it borrows from the next two sessions.')
+                   : ('You came in under. NP '+Math.round(np)+'W against '+lo+'–'+hi+'W, '+Math.round(lo-np)+'W short of the floor.')));
       } else if(np==null){ out.push('No normalised power recorded for this ride, so there is nothing to read against the band.');
       } else { out.push('NP '+Math.round(np)+'W — no watt band on file for this session to read it against.'); }
       if(intent==='vo2' && iff!=null){
-        out.push(iff>=0.90 ? ('IF '+iff.toFixed(2)+' — the intensity was there.')
-                           : ('IF '+iff.toFixed(2)+', under the 0.90 a VO2 session wants.'));
+        out.push(iff>=0.90 ? ('IF '+iff.toFixed(2)+'. The intensity was there.')
+                           : ('IF '+iff.toFixed(2)+', under the 0.90 a VO2 session needs to be a VO2 session.'));
       }
+      var uneven=false;
       if(intent==='threshold' && np!=null && avg>0){
         var vi=Math.round(np/avg*100)/100;
-        if(vi>=1.10) out.push('NP-to-avg spread '+vi.toFixed(2)+' — the effort was uneven; threshold wants it flat.');
+        uneven=(vi>=1.10);
+        if(uneven) out.push('NP-to-avg spread '+vi.toFixed(2)+' — you surged and recovered instead of holding one number, and threshold only pays when it is flat.');
       }
-      if(mins!=null && prescMin!=null && mins < prescMin*0.8){
-        out.push('Ran '+mins+' min against '+prescMin+' prescribed — short of the session.');
+      var cutShort=(mins!=null && prescMin!=null && mins < prescMin*0.8);
+      if(cutShort){
+        out.push('You stopped at '+mins+' min against '+prescMin+' prescribed. The last third is the part that changes anything.');
       }
       var prior=_cvdPriorWeek_(dateKey, intent), pnp=prior?_cvdNum_(prior.np):null;
       if(pnp!=null && np!=null){
         var dp=Math.round(np-pnp);
-        out.push(dp>0 ? ('Up '+dp+'W on the same session last week.')
+        out.push(dp>0 ? ('Up '+dp+'W on the same session last week — that is the block working.')
                : (dp<0 ? ('Down '+Math.abs(dp)+'W on the same session last week.')
                        : 'Level with the same session last week.'));
       }
+      // The paradox line is EARNED: it means "you held the number for the whole session". After a
+      // session cut short it reads as praise for stopping early, and after a surging one it
+      // contradicts the sentence directly above it. Average NP landing in the band is not the same
+      // as executing the session, so it only fires when nothing else was flagged.
+      if(inBand && !cutShort && !uneven) out.push('You should feel like you had more. That means you executed it correctly, not that you undertrained.');
       return out.join(' ');
     }
 
