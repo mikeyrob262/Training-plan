@@ -19670,6 +19670,58 @@ function _cvdPriorWeek_(dateKey, intent){
     return null;
   }catch(e){ return null; }
 }
+// Interval-by-interval read, used ONLY when Intervals has already cached this ride's tagged
+// intervals on the ride object (r._icuIv, written by _icuFetchIntervals_). Deliberately SYNC and
+// cache-only: the panel renders synchronously, and a debrief that silently changes shape after an
+// async fetch is worse than one that is consistent. Returns null whenever the data cannot carry the
+// claim — no data, no prescribed structure, or a segment set that does not line up — and the caller
+// falls back to the scalar read rather than inventing a per-interval story.
+// Match rule: a WORK segment counts as interval i when its duration is within 30s of the prescribed
+// one. The COUNT must also line up (N, or N-1 for a session where the last effort was cut), or the
+// mapping is a guess and we decline.
+var _CVI_TOL_SEC=30;
+function _cvIntervalDebrief_(ride, intent, targets, struct){
+  try{
+    var icu=ride && ride._icuIv;
+    if(!icu || !Array.isArray(icu.work) || !icu.work.length) return null;
+    if(typeof _sessionSteps_!=='function') return null;
+    var steps=_sessionSteps_(intent, struct||'', targets||{});
+    var presc=steps.filter(function(s){ return s.kind==='work' && s.workMin; });
+    if(!presc.length) return null;
+    var N=presc.length, targetSec=presc[0].workMin*60;
+    var lo=presc[0].bandLo, hi=presc[0].bandHi;
+    if(lo==null || hi==null) return null;
+    var near=icu.work.filter(function(w){ return Math.abs((w.dur||0)-targetSec)<=_CVI_TOL_SEC; });
+    if(near.length!==N && near.length!==N-1) return null;   // ambiguous mapping — decline
+    var pairs=near.slice(0,N).map(function(w,i){
+      return { i:i+1, watts:(w.watts!=null?Math.round(w.watts):null),
+               inBand:(w.watts!=null && w.watts>=lo && w.watts<=hi),
+               under:(w.watts!=null && w.watts<lo) };
+    });
+    var withW=pairs.filter(function(p){ return p.watts!=null; });
+    if(!withW.length) return null;                          // segments exist but carry no power
+    var nIn=pairs.filter(function(p){ return p.inBand; }).length;
+    var out=[];
+    out.push(nIn===N
+      ? ('All '+N+' intervals landed in the '+lo+'–'+hi+'W band. That is the session executed, not survived.')
+      : (nIn+' of '+N+' intervals held the '+lo+'–'+hi+'W band.'));
+    out.push(pairs.map(function(p){
+      return 'Interval '+p.i+' '+(p.watts!=null?(p.watts+'W'):'no power');
+    }).join(', ')+'.');
+    // Weakest = furthest BELOW the band; an interval over the top is a different fault and is
+    // called out separately rather than being labelled "weakest".
+    var below=withW.filter(function(p){ return p.under; });
+    if(below.length){
+      var worst=below.reduce(function(a,b){ return (a.watts<=b.watts)?a:b; });
+      out.push('Interval '+worst.i+' was the weakest at '+worst.watts+'W, '+(lo-worst.watts)+'W under the floor.');
+    }
+    var over=withW.filter(function(p){ return p.watts>hi; });
+    if(over.length===1) out.push('Interval '+over[0].i+' went '+(over[0].watts-hi)+'W over the top, which costs you the ones after it.');
+    else if(over.length>1) out.push(over.length+' intervals went over the top of the band — that is pacing, not fitness.');
+    if(near.length===N-1) out.push('Only '+near.length+' efforts of the '+N+' prescribed are in the data.');
+    return out;
+  }catch(e){ return null; }
+}
 // Returns a string (one sentence per point, joined) or null when there is nothing honest to say.
 function _cvDebrief_(dateKey, ride, sessType){
   try{
@@ -19729,6 +19781,23 @@ function _cvDebrief_(dateKey, ride, sessType){
     // ---- VO2 / Threshold: verdict first, then the numbers, then what it costs. ----
     if(intent==='vo2' || intent==='threshold'){
       var inBand=(np!=null && lo!=null && hi!=null && np>=lo && np<=hi);
+      // Interval-by-interval when the data supports it; otherwise the scalar read below. The
+      // per-interval version REPLACES the NP-vs-band sentence because it says the same thing with
+      // more resolution — a session can average into the band while half the intervals missed it.
+      // typeof-guarded: without it a missing helper throws, the outer catch swallows it, and the
+      // ENTIRE debrief returns null — losing the scalar read too. Degrade to scalar, never to blank.
+      var ivl=(typeof _cvIntervalDebrief_==='function')?_cvIntervalDebrief_(ride, intent, t, (primary&&primary.struct)||''):null;
+      if(ivl && ivl.length){
+        ivl.forEach(function(s){ out.push(s); });
+        var pw=_cvdPriorWeek_(dateKey, intent), ppnp=pw?_cvdNum_(pw.np):null;
+        if(ppnp!=null && np!=null){
+          var pd=Math.round(np-ppnp);
+          out.push(pd>0 ? ('Up '+pd+'W on the same session last week — that is the block working.')
+                 : (pd<0 ? ('Down '+Math.abs(pd)+'W on the same session last week.')
+                         : 'Level with the same session last week.'));
+        }
+        return out.join(' ');
+      }
       if(np!=null && lo!=null && hi!=null){
         out.push(inBand ? ('You stayed in range. NP '+Math.round(np)+'W against '+lo+'–'+hi+'W. That is what discipline looks like.')
           : (np>hi ? ('You went over the ceiling. NP '+Math.round(np)+'W against '+lo+'–'+hi+'W, '+Math.round(np-hi)+'W above it. Riding over the top of the band does not bank fitness, it borrows from the next two sessions.')
