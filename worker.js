@@ -23698,7 +23698,7 @@ function _hrDecoupling_(r, ftp){
   // which is technically true but misleading — the ride was never a decoupling candidate. (The
   // Jul 23 Zwift VO2 ride is exactly this: 52 min, and its chartHR/chartPwr are empty.)
   var durSec=(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0);
-  if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min'};
+  if(!(durSec>=_HRD_MIN_SEC)) return {applicable:false, reason:'ride under 60 min', detail:'durMin='+Math.round(durSec/60)+' need>=60'};
   // SCALAR gates first — IF and VI are determinable from the sync SUMMARY (np/avgPwr), which
   // exist even on a stream-less ride. Rejecting a too-hard or too-variable ride here (before the
   // stream checks) means a "no heart-rate stream"/"no power data" reason is reached ONLY by a
@@ -23706,29 +23706,29 @@ function _hrDecoupling_(r, ftp){
   // fetch keys on. A ride that is N/A regardless never gets that far, so it never triggers a fetch.
   var npS=(+r.np>0)?+r.np:null, avgS=(+r.avgPwr>0)?+r.avgPwr:null;
   var iffS=(ftp>0&&npS)?npS/ftp:null;
-  if(iffS!=null && iffS>_HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
+  if(iffS!=null && iffS>_HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride', detail:'IF='+(Math.round(iffS*100)/100)+' (np '+Math.round(npS)+' / ftp '+ftp+') max='+_HRD_MAX_IF};
   var viS=(npS&&avgS)?npS/avgS:null;
-  if(viS!=null && viS>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
+  if(viS!=null && viS>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(viS*100)/100)+' (np '+Math.round(npS)+' / avg '+Math.round(avgS)+') max='+_HRD_MAX_VI};
   var hr=r.chartHR, pw=r.chartPwr;
-  if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream'};
-  if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data'};
+  if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream', detail:'hrPts='+((hr&&hr.length)||0)+' need>=20'};
+  if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data', detail:'pwrPts='+((pw&&pw.length)||0)+' need>=20'};
   // Streams present — refine VI/IF from the stream ONLY where the summary scalars were absent.
   var avgP = avgS!=null ? avgS : _hrdMean_(pw);
   var np   = npS!=null ? npS : _hrdNP_(pw, durSec);
   var vi   = (viS!=null) ? viS : (avgP>0 ? np/avgP : 99);
-  if(viS==null && vi>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable'};
+  if(viS==null && vi>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(vi*100)/100)+' (from stream) max='+_HRD_MAX_VI};
   var iff = (ftp>0 && np>0) ? np/ftp : null;
-  if(iffS==null && iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride'};
+  if(iffS==null && iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride', detail:'IF='+(Math.round(iff*100)/100)+' (from stream) max='+_HRD_MAX_IF};
   // align both streams onto a common index, drop the first 10 min (capped at 25%), split the rest.
   var N=Math.min(hr.length, pw.length), H=[], P=[];
   for(var i=0;i<N;i++){ H.push(+hr[Math.floor(i*hr.length/N)]||0); P.push(+pw[Math.floor(i*pw.length/N)]||0); }
   var warm=Math.min(0.25, durSec>0 ? (10*60)/durSec : 0.15);
   var start=Math.floor(N*warm), seg=N-start;
-  if(seg < 10) return {applicable:false, reason:'too short after warm-up'};
+  if(seg < 10) return {applicable:false, reason:'too short after warm-up', detail:'segPts='+seg+' need>=10'};
   var mid=start+Math.floor(seg/2);
   function ratio(a,b){ var ps=0,hs=0,n=0; for(var i=a;i<b;i++){ if(P[i]>0&&H[i]>0){ ps+=P[i]; hs+=H[i]; n++; } } return (n&&hs>0)?((ps/n)/(hs/n)):null; }
   var r1=ratio(start,mid), r2=ratio(mid,N);
-  if(r1==null||r2==null||r1<=0) return {applicable:false, reason:'gaps in power/HR data'};
+  if(r1==null||r2==null||r1<=0) return {applicable:false, reason:'gaps in power/HR data', detail:'half1='+r1+' half2='+r2};
   var dec=Math.round((r1-r2)/r1*100*10)/10;   // + = HR drifted up relative to power
   return {applicable:true, decoupling:dec, r1:r1, r2:r2, durMin:Math.round(durSec/60),
     iff:iff, vi:Math.round(vi*100)/100, segFrom:start, N:N, H:H};
@@ -23903,13 +23903,21 @@ function dsShowDashboard(){
   // answer — that is what licenses the async walk below.
   var hdCands=(typeof _hrdCandidates_==='function')?_hrdCandidates_():[];
   var hdFtp=parseInt((st&&st.ftp)||186)||186;
-  var hdPick=null, hdFetchable=false;
+  var hdPick=null, hdFetchable=false, _hdLog=[];
   for(var hdi=0; hdi<hdCands.length; hdi++){
     var hdr=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdCands[hdi], hdFtp):{applicable:false,reason:'unavailable'};
+    // Log EVERY candidate and why it was rejected, with the numbers that decided it. Without this
+    // a skipped ride can only be explained by re-deriving the gates by hand, which is guesswork.
+    _hdLog.push('  '+(normDate(hdCands[hdi].date)||'?')+'  '
+      +String(hdCands[hdi].name||'(unnamed)').slice(0,30).padEnd(32)
+      +(hdr.applicable?('ACCEPTED  decoupling '+hdr.decoupling+'%  VI '+hdr.vi+(hdr.iff!=null?('  IF '+(Math.round(hdr.iff*100)/100)):''))
+                      :('rejected: '+hdr.reason+(hdr.detail?('  ['+hdr.detail+']'):''))));
     if(hdr.applicable){ hdPick={ride:hdCands[hdi], res:hdr}; break; }
     if(!hdFetchable && (hdr.reason==='no heart-rate stream'||hdr.reason==='no power data')
        && hdCands[hdi].stravaId && _hdStreamAttempts[rideKey(hdCands[hdi])]==null) hdFetchable=true;
   }
+  try{ console.log('[hrdrift] candidate scan, newest first (FTP '+hdFtp+', gates: >=60min, VI<='
+    +_HRD_MAX_VI+', IF<='+_HRD_MAX_IF+')'+String.fromCharCode(10)+_hdLog.join(String.fromCharCode(10))); }catch(_e){}
   // The loop breaks at the pick, so any fetchable candidate it saw is strictly NEWER than the pick
   // — a ride that might win once its streams land. Worth a background walk, but not worth a
   // spinner: paint the ride we can already answer with, then upgrade in place if the newer one
@@ -24487,8 +24495,23 @@ function dsInitProfile(){
   var el=document.getElementById('ds-avatar-initials'); if(el) el.textContent=initials;
   var pn=document.getElementById('ds-profile-name'); if(pn) pn.textContent=name;
   var pw=document.getElementById('ds-profile-wt'); if(pw) pw.textContent=wt;
-  var cw=typeof getCurrentPlanWeek==='function'?getCurrentPlanWeek():1;
-  var pb=document.getElementById('ds-profile-badge'); if(pb) pb.textContent='Week '+cw;
+  // The badge said just "Week 8", which reads as whatever the viewer assumes — block week, streak,
+  // or calendar week. It was NONE of those: getCurrentPlanWeek counts weeks since the LEGACY plan's
+  // start. Inside the training block, show the block week (the training authority everywhere else
+  // in the app); outside it, fall back to the plan week. Either way the label says which.
+  var pb=document.getElementById('ds-profile-badge');
+  if(pb){
+    var _bw=null;
+    try{
+      if(typeof _BLOCK_START!=='undefined' && typeof _blockDay_==='function' && typeof _blockDaysBetween_==='function'){
+        var _bs=_blockDay_(_BLOCK_START), _td=new Date(); _td.setHours(0,0,0,0);
+        var _dd=_blockDaysBetween_(_bs, _td);
+        if(_dd>=0) _bw=Math.floor(_dd/7)+1;
+      }
+    }catch(e){}
+    var cw=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
+    pb.textContent=(_bw!=null)?('Block Wk '+_bw):('Plan Wk '+cw);
+  }
 }
 
 
