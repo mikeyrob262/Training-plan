@@ -365,9 +365,22 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .mclose{background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:30px;height:30px;border-radius:50%;font-size:15px;cursor:pointer}
 .ex-c{background:var(--s2);margin:8px 16px;border-radius:12px;border:1px solid var(--b1);overflow:hidden;display:block}
 .ex-h{padding:12px 14px 8px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.ex-nm{font-size:15px;font-weight:700;color:var(--t1)}
-.ex-tip{font-size:11px;color:var(--t3);margin-top:2px}
+/* The name block must be allowed to SHRINK. Default min-width:auto floors a flex item at its
+   min-content width, so once the Muscles chip joined the row the name could push the controls past
+   the card edge — and .ex-c clips with overflow:hidden, so the chip or the swap select would simply
+   disappear on a narrow phone rather than reflow. min-width:0 + wrapping makes the name yield. */
+.ex-i{flex:1;min-width:0}
+.ex-r{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.ex-nm{font-size:15px;font-weight:700;color:var(--t1);overflow-wrap:anywhere}
+.ex-tip{font-size:11px;color:var(--t3);margin-top:2px;overflow-wrap:anywhere}
 .ex-sw{font-size:11px;border:1px solid var(--b2);border-radius:8px;padding:4px 8px;background:var(--s1);color:var(--blue);font-weight:600;cursor:pointer;max-width:130px}
+/* iPhone-width budget: at 375px the row has ~313px inside the card. A 130px select plus the chip
+   left the name ~105px, enough to fit but tight enough to wrap every multi-word movement to three
+   lines. Trimming the select on small screens buys the name back ~34px. */
+@media(max-width:430px){
+  .ex-sw{max-width:96px}
+  .ex-h{gap:8px}
+}
 .set-hr,.set-r{display:grid;grid-template-columns:26px 1fr 68px 68px 32px;gap:6px;padding:8px 14px;align-items:center;border-top:1px solid var(--b1)}
 .sn{font-size:12px;font-weight:700;color:var(--t3);text-align:center}
 .sp{font-size:11px;color:var(--t3);text-align:center}
@@ -7479,7 +7492,31 @@ var ANATOMY_MAP={
   // ---- Mobility D ----  ('Bird-dog' and 'Dead bug' resolve to the Strength B entries above via the normalized key)
   'Prone press-up (cobra)':              { len:['m-f-abs','m-f-hip-flexor'] },
   'Wall slides (shoulder)':              { len:['m-f-pec','m-b-lat'] },
-  'Side-lying thoracic openers':         { len:['m-b-traps-mid','m-f-pec'] }
+  'Side-lying thoracic openers':         { len:['m-b-traps-mid','m-f-pec'] },
+  // ---- Full Body A/B (the legacy openStr logging modal) ----
+  // Reviewed and signed off before landing; none of these use the lengthening channel — they are all
+  // strengthening movements, so 'len' stays empty rather than being padded to look complete.
+  'Bench press':      { pri:['m-f-pec','m-f-delt-front','m-b-triceps'], sec:['m-f-serratus'] },
+  'Back squat':       { pri:['m-f-quad','m-b-glute-max','m-b-erector'], sec:['m-f-adductor','m-f-abs'] },
+  'Push-up':          { pri:['m-f-pec','m-b-triceps','m-f-delt-front'], sec:['m-f-abs','m-f-serratus'] },
+  'Band row':         { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
+  'Dumbbell press':   { pri:['m-f-pec','m-f-delt-front','m-b-triceps'], sec:['m-f-serratus','m-f-abs'] },
+  'Plank':            { pri:['m-f-abs','m-f-obliques'], sec:['m-b-erector','m-b-glute-max','m-f-delt-front'] },
+  // ---- Core (the legacy openCore modal) ----
+  'Side plank':       { pri:['m-f-obliques'], sec:['m-b-glute-med','m-f-abs','m-f-delt-front'] },
+  'Russian twist':    { pri:['m-f-obliques'], sec:['m-f-abs','m-f-hip-flexor'] },
+  'Bicycle crunch':   { pri:['m-f-abs','m-f-obliques'], sec:['m-f-hip-flexor'] },
+  'Woodchop':         { pri:['m-f-obliques','m-f-abs'], sec:['m-f-delt-front','m-b-glute-med'] },
+  'Hollow body hold': { pri:['m-f-abs'], sec:['m-f-hip-flexor','m-f-quad'] },
+  // traps-upper exists as BOTH m-f- and m-b-; the approved note said only "traps-upper". Bear crawl is
+  // a front-loaded scapular hold, so the front id is the one that reads — say the word for both.
+  'Bear crawl hold':  { pri:['m-f-abs','m-f-obliques'], sec:['m-f-delt-front','m-f-quad','m-f-traps-upper'] },
+  'Superman hold':    { pri:['m-b-erector','m-b-glute-max'], sec:['m-b-rhomboid','m-b-hamstring','m-b-rear-delt'] },
+  'Good mornings':    { pri:['m-b-hamstring','m-b-erector','m-b-glute-max'], sec:['m-f-adductor'] },
+  'Copenhagen plank': { pri:['m-f-adductor','m-f-obliques'], sec:['m-f-abs','m-b-glute-med','m-f-delt-front'] },
+  // NOT an alias of 'Glute bridge': the single-leg version does not lengthen the hip flexor the same
+  // way, so it is its own entry with no 'len' rather than inheriting the mixed two-state treatment.
+  'Single-leg glute bridge': { pri:['m-b-glute-max','m-b-hamstring'], sec:['m-b-glute-med','m-b-erector','m-f-abs'] }
 };
 // Normalize an exercise name so a library key resolves despite casing / punctuation / parenthetical
 // variants ('Bird dog' vs 'Bird-dog'). Non-alphanumerics collapse to single spaces. Regex whitespace
@@ -8390,7 +8427,7 @@ function openStr(letter,w){
 
     // Exercise header
     var exhdr=document.createElement('div');exhdr.className='ex-h';
-    var exinfo=document.createElement('div');
+    var exinfo=document.createElement('div');exinfo.className='ex-i';
     var exnm=document.createElement('div');exnm.className='ex-nm';exnm.id='en_'+letter+'_'+ei;exnm.textContent=ex[0];
     var extip=document.createElement('div');extip.className='ex-tip';extip.textContent=ex[3];
     exinfo.appendChild(exnm);exinfo.appendChild(extip);
@@ -8409,7 +8446,7 @@ function openStr(letter,w){
     // Muscles chip, same control the HTML surfaces get. It sits beside the Swap select and is
     // re-rendered by swEx when the movement changes, so it always describes the CURRENT name.
     var exright=document.createElement('div');
-    exright.style.cssText='display:flex;align-items:center;gap:6px;flex-shrink:0';
+    exright.className='ex-r';
     var chip=document.createElement('span'); chip.className='anat-chip'; chip.id='ac_'+letter+'_'+ei;
     chip.innerHTML=(typeof anatChipHTML_==='function')?anatChipHTML_(ex[0]):'';
     exright.appendChild(chip); exright.appendChild(sel);
@@ -29068,15 +29105,16 @@ function openCore(w){
 
     var card = document.createElement('div'); card.className = 'ex-c';
     var exhdr = document.createElement('div'); exhdr.className = 'ex-h';
-    var exinfo = document.createElement('div');
+    var exinfo = document.createElement('div'); exinfo.className = 'ex-i';
     var exnm = document.createElement('div'); exnm.className = 'ex-nm'; exnm.textContent = ex[0];
     var extip = document.createElement('div'); extip.className = 'ex-tip'; extip.textContent = ex[3];
     exinfo.appendChild(exnm); exinfo.appendChild(extip);
     exhdr.appendChild(exinfo);
     // Muscles chip — same control as every other movement list. Core has no swap, so it is
-    // built once and never repainted.
+    // built once and never repainted. .ex-r keeps it from being clipped on a narrow phone.
     if(typeof anatChipHTML_==='function'){
-      var cchip = document.createElement('span'); cchip.innerHTML = anatChipHTML_(ex[0]);
+      var cchip = document.createElement('div'); cchip.className = 'ex-r';
+      cchip.innerHTML = anatChipHTML_(ex[0]);
       if(cchip.innerHTML) exhdr.appendChild(cchip);
     }
     card.appendChild(exhdr);
