@@ -19584,6 +19584,120 @@ function _cvYesterday_(dateKey){
   var line=_cvYesterdayLine_(acts[0]);
   return line?{line:line, sport:acts[0].sport}:null;
 }
+// ==================== Coach V post-session debrief ====================
+// Reads ONLY what the app already holds: the prescription from blockPlanFor_, the recorded ride
+// from st.rides, the FTP in force on that date, and the same intent from the prior week. No
+// Intervals.icu dependency — that endpoint serves auto-detected power surges, not the prescribed
+// intervals, and refuses Strava-sourced activities outright, so a debrief built on it would be
+// silent on exactly the indoor sessions that need one.
+// Every figure is computed or omitted. A missing value renders '—' and never a zero, and a session
+// with no prescription gets no verdict at all.
+function _cvdNum_(v){ var n=parseFloat(v); return isFinite(n)?n:null; }
+function _cvdPct_(a,b){ return (a!=null&&b>0)?Math.round((a-b)/b*100):null; }
+// The same intent one week earlier, for the week-over-week line. Matched on the PRESCRIBED intent
+// of that day, not on ride name — a renamed ride still counts, and an unrelated ride on the same
+// weekday does not.
+function _cvdPriorWeek_(dateKey, intent){
+  try{
+    if(!intent || typeof parseDayKey!=='function' || typeof blockPlanFor_!=='function') return null;
+    var d=parseDayKey(dateKey); if(isNaN(d.getTime())) return null;
+    d.setDate(d.getDate()-7);
+    var pk=(typeof _tbDK_==='function')?_tbDK_(d):null; if(!pk) return null;
+    var plan=blockPlanFor_(pk); if(!plan) return null;
+    var match=(plan.sessions||[]).filter(function(s){ return s.intent===intent; })[0];
+    if(!match) return null;
+    var acts=(typeof activitiesForDate_==='function')?activitiesForDate_(pk):[];
+    for(var i=0;i<acts.length;i++){ if(acts[i].sport==='ride') return acts[i].obj; }
+    return null;
+  }catch(e){ return null; }
+}
+// Returns a string (one sentence per point, joined) or null when there is nothing honest to say.
+function _cvDebrief_(dateKey, ride, sessType){
+  try{
+    if(sessType==='strength' || sessType==='mobility'){
+      return 'Session logged. Open the calendar for your next session.';
+    }
+    if(!ride) return null;
+    var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+    var primary=(plan && typeof _cvPrimary_==='function')?_cvPrimary_(plan.sessions):null;
+    var intent=primary&&primary.intent;
+    var t=(primary&&primary.rx&&primary.rx.targets)||null;
+    var lo=t?_cvdNum_(t.powerLo):null, hi=t?_cvdNum_(t.powerHi):null;
+    var ftp=(typeof ftpOn_==='function')?_cvdNum_(ftpOn_(dateKey)):null;
+
+    var np=_cvdNum_(ride.np), avg=_cvdNum_(ride.avgPwr), tss=_cvdNum_(ride.tss);
+    var hr=_cvdNum_(ride.avgHR), dist=_cvdNum_(ride.distance);
+    var secs=(typeof _durSec_==='function')?_durSec_(ride):null;
+    var mins=(secs>0)?Math.round(secs/60):null;
+    var iff=(np!=null&&ftp>0)?Math.round(np/ftp*100)/100:null;
+    var prescMin=t?_cvdNum_(t.durationMin):null;
+    var out=[];
+    var dash=function(v,suffix){ return (v==null)?'—':(v+(suffix||'')); };
+
+    // No prescription -> state the facts, pass no judgement.
+    if(!intent || !plan){
+      out.push('Logged: '+dash(dist!=null?(Math.round(dist*10)/10):null,' mi')
+        +', '+dash(np!=null?Math.round(np):null,'W NP')+', '+dash(tss!=null?Math.round(tss):null,' TSS')+'.');
+      return out.join(' ');
+    }
+
+    // ---- Group ride: factual only. No watt ceiling exists, so no verdict against one. ----
+    if(intent==='group'){
+      out.push('Group ride logged: '+dash(dist!=null?(Math.round(dist*10)/10):null,' mi')
+        +', '+dash(avg!=null?Math.round(avg):null,'W avg')+', '+dash(tss!=null?Math.round(tss):null,' TSS')+'.');
+      out.push('No target to hold on a group ride — the number that matters is that you rode it.');
+      return out.join(' ');
+    }
+
+    // ---- Z2: in-zone IS the success condition. Never framed as a deficit. ----
+    if(intent==='z2' || intent==='recovery'){
+      if(avg!=null && lo!=null && hi!=null){
+        out.push(avg>=lo && avg<=hi
+          ? ('Avg '+Math.round(avg)+'W sat inside the '+lo+'–'+hi+'W band. That is the session done right.')
+          : ('Avg '+Math.round(avg)+'W against a '+lo+'–'+hi+'W band.'));
+      } else if(avg==null){ out.push('No average power recorded for this ride, so there is nothing to read against the band.');
+      } else { out.push('Avg '+Math.round(avg)+'W — no watt band on file for this session to read it against.'); }
+      var cap=t?_cvdNum_(t.hrCap):null; var ceil=(cap!=null?cap:135);
+      if(hr!=null) out.push(hr<=ceil ? ('HR averaged '+Math.round(hr)+', under the '+ceil+' ceiling.')
+                                     : ('HR averaged '+Math.round(hr)+', above the '+ceil+' ceiling — ease off sooner next time.'));
+      return out.join(' ');
+    }
+
+    // ---- VO2 / Threshold: judged against the band, with a week-over-week read. ----
+    if(intent==='vo2' || intent==='threshold'){
+      if(np!=null && lo!=null && hi!=null){
+        out.push(np>=lo && np<=hi ? ('NP '+Math.round(np)+'W landed in the '+lo+'–'+hi+'W band.')
+          : (np>hi ? ('NP '+Math.round(np)+'W, '+Math.round(np-hi)+'W above the '+lo+'–'+hi+'W band.')
+                   : ('NP '+Math.round(np)+'W, '+Math.round(lo-np)+'W under the '+lo+'–'+hi+'W band.')));
+      } else if(np==null){ out.push('No normalised power recorded for this ride, so there is nothing to read against the band.');
+      } else { out.push('NP '+Math.round(np)+'W — no watt band on file for this session to read it against.'); }
+      if(intent==='vo2' && iff!=null){
+        out.push(iff>=0.90 ? ('IF '+iff.toFixed(2)+' — the intensity was there.')
+                           : ('IF '+iff.toFixed(2)+', under the 0.90 a VO2 session wants.'));
+      }
+      if(intent==='threshold' && np!=null && avg>0){
+        var vi=Math.round(np/avg*100)/100;
+        if(vi>=1.10) out.push('NP-to-avg spread '+vi.toFixed(2)+' — the effort was uneven; threshold wants it flat.');
+      }
+      if(mins!=null && prescMin!=null && mins < prescMin*0.8){
+        out.push('Ran '+mins+' min against '+prescMin+' prescribed — short of the session.');
+      }
+      var prior=_cvdPriorWeek_(dateKey, intent), pnp=prior?_cvdNum_(prior.np):null;
+      if(pnp!=null && np!=null){
+        var dp=Math.round(np-pnp);
+        out.push(dp>0 ? ('Up '+dp+'W on the same session last week.')
+               : (dp<0 ? ('Down '+Math.abs(dp)+'W on the same session last week.')
+                       : 'Level with the same session last week.'));
+      }
+      return out.join(' ');
+    }
+
+    // ---- Any other prescribed ride intent (long, attempts): factual, no invented verdict. ----
+    out.push('Logged: '+dash(dist!=null?(Math.round(dist*10)/10):null,' mi')
+      +', '+dash(np!=null?Math.round(np):null,'W NP')+', '+dash(tss!=null?Math.round(tss):null,' TSS')+'.');
+    return out.join(' ');
+  }catch(e){ try{ console.error('[cvDebrief] '+((e&&e.message)||e)); }catch(_e){} return null; }
+}
 function coachV_(dateKey, now){
   now=now||new Date();
   var plan=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
@@ -19616,6 +19730,11 @@ function coachV_(dateKey, now){
     phase:plan.phase, phaseLabel:plan.phaseLabel, weekInPhase:plan.weekInPhase,
     primary:primary, intent:intent, targets:t, done:done,
     doneNote:done?_cvDoneNote_(wantSport, _cvDef):'', yesterday:yesterday,
+    // Post-session debrief: only once the day's own work is logged, and built from the activity
+    // that satisfied it — so the numbers read against the prescription always belong to the
+    // session being judged, never to something else that happened that day.
+    debrief:(done && typeof _cvDebrief_==='function')
+      ? _cvDebrief_(dateKey, (doneAct&&doneAct.obj)||null, (_cvDef&&_cvDef.type)||'') : '',
     pre:primary?_cvPre_(intent, t, primary.struct):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
@@ -19656,6 +19775,10 @@ function _coachVPanel_(now){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
       +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
       +'<div style="font-size:13px;color:#e2e8f0;line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
+      // Debrief row — its own block under the logged-session line. Only renders when there was
+      // something computable to say; a missing prescription or missing numbers yield '' and the
+      // row is simply absent rather than showing an empty verdict.
+      +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:12.5px;color:#cbd5e1;line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
