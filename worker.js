@@ -252,12 +252,12 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-laps th{color:#64748b;font-weight:500;text-align:left;padding:3px 5px 5px;border-bottom:1px solid #1e2130;font-size:10px}
 .ds-laps td{padding:5px 5px;color:#94a3b8;border-bottom:1px solid #161b27}
 .ds-laps td:first-child{color:#64748b}
-.anx .m rect{fill:var(--s3);stroke:var(--b1);stroke-width:.6;transition:fill .16s}
-.anx .m .ml{fill:var(--t3);font-size:5px;font-weight:700;pointer-events:none;font-family:inherit}
-.anx .m.pri rect{fill:#FC4C02;stroke:#c23a00}
-.anx .m.sec rect{fill:#f59e0b;stroke:#c67908}
-.anx .m.len rect{fill:#2dd4bf;stroke:#159485}
-.anx .m.pri .ml,.anx .m.sec .ml,.anx .m.len .ml{fill:#1a0a00}
+.anx{overflow:visible}
+.anx .sil{fill:#232629;stroke:#8E959E;stroke-width:.6;stroke-opacity:.85;stroke-linejoin:round}
+.anx .m path{fill:url(#anGradInert);stroke:#2C3036;stroke-width:.3;transition:fill .18s ease}
+.anx .m.pri path{fill:url(#anGradPri);stroke:#C23A00}
+.anx .m.sec path{fill:url(#anGradSec);stroke:#B57708}
+.anx .m.len path{fill:url(#anGradLen);stroke:#0E7F76}
 .anleg{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .anlg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)}
 .answ{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -588,6 +588,17 @@ window.AIQ_DESKTOP_MIN=1024;
 </script>
 </head>
 <body>
+<!-- Anatomy body-map gradients. ONE block for the whole document, deliberately: several diagrams
+     can be on screen at once (Today's Plan + the day editor + a logging modal), and per-diagram
+     copies would repeat these ids — url(#..) resolves to whichever copy comes first, so closing
+     that card would silently blank the fills everywhere else. Kept in the shell so it outlives
+     every innerHTML re-render; _anatEnsureDefs_ re-adds it if a surface ever renders without it. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<radialGradient id="anGradPri" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC6A1A"/><stop offset="100%" stop-color="#DC3A00"/></radialGradient>
+<radialGradient id="anGradSec" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/></radialGradient>
+<radialGradient id="anGradLen" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#8FF0E3"/><stop offset="45%" stop-color="#2DD4BF"/><stop offset="100%" stop-color="#0E8F84"/></radialGradient>
+<linearGradient id="anGradInert" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4C525B"/><stop offset="100%" stop-color="#3A3F47"/></linearGradient>
+</defs></svg>
 <div id="app-shell">
 <div id="desktop-shell" class="ds">
   <div class="ds-sidebar">
@@ -7396,10 +7407,12 @@ function watchExercise_(q){
 // through this ONE function. That is deliberate durability: the Watch button has been lost
 // three times across rebuilds by living in per-surface copies, so it lives here and any
 // future surface inherits it by construction rather than by remembering to re-add it.
-// ==================== Anatomy body map — mechanics (art is a later drop-in) ====================
-// Data + highlight + legend + a labelled placeholder body. Every muscle group is a <g id="m-f-*/m-b-*"
-// class="m"> whose fill swaps by CLASS (pri = orange-red working, sec = amber assisting, len = teal
-// lengthening). Swapping the ART later means replacing the shapes inside those groups — zero logic change.
+// ==================== Anatomy body map ====================
+// Data + highlight + legend + the silhouette body art. Every muscle group is a <g id="m-f-*/m-b-*"
+// class="m"> whose fill swaps by CLASS (pri = orange working, sec = amber assisting, len = teal
+// lengthening). The art swap from the labelled placeholder to the v5 silhouette changed only the
+// shapes inside those groups — the 28 ids and this contract were carried across unchanged, which
+// is why nothing downstream (map, highlight, legend, mounts) needed touching.
 // ANATOMY_MAP is keyed to the exercise library; an unmapped movement renders the body with no highlight
 // and a "not mapped yet" note (honest, per spec).
 var ANATOMY_MAP={
@@ -7480,59 +7493,103 @@ function _anatCombined_(exercises){
 function _anatOne_(name){ var m=_anatFor_(name); if(!m) return {pri:[],sec:[],len:[],mapped:false};
   return { pri:(m.pri||[]).slice(), sec:(m.sec||[]).filter(function(id){return (m.pri||[]).indexOf(id)<0;}),
            len:(m.len||[]).filter(function(id){return (m.pri||[]).indexOf(id)<0 && (m.sec||[]).indexOf(id)<0;}), mapped:true }; }
-// ---- PLACEHOLDER body: labelled muscle REGIONS, front + back. Simple rounded rects, not detailed art.
-// Region = [id, label, [[x,y,w,h],...]]. Bilateral groups carry two rects; the art swap replaces these
-// rects with real paths under the SAME id + class, so nothing downstream changes.
+// ---- Body art (v5): silhouette + outlined muscle regions, front + back.
+// Replaces the labelled placeholder rects. The CONTRACT is unchanged: every group is still a
+// <g id="m-f-*/m-b-*" class="m">, so ANATOMY_MAP, the class-swap highlight, the legend and every
+// mount keep working untouched — only the shapes inside the groups changed.
+// Group = [id, [part,...]]; part = [pathData, rotate|0, mirror]. A part with mirror=1 is authored
+// ONCE on the left half and reflected to the right by transform, so left/right symmetry is
+// guaranteed by construction instead of by two sets of hand-matched numbers that drift on the
+// next edit. The silhouette is one closed path (left half reflected in reverse) so it has no
+// centre seam. Canvas per figure: 100x200, head top y=6, ground y=191.
+var _AN_SIL='M 50 6 C 43 6 37 11 37 19 C 37 25 40 29 43 31 C 43 33 43 35 42 37 C 37 38 32 40 29 44 C 25 47 23 52 23 58 C 22 66 21 73 21 81 C 20 89 19 96 19 103 C 18 109 17 115 18 120 C 19 124 22 125 24 122 C 25 117 25 111 26 105 C 27 97 28 89 29 81 C 30 73 31 65 33 58 C 34 64 35 70 35 77 C 35 83 34 89 34 95 C 34 100 34 104 35 108 C 36 117 36 127 37 137 C 37 141 37 145 37.5 149 C 38 155 38 161 39 167 C 40 174 41 179 41.5 183 C 39 187 36 189 35.5 191 C 41 192.5 45.5 191.5 46.5 188 C 47 183 47 178 47 173 C 47.5 165 47.5 155 47.5 146 C 48 132 48.5 116 49 105 C 49.3 104 50 103.5 50 102.5 C 50 103.5 50.7 104 51 105 C 51.5 116 52 132 52.5 146 C 52.5 155 52.5 165 53 173 C 53 178 53 183 53.5 188 C 54.5 191.5 59 192.5 64.5 191 C 64 189 61 187 58.5 183 C 59 179 60 174 61 167 C 62 161 62 155 62.5 149 C 63 145 63 141 63 137 C 64 127 64 117 65 108 C 66 104 66 100 66 95 C 66 89 65 83 65 77 C 65 70 66 64 67 58 C 69 65 70 73 71 81 C 72 89 73 97 74 105 C 75 111 75 117 76 122 C 78 125 81 124 82 120 C 83 115 82 109 81 103 C 81 96 80 89 79 81 C 79 73 78 66 77 58 C 77 52 75 47 71 44 C 68 40 63 38 58 37 C 57 35 57 33 57 31 C 60 29 63 25 63 19 C 63 11 57 6 50 6 Z';
 var _AN_FRONT=[
-  ['m-f-neck','Neck',[[45,4,14,7]]],
-  ['m-f-traps-upper','Traps',[[30,13,44,8]]],
-  ['m-f-delt-front','Delt',[[16,22,15,12]]],
-  ['m-f-delt-side','Delt',[[73,22,15,12]]],
-  ['m-f-pec','Pecs',[[30,36,44,14]]],
-  ['m-f-serratus','Serr',[[30,52,9,7],[65,52,9,7]]],
-  ['m-f-biceps','Bi',[[8,40,13,20]]],
-  ['m-f-forearm-flex','F.arm',[[6,62,13,22]]],
-  ['m-f-abs','Abs',[[36,54,32,28]]],
-  ['m-f-obliques','Obl',[[27,56,8,22],[69,56,8,22]]],
-  ['m-f-hip-flexor','Hip',[[34,86,15,10],[55,86,15,10]]],
-  ['m-f-adductor','Add',[[42,100,20,30]]],
-  ['m-f-quad','Quads',[[24,100,17,44],[63,100,17,44]]],
-  ['m-f-tib-ant','Shin',[[28,158,12,28],[64,158,12,28]]]
+  ['m-f-neck',[['M 44.4 34.5 a 1.6 4 0 1 0 3.2 0 a 1.6 4 0 1 0 -3.2 0 Z',[8,46,34.5],1]]],
+  ['m-f-traps-upper',[['M 45.8 34 C 43.5 35.8 40 38.6 35.4 42.8 C 37.4 46.2 42 44.2 46.2 41.6 Z',0,1]]],
+  ['m-f-delt-front',[['M 28.4 48 a 3.6 5.6 0 1 0 7.2 0 a 3.6 5.6 0 1 0 -7.2 0 Z',[-12,32,48],1]]],
+  ['m-f-delt-side',[['M 25.2 53.5 a 2.8 5 0 1 0 5.6 0 a 2.8 5 0 1 0 -5.6 0 Z',[-5,28,53.5],1]]],
+  ['m-f-pec',[['M 47.8 42.2 C 43 41.6 38 43.2 35.8 47 C 34.6 51 35.6 55 38 56.6 C 42 58 46 56.2 47.8 53.2 Z',0,1]]],
+  ['m-f-serratus',[['M 33.7 59 a 1.9 1.4 0 1 0 3.8 0 a 1.9 1.4 0 1 0 -3.8 0 Z',[-20,35.6,59],1],['M 34.4 62.3 a 1.9 1.4 0 1 0 3.8 0 a 1.9 1.4 0 1 0 -3.8 0 Z',[-20,36.3,62.3],1],['M 35.2 65.5 a 1.8 1.3 0 1 0 3.6 0 a 1.8 1.3 0 1 0 -3.6 0 Z',[-20,37,65.5],1]]],
+  ['m-f-biceps',[['M 23.3 64 a 3.2 8.5 0 1 0 6.4 0 a 3.2 8.5 0 1 0 -6.4 0 Z',[-3,26.5,64],1]]],
+  ['m-f-forearm-flex',[['M 21 90 a 3 10 0 1 0 6 0 a 3 10 0 1 0 -6 0 Z',[-3,24,90],1]]],
+  ['m-f-abs',[['M 46.2 57 H 47.6 A 1.6 1.6 0 0 1 49.2 58.6 V 61 A 1.6 1.6 0 0 1 47.6 62.6 H 46.2 A 1.6 1.6 0 0 1 44.6 61 V 58.6 A 1.6 1.6 0 0 1 46.2 57 Z',0,1],['M 46.2 63.6 H 47.6 A 1.6 1.6 0 0 1 49.2 65.2 V 67.6 A 1.6 1.6 0 0 1 47.6 69.2 H 46.2 A 1.6 1.6 0 0 1 44.6 67.6 V 65.2 A 1.6 1.6 0 0 1 46.2 63.6 Z',0,1],['M 46.2 70.2 H 47.6 A 1.6 1.6 0 0 1 49.2 71.8 V 74.2 A 1.6 1.6 0 0 1 47.6 75.8 H 46.2 A 1.6 1.6 0 0 1 44.6 74.2 V 71.8 A 1.6 1.6 0 0 1 46.2 70.2 Z',0,1],['M 46.4 76.8 H 47.6 A 1.6 1.6 0 0 1 49.2 78.4 V 81.8 A 1.6 1.6 0 0 1 47.6 83.4 H 46.4 A 1.6 1.6 0 0 1 44.8 81.8 V 78.4 A 1.6 1.6 0 0 1 46.4 76.8 Z',0,1]]],
+  ['m-f-obliques',[['M 38.2 72 a 2.8 11.5 0 1 0 5.6 0 a 2.8 11.5 0 1 0 -5.6 0 Z',[3,41,72],1]]],
+  ['m-f-hip-flexor',[['M 41.5 97 a 3 5.5 0 1 0 6 0 a 3 5.5 0 1 0 -6 0 Z',[12,44.5,97],1]]],
+  ['m-f-adductor',[['M 43.4 115 a 1.8 9.5 0 1 0 3.6 0 a 1.8 9.5 0 1 0 -3.6 0 Z',[3,45.2,115],1]]],
+  ['m-f-quad',[['M 36.1 117 a 3.6 15.5 0 1 0 7.2 0 a 3.6 15.5 0 1 0 -7.2 0 Z',[-2,39.7,117],1],['M 40.2 120 a 2.8 13.5 0 1 0 5.6 0 a 2.8 13.5 0 1 0 -5.6 0 Z',[2,43,120],1]]],
+  ['m-f-tib-ant',[['M 39.9 158 a 2.6 11 0 1 0 5.2 0 a 2.6 11 0 1 0 -5.2 0 Z',[-2,42.5,158],1]]]
 ];
 var _AN_BACK=[
-  ['m-b-traps-upper','Traps',[[30,13,44,8]]],
-  ['m-b-rear-delt','Delt',[[16,22,15,12],[73,22,15,12]]],
-  ['m-b-traps-mid','Traps M',[[34,24,36,14]]],
-  ['m-b-rhomboid','Rhom',[[38,30,28,8]]],
-  ['m-b-teres','Teres',[[27,40,10,7],[67,40,10,7]]],
-  ['m-b-lat','Lats',[[26,42,20,22],[58,42,20,22]]],
-  ['m-b-triceps','Tri',[[8,40,13,20]]],
-  ['m-b-forearm-ext','F.arm',[[6,62,13,22]]],
-  ['m-b-erector','Erector',[[45,50,14,34]]],
-  ['m-b-glute-med','Glute M',[[28,86,14,12],[62,86,14,12]]],
-  ['m-b-glute-max','Glutes',[[30,98,44,20]]],
-  ['m-b-hamstring','Hams',[[26,120,20,38],[58,120,20,38]]],
-  ['m-b-gastroc','Calf',[[28,160,18,22],[58,160,18,22]]],
-  ['m-b-soleus','Soleus',[[30,184,14,12],[60,184,14,12]]]
+  ['m-b-traps-upper',[['M 46.5 33 C 44 35.2 40.5 38.4 35 42.6 C 37 46.6 42 44.6 46.8 41.6 Z',0,1]]],
+  ['m-b-rear-delt',[['M 26.3 52.5 a 3 5.2 0 1 0 6 0 a 3 5.2 0 1 0 -6 0 Z',[-6,29.3,52.5],1]]],
+  ['m-b-traps-mid',[['M 44.4 45.2 C 41 46 38.4 47.6 37.2 50.4 C 36.6 54 38.4 57.4 41 59 C 43 59.8 44.2 59.4 44.6 58.4 Z',0,1]]],
+  ['m-b-rhomboid',[['M 46.3 47 H 47.4 A 1.4 1.4 0 0 1 48.8 48.4 V 55.6 A 1.4 1.4 0 0 1 47.4 57 H 46.3 A 1.4 1.4 0 0 1 44.9 55.6 V 48.4 A 1.4 1.4 0 0 1 46.3 47 Z',0,1]]],
+  ['m-b-teres',[['M 33.7 58.5 a 2.3 2 0 1 0 4.6 0 a 2.3 2 0 1 0 -4.6 0 Z',[-15,36,58.5],1]]],
+  ['m-b-lat',[['M 35.6 59.8 C 34.8 65 35.4 72 36.8 78 C 39.8 82.6 43.8 84.6 47.2 84.2 C 47.6 79 46 71 43 64 C 40.6 60.8 37.8 59.2 35.6 59.8 Z',0,1]]],
+  ['m-b-triceps',[['M 23.2 63 a 3.3 9 0 1 0 6.6 0 a 3.3 9 0 1 0 -6.6 0 Z',[-3,26.5,63],1]]],
+  ['m-b-forearm-ext',[['M 21 90 a 3 10 0 1 0 6 0 a 3 10 0 1 0 -6 0 Z',[-3,24,90],1]]],
+  ['m-b-erector',[['M 49.3 56.5 C 46.5 57.5 44.6 61.5 44.3 67.5 C 44 75.5 45 84 46.8 90.5 C 47.7 93.8 48.7 95.5 49.3 95.2 Z',0,1]]],
+  ['m-b-glute-med',[['M 34.7 96 a 3.8 4.6 0 1 0 7.6 0 a 3.8 4.6 0 1 0 -7.6 0 Z',[-12,38.5,96],1]]],
+  ['m-b-glute-max',[['M 35.6 105 a 6.4 7.8 0 1 0 12.8 0 a 6.4 7.8 0 1 0 -12.8 0 Z',[-5,42,105],1]]],
+  ['m-b-hamstring',[['M 36 120 a 4 15 0 1 0 8 0 a 4 15 0 1 0 -8 0 Z',[-2,40,120],1],['M 42 121 a 2.8 12 0 1 0 5.6 0 a 2.8 12 0 1 0 -5.6 0 Z',[2,44.8,121],1]]],
+  ['m-b-gastroc',[['M 38.1 155 a 2.7 8.5 0 1 0 5.4 0 a 2.7 8.5 0 1 0 -5.4 0 Z',0,1],['M 42.6 155 a 2.4 8 0 1 0 4.8 0 a 2.4 8 0 1 0 -4.8 0 Z',0,1]]],
+  ['m-b-soleus',[['M 40.4 171 a 2.6 6 0 1 0 5.2 0 a 2.6 6 0 1 0 -5.2 0 Z',0,1]]]
 ];
-function _anatRegionSVG_(regions){
-  var out='';
-  regions.forEach(function(rg){
-    var id=rg[0], label=rg[1], rects=rg[2], inner='';
-    rects.forEach(function(r){ inner+='<rect x="'+r[0]+'" y="'+r[1]+'" width="'+r[2]+'" height="'+r[3]+'" rx="4"/>'; });
-    // label sits on the first rect
-    var r0=rects[0], lx=r0[0]+r0[2]/2, ly=r0[1]+r0[3]/2+2.4;
-    out+='<g id="'+id+'" class="m">'+inner+'<text class="ml" x="'+lx+'" y="'+ly+'" text-anchor="middle">'+label+'</text></g>';
+
+// One part -> its path, plus its mirrored twin when the muscle is bilateral.
+function _anatPartSVG_(p){
+  var rot = p[1] ? (' rotate(' + p[1].join(' ') + ')') : '';
+  var out = '<path d="' + p[0] + '"' + (rot ? (' transform="' + rot.replace(/^ /,'') + '"') : '') + '/>';
+  if(p[2]) out += '<path d="' + p[0] + '" transform="translate(100,0) scale(-1,1)' + rot + '"/>';
+  return out;
+}
+function _anatFigureSVG_(groups){
+  var out = '<path class="sil" d="' + _AN_SIL + '"/>';
+  groups.forEach(function(g){
+    out += '<g id="' + g[0] + '" class="m">';
+    g[1].forEach(function(p){ out += _anatPartSVG_(p); });
+    out += '</g>';
   });
   return out;
+}
+// The gradients the .pri/.sec/.len fills reference. Mounted ONCE per document, never per diagram:
+// several diagrams can be on screen at once (Today's Plan + the day editor + a logging modal), and
+// four copies of the same gradient ids would mean url(#..) resolves to whichever copy is first in
+// the document — so closing that one card would silently blank the fills on all the others.
+// The shell carries this block statically; this is the idempotent safety net for any surface that
+// renders before/outside it.
+var _AN_DEFS_ID = 'anGradPri';
+var ANAT_DEFS_SVG = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>'
+  + '<radialGradient id="anGradPri" cx="42%" cy="34%" r="78%">'
+  +   '<stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC6A1A"/><stop offset="100%" stop-color="#DC3A00"/>'
+  + '</radialGradient>'
+  + '<radialGradient id="anGradSec" cx="42%" cy="34%" r="78%">'
+  +   '<stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/>'
+  + '</radialGradient>'
+  + '<radialGradient id="anGradLen" cx="42%" cy="34%" r="78%">'
+  +   '<stop offset="0%" stop-color="#8FF0E3"/><stop offset="45%" stop-color="#2DD4BF"/><stop offset="100%" stop-color="#0E8F84"/>'
+  + '</radialGradient>'
+  + '<linearGradient id="anGradInert" x1="0" y1="0" x2="0" y2="1">'
+  +   '<stop offset="0%" stop-color="#4C525B"/><stop offset="100%" stop-color="#3A3F47"/>'
+  + '</linearGradient>'
+  + '</defs></svg>';
+function _anatEnsureDefs_(){
+  try{
+    if(typeof document === 'undefined' || !document.body) return;
+    if(document.getElementById(_AN_DEFS_ID)) return;
+    var host = document.createElement('div');
+    host.innerHTML = ANAT_DEFS_SVG;
+    if(host.firstChild) document.body.appendChild(host.firstChild);
+  }catch(e){}
 }
 // The diagram for a highlight set. hl = {pri:[],sec:[],len:[]}. Returns the SVG (no legend).
 function anatomyDiagram_(hl){
   hl=hl||{pri:[],sec:[],len:[]};
   var cls={}; (hl.pri||[]).forEach(function(id){cls[id]='pri';}); (hl.sec||[]).forEach(function(id){if(!cls[id])cls[id]='sec';}); (hl.len||[]).forEach(function(id){if(!cls[id])cls[id]='len';});
-  var svg='<svg class="anx" viewBox="0 0 200 200" width="100%" style="max-width:280px;display:block;margin:0 auto">'
-    +'<g transform="translate(2,2)">'+_anatRegionSVG_(_AN_FRONT)+'</g>'
-    +'<g transform="translate(102,2)">'+_anatRegionSVG_(_AN_BACK)+'</g></svg>';
+  _anatEnsureDefs_();   // gradients must exist in the document before this paints
+  var svg='<svg class="anx" viewBox="0 0 208 200" width="100%" style="max-width:300px;display:block;margin:0 auto">'
+    +'<g transform="translate(2,4)">'+_anatFigureSVG_(_AN_FRONT)+'</g>'
+    +'<g transform="translate(108,4)">'+_anatFigureSVG_(_AN_BACK)+'</g></svg>';
   // apply classes by string injection (so it works in a static string context too)
   Object.keys(cls).forEach(function(id){ svg=svg.replace('id="'+id+'" class="m"','id="'+id+'" class="m '+cls[id]+'"'); });
   return svg;
