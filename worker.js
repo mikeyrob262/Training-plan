@@ -7502,6 +7502,8 @@ var ANATOMY_MAP={
   'Band row':         { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-f-forearm-flex'] },
   'Dumbbell press':   { pri:['m-f-pec','m-f-delt-front','m-b-triceps'], sec:['m-f-serratus','m-f-abs'] },
   'Plank':            { pri:['m-f-abs','m-f-obliques'], sec:['m-b-erector','m-b-glute-max','m-f-delt-front'] },
+  'Pull-up / Lat Pulldown': { pri:['m-b-lat','m-f-biceps','m-b-rhomboid'], sec:['m-b-rear-delt','m-b-traps-mid','m-f-forearm-flex'] },
+  'Dumbbell Row':     { pri:['m-b-lat','m-b-rhomboid','m-b-rear-delt'], sec:['m-f-biceps','m-b-traps-mid','m-b-erector'] },
   // ---- Core (the legacy openCore modal) ----
   'Side plank':       { pri:['m-f-obliques'], sec:['m-b-glute-med','m-f-abs','m-f-delt-front'] },
   'Russian twist':    { pri:['m-f-obliques'], sec:['m-f-abs','m-f-hip-flexor'] },
