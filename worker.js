@@ -257,7 +257,7 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .anx .m path{fill:url(#anGradInert);stroke:#2C3036;stroke-width:.3;transition:fill .18s ease}
 .anx .m.pri path{fill:url(#anGradPri);stroke:#C23A00}
 .anx .m.sec path{fill:url(#anGradSec);stroke:#B57708}
-.anx .m.len path{fill:url(#anGradLen);stroke:#0E7F76}
+.anx .m.len path{fill:url(#anGradLen);stroke:#C2410C}
 .anleg{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .anlg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)}
 .answ{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -596,7 +596,7 @@ window.AIQ_DESKTOP_MIN=1024;
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <radialGradient id="anGradPri" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFB454"/><stop offset="45%" stop-color="#FC6A1A"/><stop offset="100%" stop-color="#DC3A00"/></radialGradient>
 <radialGradient id="anGradSec" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/></radialGradient>
-<radialGradient id="anGradLen" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#8FF0E3"/><stop offset="45%" stop-color="#2DD4BF"/><stop offset="100%" stop-color="#0E8F84"/></radialGradient>
+<radialGradient id="anGradLen" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#FFD2A8"/><stop offset="45%" stop-color="#F97316"/><stop offset="100%" stop-color="#C2410C"/></radialGradient>
 <linearGradient id="anGradInert" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4C525B"/><stop offset="100%" stop-color="#3A3F47"/></linearGradient>
 </defs></svg>
 <div id="app-shell">
@@ -7567,7 +7567,7 @@ var ANAT_DEFS_SVG = '<svg width="0" height="0" style="position:absolute" aria-hi
   +   '<stop offset="0%" stop-color="#FFD98A"/><stop offset="45%" stop-color="#F59E0B"/><stop offset="100%" stop-color="#B87708"/>'
   + '</radialGradient>'
   + '<radialGradient id="anGradLen" cx="42%" cy="34%" r="78%">'
-  +   '<stop offset="0%" stop-color="#8FF0E3"/><stop offset="45%" stop-color="#2DD4BF"/><stop offset="100%" stop-color="#0E8F84"/>'
+  +   '<stop offset="0%" stop-color="#FFD2A8"/><stop offset="45%" stop-color="#F97316"/><stop offset="100%" stop-color="#C2410C"/>'
   + '</radialGradient>'
   + '<linearGradient id="anGradInert" x1="0" y1="0" x2="0" y2="1">'
   +   '<stop offset="0%" stop-color="#4C525B"/><stop offset="100%" stop-color="#3A3F47"/>'
@@ -7599,7 +7599,9 @@ function anatLegend_(hl){
   hl=hl||{}; var parts=[];
   if((hl.pri||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#FC4C02"></i>Working</span>');
   if((hl.sec||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#f59e0b"></i>Assisting</span>');
-  if((hl.len||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#2dd4bf"></i>Lengthening</span>');
+  // Swatch tracks the anGradLen mid-stop. With all three states now inside the orange family the
+  // legend is what actually separates them, so a stale teal chip here would be worse than wrong.
+  if((hl.len||[]).length) parts.push('<span class="anlg"><i class="answ" style="background:#F97316"></i>Lengthening</span>');
   return parts.length?('<div class="anleg">'+parts.join('')+'</div>'):'';
 }
 // ---- Interactivity: swap the card's diagram highlights to one exercise (tap a row), or back to the
