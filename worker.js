@@ -22287,7 +22287,7 @@ function wkgTrend_(){
 // template literal, which collapses a backslash-apostrophe and breaks the script.
 function dsAttention_(){
   var out={items:[], positives:[], state:'green', rec:''};
-  function push(sev,cat,text){ out.items.push({sev:sev,cat:cat,text:text}); }
+  function push(sev,cat,text,ctx){ out.items.push({sev:sev,cat:cat,text:text,ctx:!!ctx}); }
   var fit=(typeof getFitness_==='function')?getFitness_():{ctl:0,atl:0,tsb:0,ramp:null};
   var tsb=Math.round(fit.tsb||0);
   // CTL ramp comes from the single fitness source (computed once) so the
@@ -22334,7 +22334,11 @@ function dsAttention_(){
       var ytd=(typeof _ytdCycMi_==='function')?_ytdCycMi_():0;
       var p=(typeof _paceStatus_==='function')?_paceStatus_(ytd, goal, new Date()):null;
       if(p && p.target>50){
-        if(ytd < p.target*0.85) push(1,'goals','You are behind your '+Math.round(goal)+' mi goal — about '+ytd+' mi logged vs roughly '+p.target+' expected by now.');
+        // Annual mileage pace is SEASON-LONG CONTEXT, not a directive for today — the training block
+        // decides today's work. Stated as a plain fact (sev 0, ctx) so it never drives the day state
+        // and the narrator can never turn it into "add distance today / skip rest". (The old sev-1
+        // "behind your goal" item was being rephrased into exactly that on a base-phase Saturday.)
+        if(ytd < p.target*0.85) push(0,'context',Math.max(0,p.target-ytd)+' mi behind your '+Math.round(goal)+'-mi annual pace — season context; the plan sets today.',true);
         else if(p.ahead && p.delta>=Math.max(25, Math.round(p.target*0.05))) out.positives.push('Ahead of your '+Math.round(goal)+' mi goal by ~'+p.delta+' mi');
       }
     }
@@ -22443,8 +22447,8 @@ function dsAttentionNarrate_(d, cb){
   if(!items.length){ if(cb) cb(null); return; }
   var key=d.state+'|'+items.map(function(i){return i.text;}).join('~');
   try{ if(window._dsAttnNarr && window._dsAttnNarr.key===key && (Date.now()-window._dsAttnNarr.ts)<10800000){ if(cb) cb(window._dsAttnNarr.val); return; } }catch(e){}
-  var lines=items.map(function(i){return '- ['+(i.sev>=2?'ACTION':'WATCH')+'] '+i.text;}).join('\\n');
-  var prompt='You are a professional cycling coach writing a one-glance briefing for a single athlete today. Below are the ONLY real, already-verified signals detected for today. Rephrase them into sharp, second-person coaching language focused on how each affects TODAY riding. Rules: use ONLY the signals listed; do NOT add, infer, or invent any metric, number, or signal that is not present (never mention HRV, sleep, resting heart rate, batteries, or equipment unless it appears below). Keep each bullet under about 22 words. Do not use apostrophes.\\n\\nDAY STATE: '+String(d.state||'').toUpperCase()+'\\nSIGNALS:\\n'+lines+'\\n\\nReturn ONLY valid JSON and nothing else, exactly: {"bullets":["...","..."],"rec":"..."} with at most 5 bullets in priority order. If DAY STATE is RED, rec must be one concrete action sentence for today; otherwise rec must be an empty string.';
+  var lines=items.map(function(i){return '- ['+(i.ctx?'CONTEXT':(i.sev>=2?'ACTION':'WATCH'))+'] '+i.text;}).join('\\n');
+  var prompt='You are a professional cycling coach writing a one-glance briefing for a single athlete today. Below are the ONLY real, already-verified signals detected for today. Rephrase them into sharp, second-person coaching language focused on how each affects TODAY riding. Rules: use ONLY the signals listed; do NOT add, infer, or invent any metric, number, or signal that is not present (never mention HRV, sleep, resting heart rate, batteries, or equipment unless it appears below). A signal tagged [CONTEXT] is long-range background such as annual mileage pace: state it as a plain fact ONLY and keep its wording; NEVER turn it into a directive for today, never tell the athlete to add distance, ride more, log miles, or skip rest because of it. The training plan is the sole authority for today session. Keep each bullet under about 22 words. Do not use apostrophes.\\n\\nDAY STATE: '+String(d.state||'').toUpperCase()+'\\nSIGNALS:\\n'+lines+'\\n\\nReturn ONLY valid JSON and nothing else, exactly: {"bullets":["...","..."],"rec":"..."} with at most 5 bullets in priority order. If DAY STATE is RED, rec must be one concrete action sentence for today; otherwise rec must be an empty string.';
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body:JSON.stringify({model:'claude-sonnet-4-6', max_tokens:400, messages:[{role:'user',content:prompt}]})
@@ -22456,6 +22460,13 @@ function dsAttentionNarrate_(d, cb){
     var parsed=null; try{ parsed=JSON.parse(txt.slice(s,e+1)); }catch(_){ if(cb) cb(null); return; }
     if(!parsed || !Array.isArray(parsed.bullets)){ if(cb) cb(null); return; }
     var val={bullets:parsed.bullets.filter(function(b){return typeof b==='string' && b.trim();}).slice(0,5), rec:(typeof parsed.rec==='string'?parsed.rec:'')};
+    // Output veto (same shape as the deficit-framing / hazard vetoes): a mileage/pace CONTEXT fact must
+    // never come back as a today training-volume directive. If a bullet prescribes adding distance or
+    // skipping rest off the mileage gap, restore the plain context fact instead of the directive.
+    var _ctxItem=items.filter(function(i){return i.ctx;})[0];
+    var _MILE_DIR=/add(ing)? (purposeful |more |extra )?(distance|miles|volume|mileage)|not rest|instead of rest|skip(ping)? rest|ride more|log (more )?miles|bank (the )?miles|make up (the )?(distance|miles|mileage)|purposeful (distance|miles)|chase (the )?(pace|miles)/i;
+    val.bullets=val.bullets.map(function(b){ return _MILE_DIR.test(b) ? (_ctxItem?_ctxItem.text:b) : b; });
+    if(_ctxItem && val.rec && _MILE_DIR.test(val.rec)) val.rec='';
     if(!val.bullets.length){ if(cb) cb(null); return; }
     try{ window._dsAttnNarr={key:key, ts:Date.now(), val:val}; }catch(e){}
     if(cb) cb(val);
