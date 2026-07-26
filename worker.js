@@ -570,7 +570,9 @@ window.parseFitFile = function(arrayBuffer, callback) {
               avgCad: lp.avg_cadence!=null ? Math.round(lp.avg_cadence) : null,
               avgSpd: (distMi>0 && timeSec>0) ? Math.round(distMi/(timeSec/3600)*10)/10 : null
             };
-          }).filter(function(lp){ return lp.distance>0 || lp.time>0; }).slice(0,200);
+          }).filter(function(lp){ return lp.distance>0 || lp.time>0; });
+          if(typeof _lapDedupe_==='function') result.laps=_lapDedupe_(result.laps);
+          result.laps=result.laps.slice(0,200);
           result.lapSource='garmin';   // FIT device laps = the authoritative Garmin auto-lap source
           result.lapTimeBasis='moving';
         }
@@ -4839,17 +4841,36 @@ function ensureRideGps(r){
 // short-circuit fix was useless on its own because those paths only call ensureRideStreams when
 // streams or GPS are MISSING. A ride with both cached never reached it, which is exactly why the
 // Saturday ride kept reading 24:56 after the mapper was corrected.
-// Garmin laps are excluded (already moving-based). lapSource must be 'strava' explicitly: a ride
-// with laps but NO lapSource predates that field and may hold Garmin laps, and replacing those with
-// Strava's differently-triggered set would be a downgrade, not a repair.
+// Only an EXPLICIT 'garmin' source is exempt — those laps come from the FIT timer and are already
+// moving-based. Everything else with a stravaId and laps needs the rewrite, INCLUDING a ride with no
+// lapSource at all: that field was added later, so the oldest Strava imports carry elapsed-time laps
+// and no provenance. Requiring lapSource==='strava' was too strict and skipped exactly those rides —
+// which is why the Saturday ride kept reading 24:56 through two rounds of fixes.
+// Drop repeated laps. A wholesale re-map already clears a legacy duplicate (the 8th lap that was a
+// copy of the 1st, left behind by the old union bug), but this makes the mapper self-correcting so
+// the same artefact cannot be reintroduced by any future merge. Keys on the fields a real lap pair
+// cannot share — identical distance AND time AND avg power is a repeat, not two genuine laps.
+function _lapDedupe_(laps){
+  if(!Array.isArray(laps)) return [];
+  var seen={}, out=[];
+  laps.forEach(function(lp){
+    if(!lp) return;
+    var k=[lp.distance,lp.time,lp.avgPwr,lp.avgHR].join('|');
+    if(seen[k]) return;
+    seen[k]=1; out.push(lp);
+  });
+  return out;
+}
 function lapsNeedMovingFix_(r){
   return !!(r && r.stravaId && r.laps && r.laps.length
-            && r.lapSource==='strava' && r.lapTimeBasis!=='moving');
+            && r.lapSource!=='garmin' && r.lapTimeBasis!=='moving');
 }
 // One-time heal. Does NOT call any API: it only clears the flags that would stop the next open from
 // fetching, so the rewrite happens lazily when a ride is actually opened. Idempotent, and stamped so
 // it runs once per client rather than on every load.
-var _LAP_HEAL_V='lapmoving-1';
+// Bumped when the staleness rule widens, so clients that already ran the previous pass re-run it
+// against the corrected predicate rather than skipping on the old stamp.
+var _LAP_HEAL_V='lapmoving-2';
 function healStaleLaps_(){
   try{
     if(typeof st==='undefined' || !Array.isArray(st.rides)) return 0;
@@ -4949,7 +4970,7 @@ function fetchStravaStreams_(r, ds, maxOf){
         // moving-time basis (lapTimeBasis missing) — those carry elapsed times and would otherwise
         // stay wrong forever, since this block only ever ran on rides with no laps. Garmin laps are
         // still never touched: they are authoritative and already moving-based.
-        var _lapsStale=(r.lapSource==='strava' && r.lapTimeBasis!=='moving');
+        var _lapsStale=(r.lapSource!=='garmin' && r.lapTimeBasis!=='moving');
         if(a && a.laps && a.laps.length && r.lapSource!=='garmin' && (!(r.laps&&r.laps.length) || _lapsStale)){
           r.lapSource='strava';
           r.lapTimeBasis='moving';
@@ -4969,7 +4990,8 @@ function fetchStravaStreams_(r, ds, maxOf){
               avgCad:lp.average_cadence!=null?Math.round(lp.average_cadence):null,
               avgSpd:(distMi>0&&timeSec>0)?Math.round(distMi/(timeSec/3600)*10)/10:null
             };
-          }).filter(function(lp){return lp.distance>0||lp.time>0;}).slice(0,200);
+          }).filter(function(lp){return lp.distance>0||lp.time>0;});
+          r.laps=_lapDedupe_(r.laps).slice(0,200);
         }
         // Persist heavy streams to /gps (like FIT), scalar maxes to the blob.
         var payload=gpsPayload_(r);
