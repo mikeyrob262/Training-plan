@@ -553,6 +553,7 @@ window.parseFitFile = function(arrayBuffer, callback) {
               avgSpd: (distMi>0 && timeSec>0) ? Math.round(distMi/(timeSec/3600)*10)/10 : null
             };
           }).filter(function(lp){ return lp.distance>0 || lp.time>0; }).slice(0,200);
+          result.lapSource='garmin';   // FIT device laps = the authoritative Garmin auto-lap source
         }
 
         callback(null, result);
@@ -4867,7 +4868,11 @@ function fetchStravaStreams_(r, ds, maxOf){
         if(cad){ r.chartCad=ds(cad,200); if(!r.maxCadence) r.maxCadence=maxOf(cad,255); }
         if(vel && !r.maxSpeed){ var mv=maxOf(vel,50); if(mv) r.maxSpeed=Math.round(mv*2.23694*10)/10; } // m/s -> mph (display expects mph when >10)
         // laps[] from the detailed activity (Strava field names, m & sec).
-        if(a && a.laps && a.laps.length && !(r.laps&&r.laps.length)){
+        // Strava laps are a FALLBACK only — written when the ride has NO laps AND none from Garmin.
+        // Garmin auto-lap is authoritative; the merge prefers it, so Strava never mixes with or overrides
+        // Garmin laps (Strava's differently-triggered set was half of the 14-lap doubling).
+        if(a && a.laps && a.laps.length && !(r.laps&&r.laps.length) && r.lapSource!=='garmin'){
+          r.lapSource='strava';
           r.laps=a.laps.map(function(lp){
             var distMi=lp.distance!=null?Math.round(lp.distance/1609.344*100)/100:0;
             var timeSec=lp.elapsed_time!=null?Math.round(lp.elapsed_time):(lp.moving_time!=null?Math.round(lp.moving_time):0);
@@ -5738,9 +5743,19 @@ function mergeItemFast_(a, b){
   // LatLng object: (lat, undefined)" crash, not a hypothetical risk.
   var gpsWinner = ((b.gpsLats && b.gpsLats.length) || 0) > ((a.gpsLats && a.gpsLats.length) || 0) ? b : a;
   var aNoGps = {}, bNoGps = {};
-  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons') aNoGps[k]=a[k]; });
-  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons') bNoGps[k]=b[k]; });
+  // laps/lapSource are excluded from the generic merge for the SAME reason as GPS: mergeState_ merges
+  // two arrays with mergeArrays_ (a union), so a ride carrying Garmin auto-laps (7) and a re-synced copy
+  // carrying Strava's differently-triggered laps (7) UNIONED into one 14-lap array. Laps must be atomic
+  // — ONE source, REPLACE never append — resolved below (Garmin auto-lap is authoritative).
+  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource') aNoGps[k]=a[k]; });
+  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
+  // Atomic lap resolution: prefer the Garmin auto-lap source (distance-based, consistent); else whichever
+  // side actually carries laps. Never concatenate the two — that is the doubling this fixes.
+  var _aLaps=Array.isArray(a.laps)?a.laps:null, _bLaps=Array.isArray(b.laps)?b.laps:null;
+  var _lapWin=(a.lapSource==='garmin'&&_aLaps)?a:((b.lapSource==='garmin'&&_bLaps)?b:(_aLaps?a:(_bLaps?b:null)));
+  if(_lapWin){ merged.laps=_lapWin.laps; if(_lapWin.lapSource) merged.lapSource=_lapWin.lapSource; }
+  else { delete merged.laps; delete merged.lapSource; }
   // EDIT-WINS: a ride the user manually edited must beat a stale remote copy.
   // The generic merge above resolves numbers with Math.max, which silently
   // reverts any edit that LOWERS a value (e.g. correcting an inflated
