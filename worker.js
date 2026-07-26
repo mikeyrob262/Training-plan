@@ -33063,9 +33063,17 @@ function _scoreDaySessions_(dateKey){
 // Find a completed activity (ride or run) for a given date key (Y-M-D).
 function findActivityForDate(dateKey){
   var target=parseDayKey(dateKey);
+  var keyNorm=(typeof normDate==='function')?normDate(dateKey):String(dateKey||'');
   function sameDay(ds){
     if(!ds) return false;
-    var d=new Date(ds);
+    var s=String(ds);
+    // A date-only (or leading-date) string like '2026-07-25' must be compared AS WRITTEN. new Date()
+    // treats it as UTC midnight, which rolls back a calendar day in a behind-UTC timezone (Michigan) —
+    // so today's ride read as yesterday and Coach V never flipped to its post-ride state. Compare the
+    // normalized YYYY-MM-DD directly; only fall back to Date parsing for a genuine timestamp value.
+    var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m){ return ((typeof normDate==='function')?normDate(s.slice(0,10)):s.slice(0,10))===keyNorm; }
+    var d=new Date(s);
     return d.getFullYear()===target.getFullYear() && d.getMonth()===target.getMonth() && d.getDate()===target.getDate();
   }
   var rides=(st.rides||[]);
