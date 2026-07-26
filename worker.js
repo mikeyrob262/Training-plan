@@ -22855,6 +22855,53 @@ function _hrdReasonText_(reason){
     'no ride':'No recent ride to read.' };
   return m[reason] || 'Not enough steady data.';
 }
+// ---- Qualifying-ride selection ---------------------------------------------------------------
+// The card used to read the most recent cycling ride, full stop. That is the wrong ride to read:
+// one Saturday group ride (surges, VI past the gate) blanked the card to N/A even though a
+// textbook 2-hour Z2 endurance ride sat two days behind it. Decoupling is a property of the last
+// STEADY ENDURANCE effort, not of the calendar — so walk back newest-first and report the most
+// recent ride that actually clears the gates.
+// Bounded by a lookback window on purpose: a decoupling number pulled off a two-month-old ride is
+// not a current read on aerobic durability, so past the window the honest answer stays N/A rather
+// than reaching back until it finds something.
+var _HRD_LOOKBACK_DAYS = 60;
+var _HRD_MAX_FETCH     = 3;    // stream fetches per walk — don't chain Strava calls down the whole window
+function _hrdEsc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); }
+// Cycling only. st.rides mixes sports, and a same-day "Morning Weight" strength session sorts to
+// the same date — it would win the pick and then bail at the HR check, mislabelling the day. Same
+// exclusion set the You-vs-You page uses, so Zwift/virtual rides stay in and strength/run/swim/
+// walk/etc. drop out.
+function _hrdIsRide_(rx){
+  var s=(typeof storeV2Sport_==='function')?storeV2Sport_(rx):String((rx&&(rx.sportType||rx.type))||'').replace(/[ _-]/g,'');
+  return !/^(run|trailrun|virtualrun|treadmill|swim|openwaterswim|opanwaterswim|walk|hike|weighttraining|workout|strength|crossfit|yoga|elliptical|rowing)$/i.test(s);
+}
+// Cycling rides inside the lookback window, newest first. Deliberately does NOT pre-filter on the
+// suitability gates — _hrDecoupling_ owns those, and duplicating them here would give the card two
+// definitions of "qualifying" that could drift apart. Cutoff is built from LOCAL date parts (ride
+// dates are local-parsed everywhere else; toISOString would shift the boundary by a day).
+function _hrdCandidates_(){
+  var p2=function(n){ return (n<10?'0':'')+n; };
+  var c=new Date(); c.setHours(0,0,0,0); c.setDate(c.getDate()-_HRD_LOOKBACK_DAYS);
+  var cutK=c.getFullYear()+'-'+p2(c.getMonth()+1)+'-'+p2(c.getDate());
+  var out=[];
+  (st.rides||[]).forEach(function(rx){
+    if(!rx||rx.deleted||!rx.date||!_hrdIsRide_(rx)) return;
+    var k=normDate(rx.date); if(!k||k<cutK) return;
+    out.push({r:rx,k:k});
+  });
+  out.sort(function(a,b){ return a.k>b.k?-1:(a.k<b.k?1:0); });
+  return out.map(function(o){ return o.r; });
+}
+// "EZ-Z2 Ride · Jul 23" — the card has to name the ride it read, or a number off a three-day-old
+// ride silently reads as a number off today's.
+function _hrdRideLabel_(r){
+  if(!r) return '';
+  var nm=String(r.name||'').trim() || 'Ride';
+  if(nm.length>34) nm=nm.slice(0,33)+'…';
+  var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(normDate(r.date||'')||'');
+  var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return _hrdEsc_(nm)+(m?' &middot; '+MO[(+m[2])-1]+' '+(+m[3]):'');
+}
 // One attempt per ride, keyed by rideKey. States: undefined (untried) | 'pending' (in flight) |
 // 'done' (streams landed) | 'failed' (fetch returned nothing usable). Guards against re-fetching
 // on every dashboard render, and lets a failed attempt render "stream data unavailable" on
@@ -22880,6 +22927,39 @@ function _hdEnsureStreams_(r){
     if(typeof fetchStravaStreams_==='function') return fetchStravaStreams_(r, ds, maxOf);
     return r;
   }).catch(function(){ return r; });
+}
+// Walks candidates newest-first and resolves with {ride,res} for the first one that yields a real
+// decoupling number. A candidate that is N/A for an intrinsic reason (too short, too hard, too
+// variable) is skipped outright — no fetch, no cost. A candidate whose ONLY blocker is a missing
+// stream gets one fetch attempt, then either answers or hands off to the next ride back; that is
+// what keeps a stream-less ride from dead-ending the card the way the old single-ride read did.
+// Fetches are capped by ctx.fuel so a bad window can't chain Strava calls down all 60 days.
+// Resolves {none:true, failed:n} when nothing qualified — the failed count separates "searched and
+// found no qualifying ride" from "found one but its streams wouldn't load": different claims.
+function _hdWalk_(cands, ftp, i, ctx){
+  ctx=ctx||{fuel:_HRD_MAX_FETCH, failed:0};
+  if(!cands || i>=cands.length) return Promise.resolve({none:true, failed:ctx.failed});
+  var c=cands[i];
+  var res=(typeof _hrDecoupling_==='function')?_hrDecoupling_(c, ftp):{applicable:false,reason:'unavailable'};
+  if(res.applicable) return Promise.resolve({ride:c, res:res});
+  var key=(typeof rideKey==='function')?rideKey(c):'';
+  var missing=(res.reason==='no heart-rate stream'||res.reason==='no power data');
+  // Only a ride that cleared every intrinsic + scalar gate can reach a stream reason (see the
+  // gate ordering in _hrDecoupling_), so a fetch is never spent on a ride that would be rejected
+  // anyway. 'pending'/'done'/'failed' all mean "don't fetch this one again".
+  if(!(missing && c.stravaId && ctx.fuel>0 && _hdStreamAttempts[key]==null)) return _hdWalk_(cands, ftp, i+1, ctx);
+  _hdStreamAttempts[key]='pending'; ctx.fuel--;
+  return _hdEnsureStreams_(c).then(function(){
+    var r2=(typeof _hrDecoupling_==='function')?_hrDecoupling_(c, ftp):{applicable:false,reason:'unavailable'};
+    var stillMissing=!r2.applicable && (r2.reason==='no heart-rate stream'||r2.reason==='no power data');
+    _hdStreamAttempts[key]=stillMissing?'failed':'done';
+    if(r2.applicable) return {ride:c, res:r2};
+    if(stillMissing) ctx.failed++;
+    return _hdWalk_(cands, ftp, i+1, ctx);
+  }).catch(function(){
+    _hdStreamAttempts[key]='failed'; ctx.failed++;
+    return _hdWalk_(cands, ftp, i+1, ctx);
+  });
 }
 function dsShowDashboard(){
   var mc = document.getElementById('ds-content');
@@ -22927,17 +23007,25 @@ function dsShowDashboard(){
   var wkgSeries=(wtr.pts||[]).map(function(p){return p.wkg;});
   // Today's plan (real).
   var twk=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_((typeof getTodayKey==='function')?getTodayKey():''):null;
-  // HR drift last ride — real Pw:Hr aerobic decoupling. Pick the most recent CYCLING ride BY
-  // DATE (not array position), skipping tombstones AND non-cycling activities. st.rides mixes
-  // sports (a same-day "Morning Weight" strength session sorts to the same date and, with the
-  // >= tie-break, would win — then bail at the HR check before the duration gate, mislabelling
-  // a 52-min Zwift ride as "no HR stream"). Same exclusion set the You-vs-You page uses, so
-  // Zwift/virtual rides stay in and strength/run/swim/walk/etc. drop out.
-  var _hdIsRide=function(rx){ var s=(typeof storeV2Sport_==='function')?storeV2Sport_(rx):String((rx&&(rx.sportType||rx.type))||'').replace(/[ _-]/g,''); return !/^(run|trailrun|virtualrun|treadmill|swim|openwaterswim|opanwaterswim|walk|hike|weighttraining|workout|strength|crossfit|yoga|elliptical|rowing)$/i.test(s); };
-  var hdLast=null, hdKey='';
-  (st.rides||[]).forEach(function(rx){ if(!rx||rx.deleted||!rx.date||!_hdIsRide(rx)) return; var k=normDate(rx.date); if(k>=hdKey){ hdKey=k; hdLast=rx; } });
+  // HR drift — real Pw:Hr aerobic decoupling off the most recent QUALIFYING ride, not the most
+  // recent ride. Sync pre-pass: walk the candidates newest-first and take the first one that
+  // already has everything it needs, so the common case paints a number with no fetch and no
+  // loading flash. hdFetchable records whether some candidate is one stream fetch away from an
+  // answer — that is what licenses the async walk below.
+  var hdCands=(typeof _hrdCandidates_==='function')?_hrdCandidates_():[];
   var hdFtp=parseInt((st&&st.ftp)||186)||186;
-  var hdRes=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdLast, hdFtp):{applicable:false,reason:'unavailable'};
+  var hdPick=null, hdFetchable=false;
+  for(var hdi=0; hdi<hdCands.length; hdi++){
+    var hdr=(typeof _hrDecoupling_==='function')?_hrDecoupling_(hdCands[hdi], hdFtp):{applicable:false,reason:'unavailable'};
+    if(hdr.applicable){ hdPick={ride:hdCands[hdi], res:hdr}; break; }
+    if(!hdFetchable && (hdr.reason==='no heart-rate stream'||hdr.reason==='no power data')
+       && hdCands[hdi].stravaId && _hdStreamAttempts[rideKey(hdCands[hdi])]==null) hdFetchable=true;
+  }
+  // The loop breaks at the pick, so any fetchable candidate it saw is strictly NEWER than the pick
+  // — a ride that might win once its streams land. Worth a background walk, but not worth a
+  // spinner: paint the ride we can already answer with, then upgrade in place if the newer one
+  // resolves. (The walk re-reaches the same pick if the fetch comes back empty, so it can't
+  // downgrade to an older ride.)
   // Nutrition (real, today).
   var nf=(typeof nutritionForDate==='function')?nutritionForDate():{consumed:{cal:0,pro:0,carb:0,fat:0,fiber:0},goals:{cal:2000,pro:150,carb:250,fat:70}};
   // Consistency this month (real active days).
@@ -23063,65 +23151,72 @@ function dsShowDashboard(){
     ra+='</div></div>';
   });
   H+=card(ra);
-  // HR Drift — Pw:Hr aerobic decoupling (Friel/TrainingPeaks 5% convention). Only steady,
-  // endurance-pace, 60+ min power rides get a verdict; everything else shows a not-applicable
-  // state — no number, no color — because decoupling on those rides measures workout shape.
+  // HR Drift — Pw:Hr aerobic decoupling (Friel/TrainingPeaks 5% convention) off the most recent
+  // QUALIFYING ride. Only steady, endurance-pace, 60+ min power rides get a verdict; if nothing in
+  // the lookback window qualifies the card shows a not-applicable state — no number, no color —
+  // because decoupling on a surging or threshold+ ride measures the workout's shape, not durability.
+  // The applicable state NAMES the ride it read: the number is often not from today's ride, and an
+  // unlabelled percentage would read as if it were.
   // Shared body renderer for the four states. Lives inside dsShowDashboard so it can use ACC/spark.
   function _hdSeriesOf(res){ var s=[]; if(res&&res.applicable&&res.H){ var seg=res.H.slice(res.segFrom); var st2=Math.max(1,Math.floor(seg.length/24)); for(var i=0;i<seg.length;i+=st2) s.push(seg[i]); } return s; }
-  function hdBody(res, mode){
+  function hdBody(res, mode, ride){
     if(mode==='loading'){
       var sp='<svg width="20" height="20" viewBox="0 0 40 40" style="flex-shrink:0"><circle cx="20" cy="20" r="16" fill="none" stroke="#1c2130" stroke-width="5"/><path d="M20 4a16 16 0 0 1 16 16" fill="none" stroke="#64748b" stroke-width="5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 20 20" to="360 20 20" dur="0.8s" repeatCount="indefinite"/></path></svg>';
-      return '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 6px">'+sp+'<div style="font-size:15px;font-weight:700;color:#94a3b8">Checking last ride…</div></div>'
+      return '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 6px">'+sp+'<div style="font-size:15px;font-weight:700;color:#94a3b8">Finding a steady ride…</div></div>'
         +'<div style="font-size:11px;color:#5b6678;line-height:1.5">Fetching stream data to measure decoupling.</div>'
         +'<div style="flex:1;min-height:48px"></div>';
     }
     if(mode==='unavailable'){
       return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
         +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">Stream data unavailable</div>'
-        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Could not load HR/power streams for this ride &mdash; Strava didn&#39;t return them. Not a claim about the ride itself.</div></div>';
+        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Found qualifying rides, but Strava didn&#39;t return their HR/power streams. Not a claim about the rides themselves.</div></div>';
     }
     if(res && res.applicable){
       var dec=res.decoupling;
       var col=dec<_HRD_COUPLED_PCT?ACC.green:(dec<10?ACC.amber:ACC.red);
       var msg=dec<_HRD_COUPLED_PCT?'Aerobically coupled':(dec<10?'Mild decoupling':'High — review pacing');
       var series=_hdSeriesOf(res);
+      var who=ride?_hrdRideLabel_(ride):'';
       return '<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>'
         +'<div style="font-size:12px;font-weight:600;color:'+col+';margin:4px 0 2px">'+msg+'</div>'
+        +(who?'<div style="font-size:10px;color:#94a3b8;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+who+'</div>':'')
         +'<div style="font-size:10px;color:#5b6678;margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
         +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>1?spark(series,col,100,56):'')+'</div>';
     }
+    // Nothing in the window qualified. The reason shown is the NEWEST candidate's — the most
+    // recognizable one to the user ("that was my group ride") — but the copy says the search was
+    // window-wide so the state doesn't read as a verdict on one ride.
     return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
-      +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+_hrdReasonText_(res?res.reason:'no ride')+'</div>'
-      +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power. This one doesn&#39;t qualify.</div></div>';
+      +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+(hdCands.length?'No qualifying ride in '+_HRD_LOOKBACK_DAYS+' days':_hrdReasonText_('no ride'))+'</div>'
+      +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power and HR. Nothing in the last '+_HRD_LOOKBACK_DAYS+' days fits.</div></div>';
   }
   var hd=lbl('HR DRIFT');
-  hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last ride · Pw:Hr decoupling</div>';
-  // Fetch trigger: the ride passed every intrinsic/scalar gate (so the ONLY reason it's N/A is a
-  // missing stream) and it has a Strava id to fetch from. One attempt per ride via _hdStreamAttempts.
-  var hdKeyK=hdLast?rideKey(hdLast):'';
-  var hdAttempt=hdKeyK?_hdStreamAttempts[hdKeyK]:null;
-  var hdMissing=hdRes && !hdRes.applicable && (hdRes.reason==='no heart-rate stream'||hdRes.reason==='no power data');
-  var hdMode=null;
-  if(hdAttempt==='failed'){ hdMode='unavailable'; }
-  else if(hdMissing && hdLast && hdLast.stravaId && hdAttempt==null){ hdMode='loading'; _hdStreamAttempts[hdKeyK]='pending'; }
-  else if(hdAttempt==='pending'){ hdMode='loading'; }
-  hd+='<div id="ds-hrdrift-body">'+(hdMode?hdBody(null,hdMode):hdBody(hdRes,null))+'</div>';
+  hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last qualifying ride · Pw:Hr decoupling</div>';
+  // Three-way: a ride already answers (sync pre-pass) → paint it. Nothing answers yet but some
+  // candidate is one fetch from an answer → loading, then the async walk below. Otherwise the
+  // window genuinely holds no qualifying ride → N/A, no network call.
+  var hdMode = hdPick ? null : (hdFetchable ? 'loading' : 'none');
+  var hdRunWalk = hdFetchable;   // true in the paint-now-upgrade-later case too
+  hd+='<div id="ds-hrdrift-body">'+(hdPick?hdBody(hdPick.res,null,hdPick.ride):hdBody(null,hdMode==='loading'?'loading':null))+'</div>';
   H+=card(hd);
-  // Kick off the one-time fetch AFTER the card HTML is committed (the async callback repaints
-  // #ds-hrdrift-body in place — loading -> number, or -> "stream data unavailable" if nothing lands).
-  if(hdMode==='loading' && hdAttempt==null){
-    (function(ride, ftp, key){
-      _hdEnsureStreams_(ride).then(function(){
-        var res2=(typeof _hrDecoupling_==='function')?_hrDecoupling_(ride, ftp):{applicable:false,reason:'unavailable'};
-        var stillMissing=!res2.applicable && (res2.reason==='no heart-rate stream'||res2.reason==='no power data');
-        _hdStreamAttempts[key]=stillMissing?'failed':'done';
+  // Kick off the walk AFTER the card HTML is committed (the async callback repaints
+  // #ds-hrdrift-body in place — loading -> number, or -> the matching N/A state if the window
+  // runs dry). The walk keeps stepping back on a fetch that lands nothing, so one ride whose
+  // streams Strava won't return no longer dead-ends the card.
+  if(hdRunWalk){
+    (function(cands, ftp, hadPick){
+      _hdWalk_(cands, ftp, 0, null).then(function(hit){
         var el=document.getElementById('ds-hrdrift-body'); if(!el) return;
-        el.innerHTML=stillMissing?hdBody(null,'unavailable'):hdBody(res2,null);
+        if(hit && hit.ride){ el.innerHTML=hdBody(hit.res, null, hit.ride); return; }
+        // Nothing landed. If a pick is already on screen it stays — the walk only ever adds a
+        // NEWER answer, so an empty result is no reason to blank a valid one.
+        if(hadPick) return;
+        el.innerHTML=hdBody(null, (hit&&hit.failed)?'unavailable':null);
       }).catch(function(){
-        _hdStreamAttempts[key]='failed';
+        if(hadPick) return;
         var el=document.getElementById('ds-hrdrift-body'); if(el) el.innerHTML=hdBody(null,'unavailable');
       });
-    })(hdLast, hdFtp, hdKeyK);
+    })(hdCands, hdFtp, !!hdPick);
   }
   // Nutrition
   var calPct=nf.goals.cal?Math.min(1,nf.consumed.cal/nf.goals.cal):0;
