@@ -7735,26 +7735,37 @@ function anatBlockEl_(exercises, opts){
 // as positional arrays (["Goblet Squat","3","12","cue"]), not objects.
 function anatNamesToEx_(names){ return (names||[]).map(function(n){ return {name:(n&&n.name!=null)?n.name:n}; }); }
 
+// The per-row 'Watch' control, standalone — same reason anatChipHTML_ is standalone. The session
+// detail view needs the identical button next to a radio, and a second copy of this markup is how a
+// surface ends up with one chip and not the other.
+// encodeURIComponent leaves the apostrophe UNRESERVED, and this value sits inside a quoted JS string
+// in an inline onclick — so "World's greatest stretch" would terminate the argument early and the
+// handler would never fire. Escaped explicitly. The surrounding quotes are HTML entities, not
+// backslash escapes: a backslash here would be stripped by the served template literal (the same
+// trap preflight step 2 exists to catch).
+function _exQ_(name){ return encodeURIComponent(String(name||'')).replace(/'/g,'%27'); }
+function watchChipHTML_(name){
+  return '<span onclick="event.stopPropagation();watchExercise_(&#39;'+_exQ_(name)+'&#39;)" title="Watch a demo"'
+    +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>';
+}
+// The prescription text for one movement: "3×8 @ 155 lb (70%)". Returns '' when nothing is
+// prescribed, so a caller can render a dash rather than an empty "@".
+function exercisePrescription_(e){
+  if(!e) return '';
+  var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)')
+          :(e.pct1RM?(e.pct1RM+((typeof gTerm_==='function')?gTerm_('% 1RM','pct1rm'):'% 1RM')):'');
+  return (e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):'');
+}
 function exerciseRowHTML_(e){
   if(!e) return '';
   var esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
-  var load=(e.weight!=null)?(e.weight+' lb ('+e.pct1RM+'%)')
-          :(e.pct1RM?(e.pct1RM+((typeof gTerm_==='function')?gTerm_('% 1RM','pct1rm'):'% 1RM')):'');
-  var d=(e.sets!=null?e.sets:'')+(e.reps!=null?('×'+e.reps+(e.secs?'s':'')+(e.perSide?' /side':'')):'')+(load?(' @ '+load):'');
-  // encodeURIComponent leaves the apostrophe UNRESERVED, and this value sits inside a quoted
-  // JS string in an inline onclick — so "World's greatest stretch" would terminate the
-  // argument early and the handler would never fire. Escaped explicitly. The surrounding
-  // quotes are HTML entities, not backslash escapes: a backslash here would be stripped by
-  // the served template literal (the same trap preflight step 2 exists to catch).
-  var q=encodeURIComponent(String(e.name||'')).replace(/'/g,'%27');
   return '<div style="font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px">'
     +'<span style="color:var(--t1);flex:1;min-width:0">'+esc(e.name)+'</span>'
-    +'<span style="color:var(--t3);white-space:nowrap">'+d+'</span>'
+    +'<span style="color:var(--t3);white-space:nowrap">'+exercisePrescription_(e)+'</span>'
     // Muscle-focus tap — swaps the card's body map to THIS movement (spec §5), alongside Watch, off the
-    // shared chip builder so it can never be dropped on one surface. Empty when the movement is unmapped.
+    // shared chip builders so neither can be dropped on one surface. Empty when the movement is unmapped.
     +((typeof anatChipHTML_==='function')?anatChipHTML_(e.name):'')
-    +'<span onclick="event.stopPropagation();watchExercise_(&#39;'+q+'&#39;)" title="Watch a demo"'
-    +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>'
+    +watchChipHTML_(e.name)
     +'</div>';
 }
 // Cycle a mobility session to the NEXT routine in the pool (A -> B -> C -> D -> A).
@@ -19940,6 +19951,17 @@ function _sessionSteps_(intent, struct, targets){
   }
   return steps;
 }
+// Strength / mobility steps: ONE step per prescribed movement, in prescribed order. The exercise
+// list comes from planResolve_ (derived from SESSION_DEFS + the block week), so it reprices the same
+// way ride watts do — nothing here is stored or hardcoded. A movement with no prescription renders a
+// dash rather than a bare "@" or an invented set count.
+function _sessionMoveSteps_(exercises){
+  return (exercises||[]).filter(Boolean).map(function(e){
+    var rx=(typeof exercisePrescription_==='function')?exercisePrescription_(e):'';
+    return { kind:'move', name:e.name, title:String(e.name||'Movement'), meta:(rx||'—'),
+             sub:(e.loadCue||''), chips:true };
+  });
+}
 // Resolve the live st.plan session for a (date, id). Prefers the id; falls back to the day's first
 // live session. Returns null when the day has none.
 function _sessionForDetail_(dateKey, sid){
@@ -19950,11 +19972,13 @@ function _sessionForDetail_(dateKey, sid){
   if(sid){ var m=live.filter(function(s){ return s.id===sid; })[0]; if(m) return m; }
   return live[0]||null;
 }
-// Router used by the calendar tap: a bike session opens the step-by-step detail; strength / mobility /
-// rest keep the day editor (their own detail — the anatomy view — is a separate effort).
+// Router used by the calendar tap: ride, strength and mobility all open the step-by-step detail now.
+// Rest / optional / run keep the day editor — no step list exists for them. Editing stays reachable
+// from the detail sheet's Edit link, so nothing became unreachable by moving the default.
+var _SD_DETAIL_TYPES={ride:1, strength:1, mobility:1};
 function openSessionOrEditor_(dateKey, sid){
   var s=_sessionForDetail_(dateKey, sid);
-  if(s && s.type==='ride' && typeof showSessionDetail_==='function'){ showSessionDetail_(dateKey, s.id||sid||''); }
+  if(s && _SD_DETAIL_TYPES[s.type] && typeof showSessionDetail_==='function'){ showSessionDetail_(dateKey, s.id||sid||''); }
   else if(typeof openDayEditor==='function'){ openDayEditor(dateKey, sid||undefined); }
 }
 // The step-by-step session detail overlay. Same sheet on both surfaces (parity). Each step has one
@@ -20045,15 +20069,25 @@ function _debriefRender_(m, ACC){
 }
 function showSessionDetail_(dateKey, sid){
   var s=_sessionForDetail_(dateKey, sid);
-  if(!s || s.type!=='ride'){ if(typeof openDayEditor==='function') openDayEditor(dateKey, sid||undefined); return; }
+  // Ride, strength and mobility all get the step-by-step sheet. Anything else (rest, optional, run)
+  // keeps the day editor — there is no step list to walk, and inventing one would imply a
+  // prescription that does not exist.
+  var DETAIL_TYPES={ride:1, strength:1, mobility:1};
+  if(!s || !DETAIL_TYPES[s.type]){ if(typeof openDayEditor==='function') openDayEditor(dateKey, sid||undefined); return; }
   var esc=function(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var isRide=(s.type==='ride');
   var struct=(s.block && s.block.struct) || '';
   // Reprice at read off CURRENT FTP — the watts shown are live, never the value frozen at generation.
+  // Same derive-at-read for movements: planResolve_ rebuilds the exercise list from SESSION_DEFS for
+  // the block week, so a changed 1RM reprices the loads exactly the way a changed FTP reprices watts.
   var targets=s.targets||{};
+  var rsv=(typeof planResolve_==='function')?planResolve_(s):s;
+  var exercises=(rsv&&rsv.exercises)||s.exercises||[];
   try{ if(s.intent && typeof _planSessionFromDef_==='function'){ var fr=_planSessionFromDef_(s.intent, (s.block&&s.block.week)||1); if(fr && fr.targets && fr.targets.powerLo!=null) targets=fr.targets; } }catch(e){}
-  var steps=_sessionSteps_(s.intent, struct, targets);
+  var steps=isRide?_sessionSteps_(s.intent, struct, targets):_sessionMoveSteps_(exercises);
   var done=(s.status==='completed');
-  var ACC=(typeof sportColor_==='function')?sportColor_('Ride'):'#2FA8E0';
+  var ACC=(typeof sportColor_==='function')?sportColor_(isRide?'Ride':(s.type==='mobility'?'Yoga':'WeightTraining')):'#2FA8E0';
+  if(!ACC) ACC='#2FA8E0';
   // Header context: phase + week, session name, date.
   var phaseLabel=''; try{ var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null; if(bp) phaseLabel=bp.phaseLabel+' · wk '+bp.weekInPhase; }catch(e){}
   var dObj=(typeof parseDayKey==='function')?parseDayKey(dateKey):null;
@@ -20061,10 +20095,12 @@ function showSessionDetail_(dateKey, sid){
   var DAY=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var dateTxt=dObj?(DAY[dObj.getDay()]+', '+MON[dObj.getMonth()]+' '+dObj.getDate()):dateKey;
   var note=s.note || (typeof SESSION_DEFS!=='undefined' && SESSION_DEFS[s.intent] && SESSION_DEFS[s.intent].note) || '';
-  // Derived target summary (honest, FTP-independent load): duration / TSS / IF.
+  // Derived target summary (honest, FTP-independent load): duration / TSS / IF. Anything the
+  // prescription does not carry is simply absent — never a placeholder zero.
   var summ=[]; if(targets.durationMin!=null) summ.push('~'+targets.durationMin+' min');
   if(targets.tssTarget!=null) summ.push('TSS ~'+targets.tssTarget);
   if(targets.ifTarget!=null) summ.push('IF '+targets.ifTarget);
+  if(!isRide) summ.push(steps.length+' movement'+(steps.length===1?'':'s'));
 
   var old=document.getElementById('session-detail-modal'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='session-detail-modal';
@@ -20086,12 +20122,20 @@ function showSessionDetail_(dateKey, sid){
   if(note) H+='<div style="margin-top:10px;padding:9px 12px;border-radius:10px;background:'+ACC+'12;border:1px solid '+ACC+'2e;font-size:12.5px;color:var(--t2);line-height:1.45">'+esc(note)+'</div>';
   if(done) H+='<div style="margin-top:10px;font-size:12px;font-weight:800;color:#22c55e">Completed ✓</div>';
   H+='<div id="sd-steps" style="margin-top:12px"></div>';
+  // ONE mark-complete button per session — the only one in this sheet, gated on every step being
+  // ticked. Edit sits beside it as a plain link so the day editor stays reachable now that the
+  // calendar tap opens this view for strength and mobility instead.
   H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px">';
+  H+='<div style="display:flex;align-items:center;gap:12px;min-width:0">';
   H+='<span id="sd-prog" style="font-size:12px;font-weight:700;color:var(--t3)"></span>';
+  H+='<span id="sd-edit" style="font-size:12px;font-weight:700;color:#4D9FFF;cursor:pointer;white-space:nowrap">Edit</span>';
+  H+='</div>';
   H+='<button id="sd-done" style="border:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:800;font-family:inherit;color:#08210f;background:#22c55e">'+(done?'Completed ✓':'Mark session complete')+'</button>';
   H+='</div>';
   sheet.innerHTML=H; ov.appendChild(sheet); document.body.appendChild(ov);
   document.getElementById('sd-x').onclick=function(){ ov.remove(); };
+  (function(){ var ed=document.getElementById('sd-edit'); if(!ed) return;
+    ed.onclick=function(){ ov.remove(); if(typeof openDayEditor==='function') openDayEditor(dateKey, s.id||undefined); }; })();
 
   var wrap=document.getElementById('sd-steps');
   var checks=steps.map(function(){ return done; });
@@ -20115,16 +20159,42 @@ function showSessionDetail_(dateKey, sid){
     chk.onclick=function(){ if(done) return; checks[i]=!checks[i]; paint(); sync(); };
     paint();
     var body=document.createElement('div'); body.style.cssText='flex:1;min-width:0';
-    body.innerHTML='<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+kindCol+'">'+esc(step.title)+'</div>'
-      +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-top:1px">'+esc(step.meta)+'</div>'
-      +(step.sub?('<div style="font-size:11.5px;color:var(--t3);margin-top:2px;line-height:1.4">'+esc(step.sub)+'</div>'):'');
+    if(step.kind==='move'){
+      // Movement row: name + the two existing controls, then the prescription underneath. Chips come
+      // off the shared builders (anatChipHTML_ / watchChipHTML_) — mounted, not rebuilt — so Muscles
+      // still focuses the diagram below and an unmapped movement still offers no dead button.
+      var chips=((typeof anatChipHTML_==='function')?anatChipHTML_(step.name):'')
+               +((typeof watchChipHTML_==='function')?watchChipHTML_(step.name):'');
+      body.innerHTML='<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">'
+        +'<span style="flex:1;min-width:0;font-size:14px;font-weight:800;color:var(--t1);overflow-wrap:anywhere">'+esc(step.title)+'</span>'
+        +chips+'</div>'
+        +'<div style="font-size:12.5px;font-weight:700;color:'+(step.meta==='—'?'var(--t3)':ACC)+';margin-top:3px">'+esc(step.meta)+'</div>'
+        +(step.sub?('<div style="font-size:11.5px;color:var(--t3);margin-top:2px;line-height:1.4">'+esc(step.sub)+'</div>'):'');
+    } else {
+      body.innerHTML='<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+kindCol+'">'+esc(step.title)+'</div>'
+        +'<div style="font-size:14px;font-weight:800;color:var(--t1);margin-top:1px">'+esc(step.meta)+'</div>'
+        +(step.sub?('<div style="font-size:11.5px;color:var(--t3);margin-top:2px;line-height:1.4">'+esc(step.sub)+'</div>'):'');
+    }
     row.appendChild(chk); row.appendChild(body); wrap.appendChild(row);
   });
+  // Nothing prescribed: say so rather than showing an empty list above a dead button.
+  if(!steps.length){
+    wrap.innerHTML='<div style="font-size:12.5px;color:var(--t3);line-height:1.5;padding:10px 2px">No movements are prescribed for this session yet. Open the day editor to add them.</div>';
+  }
+  // Body map for the whole session, below the movement list — the SAME shared mount every other
+  // surface uses, so each row's Muscles chip focuses into this diagram via _anatDac_.
+  if(!isRide && steps.length && typeof anatBlockHTML_==='function'){
+    var anat=document.createElement('div');
+    anat.innerHTML=anatBlockHTML_(exercises);
+    if(anat.firstChild) wrap.appendChild(anat.firstChild);
+  }
   btn.onclick=function(){ if(btn.disabled) return; _sdCompleteSession_(dateKey, s.id, ov); };
   sync();
   // Post-ride debrief: when the session is complete, pull the linked ride's Intervals interval data
   // and line the actuals up against the prescribed work intervals. Async; declines cleanly.
-  if(done){
+  // Ride-only: there is no interval stream behind a strength or mobility session, and the matcher
+  // would have nothing to line up.
+  if(done && isRide){
     var dbg=document.createElement('div'); dbg.id='sd-debrief'; dbg.style.cssText='margin-top:16px;padding-top:14px;border-top:1px solid var(--b1)';
     sheet.appendChild(dbg);
     var ride=_debriefRideFor_(dateKey, s);
@@ -20148,10 +20218,17 @@ function _sdCompleteSession_(dateKey, sid, ov){
   if(!s){ if(ov) ov.remove(); return; }
   s.status='completed';
   try{
-    var act=(typeof findActivityForDate==='function')?findActivityForDate(dateKey):null;
-    if(act && act.obj){
-      s.completedRideKey=(typeof rideKey==='function'?rideKey(act.obj):(act.obj.id||null));
-      if(typeof computeRideExecutionScore_==='function') s.executionScore=computeRideExecutionScore_(s, act.obj);
+    // Only a RIDE session links a recorded ride. Linking on a strength or mobility day would attach
+    // whatever happened to be logged that morning and then score the session against it — and the
+    // score is a ride-execution score, meaningless for a movement list. Sport is checked too, not
+    // just which array the activity came from (st.rides holds runs as well).
+    if(s.type==='ride' && typeof activitiesForDate_==='function'){
+      var _acts=activitiesForDate_(dateKey), act=null;
+      for(var _ai=0;_ai<_acts.length;_ai++){ if(_acts[_ai].sport==='ride'){ act=_acts[_ai]; break; } }
+      if(act && act.obj){
+        s.completedRideKey=(typeof rideKey==='function'?rideKey(act.obj):(act.obj.id||null));
+        if(typeof computeRideExecutionScore_==='function') s.executionScore=computeRideExecutionScore_(s, act.obj);
+      }
     }
   }catch(e){}
   try{ if(typeof markPlanEdited_==='function'){ var ef=['status']; if(s.completedRideKey!=null) ef.push('completedRideKey'); if(s.executionScore!=null) ef.push('executionScore'); markPlanEdited_(s, ef); } }catch(e){}
