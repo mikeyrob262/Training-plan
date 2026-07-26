@@ -8853,16 +8853,9 @@ function showProg(){
   var thisWeekSess=allSessions.filter(function(s){var d=new Date(s.date);return d>=weekStart;}).length;
   var thisMonthSess=allSessions.filter(function(s){var d=new Date(s.date);return d>=monthStart;}).length;
 
-  // Streak (consecutive weeks with activity)
-  var streak=0;
-  for(var wi=0;wi<52;wi++){
-    var ws3=new Date(now); ws3.setDate(now.getDate()-wi*7);
-    ws3.setDate(ws3.getDate()-(ws3.getDay()===0?6:ws3.getDay()-1)); ws3.setHours(0,0,0,0);
-    var we3=new Date(ws3); we3.setDate(ws3.getDate()+7);
-    var has=allSessions.some(function(s){var d=new Date(s.date);return d>=ws3&&d<we3;});
-    if(has) streak++;
-    else if(wi>0) break;
-  }
+  // Streak — the ONE shared calculation. This used to be a private copy with a 52-week cap and a
+  // narrower source list, so Athlete IQ and the Streaks card could (and did) disagree.
+  var streak=(typeof computeStreak_==='function')?computeStreak_(now):0;
 
   // 12-week session counts
   var weekCounts=[];
@@ -12031,35 +12024,73 @@ function showConstellation(){
   layout(); recomputeCrowns(); applyOTD();
 }
 
-// Consecutive-weeks activity streak (Strava's rule: a week counts if it has >=1
-// activity). Reads BOTH st.rides AND st.runs — runs live in a separate array, so
-// a run-only week must still count. Counts back from the current week; an empty
-// CURRENT week does not break the streak (matches Strava showing an unbroken
-// streak mid-week before you've trained) — we skip it and count from last week.
-// Uses the same non-type-filtered, non-deleted basis as recentRides_.
+// ==================== Activity streak — ONE definition ====================
+// EVERY date on which anything was logged, from EVERY store. The streak previously read st.rides
+// and st.runs only, so a week whose sole activity was a strength or mobility session logged through
+// the day editor (st.plan) read as empty and broke the run. Garmin counts any activity on any
+// device, so this does too.
+// Dates are parsed LOCAL, from their own digits — new Date('2026-07-27') is UTC midnight and rolls
+// back a day in a behind-UTC timezone, which silently moved Monday activities into the prior week.
+function _streakP2_(n){ return (n<10?'0':'')+n; }
+function _streakWeekKeyOf_(ds){
+  if(!ds) return null;
+  var s=String(ds), m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/), d;
+  if(m) d=new Date(+m[1], (+m[2])-1, +m[3]);
+  else { d=new Date(s); if(isNaN(d.getTime())) return null; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
+  var dw=d.getDay();
+  d.setDate(d.getDate()-(dw===0?6:dw-1));   // back to Monday
+  return d.getFullYear()+'-'+_streakP2_(d.getMonth()+1)+'-'+_streakP2_(d.getDate());
+}
+function _activityDates_(){
+  var out=[];
+  try{ (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
+  try{ (st.runs||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
+  // st.plan — the modern strength/mobility store. A completed session of ANY type counts.
+  try{ Object.keys(st.plan||{}).forEach(function(k){
+    var day=st.plan[k]; if(!day || !Array.isArray(day.sessions)) return;
+    for(var i=0;i<day.sessions.length;i++){ var s=day.sessions[i];
+      if(s && !s.deleted && s.status==='completed'){ out.push(k); break; } }
+  }); }catch(e){}
+  // Legacy ephemeral ws{} strength + core, still the only record for older weeks.
+  try{ if(typeof ws==='function'){ for(var w=1;w<=50;w++){ var wk=ws(w); if(!wk) continue;
+    ['A','B'].forEach(function(l){ if(wk.str && wk.str[l] && wk.str[l]._date) out.push(wk.str[l]._date); });
+    if(wk.core && wk.core.date) out.push(wk.core.date); } } }catch(e){}
+  // Mobility: ANY movement ticked is a logged activity. The old >=6 threshold silently discarded a
+  // partial session, which is a completeness judgement the streak has no business making.
+  try{ Object.keys(st.mob||{}).forEach(function(d){
+    var done=(st.mob[d]||{}).done||{};
+    for(var k2 in done){ if(done[k2]){ out.push(d); break; } }
+  }); }catch(e){}
+  try{ Object.keys(st.cond||{}).forEach(function(d){
+    if(Object.keys(st.cond[d]||{}).length>0) out.push(d);
+  }); }catch(e){}
+  return out;
+}
+// Set of Monday keys that had at least one activity. Built once, O(n) — the old implementation
+// rescanned every activity for every week, which is why a hard week cap looked necessary.
+function _activeWeekSet_(dates){
+  var set={};
+  (dates||_activityDates_()).forEach(function(ds){ var k=_streakWeekKeyOf_(ds); if(k) set[k]=1; });
+  return set;
+}
+// Consecutive weeks, counting back from this week, with >=1 activity of ANY type. An empty CURRENT
+// week does not break the streak (you may simply not have trained yet) — it is skipped and the
+// count starts from last week.
+// NO WEEK CAP. The old 52 made 78 arithmetically impossible; the walk now stops at the first empty
+// week, with a backstop bound only to prevent a runaway loop on corrupt data.
 function computeStreak_(now){
   now = now || new Date();
-  var acts = [];
-  (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) acts.push(r.date); });
-  (st.runs||[]).forEach(function(r){ if(r && !r.deleted && r.date) acts.push(r.date); });
-  if(!acts.length) return 0;
-  function weekStart(offset){
-    var d = new Date(now);
-    d.setDate(d.getDate() - offset*7);
-    var dow = d.getDay();
-    d.setDate(d.getDate() - (dow===0 ? 6 : dow-1));  // back to Monday
-    d.setHours(0,0,0,0);
-    return d;
-  }
-  function hasActivity(ws){
-    var we = new Date(ws); we.setDate(ws.getDate()+7);
-    return acts.some(function(ds){ var d=new Date(ds); return d>=ws && d<we; });
+  var set=_activeWeekSet_();
+  var base=new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  function keyAt(offset){
+    var d=new Date(base); d.setDate(d.getDate()-offset*7);
+    var dw=d.getDay(); d.setDate(d.getDate()-(dw===0?6:dw-1));
+    return d.getFullYear()+'-'+_streakP2_(d.getMonth()+1)+'-'+_streakP2_(d.getDate());
   }
   var streak=0, wi=0;
-  if(!hasActivity(weekStart(0))) wi=1;   // empty current week: don't penalize
-  for(; wi<520; wi++){
-    if(hasActivity(weekStart(wi))) streak++;
-    else break;
+  if(!set[keyAt(0)]) wi=1;                 // empty current week: not a break
+  for(; wi<5200; wi++){                    // 100 years — a runaway guard, not a semantic limit
+    if(set[keyAt(wi)]) streak++; else break;
   }
   return streak;
 }
@@ -18064,6 +18095,11 @@ function milestonesCompute_(rides, nowRef){
   if(fcl) firsts.push({label:'First 5,000 ft day',big:Math.round(fcl.elev).toLocaleString()+' ft',sub:_msFmtDate_(fcl.date),date:fcl.date,ts:fcl.d.getTime()});
   firsts.sort(function(a,b){return a.ts-b.ts;});
   // ---- STREAKS & PEAKS ----
+  // Same Monday-start week boundary the streak uses (_streakWeekKeyOf_) — kept in lockstep so the
+  // two never disagree about which week a Sunday-night ride belongs to.
+  // NOTE: this is LONGEST streak over the ERA WINDOW, a different metric on a deliberately
+  // narrower dataset than computeStreak_'s current-streak-over-everything. Milestones are scoped
+  // to the recent window on purpose (lossy library), so it is NOT folded into the shared function.
   function wkk(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var g=x.getDay(); x.setDate(x.getDate()-(g===0?6:g-1)); x.setHours(0,0,0,0); return x.getTime(); }
   var wset={}; win.forEach(function(r){ wset[wkk(r.d)]=1; });
   var weeks=Object.keys(wset).map(Number).sort(function(a,b){return a-b;});
