@@ -23678,7 +23678,28 @@ function taperVerdict_(fit, iq, ctlRamp){
 // and the card shows an explicit not-applicable state — no number, no color verdict.
 var _HRD_COUPLED_PCT = 5;      // Friel/TrainingPeaks coupling threshold
 var _HRD_MIN_SEC     = 3600;   // 60+ min: below this, cardiac drift hasn't had time to mean anything
-var _HRD_MAX_VI      = 1.1;    // variability index NP/avg: steady rides only (a Zwift interval set blows past this)
+// Variability index (NP/avg) ceiling, MODALITY-AWARE. 1.10 is a trainer number: indoors there is no
+// coasting, no stops and no terrain, so a steady effort really does hold ~1.0-1.1. Outdoors the same
+// steady endurance ride runs 1.15-1.25 from freewheeling, junctions and rollers — the effort is not
+// meaningfully variable, the road is. Holding outdoor rides to 1.10 rejected every one of them,
+// which is why the card kept reaching back past better candidates.
+// The outdoor ceiling is 1.30, NOT 1.25: the Jul 23 EZ-Z2 ride measures 143/114 = 1.2544, so a 1.25
+// ceiling still fails it. Separating it from the Jul 25 group ride at 145/115 = 1.2609 by threshold
+// alone would need a 0.0065-wide window, which is a coincidence rather than a rule — so group rides
+// are excluded by INTENT instead (see _hrdCandidates_) and the ceiling is free to sit where the
+// physiology actually is.
+var _HRD_MAX_VI      = 1.1;    // indoor / trainer: no coasting, so a steady effort holds ~1.0-1.1
+var _HRD_MAX_VI_OUT  = 1.3;    // outdoor: coasting, stops and terrain inflate VI without the effort varying
+// Outdoor = has a GPS track. A virtual/trainer ride never does, and Zwift rides that carry a
+// polyline are still virtual, so an explicit virtual sport type wins over the GPS test.
+function _hrdIsOutdoor_(r){
+  if(!r) return false;
+  var s=(typeof rideSport_==='function')?String(rideSport_(r)):String((r.sportType||r.type)||'');
+  if(/virtual/i.test(s.replace(/[ _-]/g,''))) return false;
+  if(/zwift|trainer/i.test(String(r.name||''))) return false;
+  return !!((r.lats && r.lats.length) || (r.gpsLats && r.gpsLats.length));
+}
+function _hrdViCeiling_(r){ return _hrdIsOutdoor_(r)?_HRD_MAX_VI_OUT:_HRD_MAX_VI; }
 var _HRD_MAX_IF      = 0.85;   // above this it's a tempo/threshold+ effort, not the endurance context decoupling is for
 function _hrdMean_(a){ var s=0,n=0; for(var i=0;i<a.length;i++){ var v=+a[i]; if(v>0){ s+=v; n++; } } return n?s/n:0; }
 function _hrdNP_(pw, durSec){
@@ -23708,7 +23729,8 @@ function _hrDecoupling_(r, ftp){
   var iffS=(ftp>0&&npS)?npS/ftp:null;
   if(iffS!=null && iffS>_HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride', detail:'IF='+(Math.round(iffS*100)/100)+' (np '+Math.round(npS)+' / ftp '+ftp+') max='+_HRD_MAX_IF};
   var viS=(npS&&avgS)?npS/avgS:null;
-  if(viS!=null && viS>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(viS*100)/100)+' (np '+Math.round(npS)+' / avg '+Math.round(avgS)+') max='+_HRD_MAX_VI};
+  var _viMax=_hrdViCeiling_(r);
+  if(viS!=null && viS>_viMax) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(viS*100)/100)+' (np '+Math.round(npS)+' / avg '+Math.round(avgS)+') max='+_viMax+(_hrdIsOutdoor_(r)?' outdoor':' indoor')};
   var hr=r.chartHR, pw=r.chartPwr;
   if(!(hr&&hr.length>=20))  return {applicable:false, reason:'no heart-rate stream', detail:'hrPts='+((hr&&hr.length)||0)+' need>=20'};
   if(!(pw&&pw.length>=20))  return {applicable:false, reason:'no power data', detail:'pwrPts='+((pw&&pw.length)||0)+' need>=20'};
@@ -23716,7 +23738,7 @@ function _hrDecoupling_(r, ftp){
   var avgP = avgS!=null ? avgS : _hrdMean_(pw);
   var np   = npS!=null ? npS : _hrdNP_(pw, durSec);
   var vi   = (viS!=null) ? viS : (avgP>0 ? np/avgP : 99);
-  if(viS==null && vi>_HRD_MAX_VI) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(vi*100)/100)+' (from stream) max='+_HRD_MAX_VI};
+  if(viS==null && vi>_viMax) return {applicable:false, reason:'effort too variable', detail:'VI='+(Math.round(vi*100)/100)+' (from stream) max='+_viMax+(_hrdIsOutdoor_(r)?' outdoor':' indoor')};
   var iff = (ftp>0 && np>0) ? np/ftp : null;
   if(iffS==null && iff!=null && iff > _HRD_MAX_IF) return {applicable:false, reason:'not an endurance-pace ride', detail:'IF='+(Math.round(iff*100)/100)+' (from stream) max='+_HRD_MAX_IF};
   // align both streams onto a common index, drop the first 10 min (capped at 25%), split the rest.
@@ -23729,7 +23751,15 @@ function _hrDecoupling_(r, ftp){
   function ratio(a,b){ var ps=0,hs=0,n=0; for(var i=a;i<b;i++){ if(P[i]>0&&H[i]>0){ ps+=P[i]; hs+=H[i]; n++; } } return (n&&hs>0)?((ps/n)/(hs/n)):null; }
   var r1=ratio(start,mid), r2=ratio(mid,N);
   if(r1==null||r2==null||r1<=0) return {applicable:false, reason:'gaps in power/HR data', detail:'half1='+r1+' half2='+r2};
+  // Belt and braces before ANY accept: a decoupling number is a power:HR ratio, so it cannot exist
+  // without both streams. The gates above already reject a missing stream, but 'accepted' is the one
+  // state that must never be reachable without the data behind it — a wrong number here is worse
+  // than no number, and this is the last point where that can be guaranteed.
+  if(!(hr&&hr.length>=20) || !(pw&&pw.length>=20))
+    return {applicable:false, reason:(!(hr&&hr.length>=20)?'no heart-rate stream':'no power data'),
+            detail:'final guard: hrPts='+((hr&&hr.length)||0)+' pwrPts='+((pw&&pw.length)||0)};
   var dec=Math.round((r1-r2)/r1*100*10)/10;   // + = HR drifted up relative to power
+  if(!isFinite(dec)) return {applicable:false, reason:'gaps in power/HR data', detail:'decoupling not finite'};
   return {applicable:true, decoupling:dec, r1:r1, r2:r2, durMin:Math.round(durSec/60),
     iff:iff, vi:Math.round(vi*100)/100, segFrom:start, N:N, H:H};
 }
@@ -23768,6 +23798,19 @@ function _hrdIsRide_(rx){
 // suitability gates — _hrDecoupling_ owns those, and duplicating them here would give the card two
 // definitions of "qualifying" that could drift apart. Cutoff is built from LOCAL date parts (ride
 // dates are local-parsed everywhere else; toISOString would shift the boundary by a day).
+// Was this day's ride a group ride? Prefers the PRESCRIPTION (blockPlanFor_ says the day was a
+// 'group' session), falling back to the ride's own name for a group ride that was never planned.
+function _hrdIsGroupRide_(r, dateKey){
+  try{
+    // No word-boundary escapes: the served template literal eats the backslash and leaves a raw
+    // backspace control character in the output (preflight step 3 catches exactly this).
+    if(/group/i.test(String((r&&r.name)||''))) return true;
+    if(typeof blockPlanFor_!=='function') return false;
+    var plan=blockPlanFor_(dateKey); if(!plan||!plan.sessions) return false;
+    for(var i=0;i<plan.sessions.length;i++){ if(plan.sessions[i].intent==='group') return true; }
+    return false;
+  }catch(e){ return false; }
+}
 function _hrdCandidates_(){
   var p2=function(n){ return (n<10?'0':'')+n; };
   var c=new Date(); c.setHours(0,0,0,0); c.setDate(c.getDate()-_HRD_LOOKBACK_DAYS);
@@ -23776,6 +23819,11 @@ function _hrdCandidates_(){
   (st.rides||[]).forEach(function(rx){
     if(!rx||rx.deleted||!rx.date||!_hrdIsRide_(rx)) return;
     var k=normDate(rx.date); if(!k||k<cutK) return;
+    // Group rides are excluded by INTENT, not by their VI. A group ride and a genuine outdoor
+    // endurance ride can sit 0.006 apart on VI (1.2609 vs 1.2544), so no threshold can separate
+    // them honestly — but the prescription already knows which is which. Decoupling on a ride whose
+    // pace someone else chose measures the group, not your durability.
+    if(_hrdIsGroupRide_(rx, k)) return;
     out.push({r:rx,k:k});
   });
   out.sort(function(a,b){ return a.k>b.k?-1:(a.k<b.k?1:0); });
