@@ -19438,6 +19438,35 @@ function _cvPrimary_(sessions){
 }
 function _cvIntCount_(struct){ var m=String(struct||'').match(/(\d+)\s*x/i); return m?parseInt(m[1],10):null; }
 // Pre-session instructions, keyed by intent, using the FTP-priced watts from the session's rx.
+// Named Zwift workouts, keyed by intent + the NxM the struct actually prescribes. This table is the
+// ONLY source of workout names — a name that is not here is never invented, because sending someone
+// hunting for a workout that does not exist is worse than describing the shape and letting them
+// pick. When there is no exact match the structural fallback stands alone.
+var _CV_ZWIFT={
+  'vo2|4|4':  {name:'The Gorby',           cat:'VO2Max'},
+  'vo2|5|4':  {name:'5x4 VO2Max or The Gorby+', cat:'VO2Max'},
+  'vo2|4|5':  {name:'VO2max Repeats',      cat:'VO2Max'},
+  'threshold|2|20': {name:'Threshold Intervals or Strade Bianche', cat:'Threshold/Sweet Spot'},
+  'threshold|3|20': {name:'Triple Threat', cat:'Threshold'},
+  'threshold|2|25': {name:'Threshold Intervals', cat:'Threshold'}
+};
+var _CV_ZWIFT_CAT={ vo2:'VO2Max', threshold:'Threshold' };
+function _cvZwiftLine_(intent, struct, hi){
+  if(intent==='z2'){
+    return hi ? ('In Zwift, pick any endurance route and keep power under '+hi+'W.')
+              : 'In Zwift, pick any endurance route and hold the bottom of the band.';
+  }
+  if(intent!=='vo2' && intent!=='threshold') return '';
+  var iv=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+  if(!iv || !iv.n || !iv.workMin) return '';
+  var hit=_CV_ZWIFT[intent+'|'+iv.n+'|'+iv.workMin];
+  var unit=(intent==='threshold')?'blocks':'intervals';
+  var cat=hit?hit.cat:(_CV_ZWIFT_CAT[intent]||'');
+  var shape=iv.n+' '+unit+' of '+iv.workMin+' min'+(cat?(' in the '+cat+' category'):'');
+  return hit
+    ? ('In Zwift, find '+hit.name+'. If it is not there, look for '+shape+' and set ERG on.')
+    : ('In Zwift, look for '+shape+' and set ERG on.');
+}
 function _cvPre_(intent, t, struct){
   var lo=t&&t.powerLo, hi=t&&t.powerHi, cap=t&&t.hrCap, band=(lo&&hi)?(lo+'-'+hi+'W'):'';
   var o=[];
@@ -19449,15 +19478,18 @@ function _cvPre_(intent, t, struct){
     o.push((band?(band+' for each interval. '):'')+'Start interval 1 at '+(lo?(lo+'W'):'the bottom of the band')+'. Not '+(hi?(hi+'W'):'the top')+'. '+(lo?(lo+'W.'):''));
     o.push('Intervals 3 and 4 are supposed to hurt; if you blow up on 3 you went out too hot on 1.');
     o.push('Do not add a '+(n+1)+'th interval no matter how good you feel at the end — feeling good at the end means you paced it right, not that you left work undone.');
+    var _zw=_cvZwiftLine_(intent, struct, hi); if(_zw) o.push(_zw);
   } else if(intent==='threshold'){
     o.push((band||'The band')+' for '+(struct||'the prescribed blocks')+'. That is the job. Nothing more.');
     if(lo) o.push('Start at '+lo+'W. Not '+Math.round((lo+(hi||lo))/2)+'. Not '+(hi||lo)+'. '+lo+'.');
     o.push('When it feels easy early, that is correct; when you want to push harder, that is the Type A talking, and you ignore it.');
     o.push('The last five minutes of each block is where the work is — hold the number there and the session is done.');
+    var _zwT=_cvZwiftLine_(intent, struct, hi); if(_zwT) o.push(_zwT);
   } else if(intent==='z2'){
     o.push((band?(band+' is a ceiling, not a target. '):'This is a ceiling, not a target. ')+'HR stays under '+(cap||135)+'.');
     o.push('At minute 40 the legs will feel good and you will want more — that is the Type A talking.');
     o.push('Riding 10W over the ceiling does not make this session better, it makes tomorrow worse.');
+    var _zwZ=_cvZwiftLine_(intent, struct, hi); if(_zwZ) o.push(_zwZ);
   } else if(intent==='group'){
     o.push('Sit in for the first 20 minutes. Race only the last 10 to 15.');
     o.push('If you get dropped you do not chase — this is base, not a result, and nobody is scoring it.');
@@ -20596,17 +20628,62 @@ function showIntervalsPushTest(){
   document.getElementById('ivt-del').onclick=_ivtDelete_;
 }
 function _zwoDownload_(dateKey, sid){
+  var z=null;
   try{
     var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
-    var z=_zwoFor_(s, dateKey);
+    z=_zwoFor_(s, dateKey);
+    try{ console.log('[zwo] build for '+dateKey+' sid='+sid+' -> '
+      +(z?('OK '+z.filename+'  blocks='+z.blocks+'  band '+z.lo+'-'+z.hi+'W @ FTP '+z.ftp
+           +'  bytes='+z.xml.length):'NULL (no ERG target: group ride, no band, no FTP, or no duration)')); }catch(_l){}
     if(!z){ if(typeof toast==='function') toast('No ERG target for this session'); return; }
-    var blob=new Blob([z.xml], {type:'application/xml'});
+    var blob=new Blob([z.xml], {type:'application/octet-stream'});
     var url=URL.createObjectURL(blob);
-    var a=document.createElement('a'); a.href=url; a.download=z.filename;
-    document.body.appendChild(a); a.click();
-    setTimeout(function(){ try{ document.body.removeChild(a); URL.revokeObjectURL(url); }catch(e){} }, 0);
-    if(typeof toast==='function') toast('Saved '+z.filename);
-  }catch(e){ try{ if(typeof toast==='function') toast('Could not build the workout file'); }catch(_e){} }
+    var a=document.createElement('a');
+    a.href=url; a.download=z.filename; a.rel='noopener';
+    a.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(a);
+    a.click();
+    // Revoking on a 0ms timeout is the classic way to CANCEL your own download: the browser may not
+    // have committed the blob read yet, and the URL disappears underneath it. Hold it for a minute,
+    // and leave the anchor in the DOM for a beat rather than removing it in the same tick.
+    setTimeout(function(){ try{ if(a.parentNode) a.parentNode.removeChild(a); }catch(e){} }, 4000);
+    setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
+    _zwoFallback_(z, url);
+    try{ console.log('[zwo] click dispatched, url='+url); }catch(_l){}
+  }catch(e){
+    try{ console.error('[zwo] download threw: '+((e&&e.message)||e)); }catch(_l){}
+    try{ if(typeof toast==='function') toast('Could not build the workout file'); }catch(_e){}
+    if(z) try{ _zwoFallback_(z, null); }catch(_f){}
+  }
+}
+// A programmatic a.click() is the one part of this that the browser is entitled to ignore, and it
+// fails SILENTLY when it does. So every download also offers a user-initiated route: a real link the
+// athlete clicks themselves (never blocked, because the click is genuine) and a copy-to-clipboard of
+// the XML for pasting into a file by hand. Shown under the button, not as a popup.
+function _zwoFallback_(z, url){
+  var host=document.getElementById('sd-zwo'); if(!host||!host.parentNode) return;
+  var old=document.getElementById('sd-zwo-fb'); if(old) old.remove();
+  var wrap=document.createElement('div'); wrap.id='sd-zwo-fb';
+  wrap.style.cssText='margin-top:8px;padding-top:8px;border-top:1px solid var(--b1);font-size:11px;color:var(--t3);line-height:1.55';
+  var href=url||('data:application/octet-stream;base64,'+(function(){ try{ return btoa(z.xml); }catch(e){ return ''; } })());
+  wrap.innerHTML='Saved <b style="color:var(--t2)">'+z.filename+'</b>. '
+    +'Not in your Downloads folder? '
+    +'<a id="sd-zwo-a" href="'+href+'" download="'+z.filename+'" style="color:#4D9FFF;font-weight:700">click here</a>'
+    +' or <span id="sd-zwo-copy" style="color:#4D9FFF;font-weight:700;cursor:pointer">copy the XML</span>.';
+  host.parentNode.appendChild(wrap);
+  var cp=document.getElementById('sd-zwo-copy');
+  if(cp) cp.onclick=function(){
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(z.xml).then(function(){ if(typeof toast==='function') toast('Workout XML copied'); });
+      } else {
+        var ta=document.createElement('textarea'); ta.value=z.xml;
+        ta.style.cssText='position:fixed;left:-9999px'; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        if(typeof toast==='function') toast('Workout XML copied');
+      }
+    }catch(e){ if(typeof toast==='function') toast('Could not copy'); }
+  };
 }
 // Resolve the live st.plan session for a (date, id). Prefers the id; falls back to the day's first
 // live session. Returns null when the day has none.
