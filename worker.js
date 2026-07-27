@@ -16587,7 +16587,7 @@ function _yvyPhysKpi_(ic, mv, first){
   else sub='current month &middot; no rankable last month';
   var win='';
   if(mv.curN>0){
-    if(mv.rankableMonths===0) win='<div style="font-size:10px;color:#f59e0b;margin-top:2px">history too sparse to rank</div>';
+    if(mv.rankableMonths===0) win='<div style="font-size:10px;color:'+_YVY_BASE+';margin-top:2px">history too sparse to rank</div>';
     else if(mv.shortWindow) win='<div style="font-size:10px;color:#7c8598;margin-top:2px">ranks from '+_yvyMonShort_(mv.winStart)+' &middot; '+mv.winRankable+' of '+mv.pageRankable+' rankable mo</div>';
   }
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:'+(first?'none':'1px solid #1c2130')+'">'
@@ -16895,13 +16895,38 @@ function _zsRankOf_(ym){
 // no this-month claim at all unless the current month actually scored. When it did not, it says so
 // once and shows the standings anyway — the history is the point, and hiding it because today is
 // quiet would be the same mistake as drawing run's 2026 as a flat line at zero.
-// ---- Athletic Life dashboard helpers. Green accent: this view is cross-sport, and the orange is
-// ---- the ride identity everywhere else on the page.
-var _AL_G='#22c55e', _AL_G_DIM='#16a34a', _AL_TRACK='#1c2130', _AL_BAR='#2a3341';
-// Colour carries information here, it is not decoration. Green stays the achievement thread; the
-// other three exist so a reader can read standing, factor identity and the single peak WITHOUT
-// reading the numbers. Four hues total — accents on a dark ground, not a rainbow.
-var _AL_TEAL='#14b8a6', _AL_AMBER='#f59e0b', _AL_COOL='#64748b';
+// ==================== You vs. You colour tiers ====================
+// THREE tiers, and no green anywhere on this page.
+//   ORANGE  a genuine best — a career best, an era best, or a month in the top decile of all the
+//           months that can be ranked. Orange is the app's signal for "this matters" on every
+//           other surface, so it is spent sparingly here on purpose: if every positive were
+//           orange, a career best would look like an ordinary good week and the colour would stop
+//           meaning anything.
+//   BLUE    good — above your own rolling average, ahead of pace, improving. The honest home for
+//           most of what used to be green.
+//   GREY    baseline — average or below. Neutral, and never a rebuke: this page frames gaps as
+//           closable, so the absence of a claim is the point.
+// Red survives for genuine negative DIRECTION (behind, falling). It is not a tier.
+var _YVY_TOP='#FC4C02', _YVY_TOP_DIM='#c23a00';
+var _YVY_GOOD='#60a5fa', _YVY_GOOD_DIM='#3b82f6';
+var _YVY_BASE='#64748b', _YVY_BASE_DIM='#2a3341';
+var _YVY_DOWN='#ff5c5c';
+// THE tier rule. One place decides "genuine best", so the cards, the bars, the rank strip and the
+// timeline cannot disagree about which months earn orange. Top decile (always at least the #1
+// month), then the upper half, then baseline.
+function _yvyTier_(rank, total){
+  if(!(total>0) || !(rank>0)) return _YVY_BASE;
+  if(rank<=Math.max(1, Math.ceil(total*0.10))) return _YVY_TOP;
+  if(rank<=Math.ceil(total*0.50)) return _YVY_GOOD;
+  return _YVY_BASE;
+}
+// ---- Athletic Life dashboard helpers, mapped onto the three tiers above. The names are kept so
+// ---- the call sites read the same; only the hues moved.
+// _AL_G is the general positive accent (sparklines, factor bars, the top-five dots, links) -> BLUE.
+// _AL_AMBER marks the single PEAK month and the "best month ever" label -> ORANGE. Orange is spent
+// only where the claim is a genuine best; everything merely good is blue.
+var _AL_G=_YVY_GOOD, _AL_G_DIM=_YVY_GOOD_DIM, _AL_TRACK='#1c2130', _AL_BAR=_YVY_BASE_DIM;
+var _AL_TEAL=_YVY_GOOD, _AL_AMBER=_YVY_TOP, _AL_COOL=_YVY_BASE;
 // Tier is taken from _yvyRankBand_, the same quartile language the ride surfaces already use, so
 // "lower half" means the same thing on both pages. The colour is a mapping of that band and
 // nothing more — if the band rule ever moves, the colour follows it automatically.
@@ -16909,13 +16934,13 @@ function _alTierBand_(rank, n){
   return (typeof _yvyRankBand_==='function') ? _yvyRankBand_(rank, n)
     : ((n>1) ? (rank/n<=0.25?'top quarter':(rank/n<=0.5?'upper half':(rank/n<=0.75?'lower half':'bottom quarter'))) : 'your only ranked month');
 }
+// Colour now comes from the shared tier rule rather than from the quartile BAND. The band language
+// ("top quarter") still labels the standing in words, but a top-quarter month is not automatically
+// a genuine best — only the top decile earns orange. Words and colour answer two different
+// questions on purpose, and the tier rule is the single source for the colour half.
 function _alTierColor_(rank, n){
-  var b=_alTierBand_(rank, n);
-  if(b==='top quarter') return _AL_G;
-  if(b==='upper half') return _AL_TEAL;
-  if(b==='lower half') return _AL_AMBER;
-  if(b==='bottom quarter') return _AL_COOL;
-  return _AL_G;                                        // single-month case: nothing to grade against
+  if(!(n>1)) return _YVY_GOOD;                         // single-month case: nothing to grade against
+  return _yvyTier_(rank, n);
 }
 function _alCap_(s){ return String(s).charAt(0).toUpperCase()+String(s).slice(1); }
 
@@ -16990,16 +17015,19 @@ function _alCard_(r, i, n, selYM){
   if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
   // A card is the same month handle as its bar, so it selects too. A selected card takes a white
   // border; otherwise the #1 keeps its green edge and the rest the default.
-  var border=isSel?'#f1f5f9':(top?_AL_G_DIM:'#1c2130');
+  // Card edge follows the SAME tier rule as everything else, so a top-five card that is not a
+  // top-decile month no longer wears the best-month colour.
+  var _tc=_yvyTier_(i+1, n||0);
+  var border=isSel?'#f1f5f9':((_tc===_YVY_TOP)?_YVY_TOP_DIM:(_tc===_YVY_GOOD?_YVY_GOOD_DIM:'#1c2130'));
   return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:186px;background:#111318;border:1px solid '+border+';border-radius:13px;padding:13px 13px 11px;cursor:pointer">'
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
     +(top?_alCrown_():'')
-    +'<span style="font-size:11px;font-weight:800;color:'+(top?_AL_G:'#5b6678')+'">#'+(i+1)+'</span>'
+    +'<span style="font-size:11px;font-weight:800;color:'+(top?_tc:'#5b6678')+'">#'+(i+1)+'</span>'
     +(top?'<span style="font-size:9.5px;font-weight:800;color:'+_AL_AMBER+';letter-spacing:.04em;text-transform:uppercase">Best month ever</span>':'')
     +'</div>'
     +'<div style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
     +'<div style="display:flex;align-items:baseline;gap:4px;margin-top:5px">'
-    +'<span style="font-size:22px;font-weight:800;color:'+_AL_G+';letter-spacing:-.01em">'+s100+'</span>'
+    +'<span style="font-size:22px;font-weight:800;color:'+_tc+';letter-spacing:-.01em">'+s100+'</span>'
     +'<span style="font-size:11px;color:#5b6678">/100</span></div>'
     +'<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">'+(r.score>=0?'+':'')+r.score.toFixed(2)+' z vs your average month</div>'
     +'<div style="margin-top:8px">'+_alSpark_(r)+'</div>'
@@ -17015,10 +17043,10 @@ function _alEraCard_(r, rankInEra, selYM){
   var isSel=(r.ym===selYM);
   var mix=[]; if(r.mi.ride!=null) mix.push(Math.round(r.mi.ride)+' mi ride'); if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
   return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:150px;background:#111318;border:1px solid '+(isSel?'#f1f5f9':'#1c2130')+';border-radius:12px;padding:11px 12px;cursor:pointer">'
-    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:'+(rankInEra===1?_AL_G:'#5b6678')+'">#'+rankInEra+'</span>'
-    +(rankInEra===1?('<span style="font-size:9px;font-weight:800;color:'+_AL_G+';letter-spacing:.04em;text-transform:uppercase">era best</span>'):'')+'</div>'
+    +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:'+(rankInEra===1?_YVY_TOP:'#5b6678')+'">#'+rankInEra+'</span>'
+    +(rankInEra===1?('<span style="font-size:9px;font-weight:800;color:'+_YVY_TOP+';letter-spacing:.04em;text-transform:uppercase">era best</span>'):'')+'</div>'
     +'<div style="font-size:13px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:3px;margin-top:4px"><span style="font-size:18px;font-weight:800;color:'+_AL_G+';letter-spacing:-.01em">'+(r.score>=0?'+':'')+r.score.toFixed(2)+'</span>'
+    +'<div style="display:flex;align-items:baseline;gap:3px;margin-top:4px"><span style="font-size:18px;font-weight:800;color:'+(rankInEra===1?_YVY_TOP:_YVY_BASE)+';letter-spacing:-.01em">'+(r.score>=0?'+':'')+r.score.toFixed(2)+'</span>'
     +'<span style="font-size:10px;color:#5b6678">z</span></div>'
     +'<div style="margin-top:6px">'+_alSpark_(r)+'</div>'
     +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
@@ -17360,7 +17388,8 @@ function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60)
 // instead of the "0h" that used to sit next to a double-digit percentage.
 function _yvyFmtHD_(sec){ var s=Math.abs(Math.round(sec)), h=Math.floor(s/3600), m=Math.round((s%3600)/60);
   if(m===60){ h++; m=0; } return h?(h+'h '+(m<10?'0':'')+m+'m'):(m+'m'); }
-function _yvyPct_(p, up){ var c=up?'#22c55e':'#ff5c5c', ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
+function _yvyScoreCol_(score){ return score>=80?_YVY_TOP:(score>=65?_YVY_GOOD:_YVY_BASE); }
+function _yvyPct_(p, up){ var c=up?_YVY_GOOD:_YVY_DOWN, ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
 function _yvyKpi_(ic, label, big, unit, pct, up, sub){
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid #1c2130">'
     +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
@@ -17390,7 +17419,7 @@ function _yvyCumChart_(vm){
 }
 function _yvyRing_(score, band){
   var R=52, C=2*Math.PI*R, off=C*(1-score/100);
-  var col=score>=80?'#22c55e':(score>=65?'#FC4C02':'#f59e0b');
+  var col=_yvyScoreCol_(score);
   return '<svg viewBox="0 0 130 130" style="width:130px;height:130px">'
     +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="10"/>'
     +'<circle cx="65" cy="65" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 65 65)"/>'
@@ -17422,7 +17451,7 @@ var _PB_ICON={
 };
 function _pbIcon_(k,c){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(_PB_ICON[k]||_PB_ICON.dist)+'</svg>'; }
 function _pbCardHtml_(p, formDays){
-  var accent=p.held?'#22c55e':'#FC4C02';
+  var accent=p.held?_YVY_TOP:_YVY_GOOD;
   var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'
     +'<span style="width:26px;height:26px;border-radius:7px;background:'+accent+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_pbIcon_(p.key,accent)+'</span>'
     +'<span style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+p.label+'</span>'
@@ -17438,7 +17467,7 @@ function _pbCardHtml_(p, formDays){
     // The record sits inside the form window: there is no gap to quote, so state the margin
     // over your own next-best instead of inventing a target.
     foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:12px;font-weight:700;color:#22c55e">This is current form</div>'
+      +'<div style="font-size:12px;font-weight:700;color:'+_YVY_TOP+'">This is current form</div>'
       +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'
       +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only ride at this mark.'))
       +'</div></div>';
@@ -17492,23 +17521,25 @@ function _pbSection_(vm){
 // gate the hero ranks on, with the in-progress month excluded because it is not a candidate. That
 // count is vm.completedRankable, which is the same set _yvyPhys_ counts. No calendar span, no
 // second count, no guess.
-var _MR_YOU='#FC4C02', _MR_LAST='#64748b', _MR_BEST='#f59e0b';
+// Three tiers here too: You in orange (the live subject), Last month grey (a neutral peer), and
+// Best Month in the dimmed orange — it is a genuine best, drawn as a target rather than a peer.
+var _MR_YOU=_YVY_TOP, _MR_LAST=_YVY_BASE, _MR_BEST=_YVY_TOP_DIM;
 function _mrMi_(v){ return (Math.round(v*10)/10).toLocaleString(); }
 function _mrDaysIn_(ym){ var p=String(ym||'').split('-'); if(p.length<2) return 0; return new Date(+p[0], +p[1], 0).getDate(); }
 // Gap in Personal Bests grammar. When the trailing rate cannot cover it in the days left, the line
 // says what it would actually take instead of printing a bare number that reads as failure.
 function _mrGap_(target, cur, rate, daysLeft){
   var need=Math.round((target-cur)*10)/10;
-  if(need<=0) return { passed:true, tone:'#22c55e', text:'Passed &mdash; you are '+_mrMi_(-need)+' mi clear.' };
+  if(need<=0) return { passed:true, tone:_YVY_GOOD, text:'Passed &mdash; you are '+_mrMi_(-need)+' mi clear.' };
   var head='Beat by '+_mrMi_(need)+' mi';
-  if(daysLeft<=0) return { passed:false, tone:'#f59e0b', text:head+' &mdash; but the month is out of days. The bar stands.' };
+  if(daysLeft<=0) return { passed:false, tone:_YVY_BASE, text:head+' &mdash; but the month is out of days. The bar stands.' };
   if(rate>0 && (rate/7*daysLeft)>=need)
-    return { passed:false, tone:_MR_YOU, text:head+' &mdash; your '+_mrMi_(rate)+' mi/wk rate covers it in the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left.' };
+    return { passed:false, tone:_YVY_GOOD, text:head+' &mdash; your '+_mrMi_(rate)+' mi/wk rate covers it in the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left.' };
   var needWk=Math.round(need/(daysLeft/7));
   if(!(rate>0))
-    return { passed:false, tone:'#f59e0b', text:head+' &mdash; that is '+needWk.toLocaleString()+' mi/wk for the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left, from a standing start.' };
+    return { passed:false, tone:_YVY_BASE, text:head+' &mdash; that is '+needWk.toLocaleString()+' mi/wk for the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left, from a standing start.' };
   var mult=Math.round(needWk/rate*10)/10;
-  return { passed:false, tone:'#f59e0b', text:head+' &mdash; that is '+needWk.toLocaleString()+' mi/wk for the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left, '+mult+'&times; your current rate.' };
+  return { passed:false, tone:_YVY_BASE, text:head+' &mdash; that is '+needWk.toLocaleString()+' mi/wk for the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left, '+mult+'&times; your current rate.' };
 }
 // PURE — reads only aggregates _yvyVM_ already computed. Returns null when there is no opponent.
 function _mrCompute_(vm){
@@ -17582,7 +17613,7 @@ function _wcItems_(vm){
   return out;
 }
 function _wcRow_(x){
-  var win=(x.band==='win'), col=win?'#22c55e':'#f59e0b';
+  var win=(x.band==='win'), col=win?_YVY_GOOD:_YVY_BASE;
   return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #14181f">'
     +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';margin-top:7px;flex-shrink:0"></span>'
     +'<div style="min-width:0;flex:1">'
@@ -17628,8 +17659,8 @@ function _wcSection_(vm){
     var upEmpty='Nothing is ahead of last month yet'+(vm.daysLeft>0?(' &mdash; '+vm.daysLeft+' day'+(vm.daysLeft===1?'':'s')+' left to change that.'):'.');
     var dnEmpty='Nothing has fallen off. Every metric is level or better than last month.';
     body='<div style="display:flex;flex-wrap:wrap;gap:28px">'
-      +_wcCol_('You are&hellip;','Improving','#22c55e',up,upEmpty)
-      +_wcCol_('You are&hellip;','Chasing','#f59e0b',dn,dnEmpty)
+      +_wcCol_('You are&hellip;','Improving',_YVY_GOOD,up,upEmpty)
+      +_wcCol_('You are&hellip;','Chasing',_YVY_BASE,dn,dnEmpty)
       +'</div>';
   }
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
@@ -17811,7 +17842,7 @@ function _rsSection_(vm){
       +(rs.above ? ('. The gap to '+rk(rs.aboveRank,'#f1f5f9')+' is '+_mrMi_(rs.aboveGap)+' mi.') : ', and nothing sits above it.');
   } else {
     sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
-      +'. Ride Saturday and it finishes '+rk(rs.rideRank,'#22c55e')+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
+      +'. Ride Saturday and it finishes '+rk(rs.rideRank,_YVY_GOOD)+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
   }
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
@@ -17934,17 +17965,17 @@ function _yvyRenderVM_(vm){
   var leadUp=lead>=0;
   var chart=_yvyCard_(
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Cumulative Distance</div>'
-    +'<div style="font-size:12px;font-weight:700;color:'+(leadUp?'#22c55e':'#ff5c5c')+'">'+(leadUp?'&#9650; '+lead+' mi ahead':'&#9660; '+Math.abs(lead)+' mi behind')+'</div></div>'
+    +'<div style="font-size:12px;font-weight:700;color:'+(leadUp?_YVY_GOOD:_YVY_DOWN)+'">'+(leadUp?'&#9650; '+lead+' mi ahead':'&#9660; '+Math.abs(lead)+' mi behind')+'</div></div>'
     +'<div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px"><span style="color:#FC4C02">&#9644; This month</span><span style="color:#64748b">&#9644; Last month (same days)</span></div>'
     +_yvyCumChart_(vm)
     +'<div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5">You have logged <b style="color:#f1f5f9">'+vm.curTot+' mi</b> this month, '
-    +(leadUp?('<b style="color:#22c55e">'+Math.abs(vm.kDist.pct)+'% ahead of</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
+    +(leadUp?('<b style="color:'+_YVY_GOOD+'">'+Math.abs(vm.kDist.pct)+'% ahead of</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
     +' your pace by this point in '+_YVY_MONF[_yvyLastMonthIdx_(vm)]+'.</div>');
 
   // right rail
   var score=_yvyCard_('<div style="text-align:center">'+_yvyHdr_('Self Competition Score')
     +'<div style="display:flex;justify-content:center">'+_yvyRing_(vm.score,vm.scoreBand)+'</div>'
-    +'<div style="font-size:14px;font-weight:800;color:'+(vm.score>=80?'#22c55e':'#FC4C02')+';margin-top:6px">'+vm.scoreBand+'</div>'
+    +'<div style="font-size:14px;font-weight:800;color:'+_yvyScoreCol_(vm.score)+';margin-top:6px">'+vm.scoreBand+'</div>'
     +'<div style="font-size:11px;color:#5b6678;margin-top:2px">vs last month, same days</div></div>');
 
   // Three DISTINCT metrics (sorted desc), each labeled by its OWN delta so no row repeats.
@@ -17952,13 +17983,13 @@ function _yvyRenderVM_(vm){
   // an "Even" row ended up carrying an "ahead" note.
   var summary=_yvyCard_(_yvyHdr_('Monthly Summary')+vm.mets.map(function(x){
     var tag=(x.band==='even')?'Even':((x.band==='win')?'Winning':'Needs focus');
-    var col=(x.band==='even')?'#60a5fa':((x.band==='win')?'#22c55e':'#f59e0b');
+    var col=(x.band==='even')?_YVY_BASE:((x.band==='win')?_YVY_GOOD:_YVY_BASE);
     return _yvySumRow_(col, tag, x.k, x.note);
   }).join(''));
 
   var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #14181f">'
     +'<span style="font-size:13px;color:#cbd5e1">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:#f1f5f9">'+b.mi+' mi</span>'
-    +'<span style="font-size:12px;font-weight:700;color:'+(up?'#22c55e':'#ff5c5c')+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
+    +'<span style="font-size:12px;font-weight:700;color:'+(up?_YVY_GOOD:_YVY_DOWN)+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
   var best=_yvyCard_(_yvyHdr_('Best Days vs Last Month')+bestRows);
 
   var heat=_yvyCard_(_yvyHdr_('Daily Activity Heatmap')+_yvyHeatRow_('This month',vm.heatCur)+_yvyHeatRow_('Last month',vm.heatLast)
@@ -17967,7 +17998,7 @@ function _yvyRenderVM_(vm){
   // challenge engine (the headline)
   var conf=vm.projTot>=vm.lastFull*1.05?'High':(vm.onTrack?'Medium':'Reachable');
   var confPct=Math.max(35, Math.min(95, Math.round(vm.projTot/vm.lastFull*82)));
-  var chalCol=vm.onTrack?'#22c55e':'#f59e0b';
+  var chalCol=vm.onTrack?_YVY_GOOD:_YVY_BASE;
   var challenge='<div style="background:#0e1117;border:1px solid '+(vm.onTrack?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
     +'<div style="flex:1;min-width:260px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="color:'+chalCol+'">'+ic.cal+'</span>'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">The Challenge &mdash; beat last month</span></div>'
@@ -17981,7 +18012,7 @@ function _yvyRenderVM_(vm){
 
   // insight
   var wkend=_yvyWeekendShare_(vm);
-  var insight=_yvyCard_('<div style="display:flex;gap:12px"><span style="width:34px;height:34px;border-radius:9px;background:#f59e0b22;color:#f59e0b;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic.bulb+'</span>'
+  var insight=_yvyCard_('<div style="display:flex;gap:12px"><span style="width:34px;height:34px;border-radius:9px;background:'+_YVY_BASE+'22;color:'+_YVY_BASE+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic.bulb+'</span>'
     +'<div><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Insight</div>'
     +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin:3px 0 6px">'+(vm.best[0]?('Your big day carried the month.'):('Consistency is carrying you.'))+'</div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Your best day ('+_YVY_MON[vm.m]+' '+(vm.best[0]?vm.best[0].dom:'')+', '+(vm.best[0]?vm.best[0].mi:0)+' mi) is '
