@@ -19141,12 +19141,17 @@ function showAthleteIntel(){
 // QUALITY metric. They are labelled as different axes precisely so they can never contradict — the
 // way "62% complete" sitting next to "0 of 4 clean weeks" would if the ring claimed weeks banked.
 var _BLOCK_START='2026-07-24';                 // the day the block started (spec: +28 days = Aug 21)
+// THE retest date, declared here because the milestone list below needs it at load time. It used to
+// live only down with the FTP helpers, and the milestone carried its own hard-coded Aug 25 — so the
+// calendar flag and the countdown said Aug 25 while ftpCrossesRetest_ and every repricing rule said
+// Aug 27. On the real retest day the milestone had already rolled over to Chalet. One constant now.
+var _FTP_RETEST_DATE='2026-08-27';
 var _BLOCK_MILESTONES=[
   // slidable: internal block gates that move WITH the streak on a missed week. The real-world events
   // below (chalet/alpe/tenk/ventop) have no slidable flag — the mountain does not move.
   {slug:'four-weeks', date:'2026-08-21', label:'Four weeks consistent', note:'the gate to the retest', road:true, slidable:true,
    icon:'M20 6L9 17l-5-5', sTitle:'Consistent week', sSub:'All 4 sessions, on 3 separate days', benefit:'Unlocks the retest'},
-  {slug:'ftp-retest', date:'2026-08-25', label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true, slidable:true,
+  {slug:'ftp-retest', date:_FTP_RETEST_DATE, label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true, slidable:true,
    icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
   {slug:'chalet', date:'2026-09-13', label:'Chalet Reynard', note:'', road:true,
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
@@ -19199,7 +19204,7 @@ function _blockNextMilestone_(now){
 // (week[0..6], Mon..Sun) or a date-keyed window (dates{}) for the taper/attempt runs; the resolver
 // checks the date map first. Mon is always Rest and Sun is always Optional by construction — the
 // Sunday slot is 'optional', which is NEVER a makeup, in the data itself, not just the UI.
-var _TB_VERSION='ventop-2026-1';
+var _TB_VERSION='ventop-2026-2';   // bumped: the retest day is now its own prescribed session
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
   if(st.trainingBlock && st.trainingBlock.v===_TB_VERSION) return st.trainingBlock;
@@ -19210,7 +19215,12 @@ function _trainingBlock_(){
       { id:'P1', label:'Base build', start:'2026-07-24', end:'2026-08-21', week:[
         [S('rest'),S('mobility')], [S('vo2','4x4 min, 3 min recovery, flat')], [S('easyRun','20-25 min')],
         [S('z2','60-90 min')], [S('threshold','2x20 min'),S('strengthA')], [S('group','120 min, no HR ceiling')], [S('optional')] ] },
-      { id:'P2', label:'Base build 2', start:'2026-08-22', end:'2026-09-10', week:[
+      // The retest date overrides whatever weekday slot it lands on (blockPlanFor_ reads p.dates
+      // first). Keyed off _FTP_RETEST_DATE so the prescribed session, the milestone flag and the
+      // repricing rules can never point at three different days.
+      { id:'P2', label:'Base build 2', start:'2026-08-22', end:'2026-09-10',
+        dates:(function(){ var o={}; o[_FTP_RETEST_DATE]=[S('ftpTest','10 warmup / 5 max / 10 easy / 20 test / 5 cooldown')]; return o; })(),
+        week:[
         [S('rest'),S('mobility')], [S('vo2','4x4 progressing to 5x4')], [S('easyRun','25-30 min, 3x/week')],
         [S('z2','60-90 min')], [S('threshold','2x20 to 3x15'),S('strengthA')], [S('group')], [S('optional')] ] },
       { id:'P3', label:'Chalet taper + attempt', start:'2026-09-11', end:'2026-09-14', dates:{
@@ -19351,7 +19361,7 @@ function generateBlockPlan_(){
 
 // The key session of a day — the one worth coaching. Rides first (the block's quality), then runs,
 // then strength, then mobility, then rest/optional.
-var _CV_PRIORITY=['ventop','alpe','chalet','vo2','threshold','group','long','z2','recovery','run10k','easyRun','strengthA','strengthB','mobility','optional','rest'];
+var _CV_PRIORITY=['ventop','alpe','chalet','ftpTest','vo2','threshold','group','long','z2','recovery','run10k','easyRun','strengthA','strengthB','mobility','optional','rest'];
 function _cvPrimary_(sessions){
   if(!sessions||!sessions.length) return null;
   for(var p=0;p<_CV_PRIORITY.length;p++){ for(var i=0;i<sessions.length;i++){ if(sessions[i].intent===_CV_PRIORITY[p]) return sessions[i]; } }
@@ -19406,6 +19416,17 @@ function _cvPre_(intent, t, struct){
     o.push('When it feels easy early, that is correct; when you want to push harder, that is the Type A talking, and you ignore it.');
     o.push('The last five minutes of each block is where the work is — hold the number there and the session is done.');
     var _zwT=_cvZwiftLine_(intent, struct, hi); if(_zwT) o.push(_zwT);
+  } else if(intent==='ftpTest'){
+    // The retest is the one session where a prescribed number would be actively harmful: pacing to
+    // the OLD FTP caps the result at the old FTP. So the copy is protocol + pacing discipline, and
+    // the only watt figure quoted is the break-even, which is a floor to beat rather than a target.
+    var _ftpNow=(typeof st!=='undefined' && st && st.ftp)?(parseInt(st.ftp,10)||0):0;
+    o.push('Protocol: 10 min warmup, 5 min all-out, 10 min easy, 20 min test, 5 min cooldown. Only the 20 counts.');
+    o.push('The 5-minute effort is not part of the warmup — it is maximum. It is there to clear your top end so the 20 is limited by your threshold and not by a cold engine.');
+    o.push('On the 20: pick a number you believe you can hold for the whole twenty and start THERE. Going out hard is the Type A move and it is the one that ruins this — blow up at minute 12 and the average comes out LOWER than a paced effort, and you spend the next month training against a number you undershot.');
+    o.push('Even splits. If minute 18 is the hardest thing you have done all year and you are still holding the number, you paced it right.');
+    o.push('New FTP = your 20-minute average x 0.95.'+(_ftpNow?(' You are on '+_ftpNow+'W now, so '+Math.round(_ftpNow/0.95)+'W for the 20 holds level — anything above that is real gain.'):''));
+    o.push('Enter it in Settings as soon as you are off the bike. Every watt target in the block reprices off it, and until you enter it they all still point at the old number.');
   } else if(intent==='z2'){
     o.push((band?(band+' is a ceiling, not a target. '):'This is a ceiling, not a target. ')+'HR stays under '+(cap||135)+'.');
     o.push('At minute 40 the legs will feel good and you will want more — that is the Type A talking.');
@@ -19468,12 +19489,13 @@ var _CV_EXPECT={
   chalet:'A long steady burn: boredom, then discomfort, then the summit. Pace it and the top comes to you. Send the bottom and it does not.',
   alpe:'Sustained and lonely. The clock is the opponent, not the rider ahead. Even effort, no heroics until the final ramps.',
   tenk:'Comfortable-hard early, genuinely hard from halfway. The race is won in the last 3k by whoever paced the first 7.',
-  ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top. You get one attempt at this.'
+  ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top. You get one attempt at this.',
+  ftpTest:'The 5-minute effort hurts and then it is over. The 20 is different — minutes 1 to 8 feel deceptively fine, which is exactly when you overcook it, and from 12 it is a grind you hold by decision rather than by feel. Finishing it certain you could not have gone one watt harder is the test working.'
 };
 // Form adjustment from TSB — only for the hard sessions, only when TSB is known.
 function _cvForm_(intent, tsb){
   if(tsb==null) return '';
-  var hard=(intent==='vo2'||intent==='threshold'||intent==='group'||intent==='chalet'||intent==='alpe'||intent==='ventop'||intent==='tenk');
+  var hard=(intent==='vo2'||intent==='threshold'||intent==='group'||intent==='chalet'||intent==='alpe'||intent==='ventop'||intent==='tenk'||intent==='ftpTest');
   if(!hard) return '';
   if(tsb<=-20) return 'Form is '+tsb+' — deep fatigue. Cut it back hard today: fewer reps, the low end of the band, or move the quality to tomorrow. Digging here costs more than it buys.';
   if(tsb<=-15) return 'Form is '+tsb+' — you are carrying fatigue. Back off one notch: one fewer interval, hold the bottom of the band.';
@@ -19502,7 +19524,31 @@ function _cvFtp_(now){
   var ri=-1; for(var i=0;i<sorted.length;i++){ if(sorted[i].source==='retest') ri=i; }
   if(ri>=0 && today && today>=sorted[ri].date){
     var e=sorted[ri], prev=(ri>0)?sorted[ri-1].ftp:null;
-    return 'New FTP set '+_blockFmtDate_(e.date)+' at '+e.ftp+'W'+((prev!=null&&prev!==e.ftp)?(' (was '+prev+'W)'):'')+'. Every target from here reprices automatically — the watts before and after the retest are not the same currency.';
+    var line='New FTP set '+_blockFmtDate_(e.date)+' at '+e.ftp+'W'+((prev!=null&&prev!==e.ftp)?(' (was '+prev+'W)'):'')+'. Every target from here reprices automatically — the watts before and after the retest are not the same currency.';
+    // "Reprices automatically" is true but abstract, and abstract is easy to nod at and ignore. For
+    // the first week after the retest, name the bands that actually moved. Computed the same way
+    // _planZoneFromPct_ computes them (SESSION_DEFS pctFtp x the NEW ftp), so this can never quote
+    // a number the session cards disagree with.
+    var since=(typeof _blockDaysBetween_==='function' && typeof _blockDay_==='function')
+      ? _blockDaysBetween_(_blockDay_(e.date), _blockDay_(today)) : null;
+    if(since!=null && since>=0 && since<=6 && typeof SESSION_DEFS!=='undefined'){
+      var band=function(k){ var d=SESSION_DEFS[k];
+        return (d && d.pctFtp) ? (Math.round(e.ftp*d.pctFtp[0]/100)+'-'+Math.round(e.ftp*d.pctFtp[1]/100)+'W') : ''; };
+      var _th=band('threshold'), _v=band('vo2'), _z=band('z2');
+      if(_th && _v && _z){
+        line+=' What changes this week: threshold is now '+_th+', VO2 '+_v+', and the Z2 ceiling '+_z+'.';
+        if(prev!=null && prev!==e.ftp){
+          var _pth=SESSION_DEFS.threshold && SESSION_DEFS.threshold.pctFtp;
+          if(_pth) line+=' Your old threshold band was '+Math.round(prev*_pth[0]/100)+'-'+Math.round(prev*_pth[1]/100)+'W — riding that from here is riding easy.';
+        }
+      }
+    }
+    return line;
+  }
+  // The retest day itself, before the number is in. The countdown branch below would say "in 0 days",
+  // which reads like a note about the future on the one morning it is not.
+  if(today===_FTP_RETEST_DATE){
+    return 'Today is the retest. Every watt target in the block points at the number you set today, so treat the 20 minutes as the session — and enter the result before you do anything else.';
   }
   // The current week STRADDLES the retest — the specific case ftpCrossesRetest_ answers. More urgent
   // than a plain countdown: some of this week's watts change mid-week the moment the number is set.
@@ -22506,7 +22552,7 @@ function _goalTargets_(){
 // planned retest — a KNOWN discontinuity where power and zone history change meaning. No fake data:
 // an empty log returns the current st.ftp, and a date before the log uses the FIRST recorded FTP,
 // never an invented past value.
-var _FTP_DEFAULT=186, _FTP_RETEST_DATE='2026-08-27';
+var _FTP_DEFAULT=186;   // _FTP_RETEST_DATE is declared up with the block constants — one source
 function _ftpToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function _ftpHist_(){ if(typeof st==='undefined'||!st) return []; if(!Array.isArray(st.ftpHistory)) st.ftpHistory=[]; return st.ftpHistory; }
 function _ftpSort_(h){ return h.slice().sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); }); }
@@ -29129,6 +29175,10 @@ var SESSION_DEFS={
   z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, durationMin:90,  note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
   threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  durationMin:60,  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
   vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], durationMin:45,  note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
+  // The retest. Deliberately carries NO pctFtp: a test has no prescribed band, and printing one
+  // would invite pacing to the old number — which is the whole failure mode. Duration is the full
+  // protocol (10 warmup + 5 max + 10 easy + 20 test + 5 cooldown).
+  ftpTest:  { type:'ride', name:'FTP Retest',      zone:'Test',                  durationMin:50,  note:'20-minute test, not a training session. The number you set today reprices the whole block.' },
   group:    { type:'ride', name:'Group Ride',      zone:'Z2–Z4', pctFtp:[60,88],  durationMin:120, note:'Sit in for the first 20 mi. Race only the last 10–15. Do not chase if dropped.' },
   long:     { type:'ride', name:'Long Ride',       zone:'Z2–Z3', pctFtp:[62,83],  durationMin:180, note:'Controlled Z2–Z3. Tolerable on tired legs after Friday strength.' },
   recovery: { type:'ride', name:'Recovery',        zone:'Z1',    pctFtp:[40,55],  durationMin:45,  note:'Genuinely easy. Spin the legs; add no fatigue.' },
