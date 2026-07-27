@@ -19780,55 +19780,115 @@ function _cvdPriorWeek_(dateKey, intent){
     return null;
   }catch(e){ return null; }
 }
-// Interval-by-interval read, used ONLY when Intervals has already cached this ride's tagged
-// intervals on the ride object (r._icuIv, written by _icuFetchIntervals_). Deliberately SYNC and
-// cache-only: the panel renders synchronously, and a debrief that silently changes shape after an
-// async fetch is worse than one that is consistent. Returns null whenever the data cannot carry the
-// claim — no data, no prescribed structure, or a segment set that does not line up — and the caller
-// falls back to the scalar read rather than inventing a per-interval story.
-// Match rule: a WORK segment counts as interval i when its duration is within 30s of the prescribed
-// one. The COUNT must also line up (N, or N-1 for a session where the last effort was cut), or the
-// mapping is a guess and we decline.
-var _CVI_TOL_SEC=30;
-function _cvIntervalDebrief_(ride, intent, targets, struct){
+// Interval-by-interval read, from the ride's OWN stored power stream.
+//
+// This replaces an Intervals.icu-backed version that could never have worked here. That endpoint
+// refuses Strava-sourced activities outright — which is every Zwift session, i.e. exactly the
+// structured ones — and for the rides it does serve it returns auto-detected power SURGES, not the
+// prescribed intervals: probed live, the WORK segments came back 8-52 seconds long with ZERO
+// segments at or above 2 minutes. There was nothing there to line a 4x4 against.
+//
+// Source is r.chartPwr: the watts stream decimated to <=200 points by the same downsampler every
+// chart uses. Two properties of that decimation drive the rules below:
+//   - it samples every s-th second uniformly, so index maps to time LINEARLY and a time window is
+//     just an index slice;
+//   - it keeps INSTANTANEOUS samples rather than averaging them, so a window mean estimates the
+//     interval's average rather than being it. Hence the sample-count floor per window: below that
+//     the mean is noise wearing a number's clothes.
+//
+// The interval CLOCK is derived, not assumed. Hard-coding "the warmup is 10 minutes" puts every
+// window in the wrong place the moment the warmup runs twelve — and the debrief would still read
+// with total confidence while grading the recovery valleys. So the struct supplies the PATTERN
+// (N efforts of M minutes, R recovery between, via _structIntervals_) and the START OFFSET is found
+// by scanning for the alignment that best separates work from recovery. If no alignment separates
+// them cleanly, there is no evidence the prescribed session is in this ride at all, and the whole
+// read declines to the scalar debrief rather than narrating a shape it cannot see.
+//
+// SYNC and stream-only by design: the panel renders synchronously, and a debrief that changes shape
+// after a late fetch is worse than one that is consistent. A ride whose detail page has never been
+// opened has no chartPwr, so it gets the scalar read — silently, per spec.
+var _CVS_MIN_PTS=60;        // stream points below which none of this is worth attempting
+var _CVS_MIN_WIN_PTS=8;     // samples inside ONE interval window before its mean carries a claim
+var _CVS_SEP=1.12;          // in-window mean must beat the recovery mean by this factor
+// Recovery between efforts when the struct does not state one. The block's own structs mostly do
+// not ("4x4 progressing to 5x4"), so without these the feature would decline on its main cases.
+// Only intents with a real protocol get a default — anything else declines rather than guesses.
+var _CVS_REC_DEFAULT={ vo2:3, threshold:5 };
+// Mean of the samples whose timestamps fall in [t0, t1) seconds. Half-open on purpose: an
+// inclusive end index picks up the first sample of the RECOVERY, and one recovery sample in an
+// eighteen-sample window pulls a 200W interval down about 5W — a systematic under-read that would
+// have quietly reported in-band intervals as misses.
+function _cvsMean_(a, pps, t0, t1){
+  var i0=Math.ceil(t0*pps), i1=Math.ceil(t1*pps)-1;
+  var s=0, n=0;
+  for(var i=Math.max(0,i0); i<=Math.min(a.length-1,i1); i++){
+    var v=a[i];
+    if(typeof v==='number' && isFinite(v) && v>=0){ s+=v; n++; }
+  }
+  return n?{mean:s/n, n:n}:null;
+}
+function _cvStreamIntervals_(ride, intent, targets, struct){
   try{
-    var icu=ride && ride._icuIv;
-    if(!icu || !Array.isArray(icu.work) || !icu.work.length) return null;
-    if(typeof _sessionSteps_!=='function') return null;
-    var steps=_sessionSteps_(intent, struct||'', targets||{});
-    var presc=steps.filter(function(s){ return s.kind==='work' && s.workMin; });
-    if(!presc.length) return null;
-    var N=presc.length, targetSec=presc[0].workMin*60;
-    var lo=presc[0].bandLo, hi=presc[0].bandHi;
+    var pw = ride && ride.chartPwr;
+    if(!Array.isArray(pw) || pw.length < _CVS_MIN_PTS) return null;
+    var secs=(typeof _durSec_==='function')?_durSec_(ride):0;
+    if(!(secs>0)) return null;
+    var si=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+    if(!si || !(si.n>=2) || !(si.workMin>=1)) return null;
+    var lo=targets&&targets.powerLo, hi=targets&&targets.powerHi;
     if(lo==null || hi==null) return null;
-    var near=icu.work.filter(function(w){ return Math.abs((w.dur||0)-targetSec)<=_CVI_TOL_SEC; });
-    if(near.length!==N && near.length!==N-1) return null;   // ambiguous mapping — decline
-    var pairs=near.slice(0,N).map(function(w,i){
-      return { i:i+1, watts:(w.watts!=null?Math.round(w.watts):null),
-               inBand:(w.watts!=null && w.watts>=lo && w.watts<=hi),
-               under:(w.watts!=null && w.watts<lo) };
-    });
-    var withW=pairs.filter(function(p){ return p.watts!=null; });
-    if(!withW.length) return null;                          // segments exist but carry no power
-    var nIn=pairs.filter(function(p){ return p.inBand; }).length;
-    var out=[];
-    out.push(nIn===N
-      ? ('All '+N+' intervals landed in the '+lo+'–'+hi+'W band. That is the session executed, not survived.')
-      : (nIn+' of '+N+' intervals held the '+lo+'–'+hi+'W band.'));
-    out.push(pairs.map(function(p){
-      return 'Interval '+p.i+' '+(p.watts!=null?(p.watts+'W'):'no power');
-    }).join(', ')+'.');
-    // Weakest = furthest BELOW the band; an interval over the top is a different fault and is
-    // called out separately rather than being labelled "weakest".
-    var below=withW.filter(function(p){ return p.under; });
-    if(below.length){
-      var worst=below.reduce(function(a,b){ return (a.watts<=b.watts)?a:b; });
-      out.push('Interval '+worst.i+' was the weakest at '+worst.watts+'W, '+(lo-worst.watts)+'W under the floor.');
+    var recMin=(si.recMin!=null)?si.recMin:_CVS_REC_DEFAULT[intent];
+    if(recMin==null || !(recMin>0)) return null;
+
+    var N=si.n, workSec=si.workMin*60, recSec=recMin*60;
+    var spanSec=N*workSec + (N-1)*recSec;
+    if(!(spanSec < secs)) return null;                     // the protocol does not fit inside the ride
+    var pps=(pw.length-1)/secs;                            // stream points per second
+    if(Math.round(workSec*pps) < _CVS_MIN_WIN_PTS) return null;   // too coarse to average an effort
+
+    // Scan the start offset for the alignment that best separates work from recovery. Step is one
+    // stream sample: finer than the data would be false precision.
+    var step=Math.max(5, Math.round(1/pps)), best=null;
+    for(var t0=0; t0<=(secs-spanSec); t0+=step){
+      var inS=0,inN=0,recS=0,recN=0,wins=[],ok=true;
+      for(var k=0;k<N;k++){
+        var ws=t0+k*(workSec+recSec);
+        var m=_cvsMean_(pw, pps, ws, ws+workSec);
+        if(!m || m.n<_CVS_MIN_WIN_PTS){ ok=false; break; }
+        wins.push(m); inS+=m.mean*m.n; inN+=m.n;
+        if(k<N-1){
+          var rm=_cvsMean_(pw, pps, ws+workSec, ws+workSec+recSec);
+          if(rm){ recS+=rm.mean*rm.n; recN+=rm.n; }
+        }
+      }
+      if(!ok || !inN || !recN) continue;
+      var inM=inS/inN, recM=recS/recN;
+      if(!best || (inM-recM)>best.sep) best={sep:inM-recM, inM:inM, recM:recM, wins:wins};
     }
-    var over=withW.filter(function(p){ return p.watts>hi; });
-    if(over.length===1) out.push('Interval '+over[0].i+' went '+(over[0].watts-hi)+'W over the top, which costs you the ones after it.');
-    else if(over.length>1) out.push(over.length+' intervals went over the top of the band — that is pacing, not fitness.');
-    if(near.length===N-1) out.push('Only '+near.length+' efforts of the '+N+' prescribed are in the data.');
+    if(!best) return null;
+    // No work/rest structure found at ANY offset: this ride is not the prescribed session, however
+    // much we would like it to be. Decline.
+    if(!(best.recM>0) || !(best.inM >= best.recM*_CVS_SEP)) return null;
+
+    var vals=best.wins.map(function(m){ return Math.round(m.mean); });
+    var nIn=vals.filter(function(v){ return v>=lo && v<=hi; }).length;
+    var out=[];
+    if(nIn===N){
+      out.push('All '+N+' intervals in the '+lo+'–'+hi+'W band. That is the session executed.');
+      out.push(vals.map(function(v,i){ return 'Interval '+(i+1)+': '+v+'W'; }).join('. ')+'.');
+      return out;
+    }
+    // Weakest = furthest BELOW the floor. Going over the top is a different fault with a different
+    // cost, so it is named separately and never called "weakest".
+    var weak=-1, gap=0;
+    vals.forEach(function(v,i){ if(v<lo && (lo-v)>gap){ gap=lo-v; weak=i; } });
+    out.push(vals.map(function(v,i){
+      var s='Interval '+(i+1)+': '+v+'W';
+      if(i===weak) s+=' — '+gap+'W under the floor, that is where you faded';
+      else if(v>hi) s+=' — '+(v-hi)+'W over the top';
+      return s;
+    }).join('. ')+'.');
+    out.push(nIn+' of '+N+' held the '+lo+'–'+hi+'W band.');
     return out;
   }catch(e){ return null; }
 }
@@ -19896,7 +19956,7 @@ function _cvDebrief_(dateKey, ride, sessType){
       // more resolution — a session can average into the band while half the intervals missed it.
       // typeof-guarded: without it a missing helper throws, the outer catch swallows it, and the
       // ENTIRE debrief returns null — losing the scalar read too. Degrade to scalar, never to blank.
-      var ivl=(typeof _cvIntervalDebrief_==='function')?_cvIntervalDebrief_(ride, intent, t, (primary&&primary.struct)||''):null;
+      var ivl=(typeof _cvStreamIntervals_==='function')?_cvStreamIntervals_(ride, intent, t, (primary&&primary.struct)||''):null;
       if(ivl && ivl.length){
         ivl.forEach(function(s){ out.push(s); });
         var pw=_cvdPriorWeek_(dateKey, intent), ppnp=pw?_cvdNum_(pw.np):null;
