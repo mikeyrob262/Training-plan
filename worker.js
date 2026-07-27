@@ -16414,6 +16414,45 @@ function _racingChart_(title, acts){
   }
   return aiCard_(inner);
 }
+// ---- sport selection (All / Ride / Run) -------------------------------------------------
+// Persisted in st so the page opens where it was left. Default 'all': the widest true view of
+// the athlete, and the one that does not silently hide a sport.
+var _YVY_SPORTS=[['all','All'],['ride','Ride'],['run','Run']];
+// Below this many activities in the selected sport, the narrative sections are suppressed. A
+// distribution, a rank and a "what changed" read all need a population to mean anything; under
+// ~20 they are noise with a confident voice. The sample size is ALWAYS shown either way, so the
+// reader can see why a section is absent rather than wondering whether it broke.
+var _YVY_MIN_POP=20;
+function _yvySportSel_(){
+  try{ var v=(typeof st!=='undefined'&&st)?st.yvySport:null;
+    return (v==='ride'||v==='run'||v==='all')?v:'all'; }catch(e){ return 'all'; }
+}
+function yvySetSport_(id){
+  if(id!=='all'&&id!=='ride'&&id!=='run') return;
+  try{ if(typeof st!=='undefined'&&st){ st.yvySport=id; if(typeof sv==='function') sv(); } }catch(e){}
+  // Same repaint path alSelectMonth_ uses: both surfaces mount through aiRenderOverview_(_aiMount),
+  // so there is no desktop/mobile split to mirror here.
+  try{ if(typeof _aiMount!=='undefined' && _aiMount && typeof aiRenderOverview_==='function') aiRenderOverview_(_aiMount); }catch(e){}
+}
+function _yvySportPicker_(cur){
+  var pills=_YVY_SPORTS.map(function(p){
+    var on=(p[0]===cur);
+    return '<button onclick="if(window.yvySetSport_)yvySetSport_(&#39;'+p[0]+'&#39;)" '
+      +'style="appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700;'
+      +'padding:6px 15px;border-radius:999px;border:1px solid '+(on?'#FC4C02':'#1c2130')+';'
+      +'background:'+(on?'#FC4C02':'#0e1117')+';color:'+(on?'#fff':'#94a3b8')+'">'+p[1]+'</button>';
+  }).join('');
+  return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px">'
+    +'<span style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-right:2px">Sport</span>'
+    +pills+'</div>';
+}
+// The run population, in the same shape the ride path feeds _yvyVM_: store-v2 first (normalised
+// app vocab, tombstone-free, deduped) via getRuns, dated entries only.
+function _yvyRunPop_(){
+  var l=[];
+  try{ l=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ l=[]; }
+  return l.filter(function(r){ return r && r.date && String(r.date).length>=7; });
+}
 function _yvyMi_(r){ return parseFloat(r.distance)||0; }
 function _yvyElev_(r){ return parseFloat(r.elev||r.elevation)||0; }
 function _yvySec_(r){ return (typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0); }
@@ -16565,7 +16604,7 @@ function _yvyPhysRow_(vm){
   vm.phys.forEach(function(mv){
     if(mv.curN===0) return;
     if(mv.rankableMonths===0) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few rides carry it to rank against history.');
-    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' — '+mv.winRankable+' of your '+pageRankable+' completed rankable ride-months; earlier rides do not carry it.');
+    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' — '+mv.winRankable+' of your '+pageRankable+' completed rankable '+vm.monthN+'; earlier '+vm.nP+' do not carry it.');
   });
   var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
@@ -17193,7 +17232,10 @@ function _alSection_(){
     +'</div>';
 }
 
-function _yvyVM_(rides, now){
+function _yvyVM_(rides, now, sport){
+  // sport only ever renames things and gates the narrative — every number below is computed from
+  // the list it was handed, so a run VM and a ride VM cannot diverge in method.
+  sport=(sport==='run')?'run':'ride';
   var y=now.getFullYear(), m=now.getMonth();
   var curYM=y+'-'+('0'+(m+1)).slice(-2);
   var lmY=(m===0)?y-1:y, lmM=(m===0)?11:m-1;
@@ -17219,6 +17261,10 @@ function _yvyVM_(rides, now){
   // Any consumer that draws the distribution therefore cannot disagree with the rank: position
   // in rankList IS the rank. Do not rebuild this list anywhere.
   var rankList=rankable.map(function(k){ return {ym:k, mi:Math.round(bym[k]*10)/10}; });
+  // Nouns travel WITH the view model rather than being decided at each render site. Calling a run
+  // month a "ride-month" is the same class of defect as classifying one number by two rules: the
+  // page would be describing a sport it is not showing.
+  var _nA=(sport==='run')?'run':'ride', _nP=_nA+'s';
   // The bar to beat must be a COMPLETED month. Ranking the in-progress month into it meant that
   // whenever this month was your best, the page said "the bar is <this month's own total>" — you
   // racing yourself in the present tense — and Month Race would draw You and Best as one bar.
@@ -17299,7 +17345,7 @@ function _yvyVM_(rides, now){
     function(s){ return 'Up '+s+' on last month'; }, function(s){ return 'Beat by '+s+' to catch up'; })])
     .sort(function(a,b){ return b.pct-a.pct; });
 
-  return { curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
+  return { sport:sport, nA:_nA, nP:_nP, monthN:_nA+'-months', pop:rides.length, thin:(rides.length<_YVY_MIN_POP), curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
     doneList:doneList, med6:med6, monthMi:bym,
@@ -17426,7 +17472,7 @@ function _pbSection_(vm){
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
-    +'<span style="font-size:11px;color:#5b6678">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' rides since '+pb.sinceYear+'</span></div>'
+    +'<span style="font-size:11px;color:#5b6678">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">Each bar is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:12px">'+cards+'</div>'
     +foot+'</div>';
@@ -17507,7 +17553,7 @@ function _mrSection_(vm){
   var recon=(vm.rankTot>mr.completedRankable)
     ? (' (the '+vm.rankTot+'th, this one, is still running)') : '';
   var foot=(mr.best>0)
-    ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable ride-months'+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' rides. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn as a target rather than a peer. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race.')
+    ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn as a target rather than a peer. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race.')
     : 'No completed month clears the ride count needed to stand as a record yet, so there is no bar to beat.';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
@@ -17661,7 +17707,7 @@ function _raSection_(vm){
   } else {
     head='<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
       +'<span style="font-size:32px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;line-height:1">#'+vm.rank+'</span>'
-      +'<span style="font-size:13px;color:#94a3b8">of '+vm.rankTot+' ride-months</span>'
+      +'<span style="font-size:13px;color:#94a3b8">of '+vm.rankTot+' '+vm.monthN+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+_MR_BEST+'">'+_yvyRankBand_(vm.rank,vm.rankTot)+'</span></div>';
     if(ra.next){
       lines.push('<b style="color:#f1f5f9">Next rung:</b> pass '+_yvyMonLabel_(ra.next.ym)+' at '+ra.next.mi.toLocaleString()+' mi &mdash; <span style="color:'+ra.gap.tone+';font-weight:700">'+ra.gap.text.replace(/^Beat by/,'beat by')+'</span>');
@@ -17675,12 +17721,12 @@ function _raSection_(vm){
     }
   }
   var foot;
-  if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' rides, which is the same gate the rest of this page ranks on.';
+  if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' '+vm.nP+', which is the same gate the rest of this page ranks on.';
   else foot=_yvyPartialTxt_(vm.domNow, vm.rank===1, 'riding');
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
-    +'<span style="font-size:11px;color:#5b6678">every ride-month you can be ranked on, tallest first</span></div>'
+    +'<span style="font-size:11px;color:#5b6678">every '+vm.monthN.slice(0,-1)+' you can be ranked on, tallest first</span></div>'
     +head
     +'<div style="margin-top:14px">'+_raStrip_(ra,vm)+'</div>'
     +(lines.length?('<div style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-top:12px">'+lines.join('<br>')+'</div>'):'')
@@ -17874,7 +17920,7 @@ function _yvyRenderVM_(vm){
     +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:#f1f5f9">'+aheadN+' of 4</b>. '
     +(vm.rank>0
-      ? ('This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> ride-months &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+(vm.bestMonthMi>0?('; the bar is '+_mrMi_(vm.bestMonthMi)+' mi'):'')+'.')
+      ? ('This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> '+vm.monthN+' &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+(vm.bestMonthMi>0?('; the bar is '+_mrMi_(vm.bestMonthMi)+' mi'):'')+'.')
       : (_yvyUnrankableTxt_(vm)+(vm.bestMonthMi>0?(' The bar is '+_mrMi_(vm.bestMonthMi)+' mi.'):'')))
     +'</div></div>'
     +_yvyKpi_(ic.ride,'Total Distance',vm.kDist.cur.toFixed(1),'mi',vm.kDist.pct,vm.kDist.up,'vs last month, same days')
@@ -17942,8 +17988,21 @@ function _yvyRenderVM_(vm){
     +Math.round((vm.best[0]?vm.best[0].mi:0)/(vm.curTot||1)*100)+'% of the month. Keep the weekend long rides and the '+vm.rate+' mi/wk rate and you pass last month by '+_YVY_dateAdd_(vm)+'.</div></div></div>');
 
   // layout: main col + right rail
+  // Sample size is stated on every render, for every sport, whether or not the narrative runs.
+  // A reader who can see "412 rides" knows why the distribution is there; a reader who can see
+  // "9 runs" knows why it is not, instead of assuming the page is broken.
+  var sampleLine='<div style="font-size:11.5px;color:#5b6678;margin:0 0 12px">'
+    +'Sample: <b style="color:#94a3b8">'+vm.pop.toLocaleString()+' '+(vm.pop===1?vm.nA:vm.nP)+'</b> in scope'
+    +(vm.thin?(' &middot; below '+_YVY_MIN_POP+', so the ranked and comparative sections are held back rather than computed on a sample that cannot carry them'):'')
+    +'</div>';
+  // THIN: hero + sample line only. Everything below ranks, distributes or compares, and none of
+  // those mean anything on a handful of activities. Suppressed, stated, never faked.
+  if(vm.thin){
+    return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'+hero+sampleLine+'</div>';
+  }
   return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'
     +hero
+    +sampleLine
     +_yvyPhysRow_(vm)
     +_mrSection_(vm)
     +_rsSection_(vm)
@@ -17970,7 +18029,9 @@ function _yvyOrdComment_(n){ var s=['th','st','nd','rd'], v=n%100; return n+(s[(
 // sentence has to serve runs, and hardcoding "rides" would have forced a second sentence for the
 // run side — which is the thing this function was extracted to prevent.
 function _yvyUnrankableTxt_(vm, noun){
-  var n=noun||'ride';
+  // Falls back to the VM's own noun before the literal: the hero calls this with vm alone, and a
+  // run month reading "it needs 4 rides" is the page describing a sport it is not showing.
+  var n=noun||(vm&&vm.nA)||'ride';
   return 'This month is not rankable yet &mdash; it needs '+_YVY_RANK_MIN+' '+n+'s to sit alongside your '+vm.rankTot+' ranked '+n+'-months.';
 }
 // The one sentence for "this month IS ranked, but on partial data". A DIFFERENT condition from
@@ -18001,20 +18062,51 @@ function _yvyOrd_(n){ return _yvyOrdComment_(n); }
 function _YVY_dateAdd_(vm){ var need=vm.need, rate=vm.rate/7; if(rate<=0||need<=0) return 'month end'; var days=Math.ceil(need/rate); var d=new Date(vm.y, vm.m, vm.domNow+days); return _YVY_MON[d.getMonth()]+' '+d.getDate(); }
 
 function aiRenderRacing_(){
-  // You vs. You (phase 1: RIDE ONLY). Reads the coverage-validated snapshot rides via
-  // allRidesDeduped_ (ride-typed). Ranks against rankable months only, frames deficits as
-  // closable gaps, makes NO month-of-year claim. now = real today in the live app.
+  // You vs. You, multisport. The engine (_yvyVM_) is generic over an activity list; the sport
+  // selector chooses which list it is handed and which nouns come back with it.
+  //
+  // WHY 'All' IS NOT ONE MERGED LIST: a run mile and a ride mile are not the same unit, so summing
+  // them would produce a total that is true of nothing. All renders the cross-sport standing
+  // (Athletic Life, which z-scores each sport against its OWN population and then compares the
+  // scores) followed by each sport's own body. Z-normalisation stays within sport everywhere.
+  var sel=(typeof _yvySportSel_==='function')?_yvySportSel_():'all';
+  var picker=(typeof _yvySportPicker_==='function')?_yvySportPicker_(sel):'';
+
   var src=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st.rides||[]).filter(function(r){return r&&!r.deleted;}));
   // Cycling only, in case the fallback source is all-sports (the snapshot set already is).
   var cyc=src.filter(function(r){ if(!r||!r.date) return false; var s=(typeof storeV2Sport_==='function')?storeV2Sport_(r):String(r.sportType||r.type||'').replace(/[ _-]/g,''); return !/^(run|trailrun|virtualrun|treadmill|swim|opanwaterswim|walk|hike|weighttraining|workout|rowing)$/i.test(s); });
-  // Athletic Life sits ABOVE the ride hero: the cross-sport standing is the widest true statement
-  // on the page, and the hero below it is explicitly the ride view. Renders nothing when the
-  // snapshot is unprimed or no sport has enough rankable months to hold a distribution.
-  var _al='';
-  try{ _al=(typeof _alSection_==='function')?_alSection_():''; }
-  catch(e){ try{ console.error('[yvy-all] ' + ((e&&e.message)||e)); }catch(_e){} }
-  try{ var vm=_yvyVM_(cyc, new Date()); return _al+_yvyRenderVM_(vm); }
-  catch(e){ try{ console.error('[yvy]', e&&e.message); }catch(_e){} return '<div style="padding:48px 20px;text-align:center;color:#94a3b8;font-size:13px">You vs. You is unavailable right now.</div>'; }
+
+  var now=new Date();
+  var body=function(list, sport){
+    try{ return _yvyRenderVM_(_yvyVM_(list, now, sport)); }
+    catch(e){ try{ console.error('[yvy-'+sport+']', e&&e.message); }catch(_e){} return ''; }
+  };
+  // Run-only history exhibits. These already exist and already state their own do-not-claim
+  // contract, so they are MOUNTED here rather than reimplemented: the PR board (career / since-60 /
+  // season) and the running growth chart. Each returns '' when the snapshot cannot support it.
+  var runExtras=function(){
+    var h='';
+    try{ h+=(typeof _prSection_==='function')?_prSection_():''; }catch(e){ try{ console.error('[yvy-pr]', e&&e.message); }catch(_e){} }
+    try{ h+=(typeof _rgSection_==='function')?_rgSection_():''; }catch(e){ try{ console.error('[yvy-rg]', e&&e.message); }catch(_e){} }
+    return h;
+  };
+  var head=function(txt){
+    return '<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 10px">'+txt+'</div>';
+  };
+
+  try{
+    if(sel==='ride') return picker+body(cyc,'ride');
+    var runs=(typeof _yvyRunPop_==='function')?_yvyRunPop_():[];
+    if(sel==='run')  return picker+body(runs,'run')+runExtras();
+    // ---- All ----
+    var _al='';
+    try{ _al=(typeof _alSection_==='function')?_alSection_():''; }
+    catch(e){ try{ console.error('[yvy-all] ' + ((e&&e.message)||e)); }catch(_e){} }
+    return picker+_al+head('Riding')+body(cyc,'ride')+head('Running')+body(runs,'run')+runExtras();
+  }catch(e){
+    try{ console.error('[yvy]', e&&e.message); }catch(_e){}
+    return '<div style="padding:48px 20px;text-align:center;color:#94a3b8;font-size:13px">You vs. You is unavailable right now.</div>';
+  }
 }
 
 // ==================== Milestones — cycling, recent era (last ~3 years) ====================
