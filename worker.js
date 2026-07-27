@@ -19616,6 +19616,59 @@ function _cvHrv_(now){
   else { verdict='in your normal range — recovery is on track. Train as planned.'; }
   return 'HRV '+reading+' ms'+(src==='manual'?' (logged manually)':'')+' vs a '+mean+' ms baseline — '+verdict;
 }
+// Pre-ride fuelling check — VO2 and Threshold ONLY. Those are the two sessions where arriving
+// under-fuelled changes the workout rather than just making it unpleasant: the intensity is high
+// enough that glycogen, not aerobic fitness, is the limiter. Everything else (Z2, long, strength,
+// recovery) is left alone on purpose — flagging fuel on an easy day would train the panel to be
+// ignored on the day it matters.
+//
+// SILENCE IS THE DEFAULT. Adequate fuelling produces NO line — this is a flag, not a report card,
+// and there is no positive reinforcement here.
+//
+// NO FABRICATION: the day is looked up in st.nl DIRECTLY before nutritionForDate is called, because
+// nutritionForDate goes through getNDay(), which CREATES an empty day shell on read. Coach V is a
+// read-only observer of the food log and must not manufacture days the athlete never opened. Key
+// dialect is tolerated both ways (padded and legacy unpadded) so a Plan-page open before the
+// nutrition migration has run can't read an existing log as an empty one and flag it falsely.
+var _CV_FUEL_MIN={ threshold:600, vo2:500 };   // kcal logged so far, minimum going into the session
+var _CV_FUEL_CARB_MIN=100;                     // grams; high-intensity work runs on carbohydrate
+function _cvFuelKey_(dateKey){
+  try{
+    var nl=(typeof st!=='undefined' && st && st.nl && typeof st.nl==='object') ? st.nl : null;
+    if(!nl) return null;
+    if(nl[dateKey]) return dateKey;
+    var p=String(dateKey||'').split('-');
+    if(p.length===3){
+      var loose=p[0]+'-'+String(parseInt(p[1],10))+'-'+String(parseInt(p[2],10));   // legacy unpadded
+      if(nl[loose]) return loose;
+    }
+    return null;   // no day object at all — nothing has ever been logged for this date
+  }catch(e){ return null; }
+}
+function _cvFuel_(dateKey, intent, done){
+  try{
+    if(done) return [];                                  // session logged — the fuelling window has closed
+    var min=_CV_FUEL_MIN[intent]; if(!min) return [];    // not a session where under-fuelling costs anything
+    if(typeof nutritionForDate!=='function') return [];  // no reader, no claim
+    var label=(typeof SESSION_DEFS!=='undefined' && SESSION_DEFS[intent] && SESSION_DEFS[intent].name) || intent;
+    var key=_cvFuelKey_(dateKey);
+    var cal=0, carb=0, items=0;
+    if(key){
+      var n=nutritionForDate(key);                       // the day exists, so no shell is created
+      var c=(n&&n.consumed)||{};
+      cal=Math.round(c.cal||0); carb=Math.round(c.carb||0); items=(c.items&&c.items.length)||0;
+    }
+    // An absent day and a day whose entries are all tombstoned are the same fact: nothing logged.
+    if(!items) return ['No nutrition logged today. Do not start a '+label+' session without eating first.'];
+    var out=[];
+    if(cal<min) out.push('You have logged '+cal+' calories today going into a '+label+' session. Fuel up before you start — '+label+' on empty is a different workout than the one prescribed.');
+    // Carbs are flagged only when they were actually logged: 0g on a day with food logged means the
+    // macro was never entered, not that the athlete ate zero carbohydrate. Guessing there would be
+    // inventing data.
+    if(carb>0 && carb<_CV_FUEL_CARB_MIN) out.push('You have logged '+carb+'g of carbs today. High-intensity work runs on carbohydrate — eat before you start.');
+    return out;
+  }catch(e){ try{ console.error('[cvFuel] '+((e&&e.message)||e)); }catch(_e){} return []; }
+}
 // Which sport answers a prescribed session, or '' when nothing does (strength/mobility/rest).
 // Mostly derivable from SESSION_DEFS.type; the exception is the ATTEMPT type, which covers both the
 // cycling attempts and the 10k race, so those are named explicitly rather than guessed at.
@@ -19909,6 +19962,9 @@ function coachV_(dateKey, now){
     debrief:(done && typeof _cvDebrief_==='function')
       ? _cvDebrief_(dateKey, (doneAct&&doneAct.obj)||null, (_cvDef&&_cvDef.type)||'') : '',
     pre:primary?_cvPre_(intent, t, primary.struct):[],
+    // Pre-ride fuel check. Empty array on every day that is not VO2/Threshold, on a session already
+    // logged, and on any hard day that is adequately fuelled.
+    fuel:(typeof _cvFuel_==='function')?_cvFuel_(dateKey, intent, done):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
     milestone:_cvMilestone_(now),
@@ -19956,6 +20012,12 @@ function _coachVPanel_(now){
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
       +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:#5b6678">'+cv.primary.struct+'</span>'):'')+'</div>';
+    // Fuel check ABOVE the pre-session instructions: if the athlete is about to start a VO2 or
+    // Threshold session under-fuelled, that changes the session, so it has to be read before the
+    // watt targets are. Absent entirely on an adequately-fuelled day.
+    if(cv.fuel && cv.fuel.length){
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:12.5px;color:#e2e8f0;line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
+    }
     cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
     if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
     if(cv.expect) H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
