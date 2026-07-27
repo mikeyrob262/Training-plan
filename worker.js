@@ -16488,6 +16488,34 @@ function _yvyAvgPwr_(r){ var v=(r&&r.avgPwr!=null)?+r.avgPwr:((r&&r.avgPower!=nu
 function _yvyNp_(r){ var v=(r&&r.np!=null)?+r.np:((r&&r.normPower!=null)?+r.normPower:NaN); return (v>0&&v<2000)?v:null; }
 function _yvyTssV_(r){ var v=parseFloat(r&&r.tss); return (v>0&&v<=600)?v:null; }   // 600 = constRideTSS_ ceiling
 function _yvyHrV_(r){ var v=(r&&r.avgHR!=null)?+r.avgHR:((r&&r.avgHr!=null)?+r.avgHr:NaN); return (v>0&&v<240)?v:null; }
+// ---- run accessors. Pace is DERIVED from distance and moving time rather than read off r.pace:
+// the stored pace field arrives in several shapes across the import paths, and a seconds-per-mile
+// figure computed from two fields the page already trusts cannot disagree with the distance and
+// time KPIs sitting next to it. Guarded to a sane human range so a 12-second GPS artefact or a
+// paused-clock run cannot drag an average.
+function _yvyPaceV_(r){
+  var mi=parseFloat(r&&r.distance)||0;
+  var sec=(typeof _durSec_==='function')?_durSec_(r):(+((r&&r.movingSecs)||(r&&r.duration))||0);
+  if(!(mi>0.2) || !(sec>60)) return null;
+  var p=sec/mi;
+  return (p>=180 && p<=1800) ? p : null;          // 3:00/mi to 30:00/mi
+}
+function _yvyCadV_(r){
+  var v=(r&&r.cadence!=null)?+r.cadence:((r&&r.avgCadence!=null)?+r.avgCadence:NaN);
+  if(!(v>0)) return null;
+  // Some sources report run cadence one-legged (~85) and some as total steps (~170). Doubling the
+  // one-legged form is the only way the average means one thing; anything still out of range is
+  // dropped rather than coerced.
+  if(v>=60 && v<=110) v=v*2;
+  return (v>=120 && v<=230) ? v : null;
+}
+// mm:ss per mile. Pace is the one metric on this page where a rounded integer would be a lie —
+// 8.5 min/mi is 8:30, not 9.
+function _yvyFmtPace_(secPerMi){
+  if(!(secPerMi>0)) return '—';
+  var t=Math.round(secPerMi), m=Math.floor(t/60), ss=t%60;
+  return m+':'+(ss<10?'0':'')+ss;
+}
 function _yvyAddMonth_(k,d){ var p=String(k).split('-'); var t=(parseInt(p[0],10)*12+parseInt(p[1],10)-1)+d; return Math.floor(t/12)+'-'+('0'+(t%12+1)).slice(-2); }
 function _yvyCalMonths_(a,b){ if(!a||!b) return 0; var x=String(a).split('-'),y=String(b).split('-'); return (parseInt(y[0],10)-parseInt(x[0],10))*12+(parseInt(y[1],10)-parseInt(x[1],10))+1; }
 function _yvyMonLabel_(ym){ var p=String(ym).split('-'); return (_YVY_MON[(+p[1]||1)-1]||'')+' '+p[0]; }
@@ -16526,7 +16554,7 @@ function _yvyFieldWindow_(rides, acc, lastYM){
 // A delta is shown ONLY when last month is itself rankable for the field (>=_YVY_RANK_MIN carriers) —
 // that is the per-field gate. shortWindow flags a metric whose honest history floors out later than
 // the page's full ride window, which the render then states explicitly.
-function _yvyPhys_(rides, now){
+function _yvyPhys_(rides, now, sport){
   var y=now.getFullYear(), m=now.getMonth();
   var curYM=y+'-'+('0'+(m+1)).slice(-2);
   var lmY=(m===0)?y-1:y, lmM=(m===0)?11:m-1;
@@ -16547,23 +16575,41 @@ function _yvyPhys_(rides, now){
   // Avg HR is deliberately false: on its own a higher average is not a worse month and a lower one
   // is not a better one — that reading only exists paired against power (the decoupling metric).
   // nUnit is the suffix for gap-grammar copy, where a bare number would not read.
-  var SPECS=[
+  // Runs do not carry power. Showing Avg Power / NP / TSS on the Run tab rendered four blanks and
+  // called it a physiology row — the fields were not missing data, they were the wrong fields.
+  // Pace metrics replace them.
+  //
+  // invert = lower is better. Pace is the page's first such metric, and every direction-reading
+  // consumer has to honour it or a 20-second-per-mile improvement renders as a decline with a red
+  // arrow. The flip happens ONCE, on the pct, so band/up/note all inherit it and cannot disagree —
+  // the same one-number-one-rule discipline the rest of this page runs on.
+  var _RUN_SPECS=[
+    {key:'pace',  label:'Avg Pace',        unit:'/mi', nUnit:'/mi',   agg:'avg', signed:false, invert:true,  fmt:'pace', acc:_yvyPaceV_},
+    {key:'bpace', label:'Best Pace',       unit:'/mi', nUnit:'/mi',   agg:'min', signed:false, invert:true,  fmt:'pace', acc:_yvyPaceV_},
+    {key:'cad',   label:'Avg Cadence',     unit:'spm', nUnit:' spm',  agg:'avg', signed:false, acc:_yvyCadV_},
+    {key:'hr',    label:'Avg HR',          unit:'bpm', nUnit:' bpm',  agg:'avg', signed:false, acc:_yvyHrV_}
+  ];
+  var _RIDE_SPECS=[
     {key:'pwr', label:'Avg Power',        unit:'W',   nUnit:'W',     agg:'avg', signed:true,  acc:_yvyAvgPwr_},
     {key:'np',  label:'Normalized Power', unit:'W',   nUnit:'W',     agg:'avg', signed:true,  acc:_yvyNp_},
     {key:'tss', label:'TSS',              unit:'',    nUnit:' TSS',  agg:'sum', signed:true,  acc:_yvyTssV_},
     {key:'hr',  label:'Avg HR',           unit:'bpm', nUnit:' bpm',  agg:'avg', signed:false, acc:_yvyHrV_}
   ];
+  var SPECS=(sport==='run')?_RUN_SPECS:_RIDE_SPECS;
   return SPECS.map(function(sp){
     function agg(list){ var v=[]; list.forEach(function(r){ var x=sp.acc(r); if(x!=null) v.push(x); });
       if(!v.length) return {n:0, val:0};
+      if(sp.agg==='min') return {n:v.length, val:Math.min.apply(null, v)};
       var s=0; v.forEach(function(x){ s+=x; }); return {n:v.length, val:(sp.agg==='sum'?s:s/v.length)}; }
     var c=agg(cur), L=agg(lastSD), win=_yvyFieldWindow_(rides, sp.acc, lastYM);
     var hasDelta=(L.n>=_YVY_RANK_MIN && c.n>=1);
     var pct=hasDelta ? (L.val>0?Math.round((c.val-L.val)/L.val*100):(c.val>0?100:0)) : 0;
+    // Lower-is-better metrics flip here, once, so everything downstream reads one direction.
+    if(sp.invert) pct=-pct;
     // band is null unless this metric has a real same-day delta to band — a null band is the
     // coverage gate, and any consumer that renders direction must skip on it rather than caveat.
     var band=hasDelta?_yvyBand_(pct):null, d=c.val-L.val;
-    function nf(v){ return Math.round(Math.abs(v))+sp.nUnit; }
+    function nf(v){ return (sp.fmt==='pace') ? (_yvyFmtPace_(Math.abs(v))+sp.nUnit) : (Math.round(Math.abs(v))+sp.nUnit); }
     var note='';
     if(band){
       var negligible=(nf(d)===nf(0));
@@ -16572,17 +16618,20 @@ function _yvyPhys_(rides, now){
       else note=(band==='win')?('Up '+nf(d)+' on last month'):('Beat by '+nf(d)+' to catch up');
     }
     return { key:sp.key, label:sp.label, unit:sp.unit, agg:sp.agg, signed:!!sp.signed, band:band, note:note,
-      curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct, up:(c.val>=L.val), hasDelta:hasDelta,
+      fmt:sp.fmt||'', invert:!!sp.invert,
+      curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct,
+      up:(sp.invert ? (c.val<=L.val) : (c.val>=L.val)), hasDelta:hasDelta,
       winStart:win.start, winRankable:win.inWindow, rankableMonths:win.rankableMonths,
       fullStart:fullStart, pageRankable:pageRankable,
       shortWindow:!!(win.inWindow && win.inWindow<pageRankable) };
   });
 }
 function _yvyPhysKpi_(ic, mv, first){
-  var valStr = (mv.curN===0) ? '&mdash;' : Math.round(mv.curVal).toLocaleString();
+  var valStr = (mv.curN===0) ? '&mdash;'
+    : ((mv.fmt==='pace') ? _yvyFmtPace_(mv.curVal) : Math.round(mv.curVal).toLocaleString());
   var pctHtml = mv.hasDelta ? (' '+_yvyPct_(mv.pct, mv.up)) : '';
   var sub;
-  if(mv.curN===0) sub='no rides carry this yet';
+  if(mv.curN===0) sub='no '+((mv.nounP)||'rides')+' carry this yet';
   else if(mv.hasDelta) sub='vs last month, same days';
   else sub='current month &middot; no rankable last month';
   var win='';
@@ -16598,8 +16647,9 @@ function _yvyPhysKpi_(ic, mv, first){
     +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div>'+win+'</div>';
 }
 function _yvyPhysRow_(vm){
-  var ic={pwr:'&#9889;', np:'&#128200;', tss:'&#128293;', hr:'&#10084;&#65039;'};
-  var cells=vm.phys.map(function(mv,i){ return _yvyPhysKpi_(ic[mv.key], mv, i===0); }).join('');
+  var ic={pwr:'&#9889;', np:'&#128200;', tss:'&#128293;', hr:'&#10084;&#65039;',
+          pace:'&#9201;&#65039;', bpace:'&#9889;', cad:'&#128099;'};
+  var cells=vm.phys.map(function(mv,i){ mv.nounP=vm.nP; return _yvyPhysKpi_(ic[mv.key], mv, i===0); }).join('');
   var notes=[], pageRankable=(vm.phys[0]&&vm.phys[0].pageRankable)||0;
   vm.phys.forEach(function(mv){
     if(mv.curN===0) return;
@@ -16609,7 +16659,7 @@ function _yvyPhysRow_(vm){
   var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 18px 6px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Power &amp; Physiology</span>'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+(vm.sport==='run'?'Pace &amp; Physiology':'Power &amp; Physiology')+'</span>'
     +'<span style="font-size:11px;color:#5b6678">this month, same-day vs last</span></div>'
     +'<div style="display:flex;flex-wrap:wrap">'+cells+'</div>'+foot+'</div>';
 }
@@ -17293,6 +17343,12 @@ function _yvyVM_(rides, now, sport){
   // month a "ride-month" is the same class of defect as classifying one number by two rules: the
   // page would be describing a sport it is not showing.
   var _nA=(sport==='run')?'run':'ride', _nP=_nA+'s';
+  // Latest dated activity in scope. Four zeros in a KPI row read as a broken page; "your last run
+  // was Aug 14, 2025" reads as what it is. Derived, never a placeholder — null when the population
+  // is empty, and the zero-state then says only what it can.
+  var _lastAct=null;
+  (rides||[]).forEach(function(r){ var d=String((r&&r.date)||'').slice(0,10);
+    if(d.length===10 && (!_lastAct || d>_lastAct)) _lastAct=d; });
   // The bar to beat must be a COMPLETED month. Ranking the in-progress month into it meant that
   // whenever this month was your best, the page said "the bar is <this month's own total>" — you
   // racing yourself in the present tense — and Month Race would draw You and Best as one bar.
@@ -17368,18 +17424,19 @@ function _yvyVM_(rides, now, sport){
   // Ride count is the hero's fourth metric ("ahead in N of 4") but is not a Monthly Summary row.
   // Built through the SAME met() factory so it cannot acquire its own threshold, and kept in a
   // separate array so adding it here does not silently grow a shipped section.
-  function fAct(v){ var n=Math.round(Math.abs(v)); return n+' ride'+(n===1?'':'s'); }
+  function fAct(v){ var n=Math.round(Math.abs(v)); return n+' '+_nA+(n===1?'':'s'); }
   var metsAll=mets.concat([met('Activities', kActs, fAct,
     function(s){ return 'Up '+s+' on last month'; }, function(s){ return 'Beat by '+s+' to catch up'; })])
     .sort(function(a,b){ return b.pct-a.pct; });
 
-  return { sport:sport, nA:_nA, nP:_nP, monthN:_nA+'-months', pop:rides.length, thin:(rides.length<_YVY_MIN_POP), curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
+  return { sport:sport, nA:_nA, nP:_nP, monthN:_nA+'-months', pop:rides.length, thin:(rides.length<_YVY_MIN_POP),
+    lastAct:_lastAct, curN:cur.length, curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
     doneList:doneList, med6:med6, monthMi:bym,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
-    winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now),
+    winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now, sport),
     pb:_pbCompute_(rides, now, rate, med6) };
 }
 
@@ -18022,6 +18079,20 @@ function _yvyRenderVM_(vm){
   // Sample size is stated on every render, for every sport, whether or not the narrative runs.
   // A reader who can see "412 rides" knows why the distribution is there; a reader who can see
   // "9 runs" knows why it is not, instead of assuming the page is broken.
+  // NOTHING THIS MONTH. The KPI row is a same-day-vs-last-month comparison, so with no activity
+  // in the current month it correctly renders 0.0 / 0h 00m / 0 / 0 — four zeros that look exactly
+  // like a data-loading failure and are not one. Say which it is, and say when the last one was.
+  var zeroLine='';
+  if(vm.curN===0 && vm.pop>0){
+    var _lm='';
+    if(vm.lastAct){
+      var _p=vm.lastAct.split('-');
+      _lm=' Your last '+vm.nA+' was '+(_YVY_MON[(+_p[1]||1)-1]||'')+' '+(+_p[2]||0)+', '+_p[0]+'.';
+    }
+    zeroLine='<div style="font-size:12.5px;color:#94a3b8;line-height:1.55;background:#0e1117;border:1px solid #1c2130;border-radius:12px;padding:12px 14px;margin:0 0 12px">'
+      +'<b style="color:#f1f5f9">No '+vm.nP+' logged in '+_YVY_MONF[vm.m]+'.</b> The month figures below are zero because the month is empty, not because the data is missing &mdash; '
+      +vm.pop.toLocaleString()+' '+vm.nP+' are in scope for the ranked sections.'+_lm+'</div>';
+  }
   var sampleLine='<div style="font-size:11.5px;color:#5b6678;margin:0 0 12px">'
     +'Sample: <b style="color:#94a3b8">'+vm.pop.toLocaleString()+' '+(vm.pop===1?vm.nA:vm.nP)+'</b> in scope'
     +(vm.thin?(' &middot; below '+_YVY_MIN_POP+', so the ranked and comparative sections are held back rather than computed on a sample that cannot carry them'):'')
@@ -18029,10 +18100,11 @@ function _yvyRenderVM_(vm){
   // THIN: hero + sample line only. Everything below ranks, distributes or compares, and none of
   // those mean anything on a handful of activities. Suppressed, stated, never faked.
   if(vm.thin){
-    return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'+hero+sampleLine+'</div>';
+    return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'+hero+zeroLine+sampleLine+'</div>';
   }
   return '<div style="max-width:1080px;margin:0 auto;padding-bottom:12px">'
     +hero
+    +zeroLine
     +sampleLine
     +_yvyPhysRow_(vm)
     +_mrSection_(vm)
