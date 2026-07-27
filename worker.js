@@ -23695,7 +23695,17 @@ function dsAttention_(){
     return Math.round((st.rides||[]).filter(function(r){return r&&!r.deleted&&r.date&&r.date>s1&&r.date<=s0;}).reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0)); }
   var wkThis=tssWin(0,7), wkLast=tssWin(7,14);
   // Recovery / fatigue (TSB).
-  if(tsb<=-25) push(2,'recovery','Form is deep in the red ('+tsb+'). A hard session today only digs the hole deeper — swap to an easy Zone 1 spin or take the rest.');
+  // A deep TSB only opens ACTION RECOMMENDED when it is deeper than the block asked for. In a base
+  // or build phase, -28 IS the prescription: firing sev 2 there put the panel in urgent contradiction
+  // with the plan the athlete is following, and the narrator turned it into "pushing hard now
+  // extends the hole". ctx=true keeps this one out of the model entirely — there is no wording left
+  // for it to escalate into a back-off directive, which is the same structural fix the mileage gap
+  // already uses. Below the phase band, or outside the block, the urgent item stands unchanged.
+  var _tsbPlan=(typeof _tsbAsPlanned_==='function')?_tsbAsPlanned_(tsb, new Date()):null;
+  if(tsb<=-15 && _tsbPlan && _tsbPlan.build){
+    push(1,'recovery','Heavy load (form '+tsb+') — expected in '+_tsbPlan.label+', week '+_tsbPlan.week+'. The block prescribes this; hold the plan and protect sleep.', true);
+  }
+  else if(tsb<=-25) push(2,'recovery','Form is deep in the red ('+tsb+'). A hard session today only digs the hole deeper — swap to an easy Zone 1 spin or take the rest.');
   else if(tsb<=-15) push(1,'recovery','Fatigue is accumulating (form '+tsb+'). Fine mid-build, but guard your recovery and sleep this week.');
   // Training load. Detraining / low-volume warnings are suppressed in a taper
   // (inTaper): during a peak the CTL drop and reduced TSS ARE the plan, and firing
@@ -23929,6 +23939,36 @@ function openRecoveryEditor_(){
 //     readyLabel  Recovery-card gauge label when it is a FORM readiness (no HRV/RHR)
 //     readyNote   Recovery-card sub-line
 //     color       shared accent for the verdict
+// ==================== is this form what the BLOCK asked for? ====================
+// A deeply negative TSB is not a fault in a build phase — it IS the stimulus, and the block
+// prescribed it. Telling the athlete to back off then puts the dashboard in direct contradiction
+// with the plan he is following, which is the same self-contradiction class already fixed for
+// detraining-vs-taper: one number, classified by two systems that do not know about each other.
+//
+// So the load thresholds are read AGAINST the phase. A build phase earns its hole; a taper does
+// not — form still deep in the red days from an attempt means the taper is not working, and that
+// genuinely is worth an urgent word. Outside the block, or when the plan cannot answer, this
+// returns null and every threshold below behaves exactly as it did before. A null must never
+// silently soften a warning.
+var _TSB_PHASE_BAND={
+  P1:[-30,-6], P2:[-30,-6], P4:[-32,-6], P6:[-32,-6],   // build: a negative TSB is the plan working
+  P3:[-12, 14], P5:[-10, 16], P7:[-8, 20]               // taper / attempt: form has to be coming up
+};
+function _tsbBlockCtx_(now){
+  try{
+    if(typeof _tbDK_!=='function' || typeof blockPlanFor_!=='function') return null;
+    var plan=blockPlanFor_(_tbDK_(now||new Date()));
+    if(!plan || !plan.phase) return null;                       // outside the block window
+    var b=_TSB_PHASE_BAND[plan.phase]; if(!b) return null;      // a phase with no stated expectation
+    return {phase:plan.phase, label:plan.phaseLabel, week:plan.weekInPhase, lo:b[0], hi:b[1],
+            build:(b[0]<=-20)};
+  }catch(e){ return null; }
+}
+// True when today's form sits inside what this phase of the block expects of it.
+function _tsbAsPlanned_(tsb, now){
+  var c=_tsbBlockCtx_(now);
+  return (c && tsb>=c.lo && tsb<=c.hi) ? c : null;
+}
 function taperVerdict_(fit, iq, ctlRamp){
   var G='#4ade80', B='#60a5fa', A='#f59e0b', R='#e24b4a';
   var tsb=Math.round((fit&&fit.tsb)||0);
@@ -23946,6 +23986,17 @@ function taperVerdict_(fit, iq, ctlRamp){
   }
   // Overreaching: deep fatigue, legs cooked.
   if(tsb<=-25){
+    // ...unless this is exactly the load the block asked for. In a build phase a TSB of -28 is the
+    // stimulus, not a warning, and "back off before anything that matters" reads as the dashboard
+    // overruling the plan. Amber, not red, and the note names the phase so the number is legible
+    // as intent rather than damage. Outside the block (_ap null) the original wording stands.
+    var _ap=(typeof _tsbAsPlanned_==='function')?_tsbAsPlanned_(tsb, new Date()):null;
+    if(_ap && _ap.build){
+      return {phase:'overreaching', color:A,
+        trend:'Heavy load', trendNote:'Form '+tsb+' — expected in '+_ap.label+', week '+_ap.week+'. The block prescribes this load; it is the stimulus, not a hole to climb out of.',
+        load:'Heavy — as planned', loadNote:'On plan for this phase. Protect sleep and fuelling; the plan decides the sessions.',
+        readyLabel:'Loaded', readyNote:'Form readiness from planned load (TSB '+tsb+')'};
+    }
     return {phase:'overreaching', color:R,
       trend:'Overreaching', trendNote:'Deep in a load block — legs are cooked. Productive briefly, but back off before anything that matters.',
       load:'Deep', loadNote:'Heavy fatigue — protect recovery.',
