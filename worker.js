@@ -16222,7 +16222,7 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['forecast','Forecast']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -19426,12 +19426,647 @@ function aiRenderDNA_(){
   return H;
 }
 
+
+// ==================== TRAJECTORY ====================
+// Projection from real logged series. Every number on this page is one of two things:
+//   (a) arithmetic over data already in the store, or
+//   (b) an ordinary least-squares fit whose sample size, window and method are printed on the card.
+// Nothing here is modelled, and no card estimates a figure it cannot derive.
+//
+// What is deliberately absent, and why:
+//   - Scenario cards ("+10% volume -> +8W", "miss one workout -> 46%") need a dose-response
+//     relationship between training load and FTP. That cannot be derived from one athlete's
+//     history, so the number cannot be computed and the section is not rendered at all.
+//   - A projected climb TIME needs a power/weight/grade model this app does not have.
+//   - "Plateau in 18 days" is not derivable from a repeated-week pattern. The pattern is real and
+//     ships; the countdown is not and does not.
+//   - "+8W within 5 weeks" and a confidence figure attached to it are the same class of number.
+//     The limiter FINDING is computable and ships; the projected gain does not.
+// The standing rule for anything added later: if you cannot point at the series and the formula,
+// suppress the line rather than estimate it.
+
+// Standard normal CDF (Abramowitz and Stegun 7.1.26, via erf). This is what turns a fit into a
+// confidence figure: the share of the prediction band sitting past the threshold IS the number,
+// not a separate invented one.
+function _trjPhi_(z){
+  if(!isFinite(z)) return (z>0)?1:0;
+  var sg=(z<0)?-1:1, x=Math.abs(z)/Math.SQRT2;
+  var t=1/(1+0.3275911*x);
+  var y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return 0.5*(1+sg*y);
+}
+// Whole days since the epoch, from a local calendar day. parseDayKey (not new Date(key)) because
+// the string form parses as UTC midnight and reads back a day early west of UTC.
+function _trjDay_(dateStr){
+  if(!dateStr) return null;
+  var k=String(dateStr).slice(0,10);
+  var d=(typeof parseDayKey==='function')?parseDayKey(k):new Date(k);
+  if(!d || isNaN(d.getTime())) return null;
+  return Math.round(new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()/86400000);
+}
+function _trjKey_(t){
+  if(t==null || !isFinite(t)) return null;
+  var d=new Date(Math.round(t)*86400000);
+  return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2);
+}
+var _TRJ_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _trjFmt_(t){
+  var k=_trjKey_(t); if(!k) return null;
+  return _TRJ_MON[(+k.slice(5,7))-1]+' '+(+k.slice(8,10));
+}
+function _trjFmtY_(t){
+  var k=_trjKey_(t); if(!k) return null;
+  return _TRJ_MON[(+k.slice(5,7))-1]+' '+(+k.slice(8,10))+', '+k.slice(0,4);
+}
+function _trjTodayT_(){ var d=new Date(); return Math.round(new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime()/86400000); }
+function _trjMondayT_(t){ var dw=new Date(Math.round(t)*86400000).getUTCDay(); return t-((dw===0)?6:dw-1); }
+
+// Ordinary least squares with a genuine prediction interval. Returns null rather than a weak fit:
+// fewer than minN points, or a span too short for a slope to mean anything, is a suppression, not
+// a smaller number.
+var TRJ_WINDOW=84;        // 12 weeks of trailing data
+var TRJ_MIN_SPAN=42;      // and at least 6 weeks actually covered
+function _trjFit_(pts, opts){
+  opts=opts||{};
+  var minN=(opts.minN!=null)?opts.minN:4;
+  var minSpan=(opts.minSpan!=null)?opts.minSpan:TRJ_MIN_SPAN;
+  if(!Array.isArray(pts)) return null;
+  var p=pts.filter(function(x){ return x && isFinite(x.t) && isFinite(x.y); })
+           .sort(function(a,b){ return a.t-b.t; });
+  // n-2 degrees of freedom: three points is the floor at which a residual spread exists at all.
+  if(p.length<minN || p.length<3) return null;
+  var span=p[p.length-1].t-p[0].t;
+  if(span<minSpan) return null;
+  var n=p.length, sx=0, sy=0, i;
+  for(i=0;i<n;i++){ sx+=p[i].t; sy+=p[i].y; }
+  var mx=sx/n, my=sy/n, sxx=0, sxy=0, dx;
+  for(i=0;i<n;i++){ dx=p[i].t-mx; sxx+=dx*dx; sxy+=dx*(p[i].y-my); }
+  if(!(sxx>0)) return null;
+  var slope=sxy/sxx, intercept=my-slope*mx, ss=0, e;
+  for(i=0;i<n;i++){ e=p[i].y-(intercept+slope*p[i].t); ss+=e*e; }
+  var resid=Math.sqrt(ss/(n-2));
+  var fit={ n:n, span:span, slope:slope, intercept:intercept, resid:resid, sxx:sxx, meanT:mx,
+            slopeSE:(sxx>0?resid/Math.sqrt(sxx):null),
+            firstT:p[0].t, lastT:p[n-1].t, firstY:p[0].y, lastY:p[n-1].y, pts:p };
+  fit.at=function(t){ return intercept+slope*t; };
+  // Prediction interval for a NEW observation: residual spread plus the uncertainty in the line.
+  fit.se=function(t){ return resid*Math.sqrt(1+1/n+((t-mx)*(t-mx))/sxx); };
+  fit.pAtLeast=function(t,target){ var sd=fit.se(t); if(!(sd>0)) return (fit.at(t)>=target)?1:0; return 1-_trjPhi_((target-fit.at(t))/sd); };
+  fit.pAtMost=function(t,target){ var sd=fit.se(t); if(!(sd>0)) return (fit.at(t)<=target)?1:0; return _trjPhi_((target-fit.at(t))/sd); };
+  fit.crossT=function(target){
+    if(!(Math.abs(slope)>1e-9)) return null;
+    var t=(target-intercept)/slope; return isFinite(t)?t:null;
+  };
+  return fit;
+}
+function _trjWindow_(rows, windowDays){
+  var today=_trjTodayT_(), lo=today-(windowDays||TRJ_WINDOW);
+  return (rows||[]).filter(function(r){ return r && r.t!=null && r.t>=lo && r.t<=today; });
+}
+function _trjWeightPts_(){
+  var wl=(typeof st!=='undefined'&&st&&Array.isArray(st.weightLog))?st.weightLog:[];
+  return _trjWindow_(wl.map(function(w){
+    var v=(w&&w.weight!=null)?parseFloat(w.weight):NaN;
+    return (w&&w.date&&isFinite(v))?{t:_trjDay_(w.date), y:v}:null;
+  }).filter(function(x){return x&&x.t!=null;}));
+}
+function _trjCtlPts_(){
+  var fs2=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  return _trjWindow_(fs2.map(function(p){
+    return (p&&p.date&&p.ctl!=null&&isFinite(+p.ctl))?{t:_trjDay_(p.date), y:+p.ctl}:null;
+  }).filter(function(x){return x&&x.t!=null;}));
+}
+// ftpHistory records CHANGES ONLY -- ftpRecord_ no-ops when the value is unchanged -- so it is a
+// sparse step log, not a sampled series. Expanding it to one point per day through ftpOn_ would
+// manufacture flat stretches that shrink the residual spread and hand back a falsely tight band,
+// which is the failure mode this page exists to avoid. The real entries are used as they are, and
+// when there are too few the FTP projection is suppressed instead of fitted to two points.
+function _trjFtpPts_(){
+  var h=(typeof _ftpHist_==='function')?_ftpHist_():[];
+  return _trjWindow_(h.map(function(e){
+    return (e&&e.date&&e.ftp!=null&&isFinite(+e.ftp))?{t:_trjDay_(e.date), y:+e.ftp}:null;
+  }).filter(function(x){return x&&x.t!=null;}));
+}
+function _trjRecoveryPts_(){
+  var rl=(typeof st!=='undefined'&&st&&Array.isArray(st.recoveryLog))?st.recoveryLog:[];
+  return _trjWindow_(rl.map(function(x){
+    return (x&&x.date&&x.hrv!=null&&isFinite(+x.hrv))?{t:_trjDay_(x.date), y:+x.hrv}:null;
+  }).filter(function(x){return x&&x.t!=null;}));
+}
+
+// ---- presentation helpers ----
+function _trjPct_(p){ return Math.max(0,Math.min(100,Math.round((p||0)*100))); }
+function _trjSec_(n,label,sub){
+  return '<div style="display:flex;align-items:center;gap:9px;margin:22px 0 10px">'
+    +'<div style="flex:none;width:19px;height:19px;border-radius:5px;border:1px solid #FC4C02;color:#FC4C02;'
+    +'font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">'+n+'</div>'
+    +'<div style="font-size:11.5px;font-weight:800;letter-spacing:.09em;color:#cbd5e1">'+aiEsc_(label)+'</div>'
+    +(sub?'<div style="font-size:11.5px;color:#5b6678">'+aiEsc_(sub)+'</div>':'')
+    +'</div>';
+}
+function _trjMethod_(txt){
+  return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid #1c2130;font-size:10.5px;'
+    +'line-height:1.45;color:#5b6678">'+aiEsc_(txt)+'</div>';
+}
+function _trjBar_(pct,col){
+  return '<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden;margin-top:7px">'
+    +'<div style="height:100%;width:'+pct+'%;background:'+(col||'#FC4C02')+';border-radius:3px"></div></div>';
+}
+function _trjNote_(txt){
+  return '<div style="font-size:11.5px;color:#5b6678;line-height:1.5">'+aiEsc_(txt)+'</div>';
+}
+
+// ---- 1. Destination ----
+// The destination itself is a REAL dated event out of the training block, not a guess. What is
+// projected against it is whichever metric actually has a fittable series: FTP when the log has
+// enough genuine entries, otherwise CTL. The card always says which one it used and how many
+// points it had, because those two facts are what make the percentage checkable.
+function _trjDestination_(){
+  var eff=(typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(new Date()):[];
+  var today=_trjTodayT_(), ev=null, i, t;
+  for(i=0;i<eff.length;i++){                       // the block's main event, if it is still ahead
+    if(eff[i] && eff[i].slug==='ventop'){ t=_trjDay_(eff[i].date); if(t!=null && t>=today){ ev=eff[i]; } break; }
+  }
+  if(!ev){                                          // otherwise the next milestone of any kind
+    var best=null, bt=null;
+    for(i=0;i<eff.length;i++){ t=_trjDay_(eff[i].date); if(t!=null && t>=today && (bt==null||t<bt)){ bt=t; best=eff[i]; } }
+    ev=best;
+  }
+  if(!ev) return null;
+  var evT=_trjDay_(ev.date); if(evT==null) return null;
+  var g=(typeof _goalTargets_==='function')?_goalTargets_():{};
+
+  var ftp=_trjFit_(_trjFtpPts_(), {minN:4});
+  var out={ event:ev, eventT:evT, days:evT-today };
+  if(ftp && +g.ftpW>0){
+    out.metric='ftp'; out.unit='W'; out.fit=ftp; out.goal=+g.ftpW;
+    out.proj=ftp.at(evT); out.prob=ftp.pAtLeast(evT,+g.ftpW); out.cross=ftp.crossT(+g.ftpW);
+    out.method='Straight-line fit over your last '+Math.round(ftp.span/7)+' weeks of FTP log entries ('
+      +ftp.n+' recorded changes) and how consistent those gains have been. The percentage is the share of the '
+      +'prediction band that clears '+Math.round(+g.ftpW)+'W. A disclosed estimate, not a validated model.';
+    return out;
+  }
+  var ctl=_trjFit_(_trjCtlPts_(), {minN:14});
+  if(ctl && +g.ctl>0){
+    out.metric='ctl'; out.unit=''; out.fit=ctl; out.goal=+g.ctl;
+    out.proj=ctl.at(evT); out.prob=ctl.pAtLeast(evT,+g.ctl); out.cross=ctl.crossT(+g.ctl);
+    out.ftpWhy=(_trjFtpPts_().length<4)
+      ? ('FTP is not projected: the FTP log records changes only, and it holds '+_trjFtpPts_().length
+         +' entr'+(_trjFtpPts_().length===1?'y':'ies')+' in this window. Fewer than 4 cannot carry a trend.')
+      : null;
+    out.method='Straight-line fit over your last '+Math.round(ctl.span/7)+' weeks of CTL ('+ctl.n
+      +' daily points from Intervals) and its week-to-week variance. The percentage is the share of the '
+      +'prediction band that clears a CTL of '+Math.round(+g.ctl)+'. A disclosed estimate, not a validated model.';
+    return out;
+  }
+  out.metric=null;
+  return out;
+}
+function _trjRowProj_(icon,label,fit,goal,dir,unit,digits){
+  if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
+    +'<div style="font-size:12.5px;color:#8b97ab">'+aiEsc_(label)+'</div>'
+    +'<div style="font-size:11.5px;color:#5b6678">not enough logged data</div></div>';
+  var evT=_trjTodayT_()+28;                          // a 4-week horizon, stated on the row
+  var v=fit.at(evT), d=(digits==null?0:digits);
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
+    +'<div style="font-size:12.5px;color:#8b97ab">'+aiEsc_(label)+'</div>'
+    +'<div style="text-align:right">'
+      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9">'+v.toFixed(d)+(unit||'')+'</div>'
+      +'<div style="font-size:10.5px;color:#5b6678">'+aiEsc_(_trjFmt_(evT)||'')+' &middot; n='+fit.n+'</div>'
+    +'</div></div>';
+}
+function _trjSection1_(){
+  var d=_trjDestination_();
+  if(!d) return '';
+  var H='';
+  var left='';
+  if(d.metric){
+    var pct=_trjPct_(d.prob), goalTxt=Math.round(d.goal)+(d.unit||'');
+    var name=(d.metric==='ftp')?'FTP':'CTL (fitness)';
+    left=''
+      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:4px">You are heading for</div>'
+      +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
+      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
+      +'<div style="font-size:12.5px;color:#cbd5e1">'+pct+'% of the projection band clears your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)+'</div>'
+      +_trjBar_(pct,'#FC4C02')
+      +'<div style="display:flex;gap:22px;margin-top:16px;flex-wrap:wrap">'
+        +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">PROJECTED '+aiEsc_(name.toUpperCase())+'</div>'
+        +'<div style="font-size:17px;font-weight:700;color:#f1f5f9;margin-top:2px">'+d.proj.toFixed(d.metric==='ftp'?0:1)+(d.unit||'')+'</div>'
+        +'<div style="font-size:10.5px;color:#5b6678">on '+aiEsc_(_trjFmt_(d.eventT)||'')+'</div></div>'
+        +((d.cross!=null && d.cross>=_trjTodayT_() && d.cross<=_trjTodayT_()+730)
+           ? ('<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">TREND REACHES GOAL</div>'
+             +'<div style="font-size:17px;font-weight:700;color:#f1f5f9;margin-top:2px">'+aiEsc_(_trjFmt_(d.cross)||'')+'</div>'
+             +'<div style="font-size:10.5px;color:#5b6678">if the line holds</div></div>')
+           : '')
+      +'</div>'
+      +(d.ftpWhy?('<div style="margin-top:12px;font-size:11px;color:#8b97ab;line-height:1.5">'+aiEsc_(d.ftpWhy)+'</div>'):'')
+      +_trjMethod_(d.method);
+  } else {
+    left=''
+      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:4px">You are heading for</div>'
+      +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
+      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
+      +_trjNote_('No projection yet. Neither the FTP log nor the CTL series has enough points in the last 12 weeks '
+        +'to support a trend line, so no probability is shown rather than a guessed one.');
+  }
+  var wFit=_trjFit_(_trjWeightPts_(), {minN:6});
+  var cFit=_trjFit_(_trjCtlPts_(), {minN:14});
+  var fFit=_trjFit_(_trjFtpPts_(), {minN:4});
+  var right=''
+    +'<div style="font-size:11.5px;font-weight:700;color:#cbd5e1;margin-bottom:4px">Key Outcome Projections</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-bottom:6px">Same fit, 4 weeks out</div>'
+    +_trjRowProj_('','FTP',fFit,null,'up','W',0)
+    +_trjRowProj_('','Weight',wFit,null,'down',' lbs',1)
+    +_trjRowProj_('','CTL (fitness)',cFit,null,'up','',0)
+    +'<div style="font-size:10.5px;color:#5b6678;line-height:1.45;margin-top:9px">'
+    +'Peak week is not shown: nothing in the block defines one, so there is no date to read.</div>';
+
+  H+=_trjSec_(1,'WHERE YOU ARE HEADED','');
+  H+='<div class="trj-hero">'+aiCard_(left)+aiCard_(right)+'</div>';
+  return H;
+}
+
+// ---- 3. Predictions ----
+// Three identical weeks: a structural comparison of what was actually prescribed in each of the
+// last three complete weeks. Identical means the same multiset of type+intent. The pattern is
+// real; a day-count to a plateau is not derivable from it and is not shown.
+function _trjWeekSig_(mondayT){
+  var parts=[], d, key, list;
+  for(d=0; d<7; d++){
+    key=_trjKey_(mondayT+d); if(!key) continue;
+    list=(typeof planSessionsForDate_==='function')?planSessionsForDate_(key):[];
+    (list||[]).forEach(function(x){
+      if(!x || x.deleted) return;
+      var ty=String(x.type||'').toLowerCase();
+      if(ty==='rest') return;
+      parts.push(ty+':'+String(x.intent||'').toLowerCase());
+    });
+  }
+  return parts.sort().join('|');
+}
+function _trjPlateau_(){
+  var curMon=_trjMondayT_(_trjTodayT_()), sigs=[], i;
+  for(i=1;i<=3;i++) sigs.push(_trjWeekSig_(curMon-7*i));
+  for(i=0;i<3;i++){ if(!sigs[i]) return null; }     // an empty week proves nothing either way
+  var same=(sigs[0]===sigs[1] && sigs[1]===sigs[2]);
+  return { same:same, sessions:sigs[0].split('|').length, sig:sigs[0] };
+}
+function _trjCardFitness_(){
+  var p=_trjPlateau_();
+  if(!p) return '';
+  var body;
+  if(p.same){
+    body='<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.35">Three identical weeks in a row.</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">The last three weeks prescribed the same '
+      +p.sessions+' sessions in the same shape. Repeating a week stops adding stimulus once you have adapted to it.</div>'
+      +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">SUGGESTED CHANGE</div>'
+      +'<div style="font-size:12px;color:#cbd5e1;margin-top:2px">Add one VO2 session this week.</div>'
+      +_trjMethod_('Pattern check on the last three complete weeks. No plateau date is shown -- a repeated-week '
+        +'pattern does not tell you when adaptation stops, so that number is not computable here.');
+  } else {
+    body='<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.35">Your weeks are still varying.</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">The last three weeks were not structurally '
+      +'identical, so there is no repeated-week plateau pattern to flag.</div>';
+  }
+  return aiCard_('<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">FITNESS</div>'+body);
+}
+function _trjCardWeight_(){
+  var fit=_trjFit_(_trjWeightPts_(), {minN:6});
+  if(!fit) return '';
+  var g=(typeof _goalTargets_==='function')?_goalTargets_():{};
+  var horizon=_trjTodayT_()+28, proj=fit.at(horizon);
+  var perWk=fit.slope*7;
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#60a5fa;margin-bottom:8px">WEIGHT</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT TREND</div>'
+    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+fit.lastY.toFixed(1)+' lbs</div>'
+    +'<div style="font-size:11px;color:#8b97ab;margin-top:2px">'+(perWk>=0?'+':'')+perWk.toFixed(2)+' lbs/week</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:10px">PROJECTED</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:1px">'+proj.toFixed(1)+' lbs</div>'
+    +'<div style="font-size:10.5px;color:#5b6678">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>';
+  if(+g.weightLb>0){
+    var pr=fit.pAtMost(horizon,+g.weightLb), pc=_trjPct_(pr);
+    H+='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:10px">CHANCE OF BEING AT OR UNDER '+Math.round(+g.weightLb)+' LBS</div>'
+      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-top:1px">'+pc+'%</div>'+_trjBar_(pc,'#60a5fa');
+  }
+  H+=_trjMethod_('Least-squares fit over '+fit.n+' weigh-ins across '+Math.round(fit.span/7)+' weeks.');
+  return aiCard_(H);
+}
+// Real forecast against real scheduled sessions. A count of hot days that already have a session
+// on them -- no hydration percentage, because there is no data behind one.
+var _TRJ_HOT=82;
+function _trjHeatCard_(){
+  var wx=(typeof wxCache_!=='undefined' && wxCache_ && wxCache_.weather)?wxCache_.weather:null;
+  if(!wx || !wx.data || !wx.data.daily || !wx.data.daily.time) return '';
+  var dly=wx.data.daily, hot=[], i, key, tmax, sess;
+  for(i=0;i<dly.time.length;i++){
+    key=String(dly.time[i]).slice(0,10);
+    tmax=(dly.temperature_2m_max&&dly.temperature_2m_max[i]!=null)?+dly.temperature_2m_max[i]:null;
+    if(tmax==null || tmax<_TRJ_HOT) continue;
+    sess=(typeof getWorkoutForDate_==='function')?getWorkoutForDate_(key):null;
+    if(!sess || sess.isRest) continue;
+    hot.push({key:key, t:tmax, name:sess.name});
+  }
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#f59e0b;margin-bottom:8px">HEAT &amp; WEATHER</div>';
+  if(!hot.length){
+    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">No sessions above '+_TRJ_HOT+'&deg;F in the next 7 days.</div>'
+      +_trjMethod_('Open-Meteo daily highs for the next 7 days, matched against the sessions actually on your plan.');
+    return aiCard_(H);
+  }
+  H+='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">NEXT 7 DAYS</div>'
+    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+hot.length+' hot session'+(hot.length===1?'':'s')+'</div>'
+    +'<div style="margin-top:9px">';
+  hot.slice(0,4).forEach(function(x){
+    H+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0">'
+      +'<span style="color:#8b97ab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(_trjFmt_(_trjDay_(x.key))||'')+' &middot; '+aiEsc_(x.name||'Session')+'</span>'
+      +'<span style="color:#f59e0b;font-weight:700;flex:none">'+Math.round(x.t)+'&deg;</span></div>';
+  });
+  H+='</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">PLAN AHEAD</div>'
+    +'<div style="font-size:12px;color:#cbd5e1;margin-top:2px">Increase fluids and electrolytes on those days.</div>'
+    +_trjMethod_('Open-Meteo daily highs matched against your scheduled sessions. No hydration percentage is shown '
+      +'-- there is no measured sweat or intake data behind one.');
+  return aiCard_(H);
+}
+function _trjCardRecovery_(){
+  // Builds only if the recovery series can actually carry a trend. The HRV feed is new, so this
+  // will usually suppress -- which is the intended outcome, not a failure.
+  var fit=_trjFit_(_trjRecoveryPts_(), {minN:10, minSpan:28});
+  if(!fit) return '';
+  var horizon=_trjTodayT_()+14, proj=fit.at(horizon), perWk=fit.slope*7;
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">RECOVERY</div>'
+    +'<div style="font-size:13px;color:#cbd5e1;line-height:1.4">HRV trend is '+(perWk>=0?'rising':'falling')+'.</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">PROJECTED</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:1px">'+proj.toFixed(0)+' ms</div>'
+    +'<div style="font-size:10.5px;color:#5b6678">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>'
+    +_trjMethod_('Least-squares fit over '+fit.n+' recovery readings across '+Math.round(fit.span/7)+' weeks.');
+  return aiCard_(H);
+}
+// Pure arithmetic on the same week-set the streak card uses. Weeks, not sessions, because the
+// streak itself is defined weekly -- converting it to a session count would invent a rate.
+function _trjLongestStreak_(){
+  var set=(typeof _activeWeekSet_==='function')?_activeWeekSet_():null;
+  if(!set) return null;
+  var keys=Object.keys(set).filter(function(k){ return set[k]; }).sort();
+  if(!keys.length) return null;
+  var best=0, run=0, prev=null;
+  keys.forEach(function(k){
+    var t=_trjDay_(k);
+    if(t==null) return;
+    if(prev!=null && (t-prev)===7) run++; else run=1;
+    if(run>best) best=run;
+    prev=t;
+  });
+  return best;
+}
+function _trjCardConsistency_(){
+  if(typeof computeStreak_!=='function') return '';
+  var cur=computeStreak_(), best=_trjLongestStreak_();
+  if(best==null) return '';
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">CONSISTENCY</div>';
+  if(cur>=best){
+    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">You are on your longest streak on record.</div>'
+      +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">CURRENT STREAK</div>'
+      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+cur+' week'+(cur===1?'':'s')+'</div>';
+  } else {
+    var need=best-cur+1;
+    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">'+need+' more active week'+(need===1?'':'s')
+      +' beats your longest streak.</div>'
+      +'<div style="display:flex;gap:18px;margin-top:10px">'
+      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT</div>'
+      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+cur+'</div></div>'
+      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">LONGEST</div>'
+      +'<div style="font-size:17px;font-weight:800;color:#8b97ab;margin-top:1px">'+best+'</div></div>'
+      +'</div>';
+  }
+  H+=_trjMethod_('Counted from the same weekly activity set the streak card uses. Arithmetic, not a prediction.');
+  return aiCard_(H);
+}
+function _trjSection3_(){
+  var cards=[_trjCardFitness_(),_trjCardWeight_(),_trjHeatCard_(),_trjCardRecovery_(),_trjCardConsistency_()]
+    .filter(function(x){ return x; });
+  if(!cards.length) return '';
+  return _trjSec_(3,'PREDICTIONS','What the logged data supports')
+    +'<div class="trj-cards">'+cards.join('')+'</div>';
+}
+
+// ---- 4. Biggest opportunity ----
+// The limiter FINDING is computable: weekly seconds in each zone band, fitted over the same
+// window, and compared. What is NOT computable is what fixing it is worth in watts -- that needs
+// the dose-response curve this app cannot derive -- so no projected gain and no confidence figure
+// appear on this card.
+function _trjZoneWeeks_(){
+  var today=_trjTodayT_(), lo=today-TRJ_WINDOW;
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  var wk={}, used=0;
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var t=_trjDay_(r.date); if(t==null || t<lo || t>today) return;
+    var ftp=(typeof ftpOn_==='function')?ftpOn_(String(r.date).slice(0,10)):((typeof st!=='undefined'&&st&&st.ftp)||186);
+    var zt=(typeof rideZoneTime_==='function')?rideZoneTime_(r,ftp):null;
+    // A mean-max power curve cannot recover time-in-zone (it dumps a long ride's excess into Z1),
+    // so curve-derived rides are excluded rather than fitted.
+    if(!zt || !zt.z || zt.src==='curve') return;
+    used++;
+    var mon=_trjMondayT_(t);
+    if(!wk[mon]) wk[mon]={z2:0,z4:0,z5:0};
+    wk[mon].z2+=(zt.z[1]||0); wk[mon].z4+=(zt.z[3]||0); wk[mon].z5+=(zt.z[4]||0);
+  });
+  var mons=Object.keys(wk).map(Number).sort(function(a,b){return a-b;});
+  return { weeks:mons.map(function(m){ return {t:m, z2:wk[m].z2, z4:wk[m].z4, z5:wk[m].z5}; }), rides:used };
+}
+function _trjLimiter_(){
+  var zw=_trjZoneWeeks_();
+  if(zw.weeks.length<5 || zw.rides<8) return {thin:true, weeks:zw.weeks.length, rides:zw.rides};
+  var mk=function(k){ return _trjFit_(zw.weeks.map(function(w){ return {t:w.t, y:w[k]/60}; }), {minN:5, minSpan:28}); };
+  var f2=mk('z2'), f4=mk('z4'), f5=mk('z5');
+  if(!f2 || !f4 || !f5) return {thin:true, weeks:zw.weeks.length, rides:zw.rides};
+  var perWk=function(f){ return f.slope*7; };            // minutes per week, per week
+  var mean=function(k){ var s2=0; zw.weeks.forEach(function(w){ s2+=w[k]/60; }); return s2/zw.weeks.length; };
+  var bands=[{k:'z4',label:'Threshold',fit:f4},{k:'z2',label:'Zone 2',fit:f2},{k:'z5',label:'VO2',fit:f5}];
+  bands.forEach(function(b){ b.per=perWk(b.fit); b.avg=mean(b.k); });
+  // "Flat" means the trend cannot be told apart from zero: the slope is inside its own 95% error.
+  bands.forEach(function(b){ b.flat=(b.fit.slopeSE!=null) && (Math.abs(b.fit.slope) < 1.96*b.fit.slopeSE); });
+  var flat=bands.filter(function(b){ return b.flat; });
+  var rising=bands.filter(function(b){ return !b.flat && b.per>0; });
+  return { thin:false, bands:bands, flat:flat, rising:rising, weeks:zw.weeks.length, rides:zw.rides };
+}
+function _trjSection4_(){
+  var L=_trjLimiter_();
+  var H=_trjSec_(4,'BIGGEST OPPORTUNITY','');
+  if(L.thin){
+    // Nothing at all to explain: with zero usable rides this is an absence, not a shortfall, and a
+    // card saying so is just noise on a page that already has nothing on it.
+    if(!L.rides && !L.weeks) return '';
+    return H+aiCard_(_trjNote_('Not enough rides with real time-in-zone in the last 12 weeks to compare bands ('
+      +L.rides+' usable ride'+(L.rides===1?'':'s')+' across '+L.weeks+' week'+(L.weeks===1?'':'s')
+      +'). Curve-estimated rides are excluded because a power curve cannot recover time-in-zone.'));
+  }
+  var body='';
+  if(L.flat.length && L.rising.length){
+    var lim=L.flat[0];
+    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">'+aiEsc_(lim.label)+' is your limiter.</div>'
+      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">'+aiEsc_(lim.label)
+      +' time has not moved over the last '+L.weeks+' weeks while '
+      +aiEsc_(L.rising.map(function(b){return b.label;}).join(' and '))+' progressed.</div>';
+  } else if(L.flat.length){
+    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">Every band is flat.</div>'
+      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">No zone has a trend distinguishable '
+      +'from zero over the last '+L.weeks+' weeks, so no single limiter stands out.</div>';
+  } else {
+    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">No band is stalled.</div>'
+      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">Every zone is trending over the last '
+      +L.weeks+' weeks, so there is no flat band to call a limiter.</div>';
+  }
+  body+='<div style="margin-top:13px">';
+  L.bands.forEach(function(b){
+    var col=b.flat?'#64748b':(b.per>0?'#22c55e':'#e24b4a');
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #171b26">'
+      +'<span style="font-size:12px;color:#cbd5e1">'+aiEsc_(b.label)+'</span>'
+      +'<span style="font-size:11.5px;color:#8b97ab">'+Math.round(b.avg)+' min/wk avg</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+col+';flex:none">'
+      +(b.flat?'flat':((b.per>0?'+':'')+b.per.toFixed(1)+' min/wk')) +'</span></div>';
+  });
+  body+='</div>';
+  body+=_trjMethod_('Weekly minutes per band over '+L.weeks+' weeks from '+L.rides+' rides with real time-in-zone. '
+    +'Flat means the slope sits inside its own 95% error. No projected watt gain and no confidence figure are shown: '
+    +'converting a zone change into an FTP change needs a dose-response relationship this data cannot establish.');
+  return H+aiCard_(body);
+}
+
+// ---- 6. Confidence and momentum ----
+function _trjMomentum_(){
+  var pts=_trjCtlPts_(); if(pts.length<14) return null;
+  var byWeek={}, i, mon;
+  for(i=0;i<pts.length;i++){
+    mon=_trjMondayT_(pts[i].t);
+    if(byWeek[mon]==null || pts[i].t>=byWeek[mon].t) byWeek[mon]={t:pts[i].t,y:pts[i].y};
+  }
+  var weeks=Object.keys(byWeek).map(Number).sort(function(a,b){return a-b;});
+  if(weeks.length<3) return null;
+  var run=0;
+  for(i=weeks.length-1;i>0;i--){
+    if(byWeek[weeks[i]].y>byWeek[weeks[i-1]].y) run++; else break;
+  }
+  return { weeks:run, sampled:weeks.length, latest:byWeek[weeks[weeks.length-1]].y };
+}
+var TRJ_MILE_TARGET=10000;
+function _trjLifetime_(){
+  // All-time miles come from Strava's server-side totals. The local library is heavily
+  // tombstoned, so summing st.rides would understate the lifetime figure badly.
+  var stats=(typeof st!=='undefined'&&st&&st.athleteStats)?st.athleteStats:null;
+  if(!stats || !(+stats.rideMeters>0)) return null;
+  var cur=(+stats.rideMeters)/1609.344;
+  if(cur>=TRJ_MILE_TARGET) return {done:true, cur:cur};
+  var today=_trjTodayT_(), lo=today-TRJ_WINDOW;
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  var win=[];
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var t=_trjDay_(r.date); if(t==null || t<lo || t>today) return;
+    var mi=parseFloat(r.distance!=null?r.distance:r.miles); if(!(mi>0)) return;
+    win.push({t:t, mi:mi});
+  });
+  if(win.length<8) return null;
+  win.sort(function(a,b){ return a.t-b.t; });
+  var cum=0, pts=win.map(function(x){ cum+=x.mi; return {t:x.t, y:cum}; });
+  var fit=_trjFit_(pts, {minN:8});
+  if(!fit || !(fit.slope>0)) return null;
+  var need=TRJ_MILE_TARGET-cur;
+  var mid=today+need/fit.slope;
+  var out={ done:false, cur:cur, perWk:fit.slope*7, mid:mid, fit:fit };
+  // A range, not a date, whenever the pace itself is uncertain: the slope's own 95% interval.
+  if(fit.slopeSE!=null && fit.slopeSE>0){
+    var fast=fit.slope+1.96*fit.slopeSE, slow=fit.slope-1.96*fit.slopeSE;
+    if(fast>0) out.early=today+need/fast;
+    if(slow>0) out.late=today+need/slow;
+  }
+  return out;
+}
+function _trjSection6_(){
+  var d=_trjDestination_(), mom=_trjMomentum_(), life=_trjLifetime_();
+  var cards=[];
+  if(d && d.metric && d.prob!=null){
+    var pc=_trjPct_(d.prob);
+    cards.push(aiCard_(
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#8b97ab;margin-bottom:8px">PREDICTION CONFIDENCE</div>'
+      +'<div style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+pc+'%</div>'
+      +_trjBar_(pc,'#FC4C02')
+      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:9px;line-height:1.5">The same figure as the destination card: '
+      +'the share of the projection band that clears your goal. It is not a separate score.</div>'));
+  }
+  if(mom){
+    cards.push(aiCard_(
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">MOMENTUM</div>'
+      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;line-height:1.15">'
+      +(mom.weeks>0?(mom.weeks+' week'+(mom.weeks===1?'':'s')+' rising'):'No rising streak')+'</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">'
+      +(mom.weeks>0
+        ? ('CTL has increased '+mom.weeks+' week'+(mom.weeks===1?'':'s')+' in a row, now at '+mom.latest.toFixed(0)+'.')
+        : ('CTL did not rise last week. Now at '+mom.latest.toFixed(0)+'.'))+'</div>'
+      +_trjMethod_('Counted from weekly CTL over '+mom.sampled+' weeks. Arithmetic on a logged series, not a prediction.')));
+  }
+  if(life && !life.done){
+    var range=(life.early!=null && life.late!=null && Math.abs(life.late-life.early)>21);
+    cards.push(aiCard_(
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">LIFETIME MILES</div>'
+      +'<div style="font-size:13px;color:#cbd5e1;line-height:1.45">At your recent pace you pass '
+      +TRJ_MILE_TARGET.toLocaleString()+' lifetime miles '
+      +(range?('between '+aiEsc_(_trjFmt_(life.early)||'')+' and '+aiEsc_(_trjFmtY_(life.late)||''))
+             :('around '+aiEsc_(_trjFmtY_(life.mid)||'')))+'.</div>'
+      +'<div style="display:flex;gap:18px;margin-top:11px">'
+      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT</div>'
+      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+Math.round(life.cur).toLocaleString()+' mi</div></div>'
+      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">RECENT PACE</div>'
+      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+life.perWk.toFixed(0)+' mi/wk</div></div>'
+      +'</div>'
+      +_trjMethod_('Lifetime total from Strava server-side totals (the local library is heavily tombstoned and would '
+        +'understate it). Pace fitted over the last 12 weeks of rides'
+        +(range?'; shown as a range because the pace itself varies enough that a single date would overstate precision.':'.'))));
+  }
+  if(!cards.length) return '';
+  return _trjSec_(6,'CONFIDENCE &amp; MOMENTUM','')+'<div class="trj-cards">'+cards.join('')+'</div>';
+}
+
+// Weather is fetched, not stored, so the heat card fills in on arrival and the tab repaints once.
+var _trjWxAsked=false;
+function _trjKickWeather_(){
+  if(_trjWxAsked) return;
+  if(typeof wxCache_!=='undefined' && wxCache_ && wxCache_.weather) return;   // already have it
+  if(typeof getWeather_!=='function') return;
+  _trjWxAsked=true;
+  try{
+    getWeather_().then(function(){
+      try{ if(_aiTab==='trajectory' && _aiMount) aiRenderOverview_(_aiMount); }catch(e){}
+    });
+  }catch(e){}
+}
+function aiRenderTrajectory_(){
+  var css='<style>'
+    +'.trj-hero{display:grid;grid-template-columns:1.55fr 1fr;gap:12px;align-items:stretch}'
+    +'.trj-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;align-items:stretch}'
+    +'@media(max-width:820px){.trj-hero{grid-template-columns:1fr}}'
+    +'</style>';
+  var parts=[_trjSection1_(), _trjSection3_(), _trjSection4_(), _trjSection6_()].filter(function(x){ return x; });
+  try{ _trjKickWeather_(); }catch(e){}
+  if(!parts.length){
+    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
+      +'Not enough logged history yet to project anything honestly.<br>'
+      +'Trajectory needs several weeks of weight, CTL or FTP entries before it will show a trend.</div>';
+  }
+  return css+parts.join('')
+    +'<div style="margin:20px 0 4px;padding-top:11px;border-top:1px solid #1c2130;font-size:10.5px;color:#5b6678;line-height:1.55">'
+    +'Every figure here is a straight-line fit over your own logged data, with its sample size shown. '
+    +'Scenario comparisons and race-time predictions are deliberately absent: they need a dose-response '
+    +'relationship between training and adaptation that cannot be derived from one athlete&rsquo;s history.</div>';
+}
+
 function aiRenderTab_(tab, ded){
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
   if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">DNA — render error.</div>';
+  if(tab==='trajectory') return _aiSafe_('Trajectory', function(){return aiRenderTrajectory_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Trajectory — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
@@ -37187,7 +37822,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-segment-name-refresh';
+window.__BUILD__ = '2026-07-28-trajectory';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
