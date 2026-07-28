@@ -10223,6 +10223,48 @@ function getWorkoutForDate_(dateKey){
   return null;
 }
 
+// Calories actually BURNED on a date, from every logged activity of any sport.
+//
+// REAL VALUES ONLY. A record with no calories contributes nothing — no estimate is synthesised
+// from duration or power, because a fabricated burn becomes a fabricated fuelling target and the
+// athlete eats against it. The previous version of this added a flat 250 per strength session and
+// 180 per core session; those are gone. A Garmin strength session that carries real calories
+// still counts, because it arrives in st.rides with a calories field like anything else.
+//
+// st.rides carries EVERY sport, which is what makes this an any-activity read rather than a
+// rides-and-runs one. Returns {cal, n, sources:[...]} so a caller can show what it counted.
+function burnedCalsForDate_(dateKey){
+  var out={cal:0, n:0, sources:[]};
+  var key=(typeof normDate==='function')?normDate(dateKey):dateKey;
+  var take=function(r, label){
+    if(!r || r.deleted || !r.date) return;
+    var d=(typeof normDate==='function')?normDate(r.date):r.date;
+    if(d!==key) return;
+    var c=parseFloat(r.calories);
+    if(!(c>0)) return;                       // missing or zero: contributes nothing, by design
+    out.cal+=Math.round(c); out.n++;
+    out.sources.push({name:(r.name||label||'Activity'), cal:Math.round(c),
+                      sport:(typeof _actSport_==='function')?_actSport_(r,label):label});
+  };
+  try{ (st.rides||[]).forEach(function(r){ take(r,'ride'); }); }catch(e){}
+  try{ (st.runs||[]).forEach(function(r){ take(r,'run'); }); }catch(e){}
+  return out;
+}
+// The day's fuelling target once real activity is accounted for. Returns the three figures the
+// surfaces display, so the header and the meal-plan card cannot show different arithmetic.
+//
+// Base EXCLUDES the prescribed-session estimate whenever a real burn exists: the estimate was a
+// stand-in for the very session now measured. Keeping both would inflate every training day by
+// the estimate (about 340 kcal on a 45-minute VO2 at 190W FTP) and the athlete would eat it.
+function fuelBudgetForDate_(dateKey){
+  var tgt=(typeof calcTrainingAwareTargets_==='function')?calcTrainingAwareTargets_(dateKey):null;
+  if(!tgt) return null;
+  var burn=(typeof burnedCalsForDate_==='function')?burnedCalsForDate_(dateKey):{cal:0,n:0,sources:[]};
+  var estimated=(tgt.exerciseCal!=null)?tgt.exerciseCal:0;
+  var base=(burn.cal>0 && tgt.baseCal!=null) ? tgt.baseCal : tgt.cal;
+  return { base:Math.round(base), burned:burn.cal, total:Math.round(base+burn.cal),
+           n:burn.n, sources:burn.sources, replacedEstimate:(burn.cal>0?estimated:0), tgt:tgt };
+}
 // Training-aware daily targets, replacing the fixed HIGH/MOD/LOW weekly
 // pattern with real numbers derived from today's actual scheduled ride
 // duration and the athlete's real FTP/weight. Falls back to the old
@@ -10265,6 +10307,7 @@ function calcTrainingAwareTargets_(dateKey){
       sodium:2300, fluidOz:fluidGoalOz_(dateKey, wt, workout),
       mag:parseInt(st.magBase||400),   // light/rest-day magnesium baseline (editable)
       workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
+      exerciseCal:0, baseCal:base.cal,
       isTrainingAware:false
     };
   }
@@ -10283,6 +10326,9 @@ function calcTrainingAwareTargets_(dateKey){
   // Exercise calorie burn estimate: ~8 kcal/min at moderate endurance
   // effort scaled by FTP relative to a 200W reference rider, consistent
   // with the app's other ride-calorie estimates elsewhere in the code.
+  // ESTIMATE for the PRESCRIBED session. Exposed on the return (exerciseCal/baseCal) because the
+  // moment a real activity is logged this estimate must come OUT of the budget — otherwise the
+  // day is fuelled for the session twice, once predicted and once measured.
   var exerciseCal=Math.round(workout.minutes*8*(ftp/200));
   var restingCal=Math.round(wt*12); // baseline non-training-day calories
   var cal=restingCal+exerciseCal;
@@ -10300,7 +10346,8 @@ function calcTrainingAwareTargets_(dateKey){
   var mag=Math.min(parseInt(st.magPeak||1000), Math.round(parseInt(st.magBase||400) + hours*(workout.isHard?250:150)));
   return {
     cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz, mag:mag,
-    workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true
+    workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true,
+    exerciseCal:exerciseCal, baseCal:Math.max(0, cal-exerciseCal)
   };
 }
 
@@ -10558,54 +10605,24 @@ function renderNutr(){
   var ds=days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();
   var t=document.getElementById('NUTR');if(!t)return;
 
-  // Exercise calories earned from all logged activity on this date
-  var exCal=0;
-  if(st.rides){
-    st.rides.forEach(function(r){
-      if(r.date===nutrDate&&r.calories) exCal+=r.calories;
-    });
-  }
-  // Strength sessions: estimate ~250 cal per completed session
-  if(st.weeks){
-    var wks=Object.keys(st.weeks);
-    wks.forEach(function(wk){
-      var ws=st.weeks[wk];
-      // Strength A/B
-      ['A','B'].forEach(function(lt){
-        var sk='str'+lt;
-        if(ws[sk]&&ws[sk].date===nutrDate){
-          var done=0,total=0;
-          Object.keys(ws[sk]).forEach(function(k){
-            if(k!=='date'&&typeof ws[sk][k]==='object'){
-              Object.keys(ws[sk][k]).forEach(function(si){
-                total++;
-                if(ws[sk][k][si]&&ws[sk][k][si].done) done++;
-              });
-            }
-          });
-          if(done>0) exCal+=250;
-        }
-      });
-      // Core session
-      if(ws.core&&ws.core.date===nutrDate){
-        var cdone=0;
-        Object.keys(ws.core).forEach(function(k){
-          if(k!=='date'&&typeof ws.core[k]==='object'){
-            Object.keys(ws.core[k]).forEach(function(si){
-              if(ws.core[k][si]&&ws.core[k][si].done) cdone++;
-            });
-          }
-        });
-        if(cdone>0) exCal+=180;
-      }
-    });
-  }
-  var budgetCal = tgt.cal + exCal;
+  // Burned calories: the ONE shared reader, so this card and the page header cannot disagree.
+  // Real r.calories only — the flat 250-per-strength and 180-per-core estimates that used to be
+  // added here were fabricated numbers driving a real fuelling decision.
+  var _fuel=(typeof fuelBudgetForDate_==='function')?fuelBudgetForDate_(nutrDate):null;
+  var exCal=_fuel?_fuel.burned:0;
+  var budgetCal = _fuel ? _fuel.total : tgt.cal;
+  var baseCal   = _fuel ? _fuel.base  : tgt.cal;
   var remCal = budgetCal - tot.cal;
   var calPct = Math.min(100, Math.round(tot.cal/budgetCal*100));
   var overBudget = remCal < 0;
 
   // Day type label
+  var _hdrFuel=(typeof fuelBudgetForDate_==='function')?fuelBudgetForDate_(nutrDate):null;
+  // Rule 5: the header must carry the adjustment too, not just the meal-plan card. Same shared
+  // reader, so the two can never print different totals.
+  var _fuelLine = (_hdrFuel && _hdrFuel.burned>0)
+    ? ('Base '+_hdrFuel.base.toLocaleString()+' + Burned '+_hdrFuel.burned.toLocaleString()+' = '+_hdrFuel.total.toLocaleString()+' cal')
+    : '';
   var dayLabel = trainingTgt.isTrainingAware
     ? (trainingTgt.workoutName+' &middot; '+Math.round(trainingTgt.workoutMinutes)+' min')
     : (trainingTgt.workoutName||'Rest day');
@@ -10627,7 +10644,9 @@ function renderNutr(){
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0">';
   h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
   h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
-  h+='<div style="font-size:11px;color:var(--t3);font-weight:500;margin-top:2px">'+dayLabel+'</div></div>';
+  h+='<div style="font-size:11px;color:var(--t3);font-weight:500;margin-top:2px">'+dayLabel+'</div>'
+    +(_fuelLine?('<div style="font-size:12px;color:#fff;font-weight:700;margin-top:4px;opacity:.95">'+_fuelLine+'</div>'):'')
+    +'</div>';
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
 
@@ -10658,7 +10677,8 @@ function renderNutr(){
   h+='</svg>';
   h+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">';
   h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Food</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+tot.cal+'</span></div>';
-  if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Exercise</span><span style="font-size:12px;font-weight:600;color:#639922">-'+exCal+'</span></div>';
+  if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Base</span><span style="font-size:12px;font-weight:600;color:var(--t2)">'+baseCal.toLocaleString()+'</span></div>';
+  if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Burned</span><span style="font-size:12px;font-weight:600;color:#639922">-'+exCal+'</span></div>';
   h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Budget</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+budgetCal+'</span></div>';
   h+='</div></div></div>';
 
@@ -36964,7 +36984,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-jan26-backfill';
+window.__BUILD__ = '2026-07-28-burn-adjusted-fuel';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
