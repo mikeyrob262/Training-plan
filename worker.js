@@ -10167,8 +10167,31 @@ function getWorkoutForDate_(dateKey){
     return fallback;
   };
 
+  // ---- 0. inside the training block, is st.plan's answer actually OWNED by the user?
+  // A day the user planned or completed wins over the block, always. A day still carrying
+  // generator residue does NOT: that residue can be stale (a plan generated before the block
+  // existed, or generated from a non-Monday start, which used to rotate the whole week), and a
+  // stale VO2 sitting on a Rest+Mobility Monday is exactly how this page came to fuel 2,630
+  // calories for a rest day.
+  var _inBlock=false;
+  try{
+    if(typeof _trainingBlock_==='function'){
+      var _tb=_trainingBlock_();
+      _inBlock=!!(_tb && dateKey>=_tb.start && dateKey<=_tb.end);
+    }
+  }catch(e){}
+  var _planOwned=true;
+  if(_inBlock){
+    try{
+      var _ps=(typeof planSessionsForDate_==='function')?planSessionsForDate_(dateKey):[];
+      _planOwned=_ps.some(function(x){
+        return (typeof _planUserOwned_==='function' && _planUserOwned_(x)) || (x && x.status==='completed');
+      });
+    }catch(e){ _planOwned=true; }
+  }
+
   // ---- 1. the persistent plan
-  var _ov=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
+  var _ov=(_planOwned && typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
   if(_ov && _ov.name){
     var f1=_fuelable(_ov.sessions&&_ov.sessions.length?_ov.sessions:[{type:_ov.type, intent:_ov.intent, name:_ov.name}]);
     if(!f1.length) return _restResult('Rest + mobility');
@@ -21032,7 +21055,13 @@ function _icuFetchIntervals_(r, cb){
 // Resolve the completed ride for a session: its linked ride, else the day's activity.
 function _debriefRideFor_(dateKey, s){
   if(s && s.completedRideKey && st.rides){ for(var i=0;i<st.rides.length;i++){ var r=st.rides[i]; if(r && !r.deleted && (typeof rideKey==='function'?rideKey(r):r.id)===s.completedRideKey) return r; } }
-  if(typeof findActivityForDate==='function'){ var a=findActivityForDate(dateKey); if(a && a.obj) return a.obj; }
+  // st.rides carries EVERY sport, so the day's first activity may be a weight-training or walk
+  // record. A ride debrief handed one of those describes a strength session as an easy spin.
+  // Take the day's first activity whose sport is actually 'ride', or none.
+  if(typeof activitiesForDate_==='function'){
+    var _acts=activitiesForDate_(dateKey);
+    for(var _ai=0;_ai<_acts.length;_ai++){ if(_acts[_ai] && _acts[_ai].sport==='ride' && _acts[_ai].obj) return _acts[_ai].obj; }
+  }
   return null;
 }
 // PURE. Match prescribed work intervals (from steps) to the ride's actual WORK intervals. Maps only
@@ -29772,7 +29801,11 @@ function generatePlanBlock_(startKey, weeks){
         // Only WRITE the template on a day with no user-owned / completed session (respect a
         // day the user has planned); its residue is already cleaned above.
         if(existing.some(function(s){ return _planUserOwned_(s) || (s && s.status==='completed'); })){ out.kept.push(key); continue; }
-        var keys=(PLAN_TEMPLATE_[d]||[]).slice();
+        // Index by the REAL weekday of this date, not by the offset from the start date.
+        // PLAN_TEMPLATE_ is a Mon..Sun table; reading it with d (0..6 from startKey) only lined up
+        // when the caller happened to pass a Monday, and silently rotated the whole week otherwise.
+        var _wd=(dt.getDay()+6)%7;                       // 0=Mon .. 6=Sun
+        var keys=(PLAN_TEMPLATE_[_wd]||[]).slice();
         // Race taper (§3.6): no loaded strength within 72h before a race — that slot -> Mobility.
         if(loadedTaper_(dt)) keys=keys.map(function(k){ return (SESSION_DEFS[k] && SESSION_DEFS[k].type==='strength') ? 'mobility' : k; });
         keys.forEach(function(intent){
