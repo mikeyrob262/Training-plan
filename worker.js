@@ -34206,7 +34206,7 @@ function syncSegmentPRs_(silent, cb){
         var cnt=(stats.effort_count!=null)?stats.effort_count:null;
         var id='s'+s.id, cur=st.segments[id]||{};
         st.segments[id]=Object.assign(cur,{
-          id:id, name:s.name||cur.name||'Segment',
+          id:id, name:(cur.nameEdited?(cur.name||s.name):(s.name||cur.name))||'Segment',
           distMi:(s.distance!=null?Math.round(s.distance/1609.344*100)/100:cur.distMi)||null,
           grade:(s.average_grade!=null?s.average_grade:cur.grade),
           prSec:(prSec!=null?prSec:cur.prSec)||null, prDate:prDate||cur.prDate||null,
@@ -34300,7 +34300,7 @@ function syncRidePRs_(days, silent, cb){
           // first sync happened to see. Writing it only when absent, and only inside the
           // faster-wins branch above, meant a name stored once was never corrected again.
           // Passed through byte-for-byte: no case change, no trimming, no length cap.
-          if(se.name && se.name!==cur.name){
+          if(se.name && se.name!==cur.name && !cur.nameEdited){
             try{ console.log('[segPR] rename '+key+': "'+cur.name+'" -> "'+se.name+'"'); }catch(e){}
             cur.name=se.name; renamed++;
           }
