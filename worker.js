@@ -12209,6 +12209,39 @@ function streakCardHTML_(){
     +'</div>';
 }
 
+// Days-to-next-milestone card for the mobile home screen. Reads _blockNextMilestone_, the same
+// resolver the Plan tab uses, so the home screen and the Plan roadmap can never quote different
+// days for the same milestone. Renders NOTHING outside the block window or once the block is
+// complete — an empty slot beats a countdown to a date that has passed.
+function milestoneCardHTML_(){
+  var nm=null;
+  try{ nm=(typeof _blockNextMilestone_==='function')?_blockNextMilestone_(new Date()):null; }catch(e){ nm=null; }
+  if(!nm || !nm.m) return '';
+  var days=nm.days, label=nm.m.label;
+  // A slid gate says so. The Plan tab already makes this distinction; the home screen would be
+  // quietly wrong without it, since a slidable date is not the date originally planned.
+  var slid=(nm.m.slidWeeks>0 && nm.m.baseDate);
+  var sub = days===0 ? 'Today'
+          : days===1 ? 'Tomorrow'
+          : (typeof _blockFmtDate_==='function' ? _blockFmtDate_(nm.m.date) : nm.m.date);
+  if(slid) sub += ' (moved from '+((typeof _blockFmtDate_==='function')?_blockFmtDate_(nm.m.baseDate):nm.m.baseDate)+')';
+  var flagSvg =
+    '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:none">'
+    +'<path d="M4 22V4"/><path d="M4 4h13l-2.2 3.5L17 11H4z"/>'
+    +'</svg>';
+  return '<div onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+nm.m.date+'&#39;)" style="margin:0 16px 20px;background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer">'
+    +'<div style="display:flex;align-items:center;gap:14px">'
+    +flagSvg
+    +'<div>'
+    +'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3)">Next milestone</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--t1);margin-top:2px">'+label+'</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+sub+'</div>'
+    +'</div></div>'
+    +'<div style="text-align:right"><span style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+days+'</span>'
+    +'<span style="font-size:13px;color:var(--t3);margin-left:4px">'+(days===1?'day':'days')+'</span></div>'
+    +'</div>';
+}
+
 function showHomeDash(){
   showScreen('HOME_DASH');
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
@@ -12292,8 +12325,13 @@ function showHomeDash(){
     +'<div id="home-readiness-freshness" style="font-size:10px;color:var(--t3);margin-top:8px;text-align:right"></div>'
     +'</div>';
 
-  // Activity streak card (shared renderer, both dashboards)
-  html+=streakCardHTML_();
+  // Days to the next milestone, in the slot the Activity Streak card used to hold.
+  // The streak was removed from this screen on purpose: it counts weeks off the ride library,
+  // and a tombstoned record that a merge silently re-buried moved the number for reasons
+  // unrelated to training. A milestone is a date. computeStreak_ and streakCardHTML_ are kept
+  // (Athlete IQ still shows the count in its stat row) — this is a placement decision, not a
+  // deletion of the metric.
+  html+=milestoneCardHTML_();
 
   // Today's Plan - reads today's real session(s) from st.plan (NOT the old ws{} DOM template,
   // which is what surfaced the "Group Ride / Zone 2 / 2 min" artifact). Prescription renders via
@@ -37025,7 +37063,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-restore-tombstone-fix';
+window.__BUILD__ = '2026-07-28-home-milestone-card';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
