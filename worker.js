@@ -10379,7 +10379,10 @@ function calcFuelTheWorkout_(dateKey){
 
 function getNDay(k){if(!st.nl)st.nl={};if(!st.nl[k])st.nl[k]={meals:{breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]},water:0};var d=st.nl[k];if(!d.meals)d.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'].forEach(function(m){if(!d.meals[m])d.meals[m]=[];});return d;}
 function getDTots(k){var nd=getNDay(k),t={cal:0,p:0,c:0,f:0};if(!nd.meals)nd.meals={breakfast:[],preworkout:[],during:[],postworkout:[],lunch:[],dinner:[],snacks:[]};MEAL_BUCKETS.forEach(function(m){(nd.meals[m]||[]).forEach(function(i){if(i.deleted)return;t.cal+=i.cal||0;t.p+=i.p||0;t.c+=i.c||0;t.f+=i.f||0;});});return t;}
-function getDType(k){var d=new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return DTYPE[idx]||'MOD';}
+// Weekday for the HIGH/MOD/LOW baseline. Uses parseDayKey for the same reason the header does:
+// new Date('YYYY-MM-DD') is UTC-parsed, so west of UTC this returned YESTERDAY's day type and
+// therefore yesterday's calorie baseline. Unlike the header, that one silently moved a number.
+function getDType(k){var d=(typeof parseDayKey==='function')?parseDayKey(k):new Date(k),dow=d.getDay(),idx=dow===0?6:dow-1;return DTYPE[idx]||'MOD';}
 // Single source of truth for a day's nutrition, so the dashboard, calendar tab
 // and nutrition page can't diverge (the dashboard cards previously printed
 // hardcoded mockup numbers). Consumed from the food log (getDTots + water),
@@ -10603,7 +10606,11 @@ function renderNutr(){
   var waterPctOz=Math.min(100,Math.round(waterOz/waterTgtOz*100));
   var dt=getDType(nutrDate),tgt={cal:trainingTgt.cal,pro:trainingTgt.pro,carb:trainingTgt.carb,fat:trainingTgt.fat};
   var fuelPlan=calcFuelTheWorkout_(nutrDate);
-  var d=new Date(nutrDate);
+  // parseDayKey, NOT new Date(key): the string form is parsed as UTC midnight and then read
+  // with local getters, so at UTC-4 'Jul 28' rendered as Jul 27. The data was always right —
+  // only the label was a day behind, which is the worse kind of wrong because it looks like
+  // stale data rather than a formatting fault.
+  var d=(typeof parseDayKey==='function')?parseDayKey(nutrDate):new Date(nutrDate);
   var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   var ds=days[d.getDay()]+', '+months[d.getMonth()]+' '+d.getDate();
   var t=document.getElementById('NUTR');if(!t)return;
@@ -10623,8 +10630,13 @@ function renderNutr(){
   var _hdrFuel=(typeof fuelBudgetForDate_==='function')?fuelBudgetForDate_(nutrDate):null;
   // Rule 5: the header must carry the adjustment too, not just the meal-plan card. Same shared
   // reader, so the two can never print different totals.
-  var _fuelLine = (_hdrFuel && _hdrFuel.burned>0)
-    ? ('Base '+_hdrFuel.base.toLocaleString()+' + Burned '+_hdrFuel.burned.toLocaleString()+' = '+_hdrFuel.total.toLocaleString()+' cal')
+  // ALWAYS shown, including at zero burn. A flat total is a number you have to take on faith;
+  // the parts are what make it checkable. At zero it says so explicitly rather than vanishing,
+  // because an absent line is indistinguishable from a broken one.
+  var _fuelLine = _hdrFuel
+    ? (_hdrFuel.burned>0
+        ? ('Base '+_hdrFuel.base.toLocaleString()+' + Burned '+_hdrFuel.burned.toLocaleString()+' = '+_hdrFuel.total.toLocaleString()+' cal')
+        : ('Base '+_hdrFuel.base.toLocaleString()+' cal + nothing burned yet'))
     : '';
   var dayLabel = trainingTgt.isTrainingAware
     ? (trainingTgt.workoutName+' &middot; '+Math.round(trainingTgt.workoutMinutes)+' min')
@@ -10648,7 +10660,7 @@ function renderNutr(){
   h+='<button id="nutr-prev" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>';
   h+='<div style="text-align:center"><div style="font-size:16px;font-weight:800;color:var(--t1)">'+ds+'</div>';
   h+='<div style="font-size:11px;color:var(--t3);font-weight:500;margin-top:2px">'+dayLabel+'</div>'
-    +(_fuelLine?('<div style="font-size:12px;color:#fff;font-weight:700;margin-top:4px;opacity:.95">'+_fuelLine+'</div>'):'')
+    +(_fuelLine?('<div style="font-size:12px;color:var(--t2);font-weight:700;margin-top:4px">'+_fuelLine+'</div>'):'')
     +'</div>';
   h+='<button id="nutr-next" style="background:var(--s2);border:1px solid var(--b1);color:var(--t2);width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>';
   h+='</div>';
@@ -10680,7 +10692,8 @@ function renderNutr(){
   h+='</svg>';
   h+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">';
   h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Food</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+tot.cal+'</span></div>';
-  if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Base</span><span style="font-size:12px;font-weight:600;color:var(--t2)">'+baseCal.toLocaleString()+'</span></div>';
+  h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Base</span><span style="font-size:12px;font-weight:600;color:var(--t2)">'+baseCal.toLocaleString()+'</span></div>';
+  if(!exCal) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Burned</span><span style="font-size:12px;font-weight:600;color:var(--t3)">0</span></div>';
   if(exCal>0) h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Burned</span><span style="font-size:12px;font-weight:600;color:#639922">-'+exCal+'</span></div>';
   h+='<div style="display:flex;justify-content:space-between"><span style="font-size:10px;color:var(--t3)">Budget</span><span style="font-size:12px;font-weight:600;color:var(--t1)">'+budgetCal+'</span></div>';
   h+='</div></div></div>';
@@ -37063,7 +37076,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-home-milestone-card';
+window.__BUILD__ = '2026-07-28-nutr-date-and-breakdown';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
