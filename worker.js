@@ -18745,7 +18745,19 @@ function segmentRecordsCompute_(store){
   arr.sort(function(a,b){ if(b.effortCount!==a.effortCount) return b.effortCount-a.effortCount; return String(b.prDate||'').localeCompare(String(a.prDate||'')); });
   return arr;
 }
-function aiSyncSegments_(){ try{ if(typeof toast==='function') toast('Syncing segment PRs…'); }catch(e){} if(typeof syncSegmentPRs_==='function') syncSegmentPRs_(false, function(){ try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }); }
+function aiSyncSegments_(){
+  // Two passes, deliberately. The starred list is one cheap call and carries effort counts;
+  // the per-ride sweep is what finds PRs on UNSTARRED segments, which the starred list cannot
+  // see at all. Running only the first is what showed one of Saturday's three PRs.
+  try{ if(typeof toast==='function') toast('Syncing segment PRs…'); }catch(e){}
+  var repaint=function(){ try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} };
+  var second=function(){
+    if(typeof syncRidePRs_!=='function'){ repaint(); return; }
+    syncRidePRs_(30, false, function(){ repaint(); });
+  };
+  if(typeof syncSegmentPRs_==='function') syncSegmentPRs_(true, function(){ repaint(); second(); });
+  else second();
+}
 function aiRenderRecords_(){
   var recs=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
   var H='<div style="max-width:900px;margin:0 auto;padding-bottom:16px">';
@@ -32741,9 +32753,12 @@ function decodePolyline(str) {
 // (the same call fetchStravaGPS uses; segment_efforts ride in that response).
 // Only stravaId rides can have segments (Strava matches them server-side).
 // Caches onto r.segments. cb(array) on success, cb([]) if none, cb(null) on error.
-function fetchRideSegments(r, cb){
+function fetchRideSegments(r, cb, force){
   if(!r || !r.stravaId){ cb(null); return; }
-  if(r.segments){ cb(r.segments); return; }
+  // force: the PR pass needs segment IDS, and entries cached before this change carry none.
+  // A cached entry without an id is unusable for keying, so treat it as a miss.
+  var _cacheOk=r.segments && (!force) && (!r.segments.length || r.segments[0].id!=null);
+  if(_cacheOk){ cb(r.segments); return; }
   var doFetch=function(token){
     fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}})
     .then(function(res){return res.json();}).then(function(a){
@@ -32751,6 +32766,7 @@ function fetchRideSegments(r, cb){
       var segs=a.segment_efforts.map(function(se){
         var s=se.segment||{};
         return {
+          id: (s.id!=null?s.id:null),
           name: s.name||se.name||'Segment',
           time: se.elapsed_time||0,
           distance: s.distance!=null?Math.round(s.distance/1609.344*100)/100:null,
@@ -32802,7 +32818,11 @@ function syncSegmentPRs_(silent, cb){
           distMi:(s.distance!=null?Math.round(s.distance/1609.344*100)/100:cur.distMi)||null,
           grade:(s.average_grade!=null?s.average_grade:cur.grade),
           prSec:(prSec!=null?prSec:cur.prSec)||null, prDate:prDate||cur.prDate||null,
-          effortCount:(cnt!=null?cnt:cur.effortCount)||null, starred:true, updatedAt:Date.now()
+          effortCount:(cnt!=null?cnt:cur.effortCount)||null, starred:true,
+          // Only stamp updatedAt when Strava actually gave us a time. Stamping on a null kept
+          // the stale value AND made it look freshly confirmed.
+          updatedAt:(prSec!=null?Date.now():(cur.updatedAt||null)),
+          prStale:(prSec==null && cur.prSec!=null)?true:false
         });
         if((+st.segments[id].prSec)>0) n++;
       });
@@ -32824,6 +32844,73 @@ function syncSegmentPRs_(silent, cb){
     .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'no token'); } })
     .catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'auth'); } });
   } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done(0,'Connect Strava first'); }
+}
+
+// ==================== segment PRs from the RIDES ====================
+// syncSegmentPRs_ reads /segments/starred, which by definition returns only STARRED segments —
+// so a PR on an unstarred segment never entered the store at all. That is not a pagination fault
+// (the starred walk pages correctly); it is scope. Three PRs on one ride showed up as one
+// because only one of the three segments was starred.
+//
+// The detailed-activity endpoint carries every segment_effort for the ride WITH pr_rank, and
+// pr_rank===1 means that effort IS the athlete's best on that segment. That is the same
+// server-side truth, unfiltered by starring, and it carries the time from the ride that set it
+// rather than a summary field that can lag.
+//
+// FASTER WINS. A PR is a minimum, so when both sources hold a time the smaller one is correct by
+// definition. That rule also self-heals a stale entry without needing to know which source was
+// out of date.
+//
+// Costs one activity call per ride, so it is windowed (default 30 days) and sequential — a burst
+// of parallel calls is the fastest way to a 429.
+function syncRidePRs_(days, silent, cb){
+  cb=cb||function(){}; days=(days>0)?days:30;
+  var cut=new Date(); cut.setDate(cut.getDate()-days);
+  var cutKey=cut.getFullYear()+'-'+('0'+(cut.getMonth()+1)).slice(-2)+'-'+('0'+cut.getDate()).slice(-2);
+  var rides=((typeof st!=='undefined'&&st&&st.rides)||[]).filter(function(r){
+    return r && !r.deleted && r.stravaId && r.date && String(r.date).slice(0,10)>=cutKey;
+  }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+  if(!isPlainObj_(st.segments)) st.segments={};
+  var found=0, improved=0, added=0, scanned=0, i=0;
+  var finish=function(){
+    try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved'); }catch(e){}
+    if(!silent){ try{ if(typeof toast==='function') toast(found?(added+' new, '+improved+' updated from '+scanned+' rides'):('No new PRs in '+scanned+' rides')); }catch(e){} }
+    cb({scanned:scanned, found:found, added:added, improved:improved});
+  };
+  var step=function(){
+    if(i>=rides.length){ finish(); return; }
+    var r=rides[i++];
+    fetchRideSegments(r, function(segs){
+      scanned++;
+      if(Array.isArray(segs)){
+        segs.forEach(function(se){
+          if(!se || se.id==null) return;
+          if(+se.prRank!==1) return;                       // only the athlete's best counts
+          var sec=+se.time; if(!(sec>0)) return;
+          found++;
+          var key='s'+se.id, cur=st.segments[key];
+          var date=String(r.date||'').slice(0,10);
+          if(!cur){
+            st.segments[key]={ id:key, name:se.name||'Segment', distMi:se.distance||null,
+              grade:(se.grade!=null?se.grade:null), prSec:sec, prDate:date||null,
+              effortCount:null, starred:!!se.starred, updatedAt:Date.now(), source:'ride' };
+            added++; return;
+          }
+          // Faster wins. Equal times leave the record alone so the date is not churned.
+          if(!(+cur.prSec>0) || sec < +cur.prSec){
+            cur.prSec=sec; cur.prDate=date||cur.prDate; cur.updatedAt=Date.now();
+            cur.prStale=false; cur.source='ride';
+            if(!cur.name && se.name) cur.name=se.name;
+            if(cur.distMi==null && se.distance!=null) cur.distMi=se.distance;
+            improved++;
+          }
+        });
+      }
+      setTimeout(step, 220);                               // gentle on the rate limit
+    }, true);                                              // force: we need ids, not the old cache
+  };
+  step();
 }
 
 // Pull the athlete's LIFETIME totals from Strava (/athletes/{id}/stats -> all_ride_totals) into
@@ -37091,7 +37178,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-desktop-nutr-parity';
+window.__BUILD__ = '2026-07-28-ride-segment-prs';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
