@@ -32871,12 +32871,12 @@ function syncRidePRs_(days, silent, cb){
     return r && !r.deleted && r.stravaId && r.date && String(r.date).slice(0,10)>=cutKey;
   }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
   if(!isPlainObj_(st.segments)) st.segments={};
-  var found=0, improved=0, added=0, scanned=0, i=0;
+  var found=0, improved=0, added=0, scanned=0, renamed=0, i=0;
   var finish=function(){
     try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
-    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved'); }catch(e){}
+    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved, '+renamed+' name(s) refreshed'); }catch(e){}
     if(!silent){ try{ if(typeof toast==='function') toast(found?(added+' new, '+improved+' updated from '+scanned+' rides'):('No new PRs in '+scanned+' rides')); }catch(e){} }
-    cb({scanned:scanned, found:found, added:added, improved:improved});
+    cb({scanned:scanned, found:found, added:added, improved:improved, renamed:renamed});
   };
   var step=function(){
     if(i>=rides.length){ finish(); return; }
@@ -32901,10 +32901,19 @@ function syncRidePRs_(days, silent, cb){
           if(!(+cur.prSec>0) || sec < +cur.prSec){
             cur.prSec=sec; cur.prDate=date||cur.prDate; cur.updatedAt=Date.now();
             cur.prStale=false; cur.source='ride';
-            if(!cur.name && se.name) cur.name=se.name;
-            if(cur.distMi==null && se.distance!=null) cur.distMi=se.distance;
             improved++;
           }
+          // The stored name is a CACHE of Strava's, and segment names stay editable by whoever
+          // created the segment — so it has to track the source rather than freeze at whatever the
+          // first sync happened to see. Writing it only when absent, and only inside the
+          // faster-wins branch above, meant a name stored once was never corrected again.
+          // Passed through byte-for-byte: no case change, no trimming, no length cap.
+          if(se.name && se.name!==cur.name){
+            try{ console.log('[segPR] rename '+key+': "'+cur.name+'" -> "'+se.name+'"'); }catch(e){}
+            cur.name=se.name; renamed++;
+          }
+          if(se.distance!=null) cur.distMi=se.distance;
+          if(se.grade!=null) cur.grade=se.grade;
         });
       }
       setTimeout(step, 220);                               // gentle on the rate limit
@@ -37178,7 +37187,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-ride-segment-prs';
+window.__BUILD__ = '2026-07-28-segment-name-refresh';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
