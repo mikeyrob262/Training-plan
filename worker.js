@@ -5909,7 +5909,10 @@ function mergeItemFast_(a, b){
   var _mask=Object.assign({}, aM, bM), _mk=Object.keys(_mask);
   if(aEdit || bEdit || _mk.length){
     var win = (aEdit>=bEdit) ? a : b;
-    ['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed','avgHR','hr','calories','sportType','type'].forEach(function(f){
+    // 'deleted'/'deletedAt' included: a tombstone and an un-tombstone are both deliberate user
+    // state, and whichever happened LAST must win. Leaving them out meant a restore could be
+    // reverted by a stale remote, and a delete could be resurrected by one.
+    ['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed','avgHR','hr','calories','sportType','type','deleted','deletedAt'].forEach(function(f){
       if(win[f]!==undefined) merged[f]=win[f];
     });
     _mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
@@ -27573,6 +27576,9 @@ function deleteRide(idx, e){
       if(!ride.id) ride.id = genEntryId_();
       ride.deleted = true;
       ride.deletedAt = Date.now();
+      // Same mask the restore path uses, so a delete and an un-delete are protected
+      // identically and the most recent one wins rather than whichever side merged last.
+      if(typeof markRideEdited_==='function') markRideEdited_(ride, ['deleted','deletedAt']);
     }
     sv();
     fbPush(false); // MERGE push - deleted OR-merges (deletions win), so this sticks immediately WITHOUT a blind overwrite
@@ -35869,6 +35875,10 @@ function reimportMerge_(rides, mapped, nowTs, dryRun){
       var _rev=(typeof applyRideSync_==='function')?applyRideSync_(tomb, m):Object.assign({}, tomb, m);
       Object.keys(_rev).forEach(function(k){ tomb[k]=_rev[k]; });
       tomb.deleted=false; tomb.deletedAt=null; try{ delete tomb.deleteReason; }catch(e){}
+      // Mark the un-delete in the edit mask. Without this the merge has no way to know the
+      // tombstone was cleared ON PURPOSE, and a stale remote copy re-buries it on the next
+      // poll — which is what made a successful restore look like it had never run.
+      if(typeof markRideEdited_==='function') markRideEdited_(tomb, ['deleted','deletedAt']);
       tomb.editedAt=nowTs; if(s) liveById[s]=tomb; revived++;
     } else {
       m.editedAt=nowTs; rides.push(m); if(s) liveById[s]=m; added++;
@@ -37015,7 +37025,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-scan-hang-fix';
+window.__BUILD__ = '2026-07-28-restore-tombstone-fix';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
