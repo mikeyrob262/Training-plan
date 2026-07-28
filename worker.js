@@ -18834,6 +18834,9 @@ function aiSyncSegments_(){
   // see at all. Running only the first is what showed one of Saturday's three PRs.
   try{ if(typeof toast==='function') toast('Syncing segment PRs…'); }catch(e){}
   var repaint=function(){ try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} };
+  // Free first: effort history already cached on rides costs no API call and is what draws the
+  // progression lines.
+  try{ if(typeof harvestSegmentEfforts_==='function') harvestSegmentEfforts_(true); }catch(e){}
   var second=function(){
     if(typeof syncRidePRs_!=='function'){ repaint(); return; }
     syncRidePRs_(30, false, function(){ repaint(); });
@@ -34263,12 +34266,12 @@ function syncRidePRs_(days, silent, cb){
     return r && !r.deleted && r.stravaId && r.date && String(r.date).slice(0,10)>=cutKey;
   }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
   if(!isPlainObj_(st.segments)) st.segments={};
-  var found=0, improved=0, added=0, scanned=0, renamed=0, i=0;
+  var found=0, improved=0, added=0, scanned=0, renamed=0, histAdded=0, i=0;
   var finish=function(){
     try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
-    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved, '+renamed+' name(s) refreshed'); }catch(e){}
+    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved, '+renamed+' name(s) refreshed, '+histAdded+' effort(s) logged'); }catch(e){}
     if(!silent){ try{ if(typeof toast==='function') toast(found?(added+' new, '+improved+' updated from '+scanned+' rides'):('No new PRs in '+scanned+' rides')); }catch(e){} }
-    cb({scanned:scanned, found:found, added:added, improved:improved, renamed:renamed});
+    cb({scanned:scanned, found:found, added:added, improved:improved, renamed:renamed, histAdded:histAdded});
   };
   var step=function(){
     if(i>=rides.length){ finish(); return; }
@@ -34278,6 +34281,13 @@ function syncRidePRs_(days, silent, cb){
       if(Array.isArray(segs)){
         segs.forEach(function(se){
           if(!se || se.id==null) return;
+          // Every effort feeds the progression line, whether or not it was a best. Only a record we
+          // already hold is extended -- see harvestSegmentEfforts_ for why an unknown segment is
+          // not created from an effort alone.
+          var _hk='s'+se.id, _hs=st.segments[_hk];
+          if(_hs && _segEffortPush_(_hs, se.time, String(r.date||'').slice(0,10))){
+            _segEffortTrim_(_hs); _hs.effortCount=_hs.efforts.length; histAdded++;
+          }
           if(+se.prRank!==1) return;                       // only the athlete's best counts
           var sec=+se.time; if(!(sec>0)) return;
           found++;
@@ -34352,6 +34362,74 @@ function _bikeShownMi_(bike, stats){
   if(bike && +bike.miles>0 && !(+st2.totalMi>0))
     return { mi:+bike.miles, src:'stored' };
   return { mi:(+st2.totalMi||0), src:'local' };
+}
+// ==================== segment effort history ====================
+// The Records progression line is built from st.segments[key].efforts, and NOTHING ever wrote that
+// array: both syncs stored only the PR (time + date) and threw every other effort away. So every
+// sparkline, the improvement figures, the cumulative timeline and the effort counts were empty by
+// construction, not because the rides were missing.
+//
+// Two sources, both already paid for:
+//   1. r.segments — fetchRideSegments caches every segment effort on a ride when that ride is
+//      opened. Harvesting it costs ZERO API calls.
+//   2. the per-ride PR sweep, which already downloads every effort and currently discards the
+//      ones that are not personal bests.
+// A segment we hold no record for is SKIPPED rather than created: an effort tells you a time, not
+// whether that time is the athlete's best, and inventing a PR from partial history is the failure
+// this page exists to avoid. The skipped count is reported.
+var SEG_EFFORT_CAP=60;
+function _segEffortPush_(seg, sec, date){
+  if(!seg || !(+sec>0) || !date) return false;
+  if(!Array.isArray(seg.efforts)) seg.efforts=[];
+  var d=String(date).slice(0,10), v=Math.round(+sec), i;
+  for(i=0;i<seg.efforts.length;i++){
+    var e=seg.efforts[i];
+    if(e && e.date===d && +e.sec===v) return false;      // same effort harvested twice
+  }
+  seg.efforts.push({ sec:v, date:d });
+  return true;
+}
+function _segEffortTrim_(seg){
+  // st has a hard localStorage ceiling, so this cannot grow without limit. Sorted by date, keep the
+  // OLDEST 20 (the starting point a trend is measured from) and the NEWEST 40 (where the trend
+  // actually is). The middle is what goes: a progression only needs where you began and where you
+  // are now, and every entry in between that was not an improvement draws nothing anyway.
+  if(!seg || !Array.isArray(seg.efforts)) return;
+  seg.efforts.sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+  if(seg.efforts.length>SEG_EFFORT_CAP) seg.efforts=seg.efforts.slice(0,20).concat(seg.efforts.slice(-40));
+}
+function harvestSegmentEfforts_(silent, cb){
+  cb=cb||function(){};
+  var out={ rides:0, added:0, segments:0, skipped:0 };
+  try{
+    if(typeof st==='undefined' || !st) { cb(out); return out; }
+    if(!isPlainObj_(st.segments)) st.segments={};
+    var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():(st.rides||[]);
+    var touched={};
+    (rides||[]).forEach(function(r){
+      if(!r || r.deleted || !Array.isArray(r.segments) || !r.segments.length) return;
+      var date=String(r.date||'').slice(0,10); if(!date) return;
+      out.rides++;
+      r.segments.forEach(function(se){
+        if(!se || se.id==null) return;
+        var key='s'+se.id, seg=st.segments[key];
+        if(!seg){ out.skipped++; return; }
+        if(_segEffortPush_(seg, se.time, date)){ out.added++; touched[key]=1; }
+      });
+    });
+    Object.keys(touched).forEach(function(k){
+      var seg=st.segments[k];
+      _segEffortTrim_(seg);
+      seg.effortCount=seg.efforts.length;
+      out.segments++;
+    });
+    if(out.added){ try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){} }
+    try{ console.log('[segHist] '+out.rides+' cached ride(s), '+out.added+' effort(s) added across '
+      +out.segments+' segment(s), '+out.skipped+' effort(s) on untracked segments'); }catch(e){}
+    if(!silent){ try{ if(typeof toast==='function') toast(out.added?(out.added+' efforts added to '+out.segments+' segments'):'No new effort history'); }catch(e){} }
+  }catch(e){ try{ console.log('[segHist] error '+(e&&e.message)); }catch(_e){} }
+  cb(out);
+  return out;
 }
 function _gearKey_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9]+/g,''); }
 function syncBikeGear_(silent, cb){
@@ -38692,7 +38770,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-records-gallery';
+window.__BUILD__ = '2026-07-28-segment-effort-history';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -38802,6 +38880,8 @@ window.onload = function(){
         // remote pull so it sees the merged library, clears only the flag that would block the next
         // open's fetch, and makes no API calls itself — the rewrite happens when a ride is opened.
         try{ if(typeof healStaleLaps_==='function') healStaleLaps_(); }catch(e){}
+        // Build segment effort history from what rides already carry. Local only, no API calls.
+        try{ if(typeof harvestSegmentEfforts_==='function') harvestSegmentEfforts_(true); }catch(e){}
         // Strength-log heal now runs inside normalizeState_ on every load+merge (idempotent,
         // self-healing against key-union re-adds) — no separate one-time call needed here.
         try{ showHomeDash(); }catch(e){}
