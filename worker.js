@@ -18841,35 +18841,258 @@ function aiSyncSegments_(){
   if(typeof syncSegmentPRs_==='function') syncSegmentPRs_(true, function(){ repaint(); second(); });
   else second();
 }
-function aiRenderRecords_(){
-  var recs=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
-  var H='<div style="max-width:900px;margin:0 auto;padding-bottom:16px">';
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:2px 0 20px">';
-  H+='<div style="font-size:13px;color:#64748b;line-height:1.5">Your best times on Strava segments — all-time, straight from Strava.</div>';
-  H+='<button onclick="aiSyncSegments_()" style="flex:0 0 auto;background:transparent;border:1px solid #2a3550;color:#94a3b8;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Sync Segment PRs</button></div>';
-  if(!recs.length){
-    H+='<div style="padding:44px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">No segment records yet.<br><span style="font-size:12.5px">Tap <b style="color:#94a3b8">Sync Segment PRs</b> (Strava must be connected) to pull your starred-segment bests.</span></div>';
-    return H+'</div>';
+// Records — an achievement gallery rather than a list. Everything on it is derived from the
+// segment store: name, distance, grade, PR time, PR date, effort count, starred, and the
+// progression of successive bests. Nothing else exists, which decides what can be shown.
+//
+// Deliberately NOT built, because the data cannot support it:
+//   - sport filters (Ride/Run/Swim). Stored segments carry no activity type, so the tabs would
+//     either be inert or silently mis-file every segment.
+//   - a geographic "most improved region" grouping. No location is stored.
+//   - "PR potential 95%" / "8 segments within reach". There is no model behind either number,
+//     and inventing a probability is the exact failure this app keeps getting burned by.
+//   - "you are 2 seconds from your next PR". A PR is whatever you beat; a target time rounded
+//     down from the current one is a made-up goal, not a fact about the athlete.
+//   - "top 12% of your history" as a flourish on the consistency figure. The share of PRs held
+//     90+ days is real; ranking it against an unstated distribution is not.
+// The layout keeps those slots and fills them with figures that ARE computable.
+function _recPRCount_(r){
+  // Each entry in the progression IS a new best, so it is one PR. A record with a time but no
+  // stored effort history still represents one.
+  var n=(r && r.progression && r.progression.length)?r.progression.length:0;
+  return n>0?n:((r && +r.prSec>0)?1:0);
+}
+function _recImprove_(r){
+  // Improvement from the FIRST recorded effort to the best one, as a share of the first.
+  if(!r || !r.progression || r.progression.length<2) return null;
+  var first=+r.progression[0].sec, best=+r.prSec;
+  if(!(first>0) || !(best>0) || best>=first) return null;
+  return { pct:((first-best)/first)*100, fromSec:first, fromDate:r.progression[0].date, toDate:r.prDate };
+}
+function _recLastGain_(r){
+  // The step from the previous best to the current one — what the newest PR actually won.
+  if(!r || !r.progression || r.progression.length<2) return null;
+  var pr=r.progression, prev=+pr[pr.length-2].sec, cur=+pr[pr.length-1].sec;
+  if(!(prev>0) || !(cur>0) || cur>=prev) return null;
+  return { sec:(prev-cur), pct:((prev-cur)/prev)*100 };
+}
+function _recHeldDays_(r){
+  if(!r || !r.prDate) return null;
+  var t=(typeof _trjDay_==='function')?_trjDay_(r.prDate):null;
+  if(t==null) return null;
+  var today=(typeof _trjTodayT_==='function')?_trjTodayT_():null;
+  if(today==null) return null;
+  return Math.max(0, today-t);
+}
+function _recStats_(recs){
+  var prs=0, segs=0, best=null, mostPRs=null, held90=0, withDate=0, latest=null;
+  (recs||[]).forEach(function(r){
+    if(!r) return;
+    segs++;
+    var n=_recPRCount_(r); prs+=n;
+    var imp=_recImprove_(r);
+    if(imp && (!best || imp.pct>best.pct)) best={ pct:imp.pct, name:r.name, from:imp.fromDate, to:imp.toDate };
+    if(!mostPRs || n>mostPRs.n) mostPRs={ n:n, name:r.name };
+    var hd=_recHeldDays_(r);
+    if(hd!=null){ withDate++; if(hd>=90) held90++; }
+    if(r.prDate && (!latest || String(r.prDate)>String(latest.prDate))) latest=r;
+  });
+  return { prs:prs, segs:segs, best:best, mostPRs:mostPRs,
+           held90:held90, withDate:withDate,
+           heldPct:(withDate>0?Math.round(held90/withDate*100):null), latest:latest };
+}
+// Cumulative PRs over time, from every progression entry that carries a date. An empty or
+// single-point series draws nothing rather than a flat line implying one datum is a trend.
+function _recTimeline_(recs){
+  var pts=[];
+  (recs||[]).forEach(function(r){
+    if(!r || !r.progression) return;
+    r.progression.forEach(function(p){ if(p && p.date) pts.push(String(p.date).slice(0,10)); });
+  });
+  if(pts.length<3) return null;
+  pts.sort();
+  var W=300, Hh=86, first=pts[0], last=pts[pts.length-1];
+  var t0=(typeof _trjDay_==='function')?_trjDay_(first):null, t1=(typeof _trjDay_==='function')?_trjDay_(last):null;
+  if(t0==null || t1==null || t1<=t0) return null;
+  var path='', area='', n=pts.length, i;
+  for(i=0;i<n;i++){
+    var t=_trjDay_(pts[i]); if(t==null) continue;
+    var x=((t-t0)/(t1-t0))*W, y=Hh-((i+1)/n)*(Hh-8)-2;
+    path+=(path?' L':'M')+x.toFixed(1)+' '+y.toFixed(1);
   }
-  H+='<style>.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}@media(max-width:640px){.rec-grid{grid-template-columns:1fr}}</style><div class="rec-grid">';
-  var STAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>';
-  recs.slice(0,40).forEach(function(r){
+  if(!path) return null;
+  area=path+' L'+W+' '+Hh+' L0 '+Hh+' Z';
+  var years=[], y0=+first.slice(0,4), y1=+last.slice(0,4), yy;
+  for(yy=y0; yy<=y1; yy++){
+    var ty=_trjDay_(yy+'-01-01'); if(ty==null || ty<t0 || ty>t1) continue;
+    years.push({ label:String(yy), x:((ty-t0)/(t1-t0))*W });
+  }
+  if(years.length>6){ var step=Math.ceil(years.length/6); years=years.filter(function(_,ix){ return ix%step===0; }); }
+  return { path:path, area:area, W:W, H:Hh, years:years, total:n, first:first, last:last };
+}
+var _recSort='recent';
+function aiSetRecSort_(v){ _recSort=v; try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+var _recStarOnly=false;
+function aiToggleRecStar_(){ _recStarOnly=!_recStarOnly; try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+function _recStatBlock_(label, value, sub, col){
+  return '<div style="flex:1 1 118px;min-width:0;padding:0 10px;border-left:1px solid #1c2130">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#5b6678">'+aiEsc_(label)+'</div>'
+    +'<div style="font-size:23px;font-weight:800;color:'+(col||'#f1f5f9')+';line-height:1.15;margin-top:3px">'+value+'</div>'
+    +(sub?('<div style="font-size:10.5px;color:#5b6678;line-height:1.4;margin-top:3px">'+sub+'</div>'):'')
+    +'</div>';
+}
+function aiRenderRecords_(){
+  var all=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
+  if(!all.length){
+    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
+      +'No segment records synced yet.<br>Use Sync Segment PRs to pull them from Strava.</div>';
+  }
+  var S=_recStats_(all), TL=_recTimeline_(all);
+  var H='<style>'
+    +'.rec-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:16px 18px;margin-bottom:14px}'
+    +'.rec-stats{display:flex;flex:1 1 540px;flex-wrap:wrap;gap:6px;align-items:flex-start;min-width:0}'
+    +'.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
+    +'.rec-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}'
+    +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:15px 18px}'
+    +'.rec-sel{background:#0d0f14;border:1px solid #1c2130;color:#cbd5e1;font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
+    +'</style>';
+
+  // ---- hero summary
+  var heroL='<div class="rec-stats">'
+    +'<div style="flex:1 1 128px;min-width:0;padding-right:4px">'
+      +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#FC4C02">YOU HAVE SET</div>'
+      +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">'
+      +'<span style="font-size:38px;font-weight:800;color:#f1f5f9;line-height:1">'+S.prs.toLocaleString()+'</span>'
+      +'<span style="font-size:11px;font-weight:800;color:#FC4C02;background:rgba(252,76,2,.12);border-radius:6px;padding:3px 7px">PR'+(S.prs===1?'':'s')+'</span></div>'
+      +'<div style="font-size:10.5px;color:#5b6678;margin-top:4px">across '+S.segs+' segment'+(S.segs===1?'':'s')+'</div>'
+    +'</div>';
+  heroL+=S.best
+    ? _recStatBlock_('BIGGEST IMPROVEMENT', S.best.pct.toFixed(0)+'%',
+        aiEsc_(S.best.name)+'<br>'+(S.best.from?(_msFmtDate_(S.best.from)+' to '+_msFmtDate_(S.best.to||S.best.from)):''), '#22c55e')
+    : _recStatBlock_('BIGGEST IMPROVEMENT', '&mdash;', 'No segment has two dated efforts yet', '#64748b');
+  heroL+=S.mostPRs
+    ? _recStatBlock_('MOST PRs ON ONE SEGMENT', S.mostPRs.n, aiEsc_(S.mostPRs.name), '#f59e0b')
+    : '';
+  heroL+=(S.heldPct!=null)
+    ? _recStatBlock_('STILL STANDING', S.heldPct+'%', S.held90+' of '+S.withDate+' PRs held 90+ days', '#60a5fa')
+    : _recStatBlock_('STILL STANDING', '&mdash;', 'No PR dates stored yet', '#64748b');
+  heroL+='</div>';
+
+  var heroR='';
+  if(TL){
+    heroR='<div style="flex:1 1 300px;min-width:0;display:flex;gap:12px;align-items:stretch">'
+      +'<div style="flex:1 1 auto;min-width:0">'
+        +'<svg width="100%" height="'+TL.H+'" viewBox="0 0 '+TL.W+' '+TL.H+'" preserveAspectRatio="none" style="display:block">'
+        +'<defs><linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">'
+        +'<stop offset="0%" stop-color="#FC4C02" stop-opacity=".38"/><stop offset="100%" stop-color="#FC4C02" stop-opacity="0"/>'
+        +'</linearGradient></defs>'
+        +'<path d="'+TL.area+'" fill="url(#recGrad)"/>'
+        +'<path d="'+TL.path+'" fill="none" stroke="#FC4C02" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
+        +'</svg>'
+        +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:#5b6678;margin-top:3px">'
+        +TL.years.map(function(y){ return '<span>'+aiEsc_(y.label)+'</span>'; }).join('')+'</div>'
+        +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+TL.total+' dated efforts, cumulative</div>'
+      +'</div>';
+    if(S.latest){
+      heroR+='<div style="flex:0 0 150px;background:#0d0f14;border:1px solid #1c2130;border-radius:12px;padding:10px 12px">'
+        +'<div style="font-size:10px;color:#5b6678;font-weight:700">Latest PR</div>'
+        +'<div style="font-size:10.5px;color:#8b97ab;margin-top:1px">'+aiEsc_(_msFmtDate_(S.latest.prDate))+'</div>'
+        +'<div style="font-size:11.5px;color:#e2e8f0;font-weight:600;margin-top:7px;line-height:1.3">'+aiEsc_(S.latest.name)+'</div>'
+        +'<div style="font-size:15px;font-weight:800;color:#FC4C02;margin-top:2px">'+_segFmtT_(S.latest.prSec)+'</div>'
+      +'</div>';
+    }
+    heroR+='</div>';
+  }
+  H+='<div class="rec-hero">'+heroL+heroR+'</div>';
+
+  // ---- controls. No sport tabs: segments carry no activity type, so such a filter would be
+  // decorative at best and wrong at worst.
+  var sorts=[['recent','Recent PR'],['improve','Biggest improvement'],['efforts','Most efforts'],['held','Longest held'],['fastest','Fastest time']];
+  H+='<div class="rec-bar"><select class="rec-sel" onchange="aiSetRecSort_(this.value)">'
+    +sorts.map(function(o){ return '<option value="'+o[0]+'"'+(_recSort===o[0]?' selected':'')+'>Sort: '+o[1]+'</option>'; }).join('')
+    +'</select>'
+    +'<div onclick="aiToggleRecStar_()" style="cursor:pointer;font-size:12px;font-weight:700;padding:7px 11px;border-radius:9px;border:1px solid '
+    +(_recStarOnly?'#FC4C02':'#1c2130')+';color:'+(_recStarOnly?'#FC4C02':'#8b97ab')+';background:#0d0f14">Starred only</div>'
+    +'<div style="margin-left:auto;font-size:11px;color:#5b6678">'+all.length+' segment'+(all.length===1?'':'s')+'</div>'
+    +'</div>';
+
+  var recs=all.filter(function(r){ return _recStarOnly ? !!r.starred : true; });
+  recs=recs.slice().sort(function(x,y){
+    if(_recSort==='improve'){ var ix=_recImprove_(x), iy=_recImprove_(y); return (iy?iy.pct:-1)-(ix?ix.pct:-1); }
+    if(_recSort==='efforts') return (+y.effortCount||0)-(+x.effortCount||0);
+    if(_recSort==='held'){ var hx=_recHeldDays_(x), hy=_recHeldDays_(y); return (hy==null?-1:hy)-(hx==null?-1:hx); }
+    if(_recSort==='fastest') return (+x.prSec||1e9)-(+y.prSec||1e9);
+    return String(y.prDate||'').localeCompare(String(x.prDate||''));
+  });
+  if(!recs.length){
+    H+='<div style="padding:40px 20px;text-align:center;color:#5b6678;font-size:13px">No starred segments.</div>';
+    return '<div style="padding-bottom:16px">'+H+'</div>';
+  }
+
+  var STAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="#f59e0b" stroke="none" style="flex:none"><path d="M12 2l3 7h7l-5.5 4.5L18 21l-6-4-6 4 1.5-7.5L2 9h7z"/></svg>';
+  H+='<div class="rec-grid">';
+  recs.slice(0,60).forEach(function(r){
     var spark='';
     if(r.progression.length>=2){
-      var W=180,Hh=32, secs=r.progression.map(function(p){return p.sec;}), mn=Math.min.apply(null,secs), mx=Math.max.apply(null,secs); if(mx<=mn) mx=mn+1;
+      var W=200,Hh=34, secs=r.progression.map(function(p){return p.sec;}), mn=Math.min.apply(null,secs), mx=Math.max.apply(null,secs); if(mx<=mn) mx=mn+1;
       var n=r.progression.length;
-      var pts=r.progression.map(function(p,i){ var x=(n>1?i/(n-1):0)*W; var y=Hh-((mx-p.sec)/(mx-mn))*(Hh-6)-3; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');   // faster (lower sec) sits HIGHER
-      spark='<svg width="100%" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" style="display:block;margin-top:9px"><path d="M'+pts+'" fill="none" stroke="#22c55e" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+      var pts=r.progression.map(function(p,ix){ var x=(n>1?ix/(n-1):0)*W; var y=Hh-((mx-p.sec)/(mx-mn))*(Hh-7)-3; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');
+      spark='<svg width="100%" height="'+Hh+'" viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" style="display:block;margin-top:10px">'
+        +'<path d="M'+pts+' L'+W+' '+Hh+' L0 '+Hh+' Z" fill="rgba(34,197,94,.10)"/>'
+        +'<path d="M'+pts+'" fill="none" stroke="#22c55e" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>';
     }
-    var meta=[]; if(r.distMi) meta.push(r.distMi+' mi'); if(r.grade!=null) meta.push(r.grade+'%'); if(r.effortCount) meta.push(r.effortCount+' effort'+(r.effortCount===1?'':'s'));
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0">'
-      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+(r.starred?STAR:'')+'<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
-      +'<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:#FC4C02;line-height:1">'+_segFmtT_(r.prSec)+'</span>'+(r.prDate?('<span style="font-size:11.5px;color:#5b6678">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
-      +(meta.length?('<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+meta.join(' · ')+'</div>'):'')
+    var meta=[]; if(r.distMi) meta.push(r.distMi+' mi'); if(r.grade!=null) meta.push(r.grade+'%');
+    if(r.effortCount) meta.push(r.effortCount+' effort'+(r.effortCount===1?'':'s'));
+    var gain=_recLastGain_(r), held=_recHeldDays_(r);
+    var foot=[];
+    if(gain) foot.push('<span style="color:#22c55e;font-weight:700">&uarr; '+_segFmtT_(gain.sec)+'</span>'
+      +'<span style="color:#5b6678"> '+gain.pct.toFixed(1)+'% faster</span>');
+    if(held!=null) foot.push('<span style="color:#5b6678">Held '+held+' day'+(held===1?'':'s')+'</span>');
+    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+(r.starred?STAR:'')
+        +'<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
+      +'<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:#FC4C02;line-height:1">'+_segFmtT_(r.prSec)+'</span>'
+        +(r.prDate?('<span style="font-size:11.5px;color:#5b6678">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
+      +(meta.length?('<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+meta.join(' &middot; ')+'</div>'):'')
       +spark
+      +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid #171b26">'+foot.join('')+'</div>'):'')
     +'</div>';
   });
-  H+='</div></div>'; return H;
+  H+='</div>';
+  if(recs.length>60) H+='<div style="font-size:11px;color:#5b6678;text-align:center;margin-top:10px">Showing the first 60 of '+recs.length+'.</div>';
+
+  // ---- footer: only findings that come straight off the records.
+  var foots=[];
+  var monthKey=(typeof getTodayKey==='function')?String(getTodayKey()).slice(0,7):'';
+  var monthBest=null;
+  all.forEach(function(r){
+    if(!r.prDate || String(r.prDate).slice(0,7)!==monthKey) return;
+    var g=_recLastGain_(r);
+    if(g && (!monthBest || g.pct>monthBest.pct)) monthBest={ pct:g.pct, sec:g.sec, name:r.name };
+  });
+  if(monthBest) foots.push('<div style="flex:1 1 240px;min-width:0">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#a855f7">BIGGEST WIN THIS MONTH</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(monthBest.name)+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">Took '+_segFmtT_(monthBest.sec)+' off your previous best, '
+    +monthBest.pct.toFixed(1)+'% faster.</div></div>');
+  var longest=null;
+  all.forEach(function(r){ var h=_recHeldDays_(r); if(h!=null && (!longest || h>longest.days)) longest={days:h, name:r.name, sec:r.prSec}; });
+  if(longest) foots.push('<div style="flex:1 1 240px;min-width:0">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#60a5fa">LONGEST STANDING</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(longest.name)+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">'+_segFmtT_(longest.sec)+' has stood for '+longest.days+' days.</div></div>');
+  var most=null;
+  all.forEach(function(r){ if(+r.effortCount>0 && (!most || +r.effortCount>most.n)) most={n:+r.effortCount, name:r.name}; });
+  if(most) foots.push('<div style="flex:1 1 240px;min-width:0">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#f59e0b">MOST CONTESTED</div>'
+    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(most.name)+'</div>'
+    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">'+most.n+' recorded efforts.</div></div>');
+  if(foots.length) H+='<div class="rec-foot">'+foots.join('')+'</div>';
+  H+='<div style="font-size:10.5px;color:#5b6678;line-height:1.55;margin-top:12px">'
+    +'Every figure here is read from your synced segment records. Sport filters are absent because '
+    +'stored segments carry no activity type, and no speculative success score or target time is '
+    +'shown because nothing in this data supports one.</div>';
+  return '<div style="padding-bottom:16px">'+H+'</div>';
 }
 
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
@@ -38469,7 +38692,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-prescribed-vs-actual';
+window.__BUILD__ = '2026-07-28-records-gallery';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
