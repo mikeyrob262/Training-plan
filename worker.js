@@ -20118,6 +20118,156 @@ function _trjSection4_(){
   return H+aiCard_(body);
 }
 
+// ---- 5. Strength and mobility adherence ----
+// Strength is the stated primary driver for a masters athlete, so it gets its own line rather than
+// being folded into a generic activity streak. Prescribed comes from the plan, completed from the
+// session's own status/log -- the same records the day editor writes, so this cannot disagree with
+// what the calendar shows. Rides are deliberately NOT counted here: blending them is exactly what
+// hid whether the limiter is ride-side or strength-side.
+function _trjStrengthWeeks_(){
+  var today=_trjTodayT_(), start=today-TRJ_WINDOW;
+  try{
+    var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null;
+    if(tb && tb.start){ var bt=_trjDay_(tb.start); if(bt!=null && bt>start) start=bt; }
+  }catch(e){}
+  if(typeof planSessionsForDate_!=='function') return null;
+  var wk={}, presc=0, done=0, t, key, list;
+  for(t=start; t<=today; t++){
+    key=_trjKey_(t); if(!key) continue;
+    list=planSessionsForDate_(key)||[];
+    list.forEach(function(x){
+      if(!x || x.deleted) return;
+      var ty=String(x.type||'').toLowerCase();
+      if(ty!=='strength' && ty!=='mobility') return;
+      var mon=_trjMondayT_(t);
+      if(!wk[mon]) wk[mon]={t:mon, presc:0, done:0};
+      wk[mon].presc++; presc++;
+      var isDone=!!(x.done || x.completed || String(x.status||'')==='completed' || x.strengthLog);
+      if(isDone){ wk[mon].done++; done++; }
+    });
+  }
+  var weeks=Object.keys(wk).map(Number).sort(function(a,b){return a-b;}).map(function(m){ return wk[m]; });
+  return { weeks:weeks, presc:presc, done:done, startT:start, days:(today-start+1) };
+}
+var TRJ_STR_MIN=6;                                   // prescribed sessions before a rate means anything
+function _trjSection5_(){
+  var S=_trjStrengthWeeks_();
+  if(!S) return '';
+  var H=_trjSec_(5,'STRENGTH & MOBILITY ADHERENCE','');
+  if(S.presc<TRJ_STR_MIN){
+    // Shortfall, not absence -- say which it is and what would change it.
+    if(!S.presc) return '';
+    return H+aiCard_(_trjNote_('Only '+S.presc+' strength or mobility session'+(S.presc===1?' has':'s have')
+      +' been prescribed in the '+S.days+' days measured, and '+S.done+' completed. A completion rate off '
+      +'that few would swing on a single session, so none is shown yet. '+TRJ_STR_MIN+' prescribed is the threshold.'));
+  }
+  var rate=S.done/S.presc, pct=Math.round(rate*100);
+  var fit=_trjFit_(S.weeks.filter(function(w){ return w.presc>0; }).map(function(w){ return {t:w.t, y:w.done/w.presc}; }),
+                   {minN:4, minSpan:21});
+  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">COMPLETED</div>'
+    +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+S.done+' of '+S.presc+' prescribed sessions</div>'
+    +_trjBar_(pct, pct>=80?'#22c55e':(pct>=55?'#f59e0b':'#e24b4a'));
+  body+='<div style="margin-top:12px">';
+  S.weeks.forEach(function(w){
+    if(!w.presc) return;
+    var r=Math.round(w.done/w.presc*100);
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
+      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
+      +'<span style="font-size:11.5px;color:#cbd5e1">'+w.done+'/'+w.presc+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+(r>=80?'#22c55e':(r>=55?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
+  });
+  body+='</div>';
+  if(fit){
+    var per=fit.slope*7*100;
+    body+='<div style="font-size:11.5px;color:#8b97ab;margin-top:10px;line-height:1.5">Completion is '
+      +(Math.abs(per)<1?'flat':(per>0?('rising '+per.toFixed(0)+' points a week'):('falling '+Math.abs(per).toFixed(0)+' points a week')))
+      +' across '+fit.n+' weeks.</div>';
+  }
+  body+=_trjMethod_('Prescribed strength and mobility sessions only -- rides are excluded on purpose, so this '
+    +'shows whether the limiter is strength-side rather than blending both into one streak. Completion is read '
+    +'from the session record the day editor writes.');
+  return H+aiCard_(body);
+}
+
+// ---- 7. Interval execution quality ----
+// Volume can climb while execution falls apart, so CTL alone cannot tell you whether the work is
+// being done as prescribed. This pairs each elapsed session that carried an interval structure with
+// the ride on that date and asks what share of work intervals landed inside the prescribed band --
+// using the SAME matcher as the post-ride debrief, in raw mode, so the two cannot disagree.
+var TRJ_IVL_MIN=4;                                   // rides before a week-over-week read means anything
+function _trjIvlWeeks_(){
+  if(typeof planSessionsForDate_!=='function' || typeof _cvStreamIntervals_!=='function') return null;
+  var today=_trjTodayT_(), start=today-TRJ_WINDOW;
+  try{
+    var tb=(typeof _trainingBlock_==='function')?_trainingBlock_():null;
+    if(tb && tb.start){ var bt=_trjDay_(tb.start); if(bt!=null && bt>start) start=bt; }
+  }catch(e){}
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  var byDate={};
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var k=String(r.date||'').slice(0,10); if(!k) return;
+    (byDate[k]=byDate[k]||[]).push(r);
+  });
+  var wk={}, structured=0, matched=0, t, key;
+  for(t=start; t<=today; t++){
+    key=_trjKey_(t); if(!key) continue;
+    (planSessionsForDate_(key)||[]).forEach(function(x){
+      if(!x || x.deleted) return;
+      var struct=(x.block && x.block.struct)||null;
+      if(!struct) return;
+      structured++;
+      var cands=byDate[key]||[];
+      for(var i=0;i<cands.length;i++){
+        var res=null;
+        try{ res=_cvStreamIntervals_(cands[i], x.intent, x.targets, struct, true); }catch(e){ res=null; }
+        if(res && res.n>0){
+          matched++;
+          var mon=_trjMondayT_(t);
+          if(!wk[mon]) wk[mon]={t:mon, hit:0, n:0, rides:0};
+          wk[mon].hit+=res.nIn; wk[mon].n+=res.n; wk[mon].rides++;
+          break;
+        }
+      }
+    });
+  }
+  var weeks=Object.keys(wk).map(Number).sort(function(a,b){return a-b;}).map(function(m){ return wk[m]; });
+  var hit=0, n=0;
+  weeks.forEach(function(w){ hit+=w.hit; n+=w.n; });
+  return { weeks:weeks, hit:hit, n:n, structured:structured, matched:matched };
+}
+function _trjSection7_(){
+  var Q=_trjIvlWeeks_();
+  if(!Q || !Q.structured) return '';
+  var H=_trjSec_(7,'INTERVAL EXECUTION','');
+  if(Q.matched<TRJ_IVL_MIN){
+    return H+aiCard_(_trjNote_(Q.structured+' session'+(Q.structured===1?'':'s')+' with an interval structure '
+      +'have come due, and '+Q.matched+' could be read against a stored power stream. '+TRJ_IVL_MIN+' is the '
+      +'threshold for a week-over-week figure. Rides imported from Strava carry no power stream here, so the '
+      +'readable set is smaller than the prescribed one.'));
+  }
+  var pct=Math.round(Q.hit/Q.n*100);
+  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">INTERVALS IN THE PRESCRIBED BAND</div>'
+    +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+Q.hit+' of '+Q.n+' work intervals across '+Q.matched+' rides</div>'
+    +_trjBar_(pct, pct>=70?'#22c55e':(pct>=45?'#f59e0b':'#e24b4a'));
+  body+='<div style="margin-top:12px">';
+  Q.weeks.forEach(function(w){
+    if(!w.n) return;
+    var r=Math.round(w.hit/w.n*100);
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
+      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
+      +'<span style="font-size:11.5px;color:#cbd5e1">'+w.hit+'/'+w.n+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+(r>=70?'#22c55e':(r>=45?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
+  });
+  body+='</div>';
+  body+=_trjMethod_('Work intervals derived from the prescribed structure and compared against the prescribed '
+    +'power band, using the same matcher as the post-ride debrief. Counts intervals, not sessions, and only '
+    +'rides with a stored power stream can be read at all.');
+  return H+aiCard_(body);
+}
+
 // ---- 6. Confidence and momentum ----
 function _trjMomentum_(){
   var pts=_trjCtlPts_(); if(pts.length<14) return null;
@@ -20232,7 +20382,7 @@ function aiRenderTrajectory_(){
     +'.trj-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;align-items:stretch}'
     +'@media(max-width:820px){.trj-hero{grid-template-columns:1fr}}'
     +'</style>';
-  var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection6_()].filter(function(x){ return x; });
+  var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection5_(), _trjSection6_(), _trjSection7_()].filter(function(x){ return x; });
   try{ _trjKickWeather_(); }catch(e){}
   if(!parts.length){
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
@@ -21055,7 +21205,7 @@ function _cvsMean_(a, pps, t0, t1){
   }
   return n?{mean:s/n, n:n}:null;
 }
-function _cvStreamIntervals_(ride, intent, targets, struct){
+function _cvStreamIntervals_(ride, intent, targets, struct, raw){
   try{
     var pw = ride && ride.chartPwr;
     if(!Array.isArray(pw) || pw.length < _CVS_MIN_PTS) return null;
@@ -21100,6 +21250,9 @@ function _cvStreamIntervals_(ride, intent, targets, struct){
 
     var vals=best.wins.map(function(m){ return Math.round(m.mean); });
     var nIn=vals.filter(function(v){ return v>=lo && v<=hi; }).length;
+  // Additive raw mode: the trend needs counts, the debrief needs sentences. Same computation, so
+  // they cannot drift apart into two different answers about the same ride.
+  if(raw) return { vals:vals, nIn:nIn, n:vals.length, lo:lo, hi:hi };
     var out=[];
     if(nIn===N){
       out.push('All '+N+' intervals in the '+lo+'–'+hi+'W band. That is the session executed.');
@@ -30708,6 +30861,28 @@ function _planZoneFromPct_(pct){
 // (generator, editor prefill, Today's Plan card). blockWeek applies within-block volume
 // periodization to exercises (deload cuts sets). No id/source/block here — the write path stamps
 // those. Rest returns a bodyless session.
+// Prescribed TSS for a session that carries an interval structure. TSS = hours x IF^2 x 100 is
+// only honest when the whole session sits at that intensity, which an interval workout does not:
+// the work minutes are at the band and the rest is recovery. The easy intensity is taken from the
+// block's OWN recovery prescription rather than an invented constant, so if the block changes what
+// "easy" means this follows it. Returns null when the structure is unparseable or does not fit
+// inside the session, in which case the caller keeps the flat-band figure.
+function _planTssFromStruct_(struct, durationMin, pctFtp){
+  if(!struct || !(durationMin>0) || !pctFtp || pctFtp.length<2) return null;
+  var iv=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+  if(!iv || !(iv.n>0) || !(iv.workMin>0)) return null;
+  var workMin=iv.n*iv.workMin;
+  if(!(workMin>0) || workMin>durationMin) return null;
+  var rec=(typeof SESSION_DEFS!=='undefined' && SESSION_DEFS && SESSION_DEFS.recovery && SESSION_DEFS.recovery.pctFtp)
+    ? SESSION_DEFS.recovery.pctFtp : [40,55];
+  var ifWork=((pctFtp[0]+pctFtp[1])/2)/100;
+  var ifEasy=((rec[0]+rec[1])/2)/100;
+  var restMin=durationMin-workMin;
+  var tss=((workMin/60)*ifWork*ifWork + (restMin/60)*ifEasy*ifEasy)*100;
+  if(!isFinite(tss) || tss<=0) return null;
+  return { tss:Math.round(tss), workMin:workMin, restMin:restMin,
+           ifWork:Math.round(ifWork*100)/100, ifEasy:Math.round(ifEasy*100)/100 };
+}
 function _planSessionFromDef_(intent, blockWeek){
   var def=SESSION_DEFS[intent]; if(!def) return null;
   var s={ type:def.type, intent:(def.type==='rest'?'':intent), name:def.name, status:'planned', targets:{} };
@@ -30732,7 +30907,10 @@ function _planSessionFromDef_(intent, blockWeek){
   if(def.pctFtp && def.durationMin){
     var _if=((def.pctFtp[0]+def.pctFtp[1])/2)/100;
     s.targets.ifTarget=Math.round(_if*100)/100;
-    s.targets.tssTarget=Math.round((def.durationMin/60)*_if*_if*100);
+    var _struct=(def.struct||(s.block&&s.block.struct)||null);
+    var _sTss=(typeof _planTssFromStruct_==='function')?_planTssFromStruct_(_struct, def.durationMin, def.pctFtp):null;
+    if(_sTss){ s.targets.tssTarget=_sTss.tss; s.targets.tssBasis='struct'; s.targets.workMin=_sTss.workMin; }
+    else { s.targets.tssTarget=Math.round((def.durationMin/60)*_if*_if*100); s.targets.tssBasis='band'; }
   }
   if(def.note) s.note=def.note;
   return s;
@@ -38159,7 +38337,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-milestone-confidence';
+window.__BUILD__ = '2026-07-28-adherence-and-execution';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
