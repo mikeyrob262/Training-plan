@@ -10401,9 +10401,31 @@ function backfillNutrientsFromDB_(){
   var scanned=0, filled=0, touched=0;
   try{
     if(typeof st==='undefined' || !st || !isPlainObj_(st.nl)) return {scanned:0,filled:0,touched:0};
-    var db={}, add=function(row){ if(row && row.n) db[String(row.n).trim().toLowerCase()]=row; };
+    // EVERY catalogue, not just CF. The shake Mikey logs is in DEFAULT_MY_FOODS ("My Foods"),
+    // which CF never contained -- so the name matched nothing and the fill silently did nothing.
+    // Merged per name, taking the first POSITIVE value for each nutrient, so a catalogue that
+    // carries fiber wins over one that omits it regardless of which is read first.
+    var db={}, add=function(row){
+      if(!row || !row.n) return;
+      var k=String(row.n).trim().toLowerCase(), cur=db[k];
+      if(!cur){ db[k]=row; return; }
+      var merged={}; for(var a in cur) merged[a]=cur[a];
+      _NL_FILL_KEYS.concat(['cal']).forEach(function(f){ if(!(+merged[f]>0) && +row[f]>0) merged[f]=row[f]; });
+      db[k]=merged;
+    };
     try{ if(typeof CF!=='undefined' && CF && CF.forEach) CF.forEach(add); }catch(e){}
     try{ (st.cf||[]).forEach(add); }catch(e){}
+    try{ if(typeof DEFAULT_MY_FOODS!=='undefined' && DEFAULT_MY_FOODS && DEFAULT_MY_FOODS.forEach) DEFAULT_MY_FOODS.forEach(add); }catch(e){}
+    try{ (st.myFoods||[]).forEach(add); }catch(e){}
+    // st.myFoods is a COPY taken from DEFAULT_MY_FOODS the first time the tab opened, so it is
+    // frozen at whatever the row looked like then. Heal it, or every future log repeats the bug.
+    try{
+      (st.myFoods||[]).forEach(function(mf){
+        if(!mf || !mf.n) return;
+        var row=db[String(mf.n).trim().toLowerCase()]; if(!row) return;
+        _NL_FILL_KEYS.forEach(function(f){ if(!(+mf[f]>0) && +row[f]>0){ mf[f]=row[f]; filled++; } });
+      });
+    }catch(e){}
     Object.keys(st.nl).forEach(function(dk){
       var day=st.nl[dk]; if(!day || !isPlainObj_(day.meals)) return;
       Object.keys(day.meals).forEach(function(m){
@@ -10414,6 +10436,13 @@ function backfillNutrientsFromDB_(){
           var row=db[String((i._baseName||i.n||'')).trim().toLowerCase()];
           if(!row) return;
           var qty=(+i._qty>0)?+i._qty:1, any=false;
+          // No _qty recorded (three bottles logged as a single 540 cal line) -- calories are the
+          // only multiplier actually stored, so use their ratio when it lands on a clean quarter
+          // step. Anything ragged is left at 1 rather than guessed at.
+          if(!(+i._qty>0) && +row.cal>0 && +i.cal>0){
+            var _ratio=(+i.cal)/(+row.cal), _q=Math.round(_ratio*4)/4;
+            if(_q>=0.25 && _q<=24 && Math.abs(_ratio-_q)<0.02) qty=_q;
+          }
           _NL_FILL_KEYS.forEach(function(k){
             var want=+(row[k]||0);
             if(!(want>0)) return;
@@ -23848,7 +23877,7 @@ function _ytdCycSrc_(){
 function _athleteStatsStale_(){
   var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
   if(!as) return true;
-  return (as.ytdRideMeters===undefined || as.ytdRideCount===undefined);
+  return (as.ytdRideMeters===undefined || as.ytdRideCount===undefined || as.rideCount==null);
 }
 // (2) LINEAR-pace status vs an annual goal. Linear is a STATED simplification — real training is not
 //     linear — so the copy always says "linear pace", never "on pace" as if the target were destiny.
@@ -31448,7 +31477,7 @@ function renderCore(){
 
 // Default My Foods - Mikey's regulars
 var DEFAULT_MY_FOODS = [
-  {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, srv:'1 bottle'},
+  {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, fiber:5, srv:'1 bottle'},
   {n:'Transparent Labs Whey Protein Isolate', cal:130, p:28, c:3, f:1, srv:'1 scoop'},
   {n:'Greek Yogurt Plain (Fage 0%)', cal:120, p:22, c:9, f:0, srv:'1 cup'},
   {n:'Egg Whole', cal:70, p:6, c:0, f:5, srv:'1 large'},
@@ -31463,7 +31492,7 @@ var DEFAULT_MY_MEALS = [
     name: 'Typical Breakfast',
     emoji: '🍳',
     foods: [
-      {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5},
+      {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, fiber:5},
       {n:'Greek Yogurt Plain (Fage 0%)', cal:120, p:22, c:9, f:0},
       {n:'Egg Whole x2', cal:140, p:12, c:0, f:10},
       {n:'Transparent Labs Whey Protein Isolate', cal:130, p:28, c:3, f:1},
@@ -31473,7 +31502,7 @@ var DEFAULT_MY_MEALS = [
     name: 'High Protein Breakfast',
     emoji: '💪',
     foods: [
-      {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5},
+      {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, fiber:5},
       {n:'Greek Yogurt Plain (Fage 0%)', cal:120, p:22, c:9, f:0},
       {n:'Egg Whole x3', cal:210, p:18, c:0, f:15},
       {n:'Turkey Sausage Link', cal:90, p:9, c:1, f:5},
@@ -33674,6 +33703,15 @@ function syncRidePRs_(days, silent, cb){
 // read per bike as the canonical per-gear record. Names are matched normalised, and a bike that
 // cannot be matched CONFIDENTLY is left alone and reported -- writing the wrong odometer onto the
 // wrong bike is worse than leaving a stale one.
+// A sync that resolves AFTER the view has painted has to repaint it: otherwise the corrected
+// number sits in state while the screen keeps showing the stale one, which is indistinguishable
+// from "the fix did not work". Both Strava syncs below are network calls that finish long after
+// the dashboard first renders.
+function _syncRepaint_(){
+  try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+  try{ if(typeof _aiMount!=='undefined' && _aiMount && typeof aiRenderOverview_==='function') aiRenderOverview_(_aiMount); }catch(e){}
+  try{ if(typeof renderGarage==='function') renderGarage(); }catch(e){}
+}
 function _gearKey_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9]+/g,''); }
 function syncBikeGear_(silent, cb){
   cb=cb||function(){};
@@ -33681,6 +33719,7 @@ function syncBikeGear_(silent, cb){
   function done(err){
     if(err) report.errors.push(err);
     try{ console.log('[gear] '+JSON.stringify(report)); }catch(e){}
+    if(report.matched.length){ try{ if(typeof _syncRepaint_==='function') _syncRepaint_(); }catch(e){} }
     if(!silent){ try{ if(typeof toast==='function') toast(err?('Gear sync failed: '+err)
       :(report.matched.length+' bike(s) updated from Strava'+(report.unmatched.length?(', '+report.unmatched.length+' unmatched'):''))); }catch(e){} }
     cb(report);
@@ -33768,6 +33807,7 @@ function syncAthleteStats_(silent, cb){
         // Cross-reference the app's YTD against Strava's now that we have the authoritative figure.
         // Read-only — it logs a flag if they diverge, it does not rewrite anything.
         try{ if(typeof reconcileStrava_==='function') reconcileStrava_(); }catch(e){}
+        try{ if(typeof _syncRepaint_==='function') _syncRepaint_(); }catch(e){}
         try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
         done(true);
       }).catch(function(e){ done(false,(e&&e.message)||'fetch'); });
@@ -38011,7 +38051,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-gear-odometer-ytd';
+window.__BUILD__ = '2026-07-28-fiber-myfoods-repaint';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
