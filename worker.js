@@ -9672,10 +9672,10 @@ var CF=[...RESTAURANT_FOODS,
   {n:"Precision Fuel PF90 Drink Mix",cal:357,p:0,c:90,f:0,srv:"1 serving (70g)"},
   {n:"Precision Hydration PH1000",cal:10,p:0,c:2,f:0,srv:"1 sachet"},
   {n:"Precision Hydration PH1500",cal:15,p:0,c:4,f:0,srv:"1 sachet"},
-  {n:"OWYN Dark Chocolate",cal:170,p:20,c:13,f:5,srv:"1 bottle (325ml)"},
-  {n:"OWYN Vanilla",cal:160,p:20,c:11,f:5,srv:"1 bottle (325ml)"},
-  {n:"OWYN Strawberry",cal:160,p:20,c:11,f:5,srv:"1 bottle (325ml)"},
-  {n:"OWYN Cold Brew Coffee",cal:170,p:20,c:13,f:5,srv:"1 bottle (325ml)"},
+  {n:"OWYN Dark Chocolate",cal:170,p:20,c:13,f:5,fiber:5,srv:"1 bottle (325ml)"},
+  {n:"OWYN Vanilla",cal:160,p:20,c:11,f:5,fiber:5,srv:"1 bottle (325ml)"},
+  {n:"OWYN Strawberry",cal:160,p:20,c:11,f:5,fiber:5,srv:"1 bottle (325ml)"},
+  {n:"OWYN Cold Brew Coffee",cal:170,p:20,c:13,f:5,fiber:5,srv:"1 bottle (325ml)"},
 
   // -- PROTEIN BARS
   {n:"Quest Bar (avg)",cal:190,p:21,c:20,f:8,srv:"1 bar (60g)"},
@@ -10387,6 +10387,48 @@ function getDType(k){var d=(typeof parseDayKey==='function')?parseDayKey(k):new 
 // and nutrition page can't diverge (the dashboard cards previously printed
 // hardcoded mockup numbers). Consumed from the food log (getDTots + water),
 // goals from calcTrainingAwareTargets_. Returns rounded {consumed, goals}.
+// Logged food items are COPIES of a database row, and every nutrient panel reads i.fiber off the
+// stored entry rather than re-looking-up the food. So a row that gains a nutrient later leaves
+// every already-logged copy sitting at zero -- three OWYN shakes logged before those rows carried
+// fiber are exactly that. Fixing the database alone would not move today's total by one gram.
+//
+// Conservative by construction: fills ONLY where the stored value is absent or zero AND the row
+// for that exact name carries a positive one. A food that genuinely has no fiber is never
+// rewritten, and a hand-edited value is never clobbered. Scales by the logged quantity, and is
+// idempotent -- a second run fills nothing.
+var _NL_FILL_KEYS=['fiber','sodium','satFat','sugar','potassium','calcium','iron','magnesium'];
+function backfillNutrientsFromDB_(){
+  var scanned=0, filled=0, touched=0;
+  try{
+    if(typeof st==='undefined' || !st || !isPlainObj_(st.nl)) return {scanned:0,filled:0,touched:0};
+    var db={}, add=function(row){ if(row && row.n) db[String(row.n).trim().toLowerCase()]=row; };
+    try{ if(typeof CF!=='undefined' && CF && CF.forEach) CF.forEach(add); }catch(e){}
+    try{ (st.cf||[]).forEach(add); }catch(e){}
+    Object.keys(st.nl).forEach(function(dk){
+      var day=st.nl[dk]; if(!day || !isPlainObj_(day.meals)) return;
+      Object.keys(day.meals).forEach(function(m){
+        var list=day.meals[m]; if(!list || typeof list.forEach!=='function') return;
+        list.forEach(function(i){
+          if(!i || i.deleted) return;
+          scanned++;
+          var row=db[String((i._baseName||i.n||'')).trim().toLowerCase()];
+          if(!row) return;
+          var qty=(+i._qty>0)?+i._qty:1, any=false;
+          _NL_FILL_KEYS.forEach(function(k){
+            var want=+(row[k]||0);
+            if(!(want>0)) return;
+            if(+(i[k]||0)>0) return;
+            i[k]=Math.round(want*qty*10)/10; filled++; any=true;
+          });
+          if(any) touched++;
+        });
+      });
+    });
+    if(filled){ try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){} }
+    try{ console.log('[nutfill] '+scanned+' logged item(s), '+touched+' updated, '+filled+' field(s) filled'); }catch(e){}
+  }catch(e){ try{ console.log('[nutfill] error '+(e&&e.message)); }catch(_e){} }
+  return {scanned:scanned, filled:filled, touched:touched};
+}
 function nutritionForDate(key){
   var k=key||((typeof nutrDate!=='undefined'&&nutrDate)?nutrDate:(typeof getTodayKey==='function'?getTodayKey():''));
   var g=calcTrainingAwareTargets_(k)||{};
@@ -37864,7 +37906,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-hero-panel-momentum-fix';
+window.__BUILD__ = '2026-07-28-fiber-backfill';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -37960,6 +38002,8 @@ window.onload = function(){
         try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
         // Seed / self-heal the append-only FTP log so no write site can escape it (Coach V dependency).
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
+        // Fill nutrients onto already-logged items whose database row gained them after the fact.
+        try{ if(typeof backfillNutrientsFromDB_==='function') backfillNutrientsFromDB_(); }catch(e){}
         // Arm rides still holding elapsed-time Strava laps for a moving-time rewrite. Runs AFTER the
         // remote pull so it sees the merged library, clears only the flag that would block the next
         // open's fetch, and makes no API calls itself — the rewrite happens when a ride is opened.
