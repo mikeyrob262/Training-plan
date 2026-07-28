@@ -22983,6 +22983,9 @@ function dsShowGear(){
   var bikes=(st.bikes||[]).filter(function(b){ return b && !b.deleted; });
 
   mc.innerHTML='';
+  // Tagged so _syncRepaint_ can tell this page is the one currently on screen. Every other ds
+  // view wipes ds-content, so the marker goes away as soon as the user navigates off.
+  mc.setAttribute('data-ds-view','gear');
   var wrap=document.createElement('div');
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px;box-sizing:border-box;gap:14px';
 
@@ -23071,13 +23074,26 @@ function dsShowGear(){
     // Mileage stats
     var statsRow=document.createElement('div');
     statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e;margin-bottom:12px';
-    [['Total Miles',stats.totalMi.toLocaleString()+' mi'],['This Year',stats.yearMi.toLocaleString()+' mi'],['Last Ride',stats.lastDate?fmtRideDate_(stats.lastDate):'—']].forEach(function(x){
+    // Total comes from Strava's odometer when we have it. "This Year" has no Strava equivalent
+    // (the gear endpoint carries a lifetime total only), so it stays local -- and is shown as an
+    // em dash rather than a confident 0 when the local matcher resolved no rides for this bike,
+    // because 0 mi this year and "we could not attribute your rides" are not the same statement.
+    var _shown=(typeof _bikeShownMi_==='function')?_bikeShownMi_(bike, stats):{mi:stats.totalMi,src:'local'};
+    var _yearTxt=(stats.count>0)?(stats.yearMi.toLocaleString()+' mi'):'—';
+    [['Total Miles',_shown.mi.toLocaleString()+' mi'],['This Year',_yearTxt],['Last Ride',stats.lastDate?fmtRideDate_(stats.lastDate):'—']].forEach(function(x){
       var s=document.createElement('div');
       s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
       s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
       statsRow.appendChild(s);
     });
     card.appendChild(statsRow);
+    var srcNote=document.createElement('div');
+    srcNote.style.cssText='font-size:10px;color:#5b6678;margin:-8px 0 12px;text-align:center';
+    srcNote.textContent=(_shown.src==='strava')
+      ? ('Total from Strava gear odometer' + (stats.count>0 ? (' · ' + stats.count + ' ride' + (stats.count===1?'':'s') + ' matched locally') : ''))
+      : ((_shown.src==='stored') ? 'Total from the stored value · not yet confirmed against Strava'
+                                 : 'Total computed from matched rides · not confirmed against Strava');
+    card.appendChild(srcNote);
 
     // Edit / Delete
     var actRow=document.createElement('div');
@@ -33711,6 +33727,25 @@ function _syncRepaint_(){
   try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
   try{ if(typeof _aiMount!=='undefined' && _aiMount && typeof aiRenderOverview_==='function') aiRenderOverview_(_aiMount); }catch(e){}
   try{ if(typeof renderGarage==='function') renderGarage(); }catch(e){}
+  // The desktop Gear page too, but only when it is the view actually on screen -- calling
+  // dsShowGear blind would yank the user off whatever they were looking at.
+  try{
+    var _mc=document.getElementById('ds-content');
+    if(typeof dsShowGear==='function' && _mc && _mc.getAttribute('data-ds-view')==='gear') dsShowGear();
+  }catch(e){}
+}
+// The mileage a gear card should SHOW, and where it came from. Strava's per-gear odometer is the
+// same number its gear page shows and is immune to the local library's tombstoning and to rides
+// that resolve to no bike; the local recompute is only a fallback for a bike Strava has never
+// heard of. Returning the source alongside the number is what lets the card say which it is
+// instead of presenting two very different things in identical type.
+function _bikeShownMi_(bike, stats){
+  var st2=stats||{};
+  if(bike && bike.milesSource==='strava' && +bike.miles>=0 && bike.miles!=null)
+    return { mi:+bike.miles, src:'strava' };
+  if(bike && +bike.miles>0 && !(+st2.totalMi>0))
+    return { mi:+bike.miles, src:'stored' };
+  return { mi:(+st2.totalMi||0), src:'local' };
 }
 function _gearKey_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9]+/g,''); }
 function syncBikeGear_(silent, cb){
@@ -38051,7 +38086,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-fiber-myfoods-repaint';
+window.__BUILD__ = '2026-07-28-gear-page-odometer';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
