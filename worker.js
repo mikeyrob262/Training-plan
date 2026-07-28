@@ -12089,27 +12089,28 @@ function _streakWeekKeyOf_(ds){
   return d.getFullYear()+'-'+_streakP2_(d.getMonth()+1)+'-'+_streakP2_(d.getDate());
 }
 function _activityDates_(){
+  // RIDES AND RUNS ONLY (owner decision, Jul 28 2026). The streak previously counted a completed
+  // plan session of any type, legacy strength, ANY single ticked mobility movement, and
+  // conditioning — so one stretch kept a week alive and the count read far higher than "weeks I
+  // actually trained". Strength and mobility are still tracked and scored elsewhere; they just do
+  // not decide this number.
+  //
+  // st.rides is NOT a ride list — it carries every sport Strava sends, including WeightTraining,
+  // Walk and Hike. Filtering the STORE is not the same as filtering the SPORT, so each record is
+  // classified through _actSport_ (the same reader activitiesForDate_ uses) and only 'ride' and
+  // 'run' count. Filtering by store alone would have quietly kept every gym session in.
   var out=[];
-  try{ (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
-  try{ (st.runs||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
-  // st.plan — the modern strength/mobility store. A completed session of ANY type counts.
-  try{ Object.keys(st.plan||{}).forEach(function(k){
-    var day=st.plan[k]; if(!day || !Array.isArray(day.sessions)) return;
-    for(var i=0;i<day.sessions.length;i++){ var s=day.sessions[i];
-      if(s && !s.deleted && s.status==='completed'){ out.push(k); break; } }
+  var sportOf=function(r, fallback){
+    return (typeof _actSport_==='function') ? _actSport_(r, fallback) : fallback;
+  };
+  try{ (st.rides||[]).forEach(function(r){
+    if(!r || r.deleted || !r.date) return;
+    var sp=sportOf(r,'ride');
+    if(sp==='ride' || sp==='run') out.push(r.date);
   }); }catch(e){}
-  // Legacy ephemeral ws{} strength + core, still the only record for older weeks.
-  try{ if(typeof ws==='function'){ for(var w=1;w<=50;w++){ var wk=ws(w); if(!wk) continue;
-    ['A','B'].forEach(function(l){ if(wk.str && wk.str[l] && wk.str[l]._date) out.push(wk.str[l]._date); });
-    if(wk.core && wk.core.date) out.push(wk.core.date); } } }catch(e){}
-  // Mobility: ANY movement ticked is a logged activity. The old >=6 threshold silently discarded a
-  // partial session, which is a completeness judgement the streak has no business making.
-  try{ Object.keys(st.mob||{}).forEach(function(d){
-    var done=(st.mob[d]||{}).done||{};
-    for(var k2 in done){ if(done[k2]){ out.push(d); break; } }
-  }); }catch(e){}
-  try{ Object.keys(st.cond||{}).forEach(function(d){
-    if(Object.keys(st.cond[d]||{}).length>0) out.push(d);
+  try{ (st.runs||[]).forEach(function(r){
+    if(!r || r.deleted || !r.date) return;
+    out.push(r.date);                                  // st.runs is run-typed by construction
   }); }catch(e){}
   return out;
 }
