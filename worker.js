@@ -30,9 +30,20 @@ export default {
           const key = env && env.INTERVALS_API_KEY;
           const aid = (env && env.INTERVALS_ATHLETE_ID) || 'i544205';
           if (!key) return J({ error: 'not_configured' }, 503);
-          const day = _u.searchParams.get('date');
-          const safeDay = /^\d{4}-\d{2}-\d{2}$/.test(day || '') ? day : new Date().toISOString().slice(0, 10);
-          const r = await fetch('https://intervals.icu/api/v1/athlete/' + aid + '/wellness/' + safeDay, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
+          // RANGE form. Intervals serves the whole PMC history from this endpoint, which is what
+          // lets the app stop reconstructing CTL/ATL locally: one authoritative series instead of
+          // several independent recomputations that drift apart. Single-day form is unchanged.
+          const _ok = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+          const oldest = _u.searchParams.get('oldest'), newest = _u.searchParams.get('newest');
+          let _url;
+          if (_ok(oldest) && _ok(newest)) {
+            _url = 'https://intervals.icu/api/v1/athlete/' + aid + '/wellness?oldest=' + oldest + '&newest=' + newest;
+          } else {
+            const day = _u.searchParams.get('date');
+            const safeDay = _ok(day) ? day : new Date().toISOString().slice(0, 10);
+            _url = 'https://intervals.icu/api/v1/athlete/' + aid + '/wellness/' + safeDay;
+          }
+          const r = await fetch(_url, { headers: { 'Authorization': 'Basic ' + btoa('API_KEY:' + key) } });
           return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
         }
 
@@ -12110,7 +12121,7 @@ function showHomeDash(){
   if(!scr) return;
 
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
-  var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var pmcData=fitnessSeries_();
   var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
   // Single source of truth for the headline numbers (the live pull still
   // overwrites these in place when it resolves — same source getFitness_ reads).
@@ -12335,6 +12346,9 @@ function showHomeDash(){
   // Falls back silently to the CSV-based numbers already rendered above
   // if the live call fails for any reason (offline, API down, etc).
   setTimeout(function(){ fetchLiveIntervalsWellness(); }, 0);
+  // The PMC curve, from the same endpoint. Cached on st, so a cold render paints from cache and
+  // repaints when this lands rather than falling back to a local reconstruction.
+  setTimeout(function(){ try{ if(typeof ensureFitnessSeries_==='function') ensureFitnessSeries_(); }catch(e){} }, 0);
 }
 
 // Live Intervals.icu wellness pull - fetches today's actual CTL (fitness),
@@ -12356,6 +12370,9 @@ function fetchLiveIntervalsWellness(callback){
       var ctl=Math.round(data.ctl||data.fitness||0);
       var atl=Math.round(data.atl||data.fatigue||0);
       var tsb=Math.round((data.ctl!=null&&data.atl!=null)?(data.ctl-data.atl):(data.form||0));
+      // Intervals' own CTL-per-week ramp. Taken from the source rather than re-derived from a
+      // local 7-day delta, which is one more thing that used to be computed twice.
+      var ramp=(typeof data.rampRate==='number')?Math.round(data.rampRate*100)/100:null;
       // Garmin HRV (rMSSD) + resting HR now flow through Intervals wellness (confirmed live from
       // ~Jul 24 2026). hrvSDNN is null on this account, so read only data.hrv. A missing reading is
       // a gap, not a zero — keep it null so the baseline never counts a non-measurement.
@@ -12390,7 +12407,7 @@ function fetchLiveIntervalsWellness(callback){
       // Fitness/Fatigue/Form) so every part of the app agrees on the same
       // current fitness numbers instead of each recomputing its own,
       // inconsistent version.
-      window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, hrv:hrv, rhr:rhr, fetchedAt:Date.now()};
+      window.__liveWellness = {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, hrv:hrv, rhr:rhr, fetchedAt:Date.now()};
       // Persist today's HRV/RHR into the accumulating daily store the rolling baseline reads
       // (st.hrvDaily, keyed by Y-M-D). Only real values, and only when the stored value actually
       // changes, so the ~10-min refetch does not thrash saves. Capped at ~180 days.
@@ -12678,11 +12695,16 @@ function athleteIQ_(){
   if(!dates.length) return {score:null, reason:"no rides"};
   dates.sort();
   if(Math.round((now-new Date(dates[0]))/86400000)<28) return {score:null, reason:"<28 days"};
-  var ctl=0,atl=0,series=[];
-  for(var i=89;i>=0;i--){ var d=new Date(now); d.setDate(d.getDate()-i);
-    var nd=normDate(d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate());
-    var tss=tssBy[nd]||0; ctl=ctl+(tss-ctl)/42; atl=atl+(tss-atl)/7; series.push(ctl); }
-  var n=series.length, ctlNow=series[n-1], idx28=n-1-28, ctl28=(idx28>=0)?series[idx28]:series[0], tsbNow=ctlNow-atl;
+  // CTL/ATL/TSB come from the ONE source. This used to run its own 90-day EMA off a 0 seed, so
+  // the Athlete IQ score was graded against a different fitness curve from the one every other
+  // surface showed. The score is still computed here; the fitness inputs to it are not.
+  var _fitIQ=(typeof getFitness_==='function')?getFitness_():null;
+  if(!_fitIQ || !_fitIQ.loaded) return {score:null, reason:"fitness not loaded"};
+  var _fs=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+  var ctlNow=_fitIQ.ctl, atl=_fitIQ.atl, tsbNow=_fitIQ.tsb;
+  // CTL 28 days ago, read off the same series rather than re-derived.
+  var ctl28=ctlNow;
+  if(_fs.length){ var _i28=_fs.length-1-28; ctl28=(_i28>=0)?_fs[_i28].ctl:_fs[0].ctl; }
   // 1) fitness trend (is CTL rising vs 4 weeks ago)
   var trend=Math.max(0,Math.min(100, 50+(ctlNow-ctl28)*8));
   // 2) consistency (distinct ride-days in last 28)
@@ -12885,7 +12907,7 @@ function renderPerf(container){
   var rides=st.rides.filter(function(r){return !r.deleted;});
   var FTP=parseInt(st.ftp||186);
   var BWT=parseFloat(st.weight||160);
-  var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var pmcData=fitnessSeries_();
   var pcurve=computePowerCurve(rides);
   var wkg=FTP/BWT*2.20462;
   var targetFTP=215,targetBW=151;
@@ -13710,91 +13732,119 @@ function renderRideList(container, limit){
   }
 }
 
-function buildPMCFromHistory(history){
-  // Build daily PMC points from weekly Intervals.icu summary data
-  var data=[];
-  history.forEach(function(wk,i){
-    var next=history[i+1];
-    var d=new Date(wk.week);
-    for(var day=0;day<7;day++){
-      var dt=new Date(d);
-      dt.setDate(dt.getDate()+day);
-      var label=(dt.getMonth()+1)+'/'+dt.getDate();
-      // Interpolate between weeks
-      var frac=day/7;
-      var ctl=next?wk.fitness+(next.fitness-wk.fitness)*frac:wk.fitness;
-      var atl=next?wk.fatigue+(next.fatigue-wk.fatigue)*frac:wk.fatigue;
-      data.push({d:label,ctl:Math.round(ctl*10)/10,atl:Math.round(atl*10)/10,tsb:Math.round((ctl-atl)*10)/10});
-    }
-  });
-  // Add final week endpoint
-  var last=history[history.length-1];
-  if(last) data.push({d:'Now',ctl:last.fitness,atl:last.fatigue,tsb:last.form});
-  return data;
+// ==================== THE fitness source ====================
+// CTL / ATL / TSB come from Intervals.icu and NOWHERE else.
+//
+// This app used to reconstruct them locally in five separate places, each with its own seed, its
+// own window and its own idea of what counted as load. They disagreed, and every fix corrected one
+// surface while another kept its own answer — the defect that produced CTL 58 / ATL 86 / TSB -28
+// against Intervals' 58 / 57 / +1. The worst offender interpolated ATL between WEEKLY samples,
+// which cannot work: ATL has a 7-day time constant, so a weekly interpolation is smoothing away
+// exactly the signal it is meant to carry. CTL survived that treatment (42-day constant) which is
+// why CTL agreed and ATL did not.
+//
+// Intervals already computes these from the athlete's full activity history, including activities
+// this app never imported. There is no version of a local reconstruction that is more correct than
+// the source of truth, so there is no local reconstruction.
+//
+// Anything that needs the numbers calls getFitness_(). Anything that needs the curve calls
+// fitnessSeries_(). Neither computes; both read the cached Intervals series.
+var FIT_SERIES_DAYS=180;
+var FIT_SERIES_TTL=6*60*60*1000;        // refetch the curve a few times a day, not per render
+function _fitYMD_(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// Pull the PMC curve from Intervals and cache it on st so it survives a reload and a cold render.
+// Never throws, never blocks a render: callers paint from the cache and this repaints when it lands.
+function fetchIntervalsFitnessSeries_(cb){
+  try{
+    var now=new Date(), oldest=new Date(now.getTime()-FIT_SERIES_DAYS*86400000);
+    fetch('/api/intervals-wellness?oldest='+_fitYMD_(oldest)+'&newest='+_fitYMD_(now),
+          {headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .then(function(j){
+        if(!Array.isArray(j)) throw new Error('not a series');
+        var out=[];
+        j.forEach(function(w){
+          if(!w || !w.id) return;
+          // A day Intervals has not scored carries null ctl/atl. Skipped, never zero-filled:
+          // a zero would render as a fitness collapse that did not happen.
+          if(typeof w.ctl!=='number' || typeof w.atl!=='number') return;
+          out.push({ date:String(w.id).slice(0,10),
+                     ctl:Math.round(w.ctl*10)/10, atl:Math.round(w.atl*10)/10,
+                     tsb:Math.round((w.ctl-w.atl)*10)/10,
+                     ramp:(typeof w.rampRate==='number')?Math.round(w.rampRate*100)/100:null });
+        });
+        out.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+        if(out.length && typeof st!=='undefined' && st){
+          st.fitSeries=out; st.fitSeriesAt=Date.now();
+          try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+        }
+        if(cb) cb(out);
+      }).catch(function(){ if(cb) cb(null); });
+  }catch(e){ if(cb) cb(null); }
 }
-
-function computePMC(rides){
-  // CTL τ=42, ATL τ=7
-  var days = 84, today = new Date();
-  var ctl = 20, atl = 20; // starting baseline
-  var data = [];
-  for(var d = days; d >= 0; d--){
-    var dt = new Date(today);
-    dt.setDate(dt.getDate() - d);
-    // Normalize both sides: the built key is non-zero-padded ("2026-7-11")
-    // while ride dates are ISO zero-padded ("2026-07-11"), so a raw === never
-    // matched -> every day scored 0 TSS and CTL decayed to ~3. normDate pads.
-    var key = normDate(dt.getFullYear() + '-' + (dt.getMonth()+1) + '-' + dt.getDate());
-    var tss = 0;
-    rides.forEach(function(r){
-      if(normDate(r.date) === key) tss += (r.load != null ? r.load : (r.tss || 0));
-    });
-    ctl = ctl + (tss - ctl) / 42;
-    atl = atl + (tss - atl) / 7;
-    var tsb = ctl - atl;
-    data.push({d: dt.getMonth()+1+'/'+dt.getDate(), ctl: Math.round(ctl*10)/10, atl: Math.round(atl*10)/10, tsb: Math.round(tsb*10)/10});
-  }
-  return data;
+// Refresh the cache when it is missing or old. Safe to call from anywhere; self-throttling.
+function ensureFitnessSeries_(cb){
+  try{
+    var have=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:null;
+    var age=(typeof st!=='undefined'&&st&&st.fitSeriesAt)?(Date.now()-st.fitSeriesAt):Infinity;
+    if(have && have.length && age<FIT_SERIES_TTL){ if(cb) cb(have); return; }
+    if(window.__fitSeriesInFlight){ if(cb) cb(have); return; }
+    window.__fitSeriesInFlight=true;
+    fetchIntervalsFitnessSeries_(function(out){ window.__fitSeriesInFlight=false; if(cb) cb(out||have); });
+  }catch(e){ if(cb) cb(null); }
 }
-
-// ---- SINGLE fitness source of truth --------------------------------------
-// Every headline surface (desktop Dashboard, AI Coach, Athlete Intelligence,
-// metric-teach) reads getFitness_() so they can no longer disagree the way the
-// Jul 18 report caught them (Dashboard CTL 53 / Coach 60 / AIQ 72 at the same
-// time). Divergence had two causes, both removed here: a split live-freshness
-// gate (Dashboard trusted a 1-hour-old value; everyone else 10 min) and a split
-// fallback (Dashboard always computePMC at baseline 20/20; everyone else the
-// Intervals CSV). One gate, one fallback, one 7-day ramp — computed here once.
-var FIT_LIVE_GATE=10*60*1000;
+// The curve, for charts. Chart shape in the app's own {d,ctl,atl,tsb} vocabulary. Empty when
+// Intervals has not been read yet — an empty chart that says so beats a locally-invented one.
 function fitnessSeries_(){
-  // Prefer the athlete's own Intervals.icu weekly history (authoritative) over a
-  // local reconstruction; only compute locally when no history has been imported.
-  if(st.pmcHistory && st.pmcHistory.length) return buildPMCFromHistory(st.pmcHistory);
-  var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
-    .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
-  a.forEach(function(x){ x.load=unifiedLoad(x); });
-  var wl=a.filter(function(x){return x.load>0;});
-  return wl.length?computePMC(wl):[];
+  try{ ensureFitnessSeries_(); }catch(e){}
+  var src=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  return src.map(function(p){
+    var mm=p.date.slice(5,7), dd=p.date.slice(8,10);
+    return { d:(+mm)+'/'+(+dd), date:p.date, ctl:p.ctl, atl:p.atl, tsb:p.tsb };
+  });
 }
+// THE numbers. Every surface reads this and no surface computes its own.
+//
+// Order of preference, and each step is a READ of Intervals, never a computation:
+//   1. today's live wellness poll (window.__liveWellness), which is the same endpoint;
+//   2. the cached Intervals series (st.fitSeries), newest point;
+//   3. nothing — zeros with source:'none' and stale:true, so a caller can say "not loaded"
+//      instead of rendering an invented number.
+// There is deliberately no local fallback. A wrong CTL/ATL is worse than an absent one: it drives
+// the attention panel, Coach V and the readiness gauge, and it looked authoritative while being
+// wrong for weeks.
 function getFitness_(){
   var series=[]; try{ series=fitnessSeries_()||[]; }catch(e){ series=[]; }
-  var last=series.length?series[series.length-1]:null;
-  var ctl=last?Math.round(last.ctl||0):0;
-  var atl=last?Math.round(last.atl||0):0;
-  var tsb=last?Math.round(last.tsb!=null?last.tsb:((last.ctl||0)-(last.atl||0))):0;
-  // 7-day deltas (ctl ramp drives peaking/detraining direction) — computed ONCE.
+  var raw=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var last=raw.length?raw[raw.length-1]:null;
+  var ctl=0, atl=0, tsb=0, ramp=null, source='none', asOf=null, stale=true;
+  if(last){
+    ctl=Math.round(last.ctl||0); atl=Math.round(last.atl||0); tsb=Math.round(last.tsb||0);
+    // Intervals reports rampRate as CTL change per WEEK, which is the same unit the app's
+    // peaking/detraining thresholds already use. Taken from the source rather than re-derived.
+    ramp=(last.ramp!=null)?last.ramp:null;
+    source='intervals'; asOf=(st&&st.fitSeriesAt)||null;
+    stale=(last.date!==_fitYMD_(new Date()));
+  }
+  // Today's poll wins when present: it is the freshest read of the same endpoint.
+  try{
+    var lw=window.__liveWellness;
+    if(lw && lw.fetchedAt){
+      ctl=Math.round(lw.ctl||0); atl=Math.round(lw.atl||0); tsb=Math.round(lw.tsb||0);
+      if(lw.ramp!=null) ramp=lw.ramp;
+      source='intervals-live'; asOf=lw.fetchedAt;
+      stale=((Date.now()-lw.fetchedAt)>=FIT_LIVE_GATE);
+    }
+  }catch(e){}
+  // d7 stays available for consumers that want the 7-day move, read off the SAME series.
   var d7=null;
-  if(series.length>=8){ var n=series.length-1, p=series.length-8;
-    d7={ ctl:Math.round((series[n].ctl-series[p].ctl)*10)/10,
-         atl:Math.round((series[n].atl-series[p].atl)*10)/10,
-         tsb:Math.round(((series[n].ctl-series[n].atl)-(series[p].ctl-series[p].atl))*10)/10 }; }
-  var ramp=d7?d7.ctl:null;
-  var source=(st.pmcHistory&&st.pmcHistory.length)?'intervals-csv':'computed';
-  var asOf=(st&&st.lastUpdate)?st.lastUpdate:Date.now(), stale=true;
-  // Live Intervals.icu overrides the headline numbers when genuinely fresh, under
-  // ONE shared gate. Ramp/d7 stay from the series (live carries no history).
-  try{ var lw=window.__liveWellness; if(lw && lw.fetchedAt && (Date.now()-lw.fetchedAt)<FIT_LIVE_GATE){ ctl=Math.round(lw.ctl||0); atl=Math.round(lw.atl||0); tsb=Math.round(lw.tsb||0); source='live'; asOf=lw.fetchedAt; stale=false; } }catch(e){}
-  return {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, d7:d7, source:source, asOf:asOf, stale:stale};
+  if(raw.length>=8){ var n=raw.length-1, p=raw.length-8;
+    d7={ ctl:Math.round((raw[n].ctl-raw[p].ctl)*10)/10,
+         atl:Math.round((raw[n].atl-raw[p].atl)*10)/10,
+         tsb:Math.round((raw[n].tsb-raw[p].tsb)*10)/10 }; }
+  if(ramp==null && d7) ramp=d7.ctl;
+  return {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, d7:d7, source:source, asOf:asOf, stale:stale,
+          loaded:(source!=='none')};
 }
 
 function buildPMCChart(data){
@@ -15401,7 +15451,7 @@ function aiRideScore_(wind, temp, precip){
 }
 
 // Fatigue decomposition = the app's own PMC (CTL fitness / ATL fatigue / TSB form)
-// over the full loaded library. Deterministic — reuses computePMC + unifiedLoad,
+// over the full loaded library. Deterministic — reads the shared Intervals series,
 // the exact pipeline the desktop dashboard runs (see dsShowDashboard).
 function aiFatigue_(ridesOpt){
   var rides=ridesOpt||allRidesDeduped_();
@@ -15409,9 +15459,10 @@ function aiFatigue_(ridesOpt){
   items.forEach(function(x){ x.load=unifiedLoad(x); });
   var withLoad=items.filter(function(x){ return x.load>0; });
   if(withLoad.length<8) return { ok:false, value:null, drivers:[], sampleSize:withLoad.length };
-  var pmc=computePMC(withLoad);
-  var now=pmc[pmc.length-1], wk=pmc[Math.max(0, pmc.length-8)];
-  var ctl=Math.round(now.ctl), atl=Math.round(now.atl), tsb=Math.round(now.tsb);
+  var pmc=fitnessSeries_();
+  var wk=pmc[Math.max(0, pmc.length-8)];
+  var _f=getFitness_();
+  var ctl=_f.ctl, atl=_f.atl, tsb=_f.tsb;
   return {
     ok:true,
     value:tsb,
@@ -18629,18 +18680,18 @@ function _aiLinePath_(vals, W, H){
   var n=vals.length;
   return 'M'+vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-min)/(max-min))*(H-10)-5; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L');
 }
-// Training-load PMC curve — reuses computePMC + unifiedLoad (the dashboard pipeline).
+// Training-load PMC curve — reads the shared Intervals series (the one fitness source).
 function aiTrendPMC_(rides){
   var items=(rides||[]).concat((st.runs||[]).map(function(r){return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe};}));
   items.forEach(function(x){ x.load=unifiedLoad(x); });
   var wl=items.filter(function(x){ return x.load>0; });
   if(wl.length<8) return '';
-  var pmc=computePMC(wl); if(!pmc||pmc.length<2) return '';
+  var pmc=fitnessSeries_(); if(!pmc||pmc.length<2) return '';
   var ctl=pmc.map(function(p){return p.ctl;}), atl=pmc.map(function(p){return p.atl;});
   var lo=Math.min.apply(null,ctl.concat(atl)), hi=Math.max.apply(null,ctl.concat(atl)); if(hi<=lo)hi=lo+1;
   var W=680,H=130,n=pmc.length;
   function pth(vals){ return 'M'+vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-lo)/(hi-lo))*(H-10)-5; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L'); }
-  var now=pmc[pmc.length-1];
+  var now=getFitness_();
   var inner=aiLbl_('TRAINING LOAD (PMC)','<span style="font-size:11px;color:#5b6678">last '+n+' days</span>');
   inner+='<div style="display:flex;gap:22px;margin-bottom:12px">';
   [['Fitness (CTL)',Math.round(now.ctl),'#4ade80'],['Fatigue (ATL)',Math.round(now.atl),'#f59e0b'],['Form (TSB)',Math.round(now.tsb),'#60a5fa']].forEach(function(s){ inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">'+s[0]+'</div><div style="font-size:22px;font-weight:800;color:'+s[2]+';line-height:1.1">'+s[1]+'</div></div>'; });
@@ -18703,16 +18754,18 @@ function _trConf_(n, full){ n=+n||0; full=full||120; var c=Math.round(100*(1-Mat
 // Full-history daily CTL/ATL (not the 85-day window) — a single pass over all live load, so
 // "highest CTL ever" is a real all-time comparison. Cheap: bucket load by day, walk with τ=42/7.
 function _trLongPMC_(){
-  var a=(st.rides||[]).filter(function(r){return r&&!r.deleted;})
-    .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe};}));
-  a.forEach(function(x){ x.load=(typeof unifiedLoad==='function')?unifiedLoad(x):(+x.tss||0); });
-  var byDay={}, min=null;
-  a.forEach(function(x){ if(!x.date||!(x.load>0))return; var k=normDate(x.date); byDay[k]=(byDay[k]||0)+x.load; var t=new Date(String(x.date).slice(0,10)+'T00:00:00'); if(isNaN(t.getTime()))return; if(!min||t<min)min=t; });
-  if(!min) return null;
-  var today=new Date(); today.setHours(0,0,0,0);
-  var ctl=0, atl=0, peakCtl=0, peakDate=null, d=new Date(min), guard=0;
-  while(d<=today && guard++<20000){ var k=normDate(d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()); var tss=byDay[k]||0; ctl+=(tss-ctl)/42; atl+=(tss-atl)/7; if(ctl>peakCtl){peakCtl=ctl; peakDate=new Date(d);} d.setDate(d.getDate()+1); }
-  return { ctlNow:Math.round(ctl), peakCtl:Math.round(peakCtl), peakDate:peakDate };
+  // Long-range PMC. Formerly rebuilt the whole curve from the first ride with its own EMA; now a
+  // read of the one Intervals series, so the long view and the dashboard cannot disagree about
+  // where CTL peaked.
+  var s=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+  if(s.length<2) return null;
+  var peakCtl=0, peakDate=null;
+  s.forEach(function(p){ if(p.ctl>peakCtl){ peakCtl=p.ctl; peakDate=p.date; } });
+  var last=s[s.length-1];
+  return { series:s, ctl:last.ctl, atl:last.atl, tsb:last.tsb,
+           peakCtl:Math.round(peakCtl*10)/10, peakDate:peakDate,
+           start:s[0].date, end:last.date, n:s.length };
+
 }
 // Your Story — Last 90 days: fitness/fatigue/form now vs ~90d ago (authoritative series).
 function _trStory_(){
@@ -21662,10 +21715,9 @@ function dsShowAICoach(){
     .concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
   acts.forEach(function(a){a.load=unifiedLoad(a);});
   var wl=acts.filter(function(a){return a.load>0;});
-  var pmc=wl.length?computePMC(wl):null;
-  var ctl=pmc?Math.round(pmc[pmc.length-1].ctl):0;
-  var atl=pmc?Math.round(pmc[pmc.length-1].atl):0;
-  var tsb=ctl-atl;
+  var pmc=fitnessSeries_(); if(!pmc.length) pmc=null;
+  var _fCoach=getFitness_();
+  var ctl=_fCoach.ctl, atl=_fCoach.atl, tsb=_fCoach.tsb;
   var ftp=parseInt(st.ftp||186);
   var weight=parseFloat(st.weight||162);
   var wkg=(ftp/weight*2.20462).toFixed(2);
@@ -21962,10 +22014,9 @@ function openAICoachPlanGen(){
     var a2=(st.rides||[]).filter(function(r){return !r.deleted;}).concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
     a2.forEach(function(a){a.load=unifiedLoad(a);});
     var wl2=a2.filter(function(a){return a.load>0;});
-    var pmc2=wl2.length?computePMC(wl2):null;
-    var ctl2=pmc2?Math.round(pmc2[pmc2.length-1].ctl):0;
-    var atl2=pmc2?Math.round(pmc2[pmc2.length-1].atl):0;
-    var tsb2=ctl2-atl2;
+    var pmc2=fitnessSeries_(); if(!pmc2.length) pmc2=null;
+    var _fPlan=getFitness_();
+    var ctl2=_fPlan.ctl, atl2=_fPlan.atl, tsb2=_fPlan.tsb;
     var _planRace=getNextRace_();
     var rStr=_planRace?_planRace.name+' in '+_planRace.daysOut+' days'+(_planRace.target?' (target '+_planRace.target+')':''):'none scheduled';
 
@@ -22955,15 +23006,15 @@ function dsShowAnalytics(){
   // Fixed long seed (>=220d) so the 42-day EMA is fully converged and today's
   // CTL/ATL/TSB are the SAME regardless of the selected range — only the visible
   // slice changes, never the values.
-  var SEED=Math.max(RDAYS+42, 220), ctl=0,atl=0, ctlAll=[],atlAll=[],tsbAll=[],labAll=[];
-  for(var _i=SEED-1;_i>=0;_i--){
-    var _d=new Date(now); _d.setDate(_d.getDate()-_i);
-    var _nd=normDate(_d.getFullYear()+'-'+(_d.getMonth()+1)+'-'+_d.getDate());
-    var _t=tssByDate[_nd]||0;
-    ctl=ctl+(_t-ctl)/42; atl=atl+(_t-atl)/7;
-    ctlAll.push(Math.round(ctl*10)/10); atlAll.push(Math.round(atl*10)/10);
-    tsbAll.push(Math.round((ctl-atl)*10)/10); labAll.push(_nd.slice(5));
-  }
+  // The curve comes from Intervals, not from a local EMA. The seed-length comment below used to
+  // explain how this surface kept its own values stable across range changes; it no longer has its
+  // own values. Selecting a range slices the authoritative series, which is all it ever should
+  // have done.
+  var _fsAn=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+  var ctlAll=_fsAn.map(function(p){return p.ctl;}),
+      atlAll=_fsAn.map(function(p){return p.atl;}),
+      tsbAll=_fsAn.map(function(p){return p.tsb;}),
+      labAll=_fsAn.map(function(p){return String(p.date).slice(5);});
   var ctlArr=ctlAll.slice(-RDAYS), atlArr=atlAll.slice(-RDAYS), tsbArr=tsbAll.slice(-RDAYS), labels=labAll.slice(-RDAYS);
 
   // Rides within the selected window — drives Power Distribution.
@@ -23721,7 +23772,7 @@ function dsShowCalendar(){
 function getDesktopFitness_(){
   // Back-compat alias — now delegates to the single source of truth so the
   // desktop Dashboard reads the exact same CTL/ATL/TSB (and ramp) as the AI
-  // Coach and Athlete Intelligence, instead of its own 1-hour-gate/computePMC
+  // Coach and Athlete Intelligence, instead of its own 1-hour-gate/local-EMA
   // variant. Returns the full snapshot; legacy callers just read ctl/atl/tsb.
   return getFitness_();
 }
@@ -34400,7 +34451,7 @@ function showCalendarTab(){
 
   // ---- Real data pulls -----------------------------------------------------
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
-  var pmcData=(st.pmcHistory&&st.pmcHistory.length)?buildPMCFromHistory(st.pmcHistory):computePMC(rides);
+  var pmcData=fitnessSeries_();
   var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
   var ctl=Math.round(last.ctl||0);
   var atl=Math.round(last.atl||0);
