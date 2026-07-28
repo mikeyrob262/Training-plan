@@ -10128,42 +10128,76 @@ function renderAllAvatars(){
 var MEAL_BUCKETS=['breakfast','preworkout','during','postworkout','lunch','dinner','snacks'];
 
 function getWorkoutForDate_(dateKey){
-  // Reads the persistent plan (st.plan) via getPlannedWorkoutForDate (Phase 0).
+  // What is prescribed on THIS date. Two sources, both date-keyed, in priority order:
+  //   1. st.plan (the persistent plan the user edits and completes against);
+  //   2. blockPlanFor_(dateKey) — the training block itself, which is the authority whenever the
+  //      plan has not been generated for that day.
+  //
+  // There used to be a third: a scrape of the ws{week}_{weekday} DOM cells. Those cells are still
+  // in the served markup carrying a STATIC template from an older plan ("Strength A", "Zwift",
+  // "Group Ride"), so on any day st.plan had not been generated for, the Nutrition page fuelled
+  // for a session out of that template rather than for the session actually prescribed. It read
+  // the weekday index off the real clock and the week index off getCurrentPlanWeek(), so it could
+  // not be date-correct even in principle for a date other than today. Deleted, not repaired.
+  //
+  // REST/MOBILITY IS NOT A FUELLING EVENT. A day of rest + 15 minutes of mobility is a rest day
+  // for the purposes of a calorie budget; treating the mobility slot as "the workout" flipped the
+  // whole day onto the training-day formula and handed back a training-day budget on a Monday.
+  var _fuelable=function(list){
+    return (list||[]).filter(function(x){
+      var ty=String((x&&x.type)||'').toLowerCase();
+      return x && ty!=='rest' && ty!=='mobility';
+    });
+  };
+  var _restResult=function(nm){
+    return {name:nm||'Rest day', minutes:0, isRide:false, isRest:true, isHard:false};
+  };
+  var _shape=function(nm, mins, sessions){
+    var hard=/interval|sweet spot|threshold|tempo|hill|vo2|race|attempt/i.test(nm);
+    // Intent is more reliable than the display name when the plan carries one.
+    (sessions||[]).forEach(function(x){ if(x && /^(vo2|threshold|chalet|alpe|ventop|tenk|ftpTest)$/i.test(String(x.intent||''))) hard=true; });
+    return {name:nm, minutes:mins, isRide:/zwift|ride|bike|chase|z2|endurance|group|long/i.test(nm),
+            isRest:/rest/i.test(nm), isHard:hard};
+  };
+  var _mins=function(txt, fallback){
+    if(!txt) return fallback;
+    var n=String(txt).match(/[0-9]+/g);
+    if(n && n.length>=2 && String(txt).indexOf('-')>=0) return (parseInt(n[0])+parseInt(n[1]))/2;
+    if(n && n.length) return parseInt(n[0]);
+    return fallback;
+  };
+
+  // ---- 1. the persistent plan
   var _ov=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(dateKey):null;
   if(_ov && _ov.name){
-    var onm=_ov.name, omin=90;
-    if(_ov.dur){ var _dn=String(_ov.dur).match(/[0-9]+/g); if(_dn && _dn.length>=2 && String(_ov.dur).indexOf('-')>=0) omin=(parseInt(_dn[0])+parseInt(_dn[1]))/2; else if(_dn && _dn.length) omin=parseInt(_dn[0]); }
-    return {name:onm, minutes:omin, isRide:/zwift|ride|bike|chase/i.test(onm), isRest:/rest/i.test(onm), isHard:/interval|sweet spot|threshold|tempo|hill|vo2|race/i.test(onm)};
+    var f1=_fuelable(_ov.sessions&&_ov.sessions.length?_ov.sessions:[{type:_ov.type, intent:_ov.intent, name:_ov.name}]);
+    if(!f1.length) return _restResult('Rest + mobility');
+    var s1=f1[0], nm1=s1.name||_ov.name;
+    var dur1=(s1.targets&&s1.targets.durationMin!=null)?(s1.targets.durationMin+' min'):_ov.dur;
+    return _shape(nm1, _mins(dur1, 90), f1);
   }
-  var target=new Date(dateKey+'T00:00:00');
-  var todayKey=getTodayKey();
-  var isToday=(dateKey===todayKey);
-  var curWeek=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
-  // Only today's workout is reliably in the DOM (the visible week); for
-  // other dates fall back to the plan's stored day type without duration.
-  if(!isToday) return null;
-  var dayIdx=(new Date().getDay()===0)?6:new Date().getDay()-1;
-  var sessEl=document.getElementById('ws'+curWeek+'_'+dayIdx);
-  var cardEl=document.getElementById('wc'+curWeek+'_'+dayIdx);
-  var sessName=sessEl?sessEl.textContent.trim():null;
-  if(!sessName) return null;
-  var plannedEl=cardEl?cardEl.querySelector('.wof-pl'):null;
-  var plannedDurText=plannedEl?plannedEl.textContent.trim():null;
-  // Planned duration is often a range like "55-65 min" - take the midpoint.
-  // NOTE: this file is served inside one template literal, which strips a
-  // single backslash — so \d/\s regexes become d/s and never match. Use a
-  // backslash-free [0-9] number scan instead (this previously always fell
-  // through to the 90-min default).
-  var minutes=90;
-  if(plannedDurText){
-    var durNums=plannedDurText.match(/[0-9]+/g);
-    if(durNums && durNums.length>=2 && plannedDurText.indexOf('-')>=0) minutes=(parseInt(durNums[0])+parseInt(durNums[1]))/2;
-    else if(durNums && durNums.length) minutes=parseInt(durNums[0]);
-  }
-  var isRide=/zwift|ride|bike|chase/i.test(sessName);
-  var isRest=/rest/i.test(sessName);
-  var isHard=/interval|sweet spot|threshold|tempo|hill|vo2|race/i.test(sessName);
-  return {name:sessName, minutes:minutes, isRide:isRide, isRest:isRest, isHard:isHard};
+
+  // ---- 2. the training block, for this exact date
+  try{
+    if(typeof blockPlanFor_==='function'){
+      var bp=blockPlanFor_(dateKey);
+      if(bp && bp.sessions && bp.sessions.length){
+        var f2=_fuelable(bp.sessions.map(function(x){
+          var def=(typeof SESSION_DEFS!=='undefined' && x)?SESSION_DEFS[x.intent]:null;
+          return {type:def?def.type:'', intent:x.intent, name:(x.rx&&x.rx.name)||(def&&def.name)||x.intent,
+                  targets:(x.rx&&x.rx.targets)||null};
+        }));
+        if(!f2.length) return _restResult('Rest + mobility');
+        var s2=f2[0];
+        var dur2=(s2.targets&&s2.targets.durationMin!=null)?(s2.targets.durationMin+' min'):null;
+        return _shape(s2.name, _mins(dur2, 90), f2);
+      }
+    }
+  }catch(e){}
+
+  // Nothing prescribed for this date. Null, never a guess — calcTrainingAwareTargets_ reads that
+  // as a rest day and uses the baseline, which is the honest answer for a day with no session.
+  return null;
 }
 
 // Training-aware daily targets, replacing the fixed HIGH/MOD/LOW weekly
