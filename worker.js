@@ -12089,28 +12089,43 @@ function _streakWeekKeyOf_(ds){
   return d.getFullYear()+'-'+_streakP2_(d.getMonth()+1)+'-'+_streakP2_(d.getDate());
 }
 function _activityDates_(){
-  // RIDES AND RUNS ONLY (owner decision, Jul 28 2026). The streak previously counted a completed
-  // plan session of any type, legacy strength, ANY single ticked mobility movement, and
-  // conditioning — so one stretch kept a week alive and the count read far higher than "weeks I
-  // actually trained". Strength and mobility are still tracked and scored elsewhere; they just do
-  // not decide this number.
+  // ANY SPORT, ANY TYPE (owner decision, Jul 28 2026, reversing 0185f39).
   //
-  // st.rides is NOT a ride list — it carries every sport Strava sends, including WeightTraining,
-  // Walk and Hike. Filtering the STORE is not the same as filtering the SPORT, so each record is
-  // classified through _actSport_ (the same reader activitiesForDate_ uses) and only 'ride' and
-  // 'run' count. Filtering by store alone would have quietly kept every gym session in.
+  // The streak is a CONSISTENCY metric, not a training-load one, and the number it is checked
+  // against is Garmin's — which counts every activity it receives. Narrowing this to rides and
+  // runs made it disagree with the source of truth by definition rather than by arithmetic:
+  // Garmin/Strava read 78 weeks, a rides-and-runs count read far lower. The gap was never data
+  // depth (1,930 records back to 2011, ample for 78 weeks); it was scope.
+  //
+  // So: every recorded activity counts, whatever its sport — rides, runs, walks, hikes, weight
+  // training, mobility, conditioning. NO sport classification is applied on purpose. st.rides
+  // carries every sport Strava sends, and that breadth is now the point rather than a hazard.
+  // The card says "any sport" so the definition is legible on the surface that shows it.
+  //
+  // What is still excluded is only what is not an activity: deleted records, and plan sessions
+  // that were prescribed but never completed.
   var out=[];
-  var sportOf=function(r, fallback){
-    return (typeof _actSport_==='function') ? _actSport_(r, fallback) : fallback;
-  };
-  try{ (st.rides||[]).forEach(function(r){
-    if(!r || r.deleted || !r.date) return;
-    var sp=sportOf(r,'ride');
-    if(sp==='ride' || sp==='run') out.push(r.date);
+  try{ (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
+  try{ (st.runs||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push(r.date); }); }catch(e){}
+  // st.plan — the modern strength/mobility store. A COMPLETED session of any type counts; a
+  // planned-but-unfinished one does not.
+  try{ Object.keys(st.plan||{}).forEach(function(k){
+    var day=st.plan[k]; if(!day || !Array.isArray(day.sessions)) return;
+    for(var i=0;i<day.sessions.length;i++){ var s=day.sessions[i];
+      if(s && !s.deleted && s.status==='completed'){ out.push(k); break; } }
   }); }catch(e){}
-  try{ (st.runs||[]).forEach(function(r){
-    if(!r || r.deleted || !r.date) return;
-    out.push(r.date);                                  // st.runs is run-typed by construction
+  // Legacy ephemeral ws{} strength + core, still the only record for older weeks.
+  try{ if(typeof ws==='function'){ for(var w=1;w<=50;w++){ var wk=ws(w); if(!wk) continue;
+    ['A','B'].forEach(function(l){ if(wk.str && wk.str[l] && wk.str[l]._date) out.push(wk.str[l]._date); });
+    if(wk.core && wk.core.date) out.push(wk.core.date); } } }catch(e){}
+  // Mobility: ANY movement ticked is a logged activity. A >=6 threshold would be a completeness
+  // judgement the streak has no business making.
+  try{ Object.keys(st.mob||{}).forEach(function(d){
+    var done=(st.mob[d]||{}).done||{};
+    for(var k2 in done){ if(done[k2]){ out.push(d); break; } }
+  }); }catch(e){}
+  try{ Object.keys(st.cond||{}).forEach(function(d){
+    if(Object.keys(st.cond[d]||{}).length>0) out.push(d);
   }); }catch(e){}
   return out;
 }
@@ -12163,7 +12178,7 @@ function streakCardHTML_(){
     +'<div style="display:flex;align-items:center;gap:14px">'
     +flameSvg
     +'<div>'
-    +'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3)">Activity Streak</div>'
+    +'<div style="font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t3)">Activity streak (any sport)</div>'
     +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+sub+'</div>'
     +'</div></div>'
     +'<div style="text-align:right"><span style="font-size:34px;font-weight:800;color:var(--t1);line-height:1">'+n+'</span>'
