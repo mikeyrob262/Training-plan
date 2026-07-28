@@ -20362,6 +20362,138 @@ function _trjSection6_(){
   return _trjSec_(6,'CONFIDENCE & MOMENTUM','')+'<div class="trj-cards">'+cards.join('')+'</div>';
 }
 
+// ---- 8. Prescribed vs actual ----
+// CTL says how much load arrived; it cannot say whether that load was the load that was ASKED for.
+// A block can look healthy on CTL while every session is ridden harder than written, which is the
+// pattern this card exists to make visible.
+//
+// Paired at DAY level, not session level: a day can carry two prescriptions or two rides, and
+// summing both sides is the only pairing that stays honest when it does. A day with a prescription
+// and no ride is a missed session, not a zero-intensity one -- it belongs to §5's completion rate,
+// not to an intensity ratio -- so it is excluded here and counted separately.
+//
+// Actual load reads r.tss first, then r.load. Those are the same number on every ride in this
+// library that carries both (50 of 50, ratio 1.00), and load has the wider coverage; icuTss is
+// absent entirely. They are NOT averaged -- one is a fallback for the other.
+function _trjRxLoad_(r){
+  if(!r) return 0;
+  var t=+r.tss; if(t>0) return t;
+  var l=+r.load; if(l>0) return l;
+  return 0;
+}
+function _trjRxTarget_(sess){
+  if(!sess) return 0;
+  var t=sess.targets && +sess.targets.tssTarget;
+  if(t>0) return t;
+  // Generated sessions are stored identity-only and re-priced on read, so a stored session may
+  // carry no targets at all. Re-derive from the definition rather than treating it as unprescribed.
+  try{
+    if(sess.intent && typeof _planSessionFromDef_==='function'){
+      var fr=_planSessionFromDef_(sess.intent, (sess.block && sess.block.week) || 1);
+      if(fr && fr.targets && +fr.targets.tssTarget>0) return +fr.targets.tssTarget;
+    }
+  }catch(e){}
+  return 0;
+}
+var TRJ_RX_MIN=8;                                    // paired days before a ratio means anything
+function _trjRxDays_(){
+  if(typeof planSessionsForDate_!=='function') return null;
+  var today=_trjTodayT_(), start=today-TRJ_WINDOW;
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  var byDate={};
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var k=String(r.date||'').slice(0,10); if(!k) return;
+    (byDate[k]=byDate[k]||[]).push(r);
+  });
+  var days=[], missed=0, unpriced=0, t, key;
+  for(t=start; t<=today; t++){
+    key=_trjKey_(t); if(!key) continue;
+    var presc=0, priced=0, any=0;
+    (planSessionsForDate_(key)||[]).forEach(function(x){
+      if(!x || x.deleted) return;
+      var ty=String(x.type||'').toLowerCase();
+      if(ty!=='ride') return;                        // rides only: a strength TSS is a different unit
+      any++;
+      var tg=_trjRxTarget_(x);
+      if(tg>0){ presc+=tg; priced++; }
+    });
+    if(!any) continue;
+    if(!priced){ unpriced++; continue; }             // prescribed but with no derivable load
+    var actual=0;
+    (byDate[key]||[]).forEach(function(r){ actual+=_trjRxLoad_(r); });
+    if(!(actual>0)){ missed++; continue; }           // no ride happened: §5's problem, not this one
+    days.push({ t:t, presc:presc, actual:actual, ratio:actual/presc });
+  }
+  if(!days.length) return { days:[], weeks:[], missed:missed, unpriced:unpriced, n:0 };
+  var wk={};
+  days.forEach(function(d){
+    var mon=_trjMondayT_(d.t);
+    if(!wk[mon]) wk[mon]={t:mon, presc:0, actual:0, n:0};
+    wk[mon].presc+=d.presc; wk[mon].actual+=d.actual; wk[mon].n++;
+  });
+  var weeks=Object.keys(wk).map(Number).sort(function(a,b){return a-b;}).map(function(m){ return wk[m]; });
+  var sp=0, sa=0;
+  days.forEach(function(d){ sp+=d.presc; sa+=d.actual; });
+  var over=days.filter(function(d){ return d.ratio>1.1; }).length;
+  var under=days.filter(function(d){ return d.ratio<0.9; }).length;
+  return { days:days, weeks:weeks, n:days.length, presc:sp, actual:sa, over:over, under:under,
+           onPlan:(days.length-over-under), missed:missed, unpriced:unpriced };
+}
+function _trjSection8_(){
+  var R=_trjRxDays_();
+  if(!R) return '';
+  var H=_trjSec_(8,'PRESCRIBED VS ACTUAL','');
+  if(R.n<TRJ_RX_MIN){
+    if(!R.n && !R.missed && !R.unpriced) return '';
+    return H+aiCard_(_trjNote_('Only '+R.n+' day'+(R.n===1?'':'s')+' in the last 12 weeks paired a priced '
+      +'prescription with a ride carrying real load. '+TRJ_RX_MIN+' is the threshold for a ratio.'
+      +(R.missed?(' '+R.missed+' prescribed day'+(R.missed===1?' had':'s had')+' no ride at all, which is a '
+        +'completion question rather than an intensity one.'):'')
+      +(R.unpriced?(' '+R.unpriced+' prescribed day'+(R.unpriced===1?'':'s')+' carried no derivable target load.'):'')));
+  }
+  var pct=Math.round(R.actual/R.presc*100);
+  var col=(pct>115)?'#f59e0b':((pct<85)?'#60a5fa':'#22c55e');
+  var verdict=(pct>115)?'harder than prescribed':((pct<85)?'easier than prescribed':'close to prescribed');
+  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">ACTUAL LOAD AS A SHARE OF PRESCRIBED</div>'
+    +'<div style="font-size:26px;font-weight:800;color:'+col+';line-height:1.1">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+aiEsc_(verdict)+' across '+R.n+' paired days &middot; '
+    +Math.round(R.actual)+' vs '+Math.round(R.presc)+' TSS</div>'
+    +_trjBar_(Math.max(0,Math.min(100,Math.round(pct/1.5))), col);
+  body+='<div style="display:flex;gap:18px;margin-top:12px">'
+    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">OVER</div>'
+    +'<div style="font-size:17px;font-weight:800;color:#f59e0b;margin-top:1px">'+R.over+'</div></div>'
+    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">ON PLAN</div>'
+    +'<div style="font-size:17px;font-weight:800;color:#22c55e;margin-top:1px">'+R.onPlan+'</div></div>'
+    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">UNDER</div>'
+    +'<div style="font-size:17px;font-weight:800;color:#60a5fa;margin-top:1px">'+R.under+'</div></div>'
+    +'</div>';
+  body+='<div style="margin-top:12px">';
+  R.weeks.forEach(function(w){
+    if(!(w.presc>0)) return;
+    var r=Math.round(w.actual/w.presc*100);
+    var c=(r>115)?'#f59e0b':((r<85)?'#60a5fa':'#22c55e');
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
+      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
+      +'<span style="font-size:11.5px;color:#cbd5e1">'+Math.round(w.actual)+'/'+Math.round(w.presc)+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:'+c+';flex:none">'+r+'%</span></div>';
+  });
+  body+='</div>';
+  var fit=_trjFit_(R.weeks.filter(function(w){ return w.presc>0; }).map(function(w){ return {t:w.t, y:w.actual/w.presc}; }),
+                   {minN:4, minSpan:21});
+  if(fit){
+    var per=fit.slope*7*100;
+    body+='<div style="font-size:11.5px;color:#8b97ab;margin-top:10px;line-height:1.5">The gap is '
+      +(Math.abs(per)<1?'flat':(per>0?('widening '+per.toFixed(0)+' points a week'):('narrowing '+Math.abs(per).toFixed(0)+' points a week')))
+      +' across '+fit.n+' weeks.</div>';
+  }
+  body+=_trjMethod_('Paired day by day over 12 weeks: prescribed TSS from the plan against logged TSS from the '
+    +'ride. Rides only. Prescribed days with no ride are excluded and counted separately -- a missed session is '
+    +'a completion question, not an intensity one'
+    +(R.missed?(' ('+R.missed+' here)'):'')+'. Over and under are outside a 10% band.');
+  return H+aiCard_(body);
+}
+
 // Weather is fetched, not stored, so the heat card fills in on arrival and the tab repaints once.
 var _trjWxAsked=false;
 function _trjKickWeather_(){
@@ -20382,7 +20514,7 @@ function aiRenderTrajectory_(){
     +'.trj-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;align-items:stretch}'
     +'@media(max-width:820px){.trj-hero{grid-template-columns:1fr}}'
     +'</style>';
-  var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection5_(), _trjSection6_(), _trjSection7_()].filter(function(x){ return x; });
+  var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection5_(), _trjSection6_(), _trjSection7_(), _trjSection8_()].filter(function(x){ return x; });
   try{ _trjKickWeather_(); }catch(e){}
   if(!parts.length){
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
@@ -38337,7 +38469,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-adherence-and-execution';
+window.__BUILD__ = '2026-07-28-prescribed-vs-actual';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
