@@ -22639,22 +22639,28 @@ function dsShowNutrition(){
     var n=nutritionForDate(viewKey);
     var consumed=n.consumed;
     var trainingTgt; try{ trainingTgt=calcTrainingAwareTargets_(viewKey); }catch(e){ trainingTgt=null; }
-    var goals=trainingTgt?{cal:trainingTgt.cal,p:trainingTgt.pro,c:trainingTgt.carb,f:trainingTgt.fat,fiber:trainingTgt.fiber||30,sodium:trainingTgt.sodium||2300,fluidOz:trainingTgt.fluidOz||107}
+    // Burn-adjusted, via the ONE shared reader. This page previously showed the prescription
+    // target with no burn accounted for and no way to see what it was made of.
+    var _dfuel=(typeof fuelBudgetForDate_==='function')?fuelBudgetForDate_(viewKey):null;
+    var goals=trainingTgt?{cal:(_dfuel?_dfuel.total:trainingTgt.cal),p:trainingTgt.pro,c:trainingTgt.carb,f:trainingTgt.fat,fiber:trainingTgt.fiber||30,sodium:trainingTgt.sodium||2300,fluidOz:trainingTgt.fluidOz||107}
       :{cal:st.calGoal||2000,p:st.proteinGoal||165,c:st.carbGoal||250,f:st.fatGoal||70,fiber:30,sodium:2300,fluidOz:107};
     var cal=Math.round(consumed.cal||0), pro=Math.round(consumed.pro||0), carb=Math.round(consumed.carb||0), fat=Math.round(consumed.fat||0), fiber=Math.round(consumed.fiber||0), sodium=Math.round(consumed.sodium||0);
     var mic=microsOf(viewKey);
     var wOz=waterOzOf(viewKey), wTgt=goals.fluidOz||107;
     var mealCal=calByMeal(viewKey);
     // 7-day history (viewKey and 6 days before)
-    var days7=[]; for(var i=6;i>=0;i--){ var d=new Date(viewKey); d.setDate(d.getDate()-i); days7.push(keyOf(d)); }
+    var days7=[]; for(var i=6;i>=0;i--){ var d=(typeof parseDayKey==='function'?parseDayKey(viewKey):new Date(viewKey)); d.setDate(d.getDate()-i); days7.push(keyOf(d)); }
     var hist=days7.map(function(dk){ var nn=nutritionForDate(dk); return {key:dk, cal:Math.round(nn.consumed.cal||0), p:Math.round(nn.consumed.pro||0), c:Math.round(nn.consumed.carb||0), f:Math.round(nn.consumed.fat||0), water:waterOzOf(dk)}; });
     // prior-7 average (days before the viewed day) for trends
-    var prior=[]; for(var j=7;j>=1;j--){ var pd=new Date(viewKey); pd.setDate(pd.getDate()-j); var pn=nutritionForDate(keyOf(pd)); prior.push({cal:pn.consumed.cal||0,p:pn.consumed.pro||0,c:pn.consumed.carb||0,f:pn.consumed.fat||0,fiber:pn.consumed.fiber||0}); }
+    var prior=[]; for(var j=7;j>=1;j--){ var pd=(typeof parseDayKey==='function'?parseDayKey(viewKey):new Date(viewKey)); pd.setDate(pd.getDate()-j); var pn=nutritionForDate(keyOf(pd)); prior.push({cal:pn.consumed.cal||0,p:pn.consumed.pro||0,c:pn.consumed.carb||0,f:pn.consumed.fat||0,fiber:pn.consumed.fiber||0}); }
     function avg(arr,f2){ var s=0,n2=0; arr.forEach(function(x){ s+=f2(x); n2++; }); return n2?s/n2:0; }
     function trend(cur,prevAvg){ if(prevAvg<=0) return null; return Math.round((cur-prevAvg)/prevAvg*100); }
 
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var vd=new Date(viewKey);
+    // parseDayKey, not new Date(key): the string form parses as UTC midnight and is then read
+    // with local getters, so west of UTC the label shows the PREVIOUS day. Same fault the
+    // mobile header had; this renderer needed the same fix.
+    var vd=(typeof parseDayKey==='function')?parseDayKey(viewKey):new Date(viewKey);
     var dateLabel=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
 
     // ---- helpers ----
@@ -22695,6 +22701,13 @@ function dsShowNutrition(){
       +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
       +'<div style="font-size:44px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.03em">'+cal+'</div>'
       +'<div style="font-size:11px;color:#64748b;margin-top:3px">of '+goals.cal+' cal</div>'
+      // Base + Burned = Total, always rendered. A bare total is a number you have to take on
+      // faith; the parts are what make it checkable, and an absent line reads as broken.
+      +(_dfuel?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'
+        +(_dfuel.burned>0
+            ? ('Base '+_dfuel.base.toLocaleString()+' + Burned '+_dfuel.burned.toLocaleString()+' = '+_dfuel.total.toLocaleString())
+            : ('Base '+_dfuel.base.toLocaleString()+' + nothing burned yet'))
+        +'</div>'):'')
       +'<div style="font-size:12px;font-weight:800;color:'+heroCol+';margin-top:6px;background:'+heroCol+'1f;border-radius:20px;padding:2px 11px">'+calPct+'%</div>'
       +'</div></div>';
     mt+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:11px">';
@@ -22853,7 +22866,9 @@ function dsShowNutrition(){
     wrap.addEventListener('click',function(e){
       var t=e.target.closest('[data-act]'); if(!t) return;
       var a=t.getAttribute('data-act');
-      function stepDay(n){ var d=new Date(viewKey); d.setDate(d.getDate()+n); viewKey=keyOf(d); nutrDate=viewKey; render(); }
+      // parseDayKey: with the UTC parse, stepping +1 from a day key returned the SAME key (a stuck
+      // forward arrow) and -1 skipped a day, west of UTC.
+      function stepDay(n){ var d=(typeof parseDayKey==='function'?parseDayKey(viewKey):new Date(viewKey)); d.setDate(d.getDate()+n); viewKey=keyOf(d); nutrDate=viewKey; render(); }
       if(a==='prev') stepDay(-1);
       else if(a==='next') stepDay(1);
       else if(a==='add'){ nutrDate=viewKey; var hr=new Date().getHours(); if(typeof openFoodForMeal==='function') openFoodForMeal(hr<11?'breakfast':hr<16?'lunch':hr<21?'dinner':'snacks'); }
@@ -37076,7 +37091,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-nutr-date-and-breakdown';
+window.__BUILD__ = '2026-07-28-desktop-nutr-parity';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
