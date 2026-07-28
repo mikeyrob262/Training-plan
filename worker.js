@@ -36000,14 +36000,45 @@ function reimportStravaActivities_(opts, cb){
         if(list.length<PER){ console.log('[reimport] page '+page+' short ('+list.length+'<'+PER+') — last page'); finishAll('last page'); } else { page++; setTimeout(nextPage, 250); }
       }).catch(function(e){ console.warn('[reimport] page '+page+' fetch error: '+(e&&e.message)); resumePoll(); report({error:(e&&e.message)||'fetch', added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Re-import paused (fetch error) — re-run to resume.'}); });
     };
-    console.log('[reimport] starting walk — scope='+types.join('+')+', per_page='+PER);
+    // types may be an ARRAY ['cycling','running'] or the STRING 'all'. A string has no .join,
+    // and this line runs immediately before nextPage() — so passing 'all' threw here and the
+    // walk never started. inScope already handled the string form correctly; only the label did not.
+    var _typesLabel=Array.isArray(types)?types.join('+'):String(types);
+    console.log('[reimport] starting walk — scope='+_typesLabel+', per_page='+PER);
     nextPage();
+  };
+  // Starting the walk is kept OUT of the token promise chain, deliberately. doRun used to be
+  // called inside .then, so any error it threw rejected that promise and landed in the auth
+  // .catch below — which responded by calling doRun a SECOND time. It threw again, nothing was
+  // left to catch it, and cb was never called: a silent hang instead of a reported failure.
+  // A failure to START the walk is not an auth failure and must not be retried as one.
+  var runSafely=function(token){
+    setTimeout(function(){                       // out of the promise chain: a throw here is ours
+      try{ doRun(token); }
+      catch(e){
+        var m=(e&&e.message)||String(e);
+        console.error('[reimport] walk failed to start: '+m);
+        try{ if(typeof initFirebaseSync==='function') initFirebaseSync(); }catch(_e){}
+        report({error:m, added:0, revived:0, pages:0, msg:'Scan failed to start: '+m});
+      }
+    },0);
   };
   if(st.stravaRefreshToken){
     fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
-    .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doRun(d.access_token); } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'no token'}); } })
-    .catch(function(){ if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'auth'}); } });
-  } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'Connect Strava first'}); }
+    .then(function(r){return r.json();}).then(function(d){
+      var tok=null;
+      if(d && d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); tok=d.access_token; }
+      else if(st.stravaToken){ tok=st.stravaToken; }
+      if(!tok){ report({error:'no token', msg:'Strava did not return a token. Reconnect Strava.'}); return; }
+      runSafely(tok);
+    })
+    .catch(function(e){
+      // Reaching here means the TOKEN request itself failed. The walk has not started.
+      if(st.stravaToken){ runSafely(st.stravaToken); }
+      else { report({error:'auth', msg:'Could not refresh Strava auth: '+((e&&e.message)||'request failed')}); }
+    });
+  } else if(st.stravaToken){ runSafely(st.stravaToken); }
+  else { report({error:'Connect Strava first', msg:'Connect Strava first.'}); }
 }
 
 // ==================== bounded backfill: Jan 1-19 2026 ====================
@@ -36984,7 +37015,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-burn-adjusted-fuel';
+window.__BUILD__ = '2026-07-28-scan-hang-fix';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
