@@ -19798,6 +19798,79 @@ function _trjSection1_(){
   return H;
 }
 
+// ---- 2. Milestone confidence ----
+// The block has four real dated targets, not one. Each gets the SAME fit evaluated at its own
+// date, so the page shows confidence per milestone rather than a single number for the furthest
+// one. Chalet Reynard is the near-term proving ground: it lands first, so whether the projection
+// holds there is the only honest evidence for whether the November read can be trusted at all.
+//
+// The percentage means exactly what it means on the destination card -- the share of the
+// prediction band clearing the metric goal ON that date. It is NOT a chance of summiting a
+// mountain or running a 10k: nothing in this data speaks to that, and a number that looked like
+// it would be inventing a claim the fit cannot support.
+function _trjMilestoneRows_(){
+  var d=_trjDestination_();
+  if(!d || !d.metric || !d.fit) return null;
+  var eff=(typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(new Date()):[];
+  var today=_trjTodayT_(), rows=[];
+  eff.forEach(function(m){
+    if(!m || !m.date) return;
+    var t=_trjDay_(m.date);
+    if(t==null || t<today) return;
+    rows.push({ slug:m.slug, label:m.label, note:m.note||'', t:t, days:(t-today),
+                proj:d.fit.at(t), prob:d.fit.pAtLeast(t, d.goal), se:d.fit.se(t) });
+  });
+  if(!rows.length) return null;
+  rows.sort(function(a,b){ return a.t-b.t; });
+  return { metric:d.metric, unit:d.unit||'', goal:d.goal, fit:d.fit, rows:rows };
+}
+function _trjSection2_(){
+  var M=_trjMilestoneRows_();
+  var H=_trjSec_(2,'MILESTONE CONFIDENCE','');
+  if(!M){
+    // Absence, not shortfall: with no fittable series there is nothing to evaluate at any date.
+    var anyFuture=false;
+    try{
+      var eff2=_blockMilestonesEffective_(new Date()), td=_trjTodayT_();
+      eff2.forEach(function(m){ var t=_trjDay_(m.date); if(t!=null && t>=td) anyFuture=true; });
+    }catch(e){}
+    if(!anyFuture) return '';
+    return H+aiCard_(_trjNote_('No projection to evaluate yet. The milestone dates are real, but neither '
+      +'the FTP log nor the CTL series has enough points to support a trend line, so no per-milestone '
+      +'figure is shown rather than a guessed one.'));
+  }
+  var name=(M.metric==='ftp')?'FTP':'CTL';
+  var goalTxt=Math.round(M.goal)+(M.unit||'');
+  var body='<div style="font-size:11.5px;color:#8b97ab;line-height:1.5;margin-bottom:12px">'
+    +'Share of the projection band clearing your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)
+    +' on each date. Same fit as the destination card, evaluated further out each time -- so the '
+    +'band widens and confidence falls the further away a target is.</div>';
+  M.rows.forEach(function(r, ix){
+    var pc=_trjConf_(r.prob), first=(ix===0);
+    var col=first?'#FC4C02':'#8b97ab';
+    body+='<div style="padding:9px 0;border-bottom:1px solid #171b26">'
+      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
+        +'<div style="min-width:0">'
+          +'<div style="font-size:13px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          +aiEsc_(r.label)+'</div>'
+          +'<div style="font-size:10.5px;color:#5b6678">'+aiEsc_(_trjFmtY_(r.t)||'')+' &middot; '+r.days+' days out</div>'
+        +'</div>'
+        +'<div style="text-align:right;flex:none">'
+          +'<div style="font-size:15px;font-weight:800;color:'+col+'">'+pc+'%</div>'
+          +'<div style="font-size:10.5px;color:#5b6678">proj '+r.proj.toFixed(M.metric==='ftp'?0:1)+(M.unit||'')+'</div>'
+        +'</div>'
+      +'</div>'
+      +(first?('<div style="font-size:10.5px;color:#FC4C02;margin-top:4px;line-height:1.45">'
+        +'First checkpoint. This one lands soon enough to check the method against reality -- if the '
+        +'projection misses here, treat the later dates as unproven.</div>'):'')
+      +'</div>';
+  });
+  body+=_trjMethod_('One fit over '+M.fit.n+' points across '+Math.round(M.fit.span/7)+' weeks, evaluated at each '
+    +'milestone date. Percentages are capped at 95%. These measure the '+aiEsc_(name)+' goal only -- they say '
+    +'nothing about summiting a climb or running a 10k, which this data cannot speak to.');
+  return H+aiCard_(body);
+}
+
 // ---- 3. Predictions ----
 // Three identical weeks: a structural comparison of what was actually prescribed in each of the
 // last three complete weeks. Identical means the same multiset of type+intent. The pattern is
@@ -20159,7 +20232,7 @@ function aiRenderTrajectory_(){
     +'.trj-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;align-items:stretch}'
     +'@media(max-width:820px){.trj-hero{grid-template-columns:1fr}}'
     +'</style>';
-  var parts=[_trjSection1_(), _trjSection3_(), _trjSection4_(), _trjSection6_()].filter(function(x){ return x; });
+  var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection6_()].filter(function(x){ return x; });
   try{ _trjKickWeather_(); }catch(e){}
   if(!parts.length){
     return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
@@ -38086,7 +38159,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-gear-page-odometer';
+window.__BUILD__ = '2026-07-28-milestone-confidence';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
