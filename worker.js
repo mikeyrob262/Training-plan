@@ -23835,6 +23835,21 @@ function _ytdCycMi_(){
   if(as && as.ytdRideMeters!=null && as.ytdRideMeters>0) return Math.round(as.ytdRideMeters/1609.344);
   return _appYtdCycMi_();
 }
+// WHICH source that figure came from. The fallback to the local library is silent, and a caller
+// that states a confident number off it repeats the "600 mi behind" fault: the stored athleteStats
+// was written before ytdRideMeters existed, so the field reads undefined and the lossy local count
+// (1,754 mi) stands in for the real year to date.
+function _ytdCycSrc_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  return (as && as.ytdRideMeters!=null && as.ytdRideMeters>0) ? 'strava' : 'local';
+}
+// True when athleteStats exists but predates the ytd fields -- a stale SHAPE, not a stale value,
+// which waiting never fixes because only a re-sync writes the missing keys.
+function _athleteStatsStale_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  if(!as) return true;
+  return (as.ytdRideMeters===undefined || as.ytdRideCount===undefined);
+}
 // (2) LINEAR-pace status vs an annual goal. Linear is a STATED simplification — real training is not
 //     linear — so the copy always says "linear pace", never "on pace" as if the target were destiny.
 function _paceStatus_(ytdMi, goalMi, now){
@@ -24800,8 +24815,15 @@ function dsAttention_(){
         // Fact only. No verb, no urgency, no comparison to today's session — the training block is
         // the authority for what to ride, and a mileage gap is season context that must never read
         // as a reason to add distance. Rendered verbatim (see dsAttentionNarrate_), never rephrased.
-        if(ytd < p.target*0.85) push(0,'context',Math.max(0,p.target-ytd).toLocaleString()+' mi behind annual pace.',true);
-        else if(p.ahead && p.delta>=Math.max(25, Math.round(p.target*0.05))) out.positives.push('Ahead of your '+Math.round(goal)+' mi goal by ~'+p.delta+' mi');
+        // Only state a gap when the year-to-date came from Strava. Off the local library the number
+        // is not merely uncertain, it is known-low -- the library is heavily tombstoned -- so the
+        // honest output is that the figure is unavailable, not a confident deficit.
+        var _ysrc=(typeof _ytdCycSrc_==='function')?_ytdCycSrc_():'strava';
+        if(_ysrc!=='strava'){
+          push(0,'context','Annual pace unavailable: Strava year-to-date has not synced, and the local ride log is incomplete.',true);
+        } else if(ytd < p.target*0.85){
+          push(0,'context',Math.max(0,p.target-ytd).toLocaleString()+' mi behind annual pace.',true);
+        } else if(p.ahead && p.delta>=Math.max(25, Math.round(p.target*0.05))) out.positives.push('Ahead of your '+Math.round(goal)+' mi goal by ~'+p.delta+' mi');
       }
     }
   }catch(e){}
@@ -33641,6 +33663,89 @@ function syncRidePRs_(days, silent, cb){
   step();
 }
 
+// ==================== bike odometers from Strava gear ====================
+// Local ride-to-bike matching cannot produce these numbers: only 4 rides resolve to the Dogma
+// against Strava's 3,968 mi, 180 cycling rides resolve to no bike at all, and the library is
+// heavily tombstoned besides. Recomputing from st.rides would just be a more elaborate wrong
+// answer. Strava keeps a per-gear odometer server-side -- exactly what the gear page shows -- so
+// that value is read and stored verbatim.
+//
+// /athlete carries the athlete's bikes as SummaryGear (id + name + distance); /gear/{id} is then
+// read per bike as the canonical per-gear record. Names are matched normalised, and a bike that
+// cannot be matched CONFIDENTLY is left alone and reported -- writing the wrong odometer onto the
+// wrong bike is worse than leaving a stale one.
+function _gearKey_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9]+/g,''); }
+function syncBikeGear_(silent, cb){
+  cb=cb||function(){};
+  var report={matched:[], unmatched:[], stravaOnly:[], errors:[]};
+  function done(err){
+    if(err) report.errors.push(err);
+    try{ console.log('[gear] '+JSON.stringify(report)); }catch(e){}
+    if(!silent){ try{ if(typeof toast==='function') toast(err?('Gear sync failed: '+err)
+      :(report.matched.length+' bike(s) updated from Strava'+(report.unmatched.length?(', '+report.unmatched.length+' unmatched'):''))); }catch(e){} }
+    cb(report);
+  }
+  var doFetch=function(token){
+    var H={'Authorization':'Bearer '+token};
+    fetch('https://www.strava.com/api/v3/athlete',{headers:H})
+      .then(function(r){ return r.ok?r.json():null; })
+      .then(function(a){
+        if(!a){ done('no athlete'); return; }
+        if(a.id) st.stravaAthleteId=a.id;
+        var gear=(a.bikes||[]).filter(function(g){ return g && g.id; });
+        if(!gear.length){ done('no bikes on the Strava account'); return; }
+        var bikes=(st.bikes||[]).filter(function(b){ return b && !b.deleted; });
+        var claimed={};
+        bikes.forEach(function(b){
+          var bk=_gearKey_(b.name);
+          var hit=gear.filter(function(g){ return !claimed[g.id] && _gearKey_(g.name)===bk; });
+          if(hit.length!==1){
+            hit=gear.filter(function(g){
+              if(claimed[g.id]) return false;
+              var gk=_gearKey_(g.name);
+              return gk && bk && (gk.indexOf(bk)>=0 || bk.indexOf(gk)>=0);
+            });
+          }
+          if(hit.length===1){ claimed[hit[0].id]=true; b._gearMatch=hit[0]; }
+          else { b._gearMatch=null; report.unmatched.push({bike:b.name, candidates:hit.length}); }
+        });
+        gear.forEach(function(g){ if(!claimed[g.id]) report.stravaOnly.push({name:g.name, id:g.id}); });
+        var todo=bikes.filter(function(b){ return b._gearMatch; }), i=0;
+        var step=function(){
+          if(i>=todo.length){
+            bikes.forEach(function(b){ try{ delete b._gearMatch; }catch(e){ b._gearMatch=null; } });
+            try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+            done(null); return;
+          }
+          var b=todo[i++], g=b._gearMatch;
+          b.stravaGearId=g.id;
+          fetch('https://www.strava.com/api/v3/gear/'+g.id,{headers:H})
+            .then(function(r){ return r.ok?r.json():null; })
+            .then(function(d){
+              // /gear/{id} is canonical; the SummaryGear distance off /athlete is the same figure
+              // and stands in when the detail call is unavailable.
+              var m=(d && d.distance!=null)?+d.distance:((g.distance!=null)?+g.distance:null);
+              if(m!=null && isFinite(m) && m>=0){
+                var was=b.miles;
+                b.miles=Math.round(m/1609.344);
+                b.milesSource='strava'; b.milesAt=Date.now();
+                report.matched.push({bike:b.name, gear:g.name, id:g.id, was:(was==null?null:was), now:b.miles});
+              } else { report.errors.push('no distance for '+g.name); }
+              setTimeout(step, 220);
+            })
+            .catch(function(e){ report.errors.push((g.name||g.id)+': '+((e&&e.message)||'fetch')); setTimeout(step,220); });
+        };
+        step();
+      })
+      .catch(function(e){ done((e&&e.message)||'fetch'); });
+  };
+  if(st.stravaRefreshToken){
+    fetch('/api/strava/token',{method:'POST',headers:{'Content-Type':'application/json','x-proxy-token':(window.PROXY_TOKEN||'')},body:JSON.stringify({grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})})
+    .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doFetch(d.access_token); } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done('no token'); } })
+    .catch(function(){ if(st.stravaToken){ doFetch(st.stravaToken); } else { done('auth'); } });
+  } else if(st.stravaToken){ doFetch(st.stravaToken); } else { done('Connect Strava first'); }
+}
+
 // Pull the athlete's LIFETIME totals from Strava (/athletes/{id}/stats -> all_ride_totals) into
 // st.athleteStats. Genuinely all-time (server-side), so the local library loss does not apply — this
 // is option A for the Milestones "Lifetime at a glance" strip. Calories are NOT in /stats (per-activity
@@ -37906,7 +38011,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-fiber-backfill';
+window.__BUILD__ = '2026-07-28-gear-odometer-ytd';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -38004,6 +38109,14 @@ window.onload = function(){
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
         // Fill nutrients onto already-logged items whose database row gained them after the fact.
         try{ if(typeof backfillNutrientsFromDB_==='function') backfillNutrientsFromDB_(); }catch(e){}
+        // athleteStats written before the ytd fields existed leaves ytdRideMeters undefined, which
+        // silently demotes every YTD reader to the lossy local library. Only a re-sync writes the
+        // missing keys, so trigger one when the stored shape is old.
+        try{ if(typeof _athleteStatsStale_==='function' && _athleteStatsStale_()
+              && typeof syncAthleteStats_==='function' && (st.stravaToken||st.stravaRefreshToken)) syncAthleteStats_(true); }catch(e){}
+        // Bike odometers come from Strava's per-gear record; pull once when a bike has no gear id.
+        try{ if(typeof syncBikeGear_==='function' && (st.stravaToken||st.stravaRefreshToken)
+              && (st.bikes||[]).some(function(b){ return b && !b.deleted && !b.stravaGearId; })) syncBikeGear_(true); }catch(e){}
         // Arm rides still holding elapsed-time Strava laps for a moving-time rewrite. Runs AFTER the
         // remote pull so it sees the merged library, clears only the flag that would block the next
         // open's fetch, and makes no API calls itself — the rewrite happens when a ride is opened.
