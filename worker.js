@@ -32577,6 +32577,7 @@ function showMoreSheet(){
     {n:'Sync Strava',   i:'M13 2L3 14h9l-1 8 10-12h-9l1-8z',                                                                       fn:'stravaBackfill',   c:'#FC4C02'},
     {n:'Sync Gear',     i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'syncStravaGear',   c:'#0F6E56'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
+    {n:'Backfill Jan 1-19 2026', i:'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M12 14v4 M10 16h4', fn:'backfillJan2026_', c:'#FFB938'},
     {n:'Restore Backup', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',                                     fn:'restoreFromBackup_', c:'#22c55e'},
     {n:'Merge Dupes',    i:'M8 6h10 M8 12h10 M8 18h10 M3 6h.01 M3 12h.01 M3 18h.01 M18 3l3 3-3 3',                                fn:'mergeCrossSourceDupes_', c:'#f59e0b'},
     {n:'Reconnect',     i:'M9 17H7A5 5 0 0 1 7 7h2 M15 7h2a5 5 0 0 1 0 10h-2 M8 12h8',                                          fn:'reconnectStrava',  c:'#FC4C02'},
@@ -35816,9 +35817,13 @@ function reimportMap_(a, ftp){
 // PURE. Additive merge of mapped Strava activities into the rides array. Mutates rides in place;
 // returns {added, revived, skipped}. Present-live (by id OR fuzzy) -> skip. Tombstone by id -> revive
 // in place (applyRideSync_ preserves manual edits). Otherwise insert. Fresh editedAt on each.
-function reimportMerge_(rides, mapped, nowTs){
+// dryRun: count exactly what WOULD change and mutate nothing. Needed because the revive path
+// writes through to the tombstone object in place, so a shallow copy of the array is not enough
+// to make a scan safe — the scan has to be a mode of this function, not a caller trick.
+function reimportMerge_(rides, mapped, nowTs, dryRun){
   nowTs = nowTs || Date.now();
   var added=0, revived=0, skipped=0;
+  var wouldAdd={};                      // ids this batch would introduce, so one is not counted twice
   var sidOf=function(r){ return (r&&r.stravaId!=null&&r.stravaId!=='')?String(r.stravaId):null; };
   var liveById={}, deadById={};
   (rides||[]).forEach(function(r){ if(!r) return; var s=sidOf(r); if(!s) return; if(r.deleted){ if(!deadById[s]) deadById[s]=r; } else liveById[s]=r; });
@@ -35826,8 +35831,13 @@ function reimportMerge_(rides, mapped, nowTs){
   (mapped||[]).forEach(function(m){
     var s=(m.stravaId!=null&&m.stravaId!=='')?String(m.stravaId):null;
     if(s && liveById[s]){ skipped++; return; }
+    if(s && wouldAdd[s]){ skipped++; return; }                              // already accounted for in this scan
     if(fuzzyLive(m)){ skipped++; return; }                                  // FIT-only twin already live -> never duplicate
     var tomb=s?deadById[s]:null;
+    if(dryRun){
+      if(tomb) revived++; else { added++; if(s) wouldAdd[s]=1; }
+      return;
+    }
     if(tomb){
       var _rev=(typeof applyRideSync_==='function')?applyRideSync_(tomb, m):Object.assign({}, tomb, m);
       Object.keys(_rev).forEach(function(k){ tomb[k]=_rev[k]; });
@@ -35909,7 +35919,19 @@ function _reimportGuardedPush_(cb){
 function reimportStravaActivities_(opts, cb){
   opts=opts||{}; cb=cb||function(){};
   var types=opts.types||['cycling','running'];
-  var inScope=function(sp){ sp=String(sp||''); if(/run/i.test(sp)) return types.indexOf('running')>=0; if(/ride|handcycle|velomobile/i.test(sp)) return types.indexOf('cycling')>=0; return false; };
+  // types:'all' accepts EVERY sport Strava sends — walks, hikes, weight training, swims. Reserved
+  // for a bounded backfill: the general resync stays cycling+running, because widening it would
+  // pour every gym session into st.rides permanently, and several readers there still assume
+  // ride-ish content (that assumption is what made a weight-training record get debriefed as an
+  // easy spin). Wide scope is safe when the window is small and deliberate.
+  var allSports=(types==='all' || (Array.isArray(types) && types.indexOf('all')>=0));
+  var inScope=function(sp){ if(allSports) return true; sp=String(sp||''); if(/run/i.test(sp)) return types.indexOf('running')>=0; if(/ride|handcycle|velomobile/i.test(sp)) return types.indexOf('cycling')>=0; return false; };
+  // Strava bounds the listing with epoch-second after/before. A bounded window is one page instead
+  // of a walk back through the whole library, and it caps what a mistake can touch.
+  var _rangeQS='';
+  if(opts.after!=null)  _rangeQS+='&after='+Math.floor(opts.after);
+  if(opts.before!=null) _rangeQS+='&before='+Math.floor(opts.before);
+  var _dry=!!opts.dryRun;
   var report=function(o){ try{ if(typeof toast==='function' && o.msg) toast(o.msg); }catch(e){} cb(o); };
   var doRun=function(token){
     try{ if(typeof fbPollTimer!=='undefined' && fbPollTimer) clearInterval(fbPollTimer); }catch(e){}   // pause poll
@@ -35918,6 +35940,13 @@ function reimportStravaActivities_(opts, cb){
     var resumePoll=function(){ try{ if(typeof initFirebaseSync==='function') initFirebaseSync(); }catch(e){} };
     var PER=200, pagesWalked=0;
     var finishAll=function(reason){
+      if(_dry){
+        console.log('[reimport] DRY RUN ended ('+(reason||'done')+') — would add '+totAdded+', revive '+totRevived+' across '+pagesWalked+' page(s). Nothing written.');
+        resumePoll();
+        report({dryRun:true, added:totAdded, revived:totRevived, pages:pagesWalked,
+                msg:'Scan: '+totAdded+' new, '+totRevived+' to restore. Nothing written yet.'});
+        return;
+      }
       console.log('[reimport] walk ENDED ('+(reason||'done')+') after '+pagesWalked+' page(s) — cumulative add='+totAdded+' rev='+totRevived+'. Verifying superset + pushing…');
       _reimportGuardedPush_(function(res){
         resumePoll();
@@ -35928,7 +35957,7 @@ function reimportStravaActivities_(opts, cb){
       });
     };
     var nextPage=function(){
-      fetch('https://www.strava.com/api/v3/athlete/activities?per_page='+PER+'&page='+page,{headers:{'Authorization':'Bearer '+token}})
+      fetch('https://www.strava.com/api/v3/athlete/activities?per_page='+PER+'&page='+page+_rangeQS,{headers:{'Authorization':'Bearer '+token}})
       .then(function(r){ var sc=r.status; if(!r.ok){ console.warn('[reimport] page '+page+' HTTP '+sc+' — stopping walk'); return {__http:sc}; } return r.json(); })
       .then(function(list){
         if(list && list.__http){ finishAll('HTTP '+list.__http); return; }
@@ -35936,10 +35965,10 @@ function reimportStravaActivities_(opts, cb){
         if(!list.length){ console.log('[reimport] page '+page+': 0 activities — end of history'); finishAll('empty page'); return; }
         pagesWalked++;
         var mapped=list.filter(function(a){ return inScope(a.sport_type||a.type); }).map(function(a){ return reimportMap_(a, ftp); });
-        var res=reimportMerge_(st.rides, mapped); totAdded+=res.added; totRevived+=res.revived;
+        var res=reimportMerge_(st.rides, mapped, null, _dry); totAdded+=res.added; totRevived+=res.revived;
         var f=(list[0]&&(list[0].start_date_local||list[0].start_date)||'').slice(0,10), l=(list[list.length-1]&&(list[list.length-1].start_date_local||list[list.length-1].start_date)||'').slice(0,10);
         console.log('[reimport] page '+page+': raw='+list.length+' ('+f+' .. '+l+') inScope='+mapped.length+' +add='+res.added+' +rev='+res.revived+' skip='+res.skipped+' | cum add='+totAdded+' rev='+totRevived);
-        try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+        if(!_dry){ try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){} }
         if(typeof opts.onProgress==='function') opts.onProgress({page:page, added:totAdded, revived:totRevived});
         if(list.length<PER){ console.log('[reimport] page '+page+' short ('+list.length+'<'+PER+') — last page'); finishAll('last page'); } else { page++; setTimeout(nextPage, 250); }
       }).catch(function(e){ console.warn('[reimport] page '+page+' fetch error: '+(e&&e.message)); resumePoll(); report({error:(e&&e.message)||'fetch', added:totAdded, revived:totRevived, pages:pagesWalked, msg:'Re-import paused (fetch error) — re-run to resume.'}); });
@@ -35952,6 +35981,56 @@ function reimportStravaActivities_(opts, cb){
     .then(function(r){return r.json();}).then(function(d){ if(d.access_token){ st.stravaToken=d.access_token; st.stravaRefreshToken=d.refresh_token; sv(); doRun(d.access_token); } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'no token'}); } })
     .catch(function(){ if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'auth'}); } });
   } else if(st.stravaToken){ doRun(st.stravaToken); } else { cb({error:'Connect Strava first'}); }
+}
+
+// ==================== bounded backfill: Jan 1-19 2026 ====================
+// A two-week hole in the activity log (Jan 5 and Jan 12 2026 carry nothing) breaks the activity
+// streak at 25 weeks against Garmin's 78. The activities exist upstream; they never reached this
+// app. Neither week contains a ride — which is why the general cycling+running resync cannot see
+// them and why this window runs all-sports.
+//
+// SCAN FIRST, ALWAYS. The scan is a real pass over the real response through the real merge, with
+// writes disabled — not an estimate — so the number in the confirm is the number that will land.
+var _BF_JAN26={ from:'2026-01-01', to:'2026-01-19' };
+function _bfEpoch_(dstr, endOfDay){
+  var p=String(dstr).split('-');
+  var d=new Date(+p[0], (+p[1]||1)-1, (+p[2]||1), endOfDay?23:0, endOfDay?59:0, endOfDay?59:0);
+  return Math.floor(d.getTime()/1000);
+}
+function backfillJan2026_(){
+  if(!st.stravaToken && !st.stravaRefreshToken){ if(typeof toast==='function') toast('Connect Strava first'); return; }
+  // after/before bracket the window. after is the last second BEFORE the window opens and before
+  // is the first second AFTER it closes, so both end days are fully included.
+  var opts={ types:'all',
+             after:_bfEpoch_(_BF_JAN26.from,false)-1,
+             before:_bfEpoch_(_BF_JAN26.to,true)+1 };
+  var label=_BF_JAN26.from+' to '+_BF_JAN26.to;
+  if(typeof toast==='function') toast('Scanning '+label+'…');
+  reimportStravaActivities_(Object.assign({dryRun:true}, opts), function(scan){
+    if(scan && scan.error){ if(typeof uiAlert==='function') uiAlert('Scan failed: '+scan.error); return; }
+    var add=(scan&&scan.added)||0, rev=(scan&&scan.revived)||0;
+    if(!add && !rev){
+      if(typeof uiAlert==='function') uiAlert('Scanned '+label+' across all sports. Nothing missing — every activity Strava has for that window is already here. The streak gap is not an import gap.', {title:'Backfill'});
+      return;
+    }
+    var lines=[];
+    if(add) lines.push(add+' activity'+(add===1?'':'s')+' missing entirely');
+    if(rev) lines.push(rev+' previously deleted here, to be restored');
+    var NL=String.fromCharCode(10), BR=NL+NL;
+    var msg='Scanned '+label+' across all sports.'+BR+lines.join(NL)+BR
+      +'Write these into your library? Existing records are matched by Strava id and by date and distance, so nothing is duplicated.';
+    var go=function(ok){
+      if(!ok) return;
+      if(typeof toast==='function') toast('Backfilling '+label+'…');
+      reimportStravaActivities_(opts, function(res){
+        if(res && res.aborted){ if(typeof uiAlert==='function') uiAlert('Aborted before writing: '+res.missing.length+' record(s) present remotely are missing locally, so the push guard stopped it. Nothing changed.', {title:'Backfill'}); return; }
+        if(res && res.error){ if(typeof uiAlert==='function') uiAlert('Merged locally but the push failed: '+res.error+'. Re-run to push.', {title:'Backfill'}); return; }
+        if(typeof uiAlert==='function') uiAlert('Done — '+((res&&res.added)||0)+' added, '+((res&&res.revived)||0)+' restored. Reopen the home screen to see the streak recount.', {title:'Backfill'});
+      });
+    };
+    if(typeof uiConfirm==='function') uiConfirm(msg,{title:'Backfill '+label, okText:'Write '+(add+rev)+' record'+((add+rev)===1?'':'s')}).then(go);
+    else go(window.confirm(msg));
+  });
 }
 
 function stravaFullResync() {
