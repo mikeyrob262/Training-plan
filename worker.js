@@ -21692,6 +21692,13 @@ function dsShowSettings(){
     +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill Jan 1-19 2026</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Two weeks (Jan 5 and Jan 12) carry no activity here, which breaks the activity streak. Pulls that window from Strava across EVERY sport - walks, hikes, gym, swims - because neither week contains a ride. Scans first and shows what it found; nothing is written until you confirm.</div>'
+    +'<div id="jan26-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="backfillJan2026_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
+    +' <button onclick="backfillJan2026_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan &amp; Backfill</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Clean Race Duplicates</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Collapse races that share a name and calendar day (keeps one). Lists what it will remove before deleting.</div>'
     +'<button onclick="runRaceCleanup()" style="background:#a855f7;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Clean Race Dupes</button>'
@@ -35997,7 +36004,8 @@ function _bfEpoch_(dstr, endOfDay){
   var d=new Date(+p[0], (+p[1]||1)-1, (+p[2]||1), endOfDay?23:0, endOfDay?59:0, endOfDay?59:0);
   return Math.floor(d.getTime()/1000);
 }
-function backfillJan2026_(){
+function backfillJan2026_(scanOnly){
+  var _st=function(t){ try{ var e=document.getElementById('jan26-backfill-status'); if(e) e.textContent=t; }catch(_){} };
   if(!st.stravaToken && !st.stravaRefreshToken){ if(typeof toast==='function') toast('Connect Strava first'); return; }
   // after/before bracket the window. after is the last second BEFORE the window opens and before
   // is the first second AFTER it closes, so both end days are fully included.
@@ -36005,11 +36013,13 @@ function backfillJan2026_(){
              after:_bfEpoch_(_BF_JAN26.from,false)-1,
              before:_bfEpoch_(_BF_JAN26.to,true)+1 };
   var label=_BF_JAN26.from+' to '+_BF_JAN26.to;
+  _st('Scanning ' + label + ' across all sports...');
   if(typeof toast==='function') toast('Scanning '+label+'…');
   reimportStravaActivities_(Object.assign({dryRun:true}, opts), function(scan){
-    if(scan && scan.error){ if(typeof uiAlert==='function') uiAlert('Scan failed: '+scan.error); return; }
+    if(scan && scan.error){ _st('Scan failed: '+scan.error); if(typeof uiAlert==='function') uiAlert('Scan failed: '+scan.error); return; }
     var add=(scan&&scan.added)||0, rev=(scan&&scan.revived)||0;
     if(!add && !rev){
+      _st('Nothing missing for '+label+'.');
       if(typeof uiAlert==='function') uiAlert('Scanned '+label+' across all sports. Nothing missing — every activity Strava has for that window is already here. The streak gap is not an import gap.', {title:'Backfill'});
       return;
     }
@@ -36019,12 +36029,15 @@ function backfillJan2026_(){
     var NL=String.fromCharCode(10), BR=NL+NL;
     var msg='Scanned '+label+' across all sports.'+BR+lines.join(NL)+BR
       +'Write these into your library? Existing records are matched by Strava id and by date and distance, so nothing is duplicated.';
+    _st('Scan: '+add+' missing, '+rev+' to restore.');
+    if(scanOnly){ if(typeof uiAlert==='function') uiAlert(msg.replace('Write these into your library?','This was a scan only - nothing was written.'), {title:'Scan '+label}); return; }
     var go=function(ok){
       if(!ok) return;
       if(typeof toast==='function') toast('Backfilling '+label+'…');
       reimportStravaActivities_(opts, function(res){
         if(res && res.aborted){ if(typeof uiAlert==='function') uiAlert('Aborted before writing: '+res.missing.length+' record(s) present remotely are missing locally, so the push guard stopped it. Nothing changed.', {title:'Backfill'}); return; }
         if(res && res.error){ if(typeof uiAlert==='function') uiAlert('Merged locally but the push failed: '+res.error+'. Re-run to push.', {title:'Backfill'}); return; }
+        _st('Done: '+((res&&res.added)||0)+' added, '+((res&&res.revived)||0)+' restored.');
         if(typeof uiAlert==='function') uiAlert('Done — '+((res&&res.added)||0)+' added, '+((res&&res.revived)||0)+' restored. Reopen the home screen to see the streak recount.', {title:'Backfill'});
       });
     };
@@ -36951,7 +36964,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-24-all-view+deploy';
+window.__BUILD__ = '2026-07-28-jan26-backfill';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
