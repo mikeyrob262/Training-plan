@@ -23110,6 +23110,14 @@ function dsShowSettings(){
     +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill segment effort history</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches the segment efforts from every ride, so the Records progression lines have history to draw. One Strava call per ride, paced to 90 per 15 minutes, so a full library takes a couple of hours. Resumable: stop any time and run it again to carry on.</div>'
+    +'<div id="segbf-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<button onclick="runSegmentBackfill_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
+    +' <button onclick="runSegmentBackfill_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Run backfill</button>'
+    +' <button onclick="stopSegmentBackfill_()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill Jan 1-19 2026</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Two weeks (Jan 5 and Jan 12) carry no activity here, which breaks the activity streak. Pulls that window from Strava across EVERY sport - walks, hikes, gym, swims - because neither week contains a ride. Scans first and shows what it found; nothing is written until you confirm.</div>'
     +'<div id="jan26-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
@@ -34148,7 +34156,7 @@ function decodePolyline(str) {
 // (the same call fetchStravaGPS uses; segment_efforts ride in that response).
 // Only stravaId rides can have segments (Strava matches them server-side).
 // Caches onto r.segments. cb(array) on success, cb([]) if none, cb(null) on error.
-function fetchRideSegments(r, cb, force){
+function fetchRideSegments(r, cb, force, quiet){
   if(!r || !r.stravaId){ cb(null); return; }
   // force: the PR pass needs segment IDS, and entries cached before this change carry none.
   // A cached entry without an id is unusable for keying, so treat it as a miss.
@@ -34173,7 +34181,9 @@ function fetchRideSegments(r, cb, force){
           starred: !!s.starred
         };
       }).slice(0,100);
-      r.segments=segs; sv(); fbPush(true);
+      // quiet: the backfill wants the efforts, NOT 641 rides' worth of cached segment arrays in
+      // state, and certainly not one full-blob push per ride. It saves on its own cadence.
+      if(!quiet){ r.segments=segs; sv(); fbPush(true); }
       cb(segs);
     }).catch(function(){ cb(null); });
   };
@@ -34322,6 +34332,149 @@ function syncRidePRs_(days, silent, cb){
     }, true);                                              // force: we need ids, not the old cache
   };
   step();
+}
+
+// ==================== segment effort backfill (paced) ====================
+// Effort history only reaches back as far as the rides whose segments have been fetched, and only
+// 9 of 641 were cached. This walks the whole library.
+//
+// One Strava call per ride against a 100-per-15-minute limit, so it is PACED: 90 calls per window
+// (headroom for the token refresh and anything else the app does), then it waits out the rest of
+// the window. 641 rides is therefore roughly 8 windows -- about two hours -- which is why it is
+// resumable rather than a single run you must babysit.
+//
+// Resumability keys off the set of ride ids already processed, not a positional cursor: the
+// library changes between sessions, and an index would silently drift onto the wrong rides.
+//
+// Scan before commit. The scan is purely local, makes no API calls, and reports exactly what would
+// be fetched and how long it would take.
+var SEG_BF_PER_WINDOW=90;
+var SEG_BF_WINDOW_MS=15*60*1000;
+var SEG_BF_GAP=260;                       // ms between calls inside a window
+var SEG_BF_SAVE_EVERY=10;                 // persist progress this often, so a crash costs little
+function _segBfState_(){
+  if(typeof st==='undefined' || !st) return null;
+  if(!isPlainObj_(st.segBackfill)) st.segBackfill={};
+  var b=st.segBackfill;
+  if(!isPlainObj_(b.done)) b.done={};
+  if(b.added==null) b.added=0;
+  if(b.created==null) b.created=0;
+  if(b.scanned==null) b.scanned=0;
+  if(b.errors==null) b.errors=0;
+  return b;
+}
+function _segBfRides_(){
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  return (rides||[]).filter(function(r){
+    if(!r || r.deleted || !r.stravaId) return false;
+    var sp=String(r.sportType||r.type||'').toLowerCase();
+    if(sp.indexOf('run')>=0 || sp.indexOf('walk')>=0 || sp.indexOf('swim')>=0 || sp.indexOf('strength')>=0) return false;
+    return true;
+  }).sort(function(a,b){ return String(b.date||'').localeCompare(String(a.date||'')); });   // newest first
+}
+function scanSegmentBackfill_(){
+  var b=_segBfState_(), list=_segBfRides_();
+  var doneN=0, todo=[];
+  list.forEach(function(r){ if(b && b.done[String(r.stravaId)]) doneN++; else todo.push(r); });
+  var windows=Math.max(1, Math.ceil(todo.length/SEG_BF_PER_WINDOW));
+  var mins=Math.round(((windows-1)*SEG_BF_WINDOW_MS + todo.length*SEG_BF_GAP)/60000);
+  var dates=list.map(function(r){ return String(r.date||'').slice(0,10); }).filter(Boolean).sort();
+  var out={ rides:list.length, alreadyDone:doneN, toFetch:todo.length, windows:windows, minutes:mins,
+            oldest:(dates[0]||null), newest:(dates[dates.length-1]||null),
+            segmentsTracked:(isPlainObj_(st.segments)?Object.keys(st.segments).length:0) };
+  try{ console.log('[segBF][scan] '+JSON.stringify(out)); }catch(e){}
+  return out;
+}
+function _segBfStatus_(txt){
+  try{ var el=document.getElementById('segbf-status'); if(el) el.textContent=txt; }catch(e){}
+  try{ console.log('[segBF] '+txt); }catch(e){}
+}
+function stopSegmentBackfill_(){
+  var b=_segBfState_(); if(!b) return;
+  b.cancel=true;
+  _segBfStatus_('Stopping after the current ride. Progress is saved; run it again to resume.');
+}
+function runSegmentBackfill_(scanOnly, cb){
+  cb=cb||function(){};
+  var scan=scanSegmentBackfill_();
+  if(scanOnly){
+    _segBfStatus_(scan.toFetch+' of '+scan.rides+' rides still to fetch ('+scan.alreadyDone+' already done). '
+      +'About '+scan.windows+' rate-limit window'+(scan.windows===1?'':'s')+', roughly '+scan.minutes+' minutes. '
+      +'Covers '+(scan.oldest||'?')+' to '+(scan.newest||'?')+'. Nothing written.');
+    cb(scan); return scan;
+  }
+  var b=_segBfState_();
+  if(!b){ cb(null); return null; }
+  if(b.running){ _segBfStatus_('Already running.'); cb(null); return null; }
+  if(!(st.stravaToken||st.stravaRefreshToken)){ _segBfStatus_('Connect Strava first.'); cb(null); return null; }
+  b.cancel=false; b.running=true; b.startedAt=b.startedAt||Date.now();
+  if(!b.winStart || (Date.now()-b.winStart)>SEG_BF_WINDOW_MS){ b.winStart=Date.now(); b.winCount=0; }
+  var list=_segBfRides_().filter(function(r){ return !b.done[String(r.stravaId)]; });
+  var i=0, sinceSave=0;
+  var finish=function(reason){
+    b.running=false; b.updatedAt=Date.now();
+    try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+    var msg=reason+' '+b.scanned+' ride(s) processed, '+b.added+' effort(s) added, '+b.created+' segment(s) created'
+      +(b.errors?(', '+b.errors+' error(s)'):'')+'.';
+    _segBfStatus_(msg);
+    try{ if(typeof toast==='function') toast(msg); }catch(e){}
+    try{ if(typeof _syncRepaint_==='function') _syncRepaint_(); }catch(e){}
+    cb({ scanned:b.scanned, added:b.added, created:b.created, errors:b.errors, done:Object.keys(b.done).length });
+  };
+  var step=function(){
+    if(b.cancel){ finish('Stopped.'); return; }
+    if(i>=list.length){ finish('Backfill complete.'); return; }
+    // rate-limit window accounting
+    var now=Date.now();
+    if((now-b.winStart)>=SEG_BF_WINDOW_MS){ b.winStart=now; b.winCount=0; }
+    if(b.winCount>=SEG_BF_PER_WINDOW){
+      var wait=Math.max(1000, SEG_BF_WINDOW_MS-(now-b.winStart)+1500);
+      _segBfStatus_('Rate limit reached. Waiting '+Math.ceil(wait/60000)+' min, then continuing. '
+        +i+' of '+list.length+' done this run ('+b.added+' efforts so far). Safe to leave open.');
+      try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
+      setTimeout(function(){ b.winStart=Date.now(); b.winCount=0; step(); }, wait);
+      return;
+    }
+    var r=list[i++];
+    b.winCount++;
+    _segBfStatus_('Fetching '+i+' of '+list.length+' ('+String(r.date||'').slice(0,10)+'). '
+      +b.added+' efforts added, '+b.created+' segments created.');
+    fetchRideSegments(r, function(segs){
+      b.scanned++;
+      if(segs===null){ b.errors++; }
+      else if(Array.isArray(segs)){
+        var date=String(r.date||'').slice(0,10);
+        segs.forEach(function(se){
+          if(!se || se.id==null || !(+se.time>0)) return;
+          var key='s'+se.id, seg=st.segments[key];
+          if(!seg){
+            // Created from observed history, and labelled as such. The best time SEEN is a true
+            // statement about the athlete's own log; it is not a claim that Strava agrees it is the
+            // PR. A later starred/ride sync overwrites it on faster-wins, so this is never worse
+            // than having no record at all.
+            seg=st.segments[key]={ id:key, name:se.name||'Segment', distMi:(se.distance!=null?se.distance:null),
+              grade:(se.grade!=null?se.grade:null), prSec:null, prDate:null, effortCount:0,
+              starred:!!se.starred, source:'history', updatedAt:Date.now() };
+            b.created++;
+          }
+          if(_segEffortPush_(seg, se.time, date)) b.added++;
+          _segEffortTrim_(seg);
+          seg.effortCount=seg.efforts.length;
+          // best observed, only ever tightening
+          if(!(+seg.prSec>0) || +se.time < +seg.prSec){
+            if(seg.source==='history' || !(+seg.prSec>0)){ seg.prSec=Math.round(+se.time); seg.prDate=date; }
+          }
+        });
+      }
+      b.done[String(r.stravaId)]=1;
+      if(++sinceSave>=SEG_BF_SAVE_EVERY){ sinceSave=0; b.updatedAt=Date.now();
+        try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){} }
+      setTimeout(step, SEG_BF_GAP);
+    }, true, true);                                   // force (need ids), quiet (no per-ride cache/push)
+  };
+  _segBfStatus_('Starting: '+list.length+' ride(s) to fetch, about '+scan.minutes+' minutes.');
+  step();
+  return null;
 }
 
 // ==================== bike odometers from Strava gear ====================
@@ -38770,7 +38923,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-segment-effort-history';
+window.__BUILD__ = '2026-07-28-segment-effort-backfill';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
