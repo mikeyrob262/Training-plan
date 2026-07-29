@@ -122,6 +122,21 @@ try {
     fail('nutrition fold semantics regressed (see above).');
   }
 
+  // ---- 6. /store_v2 live-tail fold -> the snapshot is hand-uploaded and goes stale the moment
+  //         the next ride syncs, so every reader downstream of allRidesDeduped_ depends on the
+  //         tail being folded back on. Both directions are silent failures: not folding
+  //         undercounts the current month (117 mi on 2026-07-29), and folding too loosely
+  //         double-counts history.
+  console.log(`${D}· checking /store_v2 live-tail fold…${X}`);
+  try {
+    const so = execSync('node scripts/store-v2-tail-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the /store_v2 live-tail fold regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

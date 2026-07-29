@@ -3581,6 +3581,60 @@ var STORE_V2_INDOOR_RE = /trainer|indoor|virtual|zwift/i;
 // post-export backfilled activities restored the exact parity the regeneration had lost.
 var STORE_V2_EXPECT_RIDE = 409;
 var STORE_V2_EXPECT_RUN  = 2201;
+// ---- the snapshot TAIL: what a frozen snapshot cannot know ----------------
+// /store_v2 is a HAND-UPLOADED file. storeV2Put_ from the console is its only writer and
+// nothing in the sync path touches it, so it is pinned to whatever generation was last PUT
+// while Strava/Intervals sync keeps filling st.rides. Every reader downstream of
+// allRidesDeduped_ therefore stopped dead at the snapshot's last activity. On 2026-07-29 that
+// showed as You vs. You reporting July at 335.2 mi over 10 rides against Strava's 452.2 over
+// 15 — a 117.0 mi undercount that was ENTIRELY the five rides logged after the snapshot's
+// newest ride (2026-07-18). Same shape as the bike odometer and the Watchlist YTD: the number
+// was not miscomputed, it was computed over a source that had stopped moving.
+//
+// THE HORIZON IS THE BUCKET'S OWN LAST DATE, NEVER builtAt. Not a hypothetical distinction:
+// this snapshot stamps builtAt 2026-07-22T21:53Z but its newest ride is 2026-07-18, because
+// the export it was built from was already stale when it was uploaded. Cutting on builtAt
+// would have silently dropped the 07-21 ride and still looked like a fix.
+//
+// Strictly AFTER the horizon, with one exception — a boundary-day record carrying a stravaId
+// the snapshot does not have is a second activity that day, not the one already counted.
+// Anything else on the boundary day is skipped, and nothing before it is ever considered.
+// That date cut IS the anti-double-count guard, and it is deliberately NOT the fuzzy
+// date+distance rule dedupeRides_ uses, which is too weak to trust here. 2024-06-30 is the
+// proof: st.rides carries a no-id 52.4 mi "Lunch Ride" against the snapshot's 54.7 mi record
+// of the SAME ride — 2.3 mi apart, so the <1 mi fuzzy test calls them different rides and
+// would fold 52.4 phantom miles into a month the snapshot already had right. A date cut
+// cannot make that mistake, and it is why the fold moves 2026-07 and nothing else.
+function storeV2Tail_(snapList, re, pool){
+  var horizon='', sids={};
+  (snapList||[]).forEach(function(a){
+    var d=String((a&&a.date)||'').slice(0,10);
+    if(d && d>horizon) horizon=d;
+    var s=(a&&a.stravaId!=null&&a.stravaId!=='')?String(a.stravaId):'';
+    if(s) sids[s]=1;
+  });
+  // An empty bucket has no horizon, and "after nothing" is the entire library — which is the
+  // 6x inflation the ride filter exists to prevent. Fold nothing rather than guess a cut.
+  if(!horizon) return { horizon:'', add:[], skipped:0 };
+  var add=[], skipped=0, takenSid={}, takenKey={};
+  (pool||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var d=String(r.date||'').slice(0,10);
+    if(!d || d<horizon) return;
+    if(!re.test(storeV2Sport_(r))) return;
+    var s=(r.stravaId!=null&&r.stravaId!=='')?String(r.stravaId):'';
+    if(s && sids[s]) return;                       // the snapshot already carries this one
+    if(d===horizon && !s){ skipped++; return; }    // unidentifiable boundary twin
+    // The run pool is a union (st.rides run-typed + st.runs), so one activity can appear in it
+    // twice. Same id is the same activity; for id-less records, same day and distance is.
+    var k=d+'|'+(Math.round((parseFloat(r.distance)||0)*100)/100);
+    if(s ? takenSid[s] : takenKey[k]) return;
+    if(s) takenSid[s]=1;
+    takenKey[k]=1;
+    add.push(r);
+  });
+  return { horizon:horizon, add:add, skipped:skipped };
+}
 var _storeV2Cache=null;
 // Reads /store_v2 once per session and resolves a classified view of it. Wired to
 // NOTHING — step 2 repoints allRidesDeduped_() here; until then the only entry
@@ -15471,6 +15525,52 @@ var _storeV2Rides = null;
 // once at boot and getRuns reads it. Null means not-primed-yet, so getRuns falls through to
 // the legacy union rather than to empty.
 var _storeV2Runs = null;
+// The PURE snapshot buckets, held separately from the armed caches above so the fold can be
+// recomputed without re-reading Firebase. The probes and the PUT validator keep measuring the
+// snapshot alone (they go through storeV2Classify_, which this never touches) — a diagnostic
+// that silently included local records would stop being able to answer "did the PUT land".
+var _storeV2Snap = null;
+// Identity+length of the pool the current arming was computed from, so a library that grows
+// after priming re-folds instead of serving a stale tail. Same memo shape as _dedupeCache.
+var _storeV2Armed = null;
+// Folds the live tail onto each snapshot bucket and (re)arms the sync caches.
+//
+// Called at prime AND again whenever the library has moved, because prime runs on the
+// _idbReady chain while the Firebase pull runs on a SEPARATE one by design. A ride that lands
+// from the remote a second after priming would otherwise sit outside the fold for the whole
+// session — which is the same undercount this fold exists to close, just with a shorter fuse.
+function storeV2Arm_(){
+  var s=_storeV2Snap;
+  if(!s) return null;
+  var pool=(typeof st!=='undefined' && st && st.rides) ? st.rides : [];
+  var runs=(typeof st!=='undefined' && st && st.runs) ? st.runs : [];
+  var tr=storeV2Tail_(s.rides, STORE_V2_RIDE_RE, pool);
+  var tu=storeV2Tail_(s.runs,  STORE_V2_RUN_RE,  pool.concat(runs));
+  _storeV2Rides = tr.add.length ? s.rides.concat(tr.add) : s.rides;
+  // Run cards read .time (a FORMATTED duration) and .elevation; storeV2Normalize_ puts those
+  // on snapshot records, and getRunsLegacy_ maps them onto st.rides records. Tail records get
+  // the same aliases here, on a COPY — folding must never mutate a record st.rides owns.
+  _storeV2Runs = tu.add.length
+    ? s.runs.concat(tu.add.map(function(r){
+        var c={}; for(var k in r){ if(Object.prototype.hasOwnProperty.call(r,k)) c[k]=r[k]; }
+        if(c.time==null && c.duration!=null) c.time=c.duration;
+        if(c.elevation==null && c.elev!=null) c.elevation=c.elev;
+        return c;
+      }))
+    : s.runs;
+  _storeV2Armed = { arr:pool, len:pool.length, rlen:runs.length };
+  return { ride:tr, run:tu };
+}
+// Re-folds when the library has changed since the last arming. Cheap (one O(n) pass over
+// st.rides) and only ever runs when identity or length moved, so the render-inline callers
+// of allRidesDeduped_ keep their O(1) read on a settled library.
+function storeV2Refresh_(){
+  if(!STORE_V2_READS || !_storeV2Snap) return;
+  var pool=(typeof st!=='undefined' && st && st.rides) ? st.rides : [];
+  var runs=(typeof st!=='undefined' && st && st.runs) ? st.runs : [];
+  if(_storeV2Armed && _storeV2Armed.arr===pool && _storeV2Armed.len===pool.length && _storeV2Armed.rlen===runs.length) return;
+  try{ storeV2Arm_(); }catch(e){ try{ console.error('[store_v2] re-arm failed: ' + ((e&&e.message)||e)); }catch(_e){} }
+}
 // Loads the snapshot and arms the sync cache with the RIDE-TYPED subset only.
 // The filter is the point: st.rides held ~838 live records, while /store_v2 is a
 // single typed collection of 2,451 (409 ride + 1,760 run + 282 other). Repointing
@@ -15482,13 +15582,26 @@ function primeStoreV2_(){
     // The arming line is the most-quoted count on this path — it states what allRidesDeduped_ is
     // about to serve for the rest of the session. It gets the stamp first.
     console.log('[store_v2] ' + storeV2Stamp_(s.builtAt));
-    _storeV2Rides = s.rides;
-    _storeV2Runs = s.runs;
+    _storeV2Snap = s;
+    var t=storeV2Arm_() || { ride:{horizon:'',add:[],skipped:0}, run:{horizon:'',add:[],skipped:0} };
     var was=(st.rides||[]).filter(function(r){ return r && !r.deleted; }).length;
-    console.log('[store_v2] reads ARMED — allRidesDeduped_ now serves ' + s.rides.length
-      + ' ride-typed records (st.rides live was ' + was + '). Excluded: ' + s.runs.length
+    console.log('[store_v2] reads ARMED — allRidesDeduped_ now serves ' + _storeV2Rides.length
+      + ' ride-typed records (' + s.rides.length + ' snapshot + ' + t.ride.add.length
+      + ' live tail; st.rides live was ' + was + '). Excluded: ' + s.runs.length
       + ' run, ' + s.other.length + ' other. Set STORE_V2_READS=false to roll back.');
-    if(typeof STORE_V2_RUNS!=='undefined' && STORE_V2_RUNS) console.log('[store_v2] run screen ARMED — getRuns now serves ' + s.runs.length + ' snapshot runs. Set STORE_V2_RUNS=false to roll back.');
+    // The tail is the part of the library the snapshot cannot see, so it is stated every boot
+    // next to the horizon it was measured from. A silent fold is how the 117 mi gap survived:
+    // the count looked plausible and nothing on the page said what date it stopped at.
+    [['ride',t.ride],['run',t.run]].forEach(function(p){
+      var k=p[0], x=p[1];
+      if(!x.horizon){ console.warn('[store_v2] ' + k + ' bucket is empty — no horizon, nothing folded.'); return; }
+      var msg='[store_v2] ' + k + ' horizon ' + x.horizon + ' — folded ' + x.add.length + ' live record'
+        + (x.add.length===1?'':'s') + ' dated after it'
+        + (x.skipped?(' (' + x.skipped + ' boundary-day record' + (x.skipped===1?'':'s') + ' skipped: no stravaId to tell them apart from what the snapshot already holds)'):'') + '.';
+      if(x.add.length) console.warn(msg + ' The snapshot is stale by ' + x.add.length + ' ' + k + ' — re-run storeV2Put_() to fold them in properly.');
+      else console.log(msg);
+    });
+    if(typeof STORE_V2_RUNS!=='undefined' && STORE_V2_RUNS) console.log('[store_v2] run screen ARMED — getRuns now serves ' + _storeV2Runs.length + ' runs (' + s.runs.length + ' snapshot + ' + t.run.add.length + ' live tail). Set STORE_V2_RUNS=false to roll back.');
     if(s.virtual.length===0) console.warn('[store_v2] indoor/outdoor split is NOT available from this snapshot (virtual=0) — see storeV2Verify_() indoor signals before migrating any surface that splits them.');
     try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
     try{ showHomeDash(); }catch(e){}
@@ -15507,6 +15620,10 @@ function primeStoreV2_(){
 // recentRides_ additionally has an all-sports contract this accessor's ride filter
 // would silently break.
 function allRidesDeduped_(){
+  // Snapshot PLUS the live tail it cannot know about — re-folded here rather than only at
+  // prime, so a ride that syncs mid-session is counted on the next render instead of after a
+  // reload. See storeV2Tail_ for why the tail is a date cut and not a fuzzy match.
+  storeV2Refresh_();
   // Primed snapshot wins. Returns a copy so a caller that sorts in place (recentRides_
   // does) cannot reorder the shared cache for every subsequent reader.
   if(STORE_V2_READS && _storeV2Rides) return _storeV2Rides.slice();
@@ -29792,6 +29909,10 @@ function getRuns(){
   // st.runs, no dedup), so this is the clean 2201, not a match to the old number. Falls
   // through to the legacy union when not primed, so a slow/failed snapshot read degrades to
   // today's behaviour, never to an empty screen.
+  // Same live-tail fold as the ride accessor: the snapshot's newest run is its horizon, and a
+  // run logged after it comes off st.runs/st.rides rather than being invisible until the next
+  // manual storeV2Put_.
+  if(typeof storeV2Refresh_==='function') storeV2Refresh_();
   if(STORE_V2_RUNS && _storeV2Runs && _storeV2Runs.length) return _storeV2Runs.slice();
   return getRunsLegacy_();
 }
