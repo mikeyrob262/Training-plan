@@ -10035,11 +10035,13 @@ function nutDateBanner_(){
   var pretty=(d&&!isNaN(d.getTime()))
     ? ((_YVY_MON[d.getMonth()]||'')+' '+d.getDate())
     : nutrDate;
-  return '<div style="display:flex;align-items:center;gap:9px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.35);border-radius:11px;padding:9px 12px;margin-bottom:10px">'
+  // Wraps rather than overflows: at 390px the one-line version pushed "Back to today" off the
+  // right edge, which is the one control on the banner that matters.
+  return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.35);border-radius:11px;padding:9px 12px;margin-bottom:10px">'
     +'<span style="width:7px;height:7px;border-radius:50%;background:#d97706;flex-shrink:0"></span>'
-    +'<span style="font-size:12.5px;color:#e8edf5;font-weight:700">Logging to '+pretty+'</span>'
+    +'<span style="font-size:12.5px;color:#e8edf5;font-weight:700;min-width:0">Logging to '+pretty+'</span>'
     +'<span style="font-size:11.5px;color:#94a3b8">not today</span>'
-    +'<span onclick="nutJumpToday_()" style="margin-left:auto;font-size:12px;font-weight:700;color:#d97706;cursor:pointer;white-space:nowrap">Back to today</span>'
+    +'<span onclick="nutJumpToday_()" style="margin-left:auto;font-size:12px;font-weight:700;color:#d97706;cursor:pointer;white-space:nowrap;flex-shrink:0">Back to today</span>'
     +'</div>';
 }
 function nutJumpToday_(){
