@@ -205,6 +205,18 @@ try {
     fail('the You vs. You run path regressed (see above).');
   }
 
+  // ---- 12. Athlete Intelligence cards -> no progress-shaped pill survives, every number on a
+  //          card says what it is, and a DNA trait draws a line only where a history exists.
+  console.log(`${D}· checking Athlete Intelligence cards (no pills)…${X}`);
+  try {
+    const so = execSync('node scripts/ai-cards-nobar-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('an Athlete Intelligence card regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

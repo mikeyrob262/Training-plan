@@ -20309,7 +20309,10 @@ function _trEfficiency_(){
   var avg=function(a){return a.length?a.reduce(function(s,x){return s+x;},0)/a.length:0;};
   var half=Math.max(2, Math.floor(vals.length/3));
   var er=avg(vals.slice(-half)), ep=avg(vals.slice(0, half));
-  return { vals:vals, efNow:Math.round(er*10)/10, pct:ep>0?Math.round((er-ep)/ep*100):0, n:pts.length };
+  // half/months come back with the numbers so the card can SAY what the percentage compared,
+  // instead of printing a bare signed figure against an unstated baseline.
+  return { vals:vals, efNow:Math.round(er*10)/10, pct:ep>0?Math.round((er-ep)/ep*100):0, n:pts.length,
+           half:half, months:vals.length, firstYM:order[order.length-vals.length]||order[0], lastYM:order[order.length-1] };
 }
 // Watch: day-of-week that carries the athlete's heaviest average load (where fatigue concentrates).
 function _trWatchDay_(){
@@ -20330,7 +20333,33 @@ function _trPredictions_(n){
 }
 // ---- render helpers ----
 function _trDelta_(pct, invert){ if(pct==null) return ''; var good=invert?(pct<0):(pct>0); var c=(pct===0)?'#94a3b8':(good?'#22c55e':'#ef4444'); var s=(pct>0?'+':'')+pct+'%'; return '<span style="color:'+c+';font-weight:800">'+s+'</span>'; }
-function _trConfBar_(conf, color){ color=color||'#22c55e'; return '<div style="display:flex;align-items:center;gap:9px"><div style="flex:1;height:5px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+Math.max(3,Math.min(100,conf))+'%;background:'+color+';border-radius:3px"></div></div><span style="font-size:12px;font-weight:800;color:'+color+'">'+conf+'%</span></div>'; }
+// _trConfBar_ removed: it was the last progress-shaped pill on these pages. Confidence is now
+// either words (_trConfNote_) or a marker on a labelled scale (_gcScale_) — never a filled bar.
+// Sample confidence, in WORDS. It used to be a filled pill sitting directly under a trend
+// percentage, so two unrelated numbers — "-8%" (the trend) and "99%" (how sure we are of it) —
+// read as one comparison, and the card carried two competing graphics for one story. The trend
+// line is the card's single visualization; confidence is a caveat and belongs in footnote voice.
+function _trConfWord_(conf){ conf=+conf||0; return conf>=85?'high confidence':(conf>=60?'moderate confidence':(conf>=35?'low confidence':'very low confidence')); }
+function _trConfNote_(n, nounP, conf){
+  return '<div style="font-size:10.5px;color:#5b6678;margin-top:7px;border-top:1px solid #1c2130;padding-top:7px">'
+    +'Based on '+(+n||0).toLocaleString()+' '+nounP+' &middot; '+_trConfWord_(conf)+'</div>';
+}
+// One labelled trend statement, replacing a bare signed percentage whose comparison was unstated.
+// dir carries the arrow + colour; the clause after it says what was compared to what.
+function _trTrendLine_(pct, whatVsWhat, invert){
+  var good=invert?(pct<0):(pct>0), c=(pct===0)?'#94a3b8':(good?'#22c55e':'#ef4444');
+  var arrow=(pct===0)?'':(pct>0?'&#9650; ':'&#9660; ');
+  return '<div style="display:flex;align-items:baseline;gap:7px;margin-top:6px;flex-wrap:wrap">'
+    +'<span style="font-size:13px;font-weight:800;color:'+c+'">'+arrow+Math.abs(pct)+'%</span>'
+    +'<span style="font-size:11.5px;color:#94a3b8;line-height:1.35">'+whatVsWhat+'</span></div>';
+}
+// The card's value line: number, its unit, and a plain-language gloss of what the unit means.
+function _trValueLine_(val, unit, gloss){
+  return '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
+    +'<span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+val+'</span>'
+    +'<span style="font-size:12px;color:#94a3b8">'+unit+'</span></div>'
+    +(gloss?('<div style="font-size:10.5px;color:#5b6678;margin-top:3px">'+gloss+'</div>'):'');
+}
 function _trSpark_(vals, color){ if(!vals||vals.length<2) return ''; var W=300,H=54; return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;margin-top:8px"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="'+(color||'#22c55e')+'" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>'; }
 // Question card: coaching question is the headline; the metric is secondary.
 function _trQCard_(q, bodyHtml){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:#e8edf5;line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
@@ -20433,22 +20462,49 @@ function aiRenderTrends_(ded){
   // Are you becoming a better aerobic athlete? (VO2)
   var vh=(st.vo2maxHistory||[]).filter(function(x){return x&&x.v!=null&&!isNaN(parseFloat(x.v));});
   if(vh.length>=2){ var vv=vh.map(function(x){return parseFloat(x.v);}); var cut=vh.length>6?vh[vh.length-7]:vh[0]; var vd=Math.round((vv[vv.length-1]-parseFloat(cut.v))*10)/10;
-    H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+vv[vv.length-1]+'</span><span style="font-size:12px;color:#5b6678">VO&#8322; ml/kg/min</span><span style="margin-left:auto">'+_trDelta_(vd?Math.round(vd/parseFloat(cut.v)*100):0)+'</span></div><div style="margin:12px 0 4px">'+_trConfBar_(_trConf_(vh.length,20), GRN)+'</div><div style="font-size:10.5px;color:#5b6678">Based on '+vh.length+' estimates</div>'+_trSpark_(vv, GRN)); }
+    var vback=Math.min(6, vh.length-1);
+    // Two points joined by a straight segment LOOK like a trend and are not one. Below 4 estimates
+    // the card says so instead of drawing a line the data cannot support.
+    var vLine=(vh.length>=4)
+      ? (_gcTrend_(vv.map(function(v){ return {v:v, lab:''}; }), _GC_YOY, {aria:'VO2 max estimates over time', H:38, fill:false,
+          from:'earliest estimate', to:'latest'})||'')
+      : '<div style="font-size:10.5px;color:#5b6678;margin-top:8px;line-height:1.45">Too few estimates to draw a trend &mdash; they accrue from HR-paired rides.</div>';
+    H+=_trQCard_('Are you becoming a better aerobic athlete?',
+      _trValueLine_(vv[vv.length-1], 'VO&#8322; ml/kg/min', 'oxygen your body can use at full effort &mdash; higher is fitter')
+      +_trTrendLine_(vd?Math.round(vd/parseFloat(cut.v)*100):0, vback===1?'vs your previous estimate':('vs '+vback+' estimates ago'))
+      +vLine
+      +_trConfNote_(vh.length, 'estimates', _trConf_(vh.length,20))); }
   else { H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough VO&#8322; estimates yet &mdash; they accrue from HR-paired rides.</div>'); }
   // Are you getting faster? (FTP — honest degrade: manual, no history)
   var ftp=parseInt(st.ftp)||0;
   H+=_trQCard_('Are you getting faster?', ftp>0 ? ('<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+ftp+'</span><span style="font-size:12px;color:#5b6678">FTP W</span></div><div style="font-size:11px;color:#94a3b8;margin-top:12px;line-height:1.5">You set this manually &mdash; there is no FTP history to trend yet. Log FTP tests (or connect power-based estimates) to see progression here.</div>') : '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Set your FTP in Settings to track this.</div>');
   // How is your aerobic efficiency? (EF trend — real proxy for "recovery")
   var eff=_aiSafe_('TrEff', function(){return _trEfficiency_();});
-  if(eff){ H+=_trQCard_('How is your aerobic efficiency?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+eff.efNow+'</span><span style="font-size:12px;color:#5b6678">speed per HR</span><span style="margin-left:auto">'+_trDelta_(eff.pct)+'</span></div><div style="margin:12px 0 4px">'+_trConfBar_(_trConf_(eff.n,120), GRN)+'</div><div style="font-size:10.5px;color:#5b6678">Based on '+eff.n+' HR-paired rides</div>'+_trSpark_(eff.vals, GRN)); }
+  // Was: a 30px value, a bare "-8%", a 99% confidence PILL, a caption, and a sparkline — two
+  // graphics and two unrelated percentages with nothing saying which was which. Now: what the
+  // number means, one labelled comparison, one line, and confidence as a footnote.
+  if(eff){ H+=_trQCard_('How is your aerobic efficiency?',
+      _trValueLine_(eff.efNow, 'mph per 100 bpm', 'how much speed each heartbeat buys you &mdash; higher is more efficient')
+      +_trTrendLine_(eff.pct, 'most recent '+eff.half+' month'+(eff.half===1?'':'s')+' vs the first '+eff.half+' of these '+eff.months)
+      +(_gcTrend_(eff.vals.map(function(v){ return {v:v, lab:''}; }), _GC_YOY, {aria:'Aerobic efficiency by month', H:38, fill:false,
+          from:_gcMonLab_?_gcMonLab_(eff.firstYM):'earliest month', to:_gcMonLab_?_gcMonLab_(eff.lastYM):'this month'})||'')
+      +_trConfNote_(eff.n, 'HR-paired rides', _trConf_(eff.n,120))); }
   else { H+=_trQCard_('How is your aerobic efficiency?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Needs rides with average HR + speed. Sync HR-paired rides to unlock this.</div>'); }
   // How consistent have you been?
   var consCells=_aiSafe_('TrCons', function(){ return (typeof dsConsistency_==='function')?dsConsistency_(rides,90,new Date(),normDate):null; });
   if(consCells&&consCells.length){ var active=consCells.filter(function(c){return c.n>0;}).length; var consPct=Math.round(active/consCells.length*100);
     // per-week active bars over ~13 weeks
     var wk=[]; for(var wi=0; wi<13; wi++){ wk.push(0); } consCells.forEach(function(c,i){ var w=Math.floor(i/7); if(w<13&&c.n>0) wk[w]++; });
-    var wkmx=Math.max.apply(null,wk)||1; var bars=wk.map(function(v){ var h=Math.round(v/7*100); return '<div style="flex:1;height:44px;display:flex;align-items:flex-end"><div style="width:100%;height:'+Math.max(6,h)+'%;background:'+BLU+';opacity:'+(0.35+0.65*(v/7))+';border-radius:2px 2px 0 0"></div></div>'; }).join('');
-    H+=_trQCard_('How consistent have you been?', '<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+consPct+'%</span><span style="font-size:12px;color:#5b6678">active days, 90d</span></div><div style="display:flex;gap:3px;margin-top:14px">'+bars+'</div>'); }
+    // Thirteen weekly rectangles side by side ARE a time series — the one shape the standing rule
+    // says must be a line. Same weekly counts, drawn as the trajectory they already were.
+    var wkPts=wk.map(function(v,i){ return {v:v, lab:'wk '+(i+1)}; });
+    var firstHalf=wk.slice(0,6).reduce(function(a,b){return a+b;},0), lastHalf=wk.slice(-6).reduce(function(a,b){return a+b;},0);
+    var trendPct=firstHalf>0?Math.round((lastHalf-firstHalf)/firstHalf*100):(lastHalf>0?100:0);
+    H+=_trQCard_('How consistent have you been?',
+      _trValueLine_(consPct+'%', 'of the last 90 days had an activity', active+' active days out of '+consCells.length)
+      +_trTrendLine_(trendPct, 'last 6 weeks vs the first 6')
+      +(_gcTrend_(wkPts, _GC_RECOVERY, {aria:'Active days per week over 13 weeks', H:38, fill:false,
+          from:'13 weeks ago', to:'this week'})||'')); }
   else { H+=_trQCard_('How consistent have you been?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough recent rides to score consistency.</div>'); }
   H+='</div>';
 
@@ -20460,7 +20516,8 @@ function aiRenderTrends_(ded){
   if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid #1c2130':'')+'">'
       +'<span style="width:30px;height:30px;border-radius:8px;background:'+p.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+((typeof _msIcon_==='function'&&typeof _MS_ICON!=='undefined')?_msIcon_(_MS_ICON[p.cat]||_MS_ICON.Distance,p.color):'')+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">Projected '+_msFmtDate_(p.date)+'</div></div>'
-      +'<div style="width:120px;flex:0 0 auto">'+_trConfBar_(p.conf, p.color)+'<div style="font-size:9.5px;color:#5b6678;text-align:right;margin-top:2px">confidence</div></div>'
+      +'<div style="width:132px;flex:0 0 auto">'+_gcScale_(p.conf, p.color, 'unlikely', 'even', 'near certain')
+        +'<div style="font-size:9.5px;color:#5b6678;text-align:center;margin-top:3px">'+p.conf+'% &middot; chance it lands by then</div></div>'
     +'</div>'; });
     H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:10px;cursor:pointer" onclick="aiSetTab_(&#39;milestones&#39;)">View all milestones &rsaquo;</div>';
   } else { H+='<div style="color:#5b6678;font-size:12.5px">No projectable milestones yet &mdash; a training rate builds from recent rides.</div>'; }
@@ -20470,7 +20527,6 @@ function aiRenderTrends_(ded){
   var improving = story && story.fitness.pct!=null && story.fitness.pct>=0;
   H+='<div style="font-size:13px;font-weight:700;color:#e8edf5;margin-bottom:6px">Why is your fitness '+(improving?'improving':'changing')+'?</div>';
   var pos=drv.filter(function(x){ return x.invert?(x.delta<0):(x.delta>0); });
-  var overall=drv.length?Math.round(pos.length/drv.length*100):0;
   H+='<div style="display:flex;gap:16px;align-items:center">';
   H+='<div style="flex:1;min-width:0">';
   if(pos.length){ pos.slice(0,4).forEach(function(x){ var mag=Math.abs(x.delta); H+='<div style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:12px;color:#cbd5e1;line-height:1.4"><span style="color:'+GOOD+';flex-shrink:0">&#10003;</span><span>'+aiEsc_(x.key)+' '+(x.invert?'improved ':'up ')+mag+'%</span></div>'; }); }
@@ -20478,8 +20534,11 @@ function aiRenderTrends_(ded){
   H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:12px;cursor:pointer" onclick="aiSetTab_(&#39;overview&#39;)">Ask AI Coach &rsaquo;</div>';
   H+='</div>';
   // improvement ring
-  var R=34, CIRC=2*Math.PI*R, off=CIRC*(1-overall/100);
-  H+='<div style="flex:0 0 auto;text-align:center"><svg width="92" height="92" viewBox="0 0 92 92"><circle cx="46" cy="46" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="8"/><circle cx="46" cy="46" r="'+R+'" fill="none" stroke="'+GRN+'" stroke-width="8" stroke-linecap="round" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 46 46)"/><text x="46" y="51" text-anchor="middle" font-size="19" font-weight="800" fill="#f1f5f9">'+overall+'%</text></svg><div style="font-size:10px;color:#5b6678;margin-top:2px;max-width:92px">drivers trending positive</div></div>';
+  // "2 of 4" is the whole fact. A ring drawn to 50% of its circumference dresses a COUNT as
+  // accumulated progress, and there is no trajectory behind it to draw as a line instead.
+  H+='<div style="flex:0 0 auto;text-align:center;min-width:96px">'
+    +'<div style="font-size:26px;font-weight:800;color:'+(pos.length?GRN:'#94a3b8')+';line-height:1">'+pos.length+'<span style="font-size:15px;color:#5b6678;font-weight:700"> of '+drv.length+'</span></div>'
+    +'<div style="font-size:10px;color:#5b6678;margin-top:4px;max-width:96px;line-height:1.35">drivers trending positive</div></div>';
   H+='</div></div></div>';
 
   // ===== ONE THING TO REMEMBER =====
@@ -20560,7 +20619,11 @@ function _dnaEras_(acts){
 }
 // ---- TRAITS: each returns a card object, or a LOCKED object stating what unlocks it. n is always
 // carried so the confidence is a real count, never a fabricated percentage.
-function _dnaTrait_(name, headline, detail, deriv, col){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false}; }
+// spark = the trait's own history as _gcSpark_ points, for traits that HAVE one. A trait whose
+// number is a single maximum (longest streak), a categorical share (day of week) or a two-group
+// median comparison (pace after rest) has no trajectory behind it and gets none — the standing
+// rule says draw the line where the history is real, not everywhere.
+function _dnaTrait_(name, headline, detail, deriv, col, spark, sparkNote){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false, spark:spark||null, sparkNote:sparkNote||''}; }
 function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:unlock, col:col}; }
 function _dnaTraits_(acts){
   var T=[], G='#4ade80', A='#f59e0b', B='#60a5fa', P='#a855f7', TEAL='#2dd4bf';
@@ -20572,7 +20635,16 @@ function _dnaTraits_(acts){
     var wk={}; acts.forEach(function(a){ var k=_dnaWeekKey_(a.date); if(k) wk[k]=1; });
     var span=Math.max(1, Math.round(_dnaDaysBetween_(dates[0], dates[dates.length-1])/7)+1);
     var aw=Object.keys(wk).length, pct=Math.round(aw/span*100);
-    T.push(_dnaTrait_('Consistency', pct+'% of weeks active', 'You logged at least one activity in '+aw.toLocaleString()+' of '+span.toLocaleString()+' weeks.', 'active weeks ÷ weeks in your logged span', G));
+    // The headline is one lifetime share; the history behind it is how that share moved year to year.
+    // Key the year off the ACTIVITY, not off the week's Monday: a week straddling New Year has a
+    // December Monday, which otherwise invents a leading year holding one week (2% active) and
+    // drags the line's left edge down to a value the athlete never had.
+    var perY={}; acts.forEach(function(a2){ var y=String(a2.date).slice(0,4), k2=_dnaWeekKey_(a2.date);
+      if(!k2) return; if(!perY[y]) perY[y]={}; perY[y][k2]=1; });
+    var ys=Object.keys(perY).sort();
+    var sp=ys.map(function(y){ return {v:Math.round(Object.keys(perY[y]).length/52*100), lab:y}; });
+    T.push(_dnaTrait_('Consistency', pct+'% of weeks active', 'You logged at least one activity in '+aw.toLocaleString()+' of '+span.toLocaleString()+' weeks.', 'active weeks ÷ weeks in your logged span', G,
+      sp, 'share of weeks active, by year'));
   })();
   // 2) LONGEST STREAK — most consecutive active weeks.
   (function(){
@@ -20583,10 +20655,15 @@ function _dnaTraits_(acts){
   })();
   // 3) RETURN-AFTER-GAP — you always come back.
   (function(){
-    var breaks=[]; for(var i=1;i<dates.length;i++){ var g=_dnaDaysBetween_(dates[i-1],dates[i]); if(g>=14) breaks.push(g); }
+    var breaks=[], brkY={}; for(var i=1;i<dates.length;i++){ var g=_dnaDaysBetween_(dates[i-1],dates[i]);
+      if(g>=14){ breaks.push(g); var by=String(dates[i]).slice(0,4); brkY[by]=(brkY[by]||0)+1; } }
     if(breaks.length<3) return;
     var longest=Math.max.apply(null,breaks), med=Math.round(_dnaMedian_(breaks));
-    T.push(_dnaTrait_('You always come back', breaks.length+' breaks, every one ended', 'You went 14+ days without an activity '+breaks.length+' times; the longest was '+longest+' days, and you returned every time (median break '+med+' days).', 'gaps ≥14 days between consecutive activities', B));
+    // Every year in the span, so a year with no breaks reads as a zero rather than vanishing.
+    var y0=+String(dates[0]).slice(0,4), y1=+String(dates[dates.length-1]).slice(0,4), bs=[];
+    for(var by2=y0; by2<=y1; by2++) bs.push({v:brkY[String(by2)]||0, lab:String(by2)});
+    T.push(_dnaTrait_('You always come back', breaks.length+' breaks, every one ended', 'You went 14+ days without an activity '+breaks.length+' times; the longest was '+longest+' days, and you returned every time (median break '+med+' days).', 'gaps ≥14 days between consecutive activities', B,
+      bs, 'breaks of 14+ days, by year'));
   })();
   // 4) DAY OF WEEK — dominant training day (run log; ~n per weekday). Month-of-year stays OUT.
   (function(){
@@ -20613,7 +20690,11 @@ function _dnaTraits_(acts){
     var months=Object.keys(by).sort(); if(months.length<12) return;
     var vals=months.map(function(k){return by[k];}), recent=by[months[months.length-1]];
     var below=vals.filter(function(v){return v<recent;}).length; var pctl=Math.round(below/vals.length*100);
-    T.push(_dnaTrait_('Recent run volume', Math.round(recent)+' mi last month', 'Your most recent month is higher than '+pctl+'% of your '+months.length+' logged run months.', 'percentile of the latest month within your own run-month distribution', G));
+    // The percentile is a position WITHIN this series, so drawing the series is what makes the
+    // claim checkable. Last 60 months, so a 16-year log stays readable at card width.
+    var mSp=months.slice(-60).map(function(k){ return {v:Math.round(by[k]*10)/10, lab:k}; });
+    T.push(_dnaTrait_('Recent run volume', Math.round(recent)+' mi last month', 'Your most recent month is higher than '+pctl+'% of your '+months.length+' logged run months.', 'percentile of the latest month within your own run-month distribution', G,
+      mSp, 'run miles per month' + (months.length>60?' (last 60)':'')));
   })();
   // 7) PACE AFTER REST — do runs after a break come out faster or slower?
   (function(){
@@ -20714,7 +20795,8 @@ function aiRenderDNA_(){
       +'<span style="font-size:14px;font-weight:800;color:#f1f5f9">'+aiEsc_(t.name)+'</span></div>'
       +'<div style="font-size:19px;font-weight:800;color:'+t.col+';letter-spacing:-.01em;margin-bottom:5px">'+aiEsc_(t.headline)+'</div>'
       +'<div style="font-size:12px;color:#94a3b8;line-height:1.45;margin-bottom:7px">'+aiEsc_(t.detail)+'</div>'
-      +'<div style="font-size:10px;color:#5b6678;border-top:1px solid #1c2130;padding-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
+      +(t.spark ? (_gcTrend_(t.spark, t.col, {aria:t.name+' over time', H:34, fill:false, note:t.sparkNote})||'') : '')
+      +'<div style="font-size:10px;color:#5b6678;border-top:1px solid #1c2130;padding-top:7px;margin-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
       +'</div>';
   });
   H+='</div>';
