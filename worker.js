@@ -13323,11 +13323,37 @@ function renderPerf(container){
     +'<div style="font-size:11px;color:#FFB938;font-weight:700">Chase 1 &middot; '+targetFTP+'W &middot; '+targetBW+'lbs</div>'
     +'</div>'
     +'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:4px"><span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
-    +'<div style="height:6px;background:var(--s2);border-radius:3px"><div style="height:6px;background:linear-gradient(90deg,#00C896,#FFB938);border-radius:3px;width:'+wkgPct+'%;transition:width .5s ease"></div></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-top:4px">'
-    +'<span>2.0</span><span>2.5 Chase 2</span><span>3.0 Cat 3</span><span>3.5 Cat 2</span><span>4.0</span>'
-    +'</div>'
+    // W/kg TRAJECTORY, not a progress bar. "68% of the way to Chase 1" is one ratio and reads the
+    // same whether the athlete has been climbing toward it for six months or drifting away from it.
+    // The line is w/kg at every weigh-in, with the FTP that was in effect on that date — see
+    // _gcWkgPts_ for why today's FTP is not applied backwards. The target sits as a dashed rule so
+    // the gap is still visible as a distance, which is all the bar was ever really saying.
+    +(function(){
+      var pts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
+      // The target rule is only drawn when the target actually falls inside the plotted range.
+      // Decide that FIRST, because the caption must not promise a dashed line that is not there —
+      // a target still far above everything logged simply is not on this chart yet, and saying so
+      // is the honest version.
+      var _v=pts.map(function(p){ return p.v; }).filter(function(v){ return v!=null; });
+      var _lo=_v.length?Math.min.apply(null,_v):0, _hi=_v.length?Math.max.apply(null,_v):0;
+      var _tp=(_hi>_lo)?((targetWkg-_lo)/(_hi-_lo)):-1;
+      var _onChart=(_tp>=0 && _tp<=1);
+      var spark=_gcTrend_(pts, _GC_WKG, { aria:'W per kg by weigh-in', H:44, fill:false,
+        note:'w/kg at each weigh-in &middot; '+(_onChart?('dashed line is Chase 1 at '+targetWkg.toFixed(2))
+                                                       :('Chase 1 at '+targetWkg.toFixed(2)+' is still above everything logged, so it is off the top of this chart')) });
+      if(!spark){
+        // No weigh-in history to draw. Say so rather than falling back to the bar this replaced.
+        return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
+          +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+          +'<div style="font-size:10.5px;color:var(--t3);margin-top:3px">Log a few weigh-ins and this becomes a trend line toward '+targetWkg.toFixed(2)+'.</div>';
+      }
+      var rule=_onChart
+        ? '<div style="position:absolute;left:0;right:0;top:'+((1-_tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
+        : '';
+      return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
+        +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+        +'<div style="position:relative">'+spark+rule+'</div>';
+    })()
     +'</div>';
   // -- PEAK POWER (vertical bar chart)
   var peakDursList=[
@@ -13450,9 +13476,14 @@ function renderPerf(container){
   // and the teaching sheet agree; np/if/tss anchor to the most recent power ride.
   var _tc=teachCtx_();
   [
-    {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:Math.min(100,Math.round(ctl2/100*100))},
-    {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:Math.min(100,Math.round(atl2/100*100))},
-    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null},
+    // CTL/ATL/TSB carry a 90-day LINE instead of a bar. "CTL is 62% of 100" measured against an
+    // arbitrary ceiling, and TSB — signed, routinely negative — could not have a bar at all, so the
+    // metric whose DIRECTION matters most had nothing. All three now read off st.fitSeries, the
+    // same array getFitness_ takes its headline from, so a card and the number above it cannot
+    // disagree. Small multiples: each sits in its own card, so the three hues never share an axis.
+    {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:null,spark:_gcFitPts_('ctl',90),sparkC:_gcHue_(0)},
+    {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:null,spark:_gcFitPts_('atl',90),sparkC:_gcHue_(1)},
+    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null,spark:_gcFitPts_('tsb',90),sparkC:_gcHue_(2)},
     {key:'wkg',lbl:'W/kg',v:_tc.wkg.toFixed(2),sub:'FTP-based',c:'#FC4C02',desc:'watts / kg',barW:null},
     {key:'ftp',lbl:'FTP',v:_tc.ftp+'W',sub:'Manual',c:'#94a3b8',desc:'may be stale',barW:null},
     {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'last ride',c:'#60a5fa',desc:'avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)',barW:null},
@@ -13467,7 +13498,8 @@ function renderPerf(container){
       +'<div style="font-size:22px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
       +'<div style="font-size:11px;font-weight:600;color:'+card.c+';margin-top:3px">'+card.sub+'</div>'
       +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
-      +(card.barW!==null?'<div style="height:4px;background:var(--s2);border-radius:2px;margin-top:6px"><div style="height:4px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':'')
+      +(card.spark?_gcTrend_(card.spark, card.sparkC||card.c, { aria:card.lbl+' over 90 days', H:26, fill:false, from:'', to:'', note:'90 days' })
+        :(card.barW!==null?'<div style="height:4px;background:var(--s2);border-radius:2px;margin-top:6px"><div style="height:4px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':''))
       +'</div>';
   });
   html+='</div>';
@@ -13584,21 +13616,34 @@ function renderPerf(container){
   });
   html+='</div>';
 
-  // MONTHLY MILEAGE - flat list replacing the vertical bar chart
+  // MONTHLY MILEAGE — a growth line, not twelve rectangles.
+  //
+  // This was the clearest violation of the line rule left in the app: a 12-point time series drawn
+  // as 12 horizontal bars, each scaled against the biggest month. Twelve rectangles can say which
+  // month was largest and nothing at all about whether the athlete is building, holding or falling
+  // away, which is the only reason anyone reads a twelve-month strip. The per-month numbers are not
+  // lost — they move into the chart's table view, still reachable without hovering.
   html+='<div style="margin:0 16px 20px">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Monthly Mileage</div>';
   html+='<div style="font-size:11px;color:var(--t3)">Last 12 months</div></div>';
-  var maxMiles=Math.max.apply(null,mMiles.concat([1]));
-  mLabels.forEach(function(lbl,i){
-    var mi=mMiles[i];
-    var pct=maxMiles>0?Math.round(mi/maxMiles*100):0;
-    html+='<div style="display:flex;align-items:center;gap:10px;padding:'+(i>0?'6px 0':'0 0 6px')+'">'
-      +'<span style="font-size:11px;color:var(--t3);width:28px;flex-shrink:0">'+lbl+'</span>'
-      +'<div style="flex:1;height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;width:'+pct+'%;background:var(--blue);border-radius:2px"></div></div>'
-      +'<span style="font-size:12px;font-weight:700;color:var(--t1);width:44px;text-align:right;flex-shrink:0">'+mi+'mi</span>'
-      +'</div>';
-  });
+  (function(){
+    var pts=mMiles.map(function(v){ return (v==null||!isFinite(+v))?0:+v; });
+    if(pts.length<2){ html+='<div style="font-size:12px;color:var(--t3)">Not enough months logged yet to draw a trend.</div>'; return; }
+    var top=0; pts.forEach(function(v){ if(v>top) top=v; });
+    var ny=_mrNice_(top||1, 4);
+    var spec={
+      series:[{ key:'mi', label:'Miles', color:_GC_MILES, dash:'', pts:pts, v:pts[pts.length-1]||0 }],
+      nx:pts.length, maxY:ny.max, stepY:ny.step, unit:' mi',
+      xlabs:mLabels.slice(),
+      xticks:mLabels.map(function(l,i){ return { d:i+1, lab:l }; })
+                    .filter(function(t,i){ return (mLabels.length<=6) || (i%2===0) || i===mLabels.length-1; }),
+      end:{ i:0, text:Math.round(pts[pts.length-1]||0)+' mi', color:_GC_MILES },
+      fmt:function(v){ return Math.round(v).toLocaleString(); },
+      aria:'Miles per month over the last '+pts.length+' months.'
+    };
+    html+=_MR_CSS+_gcLineChart_(spec,'homemiles')+_gcTable_(spec,'Month');
+  })();
   html+='</div>';
 
   // POWER + TSS ROW
@@ -17451,6 +17496,22 @@ var _YVY_DOWN='#ff5c5c';
 var _GC_YOY=['#0891b2','#8b5cf6','#d97706'];
 var _GC_FACTOR=['#ec4899','#3b82f6','#d97706'];
 var _GC_HELD='#FC4C02', _GC_CHASE='#3b82f6';
+// THE shared categorical ramp, in fixed order — cyan, violet, amber, rose. FOUR slots, and that
+// is not a placeholder: inside the lightness band a dark chart surface allows, four is the most
+// that clears all-pairs separation. Five puts lime against amber at deltaE 3.1 under deuteranopia
+// and six puts blue against violet at 1.3, which is indistinguishable. Past four the answer is
+// small multiples (each series in its own titled panel, where cross-pair separation does not
+// apply), never a generated fifth hue.
+var _GC_SET=['#0891b2','#8b5cf6','#d97706','#ec4899'];
+function _gcHue_(i){ return _GC_SET[((i%_GC_SET.length)+_GC_SET.length)%_GC_SET.length]; }
+// Single-series identities. A lone line has no pair to separate from, so it only has to clear the
+// lightness band, the chroma floor and 3:1 against the surface — all four below do. They exist so
+// each surface reads as its own chart rather than every sparkline in the app being the same blue.
+var _GC_MILES='#0d9488';      // Monthly Mileage — teal
+var _GC_WKG='#6366f1';        // W/kg toward the Chase — indigo
+var _GC_GOAL='#ec4899';       // Goals — rose
+var _GC_LOAD='#d97706';       // weekly training load — amber
+var _GC_RECOVERY='#0891b2';   // recovery — cyan
 // Sparkline: one metric's history in the space of a label. No axes, no grid, no number on any
 // point — whatever card this sits in already carries the current value, so the line's only job is
 // direction. A single series, so no legend either: the card heading names it.
@@ -17526,6 +17587,88 @@ function _gcSparkFoot_(a, b){
   return '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:3px">'
     +'<span style="font-size:9.5px;color:#5b6678">'+a+'</span>'
     +'<span style="font-size:9.5px;color:#5b6678">'+b+'</span></div>';
+}
+// The whole "value + its history" block a card carries where a progress bar used to sit. One
+// helper because this shape now appears on a dozen surfaces, and each of them writing its own is
+// how they drift apart.
+//   pts  oldest-first [{v,lab}] (nulls allowed)
+//   Returns '' when there is no trend to show — the caller keeps its number and says nothing more,
+//   which is the honest degrade. Never a flat line through one point.
+function _gcTrend_(pts, col, opts){
+  opts=opts||{};
+  var svg=_gcSpark_(pts||[], col, { aria:opts.aria||'trend', H:opts.H||34, fill:opts.fill, markPeak:opts.markPeak });
+  if(!svg) return '';
+  var a=opts.from||((pts[0]&&pts[0].lab)||''), b=opts.to||((pts[pts.length-1]&&pts[pts.length-1].lab)||'');
+  return '<div style="margin-top:7px">'+svg
+    +((a||b)?_gcSparkFoot_(a,b):'')
+    +(opts.note?('<div style="font-size:10px;color:#5b6678;margin-top:2px">'+opts.note+'</div>'):'')
+    +'</div>';
+}
+// A SCALE, not a bar. Some numbers on these pages are a single scalar with no history behind them
+// — a prediction confidence is the share of one projection band that clears a goal, measured once.
+// There is no trajectory to draw and inventing one would be worse than a bar. But a filled pill
+// still reads as accumulation ("62% of the way there"), which a probability is not. So it is drawn
+// as a marker on a labelled 0-100 scale: same information, none of the progress grammar.
+function _gcScale_(pct, col, lo, mid, hi){
+  var p=Math.max(0, Math.min(100, Math.round(pct||0)));
+  return '<div style="margin-top:9px">'
+    +'<div style="position:relative;height:12px">'
+    +'<div style="position:absolute;left:0;right:0;top:5px;height:2px;border-radius:1px;background:#1c2130"></div>'
+    +'<div style="position:absolute;left:50%;top:2px;width:1px;height:8px;background:#2a3341"></div>'
+    +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid #0e1117;box-sizing:content-box"></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:space-between;margin-top:1px">'
+    +'<span style="font-size:9.5px;color:#5b6678">'+(lo||'0%')+'</span>'
+    +'<span style="font-size:9.5px;color:#5b6678">'+(mid||'even')+'</span>'
+    +'<span style="font-size:9.5px;color:#5b6678">'+(hi||'100%')+'</span></div></div>';
+}
+// Series builders shared by the converted surfaces. Each returns oldest-first [{v,lab}] and each
+// returns [] rather than a guess when the log cannot support a line.
+function _gcYMD_(d){ return String((d&&d.date)||d||'').slice(0,10); }
+function _gcMonLab_(ymd){
+  var p=String(ymd).split('-');
+  return (_YVY_MON[(+p[1]||1)-1]||'')+' '+(p[0]||'').slice(2);
+}
+// Daily fitness series (CTL / ATL / TSB) off st.fitSeries, tail-limited. This is the SAME array
+// getFitness_ reads its headline from, so a card's sparkline cannot disagree with the number
+// printed above it.
+// W/kg over time. The weigh-in log supplies the sampling (it is the denser of the two logs) and
+// ftpOn_ supplies the FTP that was actually in effect on that date — NOT today's FTP applied
+// backwards, which would redraw history every time the athlete retests and turn a weight-loss
+// curve into a fake power curve. Capped to the trailing window so a card shows a trend, not a
+// decade.
+function _gcWkgPts_(days){
+  if(typeof st==='undefined' || !st || !Array.isArray(st.weightLog)) return [];
+  if(typeof ftpOn_!=='function') return [];
+  var cut=null;
+  if(days>0){ var d=new Date(); d.setDate(d.getDate()-days); cut=d.toISOString().slice(0,10); }
+  var wl=st.weightLog.filter(function(w){
+    var v=(w&&w.weight!=null)?parseFloat(w.weight):NaN;
+    return w && w.date && isFinite(v) && v>0 && (!cut || String(w.date).slice(0,10)>=cut);
+  }).slice().sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+  return wl.map(function(w){
+    var ymd=_gcYMD_(w), lb=parseFloat(w.weight), ftp=parseInt(ftpOn_(ymd),10)||0;
+    var kg=lb/2.20462;
+    return { v:(kg>0 && ftp>0)?Math.round(ftp/kg*100)/100:null, lab:_gcMonLab_(ymd) };
+  });
+}
+// Weekly rate series from an array of {t|week, ...} rollups the Trajectory sections already build.
+// pick(w) returns the week's value or null; a week with no denominator is a gap, not a zero.
+function _gcWeekPts_(weeks, pick, lab){
+  return (weeks||[]).map(function(w, i){
+    var v=null; try{ v=pick(w); }catch(e){ v=null; }
+    return { v:(v!=null && isFinite(v))?v:null, lab:(lab?lab(w,i):('wk '+(i+1))) };
+  });
+}
+function _gcFitPts_(key, days){
+  var raw=(typeof st!=='undefined' && st && Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var n=Math.max(0, raw.length-(days||90));
+  var out=[];
+  for(var i=n;i<raw.length;i++){
+    var p=raw[i], v=(p && p[key]!=null && isFinite(+p[key]))?+p[key]:null;
+    out.push({ v:v, lab:_gcMonLab_(_gcYMD_(p)) });
+  }
+  return out;
 }
 // THE tier rule. One place decides "genuine best", so the cards, the bars, the rank strip and the
 // timeline cannot disagree about which months earn orange. Top decile (always at least the #1
@@ -18466,8 +18609,17 @@ function _gcLineChart_(spec, id){
     var es=spec.series[spec.end.i];
     var ey=_mrY_(g, es.pts[es.pts.length-1]), ex=_mrX_(g, es.pts.length);
     var ec=spec.end.color||es.color;
+    // A series that runs to the last x position leaves only the right padding for its label, and
+    // on the narrow surface that is not enough — "452 mi" came out as "452 m". Measure first (the
+    // same rule the mark spec applies to in-bar labels: never clip, re-anchor) and flip the label
+    // to sit INSIDE the plot, right-aligned, when it would run past the edge.
+    var _w=String(spec.end.text).length*g.fEnd*0.58;
+    var _fits=(ex+8+_w)<=(g.W-2);
     endLbl='<circle cx="'+ex.toFixed(1)+'" cy="'+ey.toFixed(1)+'" r="4" fill="'+ec+'" stroke="#0e1117" stroke-width="2"/>'
-      +'<text class="mrc-end" font-size="'+g.fEnd+'" x="'+(ex+8).toFixed(1)+'" y="'+(ey+g.fEnd*0.35).toFixed(1)+'">'+spec.end.text+'</text>';
+      +'<text class="mrc-end" font-size="'+g.fEnd+'"'
+      +(_fits?(' x="'+(ex+8).toFixed(1)+'"')
+             :(' x="'+(ex-8).toFixed(1)+'" text-anchor="end"'))
+      +' y="'+(ey+(_fits?g.fEnd*0.35:-g.fEnd*0.75)).toFixed(1)+'">'+spec.end.text+'</text>';
   }
   var rows=spec.series.map(function(s){
     return '<div id="mrc-ttr-'+id+'-'+s.key+'" style="display:flex;align-items:center;gap:8px;white-space:nowrap">'
@@ -19331,8 +19483,26 @@ function aiRenderMilestones_(){
     H+='<div style="background:rgba(20,26,40,.62);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:14px 15px">'
       +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#e2e8f0;font-weight:700;margin-bottom:9px">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
       +'<div style="font-size:23px;font-weight:800;color:#f8fafc;letter-spacing:-.01em;margin-bottom:9px">'+_msFmtDate_(p.projectedDate)+'</div>'
-      +'<div style="font-size:11px;color:#cbd5e1;margin-bottom:6px">'+pct(p.pct)+'% complete</div>'
-      +'<div style="height:7px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden"><div style="height:100%;width:'+Math.min(100,p.pct)+'%;background:'+c+';border-radius:4px"></div></div>'
+      +'<div style="font-size:11px;color:#cbd5e1;margin-bottom:2px">'+pct(p.pct)+'% complete</div>'
+      // A milestone IS a running total crossing a threshold, so the honest picture is the running
+      // total with the threshold on it — not a bar quoting one ratio. The dashed rule is the target;
+      // the line climbing toward it is what tells you whether the date above is getting nearer.
+      +(function(){
+        var pts=_msProgPts_(p.metric, 36);
+        var sp=_gcTrend_(pts, c, { aria:aiEsc_(p.name)+' progress', H:34, fill:false,
+                                   from:(pts[0]&&pts[0].lab)||'', to:(pts[pts.length-1]&&pts[pts.length-1].lab)||'' });
+        // No usable history: say so in words. Falling back to the bar this replaced would leave the
+        // rule half-applied and put the weakest version of the card in front of the thinnest data.
+        if(!sp) return '<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">Not enough logged months yet to draw the climb toward this.</div>';
+        // The target only gets a rule when it sits inside the drawn range; above it, the line
+        // simply has not reached the top of the chart yet and a rule pinned to the edge would lie.
+        var vals=pts.map(function(x){ return x.v; }).filter(function(v){ return v!=null; });
+        var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals);
+        var tp=(hi>lo)?((p.target-lo)/(hi-lo)):-1;
+        var rule=(tp>=0 && tp<=1)
+          ? '<div style="position:absolute;left:0;right:0;top:'+((1-tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed '+c+';opacity:.85;pointer-events:none"></div>' : '';
+        return '<div style="position:relative">'+sp+rule+'</div>';
+      })()
     +'</div>'; });
   H+='</div></div></div></div>';
   // ---- LIFETIME AT A GLANCE (Strava all-time totals — option A) ----
@@ -19460,6 +19630,37 @@ function milestoneProjections_(defs, rates, nowRef){
     return { id:d.id, category:d.category, name:d.name, unit:d.unit||'', metric:d.metric, current:cur, target:tgt,
              remaining:remaining, pct:pct, unlocked:unlocked, ratePerWeek:rpw, etaWeeks:etaWeeks, projectedDate:proj };
   });
+}
+// Cumulative history of a milestone's OWN metric, bucketed by month. A milestone is by definition
+// a running total crossing a threshold, so "62% complete" is a point on a curve the app already
+// has every input for — and the curve is what says whether the crossing is racing toward you or
+// receding. Same accumulate-then-sample shape as every other cumulative series here.
+function _msProgPts_(metric, months){
+  var src=[];
+  try{ src=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]); }catch(e){ src=[]; }
+  var rows=[];
+  src.forEach(function(r){
+    var d=String((r&&r.date)||'').slice(0,10); if(d.length!==10 || (r&&r.deleted)) return;
+    rows.push({ ym:d.slice(0,7), mi:parseFloat(r.distance)||0,
+                ft:parseFloat((r.elev!=null)?r.elev:r.elevation)||0,
+                sec:(typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||0)||0) });
+  });
+  if(rows.length<2) return [];
+  rows.sort(function(a,b){ return a.ym<b.ym?-1:(a.ym>b.ym?1:0); });
+  var by={}, order=[];
+  rows.forEach(function(x){
+    if(!by[x.ym]){ by[x.ym]={mi:0,ft:0,rides:0,hours:0,cent:0}; order.push(x.ym); }
+    var b=by[x.ym];
+    b.mi+=x.mi; b.ft+=x.ft; b.rides+=1; b.hours+=x.sec/3600; if(x.mi>=100) b.cent+=1;
+  });
+  var pick=function(b){
+    return metric==='ft'?b.ft : metric==='rides'?b.rides : metric==='hours'?b.hours
+         : metric==='centuries'?b.cent : b.mi;
+  };
+  var run=0, out=[];
+  order.forEach(function(ym){ run+=pick(by[ym]); out.push({ v:Math.round(run*10)/10, lab:_gcMonLab_(ym+'-01') }); });
+  if(months>0 && out.length>months) out=out.slice(out.length-months);
+  return out;
 }
 // Next N un-reached, soonest projected first; unprojectable (rate<=0) sink to the bottom by closeness.
 function nextMilestones_(projections, n){
@@ -19966,6 +20167,39 @@ function _trDrivers_(){
   out.sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);});
   return out;
 }
+// Monthly series behind each driver, so the row can show HOW it moved rather than only how far.
+// The bar was |delta| between two 60-day windows scaled against the largest |delta| — a length
+// that encodes a difference, which means the longest bar was whichever metric happened to be
+// noisiest, not whichever mattered. Same inputs, resolved monthly.
+function _trDriverPts_(key, months){
+  var ded=[]; try{ ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[]; }catch(e){ ded=[]; }
+  if(key==='Weight Change'){
+    var wl=((typeof st!=='undefined'&&st&&st.weightLog)||[]).filter(function(x){ return x&&x.date&&x.weight!=null&&isFinite(parseFloat(x.weight)); })
+      .slice().sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; });
+    var wby={}, word=[];
+    wl.forEach(function(w){ var ym=String(w.date).slice(0,7); if(!(ym in wby)) word.push(ym); wby[ym]=parseFloat(w.weight); });
+    var wout=word.map(function(ym){ return { v:wby[ym], lab:_gcMonLab_(ym+'-01') }; });
+    return (months>0 && wout.length>months) ? wout.slice(wout.length-months) : wout;
+  }
+  var by={}, order=[];
+  ded.forEach(function(r){
+    var d=String((r&&r.date)||'').slice(0,10); if(d.length!==10 || (r&&r.deleted)) return;
+    var ym=d.slice(0,7);
+    if(!by[ym]){ by[ym]={ thr:0, days:{}, mi:0 }; order.push(ym); }
+    by[ym].thr+=((+r.z4s||0)+(+r.z5s||0));
+    by[ym].days[d]=1;
+    by[ym].mi+=parseFloat(r.distance)||0;
+  });
+  order.sort();
+  var out=order.map(function(ym){
+    var b=by[ym];
+    var v=(key==='Threshold Work')?Math.round(b.thr/60)
+        :(key==='Consistency')?Object.keys(b.days).length
+        :Math.round(b.mi*10)/10;
+    return { v:v, lab:_gcMonLab_(ym+'-01') };
+  });
+  return (months>0 && out.length>months) ? out.slice(out.length-months) : out;
+}
 // Aerobic-efficiency trend (avgSpeed/avgHR) — a REAL proxy for the "recovery/efficiency" question
 // where intra-ride HR-drift streams don't exist. Returns {vals, efNow, pct, n}.
 function _trEfficiency_(){
@@ -20087,8 +20321,17 @@ function aiRenderTrends_(ded){
   H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
   H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:#e8edf5">What is driving your fitness?</span><span style="font-size:11px;color:#5b6678">60 vs prior 60 days</span></div>';
   if(drv.length){ var mxd=Math.max.apply(null, drv.map(function(x){return Math.abs(x.delta)||1;}))||1;
-    drv.forEach(function(x){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
-      H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:13px"><span style="width:120px;flex:0 0 auto;font-size:12.5px;font-weight:600;color:#cbd5e1">'+aiEsc_(x.key)+'</span><div style="flex:1;height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+c+';border-radius:3px"></div></div><span style="width:52px;text-align:right;font-size:12.5px;font-weight:800;color:'+c+'">'+(x.delta>0?'+':'')+x.delta+'%</span></div>'; });
+    drv.forEach(function(x,di){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
+      H+='<div style="margin-bottom:14px">'
+        +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
+        +'<span style="font-size:12.5px;font-weight:600;color:#cbd5e1">'+aiEsc_(x.key)+'</span>'
+        +'<span style="font-size:12.5px;font-weight:800;color:'+c+'">'+(x.delta>0?'+':'')+x.delta+'%</span></div>'
+        // The bar was |delta| scaled against the largest |delta|, so the longest bar was whichever
+        // driver happened to be noisiest rather than whichever mattered. The line is the driver
+        // itself, month by month; the signed number beside it keeps the window comparison.
+        +(_gcTrend_(_trDriverPts_(x.key, 24), _gcHue_(di), {aria:x.key+' by month', H:30, fill:false})
+          ||'<div style="font-size:10.5px;color:#5b6678;margin-top:4px">Not enough monthly history to draw a trend.</div>')
+        +'</div>'; });
   } else { H+='<div style="color:#5b6678;font-size:12.5px">Not enough windowed data yet.</div>'; }
   H+='<div style="font-size:10.5px;color:#5b6678;margin-top:6px;line-height:1.5;border-top:1px solid #1c2130;padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
   H+='</div></div>';
@@ -20571,10 +20814,6 @@ function _trjMethod_(txt){
   return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid #1c2130;font-size:10.5px;'
     +'line-height:1.45;color:#5b6678">'+aiEsc_(txt)+'</div>';
 }
-function _trjBar_(pct,col){
-  return '<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden;margin-top:7px">'
-    +'<div style="height:100%;width:'+pct+'%;background:'+(col||'#FC4C02')+';border-radius:3px"></div></div>';
-}
 function _trjNote_(txt){
   return '<div style="font-size:11.5px;color:#5b6678;line-height:1.5">'+aiEsc_(txt)+'</div>';
 }
@@ -20652,7 +20891,7 @@ function _trjSection1_(){
       +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
       +'<div style="font-size:12px;color:#8b97ab;margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
       +'<div style="font-size:12.5px;color:#cbd5e1">'+pct+'% of the projection band clears your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)+'</div>'
-      +_trjBar_(pct,'#FC4C02')
+      +_gcScale_(pct,'#FC4C02','no chance','even','certain')
       +'<div style="display:flex;gap:22px;margin-top:16px;flex-wrap:wrap">'
         +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">PROJECTED '+aiEsc_(name.toUpperCase())+'</div>'
         +'<div style="font-size:17px;font-weight:700;color:#f1f5f9;margin-top:2px">'+d.proj.toFixed(d.metric==='ftp'?0:1)+(d.unit||'')+'</div>'
@@ -20823,7 +21062,7 @@ function _trjCardWeight_(){
   if(+g.weightLb>0){
     var pr=fit.pAtMost(horizon,+g.weightLb), pc=_trjConf_(pr);
     H+='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:10px">CHANCE OF BEING AT OR UNDER '+Math.round(+g.weightLb)+' LBS</div>'
-      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-top:1px">'+pc+'%</div>'+_trjBar_(pc,'#60a5fa');
+      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-top:1px">'+pc+'%</div>'+_gcScale_(pc,'#60a5fa','no chance','even','certain');
   }
   H+=_trjMethod_('Least-squares fit over '+fit.n+' weigh-ins across '+Math.round(fit.span/7)+' weeks.');
   return aiCard_(H);
@@ -21059,7 +21298,7 @@ function _trjSection5_(){
   var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">COMPLETED</div>'
     +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
     +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+S.done+' of '+S.presc+' prescribed sessions</div>'
-    +_trjBar_(pct, pct>=80?'#22c55e':(pct>=55?'#f59e0b':'#e24b4a'));
+    +_gcTrend_(_gcWeekPts_(S.weeks, function(w){ return w.presc>0?Math.round(w.done/w.presc*100):null; }), _gcHue_(1), {aria:'Strength completion by week', H:36, from:'earliest week', to:'this week', note:'completion rate by week'});
   body+='<div style="margin-top:12px">';
   S.weeks.forEach(function(w){
     if(!w.presc) return;
@@ -21143,7 +21382,7 @@ function _trjSection7_(){
   var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">INTERVALS IN THE PRESCRIBED BAND</div>'
     +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
     +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+Q.hit+' of '+Q.n+' work intervals across '+Q.matched+' rides</div>'
-    +_trjBar_(pct, pct>=70?'#22c55e':(pct>=45?'#f59e0b':'#e24b4a'));
+    +_gcTrend_(_gcWeekPts_(Q.weeks, function(w){ return w.n>0?Math.round(w.hit/w.n*100):null; }), _gcHue_(0), {aria:'Interval execution by week', H:36, from:'earliest week', to:'this week', note:'share in band, by week'});
   body+='<div style="margin-top:12px">';
   Q.weeks.forEach(function(w){
     if(!w.n) return;
@@ -21217,7 +21456,7 @@ function _trjSection6_(){
     cards.push(aiCard_(
       '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#8b97ab;margin-bottom:8px">PREDICTION CONFIDENCE</div>'
       +'<div style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+pc+'%</div>'
-      +_trjBar_(pc,'#FC4C02')
+      +_gcScale_(pc,'#FC4C02','no chance','even','certain')
       +'<div style="font-size:11.5px;color:#8b97ab;margin-top:9px;line-height:1.5">The same figure as the destination card: '
       +'the share of the projection band that clears your goal. It is not a separate score.</div>'));
   }
@@ -21351,7 +21590,7 @@ function _trjSection8_(){
     +'<div style="font-size:26px;font-weight:800;color:'+col+';line-height:1.1">'+pct+'%</div>'
     +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+aiEsc_(verdict)+' across '+R.n+' paired days &middot; '
     +Math.round(R.actual)+' vs '+Math.round(R.presc)+' TSS</div>'
-    +_trjBar_(Math.max(0,Math.min(100,Math.round(pct/1.5))), col);
+    +_gcTrend_(_gcWeekPts_(R.weeks, function(w){ return w.presc>0?Math.round(w.actual/w.presc*100):null; }), _gcHue_(2), {aria:'Actual load as a share of prescribed, by week', H:36, from:'earliest week', to:'this week', note:'actual as a share of prescribed, by week'});
   body+='<div style="display:flex;gap:18px;margin-top:12px">'
     +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">OVER</div>'
     +'<div style="font-size:17px;font-weight:800;color:#f59e0b;margin-top:1px">'+R.over+'</div></div>'
@@ -24879,8 +25118,28 @@ function dsShowNutrition(){
     var sc='<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">';
     sc+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">'+ringHtml(overall,scoreCol,overall,'/100',84)+'<div><div style="font-size:13px;font-weight:800;color:'+scoreCol+';text-transform:uppercase;letter-spacing:.04em">'+scoreLbl+'</div><div style="font-size:11px;color:#94a3b8;max-width:210px;margin-top:3px">'+(overall>=60?'Solid day — keep hitting your targets.':'Focus on protein and fiber and closing the calorie gap.')+'</div></div></div>';
     sc+='<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;min-width:0">';
-    [['Calories',cal+' / '+goals.cal,goals.cal?Math.round(cal/goals.cal*100):0,C.cal],['Macros',macroScore+' / 100',macroScore,C.c],['Nutrients',nutrScore+' / 100',nutrScore,C.purple]].forEach(function(x){
-      sc+='<div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+x[0]+'</div><div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:16px;font-weight:800;color:#e8edf5">'+x[1]+'</span><span style="font-size:12px;font-weight:700;color:'+x[3]+'">'+x[2]+'%</span></div><div style="height:5px;background:#1a2030;border-radius:3px;margin-top:5px;overflow:hidden"><div style="height:100%;width:'+Math.min(100,x[2])+'%;background:'+x[3]+';border-radius:3px"></div></div></div>';
+    // Each score card carries its own 8-day line instead of a fill bar. A day's score is a point
+    // in a run of days, and the run is what says whether the athlete is tightening up or sliding;
+    // one filled pill says only where today landed. Calories and Macros are recomputable per day
+    // from the prior-day log. NUTRIENTS IS NOT — the log keeps fibre per day but not the
+    // micronutrients the score also weighs — so that card draws no line and says why, rather than
+    // plotting a fibre-only series under a label that promises more.
+    var _nDays=prior.concat([{cal:cal,p:pro,c:carb,f:fat,fiber:fiber}]);
+    var _nLab=function(k){ return 'day '+(k+1); };
+    var _calPts=_nDays.map(function(d,k){ return { v:goals.cal?Math.round((d.cal||0)/goals.cal*100):null, lab:_nLab(k) }; });
+    var _macPts=_nDays.map(function(d,k){
+      var v=Math.round((Math.min(100,goals.p?(d.p||0)/goals.p*100:0)+Math.min(100,goals.c?(d.c||0)/goals.c*100:0)+Math.min(100,goals.f?(d.f||0)/goals.f*100:0))/3);
+      return { v:v, lab:_nLab(k) }; });
+    [['Calories',cal+' / '+goals.cal,goals.cal?Math.round(cal/goals.cal*100):0,C.cal,_calPts,_gcHue_(0)],
+     ['Macros',macroScore+' / 100',macroScore,C.c,_macPts,_gcHue_(1)],
+     ['Nutrients',nutrScore+' / 100',nutrScore,C.purple,null,_gcHue_(2)]].forEach(function(x){
+      sc+='<div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+x[0]+'</div>'
+        +'<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:16px;font-weight:800;color:#e8edf5">'+x[1]+'</span>'
+        +'<span style="font-size:12px;font-weight:700;color:'+x[3]+'">'+x[2]+'%</span></div>'
+        +(x[4]?(_gcTrend_(x[4], x[5], {aria:x[0]+' over 8 days', H:28, fill:false, from:'8 days ago', to:'today'})
+               ||'<div style="font-size:10px;color:#5b6678;margin-top:4px">Not enough logged days yet.</div>')
+            :'<div style="font-size:10px;color:#5b6678;margin-top:6px;line-height:1.4">Per-day micronutrients are not retained, so this score has no history to plot.</div>')
+        +'</div>';
     });
     sc+='</div>';
     sc+='<div style="flex-shrink:0;min-width:170px"><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Trends vs Last 7 Days</div>'
@@ -25912,11 +26171,22 @@ function dsShowCalendar(){
           +'<div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+roll.miles+'<span style="font-size:12px;font-weight:600;color:#5b6678;margin-left:3px">mi</span></div>'
           +'<div style="font-size:14px;font-weight:800;color:'+bc+';line-height:1">'+roll.tss+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:2px">TSS</span></div>'
           +'<div style="font-size:11px;font-weight:700;color:#8592a6;line-height:1;display:flex;align-items:center;gap:3px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8592a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20l6-14 6 14"/></svg>'+(roll.elev||0)+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:1px">ft</span></div>'
-          +'<div style="height:4px;border-radius:2px;background:#1a2030;margin-top:3px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(ratio*100))+'%;background:'+bc+';border-radius:2px"></div></div>'
           +'</div>';
       });
       H+='</div>';
       H+='</div>';
+      // The per-week card used to carry its own tiny bar — this week's TSS as a fraction of the
+      // month's biggest week. Five such rectangles stacked in a rail is a time series pretending
+      // not to be one: each says how tall it is and none of them says whether the block is
+      // building or backing off, which is the entire question a week rail is read for. One line
+      // across the same weeks answers it, and the per-week numbers are still on the cards.
+      (function(){
+        var wp=weekRoll.map(function(r,i){ return { v:(r && r.acts>0)?r.tss:null, lab:'wk '+(i+1) }; });
+        var sp=_gcTrend_(wp, _GC_LOAD, { aria:'Weekly training load across the month', H:34, from:'week 1', to:'week '+wp.length });
+        if(sp) H+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'
+          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678;margin-bottom:2px">WEEKLY LOAD &middot; TSS</div>'
+          +sp+'</div>';
+      })();
     }
 
     // ---- month summary footer (compact, left-packed, no sparklines) ----
@@ -33674,7 +33944,32 @@ function renderGoals(){
         + '<span style="font-size:13px;font-weight:800;color:var(--t1)">'+(g.current!=null?g.current:'—')+' → '+g.target+' '+(g.unit||'')+'</span>'
         + '</div>';
       if(progress!=null){
-        h += '<div style="height:4px;background:var(--s3);border-radius:2px"><div style="height:4px;background:#0F6E56;border-radius:2px;width:'+progress+'%"></div></div>';
+        // A goal is a thing you move toward, so it is drawn as movement. A generic goal carries no
+        // logged history — its current value is hand-entered — so the honest line is the two real
+        // that actually exist, where you started and where you are, with the target as a dashed
+        // rule. That already says the one thing the bar could not: which DIRECTION you are going.
+        // A weight goal is the exception and gets the real weigh-in series, because that log exists.
+        var _isW=/lb|kg|weight/i.test(String(g.unit||'')+' '+String(g.label||''));
+        var _pts=null;
+        if(_isW && typeof st!=='undefined' && st && Array.isArray(st.weightLog)){
+          var _wl=st.weightLog.filter(function(w){ return w&&w.date&&isFinite(parseFloat(w.weight)); })
+            .slice().sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; }).slice(-24);
+          if(_wl.length>=2) _pts=_wl.map(function(w){ return { v:parseFloat(w.weight), lab:String(w.date).slice(5,10) }; });
+        }
+        if(!_pts && g.startValue!=null && g.current!=null && isFinite(+g.startValue) && isFinite(+g.current)){
+          _pts=[{v:+g.startValue, lab:'start'},{v:+g.current, lab:'now'}];
+        }
+        var _sp=_pts?_gcTrend_(_pts, _GC_GOAL, {aria:g.label+' progress', H:32, fill:false, markPeak:false,
+          from:(_pts[0].lab||''), to:(_pts[_pts.length-1].lab||'')}):'';
+        if(_sp){
+          var _vs=_pts.map(function(x){ return x.v; });
+          var _lo=Math.min.apply(null,_vs), _hi=Math.max.apply(null,_vs);
+          var _tp=(_hi>_lo)?((+g.target-_lo)/(_hi-_lo)):-1;
+          var _rule=(_tp>=0&&_tp<=1)?('<div style="position:absolute;left:0;right:0;top:'+((1-_tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed '+_GC_GOAL+';opacity:.85;pointer-events:none"></div>'):'';
+          h += '<div style="position:relative">'+_sp+_rule+'</div>';
+        } else {
+          h += '<div style="font-size:11px;color:var(--t3);margin-top:4px">'+progress+'% of the way there &mdash; log a starting value to see the trend.</div>';
+        }
       }
       h += '</div>';
     });
@@ -37408,13 +37703,22 @@ function showCalendarTab(){
           +'<div style="font-size:12px;font-weight:800;color:var(--t1);line-height:1">'+mr.miles+'<span style="font-size:8px;font-weight:600;color:var(--t3);margin-left:1px">mi</span></div>'
           +'<div style="font-size:10px;font-weight:800;color:'+mbar+';line-height:1">'+mr.tss+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">TSS</span></div>'
           +'<div style="font-size:9px;font-weight:700;color:var(--t2);line-height:1">'+(mr.elev||0)+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">ft</span></div>'
-          +'<div style="height:3px;border-radius:2px;background:var(--s3);margin-top:1px;overflow:hidden"><div style="height:100%;width:'+Math.max(8,Math.round(mratio*100))+'%;background:'+mbar+';border-radius:2px"></div></div>'
           +'</div>';
       }
     });
     h+='  </div>';
     h+='  </div>';
     h+='</div>';
+    // Same conversion as the desktop rail — one load line across the month's weeks instead of a
+    // stack of per-week rectangles. Both renderers move together; a bar surviving on one surface
+    // is the drift this codebase keeps producing.
+    (function(){
+      var wp=mWeekRoll.map(function(r,i){ return { v:(r && r.acts>0)?r.tss:null, lab:'wk '+(i+1) }; });
+      var sp=_gcTrend_(wp, _GC_LOAD, { aria:'Weekly training load across the month', H:30, from:'week 1', to:'week '+wp.length });
+      if(sp) h+='<div style="margin:10px 16px 0;padding-top:10px;border-top:1px solid var(--b1)">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--t3);margin-bottom:2px">WEEKLY LOAD &middot; TSS</div>'
+        +sp+'</div>';
+    })();
   }
   var todayStr=dayNames[dow]+', '+monthNames[now.getMonth()].slice(0,3)+' '+now.getDate();
   h+='<div style="background:var(--s1);border:1px solid var(--b1);border-radius:18px;margin:12px 16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';

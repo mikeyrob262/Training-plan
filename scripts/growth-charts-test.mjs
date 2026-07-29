@@ -34,7 +34,7 @@ function extractVar(name){
 
 const code = extractVar('_GC_YOY') + extractVar('_GC_FACTOR') + extractVar('_YOY_ERA_START')
   + extractVar('_YOY_CUMD') + extractVar('_AL_FACT_WIN')
-  + extract('_gcSpark_') + extract('_gcSparkFoot_')
+  + extract('_gcSpark_') + extract('_gcSparkFoot_') + extract('_gcTrend_') + extract('_gcScale_') + extract('_gcWeekPts_')
   + extract('_yoyLeap_') + extract('_yoyDaysInYear_') + extract('_yoyDayOfYear_')
   + extract('_alIndexOfYM_') + extract('_alFactorWindow_')
   + extract('_pbQKey_') + extract('_pbQLab_') + extract('_pbQFill_') + extract('_pbProg_');
@@ -122,6 +122,30 @@ check('a metric with no qualifying ride yields nothing', _pbProg_([q(2025,1,10)]
 check('a zero does not open the range', _pbProg_([q(2025,1,0), q(2025,5,4)], x => x.v, null).map(p=>p.v), [4]);
 check('a zero does not score its own quarter', _pbProg_([q(2025,1,0), q(2025,2,7)], x => x.v, null).map(p=>p.v), [7]);
 
+// ---- _gcScale_: a scale, not a bar ---------------------------------------------------------------
+// Three Trajectory readouts are single scalars (a prediction confidence, measured once, with no
+// history). They must NOT be drawn as a filled pill — a fill reads as accumulation, which is
+// exactly what a probability is not — and they must not be faked into a trend either.
+const scale = _gcScale_(62, '#FC4C02', 'no chance', 'even', 'certain');
+check('the scale places a marker at the value', scale.indexOf('left:62%') >= 0, true);
+check('the scale never fills to the value', /width:\s*62%/.test(scale), false);
+check('the scale is labelled at both ends and the middle', ['no chance','even','certain'].every(s => scale.indexOf(s) >= 0), true);
+check('out-of-range values clamp rather than overflow', [_gcScale_(-40,'#fff').indexOf('left:0%')>=0, _gcScale_(180,'#fff').indexOf('left:100%')>=0], [true,true]);
+
+// ---- _gcTrend_: the value+history block --------------------------------------------------------
+check('a trend with no history renders nothing at all', _gcTrend_([{v:1}], '#0891b2'), '');
+check('a real trend renders a chart', _gcTrend_([{v:1},{v:4},{v:3}], '#0891b2').indexOf('<svg') >= 0, true);
+
+// ---- weekly rate series --------------------------------------------------------------------------
+// The three Trajectory rate cards share this. A week with no denominator is a GAP: a week in which
+// nothing was prescribed is not a week of 0% completion, and drawing it as one invents a collapse.
+const wk = _gcWeekPts_([{presc:3,done:3},{presc:0,done:0},{presc:4,done:2}], w => w.presc>0?Math.round(w.done/w.presc*100):null);
+check('weekly rates computed', wk.map(p => p.v), [100, null, 50]);
+check('a week with no denominator is null, not zero', wk[1].v, null);
+check('an empty weeks array yields an empty series', _gcWeekPts_([], () => 1), []);
+check('a thrower in the picker degrades to null, not a crash',
+  _gcWeekPts_([{}], () => { throw new Error('x'); }).map(p => p.v), [null]);
+
 // ---- palette identity ---------------------------------------------------------------------------
 // Not a taste check: these hexes were validated as sets (lightness band, chroma floor, all-pairs
 // CVD separation, normal-vision floor, contrast) against the #0e1117 card surface. Changing one
@@ -133,4 +157,4 @@ check('year palette is the validated set', _GC_YOY, ['#0891b2','#8b5cf6','#d9770
 check('factor palette is the validated set', _GC_FACTOR, ['#ec4899','#3b82f6','#d97706']);
 
 if (failed) { console.error(`${R}✗ growth charts: ${failed} check(s) failed${X}`); process.exit(1); }
-console.log(`${G}✓ growth charts (sparkline nulls/flat/peak, day-of-year, factor window, PB progression, palettes)${X}`);
+console.log(`${G}✓ growth charts (sparkline, scale-not-bar, weekly gaps, day-of-year, factor window, PB progression, palettes)${X}`);
