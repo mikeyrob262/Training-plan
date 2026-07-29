@@ -217,6 +217,19 @@ try {
     fail('an Athlete Intelligence card regressed (see above).');
   }
 
+  // ---- 13. Activity calories -> kJ is not kcal. rideKj_ is mechanical work; printing it with a
+  //          "Cal" label overstated a run's burn by 40%, and the missing real field is also why
+  //          Nutrition saw nothing burned. Both directions are silent.
+  console.log(`${D}· checking activity calorie source…${X}`);
+  try {
+    const so = execSync('node scripts/calorie-source-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the activity calorie source regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

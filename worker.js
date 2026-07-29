@@ -5114,6 +5114,53 @@ function zoneFromWatts_(pwr, ftp, durSecs){
   var per=(durSecs>0?durSecs:n)/n;               // watts stream ~1Hz -> real seconds
   return b.map(function(c){ return Math.round(c*per); });
 }
+// Every Strava DETAIL response carries fields the LIST endpoint does not — calories chief among
+// them. Four call sites already fetch /activities/{id} for other reasons (polyline, altitude
+// stream, segment efforts) and threw the rest of the payload away. That is why 293 of 643
+// activities carried no calorie figure and the Nutrition page saw nothing burned. One harvester,
+// called from all of them.
+//
+// Gap-fill only: a value already on the record wins, so a manual edit is never overwritten, and
+// re-running is idempotent.
+function stravaHarvestDetail_(rec, a){
+  if(!rec || !a) return false;
+  var moved=false;
+  if(!(parseFloat(rec.calories)>0) && a.calories!=null && +a.calories>0){ rec.calories=Math.round(+a.calories); moved=true; }
+  if(!(parseFloat(rec.workKj)>0) && a.kilojoules!=null && +a.kilojoules>0){ rec.workKj=Math.round(+a.kilojoules); moved=true; }
+  return moved;
+}
+// Backfills the calorie figure for activities that synced before it was captured.
+//
+// NEWEST FIRST, deliberately: the Nutrition page reads today, so the days that matter most are
+// filled first even if the pass is cut short. Bounded per run because Strava allows 100 requests
+// per 15 minutes — a 200-activity gap cannot be closed in one pass and must not try.
+// Exposed so it can be run by hand after an import that predates this capture.
+function backfillStravaCalories_(limit, done){
+  limit=limit||40;
+  var todo=(st.rides||[]).filter(function(r){
+    return r && !r.deleted && r.stravaId && !(parseFloat(r.calories)>0);
+  }).sort(function(a,b){ return (a.date<b.date)?1:-1; }).slice(0, limit);
+  if(!todo.length){ if(done) done(0,0); return; }
+  withStravaToken_(function(token){
+    if(!token){ if(done) done(0,0); return; }
+    var i=0, filled=0;
+    (function next(){
+      if(i>=todo.length){
+        if(filled){ try{ sv(); }catch(e){} try{ fbPush(true); }catch(e){} }
+        try{ console.log('[calories] backfill: '+filled+' of '+todo.length+' activities gained a real calorie figure.'); }catch(e){}
+        if(done) done(filled, todo.length);
+        return;
+      }
+      var r=todo[i++];
+      fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
+        .then(function(res){ return res.ok?res.json():null; })
+        .then(function(a){ if(a && stravaHarvestDetail_(r, a)) filled++; })
+        .catch(function(){})
+        .then(function(){ setTimeout(next, 120); });   // stay well inside the rate limit
+    })();
+  });
+}
+try{ if(typeof window!=='undefined') window.backfillStravaCalories_=backfillStravaCalories_; }catch(e){}
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
   if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
   if(st.stravaRefreshToken){
@@ -27862,6 +27909,37 @@ function rideKj_(r){
   if(!s) return null;
   return Math.round(r.avgPwr*s/1000);
 }
+// The activity's ENERGY BURN, in kilocalories.
+//
+// rideKj_ above returns MECHANICAL WORK in kilojoules (avgPwr x seconds). It was printed with a
+// "Cal" label, and those are different quantities: the 2026-07-29 trail run showed 527 "Cal"
+// against Garmin's 376. The mislabel survived because for CYCLING the two happen to land close —
+// human gross efficiency is ~24%, so metabolic kcal is roughly equal to work in kJ. Running power
+// is not drivetrain work and that coincidence does not transfer, so 529 kJ of running "work"
+// overstated the burn by 40%.
+//
+// Order of preference:
+//   1. r.calories — the device's own figure. Strava passes Garmin's value through verbatim
+//      (checked against activity 19515414647: Strava calories 376 == Garmin 376).
+//   2. cycling only: the kJ approximation, returned FLAGGED as an estimate.
+//   3. nothing. A non-cycling activity with no measured value gets no number invented for it.
+function rideCalories_(r){
+  if(!r) return null;
+  var c=parseFloat(r.calories);
+  if(c>0) return { cal:Math.round(c), est:false };
+  var s=String((typeof rideSport_==='function')?rideSport_(r):'').toLowerCase();
+  // Blank sport is a legacy .fit import, and every one of those in this library is a ride.
+  var cycling=/ride|cycl|bike|handcycle/.test(s) || (!s && r.avgPwr>0);
+  if(!cycling) return null;
+  var kj=rideKj_(r);
+  return (kj>0) ? { cal:kj, est:true } : null;
+}
+// Render helper so both surfaces print the estimate marker identically.
+function rideCalText_(r){
+  var e=rideCalories_(r);
+  if(!e) return '—';
+  return (e.est?'~':'')+e.cal.toLocaleString()+' Cal';
+}
 function openDesktopRideDetail(idx, _noFetch){
   idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var rpEl=document.getElementById('ds-right-panel');
@@ -28075,7 +28153,7 @@ function openDesktopRideDetail(idx, _noFetch){
       statCell(r.avgHR?r.avgHR+' bpm':'--','Avg HR','#E24B4A')+
       statCell(r.avgPwr?r.avgPwr+' w':'--','Avg Power','#fff')+
       statCell(tss+(tss!=='--'?' TSS':''),'Training Stress','#F59E0B')+
-      statCell(r.calories?Math.round(r.calories).toLocaleString()+' Cal':'--','Calories','#fff',true)+
+      statCell((function(){var _t=rideCalText_(r);return _t==='—'?'--':_t;})(),'Calories','#fff',true)+
     '</div>'+
 
     // TABS
@@ -28195,7 +28273,7 @@ function openDesktopRideDetail(idx, _noFetch){
         '<div style="padding:10px 14px">'+
           '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
           '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+(function(){var _k=rideKj_(r);return _k!=null?_k+' Cal':'—';})()+'</div><div style="font-size:9px;color:#64748b">Burned</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+rideCalText_(r)+'</div><div style="font-size:9px;color:#64748b">'+((rideCalories_(r)||{}).est?'Burned &middot; est':'Burned')+'</div></div></div>'+
             '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
@@ -28530,11 +28608,11 @@ function openRideDetail(idx, _noFetch){
     heroGrid.appendChild(cell);
   });
   heroRow.appendChild(heroGrid);
-  var _rideKj=rideKj_(r);
+  var _cal=rideCalories_(r);
   var calRow=document.createElement('div');
   calRow.style.cssText='margin-top:20px';
-  calRow.innerHTML='<div style="font-size:19px;font-weight:500;color:var(--t1)">'+(_rideKj!=null?_rideKj+' Cal':'—')+'</div>'
-    +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories</div>';
+  calRow.innerHTML='<div style="font-size:19px;font-weight:500;color:var(--t1)">'+rideCalText_(r)+'</div>'
+    +'<div style="font-size:11px;font-weight:500;color:var(--t3);margin-top:3px">Calories'+(_cal&&_cal.est?' &middot; estimated from power':'')+'</div>';
   heroRow.appendChild(calRow);
   var heroSpacer=document.createElement('div');
   heroSpacer.style.cssText='height:20px';
@@ -35558,6 +35636,7 @@ function fetchRideSegments(r, cb, force, quiet){
   var doFetch=function(token){
     fetch('https://www.strava.com/api/v3/activities/'+r.stravaId+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}})
     .then(function(res){return res.json();}).then(function(a){
+      stravaHarvestDetail_(r, a);        // the payload is already here; do not throw the rest away
       if(!a || !a.segment_efforts){ cb([]); return; }
       var segs=a.segment_efforts.map(function(se){
         var s=se.segment||{};
@@ -39667,12 +39746,17 @@ function fetchStravaPage(token, page, imported, forceAll) {
       if(missingGPS.length>0){
         var gIdx=0;
         function fetchNextGPS(){
-          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!'); setTimeout(function(){ fetchStravaElevStats(true); }, 2000);return;}
+          if(gIdx>=missingGPS.length){sv();fbPush(true);toast('GPS + elevation backfill done!');
+            // The list endpoint never returns calories, so a synced activity reaches Nutrition with
+            // nothing burned until the detail is read. Newest-first, bounded by the rate limit.
+            backfillStravaCalories_(40, function(n){ if(n) toast('Calories filled for '+n+' activit'+(n===1?'y':'ies')+'.'); });
+            setTimeout(function(){ fetchStravaElevStats(true); }, 2000);return;}
           var r=missingGPS[gIdx++];
           var rideIndex=st.rides.indexOf(r);
           fetch('https://www.strava.com/api/v3/activities/'+r.stravaId,{headers:{'Authorization':'Bearer '+token}})
           .then(function(res){return res.json();})
           .then(function(a){
+            stravaHarvestDetail_(st.rides[rideIndex], a);   // calories ride in this same response
             if(a&&a.map){
               var poly=a.map.polyline||a.map.summary_polyline;
               if(poly){try{
