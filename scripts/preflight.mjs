@@ -18,7 +18,7 @@
 // Run manually: `node scripts/preflight.mjs`
 // Runs automatically on `git push` via .githooks/pre-push (core.hooksPath).
 import { execSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -228,6 +228,33 @@ try {
     console.error((e.stdout || '').toString());
     console.error((e.stderr || '').toString());
     fail('the activity calorie source regressed (see above).');
+  }
+
+  // ---- 14. Regex escapes eaten by the served template literal -> /\d+/ in source is served as
+  //          /d+/, a VALID regex that matches the wrong thing. Step 2's parse and step 3's control
+  //          -char sweep both pass it. This shipped: _structIntervals_ never matched, so a
+  //          "4x4 min" VO2 exported to Zwift as ONE 45-minute block at FTP.
+  console.log(`${D}· checking regex escapes survive the template literal…${X}`);
+  try {
+    const so = execSync('node scripts/served-escape-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a regex literal will lose its escapes when served (see above).');
+  }
+
+  // ---- 15. .zwo export -> the file has to reproduce the PRESCRIPTION. A rider loads it and rides
+  //          whatever it says, so an interval session flattened to one steady block at FTP is not a
+  //          cosmetic failure.
+  console.log(`${D}· checking .zwo export…${X}`);
+  try {
+    const so = execSync('node scripts/zwo-export-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the .zwo export regressed (see above).');
   }
 
   console.log(`${G}preflight passed — safe to push.${X}`);

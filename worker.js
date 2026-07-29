@@ -5161,6 +5161,7 @@ function backfillStravaCalories_(limit, done){
   });
 }
 try{ if(typeof window!=='undefined') window.backfillStravaCalories_=backfillStravaCalories_; }catch(e){}
+try{ if(typeof window!=='undefined') window._zwoCoachV_=function(dk){ return _zwoCoachV_(dk); }; }catch(e){}
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
   if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
   if(st.stravaRefreshToken){
@@ -22229,7 +22230,7 @@ function _cvPrimary_(sessions){
   for(var p=0;p<_CV_PRIORITY.length;p++){ for(var i=0;i<sessions.length;i++){ if(sessions[i].intent===_CV_PRIORITY[p]) return sessions[i]; } }
   return sessions[0];
 }
-function _cvIntCount_(struct){ var m=String(struct||'').match(/(\d+)\s*x/i); return m?parseInt(m[1],10):null; }
+function _cvIntCount_(struct){ var m=String(struct||'').match(/(\\d+)\\s*x/i); return m?parseInt(m[1],10):null; }
 // Pre-session instructions, keyed by intent, using the FTP-priced watts from the session's rx.
 // Named Zwift workouts, keyed by intent + the NxM the struct actually prescribes. This table is the
 // ONLY source of workout names — a name that is not here is never invented, because sending someone
@@ -22971,6 +22972,21 @@ function _coachVPanel_(now){
     cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
     if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
     if(cv.expect) H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
+    // Zwift export, on the card that gave the instruction. Only when the prescription resolves to a
+    // real ERG target: _zwoFor_ returns null for runs, strength, mobility and group rides (no
+    // ceiling to hold), so the link simply is not offered rather than producing a file to ignore.
+    var _cvz=(typeof _zwoFor_==='function')?_zwoFor_(cv.primary, dk):null;
+    if(_cvz){
+      H+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+        +'<div id="cv-zwo" onclick="if(window._zwoCoachV_)_zwoCoachV_(&#39;'+dk+'&#39;)" '
+        +'style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+P+';cursor:pointer">'
+        +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+P+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>'
+        +'Download for Zwift (.zwo)</div>'
+        +'<div style="font-size:10.5px;color:#5b6678;margin-top:5px;line-height:1.5">'
+          +_cvz.blocks+' block'+(_cvz.blocks===1?'':'s')+' &middot; '+_cvz.lo+'&ndash;'+_cvz.hi+'W at FTP '+_cvz.ftp
+          +'. Drop it in Documents&#92;Zwift&#92;Workouts&#92;&lt;your Zwift ID&gt;&#92; and it appears under Custom Workouts.</div>'
+        +'</div>';
+    }
     H+='</div>';
   } else if(cv.primary){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -23354,9 +23370,9 @@ function _calScrollFocus_(){
 // Leading "NxM" = N intervals of M minutes; the second number is always minutes on a ride.
 function _structIntervals_(struct){
   var s=String(struct||'');
-  var iv=s.match(/(\d+)\s*[x×]\s*(\d+)/i);
+  var iv=s.match(/(\\d+)\\s*[x×]\\s*(\\d+)/i);
   if(!iv) return null;
-  var recM=s.match(/(\d+)\s*min[^,]*recover/i);
+  var recM=s.match(/(\\d+)\\s*min[^,]*recover/i);
   return { n:(parseInt(iv[1],10)||1), workMin:(parseInt(iv[2],10)||0),
            recMin:(recM?(parseInt(recM[1],10)||null):null) };
 }
@@ -23392,8 +23408,8 @@ function _sessionSteps_(intent, struct, targets){
   } else {
     // Continuous ride: no interval pattern in the struct. Warm-up / main / cool-down, the main block
     // carrying the real duration (from the struct range, else the def's durationMin).
-    var dm=struct.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*min/i);
-    var one=struct.match(/(\d+)\s*min/i);
+    var dm=struct.match(/(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*min/i);
+    var one=struct.match(/(\\d+)\\s*min/i);
     var durTxt=dm?(dm[1]+EN+dm[2]+' min'):(one?(one[1]+' min'):(targets.durationMin!=null?(targets.durationMin+' min'):null));
     steps.push({kind:'warmup', title:'Warm-up', meta:easyTxt, sub:'Ease in — build to the working effort over the first few minutes.'});
     steps.push({kind:'work', title:'Main effort', meta:(durTxt?(durTxt+' @ '):'')+bandTxt+(zone?(' · '+zone):''), sub:''});
@@ -23422,8 +23438,21 @@ var _ZWO_WARM_SEC=600, _ZWO_COOL_SEC=300, _ZWO_REC_PWR=0.55;
 function _zwoEsc_(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
   return c==='&'?'&amp;':c==='<'?'&lt;':c==='>'?'&gt;':c==='"'?'&quot;':'&apos;'; }); }
 function _zwoPwr_(w, ftp){ return (ftp>0 && w>0) ? (Math.round(w/ftp*1000)/1000) : null; }
-function _zwoFor_(s, dateKey){
+// TWO session shapes reach this builder and they nest differently:
+//   st.plan  (session-detail sheet) -> { type, intent, name, targets, block:{ struct } }
+//   blockPlanFor_ (Coach V)         -> { intent, struct, rx:{ type, name, targets } }
+// Reading only the first is why the export produced nothing for a Coach V session. Normalise once.
+function _zwoSession_(s){
+  if(!s) return null;
+  var rx=s.rx||s;
+  return { type:(rx.type||s.type||null), intent:(s.intent||rx.intent||''), name:(rx.name||s.name||''),
+           targets:(rx.targets||s.targets||{}),
+           struct:(s.struct||(s.block&&s.block.struct)||(rx.block&&rx.block.struct)||''),
+           block:(s.block||rx.block||null) };
+}
+function _zwoFor_(s0, dateKey){
   try{
+    var s=_zwoSession_(s0);
     if(!s || s.type!=='ride') return null;
     var intent=s.intent||'';
     if(intent==='group') return null;                 // no ERG target makes sense for a group ride
@@ -23440,7 +23469,7 @@ function _zwoFor_(s, dateKey){
     if(!(ftp>0)) return null;                         // cannot express power without an FTP
     var mid=_zwoPwr_((lo+hi)/2, ftp);
     if(mid==null) return null;
-    var struct=(s.block&&s.block.struct)||'';
+    var struct=s.struct||'';
     var iv=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
     var blocks=[], warm=_zwoPwr_(lo*0.62,ftp);
     if(iv && iv.workMin>0 && (intent==='vo2')){
@@ -23462,7 +23491,7 @@ function _zwoFor_(s, dateKey){
       // prescribed duration. No warm-up/cool-down blocks — they would be ridden at the same
       // intensity anyway, and adding them would lengthen the session beyond what was prescribed.
       var dm=parseFloat(t.durationMin);
-      if(!(dm>0)){ var m=struct.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s*min/i)||struct.match(/(\d+)\s*min/i);
+      if(!(dm>0)){ var m=struct.match(/(\\d+)\\s*(?:-|–|to)\\s*(\\d+)\\s*min/i)||struct.match(/(\\d+)\\s*min/i);
         if(m) dm=parseInt(m[1],10); }
       if(!(dm>0)) return null;                        // no duration -> nothing to write
       blocks.push("<SteadyState Duration='"+Math.round(dm*60)+"' Power='"+mid+"'/>");
@@ -23478,6 +23507,7 @@ function _zwoFor_(s, dateKey){
     // across two lines — "Invalid or unexpected token" at load. Same trap as the backtick rule.
     var NL=String.fromCharCode(10);
     var xml=['<workout_file>',
+      '  <author>Athlete IQ</author>',
       '  <name>'+_zwoEsc_(nm)+'</name>',
       '  <description>'+_zwoEsc_(desc)+'</description>',
       '  <sportType>bike</sportType>',
@@ -23489,12 +23519,21 @@ function _zwoFor_(s, dateKey){
              ftp:Math.round(ftp), lo:Math.round(lo), hi:Math.round(hi), blocks:blocks.length };
   }catch(e){ try{ console.error('[zwo] '+((e&&e.message)||e)); }catch(_e){} return null; }
 }
+// Coach V holds the blockPlanFor_ session for today; the sheet holds the st.plan one. Both end up
+// here, so the file a rider gets is identical whichever card they pressed.
+function _zwoDownloadSession_(s, dateKey){ _zwoEmit_(_zwoFor_(s, dateKey), dateKey, 'cv'); }
+function _zwoCoachV_(dateKey){
+  var s=null;
+  try{ var cv=(typeof coachV_==='function')?coachV_(dateKey, new Date()):null; s=cv&&cv.primary; }catch(e){}
+  _zwoDownloadSession_(s, dateKey);
+}
 function _zwoDownload_(dateKey, sid){
-  var z=null;
+  var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
+  _zwoEmit_(_zwoFor_(s, dateKey), dateKey, sid);
+}
+function _zwoEmit_(z, dateKey, sid){
   try{
-    var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
-    z=_zwoFor_(s, dateKey);
-    try{ console.log('[zwo] build for '+dateKey+' sid='+sid+' -> '
+    try{ console.log('[zwo] build for '+dateKey+' '+(sid||'')+' -> '
       +(z?('OK '+z.filename+'  blocks='+z.blocks+'  band '+z.lo+'-'+z.hi+'W @ FTP '+z.ftp
            +'  bytes='+z.xml.length):'NULL (no ERG target: group ride, no band, no FTP, or no duration)')); }catch(_l){}
     if(!z){ if(typeof toast==='function') toast('No ERG target for this session'); return; }
@@ -23510,7 +23549,7 @@ function _zwoDownload_(dateKey, sid){
     // and leave the anchor in the DOM for a beat rather than removing it in the same tick.
     setTimeout(function(){ try{ if(a.parentNode) a.parentNode.removeChild(a); }catch(e){} }, 4000);
     setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 60000);
-    _zwoFallback_(z, url);
+    _zwoFallback_(z, url, sid==='cv'?'cv-zwo':'sd-zwo');
     try{ console.log('[zwo] click dispatched, url='+url); }catch(_l){}
   }catch(e){
     try{ console.error('[zwo] download threw: '+((e&&e.message)||e)); }catch(_l){}
@@ -23522,18 +23561,21 @@ function _zwoDownload_(dateKey, sid){
 // fails SILENTLY when it does. So every download also offers a user-initiated route: a real link the
 // athlete clicks themselves (never blocked, because the click is genuine) and a copy-to-clipboard of
 // the XML for pasting into a file by hand. Shown under the button, not as a popup.
-function _zwoFallback_(z, url){
-  var host=document.getElementById('sd-zwo'); if(!host||!host.parentNode) return;
-  var old=document.getElementById('sd-zwo-fb'); if(old) old.remove();
-  var wrap=document.createElement('div'); wrap.id='sd-zwo-fb';
+// hostId: the button that was pressed. Two cards offer this now, and the fallback link has to
+// appear under the one the rider actually used, not always under the session sheet's.
+function _zwoFallback_(z, url, hostId){
+  hostId=hostId||'sd-zwo';
+  var host=document.getElementById(hostId); if(!host||!host.parentNode) return;
+  var old=document.getElementById(hostId+'-fb'); if(old) old.remove();
+  var wrap=document.createElement('div'); wrap.id=hostId+'-fb';
   wrap.style.cssText='margin-top:8px;padding-top:8px;border-top:1px solid var(--b1);font-size:11px;color:var(--t3);line-height:1.55';
   var href=url||('data:application/octet-stream;base64,'+(function(){ try{ return btoa(z.xml); }catch(e){ return ''; } })());
   wrap.innerHTML='Saved <b style="color:var(--t2)">'+z.filename+'</b>. '
     +'Not in your Downloads folder? '
-    +'<a id="sd-zwo-a" href="'+href+'" download="'+z.filename+'" style="color:#4D9FFF;font-weight:700">click here</a>'
-    +' or <span id="sd-zwo-copy" style="color:#4D9FFF;font-weight:700;cursor:pointer">copy the XML</span>.';
+    +'<a id="'+hostId+'-a" href="'+href+'" download="'+z.filename+'" style="color:#4D9FFF;font-weight:700">click here</a>'
+    +' or <span id="'+hostId+'-copy" style="color:#4D9FFF;font-weight:700;cursor:pointer">copy the XML</span>.';
   host.parentNode.appendChild(wrap);
-  var cp=document.getElementById('sd-zwo-copy');
+  var cp=document.getElementById(hostId+'-copy');
   if(cp) cp.onclick=function(){
     try{
       if(navigator.clipboard && navigator.clipboard.writeText){
