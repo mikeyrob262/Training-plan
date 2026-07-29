@@ -257,6 +257,19 @@ try {
     fail('the .zwo export regressed (see above).');
   }
 
+  // ---- 16. Analytics Power-to-Weight -> the 0-4.0 gradient pill is gone, the target rule is only
+  //          drawn when the target is actually inside the plotted range, and the caption names
+  //          which of the two W/kg series is on screen.
+  console.log(`${D}· checking the Power-to-Weight card…${X}`);
+  try {
+    const so = execSync('node scripts/wkg-card-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Power-to-Weight card regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

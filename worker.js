@@ -25917,13 +25917,51 @@ function dsShowAnalytics(){
   // CENTER — W/kg centerpiece: value + 0-4.0 gradient scale with a marker dot,
   // then the "Top X%" line beneath. Same value, percentile and caveat as shipped.
   var _wpct=dsPercentileTop_(wkgHistory, wkgNow);
-  var _wm=Math.max(0,Math.min(100, wkgNow/4*100));
+  // W/kg TRAJECTORY, not a position on a 0-4.0 gradient. The pill said where today's number sits
+  // on an abstract scale; it could not say whether the athlete has been climbing toward the target
+  // for six months or drifting away from it, which is the only question this card is read for.
+  // Same series and same treatment as the Chase 1 chart on the home page (_gcWkgPts_): w/kg at each
+  // weigh-in, priced with the FTP that was in force on THAT date.
+  //
+  // The target comes from the editable goal, not the Chase card's hardcoded 215W/151lb pair — both
+  // are 3.14 today, but only one of them moves when the athlete changes their goal.
+  var _wTgt=parseFloat(((typeof _goalTargets_==='function')?_goalTargets_():{}).wkg);
+  if(!(_wTgt>0)) _wTgt=3.14;
+  var _wkgChart=(function(){
+    // Weigh-in-driven series first — it is the more precise one (FTP as of each weigh-in date,
+    // divided by the weight actually recorded that day). st.weightLog is empty on this athlete,
+    // so fall back to the series this page already computes and already percentile-ranks:
+    // wkgTrend_'s rolling best-20-min power over a 42-day window, sampled weekly. Falling back
+    // rather than showing an empty card, and the caption names which one is drawn — the two are
+    // different measurements and must not be silently interchangeable.
+    var pts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
+    var src='w/kg at each weigh-in';
+    if(!pts.filter(function(p){ return p && p.v!=null; }).length && _wt && _wt.pts && _wt.pts.length>1){
+      pts=_wt.pts.map(function(p){ return { v:p.wkg, lab:String(p.date).slice(5) }; });
+      src='w/kg from '+_wt.source;
+    }
+    // Decide whether the target is actually inside the plotted range BEFORE writing the caption —
+    // a caption must never promise a dashed line that is not drawn.
+    var v=pts.map(function(p){ return p.v; }).filter(function(x){ return x!=null; });
+    var lo=v.length?Math.min.apply(null,v):0, hi=v.length?Math.max.apply(null,v):0;
+    var tp=(hi>lo)?((_wTgt-lo)/(hi-lo)):-1;
+    var onChart=(tp>=0 && tp<=1);
+    var spark=(typeof _gcTrend_==='function')?_gcTrend_(pts, _GC_WKG, { aria:'W per kg by weigh-in', H:44, fill:false,
+      note:src+' &middot; '+(onChart?('dashed line is your '+_wTgt.toFixed(2)+' target')
+                                    :('your '+_wTgt.toFixed(2)+' target is above everything on this chart')) }):'';
+    // No weigh-in history: say so, rather than falling back to the bar this replaced.
+    if(!spark) return '<div style="font-size:10.5px;color:#64748b;margin-top:12px;line-height:1.5">Log a few weigh-ins and this becomes a trend line toward '+_wTgt.toFixed(2)+'.</div>';
+    var rule=onChart
+      ? '<div style="position:absolute;left:0;right:0;top:'+((1-tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
+      : '';
+    return '<div style="position:relative;margin-top:10px">'+spark+rule+'</div>';
+  })();
   var wkgHero=teachCard_(
     '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:13px;color:#64748b">W/kg</div></div>'
-    +'<div style="position:relative;height:8px;margin-top:14px"><div style="height:8px;background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e,#4ade80);border-radius:4px"></div>'
-    +'<div style="position:absolute;top:-3px;left:'+_wm.toFixed(1)+'%;transform:translateX(-50%);width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #0d1017;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:9px;color:#64748b;margin-top:4px"><span>0</span><span>2.0</span><span>4.0</span></div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:13px;color:#64748b">W/kg</div>'
+      +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Target</div>'
+      +'<div style="font-size:15px;font-weight:800;color:#FFB938;line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
+    +_wkgChart
     +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
     +'<div style="font-size:9px;color:#64748b;margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
     ,'wkg','W/kg');
