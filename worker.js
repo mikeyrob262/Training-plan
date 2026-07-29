@@ -28693,14 +28693,15 @@ var _CV_STEADY_RE=/within [0-9]+%? of (np|normalized)|hold(ing)? (power |it |the
 // Strip deficit framing when the ride is base/endurance or has no prescription. Headline: drop a
 // deficit clause after a contrast word, or replace a wholly-deficit headline. Bullets: drop. A
 // deficit-framed Recommendation is replaced with compliance guidance.
-function _insightSuppressDeficit_(text, suppress, rx){
+function _insightSuppressDeficit_(text, suppress, rx, noun){
+  noun=noun||'ride';
   if(!text || !suppress) return text;
   var NL=String.fromCharCode(10), lines=text.split(NL), out=[];
   lines.forEach(function(ln, idx){
     if(idx===0){
       var m=ln.match(/^(.*?)[,;]? +(but|though|however|yet|although) /i);   // literal spaces on purpose — regex whitespace/word-boundary escapes are eaten by the served template literal
       if(m && _CV_DEFICIT_RE.test(ln.slice(m[0].length))){ out.push(m[1].replace(/[,;\s]+$/,'')+'.'); return; }
-      if(_CV_DEFICIT_RE.test(ln)){ out.push(rx?('Executed to prescription — '+String(rx.name||'session').toLowerCase()):'Ride logged as recorded.'); return; }
+      if(_CV_DEFICIT_RE.test(ln)){ out.push(rx?('Executed to prescription — '+String(rx.name||'session').toLowerCase()):(noun.charAt(0).toUpperCase()+noun.slice(1)+' logged as recorded.')); return; }
       out.push(ln); return;
     }
     var isRec=/^\s*recommendation:/i.test(ln);
@@ -28713,16 +28714,83 @@ function _insightSuppressDeficit_(text, suppress, rx){
   });
   return out.join(NL).replace(new RegExp(NL+'{3,}','g'), NL+NL).trim();
 }
+// Real climbing, in feet, or null when the record genuinely cannot answer it.
+// Three storage shapes exist: Strava/Intervals rides carry r.elev, the runs library carries
+// r.elevation, and a FIT import may arrive with only the elevation stream. r.maxElev is the
+// HIGHEST ALTITUDE on the route, not climbing, and is deliberately never summed here — reading
+// it as gain is what makes a 37ft trail run look like a 791ft climb.
+// Returns null (not 0) when nothing answers it: a zero handed to the model reads as a fact and
+// comes back as "flat terrain with zero elevation gain".
+function _actElevGain_(r){
+  if(!r) return null;
+  var direct=[r.elev, r.elevation, r.total_elevation_gain, r.totalElevationGain];
+  var i, v, sawZero=false;
+  for(i=0;i<direct.length;i++){
+    v=parseFloat(direct[i]);
+    if(!isFinite(v)) continue;
+    if(v>0) return Math.round(v);
+    sawZero=true;                      // an explicit 0 is real, but a stream can still refine it
+  }
+  var s=r.chartEle;
+  if(s && s.length>2){
+    var gain=0, ok=false, a, b;
+    for(i=1;i<s.length;i++){
+      a=parseFloat(s[i-1]); b=parseFloat(s[i]);
+      if(!isFinite(a)||!isFinite(b)) continue;
+      ok=true; if(b>a) gain+=b-a;
+    }
+    if(ok) return Math.round(gain);
+  }
+  return sawZero?0:null;
+}
+// Sport-aware framing for the coach insight. st.rides mixes EVERY sport — see rideSport_ and the
+// activity-modality notes: of 643 live activities only 234 are actually rides. An insight that
+// hardcodes "ride" and cycling FTP calls a trail run a flat ride in zone 4-5.
+// Resolves the noun, the coach persona, and whether cycling power framing (FTP / NP / IF / power
+// bands) means anything for this activity at all.
+function _actProfile_(r){
+  var s=(typeof rideSport_==='function')?rideSport_(r):'';
+  var k=String(s||'').toLowerCase().replace(/[^a-z]/g,'');
+  function P(noun,persona,cyclingPower,foot){ return {sport:s,noun:noun,persona:persona,cyclingPower:cyclingPower,foot:foot}; }
+  if(k==='ride'||k==='virtualride'||k==='ebikeride'||k==='gravelride'||k==='mountainbikeride'||k==='handcycle'||k==='velomobile') return P('ride','cycling coach',true,false);
+  if(k==='run'||k==='virtualrun'||k==='trailrun') return P('run','running coach',false,true);
+  if(k==='hike') return P('hike','endurance coach',false,true);
+  if(k==='walk'||k==='snowshoe') return P('walk','endurance coach',false,true);
+  if(k==='swim') return P('swim','swim coach',false,false);
+  if(k==='weighttraining'||k==='crossfit'||k==='workout') return P('strength session','strength coach',false,false);
+  if(k==='yoga') return P('yoga session','endurance coach',false,false);
+  if(k==='rowing'||k==='virtualrow'||k==='kayaking'||k==='canoeing') return P('row','endurance coach',false,false);
+  return P(s?String(s).toLowerCase():'activity','endurance coach',false,false);
+}
 function fetchRideCoachInsight(r, callback){
   var FTP=parseInt(st.ftp||186);
   var maxHR=parseInt(st.maxHR||172);
   var zonePct = r.avgHR ? Math.round((r.avgHR/maxHR)*100) : null;
-  var rx=_ridePrescriptionFor_(r);
+  var prof=_actProfile_(r);
+  var noun=prof.noun, Noun=noun.charAt(0).toUpperCase()+noun.slice(1);
+  // A cycling power prescription can only grade a cycling activity. Grading a run against a
+  // watt band is the same category error as comparing running power to cycling FTP.
+  var rx=prof.cyclingPower?_ridePrescriptionFor_(r):null;
   var suppress = !rx || !!_CV_BASE_INTENTS[rx.intent];   // no prescription OR a base intent -> filter deficit framing
-  var tele='Ride: '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. '
-    +'Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. '
-    +'Avg HR: '+(r.avgHR||'unknown')+'bpm ('+(zonePct?zonePct+'% of max HR':'unknown zone')+'). '
-    +'TSS: '+(r.tss||'unknown')+'. Elevation gain: '+(r.elev||0)+'ft. ';
+  var gain=_actElevGain_(r);
+  var tele=Noun+': '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. ';
+  if(prof.foot && r.pace) tele+='Pace: '+r.pace+' per mile. ';
+  if(prof.cyclingPower){
+    tele+='Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. ';
+  } else if(r.avgPwr){
+    tele+='Avg power: '+r.avgPwr+'W'+(r.np?(', NP: '+r.np+'W'):'')
+      +' — this is '+noun+' power. It is NOT comparable to a cycling FTP: do not compare it to FTP, do not call it a percentage of FTP, and do not assign it a cycling power zone. ';
+  }
+  tele+='Avg HR: '+(r.avgHR||'unknown')+'bpm ('+(zonePct?zonePct+'% of max HR':'unknown zone')+'). ';
+  tele+='TSS: '+(r.tss||'unknown')+'. ';
+  tele+='Elevation gain: '+(gain==null?'not recorded':(gain+'ft'))+'. ';
+  if(r.maxElev) tele+='Highest point on route: '+r.maxElev+'ft above sea level — this is altitude, not climbing, and is not the elevation gain. ';
+  // Anti-fabrication rule. The old prompt asserted "Elevation gain: 0ft" whenever the field was
+  // absent, and the model faithfully reported the zero back as "flat terrain, zero elevation gain".
+  var FACTS='Describe ONLY what the data above states. Where a value is given as "not recorded" or '
+    +'"unknown", say it was not recorded — never substitute zero, and never infer it from another number. '
+    +'Do not call the terrain flat, rolling, or hilly unless elevation gain is given to you as a number. '
+    +'This activity is a '+noun+': call it a '+noun+' and nothing else. ';
   var prompt;
   if(rx){
     var bandTxt=(rx.lo!=null&&rx.hi!=null)?(rx.lo+'-'+rx.hi+'W'):'no specific power band';
@@ -28731,16 +28799,16 @@ function fetchRideCoachInsight(r, callback){
       : 'Judge execution strictly against THIS prescription and its intent, not a generic steady-state ideal.';
     prompt='You are a cycling coach reviewing a completed ride AGAINST its prescription. '
       +'Prescription: '+rx.name+', target power '+bandTxt+(rx.zone?(' ('+rx.zone+')'):'')+'. '
-      +(rx.rules?('Execution rules: '+rx.rules+' '):'')+baseNote+' '+tele
+      +(rx.rules?('Execution rules: '+rx.rules+' '):'')+baseNote+' '+tele+FACTS
       +'Respond in this exact format, no markdown, no preamble: first line one short punchy headline (max 8 words) reflecting whether the ride matched its prescription. '
       +'Then 2-3 short "- " bullets on execution versus the prescription. '
       +'Then a final line "Recommendation: " with one concrete next-session suggestion CONSISTENT with this prescription and intent.';
   } else {
-    prompt='You are a cycling coach describing a completed ride that has NO prescription on file. '+tele
+    prompt='You are a '+prof.persona+' describing a completed '+noun+' that has NO prescription on file. '+tele+FACTS
       +'There is no target to compare against. Describe it factually ONLY: do NOT judge it good or bad, do NOT suggest what to do differently, do NOT frame anything as a shortfall, missed opportunity, or power left on the table. '
-      +'Respond in this exact format, no markdown, no preamble: first line one short NEUTRAL headline (max 8 words) describing the ride. '
-      +'Then 2-3 short "- " bullets of neutral facts (duration, zones, terrain). '
-      +'Then a final line exactly: "Recommendation: No prescription on file for this ride — logged as recorded."';
+      +'Respond in this exact format, no markdown, no preamble: first line one short NEUTRAL headline (max 8 words) describing the '+noun+'. '
+      +'Then 2-3 short "- " bullets of neutral facts (duration, effort, and terrain ONLY if elevation gain was given as a number). '
+      +'Then a final line exactly: "Recommendation: No prescription on file for this '+noun+' — logged as recorded."';
   }
 
   // Time-box the coach call so the insight card can never hang on "Analyzing…"
@@ -28757,7 +28825,7 @@ function fetchRideCoachInsight(r, callback){
   .then(function(d){
     clearTimeout(_to);
     var text = d.content && d.content[0] && d.content[0].text;
-    text = _insightSuppressDeficit_((text||'').trim(), suppress, rx);   // output filter — deficit framing veto
+    text = _insightSuppressDeficit_((text||'').trim(), suppress, rx, noun);   // output filter — deficit framing veto
     callback(null, text);
   })
   .catch(function(){ clearTimeout(_to); callback('Could not reach the coach right now.', null); });

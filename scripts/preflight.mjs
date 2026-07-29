@@ -164,6 +164,20 @@ try {
     fail('a growth-chart primitive regressed (see above).');
   }
 
+  // ---- 9. AI Coach Insight prompt -> the model can only be as truthful as its inputs. A missing
+  //         field emitted as "0ft" reads to the model as fact and comes back as "flat terrain,
+  //         zero elevation gain"; a hardcoded "ride" noun calls a trail run a ride. Both ship
+  //         silently — the card renders, it is just wrong about the activity on screen.
+  console.log(`${D}· checking AI Coach Insight prompt inputs…${X}`);
+  try {
+    const so = execSync('node scripts/coach-insight-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the coach-insight prompt regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
