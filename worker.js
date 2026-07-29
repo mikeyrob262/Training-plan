@@ -16868,6 +16868,10 @@ function _yvyElev_(r){ return parseFloat(r.elev||r.elevation)||0; }
 function _yvySec_(r){ return (typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0); }
 function _yvyYM_(r){ return String(r.date||'').slice(0,7); }
 function _yvyDom_(r){ return parseInt(String(r.date||'').slice(8,10),10)||0; }
+// Days in a 'YYYY-MM'. Lives with the other date readers rather than in a render file: the VM
+// needs it to build the best-month curve and Month Race needs it to label that month's length,
+// and two copies of a month-length rule is how a 30-day month gets drawn on a 31-day axis.
+function _yvyDaysInYM_(ym){ var p=String(ym||'').split('-'); if(p.length<2) return 0; return new Date(+p[0], +p[1], 0).getDate(); }
 var _YVY_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 // ONE gate for "is this month rankable", shared with the coverage probe rather than re-declared.
 // It was two constants holding 4 — _YVY_RANK_MIN here and STORE_V2_RANKABLE_MIN on the store side —
@@ -17772,6 +17776,14 @@ function _yvyVM_(rides, now, sport){
   // ranks a PROJECTED month must rank against this list, not rankList: a month still in progress
   // cannot be one of the months its own projection is measured against.
   var doneList=doneRank.map(function(k){ return {ym:k, mi:Math.round(bym[k]*10)/10}; });
+  // Daily cumulative for the bar to beat. Month Race draws the SHAPE of that month, not just its
+  // endpoint — where it surged and where it went flat is the whole reason racing it is useful,
+  // and a single total cannot say any of that. FULL month: Best Month is a completed record, so
+  // its curve runs to its own last day, and that is what makes it a target rather than a peer.
+  // Built by the SAME cum() the other two series use, so three lines on one chart cannot end up
+  // being three different definitions of cumulative.
+  var daysInBest=bestMonthYM?_yvyDaysInYM_(bestMonthYM):0;
+  var bestCum=bestMonthYM?cum(rides.filter(function(r){ return _yvyYM_(r)===bestMonthYM; }), daysInBest):[];
 
   var start6=new Date(now.getTime()-42*86400000);
   var t6=rides.filter(function(r){ var d=_ryDate_(r.date); return d && !isNaN(d.getTime()) && d>=start6 && d<=now; });
@@ -17843,7 +17855,7 @@ function _yvyVM_(rides, now, sport){
     lastAct:_lastAct, curN:cur.length, curYM:curYM, lastYM:lastYM, y:y, m:m, domNow:domNow, daysInCur:daysInCur, daysLeft:daysLeft,
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
-    doneList:doneList, med6:med6, monthMi:bym,
+    doneList:doneList, med6:med6, monthMi:bym, bestCum:bestCum, daysInBest:daysInBest,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now, sport),
@@ -17975,24 +17987,40 @@ function _pbSection_(vm){
 }
 
 // ==================== You vs. You — Month Race ====================
-// Three full-width bars: You (month-to-date), last month THROUGH THE SAME DAY, and the bar to beat.
+// A cumulative race curve: three lines on one axis, day of month across, cumulative miles up.
+// You (month to date), last month THROUGH THE SAME DAYS, and the bar to beat drawn across its
+// full length. Was three pill bars comparing endpoints; endpoints answer "how far apart" and
+// nothing else. The question this section is actually for is WHERE the gap opened — a surge, a
+// flat week, a weekend missed — and only the shape of the month can answer that.
 //
-// Only the first two are comparable, and the section is built so that can never be misread. Last
-// month is same-day — the same figure the KPI row and the cumulative chart use, because the whole
-// point of this page's correction was to stop showing incomplete against complete. Best Month
-// cannot be same-day (it is a record, and a record is a finished month), so it is NOT drawn as a
-// peer: ghost fill, dashed edge, labelled with its own day count, and called a target in the
-// footnote. Three bars, two peers, one target.
+// The same three tiers the bars carried, now as line grammar rather than fill grammar:
+//   You        solid, brand orange   — the live subject
+//   Last month solid, neutral slate  — a like-for-like peer, same days only, so its line STOPS
+//                                      at today exactly like yours does
+//   Best Month DASHED, violet        — a completed record. It cannot be same-day (a record is a
+//                                      finished month), so it is never drawn as a peer: the dash
+//                                      is what says target, and it runs its own full length.
+// Two peers, one target — unchanged from the bars, and still unmissable, because the dashed line
+// is the only one that keeps going past where the other two stop.
+//
+// COLOR IS VALIDATED, NOT CHOSEN. The bars used dimmed orange (#c23a00) for Best against orange
+// for You, which is fine when the two are separated pill bars and wrong the moment they are lines
+// that cross: that pair is deltaE 12.3 to NORMAL vision (below the 15 floor) and 9.8 under protan.
+// The violet re-steps it — the trio #FC4C02 / #64748b / #9333ea passes lightness band, chroma
+// floor, all-pairs CVD separation (worst 9.1 tritan), normal-vision floor (worst 19.0) and 3:1
+// contrast against this card's #0e1117. Do not "tidy" Best back into the orange family.
+// Last month stays #64748b on purpose: gray IS its meaning here (a neutral peer), and the
+// cumulative chart further down this same page already draws last month in it — recoloring it in
+// one of the two would break color-follows-the-entity across the page, which is worse than the
+// deviation. Identity never rests on hue alone anyway: legend, dash and tooltip all carry it.
 //
 // Denominator: Best Month is the max over COMPLETED rankable ride-months — the same >=_YVY_RANK_MIN
 // gate the hero ranks on, with the in-progress month excluded because it is not a candidate. That
 // count is vm.completedRankable, which is the same set _yvyPhys_ counts. No calendar span, no
 // second count, no guess.
-// Three tiers here too: You in orange (the live subject), Last month grey (a neutral peer), and
-// Best Month in the dimmed orange — it is a genuine best, drawn as a target rather than a peer.
-var _MR_YOU=_YVY_TOP, _MR_LAST=_YVY_BASE, _MR_BEST=_YVY_TOP_DIM;
+var _MR_YOU=_YVY_TOP, _MR_LAST=_YVY_BASE, _MR_BEST='#9333ea';
 function _mrMi_(v){ return (Math.round(v*10)/10).toLocaleString(); }
-function _mrDaysIn_(ym){ var p=String(ym||'').split('-'); if(p.length<2) return 0; return new Date(+p[0], +p[1], 0).getDate(); }
+function _mrDaysIn_(ym){ return _yvyDaysInYM_(ym); }
 // Gap in Personal Bests grammar. When the trailing rate cannot cover it in the days left, the line
 // says what it would actually take instead of printing a bare number that reads as failure.
 function _mrGap_(target, cur, rate, daysLeft){
@@ -18008,57 +18036,266 @@ function _mrGap_(target, cur, rate, daysLeft){
   var mult=Math.round(needWk/rate*10)/10;
   return { passed:false, tone:_YVY_BASE, text:head+' &mdash; that is '+needWk.toLocaleString()+' mi/wk for the '+daysLeft+' day'+(daysLeft===1?'':'s')+' left, '+mult+'&times; your current rate.' };
 }
+// Axis ceiling on a round number, so the ticks read 0 / 150 / 300 rather than 0 / 208.6 / 417.1.
+// The 1.5 rung matters more than it looks: without it a 625.7 mi month rounds up to an 800 ceiling
+// and spends a fifth of the plot on empty air above the tallest line. With it the ceiling is 750
+// and the curves use the height they were given.
+function _mrNice_(max, want){
+  if(!(max>0)) return { max:1, step:1 };
+  var raw=max/(want||5), mag=Math.pow(10, Math.floor(Math.log(raw)/Math.LN10)), n=raw/mag;
+  var step=(n<=1?1:(n<=1.5?1.5:(n<=2?2:(n<=2.5?2.5:(n<=5?5:10)))))*mag;
+  return { max:Math.ceil(max/step)*step, step:step };
+}
 // PURE — reads only aggregates _yvyVM_ already computed. Returns null when there is no opponent.
+//
+// Three series, and each one's LENGTH is part of what it says. You and last month both stop at
+// today, because comparing a partial month against a complete one is the exact defect this page
+// was corrected for. Best Month runs its full length, because a record is a finished month.
 function _mrCompute_(vm){
   var you=Math.round(vm.curTot*10)/10;
   var lastSD=Math.round(vm.kDist.last*10)/10;
   var best=vm.bestMonthMi||0, bestYM=vm.bestMonthYM||null;
   if(lastSD<=0 && best<=0) return null;
-  var max=Math.max(you, lastSD, best, 1);
   var ord=_yvyOrdComment_(vm.domNow);
-  var bars=[{ key:'you', label:'You', sub:'through the '+ord+' &middot; '+vm.nCur+' ride'+(vm.nCur===1?'':'s'),
-              v:you, pct:you/max*100, color:_MR_YOU, ghost:false, gap:null }];
-  if(lastSD>0) bars.push({ key:'last', label:_yvyMonLabel_(vm.lastYM), sub:'through the '+ord+' &middot; same days',
-              v:lastSD, pct:lastSD/max*100, color:_MR_LAST, ghost:false, gap:_mrGap_(lastSD, you, vm.rate, vm.daysLeft) });
-  if(best>0) bars.push({ key:'best', label:'Best Month', sub:_yvyMonLabel_(bestYM)+' &middot; full month, '+_mrDaysIn_(bestYM)+' days',
-              v:best, pct:best/max*100, color:_MR_BEST, ghost:true, gap:_mrGap_(best, you, vm.rate, vm.daysLeft) });
-  return { bars:bars, marker:Math.max(0, Math.min(99.4, you/max*100)), you:you, lastSD:lastSD,
-           best:best, bestYM:bestYM, bestDays:_mrDaysIn_(bestYM), domNow:vm.domNow,
-           completedRankable:vm.completedRankable||0 };
+  var series=[{ key:'you', label:'You', sub:'through the '+ord+' &middot; '+vm.nCur+' '+vm.nA+(vm.nCur===1?'':'s'),
+                v:you, color:_MR_YOU, dash:'', pts:(vm.cumCur||[]).slice(0, vm.domNow) }];
+  if(lastSD>0) series.push({ key:'last', label:_yvyMonLabel_(vm.lastYM), sub:'same days',
+                v:lastSD, color:_MR_LAST, dash:'', pts:(vm.cumLast||[]).slice(0, vm.domNow),
+                gap:_mrGap_(lastSD, you, vm.rate, vm.daysLeft) });
+  // Drawn only when its curve survived the VM. A Best Month total with no daily shape behind it
+  // would have to be faked as a straight line to the endpoint, which is a drawn claim about days
+  // that were never like that — so it is dropped from the chart rather than invented.
+  if(best>0 && (vm.bestCum||[]).length) series.push({ key:'best', label:'Best Month', sub:_yvyMonLabel_(bestYM)+' &middot; full month, '+(vm.daysInBest||0)+' days',
+                v:best, color:_MR_BEST, dash:'6 5', pts:vm.bestCum,
+                gap:_mrGap_(best, you, vm.rate, vm.daysLeft) });
+  // The axis spans whichever month is longer — this one, or the record it is being raced against.
+  // Taken off the DRAWN best series, never off vm.bestCum directly: if Best was dropped for want of
+  // a daily shape, the axis must not still be stretched to a month that is not on the chart.
+  var bestS=series.filter(function(s){ return s.key==='best'; })[0];
+  var nx=Math.max(vm.daysInCur||31, bestS?bestS.pts.length:0, 2);
+  var top=0; series.forEach(function(s){ s.pts.forEach(function(p){ if(p>top) top=p; }); });
+  var ny=_mrNice_(top||1, 5);
+  return { series:series, you:you, lastSD:lastSD, best:best, bestYM:bestYM,
+           bestDays:vm.daysInBest||0, domNow:vm.domNow, nx:nx, maxY:ny.max, stepY:ny.step,
+           mon:_YVY_MON[vm.m], completedRankable:vm.completedRankable||0 };
 }
-function _mrBarHtml_(b){
-  var fill=b.ghost
-    ? '<div style="position:absolute;left:0;top:0;bottom:0;width:'+b.pct.toFixed(2)+'%;background:'+b.color+'14;border:1.5px dashed '+b.color+'aa;border-radius:9px;box-sizing:border-box"></div>'
-    : '<div style="position:absolute;left:0;top:0;bottom:0;width:'+b.pct.toFixed(2)+'%;background:'+b.color+';border-radius:9px"></div>';
-  return '<div style="margin-bottom:14px">'
-    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap">'
-    +'<div style="min-width:0"><span style="font-size:13px;font-weight:800;color:#f1f5f9">'+b.label+'</span>'
-    +'<span style="font-size:11px;color:#5b6678;margin-left:8px">'+b.sub+'</span></div>'
-    +'<div style="white-space:nowrap"><span style="font-size:21px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+_mrMi_(b.v)+'</span>'
-    +'<span style="font-size:12px;color:#94a3b8"> mi</span></div></div>'
-    +'<div style="position:relative;height:34px;border-radius:9px;background:#141922">'+fill+'</div>'
-    +(b.gap?('<div style="font-size:12px;color:'+b.gap.tone+';font-weight:700;margin-top:6px">'+b.gap.text+'</div>'):'')
-    +'</div>';
+// ---- the chart ------------------------------------------------------------
+// Geometry lives in ONE object and is handed to both the SVG builder and the hover handler, so
+// the crosshair cannot land somewhere the line is not. Everything is in viewBox units; the hover
+// converts client pixels into them off the rendered rect, which is what makes it correct at every
+// width without a resize listener.
+// Geometry is per-SURFACE, and it comes from isDesktop() — the one authority for which layout is
+// live (a persisted override can put the desktop layout on a narrow window, so a width media query
+// would disagree with the rest of the app). ONE viewBox cannot serve both: inside a phone card the
+// SVG renders about 322px wide, where the desktop 720x300 box is 134px tall with 4.5px axis type.
+// That is not a chart anyone can read, and letterboxing or scaling text in CSS cannot fix an
+// aspect ratio. So the mobile box is nearly square and carries its own type sizes and a sparser
+// x-axis; both are still ONE markup path, chosen at render, never two renderers to keep in step.
+function _mrGeo_(){
+  var mob=false;
+  try{ if(typeof isDesktop==='function') mob=!isDesktop(); }catch(e){}
+  return mob
+    ? { W:400, H:300, PL:36, PR:48, PT:22, PB:30, fAx:12, fToday:12, fEnd:14, xt:[1,10,20] }
+    : { W:720, H:300, PL:46, PR:66, PT:22, PB:32, fAx:10, fToday:10, fEnd:12, xt:[1,5,10,15,20,25] };
 }
+var _MR_DATA={};
+function _mrX_(g, day){ return g.PL + (day-1)/(g.nx-1)*(g.W-g.PL-g.PR); }
+function _mrY_(g, v){ var ih=g.H-g.PT-g.PB; return g.PT + ih - (v/g.maxY)*ih; }
+function _mrPath_(g, pts){
+  var p='';
+  for(var i=0;i<pts.length;i++) p+=(i?'L':'M')+_mrX_(g,i+1).toFixed(1)+' '+_mrY_(g,pts[i]).toFixed(1)+' ';
+  return p;
+}
+// Crosshair + one tooltip listing EVERY series at that day, so the pointer never has to land on a
+// line to get a number. Values lead, series names follow. Everything set at runtime goes in via
+// textContent — never innerHTML — so a label can never be markup.
+function _mrShow_(id, day){
+  var g=_MR_DATA[id]; if(!g) return;
+  day=Math.max(1, Math.min(g.nx, Math.round(day)));
+  var x=_mrX_(g, day);
+  var ln=document.getElementById('mrc-cross-'+id);
+  if(ln){ ln.setAttribute('x1', x.toFixed(1)); ln.setAttribute('x2', x.toFixed(1)); ln.style.opacity='1'; }
+  var head=document.getElementById('mrc-tth-'+id);
+  if(head) head.textContent=g.mon+' '+day;
+  g.series.forEach(function(s){
+    var dot=document.getElementById('mrc-dot-'+id+'-'+s.key);
+    var val=document.getElementById('mrc-ttv-'+id+'-'+s.key);
+    var row=document.getElementById('mrc-ttr-'+id+'-'+s.key);
+    var has=(day<=s.pts.length);
+    if(dot){
+      if(has){ dot.setAttribute('cx', x.toFixed(1)); dot.setAttribute('cy', _mrY_(g, s.pts[day-1]).toFixed(1)); dot.style.opacity='1'; }
+      else dot.style.opacity='0';
+    }
+    if(row) row.style.display=has?'flex':'none';
+    if(val && has) val.textContent=_mrMi_(s.pts[day-1])+' mi';
+  });
+  var tt=document.getElementById('mrc-tt-'+id);
+  if(tt){
+    tt.style.opacity='1';
+    // Flip the tooltip to the left of the crosshair past the midpoint so it never hangs off the
+    // card. Percent, not pixels — the SVG is fluid and the tooltip has to track it.
+    var pct=x/g.W*100;
+    tt.style.left=pct.toFixed(2)+'%';
+    tt.style.transform=(pct>58)?'translate(-100%,0) translate(-10px,0)':'translate(10px,0)';
+  }
+}
+function _mrHide_(id){
+  var g=_MR_DATA[id]; if(!g) return;
+  var ln=document.getElementById('mrc-cross-'+id); if(ln) ln.style.opacity='0';
+  var tt=document.getElementById('mrc-tt-'+id); if(tt) tt.style.opacity='0';
+  g.series.forEach(function(s){ var d=document.getElementById('mrc-dot-'+id+'-'+s.key); if(d) d.style.opacity='0'; });
+}
+function _mrMove_(ev, id){
+  var g=_MR_DATA[id]; if(!g) return;
+  var svg=document.getElementById('mrc-svg-'+id); if(!svg) return;
+  var r=svg.getBoundingClientRect(); if(!(r.width>0)) return;
+  var cx=((ev.touches&&ev.touches[0])?ev.touches[0].clientX:ev.clientX)-r.left;
+  var vx=cx/r.width*g.W;                                   // client px -> viewBox units
+  _mrShow_(id, (vx-g.PL)/(g.W-g.PL-g.PR)*(g.nx-1)+1);
+  if(ev.touches) { try{ ev.preventDefault(); }catch(e){} }
+}
+// Keyboard reaches the same readout as the pointer — arrows step a day, Home/End jump the ends.
+function _mrKey_(ev, id){
+  var g=_MR_DATA[id]; if(!g) return;
+  var k=ev.key, d=g.cursor||g.domNow;
+  if(k==='ArrowRight') d=Math.min(g.nx, d+1);
+  else if(k==='ArrowLeft') d=Math.max(1, d-1);
+  else if(k==='Home') d=1;
+  else if(k==='End') d=g.nx;
+  else return;
+  g.cursor=d; _mrShow_(id, d);
+  try{ ev.preventDefault(); }catch(e){}
+}
+function _mrChart_(mr, id){
+  var g=_mrGeo_();
+  g.nx=mr.nx; g.maxY=mr.maxY; g.domNow=mr.domNow; g.mon=mr.mon;
+  g.series=mr.series.map(function(s){ return { key:s.key, label:s.label, color:s.color, pts:s.pts }; });
+  _MR_DATA[id]=g;
+  var iw=g.W-g.PL-g.PR, ih=g.H-g.PT-g.PB;
+  // Grid: hairline, SOLID, one step off the surface. Dashing is reserved for the two things that
+  // mean something here (the target series and today), so the grid never competes with them.
+  var grid='';
+  // A month with almost no miles gets a sub-1 step, and rounding those ticks to whole numbers
+  // prints the same label three times. Format at the step's own resolution instead.
+  var tick=(mr.stepY<1) ? function(v){ return (Math.round(v*10)/10).toLocaleString(); }
+                        : function(v){ return Math.round(v).toLocaleString(); };
+  for(var v=0; v<=mr.maxY+mr.stepY*0.001; v+=mr.stepY){
+    var yy=_mrY_(g,v);
+    grid+='<line x1="'+g.PL+'" y1="'+yy.toFixed(1)+'" x2="'+(g.W-g.PR)+'" y2="'+yy.toFixed(1)+'" stroke="#1c2130" stroke-width="1"/>'
+      +'<text class="mrc-ax" font-size="'+g.fAx+'" x="'+(g.PL-8)+'" y="'+(yy+g.fAx*0.35).toFixed(1)+'" text-anchor="end">'+tick(v)+'</text>';
+  }
+  // The month's last day is always labelled; the rest come from the surface's own tick list, which
+  // is sparser on the narrow box so the labels cannot run together.
+  var xt=g.xt.concat([mr.nx]).filter(function(d,i,a){ return d<=mr.nx && a.indexOf(d)===i; });
+  var xl=''; xt.forEach(function(d){ xl+='<text class="mrc-ax" font-size="'+g.fAx+'" x="'+_mrX_(g,d).toFixed(1)+'" y="'+(g.H-g.PB+g.fAx+4).toFixed(1)+'" text-anchor="middle">'+d+'</text>'; });
+  // Today. Dashed, in the subject's own colour, labelled — it is the reason two of the three lines
+  // stop where they do, so it is drawn as a boundary rather than left implicit.
+  var tx=_mrX_(g, mr.domNow);
+  var today='<line x1="'+tx.toFixed(1)+'" y1="'+g.PT+'" x2="'+tx.toFixed(1)+'" y2="'+(g.PT+ih)+'" stroke="'+_MR_YOU+'" stroke-width="1.5" stroke-dasharray="3 4" opacity=".55"/>'
+    +'<text class="mrc-today" font-size="'+g.fToday+'" x="'+tx.toFixed(1)+'" y="'+(g.PT-6)+'" text-anchor="middle">'+mr.mon+' '+mr.domNow+'</text>';
+  var lines='', dots='';
+  mr.series.forEach(function(s){
+    if(!s.pts.length) return;
+    lines+='<path d="'+_mrPath_(g,s.pts)+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'
+      +(s.dash?(' stroke-dasharray="'+s.dash+'"'):'')+'/>';
+    // Surface ring on every marker so it stays legible where the lines cross each other.
+    dots+='<circle id="mrc-dot-'+id+'-'+s.key+'" r="4.5" fill="'+s.color+'" stroke="#0e1117" stroke-width="2" opacity="0" style="pointer-events:none"/>';
+  });
+  // ONE direct label: the endpoint of You. The other two totals are in the legend and the tooltip,
+  // and at 452.2 against 434.7 their end labels would sit on top of each other — converging labels
+  // get dropped to the legend rather than nudged apart into noise.
+  var you=mr.series[0], endLbl='';
+  if(you.pts.length){
+    var ey=_mrY_(g, you.pts[you.pts.length-1]), ex=_mrX_(g, you.pts.length);
+    endLbl='<circle cx="'+ex.toFixed(1)+'" cy="'+ey.toFixed(1)+'" r="4" fill="'+_MR_YOU+'" stroke="#0e1117" stroke-width="2"/>'
+      +'<text class="mrc-end" font-size="'+g.fEnd+'" x="'+(ex+8).toFixed(1)+'" y="'+(ey+g.fEnd*0.35).toFixed(1)+'">'+_mrMi_(you.v)+' mi</text>';
+  }
+  var rows=mr.series.map(function(s){
+    return '<div id="mrc-ttr-'+id+'-'+s.key+'" style="display:flex;align-items:center;gap:8px;white-space:nowrap">'
+      +'<span style="width:12px;height:2px;background:'+s.color+';flex-shrink:0;border-radius:1px"></span>'
+      +'<span style="font-size:12px;font-weight:800;color:#f1f5f9;font-variant-numeric:tabular-nums" id="mrc-ttv-'+id+'-'+s.key+'">&mdash;</span>'
+      +'<span style="font-size:11px;color:#94a3b8">'+s.label+'</span></div>';
+  }).join('');
+  var aria='Cumulative miles by day of month. '+mr.series.map(function(s){ return s.label+' ends at '+_mrMi_(s.v)+' miles'; }).join('. ')+'.';
+  return '<div class="mrc-wrap" style="position:relative;outline:none" onmousemove="_mrMove_(event,&#39;'+id+'&#39;)" onmouseleave="_mrHide_(&#39;'+id+'&#39;)"'
+    +' ontouchstart="_mrMove_(event,&#39;'+id+'&#39;)" ontouchmove="_mrMove_(event,&#39;'+id+'&#39;)" ontouchend="_mrHide_(&#39;'+id+'&#39;)"'
+    +' tabindex="0" aria-label="'+aria+'" onkeydown="_mrKey_(event,&#39;'+id+'&#39;)" onblur="_mrHide_(&#39;'+id+'&#39;)">'
+    +'<svg id="mrc-svg-'+id+'" class="mrc-svg" role="img" aria-label="'+aria+'" viewBox="0 0 '+g.W+' '+g.H+'" style="width:100%;height:auto;display:block">'
+    +grid+xl+today
+    +'<line id="mrc-cross-'+id+'" x1="0" y1="'+g.PT+'" x2="0" y2="'+(g.PT+ih)+'" stroke="#94a3b8" stroke-width="1" opacity="0" style="pointer-events:none"/>'
+    +lines+endLbl+dots
+    +'</svg>'
+    +'<div id="mrc-tt-'+id+'" style="position:absolute;top:6px;left:0;opacity:0;transition:opacity .1s;pointer-events:none;background:#141922;border:1px solid #2a3341;border-radius:9px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.45)">'
+    +'<div id="mrc-tth-'+id+'" style="font-size:10.5px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">&mdash;</div>'
+    +rows+'</div></div>';
+}
+// The table-view twin. Every plotted value reachable without hovering, collapsed by default so it
+// costs nothing until it is wanted.
+function _mrTable_(mr){
+  var head='<tr><th style="text-align:left;padding:3px 10px 3px 0;font-weight:700;color:#94a3b8">Day</th>'
+    +mr.series.map(function(s){ return '<th style="text-align:right;padding:3px 0 3px 14px;font-weight:700;color:#94a3b8;white-space:nowrap">'+s.label+'</th>'; }).join('')+'</tr>';
+  var body='';
+  for(var d=1; d<=mr.nx; d++){
+    body+='<tr><td style="padding:2px 10px 2px 0;color:#cbd5e1">'+mr.mon+' '+d+'</td>'
+      +mr.series.map(function(s){ return '<td style="text-align:right;padding:2px 0 2px 14px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+(d<=s.pts.length?_mrMi_(s.pts[d-1]):'&mdash;')+'</td>'; }).join('')+'</tr>';
+  }
+  return '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:#5b6678;outline:none">Table view &mdash; every day, every series</summary>'
+    +'<div style="overflow-x:auto;margin-top:8px"><table style="border-collapse:collapse;font-size:11.5px">'+head+body+'</table></div></details>';
+}
+// Only colour and the focus ring live in CSS — every SIZE is a geometry attribute from _mrGeo_(),
+// so type scale and viewBox can never disagree about which surface is being drawn.
+var _MR_CSS='<style>'
+  +'.mrc-ax{fill:#5b6678}'
+  +'.mrc-today{font-weight:700;fill:'+_MR_YOU+';opacity:.85}'
+  +'.mrc-end{font-weight:800;fill:#f1f5f9}'
+  +'.mrc-wrap:focus-visible{outline:2px solid #94a3b8;outline-offset:3px;border-radius:8px}'
+  +'</style>';
 function _mrSection_(vm){
   var mr=_mrCompute_(vm);
   if(!mr) return '';
-  var marker='<div style="position:absolute;left:'+mr.marker.toFixed(2)+'%;top:0;bottom:0;width:0;border-left:2px dashed '+_MR_YOU+';opacity:.8;pointer-events:none"></div>';
+  // Keyed by sport, not by a counter: the All view renders this section twice (ride and run) and
+  // the two must not share a hover state, while a re-render of the same sport must reuse its id
+  // rather than leaking a new one into _MR_DATA on every navigation.
+  var id=(vm.sport==='run')?'run':'ride';
+  // Legend is ALWAYS present with three series, and carries each one's total — identity never
+  // rests on hue alone, and it is where the two totals that are not direct-labelled live.
+  var legend=mr.series.map(function(s){
+    var key=s.dash
+      ? '<span style="width:16px;height:0;border-top:2px dashed '+s.color+';flex-shrink:0"></span>'
+      : '<span style="width:16px;height:2px;background:'+s.color+';flex-shrink:0;border-radius:1px"></span>';
+    return '<span style="display:inline-flex;align-items:baseline;gap:7px">'+key
+      +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+s.label+'</span>'
+      +'<span style="font-size:12px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+_mrMi_(s.v)+' mi</span>'
+      +'<span style="font-size:10.5px;color:#5b6678">'+s.sub+'</span></span>';
+  }).join('');
+  // The callouts the bars carried, now annotations under the curve they describe. Same _mrGap_
+  // wording, same tone — they were never bar furniture, they are the reading of the gap.
+  var ann=mr.series.filter(function(s){ return s.gap; }).map(function(s){
+    return '<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
+      +'<span style="width:6px;height:6px;border-radius:50%;background:'+s.color+';flex-shrink:0;transform:translateY(-2px)"></span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">vs '+s.label+' &middot; </span>'
+      +'<span style="font-size:12.5px;color:'+s.gap.tone+';font-weight:700">'+s.gap.text+'</span></div></div>';
+  }).join('');
   // The hero ranks this month AMONG the rankable months, so its denominator includes the one still
   // running; Best Month is the max OF completed ones, which cannot include it. Same source, same
   // gate, one candidate apart — so when the two differ, say so here rather than leaving two
   // unexplained counts on one page.
   var recon=(vm.rankTot>mr.completedRankable)
     ? (' (the '+vm.rankTot+'th, this one, is still running)') : '';
+  var drawn=mr.series.filter(function(s){ return s.key==='best'; }).length>0;
   var foot=(mr.best>0)
-    ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn as a target rather than a peer. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race.')
+    ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn dashed, as a target rather than a peer'+(drawn?'':', and why its curve is not drawn at all here &mdash; this snapshot carries its total but not its days')+'. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race, and both lines stop at today for that reason.')
     : 'No completed month clears the ride count needed to stand as a record yet, so there is no bar to beat.';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
-    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
+  return _MR_CSS
+    +'<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Month Race</span>'
-    +'<span style="font-size:11px;color:#5b6678">the dashed line is where you are now</span></div>'
-    +'<div style="position:relative">'+mr.bars.map(_mrBarHtml_).join('')+marker+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:2px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<span style="font-size:11px;color:#5b6678">cumulative miles, day by day &middot; hover or use the arrow keys to read any day</span></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
+    +_mrChart_(mr, id)
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'+ann+'</div>'):'')
+    +_mrTable_(mr)
+    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
     +'</div>';
 }
 

@@ -137,6 +137,20 @@ try {
     fail('the /store_v2 live-tail fold regressed (see above).');
   }
 
+  // ---- 7. Month Race cumulative chart -> the failures here are all silent. A line drawn outside
+  //         the plot box still renders, a Best Month curve truncated to today still looks like a
+  //         chart, and a crosshair whose geometry disagrees with the drawn path reads the wrong
+  //         day. Fixture-based, so it runs offline and does not move when the athlete rides.
+  console.log(`${D}· checking Month Race chart geometry…${X}`);
+  try {
+    const so = execSync('node scripts/month-race-chart-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Month Race chart regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
