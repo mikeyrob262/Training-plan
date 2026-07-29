@@ -10001,6 +10001,50 @@ var MTGT = calcMTGT();
 var DTYPE=["LOW","HIGH","MOD","HIGH","MOD","HIGH","LOW"];
 var nutrDate='',curMeal='breakfast';
 try{nutrDate=getTodayKey();}catch(e){}
+// ---- the selected nutrition day is STICKY, and that is how food lands on the wrong date --------
+// nutrDate is a module-level global: assigned once at parse, moved by day-navigation, and only
+// snapped back to today by showNutr(). On a phone the page is a resident PWA that can sit open for
+// days, so a selection made once outlives the day it was made in and every later write goes to it.
+//
+// Measured in the live log on 2026-07-29: four breakfast items totalling 1,075 cal sat under the
+// 2026-07-29 key with ids that decode to 2026-07-28 12:23-12:24 local — logged on the 28th, filed
+// on the 29th. Every entry before 2026-07-24 has a zero offset between when it was created and the
+// day it was filed under; from 2026-07-25 on, entries appear at both +1 and -1 days. The read path
+// is not at fault: nutritionForDate('2026-07-29') faithfully returns what is stored there.
+//
+// Two guards, because one is not enough:
+//   1. _nutDay stamps the REAL day a selection was made. When the real day has moved on, the
+//      selection is stale by definition and snaps back to today before any read or write.
+//   2. When the selection is deliberately not today, the UI says so in a banner. A user can still
+//      back-fill yesterday on purpose — that is a real workflow — but never without seeing it.
+var _nutDay='';
+try{ _nutDay=getTodayKey(); }catch(e){}
+function nutSetDate_(k){ nutrDate=k; try{ _nutDay=getTodayKey(); }catch(e){} }
+function nutDayGuard_(){
+  var t='';
+  try{ t=getTodayKey(); }catch(e){ return nutrDate; }
+  if(!nutrDate){ nutSetDate_(t); return nutrDate; }
+  if(_nutDay && _nutDay!==t) nutSetDate_(t);      // the calendar moved under a stale selection
+  return nutrDate;
+}
+// The banner. Rendered by the nutrition screen whenever the day being written to is not today.
+function nutDateBanner_(){
+  var t=''; try{ t=getTodayKey(); }catch(e){ return ''; }
+  if(!nutrDate || nutrDate===t) return '';
+  var d=(typeof parseDayKey==='function')?parseDayKey(nutrDate):null;
+  var pretty=(d&&!isNaN(d.getTime()))
+    ? ((_YVY_MON[d.getMonth()]||'')+' '+d.getDate())
+    : nutrDate;
+  return '<div style="display:flex;align-items:center;gap:9px;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.35);border-radius:11px;padding:9px 12px;margin-bottom:10px">'
+    +'<span style="width:7px;height:7px;border-radius:50%;background:#d97706;flex-shrink:0"></span>'
+    +'<span style="font-size:12.5px;color:#e8edf5;font-weight:700">Logging to '+pretty+'</span>'
+    +'<span style="font-size:11.5px;color:#94a3b8">not today</span>'
+    +'<span onclick="nutJumpToday_()" style="margin-left:auto;font-size:12px;font-weight:700;color:#d97706;cursor:pointer;white-space:nowrap">Back to today</span>'
+    +'</div>';
+}
+function nutJumpToday_(){
+  try{ nutSetDate_(getTodayKey()); if(typeof nutRefresh==='function') nutRefresh(); }catch(e){}
+}
 
 
 // Shared activity icon + color, matching the Calendar screen's icon family,
@@ -10592,7 +10636,7 @@ function openBarcode(){toast("Use search to find foods");}
 
 
 function rmFood(meal,idx){
-  if(!nutrDate)nutrDate=getTodayKey();
+  nutDayGuard_();
   var nd=getNDay(nutrDate);
   if(nd&&nd.meals&&nd.meals[meal]&&nd.meals[meal][idx]){
     // Tombstone instead of splice: a hard removal can be silently
@@ -10617,7 +10661,7 @@ function rmFood(meal,idx){
 // invalidate. nd.meals is the same array object nutritionForDate() hands the
 // desktop, so a lazily-assigned id persists on the real item.
 function nutResolveIdx_(meal, id){
-  if(!nutrDate) nutrDate=getTodayKey();
+  nutDayGuard_();
   var a=getNDay(nutrDate).meals[meal]||[];
   for(var j=0;j<a.length;j++){ if(a[j] && a[j].id===id && !a[j].deleted) return j; }
   return -1;
@@ -10643,7 +10687,7 @@ function nutEditFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) edi
 function nutRemoveFoodById_(meal, id){ var i=nutResolveIdx_(meal,id); if(i>=0) rmFood(meal,i); }
 
 function updWater(delta){
-  if(!nutrDate)nutrDate=getTodayKey();
+  nutDayGuard_();
   var nd=getNDay(nutrDate);
   nd.water=Math.max(0,Math.min(20,(nd.water||0)+delta));
   sv();
@@ -10654,7 +10698,7 @@ function updWater(delta){
   nutRefresh();
 }
 function resetWater(){
-  if(!nutrDate)nutrDate=getTodayKey();
+  nutDayGuard_();
   var nd=getNDay(nutrDate);
   nd.water=0;
   sv();
@@ -10662,16 +10706,16 @@ function resetWater(){
 }
 
 function nutrDelta(d){
-  if(!nutrDate)nutrDate=getTodayKey();
+  nutDayGuard_();
   var parts=nutrDate.split('-');
   var dt=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));
   dt.setDate(dt.getDate()+d);
-  nutrDate=nutKey_(dt);   // was unpadded - day-nav was the main way entries got stranded
+  nutSetDate_(nutKey_(dt));   // was unpadded - day-nav was the main way entries got stranded
   nutRefresh();
 }
 
 
-function showNutr(){try{nutrDate=getTodayKey();nutRefresh();}catch(e){console.error('showNutr error:',e);uiAlert('Nutrition error: '+e.message);}}
+function showNutr(){try{nutSetDate_(getTodayKey());nutRefresh();}catch(e){console.error('showNutr error:',e);uiAlert('Nutrition error: '+e.message);}}
 
 
 function editFoodItem(meal, idx) {
@@ -10728,6 +10772,9 @@ function editFoodItem(meal, idx) {
 
 function renderNutr(){
   MTGT = calcMTGT(); // recalc in case weight changed
+  // Snap a stale selection back to today BEFORE reading, so a page left open overnight does not
+  // render — and then log into — yesterday.
+  nutDayGuard_();
   var nd=getNDay(nutrDate),tot=getDTots(nutrDate);
   // Training-aware targets: real calorie/carb/protein/sodium/fluid needs
   // derived from today's actual scheduled workout, replacing the old
@@ -10780,6 +10827,10 @@ function renderNutr(){
     : (trainingTgt.workoutName||'Rest day');
 
   var h='';
+  // Says which day is being written to whenever that is not today. The staleness guard above
+  // handles the silent case; this handles the deliberate one, so back-filling stays possible and
+  // stays visible.
+  h+=(typeof nutDateBanner_==='function')?nutDateBanner_():'';
 
   // Hero banner — colored gradient with fuel/nutrition motif
   h+='<div style="position:relative;overflow:hidden;padding:20px 16px 18px;background:linear-gradient(135deg,#0F7A54 0%,#1AA06B 45%,#2FA8E0 120%)">';
@@ -11535,7 +11586,7 @@ function renderNutr(){
 }
 function openFoodForMeal(meal){
   curMeal = meal;
-  if(!nutrDate) nutrDate = getTodayKey();
+  nutDayGuard_();
   var old = document.getElementById('food-modal');
   if(old) old.remove();
 
@@ -11830,7 +11881,7 @@ function renderFoodRows(container, list){
         btn.textContent = '✓';
         try {
           var q = parseFloat(qi.value)||1;
-          if(!nutrDate) nutrDate = getTodayKey();
+          nutDayGuard_();
           var nd = getNDay(nutrDate);
           if(!nd.meals[curMeal]) nd.meals[curMeal] = [];
           nd.meals[curMeal].push({
@@ -11900,7 +11951,7 @@ function renderFoodRows(container, list){
     CF.push(food);
     if(!st.cf)st.cf=[];
     st.cf.push(food);
-    if(!nutrDate) nutrDate=getTodayKey();
+    nutDayGuard_();
     getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
     sv();
     document.getElementById('food-modal').remove();
@@ -26975,22 +27026,13 @@ function dsShowDashboard(){
   // reported six activities and 6h 38m for a week that actually held two.
   // dayKey is built from LOCAL parts: toISOString reads a local-midnight Date in UTC and lands on
   // the wrong day for anyone east of Greenwich.
-  function dayKey(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-  var _wkMon=new Date(); _wkMon.setHours(0,0,0,0);
-  _wkMon.setDate(_wkMon.getDate()-((_wkMon.getDay()===0)?6:_wkMon.getDay()-1));
-  var days7=[]; for(var i=0;i<7;i++){ var _wd=new Date(_wkMon); _wd.setDate(_wkMon.getDate()+i); days7.push(dayKey(_wd)); }
-  var tssByDay={}, timeByDay={}, actByDay={};
-  days7.forEach(function(k){ tssByDay[k]=0; timeByDay[k]=0; actByDay[k]=0; });
-  var weekTSS=0, weekSecs=0, weekActs=0;
-  rides.forEach(function(r){ if(!r||r.deleted||!r.date) return; var k=normDate(r.date); if(tssByDay[k]==null) return;
-    var t=parseFloat(r.tss)||0, sec=(r.movingSecs?parseFloat(r.movingSecs):(typeof parseDurToMin==='function'?parseDurToMin(r.duration)*60:0))||0;
-    tssByDay[k]+=t; timeByDay[k]+=sec; actByDay[k]+=1; weekTSS+=t; weekSecs+=sec; weekActs+=1;
-  });
-  weekTSS=Math.round(weekTSS);
+  // Routed through the shared window rather than kept as its own copy — this one was correct and
+  // the mobile one was not, and the only durable fix for that is there being one of them.
+  var _wl=weekLoadMonSun_(rides);
+  var days7=_wl.days, tssByDay=_wl.tssByDay, timeByDay=_wl.secsByDay, actByDay=_wl.actsByDay;
+  var weekTSS=_wl.tss, weekSecs=_wl.secs, weekActs=_wl.acts;
   var weekHM=(function(){var h=Math.floor(weekSecs/3600),m=Math.round((weekSecs%3600)/60);return h+'h '+(m<10?'0':'')+m+'m';})();
-  var tssSeries=days7.map(function(k){return tssByDay[k];});
-  var timeSeries=days7.map(function(k){return timeByDay[k];});
-  var actSeries=days7.map(function(k){return actByDay[k];});
+  var tssSeries=_wl.tssSeries, timeSeries=_wl.secsSeries, actSeries=_wl.actsSeries;
   // W/kg trend series (real).
   var wtr=(typeof wkgTrend_==='function')?wkgTrend_():{pts:[]};
   var wkgSeries=(wtr.pts||[]).map(function(p){return p.wkg;});
@@ -31927,6 +31969,81 @@ function getWeekStartDate(w){
 // from the actual weekly template rather than the (usually empty)
 // plan.weeks[k].wo data.
 
+// ---- the week number a header should actually show -------------------------------------------
+// getCurrentPlanWeek() counts weeks from the ACTIVE PLAN's planStart, which for the legacy default
+// plan is still 2026-06-08. On 2026-07-29 that reads "Week 8" — a real number belonging to a plan
+// nobody is following, while the athlete is in week 1 of a block that started 2026-07-24. It is
+// kept (the 17-week template screens genuinely index off it) but it is NOT what a calendar header
+// means by "week".
+//
+// Block week when today falls inside the training block; otherwise the calendar week OF THE MONTH,
+// which is the only other week number that means anything above a month grid.
+function _blockWeekOf_(dt){
+  var tb=(typeof st!=='undefined'&&st)?st.trainingBlock:null;
+  if(!tb||!tb.start) return 0;
+  var s=parseDayKey(String(tb.start).slice(0,10));
+  if(isNaN(s.getTime())) return 0;
+  var d=new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  if(d<s) return 0;
+  if(tb.end){
+    var e=parseDayKey(String(tb.end).slice(0,10));
+    if(!isNaN(e.getTime()) && d>e) return 0;            // block is over — not "block week 47"
+  }
+  return Math.floor((d-s)/(7*86400000))+1;
+}
+// Monday-anchored, matching the grid the header sits above.
+function _calWeekOfMonth_(dt){
+  var first=new Date(dt.getFullYear(), dt.getMonth(), 1);
+  var off=(first.getDay()===0)?6:(first.getDay()-1);
+  return Math.floor((dt.getDate()-1+off)/7)+1;
+}
+// The one string both calendar headers use, so they cannot disagree about what week it is.
+function calWeekLabel_(dt){
+  dt=dt||new Date();
+  var bw=_blockWeekOf_(dt);
+  if(bw>0) return 'Block week '+bw;
+  return 'Week '+_calWeekOfMonth_(dt)+' of '+_YVY_MONF[dt.getMonth()];
+}
+// ---- THE week window, Mon-Sun ------------------------------------------------------------------
+// One computation, because the two surfaces had drifted into two different definitions of "this
+// week" and only one of them was a week at all:
+//   desktop built a real Monday-anchored 7-day window off the ride library;
+//   mobile did pmcData.slice(-7) and summed p.tss — and fitnessSeries_ returns {d,date,ctl,atl,tsb}
+//   with NO tss field, so that sum was undefined||0 seven times over. The mobile Training Load
+//   card could only ever print 0 TSS, whatever the athlete rode. On 2026-07-29 it showed 0 against
+//   a real 52 from the Jul 28 VO2 ride.
+// Day keys are built from LOCAL parts: toISOString reads a local-midnight Date in UTC and lands on
+// the wrong day west of Greenwich, which would silently drop the ride at either end of the window.
+function _wkDayKey_(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function weekWindowMonSun_(now){
+  var mon=now?new Date(now.getFullYear(),now.getMonth(),now.getDate()):new Date();
+  mon.setHours(0,0,0,0);
+  mon.setDate(mon.getDate()-((mon.getDay()===0)?6:mon.getDay()-1));
+  var days=[]; for(var i=0;i<7;i++){ var d=new Date(mon); d.setDate(mon.getDate()+i); days.push(_wkDayKey_(d)); }
+  return { monday:mon, days:days };
+}
+// Sums the CURRENT Mon-Sun week off the ride library. Returns per-day maps as well, so a caller
+// that wants a sparkline over the week reads the same numbers as the headline.
+function weekLoadMonSun_(rides, now){
+  var w=weekWindowMonSun_(now);
+  var tssByDay={}, secsByDay={}, actsByDay={};
+  w.days.forEach(function(k){ tssByDay[k]=0; secsByDay[k]=0; actsByDay[k]=0; });
+  var tss=0, secs=0, acts=0;
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted || !r.date) return;
+    var k=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    if(tssByDay[k]==null) return;
+    var t=parseFloat(r.tss)||0;
+    var sec=(r.movingSecs?parseFloat(r.movingSecs):((typeof parseDurToMin==='function')?parseDurToMin(r.duration)*60:0))||0;
+    tssByDay[k]+=t; secsByDay[k]+=sec; actsByDay[k]+=1;
+    tss+=t; secs+=sec; acts+=1;
+  });
+  return { days:w.days, monday:w.monday, tss:Math.round(tss), secs:secs, acts:acts,
+           tssByDay:tssByDay, secsByDay:secsByDay, actsByDay:actsByDay,
+           tssSeries:w.days.map(function(k){ return tssByDay[k]; }),
+           secsSeries:w.days.map(function(k){ return secsByDay[k]; }),
+           actsSeries:w.days.map(function(k){ return actsByDay[k]; }) };
+}
 function getCurrentPlanWeek(){
   var plan = getActivePlan();
   var planStart = new Date(plan.planStart);
@@ -33165,7 +33282,7 @@ function renderMyFoods(container){
       addBtn.onclick=function(){
         if(addBtn.disabled) return;
         addBtn.disabled=true;
-        if(!nutrDate) nutrDate=getTodayKey();
+        nutDayGuard_();
         var nd=getNDay(nutrDate);
         nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
         sv();
@@ -33218,7 +33335,7 @@ function renderMyMeals(container){
       addAllBtn.onclick=function(){
         if(addAllBtn.disabled) return;
         addAllBtn.disabled=true;
-        if(!nutrDate) nutrDate=getTodayKey();
+        nutDayGuard_();
         var nd=getNDay(nutrDate);
         m.foods.forEach(function(f){
           nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(f.n),cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
@@ -33238,7 +33355,7 @@ function renderMyMeals(container){
   // Save current meal as a My Meal
   var amb=container.querySelector('#add-mymeal-btn');
   if(amb) amb.onclick=function(){
-    if(!nutrDate) nutrDate=getTodayKey();
+    nutDayGuard_();
     var nd=getNDay(nutrDate);
     var foods=nd.meals[curMeal]||[];
     if(foods.length===0){toast('No foods logged in '+curMeal+' yet');return;}
@@ -37579,7 +37696,7 @@ function showCalendarTab(){
   h+='  <div style="display:flex;align-items:center;justify-content:space-between">';
   h+='    <div style="display:flex;align-items:center;gap:14px">';
   h+='      <button class="cal-wk-nav" data-dir="-1" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8249;</button>';
-  h+='      <div style="font-size:15px;font-weight:600;color:var(--t1)">Week '+weekNum+' &middot; '+monthNames[now.getMonth()]+' '+now.getFullYear()+'</div>';
+  h+='      <div style="font-size:15px;font-weight:600;color:var(--t1)">'+((typeof calWeekLabel_==='function')?calWeekLabel_(now):('Week '+weekNum))+' &middot; '+monthNames[now.getMonth()]+' '+now.getFullYear()+'</div>';
   h+='      <button class="cal-wk-nav" data-dir="1" style="background:none;border:none;color:var(--t2);font-size:22px;cursor:pointer;padding:0;line-height:1">&#8250;</button>';
   h+='    </div>';
   h+='    <div style="display:flex;align-items:center;gap:8px">';
@@ -37825,9 +37942,13 @@ function showCalendarTab(){
   h+='    </div>';
   h+='  </div>';
 
-  // Training Load — real TSS/CTL
-  var weekTSS=0; pmcData.slice(-7).forEach(function(p){ weekTSS+=(p.tss||0); });
-  weekTSS=Math.round(weekTSS)||0;
+  // Training Load — real TSS/CTL.
+  // Was pmcData.slice(-7) summing p.tss, and fitnessSeries_ carries no tss field at all, so this
+  // printed 0 unconditionally. Now the SAME Mon-Sun window the desktop card uses, off the rides.
+  var _wkLoad=(typeof weekLoadMonSun_==='function')
+    ? weekLoadMonSun_((typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]), now)
+    : {tss:0, days:[]};
+  var weekTSS=_wkLoad.tss||0;
   // No configurable weekly-TSS target exists, so we don't invent one (was a
   // hardcoded 650 with a percentage against it, plus a fake ||580 fallback).
   h+='  <div style="background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.05)">';
