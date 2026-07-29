@@ -34092,6 +34092,7 @@ function showMoreSheet(){
     {n:'Sync Gear',     i:'M18 20V10a4 4 0 0 0-4-4h-4a4 4 0 0 0-4 4v10 M2 20h20 M5 14h2 M17 14h2',                               fn:'syncStravaGear',   c:'#0F6E56'},
     {n:'Full Resync',   i:'M1 4v6h6M23 20v-6h-6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',            fn:'stravaFullResync', c:'#4D9FFF'},
     {n:'Backfill Jan 1-19 2026', i:'M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M12 14v4 M10 16h4', fn:'backfillJan2026_', c:'#FFB938'},
+    {n:'Segment History', i:'M3 3v18h18 M7 15l4-4 3 3 5-6', fn:'segBackfillMobile_', c:'#22d3ee'},
     {n:'Restore Backup', i:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',                                     fn:'restoreFromBackup_', c:'#22c55e'},
     {n:'Merge Dupes',    i:'M8 6h10 M8 12h10 M8 18h10 M3 6h.01 M3 12h.01 M3 18h.01 M18 3l3 3-3 3',                                fn:'mergeCrossSourceDupes_', c:'#f59e0b'},
     {n:'Reconnect',     i:'M9 17H7A5 5 0 0 1 7 7h2 M15 7h2a5 5 0 0 1 0 10h-2 M8 12h8',                                          fn:'reconnectStrava',  c:'#FC4C02'},
@@ -34385,14 +34386,47 @@ function scanSegmentBackfill_(){
   try{ console.log('[segBF][scan] '+JSON.stringify(out)); }catch(e){}
   return out;
 }
-function _segBfStatus_(txt){
-  try{ var el=document.getElementById('segbf-status'); if(el) el.textContent=txt; }catch(e){}
+function segBackfillMobile_(){
+  try{
+    var b=_segBfState_();
+    if(b && b.running){
+      if(typeof uiConfirm==='function'){
+        uiConfirm('The segment backfill is running. Stop it? Progress is saved and you can resume later.',
+          {title:'Segment backfill', okText:'Stop'}).then(function(ok){ if(ok) stopSegmentBackfill_(); });
+      } else { stopSegmentBackfill_(); }
+      return;
+    }
+    var scan=scanSegmentBackfill_();
+    if(!scan || !scan.toFetch){
+      if(typeof uiAlert==='function') uiAlert('Nothing left to fetch. '+scan.alreadyDone+' of '+scan.rides+' rides already done.',
+        {title:'Segment backfill'});
+      else if(typeof toast==='function') toast('Segment backfill: nothing left to fetch');
+      return;
+    }
+    var msg=scan.toFetch+' of '+scan.rides+' rides still to fetch'
+      +(scan.alreadyDone?(' ('+scan.alreadyDone+' already done)'):'')+'.'
+      +' About '+scan.windows+' rate-limit window'+(scan.windows===1?'':'s')+', roughly '+scan.minutes+' minutes.'
+      +' Covers '+(scan.oldest||'?')+' to '+(scan.newest||'?')+'.'
+      +' It keeps going in the background while this stays open, and you can stop and resume any time.';
+    if(typeof uiConfirm==='function'){
+      uiConfirm(msg, {title:'Backfill segment effort history', okText:'Run backfill'})
+        .then(function(ok){ if(ok) runSegmentBackfill_(); });
+    } else if(typeof confirm==='function' && confirm(msg)) runSegmentBackfill_();
+  }catch(e){ try{ if(typeof toast==='function') toast('Segment backfill failed to start'); }catch(_e){}
+             try{ console.log('[segBF] mobile entry error '+(e&&e.message)); }catch(_e){} }
+}
+function _segBfStatus_(txt, loud){
+  var shown=false;
+  try{ var el=document.getElementById('segbf-status'); if(el){ el.textContent=txt; shown=true; } }catch(e){}
   try{ console.log('[segBF] '+txt); }catch(e){}
+  // Without the desktop card there is nowhere for progress to appear, and a 15-minute pause with no
+  // feedback reads as a hang. Only the milestones are loud; the per-ride line is not.
+  if(loud && !shown){ try{ if(typeof toast==='function') toast(txt); }catch(e){} }
 }
 function stopSegmentBackfill_(){
   var b=_segBfState_(); if(!b) return;
   b.cancel=true;
-  _segBfStatus_('Stopping after the current ride. Progress is saved; run it again to resume.');
+  _segBfStatus_('Stopping after the current ride. Progress is saved; run it again to resume.', true);
 }
 function runSegmentBackfill_(scanOnly, cb){
   cb=cb||function(){};
@@ -34430,7 +34464,7 @@ function runSegmentBackfill_(scanOnly, cb){
     if(b.winCount>=SEG_BF_PER_WINDOW){
       var wait=Math.max(1000, SEG_BF_WINDOW_MS-(now-b.winStart)+1500);
       _segBfStatus_('Rate limit reached. Waiting '+Math.ceil(wait/60000)+' min, then continuing. '
-        +i+' of '+list.length+' done this run ('+b.added+' efforts so far). Safe to leave open.');
+        +i+' of '+list.length+' done this run ('+b.added+' efforts so far). Safe to leave open.', true);
       try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
       setTimeout(function(){ b.winStart=Date.now(); b.winCount=0; step(); }, wait);
       return;
@@ -34472,7 +34506,7 @@ function runSegmentBackfill_(scanOnly, cb){
       setTimeout(step, SEG_BF_GAP);
     }, true, true);                                   // force (need ids), quiet (no per-ride cache/push)
   };
-  _segBfStatus_('Starting: '+list.length+' ride(s) to fetch, about '+scan.minutes+' minutes.');
+  _segBfStatus_('Starting: '+list.length+' ride(s) to fetch, about '+scan.minutes+' minutes.', true);
   step();
   return null;
 }
@@ -38923,7 +38957,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-segment-effort-backfill';
+window.__BUILD__ = '2026-07-28-segment-backfill-mobile';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
