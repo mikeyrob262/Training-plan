@@ -26813,7 +26813,7 @@ function openDesktopRideDetail(idx, _noFetch){
   ensureBikes();
   // Resolve THIS ride's bike via the shared resolver (was defaulting to the
   // first bike for any unassigned ride). null => no bike assigned.
-  var bike=resolveRideBike(r);
+  var bike=_isRideActivity_(r)?resolveRideBike(r):null;
   // Compute this bike's mileage ONCE — both equipment cards below used it, each
   // walking all rides + resolving every ride again. (was a redundant full pass)
   var _bikeMi = bike ? bikeMileageStats_(bike).totalMi.toLocaleString() : '';
@@ -27053,6 +27053,14 @@ function openDesktopRideDetail(idx, _noFetch){
     // right here. Writes st.bikeAssignments[rideKey] (the shared manual-
     // assignment mechanism), then re-renders so the cell reflects the choice.
     var _bikeSlot=document.getElementById('rd-bike-assign-slot');
+    if(_bikeSlot && !_isRideActivity_(r)){
+      // Not a ride: no bike picker, and say so rather than leaving an empty cell that reads as
+      // "unassigned" and invites assigning one.
+      _bikeSlot.innerHTML='<div style="font-size:11px;color:#5b6678;line-height:1.4">'
+        +aiEsc_(String((typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type))||'Activity'))
+        +' &mdash; no bike</div>';
+      _bikeSlot=null;
+    }
     if(_bikeSlot){
       var _sel=document.createElement('select');
       _sel.style.cssText='width:100%;padding:6px 8px;background:#0d0f14;color:#e2e8f0;border:1px solid #1e2130;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
@@ -28573,6 +28581,16 @@ function rideIsIndoor(r){
   if(!r) return false;
   return r.trainer===true || /virtual/i.test(String(r.sportType||r.type||''));
 }
+// Whether an activity is actually a RIDE. st.rides carries every sport, so the sport has to be
+// read before anything bike-shaped is attached to it. Untyped legacy records stay rides, which is
+// what they have always been treated as; only an explicit non-cycling sport disqualifies.
+function _isRideActivity_(r){
+  if(!r) return false;
+  var sp=String((typeof rideSport_==='function'?rideSport_(r):((r.sportType||r.type)||'')) || '').toLowerCase();
+  if(!sp) return true;
+  if(/run|walk|hike|swim|weight|strength|mobility|yoga|workout|elliptical|row|ski|skate/.test(sp)) return false;
+  return true;
+}
 function resolveRideBike(r){
   if(!r) return null;
   // Only real (non-deleted) bikes can own a ride.
@@ -28863,7 +28881,7 @@ function renderRideEquipmentTab(body, r, idx){
   // Resolve the bike via the shared resolver (gear id / Strava gear map / gear
   // name / manual st.bikeAssignments entry), so the tab and the Gear bulk-
   // assign tool stay in lockstep.
-  var bike = resolveRideBike(r);
+  var bike = _isRideActivity_(r)?resolveRideBike(r):null;
 
   // Shoes: resolved by the same gear fields as bikes. Strava rides carry a
   // gear_id (mapped to a name via st.stravaGearMap); ICU CSV imports carry
@@ -38999,7 +39017,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-sessport-hoist';
+window.__BUILD__ = '2026-07-28-activity-type-respect';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
