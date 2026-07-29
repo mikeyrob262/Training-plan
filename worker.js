@@ -24968,6 +24968,28 @@ function dsShowAnalytics(){
   setTimeout(drawCharts,100);
 }
 
+// Which sport a PLANNED session actually is. The migrated plan typed every run as a ride -- 11
+// easyRun and 4 run10k sessions carry type:'ride', and no session in the plan carries type:'run'
+// at all -- so the icon pickers, which all read type first, drew a bike for a scheduled easy run.
+// An explicit run signal in the intent or the name therefore has to outrank the stored type.
+// Fixing the icon here rather than rewriting the stored type keeps this to a rendering change;
+// the underlying type is still wrong and worth repairing separately.
+function _sessSport_(x){
+  if(!x) return 'Ride';
+  var ty=String(x.type||'').toLowerCase(), it=String(x.intent||'').toLowerCase(), nm=String(x.name||'').toLowerCase();
+  if(ty==='rest') return 'rest';
+  if(ty==='strength') return 'Strength';
+  if(ty==='mobility') return 'mobility';
+  if(ty==='run') return 'Run';
+  if(it==='easyrun' || it==='run10k' || it==='tenk') return 'Run';
+  // The block's milestone attempts are typed 'attempt', which no icon set knows. Three of them are
+  // rides and one is the 10k, handled just above.
+  if(it==='chalet' || it==='alpe' || it==='ventop') return 'Ride';
+  if(/(^|[^a-z])run([^a-z]|$)|jog|(^|[^a-z])10k([^a-z]|$)|(^|[^a-z])5k([^a-z]|$)|marathon/.test(nm)) return 'Run';
+  if(ty==='ride') return 'Ride';
+  return x.type || x.name || 'Ride';
+}
+
 function dsShowCalendar(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -25004,28 +25026,7 @@ function dsShowCalendar(){
     return 'ride';
   }
   function calColor(r){ return sportColor_(rideSport_(r)); }
-  // Which sport a PLANNED session actually is. The migrated plan typed every run as a ride -- 11
-// easyRun and 4 run10k sessions carry type:'ride', and no session in the plan carries type:'run'
-// at all -- so the icon pickers, which all read type first, drew a bike for a scheduled easy run.
-// An explicit run signal in the intent or the name therefore has to outrank the stored type.
-// Fixing the icon here rather than rewriting the stored type keeps this to a rendering change;
-// the underlying type is still wrong and worth repairing separately.
-function _sessSport_(x){
-  if(!x) return 'Ride';
-  var ty=String(x.type||'').toLowerCase(), it=String(x.intent||'').toLowerCase(), nm=String(x.name||'').toLowerCase();
-  if(ty==='rest') return 'rest';
-  if(ty==='strength') return 'Strength';
-  if(ty==='mobility') return 'mobility';
-  if(ty==='run') return 'Run';
-  if(it==='easyrun' || it==='run10k' || it==='tenk') return 'Run';
-  // The block's milestone attempts are typed 'attempt', which no icon set knows. Three of them are
-  // rides and one is the 10k, handled just above.
-  if(it==='chalet' || it==='alpe' || it==='ventop') return 'Ride';
-  if(/(^|[^a-z])run([^a-z]|$)|jog|(^|[^a-z])10k([^a-z]|$)|(^|[^a-z])5k([^a-z]|$)|marathon/.test(nm)) return 'Run';
-  if(ty==='ride') return 'Ride';
-  return x.type || x.name || 'Ride';
-}
-function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
+  function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
   function fmtHMS(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h>0?(h+':'+pad2(m)+':'+pad2(s)):(m+':'+pad2(s)); }
   function fmtFull(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h+':'+pad2(m)+':'+pad2(s); }
   function fmtHM(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.round((secs%3600)/60); return h>0?(h+'h '+pad2(m)+'m'):(m+'m'); }
@@ -38998,7 +38999,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-week-tile-icon-fiber';
+window.__BUILD__ = '2026-07-28-sessport-hoist';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
