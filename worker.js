@@ -17127,6 +17127,52 @@ function _pbRoll7_(list, endFrom){
   }
   return best;
 }
+// ---- progression -----------------------------------------------------------------------------
+// The best this metric reached in each QUARTER of the era. It replaces the progress bar the cards
+// used to carry — recent-best as a percentage of the record — which is one ratio and cannot say
+// the thing a record card is read for: are you closing on it, or drifting away from it? Two cards
+// showing 62% look identical when one has been climbing for a year and the other peaked in 2024.
+//
+// A quarter is the coarsest bucket that still shows a trajectory across a three-year era. Monthly
+// buckets on a rider who logs a long ride every few weeks turn scheduling noise into a shape.
+// EMPTY QUARTERS STAY NULL and break the line: a quarter with no qualifying ride is not a quarter
+// in which the athlete achieved zero, and joining across it would draw a collapse that never
+// happened.
+function _pbQKey_(t){ return t.getFullYear()*4 + Math.floor(t.getMonth()/3); }
+function _pbQLab_(k){ return 'Q'+((k%4)+1)+' '+Math.floor(k/4); }
+function _pbQFill_(by, lo, hi){
+  if(lo==null) return [];
+  var out=[];
+  for(var k=lo;k<=hi;k++) out.push({ v:(by[k]!=null?by[k]:null), lab:_pbQLab_(k) });
+  return out;
+}
+function _pbProg_(list, valFn, okFn){
+  var by={}, lo=null, hi=null;
+  (list||[]).forEach(function(x){
+    if(okFn && !okFn(x)) return;
+    var v=valFn(x); if(!(v>0)) return;
+    var k=_pbQKey_(x.t);
+    if(by[k]==null || v>by[k]) by[k]=v;
+    if(lo==null||k<lo) lo=k;
+    if(hi==null||k>hi) hi=k;
+  });
+  return _pbQFill_(by, lo, hi);
+}
+// The week record is an aggregate, so its progression is the best rolling 7-day total ENDING in
+// each quarter — the same window _pbRoll7_ scores, bucketed rather than maximised once.
+function _pbWeekProg_(list){
+  var by={}, lo=null, hi=null;
+  for(var i=0;i<list.length;i++){
+    var end=list[i].t.getTime(), s=0;
+    for(var j=i;j>=0;j--){ if((end-list[j].t.getTime())/86400000>6) break; s+=list[j].mi; }
+    if(!(s>0)) continue;
+    var k=_pbQKey_(list[i].t);
+    if(by[k]==null || s>by[k]) by[k]=s;
+    if(lo==null||k<lo) lo=k;
+    if(hi==null||k>hi) hi=k;
+  }
+  return _pbQFill_(by, lo, hi);
+}
 // Price of a gap, in rides. Returns '' wherever a cost line would be invention rather than
 // information:
 //   - held records have no gap to price (the card already states the margin over your next-best);
@@ -17202,7 +17248,8 @@ function _pbCompute_(rides, now, rate, med){
       pct:(recV>0)?Math.max(0,Math.min(100,Math.round(formV/recV*100))):0,
       lead:(held&&runner)?(recV-sp.val(runner)):null,
       leadStr:(held&&runner)?sp.fmt(recV-sp.val(runner)):'',
-      runnerDate:(held&&runner)?runner.date:'' });
+      runnerDate:(held&&runner)?runner.date:'',
+      prog:_pbProg_(all, sp.val, sp.ok), fmt:sp.fmt });
   });
 
   // Biggest week is an aggregate, not a per-ride best, but it takes the identical gap treatment.
@@ -17215,7 +17262,8 @@ function _pbCompute_(rides, now, rate, med){
       hasForm:!!wForm, formVal:wForm?wForm.v:0, formStr:wForm?_pbFmtMi_(wForm.v):'', formDate:wForm?wForm.date:'',
       held:wHeld, gap:wHeld?0:(wAll.v-(wForm?wForm.v:0)), gapStr:wHeld?'':_pbFmtMi_(wAll.v-(wForm?wForm.v:0)),
       pct:(wAll.v>0)?Math.max(0,Math.min(100,Math.round((wForm?wForm.v:0)/wAll.v*100))):0,
-      lead:null, leadStr:'', runnerDate:'' });
+      lead:null, leadStr:'', runnerDate:'',
+      prog:_pbWeekProg_(all), fmt:_pbFmtMi_ });
   }
 
   // What the gap COSTS, in terms you can put on a calendar. Not what it is likely to happen:
@@ -17375,6 +17423,110 @@ var _YVY_TOP='#FC4C02', _YVY_TOP_DIM='#c23a00';
 var _YVY_GOOD='#60a5fa', _YVY_GOOD_DIM='#3b82f6';
 var _YVY_BASE='#64748b', _YVY_BASE_DIM='#2a3341';
 var _YVY_DOWN='#ff5c5c';
+
+// ==================== Growth charts — the app-wide rule ====================
+// ANYWHERE a visualisation implies progress, comparison over time, or trajectory, it is drawn as
+// a LINE. A horizontal pill bar states one magnitude and stops there: it cannot say whether you
+// are accelerating, plateauing or falling off, which is the only question those surfaces are ever
+// actually asked. Two things compared over time get overlaid cumulative lines showing how each
+// got there; one metric's history gets a sparkline.
+//
+// Pill bars remain CORRECT for categorical breakdowns with no time dimension — zone distribution
+// inside a single ride, the fuel split of a single day. The test is whether the reader could ask
+// "is this getting better?" If they could, it is a line.
+//
+// PALETTE. Every chart gets its own identity rather than repeating the page's status colours, and
+// every set below was run through the six checks (lightness band, chroma floor, all-pairs CVD
+// separation, normal-vision floor, contrast) against the #0e1117 card surface:
+//   Month Race      #FC4C02 #64748b #9333ea   worst normal 19.0 · CVD 9.1
+//   Year over Year  #0891b2 #8b5cf6 #d97706   worst normal 21.1 · CVD 10.2
+//   Month factors   #ec4899 #3b82f6 #d97706   worst normal 20.1 · CVD 6.3
+// The factor set sits in the 6-8 CVD band, which is legal ONLY with secondary encoding — it has
+// it: those three are small multiples, each in its own titled panel, never overlaid on one axis.
+// DO NOT edit a hex here without re-running that check. Both colour defects this work replaced
+// looked fine to the author and failed for a reader.
+//
+// STATUS colours are not categorical and are never spent as a series identity. Personal Bests
+// keeps orange-for-held / blue-for-chasing because there the colour means state, not which line.
+var _GC_YOY=['#0891b2','#8b5cf6','#d97706'];
+var _GC_FACTOR=['#ec4899','#3b82f6','#d97706'];
+var _GC_HELD='#FC4C02', _GC_CHASE='#3b82f6';
+// Sparkline: one metric's history in the space of a label. No axes, no grid, no number on any
+// point — whatever card this sits in already carries the current value, so the line's only job is
+// direction. A single series, so no legend either: the card heading names it.
+//
+// pts is oldest-first and MAY CONTAIN NULLS. A null is a period with no qualifying activity, and
+// it breaks the line rather than being drawn as zero — a quarter you did not ride is not a
+// quarter you rode nothing in, and joining across it would draw a decline that never happened.
+function _gcSpark_(pts, col, opts){
+  opts=opts||{};
+  var W=opts.W||160, H=opts.H||36, P=3, iw=W-P*2, ih=H-P*2;
+  var vals=(pts||[]).map(function(p){ return (p&&p.v!=null&&isFinite(p.v))?+p.v:null; });
+  var real=vals.filter(function(v){ return v!=null; });
+  if(real.length<2) return '';                     // one point is not a trajectory
+  var lo=Math.min.apply(null,real), hi=Math.max.apply(null,real);
+  // A flat series would divide by zero and, worse, would be drawn as a line pinned to the floor.
+  // Centre it instead: level IS the reading, and it should look level.
+  var flat=(hi-lo)<1e-9;
+  var n=vals.length;
+  function X(i){ return P + (n>1 ? i/(n-1)*iw : iw/2); }
+  function Y(v){ return flat ? (P+ih/2) : (P + ih - (v-lo)/(hi-lo)*ih); }
+  // Segments break at nulls. A run of ONE value cannot be a line, but dropping it would silently
+  // delete a real measurement from the chart — an isolated quarter between two empty ones is
+  // exactly the case a record card needs to show — so it is kept as a dot instead.
+  var segs=[], lone=[], cur=[];
+  var close=function(){ if(cur.length>1) segs.push(cur); else if(cur.length===1) lone.push(cur[0]); cur=[]; };
+  vals.forEach(function(v,i){
+    if(v==null){ close(); return; }
+    cur.push(X(i).toFixed(1)+' '+Y(v).toFixed(1));
+  });
+  close();
+  var path=segs.map(function(s){ return 'M'+s.join('L'); }).join(' ');
+  var loneDots=lone.map(function(p){ var xy=p.split(' ');
+    return '<circle cx="'+xy[0]+'" cy="'+xy[1]+'" r="2" fill="'+col+'"/>'; }).join('');
+  // Area wash under the line only where the line is continuous, at the 10% the mark spec allows.
+  var wash='';
+  if(opts.fill!==false && segs.length===1){
+    var f=segs[0];
+    wash='<path d="M'+f.join('L')+'L'+f[f.length-1].split(' ')[0]+' '+(H-P)+'L'+f[0].split(' ')[0]+' '+(H-P)+'Z" fill="'+col+'" opacity=".12"/>';
+  }
+  var dots='';
+  var lastI=-1; for(var i=n-1;i>=0;i--){ if(vals[i]!=null){ lastI=i; break; } }
+  if(lastI>=0) dots+='<circle cx="'+X(lastI).toFixed(1)+'" cy="'+Y(vals[lastI]).toFixed(1)+'" r="2.6" fill="'+col+'"/>';
+  // The peak gets a ring, because on these cards the peak IS the record being chased and the
+  // reader's eye should find it without reading a label.
+  if(opts.markPeak!==false && !flat){
+    var pi=vals.indexOf(hi);
+    if(pi>=0 && pi!==lastI) dots+='<circle cx="'+X(pi).toFixed(1)+'" cy="'+Y(hi).toFixed(1)+'" r="2.8" fill="none" stroke="'+col+'" stroke-width="1.5"/>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+(opts.aria||'trend')
+    +'" style="width:100%;height:'+H+'px;display:block;overflow:visible">'
+    +wash+'<path d="'+path+'" fill="none" stroke="'+col+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'
+    +' vector-effect="non-scaling-stroke"/>'+loneDots+dots+'</svg>';
+}
+// The label strip a sparkline needs to be readable: first period, last period, and what the line
+// is measured in. Kept OUT of the SVG so preserveAspectRatio="none" cannot stretch the type.
+// ---- year scale ----------------------------------------------------------
+// The era floor for anything drawn per YEAR. Pre-2024 months do not clear the ride count this page
+// ranks on, and the year chart does not get a looser rule than the hero. Inherited unchanged from
+// the bar chart this replaced, along with its reason.
+var _YOY_ERA_START=2024;
+var _YOY_CUMD=[0,31,59,90,120,151,181,212,243,273,304,334];
+function _yoyLeap_(y){ return (((y%4===0)&&(y%100!==0))||(y%400===0)); }
+function _yoyDaysInYear_(y){ return _yoyLeap_(y)?366:365; }
+// Day of year from Y-M-D INTEGERS, not from a Date. Every date in this library is a local calendar
+// day (both importers split on 'T'), and routing it through Date parsing is how a ride lands on the
+// wrong day in a timezone west of UTC — the one bug class this page cannot afford at day
+// resolution, because it would shift a whole year's curve by one.
+function _yoyDayOfYear_(y, mo, d){
+  if(!(mo>=1 && mo<=12) || !(d>=1 && d<=31)) return 0;
+  return _YOY_CUMD[mo-1] + d + ((_yoyLeap_(y) && mo>2) ? 1 : 0);
+}
+function _gcSparkFoot_(a, b){
+  return '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:3px">'
+    +'<span style="font-size:9.5px;color:#5b6678">'+a+'</span>'
+    +'<span style="font-size:9.5px;color:#5b6678">'+b+'</span></div>';
+}
 // THE tier rule. One place decides "genuine best", so the cards, the bars, the rank strip and the
 // timeline cannot disagree about which months earn orange. Top decile (always at least the #1
 // month), then the upper half, then baseline.
@@ -17564,22 +17716,87 @@ function _alTimeline_(asc, topSet, peakYM, selYM){
 // One hue per factor, so the three read as three things at a glance rather than as one bar drawn
 // three times. The hue identifies the factor and carries no ranking — length is the only quantity
 // here, and a reader should not have to check the label to know which bar is which.
-function _alFactors_(r, mx){
-  function bar(label, val, frac, note, col){
-    var w=Math.max(2, Math.min(100, Math.round((frac||0)*100)));
-    return '<div style="margin-bottom:12px">'
-      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px">'
-      +'<span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#cbd5e1">'
-      +'<span style="width:7px;height:7px;border-radius:2px;background:'+col+';flex:0 0 auto"></span>'+label+'</span>'
-      +'<span style="font-size:12.5px;font-weight:800;color:#f1f5f9">'+val+'</span></div>'
-      +'<div style="height:6px;border-radius:3px;background:#141922;overflow:hidden">'
-      +'<div style="height:100%;width:'+w+'%;background:'+col+';border-radius:3px"></div></div>'
+// SMALL MULTIPLES, one per factor, each a sparkline of that factor MONTH BY MONTH across every
+// scored month — not a bar showing the selected month's value against the all-time max.
+//
+// The bars answered "how close to your ceiling was this month", which is a single number the value
+// beside the label already states. What they could not answer is the question a reader of this
+// panel is actually holding: is this month's volume part of a climb, a plateau or a slide? Only
+// the run of months can say, so the run of months is what is drawn, with the selected month marked
+// on each line so the panel's subject stays locatable.
+//
+// Three panels, three hues, never overlaid on one axis — the three factors do not share a unit
+// (miles, weeks, feet) and putting them on one scale would be the dual-axis lie in disguise.
+var _AL_FACT=[
+  { key:'vol',  label:'Volume',      col:_GC_FACTOR[0], val:function(r){ return r.totalMi; },
+    fmt:function(r){ return r.totalMi.toLocaleString()+' mi'; },
+    note:function(r){ return r.acts+' activities'; } },
+  { key:'cons', label:'Consistency', col:_GC_FACTOR[1],
+    val:function(r){ return r.weeksInMonth?(r.activeWeeks/r.weeksInMonth*100):null; },
+    fmt:function(r){ return r.activeWeeks+' of '+r.weeksInMonth+' weeks'; },
+    note:function(r){ return 'weeks with at least one activity'; } },
+  { key:'clm',  label:'Climbing',    col:_GC_FACTOR[2], val:function(r){ return r.elev; },
+    fmt:function(r){ return r.elev.toLocaleString()+' ft'; },
+    note:function(r){ return ''; } }
+];
+// The window is CENTRED ON THE MONTH THE PANEL IS SHOWING, and capped. This athlete has 164
+// scored months; drawing all of them in a 200px sparkline is 1.2px per point, which is not a
+// trend line, it is a texture — the first render of this was unreadable for exactly that reason.
+// Centring rather than taking the most recent N is what keeps the selected month always on the
+// chart: this panel exists to explain ONE month, so the neighbourhood it sits in is the honest
+// window, and the caption states the range so a reader is never guessing what they are looking at.
+var _AL_FACT_WIN=36;
+function _alFactorWindow_(asc, ym){
+  var n=asc.length;
+  if(n<=_AL_FACT_WIN) return { list:asc, idx:_alIndexOfYM_(asc, ym) };
+  var i=_alIndexOfYM_(asc, ym);
+  if(i<0) i=n-1;
+  var half=Math.floor(_AL_FACT_WIN/2);
+  var lo=Math.max(0, Math.min(n-_AL_FACT_WIN, i-half));
+  return { list:asc.slice(lo, lo+_AL_FACT_WIN), idx:i-lo };
+}
+function _alIndexOfYM_(list, ym){
+  for(var i=0;i<list.length;i++) if(list[i].ym===ym) return i;
+  return -1;
+}
+// asc = every scored month, oldest first. r = the month the panel is showing.
+function _alFactors_(r, mx, asc){
+  asc=asc||[];
+  var win=_alFactorWindow_(asc, r.ym);
+  var list=win.list;
+  // A trend needs a run of months. Below that the sparkline would be a line through two dots
+  // pretending to be a trajectory, so the panel falls back to stating the value alone.
+  var trend=(list.length>=6);
+  var cells=_AL_FACT.map(function(f){
+    var spark='', foot='';
+    if(trend){
+      var pts=list.map(function(m){ var v=f.val(m); return { v:(v==null?null:v) }; });
+      spark=_gcSpark_(pts, f.col, { aria:f.label+' by month', H:38, fill:false });
+      if(spark) foot=_gcSparkFoot_(_alFmtYM_(list[0].ym), _alFmtYM_(list[list.length-1].ym));
+      // Where the panel's month sits on that line. Without it the reader cannot tell whether the
+      // month they selected is the peak, the dip, or somewhere unremarkable.
+      if(spark && win.idx>=0){
+        var pct=(list.length>1)?(win.idx/(list.length-1)*100):50;
+        spark='<div style="position:relative">'+spark
+          +'<div style="position:absolute;left:'+pct.toFixed(2)+'%;top:0;bottom:0;width:0;border-left:1.5px dashed #f1f5f9;opacity:.8;pointer-events:none"></div></div>';
+      }
+    }
+    var note=f.note(r);
+    return '<div style="flex:1;min-width:180px">'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
+      +'<span style="width:7px;height:7px;border-radius:2px;background:'+f.col+';flex:0 0 auto"></span>'
+      +'<span style="font-size:12px;font-weight:700;color:#cbd5e1">'+f.label+'</span></div>'
+      +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em;margin-bottom:5px">'+f.fmt(r)+'</div>'
+      +spark+foot
       +(note?('<div style="font-size:10px;color:#5b6678;margin-top:3px">'+note+'</div>'):'')
       +'</div>';
-  }
-  return bar('Volume', r.totalMi.toLocaleString()+' mi', mx.mi?(r.totalMi/mx.mi):0, r.acts+' activities', _AL_G)
-    + bar('Consistency', r.activeWeeks+' of '+r.weeksInMonth+' weeks', r.weeksInMonth?(r.activeWeeks/r.weeksInMonth):0, 'weeks with at least one activity', _AL_TEAL)
-    + bar('Climbing', r.elev.toLocaleString()+' ft', mx.elev?(r.elev/mx.elev):0, '', _AL_AMBER);
+  }).join('');
+  var cap=trend
+    ? ('<div style="font-size:10px;color:#5b6678;margin-top:9px;line-height:1.5">Each line is that factor month by month across the '+list.length+' scored months around '+_alFmtYM_(r.ym)
+       +(asc.length>list.length?(' &mdash; a window on your '+asc.length+', so the shape stays readable'):'')
+       +'. The pale mark is the month shown above. Each line is scaled to its own range, so the three say direction, not size against each other.</div>')
+    : '';
+  return '<div style="display:flex;flex-wrap:wrap;gap:18px">'+cells+'</div>'+cap;
 }
 // The scoped-months board's era anchor. A MONTH boundary, not the year-scale _AM_ERA_START (2024)
 // the Momentum chart uses: this board ranks months, so Oct 2023 — where the ride log first becomes
@@ -17707,10 +17924,10 @@ function _alSection_(){
     ? ' <span onclick="alSelectMonth_(&#39;'+selYM+'&#39;)" style="color:'+_AL_G+';cursor:pointer;font-weight:700">&middot; show your best</span>'
     : '';
   var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
-    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month'+(panelRank===1?'s':'')+' great?</div>'
+    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month great?</div>'
     +'<div style="font-size:11.5px;color:#94a3b8;margin-bottom:11px">'+panelHdr+resetLink+'</div>'
-    +_alFactors_(panelRow, mx)
-    +'<div style="font-size:10px;color:#5b6678;margin-top:-2px">Bars are scaled against your own best scored month on each factor.</div></div>';
+    +_alFactors_(panelRow, mx, asc)
+    +'</div>';
 
   var foot='Months are scored against your own history <b style="color:#94a3b8">within each sport</b>, then averaged &mdash; '
     +'so a strong run month and a strong ride month are comparable even though the miles are not. '
@@ -17784,6 +18001,27 @@ function _yvyVM_(rides, now, sport){
   // being three different definitions of cumulative.
   var daysInBest=bestMonthYM?_yvyDaysInYM_(bestMonthYM):0;
   var bestCum=bestMonthYM?cum(rides.filter(function(r){ return _yvyYM_(r)===bestMonthYM; }), daysInBest):[];
+  // Day-of-year cumulative per year, for the year-over-year race. Same construction as the month
+  // curves — bucket by day, then run the total forward — so a year here and a month there cannot
+  // be two different definitions of cumulative. The current year is cut at today; completed years
+  // run their own full length, which is the same partial-vs-complete rule the month chart draws.
+  var yoyBy={};
+  rides.forEach(function(r){
+    var s=String((r&&r.date)||'').slice(0,10); if(s.length!==10) return;
+    var ry=+s.slice(0,4), rm=+s.slice(5,7), rd=+s.slice(8,10);
+    if(!(ry>=_YOY_ERA_START && ry<=y)) return;
+    var doy=_yoyDayOfYear_(ry, rm, rd); if(!doy) return;
+    (yoyBy[ry]=yoyBy[ry]||{})[doy]=(yoyBy[ry][doy]||0)+_yvyMi_(r);
+  });
+  var yoyElapsed=_yoyDayOfYear_(y, m+1, domNow) || 1;
+  var yoy=[];
+  for(var _yy=_YOY_ERA_START; _yy<=y; _yy++){
+    var _dy=_yoyDaysInYear_(_yy), _lim=(_yy===y)?Math.min(yoyElapsed,_dy):_dy;
+    var _by=yoyBy[_yy]||{}, _run=0, _arr=[];
+    for(var _d=1; _d<=_lim; _d++){ _run+=_by[_d]||0; _arr.push(Math.round(_run*10)/10); }
+    // A year with no rides at all is not drawn as a flat line at zero — it is not in the library.
+    if(_arr.length && _arr[_arr.length-1]>0) yoy.push({ y:_yy, pts:_arr, mi:_arr[_arr.length-1], partial:(_yy===y), days:_dy });
+  }
 
   var start6=new Date(now.getTime()-42*86400000);
   var t6=rides.filter(function(r){ var d=_ryDate_(r.date); return d && !isNaN(d.getTime()) && d>=start6 && d<=now; });
@@ -17856,6 +18094,7 @@ function _yvyVM_(rides, now, sport){
     kDist:kDist, kElev:kElev, kTime:kTime, kActs:kActs, cumCur:cumCur, cumLast:cumLast, lastFull:lastFull, curTot:curTot,
     rank:rank, rankTot:rankTot, rankList:rankList, bestMonthYM:bestMonthYM, bestMonthMi:bestMonthMi, completedRankable:completedRankable,
     doneList:doneList, med6:med6, monthMi:bym, bestCum:bestCum, daysInBest:daysInBest,
+    yoy:yoy, yoyElapsed:yoyElapsed,
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now, sport),
@@ -17876,25 +18115,6 @@ function _yvyKpi_(ic, label, big, unit, pct, up, sub){
     +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+big+'</span>'
     +(unit?'<span style="font-size:13px;color:#94a3b8">'+unit+'</span>':'')+' '+_yvyPct_(pct,up)+'</div>'
     +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div></div>';
-}
-// Cumulative SVG: this month solid orange, last month same-days dashed grey, last-month full as a faint ceiling line.
-function _yvyCumChart_(vm){
-  var W=560,H=230,PL=38,PR=14,PT=14,PB=26, iw=W-PL-PR, ih=H-PT-PB;
-  var maxY=Math.max(vm.lastFull, vm.cumCur[vm.cumCur.length-1]||0, 1)*1.08;
-  var nx=vm.daysInCur;
-  function X(day){ return PL + (day-1)/(nx-1)*iw; }
-  function Y(v){ return PT + ih - (v/maxY)*ih; }
-  function path(arr){ var p=''; for(var i=0;i<arr.length;i++){ p+=(i?'L':'M')+X(i+1).toFixed(1)+' '+Y(arr[i]).toFixed(1)+' '; } return p; }
-  var g=''; for(var t=0;t<=4;t++){ var v=maxY*t/4, yy=Y(v); g+='<line x1="'+PL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+yy.toFixed(1)+'" stroke="#1c2130" stroke-width="1"/>'
-    +'<text x="'+(PL-6)+'" y="'+(yy+3).toFixed(1)+'" text-anchor="end" font-size="9" fill="#5b6678">'+Math.round(v)+'</text>'; }
-  var xl=''; [1,6,11,16,21,26,vm.daysInCur].forEach(function(d){ if(d>vm.daysInCur)return; xl+='<text x="'+X(d).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#5b6678">'+_YVY_MON[vm.m]+' '+d+'</text>'; });
-  var ceilY=Y(vm.lastFull);
-  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+g
-    +'<line x1="'+PL+'" y1="'+ceilY.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+ceilY.toFixed(1)+'" stroke="#475569" stroke-width="1" stroke-dasharray="2 3"/>'
-    +'<text x="'+(W-PR)+'" y="'+(ceilY-4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#94a3b8">last month total '+vm.lastFull+'</text>'
-    +'<path d="'+path(vm.cumLast)+'" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4 4" stroke-linejoin="round"/>'
-    +'<path d="'+path(vm.cumCur)+'" fill="none" stroke="#FC4C02" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'
-    +'</svg>';
 }
 function _yvyRing_(score, band){
   var R=52, C=2*Math.PI*R, off=C*(1-score/100);
@@ -17929,6 +18149,24 @@ var _PB_ICON={
   week:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>'
 };
 function _pbIcon_(k,c){ return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+c+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(_PB_ICON[k]||_PB_ICON.dist)+'</svg>'; }
+// The trajectory toward the record: best-per-quarter, oldest to newest, with the peak ringed.
+//
+// Colour here is STATUS, not a chart identity, and that is deliberate — it is the one place on
+// this page that keeps the page's own tiers. Orange means you are holding this record at current
+// form; blue means it is a gap you are chasing. Spending a categorical hue here would say "this is
+// which line" when the reader needs "this is where you stand", and the dataviz rule that status
+// colours are reserved cuts the same way. The lightness-valid blue (#3b82f6) is used rather than
+// the lighter text blue, which sits outside the band a series colour has to hold.
+function _pbSpark_(p){
+  var pts=(p.prog||[]);
+  if(pts.length<2) return '';
+  var col=p.held?_GC_HELD:_GC_CHASE;
+  var svg=_gcSpark_(pts, col, { aria:p.label+' best per quarter', H:34 });
+  if(!svg) return '';
+  return '<div style="margin-bottom:9px">'+svg
+    +_gcSparkFoot_(pts[0].lab, pts[pts.length-1].lab)
+    +'<div style="font-size:10px;color:#5b6678;margin-top:2px">best per quarter &middot; ringed point is the record</div></div>';
+}
 function _pbCardHtml_(p, formDays){
   var accent=p.held?_YVY_TOP:_YVY_GOOD;
   var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'
@@ -17946,6 +18184,7 @@ function _pbCardHtml_(p, formDays){
     // The record sits inside the form window: there is no gap to quote, so state the margin
     // over your own next-best instead of inventing a target.
     foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+      +_pbSpark_(p)
       +'<div style="font-size:12px;font-weight:700;color:'+_YVY_TOP+'">This is current form</div>'
       +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'
       +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only ride at this mark.'))
@@ -17955,12 +18194,13 @@ function _pbCardHtml_(p, formDays){
       +'<div style="font-size:12px;font-weight:700;color:#94a3b8">No qualifying ride in '+formDays+' days</div>'
       +'<div style="font-size:11.5px;color:#5b6678;margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
   } else {
+    // The progress bar that used to sit here said "recent best is N% of the record" — one ratio,
+    // identical on a card that has been climbing all year and one that peaked two years ago.
     foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
-      +'<div style="height:5px;border-radius:3px;background:#1c2130;overflow:hidden;margin-bottom:8px">'
-      +'<div style="height:100%;width:'+p.pct+'%;background:'+accent+';border-radius:3px"></div></div>'
-      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
-      +'<span style="font-size:11.5px;color:#94a3b8">Recent best '+p.formStr+'</span>'
-      +'<span style="font-size:12.5px;font-weight:800;color:'+accent+'">Beat by '+p.gapStr+'</span></div>'
+      +_pbSpark_(p)
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
+      +'<span style="font-size:11.5px;color:#94a3b8;white-space:nowrap">Recent best '+p.formStr+'</span>'
+      +'<span style="font-size:12.5px;font-weight:800;color:'+accent+';white-space:nowrap">Beat by '+p.gapStr+'</span></div>'
       +(p.cost?('<div style="font-size:11px;color:#5b6678;line-height:1.5;margin-top:7px">'+p.cost+'</div>'):'')
       +'</div>';
   }
@@ -17981,7 +18221,7 @@ function _pbSection_(vm){
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
     +'<span style="font-size:11px;color:#5b6678">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">Each bar is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
+    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">Each line is that record&#8217;s best per quarter, so you can see the trajectory toward it; the figure beside it is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:12px">'+cards+'</div>'
     +foot+'</div>';
 }
@@ -18116,7 +18356,9 @@ function _mrShow_(id, day){
   var ln=document.getElementById('mrc-cross-'+id);
   if(ln){ ln.setAttribute('x1', x.toFixed(1)); ln.setAttribute('x2', x.toFixed(1)); ln.style.opacity='1'; }
   var head=document.getElementById('mrc-tth-'+id);
-  if(head) head.textContent=g.mon+' '+day;
+  // xlabs lets a chart name its own x positions (the year chart speaks day-of-year, not day-of-
+  // month). Absent, the month form is used, which is what Month Race has always shown.
+  if(head) head.textContent=(g.xlabs && g.xlabs[day-1]) ? g.xlabs[day-1] : (g.mon+' '+day);
   g.series.forEach(function(s){
     var dot=document.getElementById('mrc-dot-'+id+'-'+s.key);
     var val=document.getElementById('mrc-ttv-'+id+'-'+s.key);
@@ -18166,62 +18408,79 @@ function _mrKey_(ev, id){
   g.cursor=d; _mrShow_(id, d);
   try{ ev.preventDefault(); }catch(e){}
 }
-function _mrChart_(mr, id){
+// THE shared growth-line chart. Both the month race and the year race are the same object — N
+// cumulative series on one axis, a boundary marker, one direct end label, a crosshair reading
+// every series at the hovered position — so they are one builder rather than two that drift.
+// The _mr prefix on the hover engine is historical; it is the app's line engine now.
+//
+// spec: { series:[{key,label,color,dash,pts,v}], nx, maxY, stepY, xticks:[{d,lab}], xlabs,
+//         mark:{d,lab,color}, end:{i,text,color}, unit, fmt, aria, kind }
+function _gcLineChart_(spec, id){
   var g=_mrGeo_();
-  g.nx=mr.nx; g.maxY=mr.maxY; g.domNow=mr.domNow; g.mon=mr.mon;
-  g.series=mr.series.map(function(s){ return { key:s.key, label:s.label, color:s.color, pts:s.pts }; });
+  g.nx=spec.nx; g.maxY=spec.maxY; g.series=spec.series.map(function(s){
+    return { key:s.key, label:s.label, color:s.color, pts:s.pts };
+  });
+  g.xlabs=spec.xlabs||null; g.mon=spec.mon||''; g.domNow=(spec.mark&&spec.mark.d)||1;
+  g.unit=spec.unit||' mi';
   _MR_DATA[id]=g;
   var iw=g.W-g.PL-g.PR, ih=g.H-g.PT-g.PB;
-  // Grid: hairline, SOLID, one step off the surface. Dashing is reserved for the two things that
-  // mean something here (the target series and today), so the grid never competes with them.
+  var fmt=spec.fmt||_mrMi_;
+  // Grid: hairline, SOLID, one step off the surface. Dashing is reserved for the things that mean
+  // something (a target series, the boundary), so the grid never competes with them.
+  // A tiny total gets a sub-1 step, and rounding those ticks to whole numbers prints the same
+  // label three times. Format at the step's own resolution instead.
+  var tick=(spec.stepY<1) ? function(v){ return (Math.round(v*10)/10).toLocaleString(); }
+                          : function(v){ return Math.round(v).toLocaleString(); };
   var grid='';
-  // A month with almost no miles gets a sub-1 step, and rounding those ticks to whole numbers
-  // prints the same label three times. Format at the step's own resolution instead.
-  var tick=(mr.stepY<1) ? function(v){ return (Math.round(v*10)/10).toLocaleString(); }
-                        : function(v){ return Math.round(v).toLocaleString(); };
-  for(var v=0; v<=mr.maxY+mr.stepY*0.001; v+=mr.stepY){
+  for(var v=0; v<=spec.maxY+spec.stepY*0.001; v+=spec.stepY){
     var yy=_mrY_(g,v);
     grid+='<line x1="'+g.PL+'" y1="'+yy.toFixed(1)+'" x2="'+(g.W-g.PR)+'" y2="'+yy.toFixed(1)+'" stroke="#1c2130" stroke-width="1"/>'
       +'<text class="mrc-ax" font-size="'+g.fAx+'" x="'+(g.PL-8)+'" y="'+(yy+g.fAx*0.35).toFixed(1)+'" text-anchor="end">'+tick(v)+'</text>';
   }
-  // The month's last day is always labelled; the rest come from the surface's own tick list, which
-  // is sparser on the narrow box so the labels cannot run together.
-  var xt=g.xt.concat([mr.nx]).filter(function(d,i,a){ return d<=mr.nx && a.indexOf(d)===i; });
-  var xl=''; xt.forEach(function(d){ xl+='<text class="mrc-ax" font-size="'+g.fAx+'" x="'+_mrX_(g,d).toFixed(1)+'" y="'+(g.H-g.PB+g.fAx+4).toFixed(1)+'" text-anchor="middle">'+d+'</text>'; });
-  // Today. Dashed, in the subject's own colour, labelled — it is the reason two of the three lines
-  // stop where they do, so it is drawn as a boundary rather than left implicit.
-  var tx=_mrX_(g, mr.domNow);
-  var today='<line x1="'+tx.toFixed(1)+'" y1="'+g.PT+'" x2="'+tx.toFixed(1)+'" y2="'+(g.PT+ih)+'" stroke="'+_MR_YOU+'" stroke-width="1.5" stroke-dasharray="3 4" opacity=".55"/>'
-    +'<text class="mrc-today" font-size="'+g.fToday+'" x="'+tx.toFixed(1)+'" y="'+(g.PT-6)+'" text-anchor="middle">'+mr.mon+' '+mr.domNow+'</text>';
+  var xl='';
+  (spec.xticks||[]).forEach(function(t){
+    if(t.d<1 || t.d>spec.nx) return;
+    xl+='<text class="mrc-ax" font-size="'+g.fAx+'" x="'+_mrX_(g,t.d).toFixed(1)+'" y="'+(g.H-g.PB+g.fAx+4).toFixed(1)+'" text-anchor="middle">'+t.lab+'</text>';
+  });
+  // The boundary — today. Dashed and labelled: it is the reason the live series stops where it
+  // does, so it is drawn rather than left implicit.
+  var mark='';
+  if(spec.mark){
+    var tx=_mrX_(g, spec.mark.d), mc=spec.mark.color||_MR_YOU;
+    mark='<line x1="'+tx.toFixed(1)+'" y1="'+g.PT+'" x2="'+tx.toFixed(1)+'" y2="'+(g.PT+ih)+'" stroke="'+mc+'" stroke-width="1.5" stroke-dasharray="3 4" opacity=".55"/>'
+      +'<text class="mrc-today" font-size="'+g.fToday+'" fill="'+mc+'" x="'+tx.toFixed(1)+'" y="'+(g.PT-6)+'" text-anchor="middle">'+spec.mark.lab+'</text>';
+  }
   var lines='', dots='';
-  mr.series.forEach(function(s){
+  spec.series.forEach(function(s){
     if(!s.pts.length) return;
     lines+='<path d="'+_mrPath_(g,s.pts)+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'
       +(s.dash?(' stroke-dasharray="'+s.dash+'"'):'')+'/>';
     // Surface ring on every marker so it stays legible where the lines cross each other.
     dots+='<circle id="mrc-dot-'+id+'-'+s.key+'" r="4.5" fill="'+s.color+'" stroke="#0e1117" stroke-width="2" opacity="0" style="pointer-events:none"/>';
   });
-  // ONE direct label: the endpoint of You. The other two totals are in the legend and the tooltip,
-  // and at 452.2 against 434.7 their end labels would sit on top of each other — converging labels
+  // ONE direct label, on the series the story is about. The other totals live in the legend and
+  // the tooltip: when lines converge, end labels land on top of each other, and converging labels
   // get dropped to the legend rather than nudged apart into noise.
-  var you=mr.series[0], endLbl='';
-  if(you.pts.length){
-    var ey=_mrY_(g, you.pts[you.pts.length-1]), ex=_mrX_(g, you.pts.length);
-    endLbl='<circle cx="'+ex.toFixed(1)+'" cy="'+ey.toFixed(1)+'" r="4" fill="'+_MR_YOU+'" stroke="#0e1117" stroke-width="2"/>'
-      +'<text class="mrc-end" font-size="'+g.fEnd+'" x="'+(ex+8).toFixed(1)+'" y="'+(ey+g.fEnd*0.35).toFixed(1)+'">'+_mrMi_(you.v)+' mi</text>';
+  var endLbl='';
+  if(spec.end && spec.series[spec.end.i] && spec.series[spec.end.i].pts.length){
+    var es=spec.series[spec.end.i];
+    var ey=_mrY_(g, es.pts[es.pts.length-1]), ex=_mrX_(g, es.pts.length);
+    var ec=spec.end.color||es.color;
+    endLbl='<circle cx="'+ex.toFixed(1)+'" cy="'+ey.toFixed(1)+'" r="4" fill="'+ec+'" stroke="#0e1117" stroke-width="2"/>'
+      +'<text class="mrc-end" font-size="'+g.fEnd+'" x="'+(ex+8).toFixed(1)+'" y="'+(ey+g.fEnd*0.35).toFixed(1)+'">'+spec.end.text+'</text>';
   }
-  var rows=mr.series.map(function(s){
+  var rows=spec.series.map(function(s){
     return '<div id="mrc-ttr-'+id+'-'+s.key+'" style="display:flex;align-items:center;gap:8px;white-space:nowrap">'
       +'<span style="width:12px;height:2px;background:'+s.color+';flex-shrink:0;border-radius:1px"></span>'
       +'<span style="font-size:12px;font-weight:800;color:#f1f5f9;font-variant-numeric:tabular-nums" id="mrc-ttv-'+id+'-'+s.key+'">&mdash;</span>'
       +'<span style="font-size:11px;color:#94a3b8">'+s.label+'</span></div>';
   }).join('');
-  var aria='Cumulative miles by day of month. '+mr.series.map(function(s){ return s.label+' ends at '+_mrMi_(s.v)+' miles'; }).join('. ')+'.';
+  var aria=spec.aria||'';
   return '<div class="mrc-wrap" style="position:relative;outline:none" onmousemove="_mrMove_(event,&#39;'+id+'&#39;)" onmouseleave="_mrHide_(&#39;'+id+'&#39;)"'
     +' ontouchstart="_mrMove_(event,&#39;'+id+'&#39;)" ontouchmove="_mrMove_(event,&#39;'+id+'&#39;)" ontouchend="_mrHide_(&#39;'+id+'&#39;)"'
     +' tabindex="0" aria-label="'+aria+'" onkeydown="_mrKey_(event,&#39;'+id+'&#39;)" onblur="_mrHide_(&#39;'+id+'&#39;)">'
     +'<svg id="mrc-svg-'+id+'" class="mrc-svg" role="img" aria-label="'+aria+'" viewBox="0 0 '+g.W+' '+g.H+'" style="width:100%;height:auto;display:block">'
-    +grid+xl+today
+    +grid+xl+mark
     +'<line id="mrc-cross-'+id+'" x1="0" y1="'+g.PT+'" x2="0" y2="'+(g.PT+ih)+'" stroke="#94a3b8" stroke-width="1" opacity="0" style="pointer-events:none"/>'
     +lines+endLbl+dots
     +'</svg>'
@@ -18229,18 +18488,31 @@ function _mrChart_(mr, id){
     +'<div id="mrc-tth-'+id+'" style="font-size:10.5px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">&mdash;</div>'
     +rows+'</div></div>';
 }
-// The table-view twin. Every plotted value reachable without hovering, collapsed by default so it
-// costs nothing until it is wanted.
-function _mrTable_(mr){
-  var head='<tr><th style="text-align:left;padding:3px 10px 3px 0;font-weight:700;color:#94a3b8">Day</th>'
-    +mr.series.map(function(s){ return '<th style="text-align:right;padding:3px 0 3px 14px;font-weight:700;color:#94a3b8;white-space:nowrap">'+s.label+'</th>'; }).join('')+'</tr>';
-  var body='';
-  for(var d=1; d<=mr.nx; d++){
-    body+='<tr><td style="padding:2px 10px 2px 0;color:#cbd5e1">'+mr.mon+' '+d+'</td>'
-      +mr.series.map(function(s){ return '<td style="text-align:right;padding:2px 0 2px 14px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+(d<=s.pts.length?_mrMi_(s.pts[d-1]):'&mdash;')+'</td>'; }).join('')+'</tr>';
+// The table-view twin every line chart ships with. Every plotted value reachable without hovering,
+// collapsed by default so it costs nothing until it is wanted.
+function _gcTable_(spec, xlabel){
+  var head='<tr><th style="text-align:left;padding:3px 10px 3px 0;font-weight:700;color:#94a3b8">'+(xlabel||'Day')+'</th>'
+    +spec.series.map(function(s){ return '<th style="text-align:right;padding:3px 0 3px 14px;font-weight:700;color:#94a3b8;white-space:nowrap">'+s.label+'</th>'; }).join('')+'</tr>';
+  var fmt=spec.fmt||_mrMi_, body='';
+  for(var d=1; d<=spec.nx; d++){
+    var lab=(spec.xlabs && spec.xlabs[d-1]) ? spec.xlabs[d-1] : ((spec.mon?spec.mon+' ':'')+d);
+    body+='<tr><td style="padding:2px 10px 2px 0;color:#cbd5e1;white-space:nowrap">'+lab+'</td>'
+      +spec.series.map(function(s){ return '<td style="text-align:right;padding:2px 0 2px 14px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+(d<=s.pts.length?fmt(s.pts[d-1]):'&mdash;')+'</td>'; }).join('')+'</tr>';
   }
-  return '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:#5b6678;outline:none">Table view &mdash; every day, every series</summary>'
+  return '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:#5b6678;outline:none">Table view &mdash; every '+(xlabel||'day').toLowerCase()+', every series</summary>'
     +'<div style="overflow-x:auto;margin-top:8px"><table style="border-collapse:collapse;font-size:11.5px">'+head+body+'</table></div></details>';
+}
+// Month Race, now a caller of the shared builder rather than its own chart.
+function _mrSpec_(mr){
+  return { series:mr.series, nx:mr.nx, maxY:mr.maxY, stepY:mr.stepY, mon:mr.mon, unit:' mi',
+    xticks:_mrGeo_().xt.concat([mr.nx]).filter(function(d,i,a){ return d<=mr.nx && a.indexOf(d)===i; })
+             .map(function(d){ return {d:d, lab:String(d)}; }),
+    mark:{ d:mr.domNow, lab:mr.mon+' '+mr.domNow, color:_MR_YOU },
+    end:{ i:0, text:_mrMi_(mr.series[0].v)+' mi', color:_MR_YOU },
+    aria:'Cumulative miles by day of month. '+mr.series.map(function(s){ return s.label+' ends at '+_mrMi_(s.v)+' miles'; }).join('. ')+'.' };
+}
+function _mrChart_(mr, id){ return _gcLineChart_(_mrSpec_(mr), id); }
+function _mrTable_(mr){ return _gcTable_(_mrSpec_(mr), 'Day');
 }
 // Only colour and the focus ring live in CSS — every SIZE is a geometry attribute from _mrGeo_(),
 // so type scale and viewBox can never disagree about which surface is being drawn.
@@ -18556,91 +18828,125 @@ function _rsSection_(vm){
     +'</div>';
 }
 
-// ==================== You vs. You — Athlete Momentum ====================
-// The widest zoom on the page: ride miles by year. Yearly totals are rolled up from vm.monthMi,
-// the same monthly totals every other section reads, so a year here cannot disagree with a month
-// there. Nothing re-scans rides.
+// ==================== You vs. You — Year over Year ====================
+// The widest zoom on the page, and now the ONLY one at this scale. It replaces two sections that
+// were showing the same thing in two worse formats: Cumulative Distance (this month against last
+// month, a chart Month Race already draws better and at the scale that actually matters) and
+// Athlete Momentum (yearly totals as horizontal pill bars — three rectangles that could say which
+// year was bigger and nothing whatsoever about whether the athlete is climbing or stalling).
 //
-// THE CURRENT YEAR IS NOT A PEER. It gets the ghost fill and dashed edge Month Race gives Best
-// Month, plus its own elapsed-days label, because seven months against twelve is not a comparison
-// and a partial bar sharing an axis with complete ones is the single easiest way to lie here.
-// Its projected finish is a separate dashed MARK, never part of the bar, and it comes off the same
-// trailing-rate path the Challenge Engine and Regret Simulator use — there is no second projection
-// method on this page.
+// Same construction as Month Race, one zoom level out: day of year across, cumulative miles up,
+// one line per year. Completed years run their full length; the current year stops at today, and
+// the dashed boundary is where it stops. That is the whole comparison — on any given day of the
+// year you can see how far ahead or behind this year is of the same date in every prior year, and
+// the SHAPE says whether the gap is opening or closing.
 //
-// The window is stated once and is deliberately narrow: pre-2024 months do not clear the ride
-// count this page ranks on, and Momentum does not get a looser rule than the hero. Three years
-// inside a stated window cannot carry "best ever", so no superlative is used across years, and
-// there is no peak marker — at this n a trajectory claim is not supported. The year-over-year
-// change is stated in words instead.
-var _AM_ERA_START=2024;
-// Whole miles at year scale. A yearly total or a year-end projection quoted to the tenth of a mile
-// is precision the number does not have.
+// The window starts at _YOY_ERA_START for the reason the bar chart started there: earlier months
+// do not clear the ride count this page ranks on. Three years inside a stated window cannot carry
+// "best ever", so no superlative is used across years and there is no peak marker — at this n a
+// trajectory claim is not supported. The year-over-year change is stated in words instead.
+//
+// Colour is the Year over Year identity, not the page's status tiers: cyan, violet, amber, oldest
+// to newest, so the current year reads warmest and the eye lands on it first. Validated as a set —
+// see the palette note on _GC_YOY.
 function _amMi_(v){ return Math.round(v).toLocaleString(); }
-function _amDayOfYear_(dt){ return Math.round((dt-new Date(dt.getFullYear(),0,1))/86400000)+1; }
-function _amDaysInYear_(y){ return (((y%4===0)&&(y%100!==0))||(y%400===0))?366:365; }
-function _amCompute_(vm){
-  var bym=vm.monthMi||{}, curY=vm.y, tot={};
-  Object.keys(bym).forEach(function(k){
-    var y=parseInt(String(k).slice(0,4),10);
-    if(y>=_AM_ERA_START && y<=curY) tot[y]=(tot[y]||0)+bym[k];
+function _yoyCompute_(vm){
+  var ys=(vm.yoy||[]).slice();
+  if(ys.length<2) return null;                   // one year is not a comparison
+  var complete=ys.filter(function(x){ return !x.partial; });
+  var cur=ys.filter(function(x){ return x.partial; })[0]||null;
+  if(!complete.length || !cur) return null;
+  var elapsed=vm.yoyElapsed||cur.pts.length;
+  // Every prior year read AT THE SAME DAY OF YEAR. This is the number the comparison is actually
+  // about, and it is the same same-day discipline the month chart applies one zoom in: quoting a
+  // finished year against a part-finished one is the defect this page exists to avoid.
+  ys.forEach(function(x){
+    x.sameDay=(x.pts.length>=elapsed)?x.pts[elapsed-1]:(x.pts[x.pts.length-1]||0);
+    x.color=_GC_YOY[Math.max(0, Math.min(_GC_YOY.length-1, x.y-_YOY_ERA_START))];
   });
-  var years=[];
-  for(var y=_AM_ERA_START;y<=curY;y++) years.push({ y:y, mi:Math.round((tot[y]||0)*10)/10, partial:(y===curY) });
-  var complete=years.filter(function(x){ return !x.partial && x.mi>0; });
-  if(complete.length<2) return null;                  // one complete year plus a partial is not momentum
-
-  var cur=years[years.length-1];
-  var today=new Date(curY, vm.m, vm.domNow);
-  var daysLeft=Math.max(0, Math.round((new Date(curY,11,31)-today)/86400000));
+  var prior=ys.filter(function(x){ return !x.partial; });
+  var lastY=prior[prior.length-1]||null;
+  var deltaSD=lastY?Math.round((cur.sameDay-lastY.sameDay)*10)/10:null;
+  var pctSD=(lastY&&lastY.sameDay>0)?Math.round((cur.sameDay-lastY.sameDay)/lastY.sameDay*100):null;
+  // Projection comes off the SAME trailing-rate path the Challenge Engine and the Regret Simulator
+  // use. There is no second projection method on this page.
+  var daysLeft=Math.max(0, cur.days-elapsed);
   var proj=(vm.rate>0)?Math.round((cur.mi+vm.rate/7*daysLeft)*10)/10:null;
-
-  var a=complete[complete.length-1], b=complete[complete.length-2];
-  var pct=(b.mi>0)?Math.round((a.mi-b.mi)/b.mi*100):((a.mi>0)?100:0);
-  var mx=0; years.forEach(function(x){ if(x.mi>mx) mx=x.mi; });
-  if(proj!=null && proj>mx) mx=proj;
-  return { years:years, complete:complete, cur:cur, prevA:a, prevB:b, pct:pct, band:_yvyBand_(pct),
-           proj:proj, elapsed:_amDayOfYear_(today), inYear:_amDaysInYear_(curY),
-           max:Math.max(mx,1), eraStart:_AM_ERA_START };
+  var nx=Math.max.apply(null, ys.map(function(x){ return x.days; }));
+  var top=0; ys.forEach(function(x){ if(x.mi>top) top=x.mi; });
+  var ny=_mrNice_(top||1, 5);
+  return { years:ys, cur:cur, lastY:lastY, elapsed:elapsed, deltaSD:deltaSD, pctSD:pctSD,
+           proj:proj, daysLeft:daysLeft, nx:nx, maxY:ny.max, stepY:ny.step,
+           eraStart:_YOY_ERA_START, monf:_YVY_MONF[vm.m]||'', domNow:vm.domNow };
 }
-function _amSection_(vm){
-  var am=_amCompute_(vm);
-  if(!am) return '';
-  var MONF=_YVY_MONF[vm.m]||'';
-  var rows=am.years.map(function(x){
-    var w=Math.max(0, Math.min(100, x.mi/am.max*100));
-    var fill=x.partial
-      ? '<div style="position:absolute;left:0;top:0;bottom:0;width:'+w.toFixed(2)+'%;background:'+_MR_YOU+'14;border:1.5px dashed '+_MR_YOU+'aa;border-radius:9px;box-sizing:border-box"></div>'
-      : '<div style="position:absolute;left:0;top:0;bottom:0;width:'+w.toFixed(2)+'%;background:#3b4a63;border-radius:9px"></div>';
-    var mark='';
-    if(x.partial && am.proj!=null && am.proj>x.mi){
-      var pw=Math.max(0, Math.min(99.4, am.proj/am.max*100));
-      mark='<div style="position:absolute;left:'+pw.toFixed(2)+'%;top:-4px;bottom:-4px;width:0;border-left:2px dashed #64748b"></div>';
-    }
-    var sub=x.partial
-      ? ('still running &middot; through '+MONF+' '+vm.domNow+' &middot; '+am.elapsed+' of '+am.inYear+' days')
-      : 'full year';
-    return '<div style="margin-bottom:13px">'
-      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap">'
-      +'<div style="min-width:0"><span style="font-size:13px;font-weight:800;color:#f1f5f9">'+x.y+'</span>'
-      +'<span style="font-size:11px;color:#5b6678;margin-left:8px">'+sub+'</span></div>'
-      +'<div style="white-space:nowrap"><span style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+_amMi_(x.mi)+'</span>'
-      +'<span style="font-size:12px;color:#94a3b8"> mi</span></div></div>'
-      +'<div style="position:relative;height:30px;border-radius:9px;background:#141922">'+fill+mark+'</div></div>';
+// Month boundaries as the x scale. Day-of-year numbers mean nothing to a reader — "Apr" does.
+function _yoyTicks_(mob){
+  var out=[], step=mob?3:2;
+  for(var i=0;i<12;i+=step) out.push({ d:_YOY_CUMD[i]+1, lab:_YVY_MON[i] });
+  return out;
+}
+function _yoyLabels_(nx){
+  var out=[];
+  for(var d=1; d<=nx; d++){
+    var mo=11; for(var i=0;i<12;i++){ if(d<=_YOY_CUMD[i]+ (i===11?31:(_YOY_CUMD[i+1]-_YOY_CUMD[i])) ){ mo=i; break; } }
+    out.push(_YVY_MON[mo]+' '+(d-_YOY_CUMD[mo]));
+  }
+  return out;
+}
+function _yoySection_(vm){
+  var yo=_yoyCompute_(vm);
+  if(!yo) return '';
+  var id=((vm.sport==='run')?'run':'ride')+'-yoy';
+  var mob=false; try{ if(typeof isDesktop==='function') mob=!isDesktop(); }catch(e){}
+  var spec={
+    series:yo.years.map(function(x){
+      return { key:'y'+x.y, label:String(x.y), color:x.color, dash:'', pts:x.pts, v:x.mi };
+    }),
+    nx:yo.nx, maxY:yo.maxY, stepY:yo.stepY, unit:' mi',
+    xticks:_yoyTicks_(mob), xlabs:_yoyLabels_(yo.nx),
+    mark:{ d:yo.elapsed, lab:yo.monf.slice(0,3)+' '+yo.domNow, color:yo.cur.color },
+    end:{ i:yo.years.indexOf(yo.cur), text:_amMi_(yo.cur.mi)+' mi', color:yo.cur.color },
+    aria:'Cumulative miles by day of year. '+yo.years.map(function(x){ return x.y+(x.partial?' so far':'')+' '+_amMi_(x.mi)+' miles'; }).join('. ')+'.'
+  };
+  var legend=yo.years.map(function(x){
+    return '<span style="display:inline-flex;align-items:baseline;gap:7px">'
+      +'<span style="width:16px;height:2px;background:'+x.color+';flex-shrink:0;border-radius:1px"></span>'
+      +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+x.y+'</span>'
+      +'<span style="font-size:12px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+_amMi_(x.mi)+' mi</span>'
+      +'<span style="font-size:10.5px;color:#5b6678">'+(x.partial?('through '+yo.monf+' '+yo.domNow):'full year')+'</span></span>';
   }).join('');
-
-  var word=(am.band==='win')?'up from':((am.band==='focus')?'down from':'level with');
-  var sentence=am.prevA.y+' was <b style="color:#f1f5f9">'+_amMi_(am.prevA.mi)+' mi</b>, '+word+' <b style="color:#f1f5f9">'+_amMi_(am.prevB.mi)+'</b> in '+am.prevB.y+'. '
-    +am.cur.y+' sits at <b style="color:#f1f5f9">'+_amMi_(am.cur.mi)+' mi</b> through '+MONF+' '+vm.domNow+'.'
-    +((am.proj!=null && am.proj>am.cur.mi)?(' On your trailing rate that finishes near '+_amMi_(am.proj)+' mi &mdash; a projection, not a result.'):'');
-  var foot='Years start at '+am.eraStart+': earlier months do not clear the ride count this page ranks on. '
-    +am.cur.y+' is drawn as an outline because it is still running &mdash; '+am.elapsed+' of '+am.inYear+' days against full years is not a comparison, and the dashed line is where the trailing rate would finish it.';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
-    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athlete Momentum</span>'
-    +'<span style="font-size:11px;color:#5b6678">ride miles by year since '+am.eraStart+'</span></div>'
-    +rows
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-top:2px">'+sentence+'</div>'
+  // Annotations, in the same grammar the month chart uses: the like-for-like comparison first,
+  // stated at the same day of year, then the projection labelled as a projection.
+  var ann='';
+  if(yo.lastY){
+    var up=(yo.deltaSD>=0), tone=up?_YVY_GOOD:_YVY_BASE;
+    ann+='<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
+      +'<span style="width:6px;height:6px;border-radius:50%;background:'+yo.lastY.color+';flex-shrink:0;transform:translateY(-2px)"></span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">vs '+yo.lastY.y+' on this date &middot; </span>'
+      +'<span style="font-size:12.5px;color:'+tone+';font-weight:700">'
+      +(up?('Ahead by '+_mrMi_(yo.deltaSD)+' mi'):('Behind by '+_mrMi_(-yo.deltaSD)+' mi'))
+      +(yo.pctSD!=null?(' &mdash; '+Math.abs(yo.pctSD)+'% '+(up?'up on':'down on')+' where '+yo.lastY.y+' stood by '+yo.monf+' '+yo.domNow):'')
+      +'.</span></div></div>';
+  }
+  if(yo.proj!=null && yo.proj>yo.cur.mi){
+    ann+='<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
+      +'<span style="width:6px;height:6px;border-radius:50%;background:'+_YVY_BASE+';flex-shrink:0;transform:translateY(-2px)"></span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">Rest of '+yo.cur.y+' &middot; </span>'
+      +'<span style="font-size:12.5px;color:'+_YVY_BASE+';font-weight:700">On your trailing rate the year finishes near '
+      +_amMi_(yo.proj)+' mi over the '+yo.daysLeft+' day'+(yo.daysLeft===1?'':'s')+' left &mdash; a projection, not a result.</span></div></div>';
+  }
+  var foot='Years start at '+yo.eraStart+': earlier months do not clear the ride count this page ranks on. '
+    +yo.cur.y+' stops at the dashed line because it is still running &mdash; '+yo.elapsed+' of '+yo.cur.days
+    +' days against full years is not a comparison, which is why the figure quoted above is every year read at the SAME day of the year, not its finished total.';
+  return _MR_CSS
+    +'<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Year over Year</span>'
+    +'<span style="font-size:11px;color:#5b6678">cumulative miles by day of year &middot; hover or use the arrow keys to read any date</span></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
+    +_gcLineChart_(spec, id)
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'+ann+'</div>'):'')
+    +_gcTable_(spec, 'Date')
     +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
     +'</div>';
 }
@@ -18664,17 +18970,11 @@ function _yvyRenderVM_(vm){
     +_yvyKpi_(ic.act,'Activities',String(vm.kActs.cur),'',vm.kActs.pct,vm.kActs.up,'vs last month, same days')
     +'</div>';
 
-  // cumulative chart card
-  var lead=Math.round((vm.curTot-vm.cumLast[vm.cumLast.length-1])*10)/10;
-  var leadUp=lead>=0;
-  var chart=_yvyCard_(
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Cumulative Distance</div>'
-    +'<div style="font-size:12px;font-weight:700;color:'+(leadUp?_YVY_GOOD:_YVY_DOWN)+'">'+(leadUp?'&#9650; '+lead+' mi ahead':'&#9660; '+Math.abs(lead)+' mi behind')+'</div></div>'
-    +'<div style="display:flex;gap:16px;margin-bottom:8px;font-size:11px"><span style="color:#FC4C02">&#9644; This month</span><span style="color:#64748b">&#9644; Last month (same days)</span></div>'
-    +_yvyCumChart_(vm)
-    +'<div style="font-size:12px;color:#94a3b8;margin-top:8px;line-height:1.5">You have logged <b style="color:#f1f5f9">'+vm.curTot+' mi</b> this month, '
-    +(leadUp?('<b style="color:'+_YVY_GOOD+'">'+Math.abs(vm.kDist.pct)+'% ahead of</b>'):('<b style="color:#ff5c5c">'+Math.abs(vm.kDist.pct)+'% behind</b>'))
-    +' your pace by this point in '+_YVY_MONF[_yvyLastMonthIdx_(vm)]+'.</div>');
+  // The Cumulative Distance card used to sit here: this month against last month, same days, as
+  // its own small chart. It is GONE, not moved — Month Race draws exactly that comparison, larger,
+  // with the bar-to-beat on it and a crosshair, so this was the same data in a worse format. Its
+  // one unique line was the lead sentence, which now rides the Month Race annotations. The zoom
+  // this page was missing was the year, and that is what took its place.
 
   // right rail
   var score=_yvyCard_('<div style="text-align:center">'+_yvyHdr_('Self Competition Score')
@@ -18755,14 +19055,14 @@ function _yvyRenderVM_(vm){
     +sampleLine
     +_yvyPhysRow_(vm)
     +_mrSection_(vm)
+    +_yoySection_(vm)
     +_rsSection_(vm)
     +'<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start">'
-    +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+chart+challenge+'</div>'
+    +'<div style="flex:1.6;min-width:340px;display:flex;flex-direction:column;gap:14px">'+challenge+'</div>'
     +'<div style="flex:1;min-width:260px;display:flex;flex-direction:column;gap:14px">'+score+summary+best+heat+'</div>'
     +'</div>'
     +_wcSection_(vm)
     +_raSection_(vm)
-    +_amSection_(vm)
     +_pbSection_(vm)
     +'<div style="margin-top:14px">'+insight+'</div>'
     +'</div>';

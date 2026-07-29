@@ -51,7 +51,9 @@ const code = 'var _YVY_RANK_MIN=4;\n'
   + extract('_yvyDaysInYM_') + extract('_yvyOrdComment_') + extract('_yvyMonLabel_')
   + extract('_mrMi_') + extract('_mrDaysIn_') + extract('_mrNice_') + extract('_mrGap_')
   + extract('_mrCompute_') + extract('_mrGeo_') + extract('_mrX_') + extract('_mrY_')
-  + extract('_mrPath_') + extract('_mrShow_') + extract('_mrChart_') + extract('_mrTable_')
+  + extract('_mrPath_') + extract('_mrShow_')
+  + extract('_gcLineChart_') + extract('_gcTable_')
+  + extract('_mrSpec_') + extract('_mrChart_') + extract('_mrTable_')
   + extract('_mrSection_');
 (0, eval)(code);
 

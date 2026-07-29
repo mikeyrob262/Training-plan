@@ -151,6 +151,19 @@ try {
     fail('the Month Race chart regressed (see above).');
   }
 
+  // ---- 8. Growth-chart primitives -> the app-wide rule is that progress is drawn as a line, and
+  //         the ways a line lies are all silent: a gap drawn as zero, a flat series pinned to the
+  //         floor, a peak ring on the wrong point, a leap-year off-by-one shifting a whole curve.
+  console.log(`${D}· checking growth-chart primitives…${X}`);
+  try {
+    const so = execSync('node scripts/growth-charts-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a growth-chart primitive regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
