@@ -23850,18 +23850,78 @@ function dsShowBlockPlan(){
   renderBlockPlan_(wrap);
 }
 
+// Seconds for one activity. movingSecs is authoritative when present; "H:MM:SS" parses via
+// parseDurToMin. A BARE number in .duration is raw SECONDS (Strava elapsed leaking through),
+// NOT minutes — parseDurToMin reads "4715" as 4715 minutes, i.e. 78 hours. Only 2 activities in
+// the library hit that path, but a week total is exactly where one would be visible.
+function actSecs_(r){
+  if(!r) return 0;
+  var ms=parseFloat(r.movingSecs); if(isFinite(ms)&&ms>0) return Math.round(ms);
+  if(r.duration==null||r.duration==='') return 0;
+  var s=String(r.duration);
+  if(s.indexOf(':')>=0) return Math.round(parseDurToMin(s)*60);
+  var n=parseFloat(s); return isFinite(n)?Math.round(n):0;
+}
+// Compact duration for rollup rows: "1h 05m" / "36m".
+function fmtHM_(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600), m=Math.round((secs%3600)/60); if(m===60){h++;m=0;} return h>0?(h+'h '+(m<10?'0':'')+m+'m'):(m+'m'); }
+// The calendar's four activity buckets — the same vocabulary as the calendar type filter
+// (calFilter.ride/run/swim/workout), so the breakdown and the filter chips can never disagree.
+// A blank sportType/type is a legacy .fit import: all 50 in the library are rides (1,948 mi,
+// 50-66 mi outings), which is why the default falls to 'ride'.
+function calSportBucket_(r){
+  var s=String((typeof rideSport_==='function')?rideSport_(r):'').toLowerCase();
+  if(/run|jog|treadmill/.test(s)) return 'run';
+  if(/swim/.test(s)) return 'swim';
+  if(/weight|strength|lift|workout|hiit|core|gym|mobility|yoga|circuit|conditioning|cardio/.test(s)) return 'workout';
+  return 'ride';
+}
 // Single rollup used by BOTH the Calendar month footer AND each week-row summary
 // so they can never diverge. Sums ALL activity types (Miles + TSS include Zwift/
 // VirtualRide); rideCount stays type-scoped for the "Rides" label only.
+// bySport carries the same figures split into the four buckets above, so the week card can show
+// a per-sport breakdown off the same pass that produces the combined total.
+// Elevation routes through _actElevGain_, not a bare r.elev: rides store gain in .elev but the
+// runs library uses .elevation and some imports carry only the stream, so r.elev alone silently
+// reported every run as zero climbing.
 function calRollup_(list){
-  var miles=0, tss=0, rc=0, elev=0;
+  var miles=0, tss=0, rc=0, elev=0, secs=0;
+  var by={};
   (list||[]).forEach(function(r){
-    miles+=parseFloat(r.distance)||0;
-    tss+=parseFloat(r.tss)||0;
-    elev+=parseFloat(r.elev)||0;
+    var d=parseFloat(r.distance)||0, t=parseFloat(r.tss)||0;
+    var e=(typeof _actElevGain_==='function'?_actElevGain_(r):parseFloat(r.elev))||0;
+    var sc=actSecs_(r);
+    miles+=d; tss+=t; elev+=e; secs+=sc;
     if(/ride|cycl/i.test(rideSport_(r))) rc++;
+    var k=calSportBucket_(r);
+    if(!by[k]) by[k]={acts:0,miles:0,tss:0,elev:0,secs:0};
+    by[k].acts++; by[k].miles+=d; by[k].tss+=t; by[k].elev+=e; by[k].secs+=sc;
   });
-  return {miles:Math.round(miles), tss:Math.round(tss), elev:Math.round(elev), acts:(list||[]).length, rideCount:rc};
+  Object.keys(by).forEach(function(k){
+    by[k].miles=Math.round(by[k].miles*10)/10;   // a 3.3 mi run must not round to 3
+    by[k].tss=Math.round(by[k].tss); by[k].elev=Math.round(by[k].elev); by[k].secs=Math.round(by[k].secs);
+  });
+  return {miles:Math.round(miles), tss:Math.round(tss), elev:Math.round(elev), secs:Math.round(secs), acts:(list||[]).length, rideCount:rc, bySport:by};
+}
+// The per-sport week lines, built ONCE and rendered by both the desktop week rail and the mobile
+// WK column — only the icon helper and the type sizes differ per surface.
+//   Ride: distance / TSS / elevation.  Run: distance / time / elevation.  Swim: distance / time.
+// Strength and other non-distance work carries time only, so it is represented rather than
+// silently folded into a combined total it still inflates.
+// A zero term is DROPPED, never printed: "0 ft" on a week whose runs carry no elevation data is
+// the same false claim as an insight calling an unmeasured route flat.
+function calSportRows_(roll){
+  var order=[['ride','Ride','Ride'],['run','Run','Run'],['swim','Swim','Swim'],['workout','Other','Strength']];
+  var by=(roll&&roll.bySport)||{}, out=[];
+  order.forEach(function(p){
+    var b=by[p[0]]; if(!b||!b.acts) return;
+    var main=(p[0]!=='workout'&&b.miles>0)?(b.miles+' mi'):fmtHM_(b.secs), sub=[];
+    if(p[0]==='ride'){ if(b.tss) sub.push(b.tss+' TSS'); if(b.elev) sub.push(b.elev+' ft'); }
+    else if(p[0]==='run'){ if(b.secs) sub.push(fmtHM_(b.secs)); if(b.elev) sub.push(b.elev+' ft'); }
+    else if(p[0]==='swim'){ if(b.secs) sub.push(fmtHM_(b.secs)); }
+    else if(b.tss) sub.push(b.tss+' TSS');
+    out.push({key:p[0], label:p[1], sport:p[2], main:main, sub:sub.join(' · '), acts:b.acts});
+  });
+  return out;
 }
 // Single source of truth for the layout decision: a persisted manual override
 // wins, otherwise the width threshold (shared with the head bootstrap via
@@ -25984,13 +26044,8 @@ function dsShowCalendar(){
   var CAL={tss:'#F97316', time:'#2DD4BF', act:'#A855F7', dist:'#3B95E8'};
   function sportColor_(sport){ var svg=activityIcon_(sport||'Ride',10); return (svg.match(/stroke="(#[0-9A-Fa-f]{6})"/)||[])[1]||'#4ECB3C'; }
   function pad2(n){ return (n<10?'0':'')+n; }
-  function durSecs(r){ if(r&&r.movingSecs) return parseFloat(r.movingSecs)||0; return Math.round(parseDurToMin(r&&r.duration)*60); }
-  function actClass(r){ var s=rideSport_(r).toLowerCase();
-    if(/run|jog|treadmill/.test(s)) return 'run';
-    if(/swim/.test(s)) return 'swim';
-    if(/weight|strength|lift|workout|hiit|core|gym|mobility|yoga|circuit|conditioning|cardio/.test(s)) return 'workout';
-    return 'ride';
-  }
+  function durSecs(r){ return actSecs_(r); }   // shared with calRollup_ so a day cell and its week card can never print two different times for one activity
+  function actClass(r){ return calSportBucket_(r); }   // one bucket definition, shared with the week breakdown and the type filter
   function calColor(r){ return sportColor_(rideSport_(r)); }
   function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
   function fmtHMS(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h>0?(h+':'+pad2(m)+':'+pad2(s)):(m+':'+pad2(s)); }
@@ -26219,11 +26274,27 @@ function dsShowCalendar(){
         if(roll.acts===0){ H+='<div></div>'; return; }
         var ratio=Math.min(1,roll.tss/maxWkTSS);
         var bc=ratio>=0.66?'#F97316':ratio>=0.33?'#F59E0B':'#4ade80';
-        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:3px;padding:11px 15px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
-          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678">WEEK '+(wi+1)+'</div>'
-          +'<div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+roll.miles+'<span style="font-size:12px;font-weight:600;color:#5b6678;margin-left:3px">mi</span></div>'
-          +'<div style="font-size:14px;font-weight:800;color:'+bc+';line-height:1">'+roll.tss+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:2px">TSS</span></div>'
-          +'<div style="font-size:11px;font-weight:700;color:#8592a6;line-height:1;display:flex;align-items:center;gap:3px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8592a6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20l6-14 6 14"/></svg>'+(roll.elev||0)+'<span style="font-size:9px;font-weight:600;color:#5b6678;margin-left:1px">ft</span></div>'
+        // Per-sport lines are the point of this card; the combined total sits under them as a
+        // footer so the week still reads at a glance and nothing the total counts is invisible.
+        var rows=calSportRows_(roll);
+        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
+          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678">WEEK '+(wi+1)+'</div>';
+        rows.forEach(function(row){
+          var col=sportColor_(row.sport);
+          H+='<div>'
+            +'<div style="display:flex;align-items:center;gap:4px;line-height:1">'
+              +calIcon(row.sport,11,col)
+              +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:'+col+'">'+row.label.toUpperCase()+'</span>'
+              +'<span style="font-size:13px;font-weight:800;color:#e8edf5;margin-left:auto">'+row.main+'</span>'
+            +'</div>'
+            +(row.sub?('<div style="font-size:9.5px;font-weight:600;color:#8592a6;line-height:1;margin-top:2px;text-align:right">'+row.sub+'</div>'):'')
+          +'</div>';
+        });
+        H+='<div style="display:flex;align-items:baseline;gap:5px;border-top:1px solid #1a2030;padding-top:5px;margin-top:1px">'
+            +'<span style="font-size:8.5px;font-weight:700;letter-spacing:.06em;color:#4a5468">TOTAL</span>'
+            +'<span style="font-size:11px;font-weight:800;color:#8592a6;margin-left:auto">'+roll.miles+' mi</span>'
+            +'<span style="font-size:11px;font-weight:800;color:'+bc+'">'+roll.tss+' TSS</span>'
+          +'</div>'
           +'</div>';
       });
       H+='</div>';
@@ -37851,7 +37922,7 @@ function showCalendarTab(){
     h+='<div style="padding:12px 16px 4px">';
     h+='  <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:10px">'+monthNamesFull[mMonth]+' '+mYear+'</div>';
     h+='  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -16px;padding:0 16px">';
-    h+='  <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px 4px;min-width:468px">';
+    h+='  <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr)) 108px;gap:6px 4px;min-width:472px;align-items:start">';
     var wd=['M','T','W','T','F','S','S'];
     for(var wi=0; wi<7; wi++){ h+='<div style="text-align:center;font-size:10px;font-weight:600;color:var(--t3)">'+wd[wi]+'</div>'; }
     h+='<div style="text-align:center;font-size:9px;font-weight:700;letter-spacing:.05em;color:#FC4C02">WK</div>';
@@ -37867,7 +37938,7 @@ function showCalendarTab(){
         var mCol=actColor(mType);
         var mToday=(dn===todayD);
         var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
-        h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
+        h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;align-self:start;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
         h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
         if(mpw && Array.isArray(mpw.sessions) && mpw.sessions.length){
           // A glyph PER live planned session (each from its own type), so a Strength +
@@ -37884,12 +37955,26 @@ function showCalendarTab(){
       var mratio=mr.tss>0?Math.min(1,mr.tss/mMaxTSS):0;
       var mbar=mratio>=0.66?'#FC4C02':mratio>=0.33?'#EF9F27':'#5DCAA5';
       if(mr.acts===0){
-        h+='<div style="display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--s2);border:1px solid var(--b1);font-size:11px;color:var(--t3);font-weight:700">—</div>';
+        h+='<div style="display:flex;align-self:stretch;min-height:46px;align-items:center;justify-content:center;border-radius:9px;background:var(--s2);border:1px solid var(--b1);font-size:11px;color:var(--t3);font-weight:700">—</div>';
       } else {
-        h+='<div style="display:flex;flex-direction:column;justify-content:center;gap:2px;border-radius:9px;background:var(--s2);border:1px solid var(--b1);padding:4px 5px;overflow:hidden">'
-          +'<div style="font-size:12px;font-weight:800;color:var(--t1);line-height:1">'+mr.miles+'<span style="font-size:8px;font-weight:600;color:var(--t3);margin-left:1px">mi</span></div>'
-          +'<div style="font-size:10px;font-weight:800;color:'+mbar+';line-height:1">'+mr.tss+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">TSS</span></div>'
-          +'<div style="font-size:9px;font-weight:700;color:var(--t2);line-height:1">'+(mr.elev||0)+'<span style="font-size:7px;font-weight:600;color:var(--t3);margin-left:1px">ft</span></div>'
+        // Same calSportRows_ contract as the desktop week rail — only the icon helper and the
+        // type sizes differ, so the two surfaces cannot describe a week differently.
+        var mRows=calSportRows_(mr);
+        h+='<div style="display:flex;flex-direction:column;gap:3px;border-radius:9px;background:var(--s2);border:1px solid var(--b1);padding:5px 6px;overflow:hidden">';
+        mRows.forEach(function(row){
+          var mcol=actColor(row.sport);
+          h+='<div>'
+            +'<div style="display:flex;align-items:center;gap:3px;line-height:1">'+actIcon(row.sport,10,mcol)
+            +'<span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:'+mcol+'">'+row.label.toUpperCase()+'</span>'
+            +'<span style="font-size:11px;font-weight:800;color:var(--t1);margin-left:auto">'+row.main+'</span></div>'
+            +(row.sub?('<div style="font-size:8px;font-weight:600;color:var(--t3);line-height:1;margin-top:1px;text-align:right">'+row.sub+'</div>'):'')
+          +'</div>';
+        });
+        h+='<div style="display:flex;align-items:baseline;gap:4px;border-top:1px solid var(--b1);padding-top:3px">'
+            +'<span style="font-size:7px;font-weight:700;letter-spacing:.05em;color:var(--t3)">TOT</span>'
+            +'<span style="font-size:9px;font-weight:800;color:var(--t2);margin-left:auto">'+mr.miles+'mi</span>'
+            +'<span style="font-size:9px;font-weight:800;color:'+mbar+'">'+mr.tss+'</span>'
+          +'</div>'
           +'</div>';
       }
     });

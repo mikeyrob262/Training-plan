@@ -178,6 +178,20 @@ try {
     fail('the coach-insight prompt regressed (see above).');
   }
 
+  // ---- 10. Calendar week per-sport breakdown -> every failure mode here renders fine and is
+  //          simply wrong: a sport in the wrong line, a per-sport total that no longer adds up
+  //          to the combined total printed beside it, or a "0 ft" asserted for a sport that
+  //          carries no elevation data at all.
+  console.log(`${D}· checking calendar week sport breakdown…${X}`);
+  try {
+    const so = execSync('node scripts/cal-week-sport-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the calendar week breakdown regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
