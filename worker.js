@@ -16962,7 +16962,10 @@ function _yvyRunPop_(){
   return l.filter(function(r){ return r && r.date && String(r.date).length>=7; });
 }
 function _yvyMi_(r){ return parseFloat(r.distance)||0; }
-function _yvyElev_(r){ return parseFloat(r.elev||r.elevation)||0; }
+// Snapshot records carry gain as .elev (normalized from elevGainM) and the runs library uses
+// .elevation, but a live-tail record folded off st.rides may carry NEITHER and only an elevation
+// stream — which is how the Jul 2026 trail run reported 0 ft of climbing against a real 37 ft.
+function _yvyElev_(r){ return (typeof _actElevGain_==='function' ? _actElevGain_(r) : parseFloat(r.elev||r.elevation)) || 0; }
 function _yvySec_(r){ return (typeof _durSec_==='function')?_durSec_(r):(+(r.movingSecs||r.duration)||0); }
 function _yvyYM_(r){ return String(r.date||'').slice(0,7); }
 function _yvyDom_(r){ return parseInt(String(r.date||'').slice(8,10),10)||0; }
@@ -17058,7 +17061,11 @@ function _yvyFieldWindow_(rides, acc, lastYM){
   // calendar span, is what the UI quotes: a window can be 30 calendar months wide and still
   // only rank in 24 of them, and the page's honesty rule counts rankable months, not calendar.
   var inWindow=rankable.filter(function(k){ return k>=honest && k<=anchor; }).length;
-  return { rankableMonths:rankable.length, inWindow:inWindow, start:honest, months:_yvyCalMonths_(honest,anchor), anchor:anchor };
+  // firstCarried = the earliest month that can be ranked ON THIS FIELD. It is what decides
+  // whether "earlier activities do not record it" is a true statement: a field carried from the
+  // very first rankable month has no coverage gap to blame, however narrow its window ends up.
+  return { rankableMonths:rankable.length, inWindow:inWindow, start:honest, months:_yvyCalMonths_(honest,anchor), anchor:anchor,
+           firstCarried:rankable[0] };
 }
 
 // Per-metric view model. curVal is this month's aggregate (mean for intensities, sum for TSS load);
@@ -17133,7 +17140,7 @@ function _yvyPhys_(rides, now, sport){
       fmt:sp.fmt||'', invert:!!sp.invert,
       curVal:c.val, curN:c.n, lastVal:L.val, lastN:L.n, pct:pct,
       up:(sp.invert ? (c.val<=L.val) : (c.val>=L.val)), hasDelta:hasDelta,
-      winStart:win.start, winRankable:win.inWindow, rankableMonths:win.rankableMonths,
+      winStart:win.start, winRankable:win.inWindow, rankableMonths:win.rankableMonths, firstCarried:win.firstCarried,
       fullStart:fullStart, pageRankable:pageRankable,
       shortWindow:!!(win.inWindow && win.inWindow<pageRankable) };
   });
@@ -17149,7 +17156,16 @@ function _yvyPhysKpi_(ic, mv, first){
   var win='';
   if(mv.curN>0){
     if(mv.rankableMonths===0) win='<div style="font-size:10px;color:'+_YVY_BASE+';margin-top:2px">history too sparse to rank</div>';
-    else if(mv.shortWindow) win='<div style="font-size:10px;color:#7c8598;margin-top:2px">ranks from '+_yvyMonShort_(mv.winStart)+' &middot; '+mv.winRankable+' of '+mv.pageRankable+' rankable mo</div>';
+    else if(mv.shortWindow){
+      // TWO different limiters, and quoting only the second read as a missing library: how many
+      // months CARRY the field (rankableMonths) vs how many sit inside the dense like-for-like
+      // window (winRankable). On the run tab 146 of 147 months carry pace, but the window walk
+      // stops at Aug 2025 because recent running is intermittent — printing "1 of 147" made a
+      // 2,202-run history look like one run. Coverage leads; the window is stated after it.
+      var _t=mv.rankableMonths+' of '+mv.pageRankable+' mo carry it';
+      if(mv.winRankable<mv.rankableMonths) _t+=' &middot; window from '+_yvyMonShort_(mv.winStart);
+      win='<div style="font-size:10px;color:#7c8598;margin-top:2px">'+_t+'</div>';
+    }
   }
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:'+(first?'none':'1px solid #1c2130')+'">'
     +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
@@ -17165,8 +17181,23 @@ function _yvyPhysRow_(vm){
   var notes=[], pageRankable=(vm.phys[0]&&vm.phys[0].pageRankable)||0;
   vm.phys.forEach(function(mv){
     if(mv.curN===0) return;
-    if(mv.rankableMonths===0) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few rides carry it to rank against history.');
-    else if(mv.shortWindow) notes.push('<b style="color:#94a3b8">'+mv.label+'</b> ranks from '+_yvyMonLabel_(mv.winStart)+' — '+mv.winRankable+' of your '+pageRankable+' completed rankable '+vm.monthN+'; earlier '+vm.nP+' do not carry it.');
+    if(mv.rankableMonths===0){ notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few '+vm.nP+' carry it to rank against history.'); return; }
+    if(!mv.shortWindow) return;
+    // The old line asserted ONE cause — "earlier X do not carry it" — for a number that has two.
+    // For run pace that claim was simply false: 146 of the 147 rankable run-months carry pace.
+    // State the coverage, and only blame the record when the record is actually the limiter.
+    var s='<b style="color:#94a3b8">'+mv.label+'</b> is carried by '+mv.rankableMonths+' of your '+pageRankable+' completed rankable '+vm.monthN;
+    // Only blame the record when the record is actually late. 146-of-147 for pace is a
+    // rounding artefact of one thin month, not runs that failed to record a pace.
+    if(mv.firstCarried && mv.fullStart && mv.firstCarried>mv.fullStart) s+=' — it is not recorded before '+_yvyMonLabel_(mv.firstCarried);
+    s+='.';
+    if(mv.winRankable<mv.rankableMonths){
+      // Stated as WHAT the window is, not as a verdict on the athlete: "too intermittent" is
+      // overblown at 23-of-24 and only fits the 1-of-146 case.
+      s+=' It ranks within '+_yvyMonLabel_(mv.winStart)+(mv.winRankable>1?(' onward, '+mv.winRankable+' of them'):' alone')
+        +' — the longest continuous stretch dense enough to compare like for like.';
+    }
+    notes.push(s);
   });
   var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
@@ -17282,27 +17313,31 @@ function _pbWeekProg_(list){
 // longest ride — so it names the ride that clears it rather than a plan. The week record is the
 // one gap that genuinely spreads, so it is priced against a typical week. Where a fraction of a
 // ride would be printed, it says so in words instead.
-function _pbCost_(p, rate, med){
+function _pbCost_(p, rate, med, nA){
+  nA=nA||'ride';
   if(p.held || !p.hasForm) return '';
   if(p.key==='pwr' || p.key==='np') return '';
   if(p.key==='week'){
     if(!(rate>0)) return '';
-    if(med>0 && p.gap<med) return 'Across seven days that is less than one typical '+_pbFmtMi_(med)+' ride on top of your usual week.';
+    if(med>0 && p.gap<med) return 'Across seven days that is less than one typical '+_pbFmtMi_(med)+' '+nA+' on top of your usual week.';
     return 'Across seven days that is '+_pbFmtMi_(p.gap)+' on top of a typical '+_pbFmtMi_(rate)+' week.';
   }
-  var one='One ride past '+p.recStr+' clears it';
+  var one='One '+nA+' past '+p.recStr+' clears it';
   // Only distance converts against a distance median. Elevation, duration and speed do not, and
   // inventing a conversion for them would be exactly the move this section avoids.
   if(p.key==='dist' && med>0){
     var mult=Math.round(p.recVal/med*10)/10;
-    if(mult<=1) return one+' &mdash; inside a typical '+_pbFmtMi_(med)+' ride.';   // never a sub-1 ride
-    return one+' &mdash; about '+mult+'&times; a typical '+_pbFmtMi_(med)+' ride.';
+    if(mult<=1) return one+' &mdash; inside a typical '+_pbFmtMi_(med)+' '+nA+'.';   // never a sub-1 activity
+    return one+' &mdash; about '+mult+'&times; a typical '+_pbFmtMi_(med)+' '+nA+'.';
   }
   return one+'.';
 }
 // PURE. rides = raw cycling ride records; now = today. rate/med are the trailing-window figures
 // _yvyVM_ already computed; they price the gaps and are never recomputed here.
-function _pbCompute_(rides, now, rate, med){
+function _pbCompute_(rides, now, rate, med, nA){
+  // nA = singular sport noun ('ride'|'run'). The board is shared by both sports; without it the
+  // Run tab reads "Fastest Ride" over running data. Defaults to 'ride' for any legacy caller.
+  nA=nA||'ride'; var _NA=nA.charAt(0).toUpperCase()+nA.slice(1);
   var era=new Date(now.getFullYear()-_PB_ERA_YEARS, now.getMonth(), now.getDate()); era.setHours(0,0,0,0);
   var form=new Date(now.getTime()-_PB_FORM_DAYS*86400000);
   var all=(rides||[]).map(_pbNorm_).filter(function(x){ return x.t && !isNaN(x.t.getTime()) && x.t>=era && x.t<=now; })
@@ -17317,10 +17352,10 @@ function _pbCompute_(rides, now, rate, med){
   var npOk =(npEra >=_PB_PWR_MIN_ERA && npForm >=_PB_PWR_MIN_FORM);
 
   var SPECS=[
-    { key:'dist', label:'Longest Ride',  fmt:_pbFmtMi_,  val:function(x){ return x.mi; },   ok:function(x){ return x.mi>0; } },
+    { key:'dist', label:'Longest '+_NA,  fmt:_pbFmtMi_,  val:function(x){ return x.mi; },   ok:function(x){ return x.mi>0; } },
     { key:'elev', label:'Biggest Climb', fmt:_pbFmtFt_,  val:function(x){ return x.elev; }, ok:function(x){ return x.elev>0; } },
     { key:'time', label:'Longest Time',  fmt:_pbFmtDur_, val:function(x){ return x.sec; },  ok:function(x){ return x.sec>0; } },
-    { key:'mph',  label:'Fastest Ride',  fmt:_pbFmtMph_, val:function(x){ return x.mph; },
+    { key:'mph',  label:'Fastest '+_NA,  fmt:_pbFmtMph_, val:function(x){ return x.mph; },
       ok:function(x){ return x.mi>=_PB_FAST_MIN_MI && x.mph>0 && x.mph<_PB_MPH_CEIL; }, qual:_PB_FAST_MIN_MI+' mi minimum' },
     { key:'pwr',  label:'Best Avg Power', fmt:_pbFmtW_,  val:function(x){ return x.pwr; },  ok:function(x){ return x.pwr!=null; }, need:!pwrOk },
     { key:'np',   label:'Best Normalized Power', fmt:_pbFmtW_, val:function(x){ return x.np; }, ok:function(x){ return x.np!=null; }, need:!npOk }
@@ -17368,7 +17403,7 @@ function _pbCompute_(rides, now, rate, med){
   // there is no probability here, because a percentage on a single-ride PR prices a choice as if
   // it were a forecast. Everything below comes off rate/med, the same trailing path Month Race and
   // the Regret Simulator use — no second rate is introduced.
-  out.forEach(function(p){ p.cost=_pbCost_(p, rate, med); });
+  out.forEach(function(p){ p.cost=_pbCost_(p, rate, med, nA); });
 
   // Closest gap first — the section leads with the record you can actually take this week.
   // Held records sort last: they are the standard, not the target.
@@ -18170,6 +18205,9 @@ function _yvyVM_(rides, now, sport){
   // month a "ride-month" is the same class of defect as classifying one number by two rules: the
   // page would be describing a sport it is not showing.
   var _nA=(sport==='run')?'run':'ride', _nP=_nA+'s';
+  // Past tense + imperative for the copy that uses the sport as a VERB ("You rode 36m more").
+  // Nouns alone were not enough: the Monthly Summary time row read "You rode" over run data.
+  var _nVerb=(sport==='run')?'ran':'rode', _nVerbC=(sport==='run')?'Run':'Ride';
   // Latest dated activity in scope. Four zeros in a KPI row read as a broken page; "your last run
   // was Aug 14, 2025" reads as what it is. Derived, never a placeholder — null when the population
   // is empty, and the zero-state then says only what it can.
@@ -18272,7 +18310,7 @@ function _yvyVM_(rides, now, sport){
   var mets=[
     met('Distance', kDist, fMi,        function(s){ return 'You are '+s+' ahead'; },   function(s){ return 'Beat by '+s+' to catch up'; }),
     met('Elevation',kElev, fFt,        function(s){ return 'You climbed '+s+' more'; },function(s){ return 'Climb '+s+' more to catch up'; }),
-    met('Time',     kTime, _yvyFmtHD_, function(s){ return 'You rode '+s+' more'; },   function(s){ return 'Ride '+s+' more to catch up'; })
+    met('Time',     kTime, _yvyFmtHD_, function(s){ return 'You '+_nVerb+' '+s+' more'; },   function(s){ return _nVerbC+' '+s+' more to catch up'; })
   ];
   mets.sort(function(a,b){ return b.pct-a.pct; });
   var winning=mets[0], focus=mets[mets.length-1], even=null;
@@ -18294,7 +18332,7 @@ function _yvyVM_(rides, now, sport){
     rate:rate, proj:proj, need:need, projTot:projTot, onTrack:onTrack, needPerWk:needPerWk,
     best:best, heatCur:heat(cur,daysInCur), heatLast:heat(last,daysInLast), daysInLast:daysInLast, score:score, scoreBand:scoreBand,
     winning:winning, focus:focus, even:even, mets:mets, metsAll:metsAll, nCur:cur.length, phys:_yvyPhys_(rides, now, sport),
-    pb:_pbCompute_(rides, now, rate, med6) };
+    pb:_pbCompute_(rides, now, rate, med6, _nA) };
 }
 
 function _yvyFmtH_(sec){ var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h+'h '+(m<10?'0':'')+m+'m'; }
@@ -18363,7 +18401,8 @@ function _pbSpark_(p){
     +_gcSparkFoot_(pts[0].lab, pts[pts.length-1].lab)
     +'<div style="font-size:10px;color:#5b6678;margin-top:2px">best per quarter &middot; ringed point is the record</div></div>';
 }
-function _pbCardHtml_(p, formDays){
+function _pbCardHtml_(p, formDays, nA){
+  nA=nA||'ride';   // sport noun, so a run card never says "No qualifying ride"
   var accent=p.held?_YVY_TOP:_YVY_GOOD;
   var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'
     +'<span style="width:26px;height:26px;border-radius:7px;background:'+accent+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_pbIcon_(p.key,accent)+'</span>'
@@ -18383,11 +18422,11 @@ function _pbCardHtml_(p, formDays){
       +_pbSpark_(p)
       +'<div style="font-size:12px;font-weight:700;color:'+_YVY_TOP+'">This is current form</div>'
       +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'
-      +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only ride at this mark.'))
+      +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only '+nA+' at this mark.'))
       +'</div></div>';
   } else if(!p.hasForm){
     foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:12px;font-weight:700;color:#94a3b8">No qualifying ride in '+formDays+' days</div>'
+      +'<div style="font-size:12px;font-weight:700;color:#94a3b8">No qualifying '+nA+' in '+formDays+' days</div>'
       +'<div style="font-size:11.5px;color:#5b6678;margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
   } else {
     // The progress bar that used to sit here said "recent best is N% of the record" — one ratio,
@@ -18405,13 +18444,13 @@ function _pbCardHtml_(p, formDays){
 function _pbSection_(vm){
   var pb=vm.pb;
   if(!pb || !pb.recs.length) return '';
-  var cards=pb.recs.map(function(p){ return _pbCardHtml_(p, pb.formDays); }).join('');
+  var cards=pb.recs.map(function(p){ return _pbCardHtml_(p, pb.formDays, vm.nA); }).join('');
   var closable=pb.recs.filter(function(p){ return !p.held && p.hasForm; }).length;
   var lead=closable
     ? ('<b style="color:#f1f5f9">'+closable+'</b> of these are a gap you can close from current form.')
     : ('You are holding every one of these at current form.');
   var foot=pb.droppedForCoverage
-    ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">Power records are hidden here &mdash; too few rides in this window carry power for a best to mean anything.</div>'
+    ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
     : '';
   return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
@@ -19140,7 +19179,7 @@ function _yoySection_(vm){
       +'<span style="font-size:12.5px;color:'+_YVY_BASE+';font-weight:700">On your trailing rate the year finishes near '
       +_amMi_(yo.proj)+' mi over the '+yo.daysLeft+' day'+(yo.daysLeft===1?'':'s')+' left &mdash; a projection, not a result.</span></div></div>';
   }
-  var foot='Years start at '+yo.eraStart+': earlier months do not clear the ride count this page ranks on. '
+  var foot='Years start at '+yo.eraStart+': earlier months do not clear the '+vm.nA+' count this page ranks on. '
     +yo.cur.y+' stops at the dashed line because it is still running &mdash; '+yo.elapsed+' of '+yo.cur.days
     +' days against full years is not a comparison, which is why the figure quoted above is every year read at the SAME day of the year, not its finished total.';
   return _MR_CSS
@@ -19225,7 +19264,7 @@ function _yvyRenderVM_(vm){
     +'<div><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Insight</div>'
     +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin:3px 0 6px">'+(vm.best[0]?('Your big day carried the month.'):('Consistency is carrying you.'))+'</div>'
     +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Your best day ('+_YVY_MON[vm.m]+' '+(vm.best[0]?vm.best[0].dom:'')+', '+(vm.best[0]?vm.best[0].mi:0)+' mi) is '
-    +Math.round((vm.best[0]?vm.best[0].mi:0)/(vm.curTot||1)*100)+'% of the month. Keep the weekend long rides and the '+vm.rate+' mi/wk rate and you pass last month by '+_YVY_dateAdd_(vm)+'.</div></div></div>');
+    +Math.round((vm.best[0]?vm.best[0].mi:0)/(vm.curTot||1)*100)+'% of the month. Keep the weekend long '+vm.nP+' and the '+vm.rate+' mi/wk rate and you pass last month by '+_YVY_dateAdd_(vm)+'.</div></div></div>');
 
   // layout: main col + right rail
   // Sample size is stated on every render, for every sport, whether or not the narrative runs.

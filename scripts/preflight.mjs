@@ -192,6 +192,19 @@ try {
     fail('the calendar week breakdown regressed (see above).');
   }
 
+  // ---- 11. You vs. You run path -> the run library reaches the page (2,201 snapshot + tail), and
+  //          the coverage sentence states the RIGHT number for the RIGHT reason. Quoting the dense
+  //          window's count as the coverage made a 2,202-run history read as one run.
+  console.log(`${D}· checking You vs. You run path + coverage copy…${X}`);
+  try {
+    const so = execSync('node scripts/yvy-run-path-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the You vs. You run path regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
