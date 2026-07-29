@@ -10458,6 +10458,13 @@ function backfillNutrientsFromDB_(){
   }catch(e){ try{ console.log('[nutfill] error '+(e&&e.message)); }catch(_e){} }
   return {scanned:scanned, filled:filled, touched:touched};
 }
+// Rescale a logged nutrient from the quantity it was recorded at to a new one. Returns 0 rather
+// than a guess when there is nothing to rescale.
+function _nlRescale_(val, oldQty, newQty){
+  var v=+val; if(!(v>0)) return 0;
+  var o=(+oldQty>0)?+oldQty:1, n=(+newQty>0)?+newQty:1;
+  return Math.round((v/o)*n*10)/10;
+}
 function nutritionForDate(key){
   var k=key||((typeof nutrDate!=='undefined'&&nutrDate)?nutrDate:(typeof getTodayKey==='function'?getTodayKey():''));
   var g=calcTrainingAwareTargets_(k)||{};
@@ -10654,7 +10661,12 @@ function editFoodItem(meal, idx) {
       n: newName, _baseName: newName, _qty: qty,
       cal: Math.round(newCal*qty), p: Math.round(newP*qty*10)/10,
       c: Math.round(newC*qty*10)/10, f: Math.round(newF*qty*10)/10,
-      fiber: item.fiber||0, satFat: item.satFat||0, sodium: item.sodium||0, sugar: item.sugar||0
+      // cal/p/c/f are rescaled by the new quantity above, so the micronutrients have to be too --
+      // otherwise changing 3 bottles to 4 scales the calories and leaves the fiber reading three
+      // bottles' worth. Rescaled from the PER-SERVING value implied by the quantity this entry was
+      // logged at; with no prior quantity the stored figure is already per-serving.
+      fiber: _nlRescale_(item.fiber, item._qty, qty), satFat: _nlRescale_(item.satFat, item._qty, qty),
+      sodium: _nlRescale_(item.sodium, item._qty, qty), sugar: _nlRescale_(item.sugar, item._qty, qty)
     };
     sv(); modal.remove(); nutRefresh();
   };
@@ -24992,7 +25004,28 @@ function dsShowCalendar(){
     return 'ride';
   }
   function calColor(r){ return sportColor_(rideSport_(r)); }
-  function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
+  // Which sport a PLANNED session actually is. The migrated plan typed every run as a ride -- 11
+// easyRun and 4 run10k sessions carry type:'ride', and no session in the plan carries type:'run'
+// at all -- so the icon pickers, which all read type first, drew a bike for a scheduled easy run.
+// An explicit run signal in the intent or the name therefore has to outrank the stored type.
+// Fixing the icon here rather than rewriting the stored type keeps this to a rendering change;
+// the underlying type is still wrong and worth repairing separately.
+function _sessSport_(x){
+  if(!x) return 'Ride';
+  var ty=String(x.type||'').toLowerCase(), it=String(x.intent||'').toLowerCase(), nm=String(x.name||'').toLowerCase();
+  if(ty==='rest') return 'rest';
+  if(ty==='strength') return 'Strength';
+  if(ty==='mobility') return 'mobility';
+  if(ty==='run') return 'Run';
+  if(it==='easyrun' || it==='run10k' || it==='tenk') return 'Run';
+  // The block's milestone attempts are typed 'attempt', which no icon set knows. Three of them are
+  // rides and one is the 10k, handled just above.
+  if(it==='chalet' || it==='alpe' || it==='ventop') return 'Ride';
+  if(/(^|[^a-z])run([^a-z]|$)|jog|(^|[^a-z])10k([^a-z]|$)|(^|[^a-z])5k([^a-z]|$)|marathon/.test(nm)) return 'Run';
+  if(ty==='ride') return 'Ride';
+  return x.type || x.name || 'Ride';
+}
+function calIcon(sport,size,color){ var svg=activityIcon_(sport,size); return color?svg.replace(/stroke="#[0-9A-Fa-f]{6}"/,'stroke="'+color+'"'):svg; }
   function fmtHMS(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h>0?(h+':'+pad2(m)+':'+pad2(s)):(m+':'+pad2(s)); }
   function fmtFull(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.floor((secs%3600)/60),s=secs%60; return h+':'+pad2(m)+':'+pad2(s); }
   function fmtHM(secs){ secs=Math.round(secs||0); var h=Math.floor(secs/3600),m=Math.round((secs%3600)/60); return h>0?(h+'h '+pad2(m)+'m'):(m+'m'); }
@@ -25199,11 +25232,11 @@ function dsShowCalendar(){
             if(_psAll.length){
               if(dl.length){
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(ps.type||ps.name,11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(_sessSport_(ps),11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
                 });
               } else {
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(ps.type||ps.name,18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div>'+((ps.block&&ps.block.phase)?('<div onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer">'+ps.block.phase+' &middot; wk '+(ps.block.week||1)+'</div>'):'')+'</div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(_sessSport_(ps),18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div>'+((ps.block&&ps.block.phase)?('<div onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer">'+ps.block.phase+' &middot; wk '+(ps.block.week||1)+'</div>'):'')+'</div>';
                 });
               }
             }
@@ -26011,8 +26044,16 @@ function dsShowDashboard(){
   try{ var wlog=(st.weightLog||[]).filter(function(w){return w&&w.date&&w.weight;}).slice().sort(function(a,b){return normDate(a.date)>normDate(b.date)?1:-1;});
     if(wlog.length){ lastWt=parseFloat(wlog[wlog.length-1].weight); if(wlog.length>=2){ wtChange=Math.round((lastWt-parseFloat(wlog[wlog.length-2].weight))*10)/10; } } }catch(e){}
   // This-week aggregates + daily series.
-  function dayKey(d){ return d.toISOString().slice(0,10); }
-  var days7=[]; for(var i=6;i>=0;i--){ var d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-i); days7.push(dayKey(d)); }
+  // "This Week" means the CALENDAR week, Monday to Sunday -- what the label says, and what every
+  // other weekly reader here already uses (the streak, the plan, the adherence trends). It was a
+  // rolling today-minus-6 window, so on a Tuesday it reached back to the previous Wednesday and
+  // reported six activities and 6h 38m for a week that actually held two.
+  // dayKey is built from LOCAL parts: toISOString reads a local-midnight Date in UTC and lands on
+  // the wrong day for anyone east of Greenwich.
+  function dayKey(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  var _wkMon=new Date(); _wkMon.setHours(0,0,0,0);
+  _wkMon.setDate(_wkMon.getDate()-((_wkMon.getDay()===0)?6:_wkMon.getDay()-1));
+  var days7=[]; for(var i=0;i<7;i++){ var _wd=new Date(_wkMon); _wd.setDate(_wkMon.getDate()+i); days7.push(dayKey(_wd)); }
   var tssByDay={}, timeByDay={}, actByDay={};
   days7.forEach(function(k){ tssByDay[k]=0; timeByDay[k]=0; actByDay[k]=0; });
   var weekTSS=0, weekSecs=0, weekActs=0;
@@ -26148,7 +26189,7 @@ function dsShowDashboard(){
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:16px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:9px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
+    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:9px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkg.toFixed(2),'W/kg','FTP + weight',spark(wkgSeries.length>1?wkgSeries:[wkg,wkg],ACC.blue,100,22));
@@ -36615,7 +36656,7 @@ function showCalendarTab(){
     entries.slice(0,2).forEach(function(en){
       var ecol=en.rest?'#8E8E93':actColor(en.type);
       var enm=String(en.name||''); if(enm.length>9) enm=enm.slice(0,8)+'…';
-      h+='<div style="display:flex;flex-direction:column;align-items:center;gap:1px;max-width:100%">'+actIcon(en.rest?(en.type==='rest'?'rest':'recovery'):en.type,16,ecol)+'<span style="font-size:8.5px;font-weight:600;color:var(--t1);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58px">'+enm+'</span></div>';
+      h+='<div style="display:flex;flex-direction:column;align-items:center;gap:1px;max-width:100%">'+actIcon(en.rest?(en.type==='rest'?'rest':'recovery'):_sessSport_(en),16,ecol)+'<span style="font-size:8.5px;font-weight:600;color:var(--t1);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58px">'+enm+'</span></div>';
     });
     if(entries.length>2){ h+='<span style="font-size:8px;color:var(--t3);font-weight:600">+'+(entries.length-2)+'</span>'; }
     h+='</div>';
@@ -36673,7 +36714,7 @@ function showCalendarTab(){
           // A glyph PER live planned session (each from its own type), so a Strength +
           // Ride day shows both — not one glyph that may not match the day's sessions.
           h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;gap:2px;line-height:0">';
-          mpw.sessions.slice(0,2).forEach(function(ms){ h+=actIcon(ms.type||ms.name,13,actColor(ms.type||ms.name)); });
+          mpw.sessions.slice(0,2).forEach(function(ms){ var _sp=_sessSport_(ms); h+=actIcon(_sp,13,actColor(_sp)); });
           h+='</div>';
         } else if(mRestSess){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon('rest',13,'#8E8E93')+'</div>'; }
         if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
@@ -38957,7 +38998,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-segment-backfill-mobile';
+window.__BUILD__ = '2026-07-28-week-tile-icon-fiber';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
