@@ -140,7 +140,11 @@ check('ftpOn_ reads the LIVE log', /var h=_ftpHistLive_\(\); dateStr=dateStr\|\|
 check('ftpRecord_ compares against the newest LIVE entry', /var sorted=_ftpSort_\(_ftpHistLive_\(\)\), last=/.test(src), true);
 check('ftpSyncHistory_ reconciles against live entries', /var h=_ftpHistLive_\(\);\s*\n\s*if\(!h\.length\)\{ ftpRecord_\(cur,'baseline'\); return; \}/.test(src), true);
 check('_ftpHist_ stays RAW for the mutating callers', /function _ftpHist_\(\)\{[^}]*return st\.ftpHistory; \}/.test(src), true);
-check('the two latest-weigh-in tiles read live entries', (src.match(/settingsArrLive_\('weightLog'\)/g) || []).length, 2);
+// Targets the tiles by their own line shape rather than counting callers globally — other
+// surfaces legitimately read the live log too (the Analytics Weight goal card now does).
+check('the two latest-weigh-in tiles read live entries',
+  (src.match(/var wLog = \(typeof settingsArrLive_==='function'\)\?settingsArrLive_\('weightLog'\)/g) || []).length, 2);
+check('and no tile reads the raw log any more', /var wLog = st\.weightLog\|\|\[\]/.test(src), false);
 check('no display reader still calls the raw log', /\(typeof _ftpHist_==='function'\)\?_ftpHist_\(\)/.test(src), false);
 
 console.log('\n=== the force-push escape hatch ===');

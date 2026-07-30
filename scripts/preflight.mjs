@@ -322,6 +322,18 @@ try {
     fail('settings-array deletion or the force-push gate regressed (see above).');
   }
 
+  // ---- 21. The five Analytics goal cards are trends with a dashed goal, not pill bars. Guards
+  //          both halves: the fills stay gone, and the rule is only drawn when it is real.
+  console.log(`${D}· checking the goal cards…${X}`);
+  try {
+    const so = execSync('node scripts/goal-cards-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Analytics goal cards regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

@@ -13828,8 +13828,9 @@ function renderPerf(container){
       +'<div style="font-size:22px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
       +'<div style="font-size:11px;font-weight:600;color:'+card.c+';margin-top:3px">'+card.sub+'</div>'
       +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
-      +(card.spark?_gcTrend_(card.spark, card.sparkC||card.c, { aria:card.lbl+' over 90 days', H:26, fill:false, from:'', to:'', note:'90 days' })
-        :(card.barW!==null?'<div style="height:4px;background:var(--s2);border-radius:2px;margin-top:6px"><div style="height:4px;background:'+card.c+';border-radius:2px;width:'+card.barW+'%"></div></div>':''))
+      // No bar fallback: every card above sets barW:null, so that branch was dead code left over
+      // from the sparkline conversion. A card without a series simply shows its number.
+      +(card.spark?_gcTrend_(card.spark, card.sparkC||card.c, { aria:card.lbl+' over 90 days', H:26, fill:false, from:'', to:'', note:'90 days' }):'')
       +'</div>';
   });
   html+='</div>';
@@ -17986,6 +17987,29 @@ function _gcScale_(pct, col, lo, mid, hi){
     +'<span style="font-size:9.5px;color:#5b6678">'+(lo||'0%')+'</span>'
     +'<span style="font-size:9.5px;color:#5b6678">'+(mid||'even')+'</span>'
     +'<span style="font-size:9.5px;color:#5b6678">'+(hi||'100%')+'</span></div></div>';
+}
+// A metric's TRAJECTORY with its goal drawn as a dashed reference line where it actually falls
+// inside the plotted range. Factored out of the Power-to-Weight card, which established the
+// pattern, so the goal cards cannot drift from it: a goal is a line to reach, not a bar to fill,
+// and the card must never draw a rule the data does not reach (or claim one it did not draw).
+// Compact by design - these live five-across - so no axis footer, just the shape and the rule.
+function _goalSpark_(pts, col, goal, opts){
+  opts=opts||{};
+  var real=(pts||[]).filter(function(p){ return p && p.v!=null && isFinite(p.v); });
+  if(real.length<2){
+    return '<div style="font-size:9.5px;color:#5b6678;line-height:1.4">'
+      +(opts.empty||'Not enough history yet to draw a trend.')+'</div>';
+  }
+  var v=real.map(function(p){ return p.v; });
+  var lo=Math.min.apply(null,v), hi=Math.max.apply(null,v);
+  var tp=(hi>lo)?((goal-lo)/(hi-lo)):-1;
+  var onChart=(isFinite(tp) && tp>=0 && tp<=1);
+  var spark=(typeof _gcSpark_==='function')?_gcSpark_(pts, col, { aria:opts.aria||'trend', H:opts.H||30, fill:false, markPeak:false }):'';
+  if(!spark) return '';
+  var rule=onChart
+    ? '<div style="position:absolute;left:0;right:0;top:'+((1-tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.85;pointer-events:none"></div>'
+    : '';
+  return '<div style="position:relative">'+spark+rule+'</div>';
 }
 // Series builders shared by the converted surfaces. Each returns oldest-first [{v,lab}] and each
 // returns [] rather than a guess when the log cannot support a line.
@@ -26542,29 +26566,75 @@ function dsShowAnalytics(){
     var ago=(now-d)/86400000; if(ago>=0&&ago<7) _last7+=parseFloat(r.distance)||0; });
   _ytd=Math.round(_ytd); _last7=Math.round(_last7);
   var _G=_goalTargets_();
-  // Goal cards match the mockup: label + info glyph, big live value + small unit
-  // on the left, % on the right, thin colored bar, "Goal X" beneath. Weight is
-  // lower-is-better (bar = target/current); the rest are current/target.
+  // Goal cards: label + info glyph, live value + unit, then the metric's TRAJECTORY with the goal
+  // as a dashed rule where it falls in range, and the goal restated as text underneath so it is
+  // readable whether or not the rule draws. These were five pill bars ("92% of goal") - the exact
+  // pattern the standing rule exists to remove, and the last of the untraced sites from the sweep.
+  // A percentage of a goal cannot say whether the athlete is climbing toward it or drifting away,
+  // which is the only question the card is read for.
+  //
+  // Each series is one the app ALREADY computes. Nothing new is derived, and a metric whose log
+  // cannot support a line says so rather than inventing one.
+  var _mon=function(d){ return (typeof _gcMonLab_==='function')?_gcMonLab_(String(d).slice(0,10)):String(d).slice(5,10); };
+  var _ftpPts=((typeof _ftpHistLive_==='function')?_ftpHistLive_():[]).slice()
+    .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; })
+    .map(function(h){ return { v:+h.ftp, lab:_mon(h.date) }; });
+  var _wtPts=((typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):[])
+    .filter(function(w){ return w && w.date && isFinite(parseFloat(w.weight)); })
+    .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; })
+    .map(function(w){ return { v:parseFloat(w.weight), lab:_mon(w.date) }; });
+  // Same two-series preference as the Power-to-Weight card: weigh-in-derived first (the precise
+  // one), else the rolling best-20-min series this page already ranks.
+  var _wkgPts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
+  if(!_wkgPts.filter(function(p){ return p && p.v!=null; }).length && _wt && _wt.pts && _wt.pts.length>1){
+    _wkgPts=_wt.pts.map(function(p){ return { v:p.wkg, lab:_mon(p.date) }; });
+  }
+  // Weekly distance: Mon-Sun buckets off the same deduped rides the cards above count, last 12.
+  var _wkMiPts=(function(){
+    var by={};
+    (rides||[]).forEach(function(r){
+      if(!r || r.deleted || !r.date) return;
+      var d=new Date(normDate(r.date)); if(isNaN(d.getTime())) return;
+      var dw=d.getDay(), mon=new Date(d); mon.setDate(mon.getDate()-(dw===0?6:dw-1));
+      var k=mon.getFullYear()+'-'+('0'+(mon.getMonth()+1)).slice(-2)+'-'+('0'+mon.getDate()).slice(-2);
+      by[k]=(by[k]||0)+(parseFloat(r.distance)||0);
+    });
+    return Object.keys(by).sort().slice(-12).map(function(k){ return { v:Math.round(by[k]), lab:_mon(k) }; });
+  })();
+  var _ctlPts=(typeof _gcFitPts_==='function')?_gcFitPts_('ctl',90):[];
   var goals=[
-    {label:'FTP', value:''+FTP, unit:'W', frac:Math.min(1,FTP/_G.ftpW), goal:'Goal '+_G.ftpW+'W', color:'#a855f7'},
-    {label:'Weight', value:BWT.toFixed(1), unit:'lbs', frac:Math.min(1,_G.weightLb/Math.max(BWT,1)), goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e'},
-    {label:'W/kg', value:wkgNow.toFixed(2), unit:'W/kg', frac:Math.min(1,wkgNow/_G.wkg), goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7'},
-    {label:'Weekly Distance', value:''+_last7, unit:'mi', frac:Math.min(1,_last7/_G.weeklyMi), goal:'Goal '+_G.weeklyMi+' mi', color:'#3b82f6'},
-    {label:'CTL', value:''+Math.round(lastCTL), unit:'', frac:Math.min(1,lastCTL/_G.ctl), goal:'Goal '+_G.ctl, color:'#f97316'}
+    {label:'FTP', value:''+FTP, unit:'W', goal:'Goal '+_G.ftpW+'W', color:'#a855f7',
+     pts:_ftpPts, target:_G.ftpW, empty:'Log an FTP change and this becomes a trend.'},
+    {label:'Weight', value:BWT.toFixed(1), unit:'lbs', goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e',
+     pts:_wtPts, target:_G.weightLb, empty:'Log a few weigh-ins and this becomes a trend.'},
+    {label:'W/kg', value:wkgNow.toFixed(2), unit:'W/kg', goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7',
+     pts:_wkgPts, target:_G.wkg, empty:'Needs weigh-ins or 20-min power history.'},
+    {label:'Weekly Distance', value:''+_last7, unit:'mi', goal:'Goal '+_G.weeklyMi+' mi', color:'#3b82f6',
+     pts:_wkMiPts, target:_G.weeklyMi, empty:'Needs a couple of weeks of rides.'},
+    {label:'CTL', value:''+Math.round(lastCTL), unit:'', goal:'Goal '+_G.ctl, color:'#f97316',
+     pts:_ctlPts, target:_G.ctl, empty:'Needs more fitness history.'}
   ];
   var rowC=document.createElement('div');
   rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
   goals.forEach(function(g){
-    var _pc=Math.round(g.frac*100);
+    var chart=(typeof _goalSpark_==='function')
+      ? _goalSpark_(g.pts, g.color, g.target, { H:30, aria:g.label+' over time', empty:g.empty })
+      : '';
+    // The goal is stated as text whether or not the dashed rule drew, so a target that sits off
+    // the plotted range is still readable rather than silently absent.
+    var reach=(function(){
+      var real=(g.pts||[]).filter(function(p){ return p && p.v!=null && isFinite(p.v); });
+      if(real.length<2) return '';
+      var vv=real.map(function(p){ return p.v; });
+      var lo=Math.min.apply(null,vv), hi=Math.max.apply(null,vv);
+      return (g.target>=lo && g.target<=hi) ? '' : ' &middot; off chart';
+    })();
     var gc=document.createElement('div');
     gc.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px';
     gc.innerHTML='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+'</span>'+_infoGlyph+'</div>'
-      +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">'
-        +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:#94a3b8;margin-left:3px">'+g.unit+'</span>':'')+'</div>'
-        +'<span style="font-size:12px;font-weight:700;color:#94a3b8;flex-shrink:0">'+_pc+'%</span>'
-      +'</div>'
-      +'<div style="height:5px;background:#0d0f14;border-radius:3px;overflow:hidden"><div style="height:5px;background:'+g.color+';border-radius:3px;width:'+_pc+'%"></div></div>'
-      +'<div style="font-size:10px;color:#64748b">'+g.goal+'</div>';
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:#94a3b8;margin-left:3px">'+g.unit+'</span>':'')+'</div>'
+      +chart
+      +'<div style="font-size:10px;color:#64748b">'+g.goal+reach+'</div>';
     rowC.appendChild(gc);
   });
   wrap.appendChild(rowC);
