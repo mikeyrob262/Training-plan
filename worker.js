@@ -22639,14 +22639,23 @@ function _trjSection8_(){
 var _trjWxAsked=false;
 function _trjKickWeather_(){
   if(_trjWxAsked) return;
-  if(typeof wxCache_!=='undefined' && wxCache_ && wxCache_.weather) return;   // already have it
+  // "Already have it" means the payload landed, not that the slot exists. wxFetch_ leaves the slot
+  // holding {data:null} after a failure, which is truthy and would have counted as a hit.
+  if(typeof wxCache_!=='undefined' && wxCache_ && wxCache_.weather && wxCache_.weather.data) return;
   if(typeof getWeather_!=='function') return;
   _trjWxAsked=true;
   try{
-    getWeather_().then(function(){
-      try{ if(_aiTab==='trajectory' && _aiMount) aiRenderOverview_(_aiMount); }catch(e){}
-    });
-  }catch(e){}
+    getWeather_().then(function(r){
+      // Guard on SUCCESS, not on the attempt. Latching the flag before knowing the result meant one
+      // failed fetch disabled weather for the rest of the session with no retry - the same mistake
+      // the GPS re-fetch made twice.
+      if(!(r && r.data)) _trjWxAsked=false;
+      // Repaint whatever tab is mounted. This used to fire only for 'trajectory', so every other
+      // surface that kicked the fetch got the data into the cache and then never re-rendered to
+      // use it - the card stayed empty until something else happened to repaint the page.
+      try{ if(_aiMount && typeof aiRenderOverview_==='function') aiRenderOverview_(_aiMount); }catch(e){}
+    }).catch(function(){ _trjWxAsked=false; });
+  }catch(e){ _trjWxAsked=false; }
 }
 function aiRenderTrajectory_(){
   var css='<style>'
@@ -22760,8 +22769,11 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 function aiRenderSegAttack_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
   var keys=Object.keys(store);
+  // wxCache_[slot] is a WRAPPER - {data, fetchedAt} - not the payload. Reading wx.current instead
+  // of wx.data.current silently yields undefined, which is why this card read "Weather unavailable"
+  // forever while the Weather page was fine: the fetch always worked, the unwrap never did.
   var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
-  var cur=(wx&&wx.current)?wx.current:null;
+  var cur=(wx&&wx.data&&wx.data.current)?wx.data.current:null;
   try{ if(!cur && typeof _trjKickWeather_==='function') _trjKickWeather_(); }catch(e){}
   var esc=aiEsc_;
   // One renderer, both surfaces. The row is a 5-column grid on desktop that collapses in stages:
@@ -22949,8 +22961,14 @@ function aiRenderSegAttack_(){
 var _saQ='', _saFilter='all', _saSort='prob', _saOpen=null;
 function _saEvalAll_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  // wxCache_[slot] is a WRAPPER - {data, fetchedAt} - not the payload. Reading wx.current instead
+  // of wx.data.current silently yields undefined, which is why this card read "Weather unavailable"
+  // forever while the Weather page was fine: the fetch always worked, the unwrap never did.
   var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
-  var cur=(wx&&wx.current)?wx.current:null;
+  var cur=(wx&&wx.data&&wx.data.current)?wx.data.current:null;
+  // The library needs today's wind as much as the attack page does, and reading the cache without
+  // ever asking for a fill leaves it permanently empty on a cold session.
+  try{ if(!cur && typeof _trjKickWeather_==='function') _trjKickWeather_(); }catch(e){}
   var lbs=parseFloat((typeof st!=='undefined'&&st&&st.weight)||0);
   var ctx={ windFromDeg:cur?cur.winddirection_10m:null, windMph:cur?cur.windspeed_10m:null,
             tempF:cur?cur.temperature_2m:null, massKg:(lbs>0)?(lbs/2.20462+9):null,

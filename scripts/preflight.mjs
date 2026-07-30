@@ -346,6 +346,19 @@ try {
     fail('the Coach V yesterday recap regressed (see above).');
   }
 
+  // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
+  //          field straight off it yields undefined silently, which is how Segment Attack showed
+  //          "Weather unavailable" on every visit while the Weather page worked fine.
+  console.log(D + String.fromCharCode(183) + " checking weather cache shape…" + X);
+  try {
+    const so = execSync("node scripts/wx-cache-shape-test.mjs", { stdio: ["ignore", "pipe", "pipe"] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || "").toString());
+    console.error((e.stderr || "").toString());
+    fail("a weather-cache consumer reads the wrapper without unwrapping (see above).");
+  }
+
   // ---- 23. Segment Attack: the physics against external references, the CdA fit recovering a
   //          known value, and the probability being measured rather than felt.
   console.log(`${D}· checking the Segment Attack model…${X}`);
