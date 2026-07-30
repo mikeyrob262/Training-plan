@@ -5331,7 +5331,7 @@ function _icuYears_(){
 function icuIdBackfillCandidates_(){
   return (st.rides||[]).filter(function(r){
     if(!r || r.deleted || r.icuId) return false;
-    if(typeof r.id==='string' && /^i\d+$/.test(r.id)) return true;
+    if(typeof r.id==='string' && /^i\\d+$/.test(r.id)) return true;
     return r.stravaId!=null && r.stravaId!=='';
   });
 }
@@ -5353,7 +5353,7 @@ function _icuFetchMap_(onProgress){
 }
 // Resolve a ride's icuId from its own i-id, else the strava_id map. Returns the i-id or null.
 function _icuResolve_(r, map){
-  if(r && typeof r.id==='string' && /^i\d+$/.test(r.id)) return r.id;
+  if(r && typeof r.id==='string' && /^i\\d+$/.test(r.id)) return r.id;
   if(r && r.stravaId!=null && map){ var hit=map[String(r.stravaId)]; if(hit) return hit; }
   return null;
 }
@@ -5361,7 +5361,7 @@ function icuIdBackfillScan_(){
   var el=document.getElementById('icuid-backfill-status'); function say(t){ if(el) el.textContent=t; }
   var cands=icuIdBackfillCandidates_();
   if(!cands.length){ say('Every ride already has an icuId (or none can take one) — nothing to scan.'); return; }
-  var direct=cands.filter(function(r){ return typeof r.id==='string' && /^i\d+$/.test(r.id); }).length;
+  var direct=cands.filter(function(r){ return typeof r.id==='string' && /^i\\d+$/.test(r.id); }).length;
   say('Fetching your Intervals.icu activity list…');
   _icuFetchMap_(function(i,n,m){ say('Fetching activities '+i+'/'+n+' years… '+m+' Strava-linked so far'); }).then(function(map){
     _icuBackfill.map=map;
@@ -5699,7 +5699,7 @@ function mergeArrays_(a, b){
 function looksLikeSparseArray_(obj){
   var keys = Object.keys(obj);
   if(!keys.length) return false;
-  return keys.every(function(k){ return /^\d+$/.test(k); });
+  return keys.every(function(k){ return /^\\d+$/.test(k); });
 }
 function objectToArray_(obj){
   return Object.keys(obj).sort(function(x,y){return parseInt(x,10)-parseInt(y,10);}).map(function(k){ return obj[k]; });
@@ -11910,7 +11910,7 @@ function openFoodForMeal(meal){
       var local = [];
       if(q){
         var ql = q.toLowerCase();
-        var qWords = ql.split(/\s+/).filter(Boolean);
+        var qWords = ql.split(/\\s+/).filter(Boolean);
         var starts = allLocal.filter(function(f){return f.n.toLowerCase().startsWith(ql);});
         var startNames = new Set(starts.map(function(f){return f.n;}));
         var wordMatch = allLocal.filter(function(f){
@@ -12453,7 +12453,7 @@ function showConstellation(){
 function _streakP2_(n){ return (n<10?'0':'')+n; }
 function _streakWeekKeyOf_(ds){
   if(!ds) return null;
-  var s=String(ds), m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/), d;
+  var s=String(ds), m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/), d;
   if(m) d=new Date(+m[1], (+m[2])-1, +m[3]);
   else { d=new Date(s); if(isNaN(d.getTime())) return null; d=new Date(d.getFullYear(),d.getMonth(),d.getDate()); }
   var dw=d.getDay();
@@ -23722,7 +23722,7 @@ function _fmtMMSS_(sec){ sec=Math.round(sec||0); var m=Math.floor(sec/60), s=sec
 function _icuResolveLazy_(r, cb){
   if(!r){ cb(null); return; }
   if(r.icuId){ cb(r.icuId); return; }
-  if(typeof r.id==='string' && /^i\d+$/.test(r.id)){ r.icuId=r.id; try{sv();}catch(e){} cb(r.icuId); return; }
+  if(typeof r.id==='string' && /^i\\d+$/.test(r.id)){ r.icuId=r.id; try{sv();}catch(e){} cb(r.icuId); return; }
   if(r.stravaId==null || r.stravaId==='' || r._icuNone){ cb(null); return; }
   var d=(typeof normDate==='function')?normDate(r.date):r.date; if(!d){ cb(null); return; }
   fetch('/api/intervals-activities?oldest='+d+'&newest='+d,{headers:{'x-proxy-token':(window.PROXY_TOKEN||'')}})
@@ -27349,7 +27349,7 @@ function _hrdRideLabel_(r){
   if(!r) return '';
   var nm=String(r.name||'').trim() || 'Ride';
   if(nm.length>34) nm=nm.slice(0,33)+'…';
-  var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(normDate(r.date||'')||'');
+  var m=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(normDate(r.date||'')||'');
   var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return _hrdEsc_(nm)+(m?' &middot; '+MO[(+m[2])-1]+' '+(+m[3]):'');
 }
@@ -29084,8 +29084,8 @@ function renderCoachInsightContent(el, text){
   var lines=text.split(String.fromCharCode(10)).map(function(l){ return l.trim(); }).filter(Boolean);
   var headline='', bullets=[], recommendation='';
   lines.forEach(function(line){
-    if(line.toLowerCase().indexOf('recommendation:')===0){ recommendation=line.replace(/^recommendation:\s*/i,''); }
-    else if(line.indexOf('- ')===0){ bullets.push(line.replace(/^-\s*/,'')); }
+    if(line.toLowerCase().indexOf('recommendation:')===0){ recommendation=line.replace(/^recommendation:\\s*/i,''); }
+    else if(line.indexOf('- ')===0){ bullets.push(line.replace(/^-\\s*/,'')); }
     else if(!headline){ headline=line; }
   });
 
@@ -29148,11 +29148,11 @@ function _insightSuppressDeficit_(text, suppress, rx, noun){
   lines.forEach(function(ln, idx){
     if(idx===0){
       var m=ln.match(/^(.*?)[,;]? +(but|though|however|yet|although) /i);   // literal spaces on purpose — regex whitespace/word-boundary escapes are eaten by the served template literal
-      if(m && _CV_DEFICIT_RE.test(ln.slice(m[0].length))){ out.push(m[1].replace(/[,;\s]+$/,'')+'.'); return; }
+      if(m && _CV_DEFICIT_RE.test(ln.slice(m[0].length))){ out.push(m[1].replace(/[,;\\s]+$/,'')+'.'); return; }
       if(_CV_DEFICIT_RE.test(ln)){ out.push(rx?('Executed to prescription — '+String(rx.name||'session').toLowerCase()):(noun.charAt(0).toUpperCase()+noun.slice(1)+' logged as recorded.')); return; }
       out.push(ln); return;
     }
-    var isRec=/^\s*recommendation:/i.test(ln);
+    var isRec=/^\\s*recommendation:/i.test(ln);
     if(isRec && (_CV_DEFICIT_RE.test(ln) || _CV_STEADY_RE.test(ln))){
       out.push('Recommendation: '+(rx?'Keep executing the prescribed band — a base ride is won by staying in zone, not by peak power.':'No prescription on file; nothing to change.'));
       return;
@@ -30044,8 +30044,8 @@ function parseDurationToMinutes_(dur){
     var h=parseInt(parts[0])||0, m=parseInt(parts[1])||0;
     return h*60+m;
   }
-  var hMatch=String(dur).match(/(\d+)h/);
-  var mMatch=String(dur).match(/(\d+)m/);
+  var hMatch=String(dur).match(/(\\d+)h/);
+  var mMatch=String(dur).match(/(\\d+)m/);
   return (hMatch?parseInt(hMatch[1])*60:0)+(mMatch?parseInt(mMatch[1]):0)||90;
 }
 
@@ -30536,7 +30536,7 @@ function renderAnalysisContent(wrap, text){
     any=true;
     var row=document.createElement('div');
     row.style.cssText='padding:12px 16px;'+(i>0?'border-top:1px solid var(--b1);':'')+'font-size:13px;color:var(--t1);line-height:1.5';
-    row.textContent=line.replace(/^-\s*/,'');
+    row.textContent=line.replace(/^-\\s*/,'');
     listGroup.appendChild(row);
   });
   if(!any){
@@ -31131,7 +31131,7 @@ function _depWrite_(src, fname, tok){
   // Read the stamp OUT OF THE FILE BEING SENT, not from the running page. Same discipline as the
   // outgoing/read-back pair in storeV2Put_: the two stamps matching is what proves the write
   // landed, and they can only prove it if they come from different places.
-  var m=src.match(/window\.__BUILD__\s*=\s*'([^']+)'/);
+  var m=src.match(/window\\.__BUILD__\\s*=\\s*'([^']+)'/);
   var outgoing=m?m[1]:'(no stamp)';
   var api='https://api.github.com/repos/'+_DEP_OWNER+'/'+_DEP_REPO+'/contents/'+_DEP_PATH;
   var hdr={'Authorization':'token '+tok,'Accept':'application/vnd.github.v3+json'};
@@ -31159,7 +31159,7 @@ function _depWrite_(src, fname, tok){
         return fetch('https://raw.githubusercontent.com/'+_DEP_OWNER+'/'+_DEP_REPO+'/refs/heads/main/'+_DEP_PATH+'?t='+Date.now(),{cache:'no-store'})
           .then(function(r){ return r.text(); })
           .then(function(back){
-            var bm=back.match(/window\.__BUILD__\s*=\s*'([^']+)'/);
+            var bm=back.match(/window\\.__BUILD__\\s*=\\s*'([^']+)'/);
             var readback=bm?bm[1]:'(no stamp)';
             if(readback===outgoing){
               _depStatus_('Deployed. outgoing <b>'+outgoing+'</b> = read-back <b>'+readback+'</b>.<br>Cloudflare picks it up in ~30s — hard-refresh then.','#22c55e');
@@ -38609,7 +38609,7 @@ function _scoreDaySessions_(dateKey){
 function _actSameDay_(ds, keyNorm, target){
   if(!ds) return false;
   var s=String(ds);
-  var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  var m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);
   if(m){ return ((typeof normDate==='function')?normDate(s.slice(0,10)):s.slice(0,10))===keyNorm; }
   var d=new Date(s);
   return d.getFullYear()===target.getFullYear() && d.getMonth()===target.getMonth() && d.getDate()===target.getDate();

@@ -283,6 +283,19 @@ try {
     fail('the settings merge rule regressed — a numeric setting may be one-way again (see above).');
   }
 
+  // ---- 18. The regexes whose escapes the served template literal used to eat: assert what they
+  //          DO, against the served form. Step 14 proves they are spelled right; this proves they
+  //          behave right, which is the half a source-reading test would have missed.
+  console.log(`${D}· checking served regex behaviour…${X}`);
+  try {
+    const so = execSync('node scripts/served-regex-behaviour-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a served regex regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

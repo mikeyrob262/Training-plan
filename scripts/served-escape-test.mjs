@@ -10,9 +10,9 @@
 // through to the continuous branch, and a 4x4 VO2 exported to Zwift as ONE 45-minute block at
 // 100% FTP. The session-detail step list lost its per-interval breakdown the same way.
 //
-// The 18 offenders below predate this guard. They are real bugs — the date parsers and the
-// ride-handle matchers most of all — but fixing them is a separate, verifiable change. This
-// guard's job is to stop the set from GROWING. Fix one, delete its entry here.
+// The baseline is now EMPTY. All 18 pre-existing offenders were fixed in one pass; what each was
+// matching wrong, and what changed, is asserted in scripts/served-regex-behaviour-test.mjs. Any
+// hit here is therefore a NEW bug — do not add to the baseline to make the build pass.
 //
 // Run: node scripts/served-escape-test.mjs
 import fs from 'fs';
@@ -29,20 +29,7 @@ const reLit = new RegExp('/(?![/*])((?:[^/\\\\\\n]|\\\\.)+)/[gimsuy]*', 'g');
 const dbl = new RegExp('\\\\\\\\[dswDSWb]', 'g');          // \\d — correct, survives as \d
 const single = new RegExp('(^|[^\\\\])\\\\[dswDSWb]');      // \d  — eaten, served as bare d
 
-const BASELINE = new Set([
-  '^i\\d+$',                                   // ride-handle match, 4 sites
-  '^\\d+$',
-  '\\s+',
-  '^(\\d{4})-(\\d{1,2})-(\\d{1,2})',           // date parse
-  '^(\\d{4})-(\\d{2})-(\\d{2})$',              // date parse
-  '^recommendation:\\s*',
-  '^-\\s*',
-  '[,;\\s]+$',
-  '^\\s*recommendation:',
-  '(\\d+)h',
-  '(\\d+)m',
-  "window\\.__BUILD__\\s*=\\s*'([^']+)'",
-]);
+const BASELINE = new Set([]);
 
 const found = [];
 lines.forEach((L, i) => {
