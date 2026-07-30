@@ -21123,7 +21123,9 @@ function _trjPct_(p){ return Math.max(0,Math.min(100,Math.round((p||0)*100))); }
 // training, and the cards say so.
 function _trjConf_(p){ return Math.max(5, Math.min(95, Math.round((p||0)*100))); }
 function _trjSec_(n,label,sub){
-  return '<div style="display:flex;align-items:center;gap:9px;margin:22px 0 10px">'
+  // flex-wrap so a section that carries a SUBTITLE (section 8 is the first) cannot push its own
+  // header past the viewport on a phone.
+  return '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 9px;margin:22px 0 10px">'
     +'<div style="flex:none;width:19px;height:19px;border-radius:5px;border:1px solid #FC4C02;color:#FC4C02;'
     +'font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">'+n+'</div>'
     +'<div style="font-size:11.5px;font-weight:800;letter-spacing:.09em;color:#cbd5e1">'+aiEsc_(label)+'</div>'
@@ -21891,10 +21893,93 @@ function _trjRxDays_(){
   return { days:days, weeks:weeks, n:days.length, presc:sp, actual:sa, over:over, under:under,
            onPlan:(days.length-over-under), missed:missed, unpriced:unpriced };
 }
+// Plain-English tier for a week's ratio.
+//
+// The COLOUR keeps the card's existing 115/85 bands, unchanged, so a badge can never disagree with
+// the over/on-plan/under counts computed from those same thresholds. The WORDS are a finer scale on
+// top of it - two shades of "harder" inside the one orange band - which is presentation only.
+function _trjRxCol_(r){ return (r>115)?'#f59e0b':((r<85)?'#60a5fa':'#22c55e'); }
+function _trjRxTier_(r){
+  var c=_trjRxCol_(r);
+  if(r>=175) return {t:'Much harder', c:c};
+  if(r>=130) return {t:'Harder', c:c};
+  if(r>=115) return {t:'Slightly harder', c:c};
+  if(r>=95)  return {t:'On plan', c:c};
+  if(r>=70)  return {t:'A bit lighter', c:c};
+  return {t:'Much lighter', c:c};
+}
+// A round icon chip, as in the At-a-glance column.
+function _trjChip_(glyph, col){
+  return '<span style="flex:none;width:26px;height:26px;border-radius:50%;background:'+col+'1f;color:'+col
+    +';font-size:11px;display:inline-flex;align-items:center;justify-content:center;line-height:1">'+glyph+'</span>';
+}
+// Area chart on a FIXED 0-200% axis with 100% drawn as the reference.
+//
+// _gcSpark_ autoscales to the data, which is right for a trajectory whose absolute level has no
+// meaning. Here it does: 100% IS the subject of the chart, and an autoscaled line hides whether a
+// week landed above or below it. So the domain is pinned, 100% is a labelled dashed rule, and the
+// fill is split at that rule - orange above, blue below - which is the whole reading of the card.
+// Values past 200% clamp to the ceiling; the callout still prints the true number so the clamp
+// cannot silently understate a week.
+var _TRJ_RX_MAX=200;
+function _trjRxChart_(pts){
+  var real=(pts||[]).filter(function(p){ return p && p.v!=null && isFinite(p.v); });
+  if(real.length<2) return '';
+  var W=320, H=150, PL=26, PR=8, PT=14, PB=18;
+  var iw=W-PL-PR, ih=H-PT-PB, n=pts.length;
+  function X(i){ return PL + (n>1 ? i/(n-1)*iw : iw/2); }
+  function Y(v){ var c=Math.max(0, Math.min(_TRJ_RX_MAX, v)); return PT + ih - (c/_TRJ_RX_MAX)*ih; }
+  var y100=Y(100);
+  var grid='', labs='', g;
+  for(g=0; g<=_TRJ_RX_MAX; g+=50){
+    var gy=Y(g);
+    grid+='<line x1="'+PL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+gy.toFixed(1)+'" stroke="#171b26" stroke-width="1"/>';
+    labs+='<text x="'+(PL-5)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end" font-size="8" fill="#5b6678">'+g+'%</text>';
+  }
+  // Line + the two fills. Both fills use the SAME line path, closed to the 100% rule rather than to
+  // the floor, then clipped to the half-plane they belong in.
+  var pt=pts.map(function(p,i){ return (p&&p.v!=null&&isFinite(p.v)) ? (X(i).toFixed(1)+' '+Y(p.v).toFixed(1)) : null; });
+  var segs=[], cur=[];
+  pt.forEach(function(xy){ if(xy==null){ if(cur.length>1) segs.push(cur); cur=[]; } else cur.push(xy); });
+  if(cur.length>1) segs.push(cur);
+  if(!segs.length) return '';
+  var uid='trjrx'+Math.round(pts.length*997+real.length);
+  var fills='';
+  segs.forEach(function(s){
+    var d='M'+s.join('L')+'L'+s[s.length-1].split(' ')[0]+' '+y100.toFixed(1)+'L'+s[0].split(' ')[0]+' '+y100.toFixed(1)+'Z';
+    fills+='<path d="'+d+'" fill="#f59e0b" opacity=".18" clip-path="url(#'+uid+'a)"/>'
+          +'<path d="'+d+'" fill="#60a5fa" opacity=".18" clip-path="url(#'+uid+'b)"/>';
+  });
+  var line=segs.map(function(s){ return 'M'+s.join('L'); }).join(' ');
+  // Callout on the peak week: the reason the card exists is the size of the worst overshoot, and a
+  // reader should not have to trace it back to the axis.
+  var hi=-Infinity, hiI=-1;
+  pts.forEach(function(p,i){ if(p && p.v!=null && isFinite(p.v) && p.v>hi){ hi=p.v; hiI=i; } });
+  var call='';
+  if(hiI>=0){
+    var cx=X(hiI), cy=Y(hi), txt=Math.round(hi)+'%';
+    var bw=txt.length*5.4+10, bx=Math.max(PL, Math.min(W-PR-bw, cx-bw/2)), by=Math.max(2, cy-19);
+    call='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3" fill="#f59e0b" stroke="#0e1117" stroke-width="1.5"/>'
+      +'<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="14" rx="4" fill="#1c2130" stroke="#2a3341" stroke-width="1"/>'
+      +'<text x="'+(bx+bw/2).toFixed(1)+'" y="'+(by+9.8).toFixed(1)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="#f59e0b">'+txt+'</text>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Actual as a share of prescribed, by week"'
+    +' style="width:100%;height:auto;display:block;overflow:visible">'
+    +'<defs><clipPath id="'+uid+'a"><rect x="0" y="0" width="'+W+'" height="'+y100.toFixed(1)+'"/></clipPath>'
+    +'<clipPath id="'+uid+'b"><rect x="0" y="'+y100.toFixed(1)+'" width="'+W+'" height="'+(H-y100).toFixed(1)+'"/></clipPath></defs>'
+    +grid+labs+fills
+    +'<line x1="'+PL+'" y1="'+y100.toFixed(1)+'" x2="'+(W-PR)+'" y2="'+y100.toFixed(1)+'" stroke="#8b97ab" stroke-width="1.2" stroke-dasharray="4 3"/>'
+    +'<text x="'+(PL+5)+'" y="'+(y100-4).toFixed(1)+'" font-size="8" fill="#8b97ab">100% (on plan)</text>'
+    +'<path d="'+line+'" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    +call
+    +'<text x="'+PL+'" y="'+(H-4)+'" font-size="8" fill="#5b6678">Earliest week</text>'
+    +'<text x="'+(W-PR)+'" y="'+(H-4)+'" text-anchor="end" font-size="8" fill="#5b6678">This week</text>'
+    +'</svg>';
+}
 function _trjSection8_(){
   var R=_trjRxDays_();
   if(!R) return '';
-  var H=_trjSec_(8,'PRESCRIBED VS ACTUAL','');
+  var H=_trjSec_(8,'PRESCRIBED VS ACTUAL','How your training load actually showed up compared to the plan.');
   if(R.n<TRJ_RX_MIN){
     if(!R.n && !R.missed && !R.unpriced) return '';
     return H+aiCard_(_trjNote_('Only '+R.n+' day'+(R.n===1?'':'s')+' in the last 12 weeks paired a priced '
@@ -21905,43 +21990,131 @@ function _trjSection8_(){
   }
   var pct=Math.round(R.actual/R.presc*100);
   var col=(pct>115)?'#f59e0b':((pct<85)?'#60a5fa':'#22c55e');
+  // The headline gets the BRAND orange in the over state - the same #FC4C02 as the section-number
+  // chip - rather than the amber the bands use. Deliberately only this one number: amber stays
+  // everywhere the over/under BAND is what is being encoded (badges, bars, the actual-TSS total,
+  // at-a-glance), so band colour keeps meaning exactly one thing. On-plan and under are untouched.
+  var headCol=(pct>115)?'#FC4C02':col;
   var verdict=(pct>115)?'harder than prescribed':((pct<85)?'easier than prescribed':'close to prescribed');
-  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">ACTUAL LOAD AS A SHARE OF PRESCRIBED</div>'
-    +'<div style="font-size:26px;font-weight:800;color:'+col+';line-height:1.1">'+pct+'%</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+aiEsc_(verdict)+' across '+R.n+' paired days &middot; '
-    +Math.round(R.actual)+' vs '+Math.round(R.presc)+' TSS</div>'
-    +_gcTrend_(_gcWeekPts_(R.weeks, function(w){ return w.presc>0?Math.round(w.actual/w.presc*100):null; }), _gcHue_(2), {aria:'Actual load as a share of prescribed, by week', H:36, from:'earliest week', to:'this week', note:'actual as a share of prescribed, by week'});
-  body+='<div style="display:flex;gap:18px;margin-top:12px">'
-    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">OVER</div>'
-    +'<div style="font-size:17px;font-weight:800;color:#f59e0b;margin-top:1px">'+R.over+'</div></div>'
-    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">ON PLAN</div>'
-    +'<div style="font-size:17px;font-weight:800;color:#22c55e;margin-top:1px">'+R.onPlan+'</div></div>'
-    +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">UNDER</div>'
-    +'<div style="font-size:17px;font-weight:800;color:#60a5fa;margin-top:1px">'+R.under+'</div></div>'
+  var wks=R.weeks.filter(function(w){ return w.presc>0; });
+  var wpts=_gcWeekPts_(R.weeks, function(w){ return w.presc>0?Math.round(w.actual/w.presc*100):null; });
+  var fit=_trjFit_(wks.map(function(w){ return {t:w.t, y:w.actual/w.presc}; }), {minN:4, minSpan:21});
+  var LBL='font-size:10.5px;color:#5b6678;letter-spacing:.05em';
+  var BOX='background:#12151d;border:1px solid #1a1f2b;border-radius:10px;padding:10px 12px';
+
+  // -- TOP LEFT: the headline, and the two raw totals it is a ratio OF. The percentage alone
+  //    invites "141% of what?"; the pair answers it without the reader opening the table.
+  var left='<div style="'+LBL+'">ACTUAL LOAD AS A SHARE OF PRESCRIBED</div>'
+    +'<div style="font-size:34px;font-weight:800;color:'+headCol+';line-height:1.05;margin-top:4px">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:3px;line-height:1.45">'+aiEsc_(verdict)
+    +' across '+R.n+' paired day'+(R.n===1?'':'s')+'</div>'
+    +'<div style="display:flex;align-items:center;gap:9px;margin-top:12px">'
+    +'<div style="'+BOX+';flex:1;min-width:0"><div style="font-size:19px;font-weight:800;color:'+col+';line-height:1.1">'+Math.round(R.actual)+'</div>'
+    +'<div style="'+LBL+';margin-top:2px">ACTUAL TSS</div></div>'
+    +'<span style="font-size:10.5px;color:#5b6678;flex:none">vs</span>'
+    +'<div style="'+BOX+';flex:1;min-width:0"><div style="font-size:19px;font-weight:800;color:#8b97ab;line-height:1.1">'+Math.round(R.presc)+'</div>'
+    +'<div style="'+LBL+';margin-top:2px">PRESCRIBED TSS</div></div>'
     +'</div>';
-  body+='<div style="margin-top:12px">';
-  R.weeks.forEach(function(w){
-    if(!(w.presc>0)) return;
-    var r=Math.round(w.actual/w.presc*100);
-    var c=(r>115)?'#f59e0b':((r<85)?'#60a5fa':'#22c55e');
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
-      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
-      +'<span style="font-size:11.5px;color:#cbd5e1">'+Math.round(w.actual)+'/'+Math.round(w.presc)+'</span>'
-      +'<span style="font-size:12px;font-weight:700;color:'+c+';flex:none">'+r+'%</span></div>';
+
+  // -- TOP MIDDLE: the week-by-week ratio against a pinned 100% rule.
+  var chart=_trjRxChart_(wpts);
+  var mid='<div style="'+LBL+'">ACTUAL AS A SHARE OF PRESCRIBED, BY WEEK</div>'
+    +(chart?('<div style="margin-top:8px">'+chart+'</div>')
+           :('<div style="font-size:11.5px;color:#5b6678;margin-top:8px;line-height:1.5">Two priced weeks are needed before this draws a line.</div>'));
+
+  // -- TOP RIGHT: the split. These are DAY counts (the pairing unit of this whole card), not weeks.
+  // Colours follow the card's own semantics rather than the mockup's: over-plan is the orange the
+  // 206% badge already uses, on-plan the green. Painting "over plan" green here would have it
+  // disagree with every other orange number on the same card.
+  var glance='<div style="'+LBL+'">AT A GLANCE</div><div style="margin-top:8px">';
+  [['&#8593;','#f59e0b',R.over,'over plan'],
+   ['&#8211;','#22c55e',R.onPlan,'on plan'],
+   ['&#8595;','#60a5fa',R.under,'under plan']].forEach(function(row){
+    glance+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
+      +_trjChip_(row[0], row[1])
+      +'<div style="min-width:0"><div style="font-size:21px;font-weight:800;color:'+row[1]+';line-height:1">'+row[2]+'</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.3;margin-top:1px">day'+(row[2]===1?'':'s')+' '+row[3]+'</div></div></div>';
   });
-  body+='</div>';
-  var fit=_trjFit_(R.weeks.filter(function(w){ return w.presc>0; }).map(function(w){ return {t:w.t, y:w.actual/w.presc}; }),
-                   {minN:4, minSpan:21});
+  glance+='</div>';
+
+  // -- BOTTOM LEFT: the week table.
+  //
+  // The per-week visual is a FILLED BAR. That is a deliberate, owner-granted exception to the
+  // standing no-pill-bars-for-progress rule, scoped to THIS TABLE ONLY (2026-07-30) - it is not a
+  // reversal, and nothing else on any page should read it as precedent. Everywhere the rule still
+  // applies: the Power-to-Weight card, the Athlete Intelligence cards, the milestone confidences.
+  //
+  // What keeps it honest here: length is the week on the SAME shared 0-200% scale the chart above
+  // uses, clamped at the ceiling, and the caption says so - so the bar is a reading of one ratio,
+  // not an accumulation toward a target. Fill colour is _trjRxCol_, the card's existing 115/85
+  // band, so the bar, the badge and the over/under counts can never disagree.
+  var TH='font-size:9.5px;color:#5b6678;letter-spacing:.05em;padding-bottom:6px;border-bottom:1px solid #1c2130';
+  var tbl='<div style="'+LBL+'">WEEK-BY-WEEK BREAKDOWN</div>'
+    +'<div class="trj-rx-tbl">'
+    +'<div style="'+TH+'">WEEK OF</div><div class="trj-rx-mk" style="'+TH+'"></div>'
+    +'<div style="'+TH+';text-align:right">ACTUAL / PRESCRIBED</div>'
+    +'<div style="'+TH+';text-align:right">AS % OF PRESCRIBED</div>';
+  wks.forEach(function(w){
+    var r=Math.round(w.actual/w.presc*100), tier=_trjRxTier_(r);
+    var mp=Math.max(0, Math.min(100, r/_TRJ_RX_MAX*100));
+    tbl+='<div style="font-size:11.5px;color:#8b97ab;padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
+      +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid #171b26">'
+        +'<div style="height:7px;border-radius:4px;background:#1c2130;overflow:hidden" title="'+r+'% of prescribed">'
+        +'<div style="width:'+mp.toFixed(1)+'%;height:100%;border-radius:4px;background:'+tier.c+'"></div>'
+        +'</div></div>'
+      +'<div style="font-size:11.5px;color:#cbd5e1;padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap;text-align:right">'
+        +Math.round(w.actual)+' / '+Math.round(w.presc)+'</div>'
+      +'<div style="padding:5px 0;border-bottom:1px solid #171b26;text-align:right">'
+        +'<span style="font-size:11px;font-weight:700;color:'+tier.c+';background:'+tier.c+'1a;border-radius:5px;padding:2px 6px;white-space:nowrap">'+r+'%</span>'
+        +'<span class="trj-rx-tier" style="font-size:11px;color:#8b97ab;margin-left:8px;white-space:nowrap">'+tier.t+'</span></div>';
+  });
+  tbl+='</div><div class="trj-rx-mk" style="font-size:9.5px;color:#5b6678;margin-top:6px">bar length is the week on a shared 0&ndash;200% scale &middot; a full-width bar is 200% of prescribed</div>';
+
+  // -- BOTTOM RIGHT: what it means, the trend line restated, then the methodology.
+  var dir=(pct>115)?'harder than':((pct<85)?'easier than':'close to');
+  var mean='<div style="display:flex;align-items:center;gap:9px">'+_trjChip_('&#128161;','#a78bfa')
+    +'<span style="font-size:11.5px;font-weight:800;letter-spacing:.05em;color:#cbd5e1">WHAT THIS MEANS</span></div>'
+    +'<div style="font-size:12px;color:#cbd5e1;margin-top:8px;line-height:1.6">'
+    +'Across '+R.n+' day'+(R.n===1?'':'s')+' where a priced prescription met a logged ride, you rode '
+    +aiEsc_(dir)+' the plan &mdash; '+Math.round(R.actual)+' TSS against '+Math.round(R.presc)+' prescribed. '
+    +(R.over>R.under?('Most of that comes from '+R.over+' day'+(R.over===1?'':'s')+' above the 10% band.')
+     :(R.under>R.over?('Most of that comes from '+R.under+' day'+(R.under===1?'':'s')+' below the 10% band.')
+     :'The overs and unders are evenly matched.'))
+    +'</div>';
   if(fit){
     var per=fit.slope*7*100;
-    body+='<div style="font-size:11.5px;color:#8b97ab;margin-top:10px;line-height:1.5">The gap is '
-      +(Math.abs(per)<1?'flat':(per>0?('widening '+per.toFixed(0)+' points a week'):('narrowing '+Math.abs(per).toFixed(0)+' points a week')))
-      +' across '+fit.n+' weeks.</div>';
+    var word=(Math.abs(per)<1)?'flat':(per>0?'widening':'narrowing');
+    mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
+      +_trjChip_('&#128197;','#60a5fa')
+      +'<div><div style="font-size:11.5px;font-weight:700;color:#cbd5e1;letter-spacing:.03em">THE GAP IS '+(word==='flat'?'FLAT':word.toUpperCase())+'</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.5;margin-top:2px">'
+      +(word==='flat'?('level across '+fit.n+' weeks'):(Math.abs(per).toFixed(0)+' point'+(Math.abs(per).toFixed(0)==='1'?'':'s')+' a week across '+fit.n+' weeks'))
+      +'</div></div></div>';
   }
-  body+=_trjMethod_('Paired day by day over 12 weeks: prescribed TSS from the plan against logged TSS from the '
-    +'ride. Rides only. Prescribed days with no ride are excluded and counted separately -- a missed session is '
-    +'a completion question, not an intensity one'
-    +(R.missed?(' ('+R.missed+' here)'):'')+'. Over and under are outside a 10% band.');
+  mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
+    +_trjChip_('?','#8b97ab')
+    +'<div><div style="font-size:11.5px;font-weight:700;color:#cbd5e1;letter-spacing:.03em">HOW THIS IS CALCULATED</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;line-height:1.5;margin-top:3px">'
+    +aiEsc_('Paired day by day over 12 weeks: prescribed TSS from the plan against logged TSS from the ride. '
+      +'Rides only. Prescribed days with no ride are excluded and counted separately -- a missed session is a '
+      +'completion question, not an intensity one'+(R.missed?(' ('+R.missed+' here)'):'')
+      +'. Over and under are outside a 10% band.')
+    +'</div></div></div>';
+
+  // -- FOCUS BAR: one actionable line, matched to the direction actually measured.
+  var focus=(pct>115)
+    ? 'Stay consistent with your plan. Large gaps, especially over plan, can increase fatigue and injury risk.'
+    : ((pct<85)
+      ? 'Stay consistent with your plan. Riding well under prescription repeatedly means the block will not build the load it was written to build.'
+      : 'Keep it here. Executing close to prescription is what lets the plan predict your fitness.');
+
+  var body='<div class="trj-rx-top">'
+    +'<div>'+left+'</div><div>'+mid+'</div><div>'+glance+'</div></div>'
+    +'<div class="trj-rx-bot">'+'<div>'+tbl+'</div><div>'+mean+'</div></div>'
+    +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;padding:11px 13px;background:#12151d;border:1px solid #1a1f2b;border-radius:10px">'
+    +_trjChip_('&#127919;','#a78bfa')
+    +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.5">'
+    +'<span style="font-weight:800;color:#cbd5e1">Focus:</span> '+focus+'</div></div>';
   return H+aiCard_(body);
 }
 
@@ -21963,6 +22136,25 @@ function aiRenderTrajectory_(){
     +'.trj-hero{display:grid;grid-template-columns:1.55fr 1fr;gap:12px;align-items:stretch}'
     +_trjShotCSS_()
     +'.trj-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;align-items:stretch}'
+    // Section 8 rows. The chart column is the widest because it is the one thing that needs the
+    // horizontal room; the table gets the wider half of the bottom row for the same reason.
+    +'.trj-rx-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,.85fr);gap:14px;align-items:start}'
+    +'.trj-rx-bot{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;align-items:start;'
+      +'margin-top:16px;padding-top:14px;border-top:1px solid #171b26}'
+    // The SCALE column takes the slack, so the numbers/badge/label cluster to the right the way the
+    // reference layout has them. Capping it instead parked the numbers mid-row with a dead gap.
+    +'.trj-rx-tbl{display:grid;grid-template-columns:auto minmax(60px,1fr) auto auto;gap:0 12px;align-items:center;margin-top:8px}'
+    +'@media(max-width:900px){.trj-rx-top{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}'
+      +'.trj-rx-top>div:nth-child(3){grid-column:1/-1}.trj-rx-bot{grid-template-columns:1fr}}'
+    +'@media(max-width:620px){.trj-rx-top{grid-template-columns:1fr}.trj-rx-top>div:nth-child(3){grid-column:auto}'
+      +'.trj-rx-tbl{grid-template-columns:auto minmax(34px,1fr) auto auto;gap:0 8px}}'
+    // Below ~440 the bar has under ~100px to work with, at which point 173% and 206% are the same
+    // length and it is decoration rather than a reading. It drops out; the badge states the number
+    // exactly, so nothing is lost but the second encoding.
+    +'@media(max-width:440px){.trj-rx-tbl{grid-template-columns:auto 1fr auto}.trj-rx-mk{display:none}}'
+    // Last resort only. The plain-English label is a REQUESTED column and it still fits at 390,
+    // so it survives every real phone width; this is for the 320px tail.
+    +'@media(max-width:340px){.trj-rx-tier{display:none}}'
     +'@media(max-width:820px){.trj-hero{grid-template-columns:1fr}}'
     +'</style>';
   var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection5_(), _trjSection6_(), _trjSection7_(), _trjSection8_()].filter(function(x){ return x; });

@@ -296,6 +296,19 @@ try {
     fail('a served regex regressed (see above).');
   }
 
+  // ---- 19. Trajectory section 8 layout. Presentation-only rebuild, so the first thing it guards
+  //          is that the rendered numbers are still the ones _trjRxDays_ computed — and that the
+  //          per-week visual did not come back as a pill bar.
+  console.log(`${D}· checking Prescribed vs actual…${X}`);
+  try {
+    const so = execSync('node scripts/trj-section8-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Prescribed vs actual card regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

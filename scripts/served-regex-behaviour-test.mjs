@@ -14,19 +14,31 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(root, 'worker.js'), 'utf8');
 const lines = src.split(/\r?\n/);
 
+const BS = String.fromCharCode(92);
 // untagged template literal: \\ -> \ , and any other \X -> X
 const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : c));
 
-// Pull the regex literal off a given line of worker.js and build the SERVED RegExp.
+// Pull a regex literal out of worker.js and build the SERVED RegExp.
+//
+// Located by CONTENT, not line number. An earlier version pinned line numbers and broke the moment
+// an unrelated card above these sites grew by a few lines — a test that fails for a reason having
+// nothing to do with what it tests is worse than no test.
 const reLit = new RegExp('/(?![/*])((?:[^/\\\\\\n]|\\\\.)+)/([gimsuy]*)');
-function servedRe(lineNo, mustContain) {
-  const L = lines[lineNo - 1];
-  if (L == null) throw new Error('no line ' + lineNo);
-  const idx = mustContain ? L.indexOf(mustContain) : 0;
-  if (idx < 0) throw new Error('line ' + lineNo + ' no longer contains ' + mustContain);
-  const m = reLit.exec(L.slice(idx));
-  if (!m) throw new Error('no regex literal on line ' + lineNo);
-  return new RegExp(asServed(m[1]), m[2]);
+function findLines(anchor) {
+  const out = [];
+  lines.forEach((L, i) => { if (!/^\s*\/\//.test(L) && L.indexOf(anchor) >= 0) out.push(i); });
+  if (!out.length) throw new Error('anchor no longer present in worker.js: ' + anchor);
+  return out;
+}
+// anchor: a distinctive substring of the line, positioned at or before the regex literal.
+function servedRe(anchor, nth) {
+  const idxs = findLines(anchor);
+  const i = idxs[nth || 0];
+  if (i == null) throw new Error('no occurrence #' + (nth || 0) + ' of ' + anchor);
+  const L = lines[i];
+  const m = reLit.exec(L.slice(L.indexOf(anchor)));
+  if (!m) throw new Error('no regex literal after "' + anchor + '" on line ' + (i + 1));
+  return { re: new RegExp(asServed(m[1]), m[2]), line: i + 1 };
 }
 
 let fails = 0;
@@ -37,25 +49,27 @@ function check(label, got, want) {
   console.log('  ' + (ok ? G + 'PASS' + X : R + 'FAIL' + X) + '  ' + label + (ok ? '' : '   got ' + JSON.stringify(got) + ', want ' + JSON.stringify(want)));
 }
 
-console.log('\n=== Intervals.icu ride handles: /^i' + '\\' + 'd+$/ (4 sites) ===');
+console.log('\n=== Intervals.icu ride handles: /^i' + BS + 'd+$/ (4 sites) ===');
 // Was served /^id+$/ — matched the literal string "id", never a real handle like i544205. 25 live
 // rides carry one; 22 of them have no stravaId, so they were invisible to the backfill entirely.
-for (const ln of [5334, 5356, 5364, 23725]) {
-  const re = servedRe(ln, '/^i');
-  check('line ' + ln + ' matches a real handle', re.test('i544205'), true);
-  check('line ' + ln + ' rejects the literal "id"', re.test('id'), false);
-  check('line ' + ln + ' rejects a bare Strava id', re.test('9353779'), false);
-  check('line ' + ln + ' rejects an alphanumeric id', re.test('mrgukk4klcg3yxp'), false);
-}
+const ICU = '/^i' + BS + BS + 'd+$/';
+check('all four handle sites still present', findLines(ICU).length, 4);
+findLines(ICU).forEach((_, k) => {
+  const h = servedRe(ICU, k);
+  check('line ' + h.line + ' matches a real handle', h.re.test('i544205'), true);
+  check('line ' + h.line + ' rejects the literal "id"', h.re.test('id'), false);
+  check('line ' + h.line + ' rejects a bare Strava id', h.re.test('9353779'), false);
+  check('line ' + h.line + ' rejects an alphanumeric id', h.re.test('mrgukk4klcg3yxp'), false);
+});
 
-console.log('\n=== Firebase sparse-array detection: /^' + '\\' + 'd+$/ ===');
-const sparse = servedRe(5702, '/^');
+console.log('\n=== Firebase sparse-array detection: /^' + BS + 'd+$/ ===');
+const sparse = servedRe('return keys.every(function(k){').re;
 check('a numeric key is recognised', ['0', '1', '2'].every((k) => sparse.test(k)), true);
 check('a real dictionary is NOT an array', ['breakfast', 'lunch'].every((k) => sparse.test(k)), false);
 check('the literal "d" no longer counts', sparse.test('d'), false);
 
-console.log('\n=== food search tokenizer: /' + '\\' + 's+/ ===');
-const ws = servedRe(11913, 'split(');
+console.log('\n=== food search tokenizer: /' + BS + 's+/ ===');
+const ws = servedRe('var qWords = ql.split(').re;
 check('splits on whitespace', 'chicken breast'.split(ws).filter(Boolean), ['chicken', 'breast']);
 check('no longer splits on the letter s', 'sweet potato'.split(ws).filter(Boolean), ['sweet', 'potato']);
 check('a trailing s survives', 'oats'.split(ws).filter(Boolean), ['oats']);
@@ -74,39 +88,39 @@ function weekKey(re, ds) {
   const p = (n) => (n < 10 ? '0' : '') + n;
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
 }
-for (const ln of [12456, 38612]) {
-  const re = servedRe(ln, '/^(');
+for (const anc of ['var s=String(ds), m=s.match(', 'var m=s.match(']) {
+  const h = servedRe(anc), re = h.re, ln = h.line;
   check('line ' + ln + ' matches an ISO date', re.test('2026-07-27'), true);
   check('line ' + ln + ' captures the parts', '2026-07-27'.match(re).slice(1, 4), ['2026', '07', '27']);
   // A Monday must key to ITSELF, not to the Monday before it.
   check('line ' + ln + ': a Monday keys to its own week', weekKey(re, '2026-07-27'), '2026-07-27');
   check('line ' + ln + ': and a Sunday keys back to Monday', weekKey(re, '2026-07-26'), '2026-07-20');
 }
-const hrd = servedRe(27352, '/^(');
+const hrd = servedRe('var m=/^(').re;
 check('the HR-drift card can read a date at all', hrd.exec('2026-07-23') !== null, true);
 check('...and gets the right month/day', hrd.exec('2026-07-23').slice(2, 4), ['07', '23']);
 check('a non-normalized date is still rejected', hrd.exec('2026-7-23'), null);
 
 console.log('\n=== Coach V text parsing ===');
-const rec1 = servedRe(29087, 'replace(');
+const rec1 = servedRe('recommendation=line.replace(').re;
 check('strips the label AND the space after it', 'Recommendation: Keep it in zone 2.'.replace(rec1, ''), 'Keep it in zone 2.');
 check('no longer eats a leading s', 'Recommendation:stay in zone'.replace(rec1, ''), 'stay in zone');
-for (const ln of [29088, 30539]) {
-  const b = servedRe(ln, 'replace(');
-  check('line ' + ln + ' strips the bullet cleanly', '- Held 182 W.'.replace(b, ''), 'Held 182 W.');
+for (const anc of ['bullets.push(line.replace(', 'row.textContent=line.replace(']) {
+  const b = servedRe(anc);
+  check('line ' + b.line + ' strips the bullet cleanly', '- Held 182 W.'.replace(b.re, ''), 'Held 182 W.');
 }
 // The one that corrupted words: served /[,;s]+$/ stripped a trailing LETTER s.
-const tail = servedRe(29151, 'replace(');
+const tail = servedRe('out.push(m[1].replace(').re;
 check('a plural survives', 'You held good watts'.replace(tail, '') + '.', 'You held good watts.');
 check('and trailing whitespace is actually stripped now', 'Trailing space  '.replace(tail, '') + '.', 'Trailing space.');
 check('punctuation still stripped', 'Nice work,'.replace(tail, '') + '.', 'Nice work.');
-const rec2 = servedRe(29155, '/^');
+const rec2 = servedRe('var isRec=').re;
 check('an indented Recommendation line is seen', rec2.test('  Recommendation: ride easy'), true);
 check('a tab-indented one too', rec2.test('\tRecommendation: ride easy'), true);
 check('a plain one still matches', rec2.test('Recommendation: ride easy'), true);
 
 console.log('\n=== duration -> minutes (weather window) ===');
-const rh = servedRe(30047, 'match('), rm = servedRe(30048, 'match(');
+const rh = servedRe('var hMatch=String(dur).match(').re, rm = servedRe('var mMatch=String(dur).match(').re;
 function dur(s) {
   const parts = String(s).split(':');
   if (parts.length >= 2) return (parseInt(parts[0]) || 0) * 60 + (parseInt(parts[1]) || 0);
@@ -124,13 +138,13 @@ console.log('\n=== deploy build-stamp verification ===');
 // is supposed to prove the deploy landed passed vacuously every time.
 const stampLine = lines.find((l) => /^window\.__BUILD__ = '/.test(l));
 check('the app really does emit spaces around the =', /^window\.__BUILD__ = '/.test(stampLine || ''), true);
-for (const ln of [31134, 31162]) {
-  const re = servedRe(ln, 'match(');
-  const m = (stampLine || '').match(re);
-  check('line ' + ln + ' now reads the stamp', m ? m[1] : '(no stamp)', stampLine.match(/'([^']+)'/)[1]);
+for (const anc of ['var m=src.match(', 'var bm=back.match(']) {
+  const d = servedRe(anc);
+  const m = (stampLine || '').match(d.re);
+  check('line ' + d.line + ' now reads the stamp', m ? m[1] : '(no stamp)', stampLine.match(/'([^']+)'/)[1]);
 }
 // The check is only meaningful if a DIFFERENT stamp compares unequal.
-const dre = servedRe(31134, 'match(');
+const dre = servedRe('var m=src.match(').re;
 const a = "window.__BUILD__ = '2026-07-28-alpha';".match(dre);
 const b = "window.__BUILD__ = '2026-07-29-beta';".match(dre);
 check('two different builds no longer compare equal', (a ? a[1] : 'x') === (b ? b[1] : 'x'), false);
