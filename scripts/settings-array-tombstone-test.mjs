@@ -55,7 +55,7 @@ M.setSt({ weightLog: FAKE.slice() });
 check('clearing tombstones every entry', M.settingsArrClear_('weightLog'), 4);
 const stoned = M.getSt().weightLog;
 check('the entries stay in the array', stoned.length, 4);
-check('each carries its key and the deleted flag', stoned[0], { deleted:true, date:'2025-09-01' });
+check('each carries its identity and the deleted flag', stoned[0], { deleted:true, _k:'2025-09-01', date:'2025-09-01' });
 check('the VALUE field is dropped', 'weight' in stoned[0], false);
 check('and nothing reads as live any more', M.settingsArrLive_('weightLog').length, 0);
 
@@ -99,6 +99,39 @@ check('and the removal survives a stale client re-pushing it',
   M.mergeStateRoot_({ ftpHistory:M.getSt().ftpHistory, lastUpdate:older },
                     { ftpHistory:FHbad, lastUpdate:newer })
     .ftpHistory.filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
+
+console.log('\n=== composite identity: a shared date must not take an unrelated row down ===');
+// This is the state the repair actually produced: two ftpHistory rows dated 2026-07-29, one the
+// real 183 and one a fabricated 230. Keyed on date alone, tombstoning the 230 would have deleted
+// the 183 with it. ftpRecord_ same-day-corrects so the app cannot create this, but raw writes that
+// bypass it did.
+const fspec = M._LWW_ARRAYS.ftpHistory;
+const clash = [{date:'2026-07-25',ftp:190,source:'baseline'},
+               {date:'2026-07-29',ftp:230,source:'manual'},
+               {date:'2026-07-29',ftp:183,source:'manual'}];
+M.setSt({ ftpHistory: clash.slice() });
+check('the two same-date rows have DIFFERENT identities',
+  M._LWW_ARRAYS.ftpHistory.keys.join('+'), 'date+ftp');
+check('removing only the 230', M.settingsArrRemove_('ftpHistory', (h) => h.ftp === 230), 1);
+const after = M.getSt().ftpHistory;
+check('the 183 on the same date SURVIVES', after.filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
+check('the tombstone carries the composite key it deleted',
+  after.filter((h) => h.deleted)[0]._k, '2026-07-29|230');
+check('and still carries the date for readability', after.filter((h) => h.deleted)[0].date, '2026-07-29');
+check('the tombstone has no ftp, so value-filters skip it', 'ftp' in after.filter((h) => h.deleted)[0], false);
+check('through a merge against a client still holding the 230',
+  M._lwwMergeArray_(fspec, after, clash, true).filter((h) => !h.deleted).map((h) => h.ftp), [190,183]);
+check('...and the 230 stays dead',
+  M._lwwMergeArray_(fspec, after, clash, true).some((h) => h.ftp === 230 && !h.deleted), false);
+console.log('  ' + Y + '(keyed on date alone this returned [190] - the good 183 deleted as collateral)' + X);
+check('weightLog keeps a single-field identity', M._LWW_ARRAYS.weightLog.keys, ['date']);
+check('so an existing date-only tombstone still resolves',
+  M._lwwMergeArray_(spec, [{date:'2026-01-01',deleted:true}], [{date:'2026-01-01',weight:165}], true)[0].deleted, true);
+check('an unidentifiable row is left alone, not silently tombstoned', (function(){
+  M.setSt({ ftpHistory:[{source:'orphan'}] });
+  const n = M.settingsArrRemove_('ftpHistory', function(){ return true; });
+  return [n, M.getSt().ftpHistory[0].deleted];
+})(), [0, undefined]);
 
 console.log('\n=== readers cannot trip over a tombstone ===');
 check('a tombstone has no value field, so value-filters skip it',

@@ -5838,8 +5838,22 @@ function mergeStateRoot_(local, remote){
 // The tombstone carries the KEY field and no VALUE field ({date:'2026-01-01', deleted:true} with no
 // weight). That is deliberate: almost every existing reader already filters on the value being
 // present and finite, so a tombstone is invisible to them without touching a single call site.
-var _LWW_ARRAYS = { weightLog:{ key:'date', val:'weight' }, ftpHistory:{ key:'date', val:'ftp' } };
-function _arrKeyOf_(spec, item){ return (item && item[spec.key]!=null) ? String(item[spec.key]) : null; }
+// keys[] is the IDENTITY of a row. weightLog is one row per date by construction. ftpHistory is
+// too - ftpRecord_ same-day-corrects rather than stacking - but raw writes that bypass it can
+// produce two rows on one date, and that actually happened during the repair. Keyed on date alone,
+// tombstoning one of them would have taken the other down with it, so identity here is date+ftp.
+var _LWW_ARRAYS = { weightLog:{ keys:['date'], val:'weight' },
+                    ftpHistory:{ keys:['date','ftp'], val:'ftp' } };
+// A tombstone drops its VALUE field (that is what makes it invisible to readers that filter on the
+// value), so it cannot rebuild a composite key from its own fields. It carries the key it is
+// deleting in _k instead. _k is deliberately not one of the value fields any reader looks at.
+function _arrKeyOf_(spec, item){
+  if(!item) return null;
+  if(item._k!=null) return String(item._k);
+  var parts=[], i, v;
+  for(i=0;i<spec.keys.length;i++){ v=item[spec.keys[i]]; if(v==null||v==='') return null; parts.push(String(v)); }
+  return parts.length?parts.join('|'):null;
+}
 function _arrIsDead_(item){ return !!(item && item.deleted); }
 // Live entries only - what every reader wants.
 function settingsArrLive_(name){
@@ -5854,7 +5868,8 @@ function settingsArrRemove_(name, pred){
   st[name] = st[name].map(function(x){
     if(!x || _arrIsDead_(x)) return x;
     if(pred && !pred(x)) return x;
-    var t={ deleted:true }; t[spec.key]=x[spec.key]; n++;
+    var k=_arrKeyOf_(spec, x); if(k==null) return x;      // unidentifiable: leave it rather than guess
+    var t={ deleted:true, _k:k }; t[spec.keys[0]]=x[spec.keys[0]]; n++;
     return t;                                  // value field dropped on purpose
   });
   return n;
