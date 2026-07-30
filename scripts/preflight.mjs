@@ -309,6 +309,19 @@ try {
     fail('the Prescribed vs actual card regressed (see above).');
   }
 
+  // ---- 20. Deleting from a settings array must survive a merge, and the force-push escape hatch
+  //          must stay gated. These are the two halves of the "my correction keeps coming back"
+  //          failure that cost four rounds of hand-cleaning.
+  console.log(`${D}· checking settings-array deletion…${X}`);
+  try {
+    const so = execSync('node scripts/settings-array-tombstone-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('settings-array deletion or the force-push gate regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

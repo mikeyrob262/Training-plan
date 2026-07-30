@@ -5815,8 +5815,72 @@ function mergeStateRoot_(local, remote){
       if(!hasL && hasR){ _lwwSet_(out, p, rv); continue; }
       _lwwSet_(out, p, remoteWins ? rv : lv);
     }
+    // Settings arrays: union by key with tombstones winning, so a deletion can actually travel.
+    var name;
+    for(name in _LWW_ARRAYS){
+      if(!Object.prototype.hasOwnProperty.call(_LWW_ARRAYS, name)) continue;
+      out[name] = _lwwMergeArray_(_LWW_ARRAYS[name],
+        local && local[name], remote && remote[name], remoteWins);
+    }
   }catch(e){ console.error('[lww] merge failed, falling back to plain merge: '+(e&&e.message)); }
   return out;
+}
+// ===== SETTINGS-LEVEL ARRAYS: deletion needs a TOMBSTONE ======================
+// mergeState_ resolves two arrays by UNION and returns the non-null side when one is missing, so
+// a removal has no way to travel: clearing st.weightLog locally and pushing merges the cloud's
+// copy straight back, and writing null server-side loses to any client still holding entries. My
+// own "st.weightLog = null; saveLocal_(); fbPush()" could not have worked for exactly this reason -
+// fbPush merges remote in BEFORE the PUT, and null loses that merge every time.
+//
+// Rides already solve this: a deleted ride stays in the array as {deleted:true} and OR-merges, so
+// the removal wins without a force push. These arrays get the same treatment.
+//
+// The tombstone carries the KEY field and no VALUE field ({date:'2026-01-01', deleted:true} with no
+// weight). That is deliberate: almost every existing reader already filters on the value being
+// present and finite, so a tombstone is invisible to them without touching a single call site.
+var _LWW_ARRAYS = { weightLog:{ key:'date', val:'weight' }, ftpHistory:{ key:'date', val:'ftp' } };
+function _arrKeyOf_(spec, item){ return (item && item[spec.key]!=null) ? String(item[spec.key]) : null; }
+function _arrIsDead_(item){ return !!(item && item.deleted); }
+// Live entries only - what every reader wants.
+function settingsArrLive_(name){
+  var a = (typeof st!=='undefined' && st && Array.isArray(st[name])) ? st[name] : [];
+  return a.filter(function(x){ return x && !_arrIsDead_(x); });
+}
+// Tombstone entries matching a predicate (or all of them when none is given). Returns the count.
+function settingsArrRemove_(name, pred){
+  if(typeof st==='undefined' || !st || !Array.isArray(st[name])) return 0;
+  var spec=_LWW_ARRAYS[name]; if(!spec) return 0;
+  var n=0;
+  st[name] = st[name].map(function(x){
+    if(!x || _arrIsDead_(x)) return x;
+    if(pred && !pred(x)) return x;
+    var t={ deleted:true }; t[spec.key]=x[spec.key]; n++;
+    return t;                                  // value field dropped on purpose
+  });
+  return n;
+}
+function settingsArrClear_(name){ return settingsArrRemove_(name, null); }
+// Merge one settings array: union by key, a tombstone on EITHER side wins, otherwise the newer
+// blob's copy of that entry. Order is restored by key so two devices cannot disagree on it.
+function _lwwMergeArray_(spec, a, b, remoteWins){
+  a = Array.isArray(a)?a:[]; b = Array.isArray(b)?b:[];
+  if(!a.length && !b.length) return null;
+  var by = {}, order = [];
+  function take(list, isRemote){
+    list.forEach(function(x){
+      var k=_arrKeyOf_(spec, x); if(k==null) return;
+      if(!(k in by)){ by[k]=null; order.push(k); }
+      var cur=by[k];
+      if(cur && _arrIsDead_(cur)) return;                 // a tombstone already won this key
+      if(_arrIsDead_(x)){ by[k]=x; return; }              // deletion wins over any live copy
+      if(cur==null){ by[k]=x; return; }
+      if(isRemote===remoteWins) by[k]=x;                  // newer blob's copy of a live entry
+    });
+  }
+  take(a, false); take(b, true);
+  order.sort();
+  var out=order.map(function(k){ return by[k]; }).filter(Boolean);
+  return out.length?out:null;
 }
 // Shadow of the allowlisted values as of the last save/merge. saveLocal_ compares against
 // it so that a LOCAL edit stamps st.lastUpdate and therefore wins the next merge. Without
@@ -7305,8 +7369,10 @@ function logWeightQuick(){
     st.weight = num;
     if(!st.weightLog) st.weightLog = [];
     var today = getTodayKey();
-    var existing = st.weightLog.find(function(w){return w.date===today;});
-    if(existing) existing.weight = num;
+    var existing = st.weightLog.find(function(w){return w && w.date===today;});
+    // Logging a weight on a date that was previously DELETED revives it - clear the tombstone
+    // rather than leaving a deleted flag on a row that now has a real value again.
+    if(existing){ existing.weight = num; if(existing.deleted) delete existing.deleted; }
     else st.weightLog.push({date:today, weight:num});
     sv(); fbPush(true);
     toast('Weight logged: '+num+' lbs');
@@ -8177,7 +8243,7 @@ function todayWorkoutHTML(){
 // Weight + Nutrition secondary stat row - demoted below Today since these
 // are check-ins, not the day's main decision.
 function weightNutritionRowHTML(){
-  var wLog = st.weightLog||[];
+  var wLog = (typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):(st.weightLog||[]);
   var latestW = wLog.length ? wLog[wLog.length-1] : null;
   var tots = getDTots(getTodayKey());
 
@@ -8260,7 +8326,7 @@ function renderHomeTSSAndPR(){
   var rides = st.rides||[];
 
   // Weight quick-log button (always shown, independent of rides)
-  var wLog = st.weightLog||[];
+  var wLog = (typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):(st.weightLog||[]);
   var latestW = wLog.length ? wLog[wLog.length-1] : null;
   var weightHtml = '<div style="margin:0 16px 12px;background:var(--s2);border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">'
     + '<div><div style="font-size:11px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Weight</div>'
@@ -9357,7 +9423,57 @@ function showSet(){
     +'<button id="export-data-btn" title="Export data" style="width:38px;height:38px;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬇</button>'
     +'<button id="import-data-btn" title="Import data" style="width:38px;height:38px;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬆</button>'
     +'<input id="import-data-file" type="file" accept=".json" style="display:none">'
+    +'</div>'
+    // LAST RESORT. Every other control here MERGES; this is the only one that does not, which is
+    // why it is separated, muted until pressed, and gated behind a confirm that states exactly what
+    // is about to be discarded. It exists because a stale device that keeps re-pushing old values
+    // is otherwise unfixable from inside the app.
+    +'<div style="border-top:1px solid var(--b1);padding:10px 16px">'
+    +'<button id="force-push-btn" style="width:100%;background:transparent;border:1px solid #4a2318;color:#b45309;'
+      +'font-size:11px;font-weight:700;padding:8px 10px;border-radius:9px;cursor:pointer;font-family:inherit">'
+      +'Overwrite cloud with this device</button>'
+    +'<div style="font-size:9.5px;color:var(--t3);margin-top:5px;line-height:1.45">'
+      +'Last resort. Replaces the cloud copy outright instead of merging. Use only when another '
+      +'device keeps pushing back values you have already corrected.</div>'
     +'</div></div>';
+  // Force-push. Reads the CLOUD first so the confirm can name what is actually at stake rather than
+  // warning in the abstract, then requires the explicit token fbPush already demands.
+  setTimeout(function(){
+    var fb=document.getElementById('force-push-btn');
+    if(!fb) return;
+    fb.onclick=function(){
+      fb.disabled=true; fb.textContent='Checking the cloud…';
+      var restore=function(){ fb.disabled=false; fb.textContent='Overwrite cloud with this device'; };
+      ensureFbAuth_().then(function(tok){ return fetch(fbAuthedUrl_(tok)); })
+        .then(function(r){ return r.ok?r.json():null; })
+        .catch(function(){ return null; })
+        .then(function(remote){
+          var cnt=function(o,k){ var v=o&&o[k]; return Array.isArray(v)?v.length:(v&&typeof v==='object'?Object.keys(v).length:0); };
+          var lines=[['rides','rides'],['runs','runs'],['weightLog','weigh-ins'],['ftpHistory','FTP entries']]
+            .map(function(p){ return '  ' + p[1] + ': cloud ' + cnt(remote,p[0]) + '  ->  this device ' + cnt(st,p[0]); })
+            .join(String.fromCharCode(10));
+          var when=(remote&&remote.lastUpdate)?new Date(remote.lastUpdate).toLocaleString():'unknown';
+          var loss=[['rides','rides'],['runs','runs'],['weightLog','weigh-ins'],['ftpHistory','FTP entries']]
+            .filter(function(p){ return cnt(remote,p[0])>cnt(st,p[0]); })
+            .map(function(p){ return p[1]; });
+          var warn=loss.length
+            ? (String.fromCharCode(10)+String.fromCharCode(10)+'WARNING: the cloud has MORE '+loss.join(', ')
+               +' than this device. Those extra records will be lost.')
+            : '';
+          return uiConfirm('This replaces the cloud copy with this device outright. It does not merge, '
+            +'and it cannot be undone.'+String.fromCharCode(10)+String.fromCharCode(10)
+            +'Cloud last written: '+when+String.fromCharCode(10)+String.fromCharCode(10)
+            +lines+warn,
+            { title:'Overwrite cloud?', danger:true, okText:'Overwrite', cancelText:'Cancel' })
+            .then(function(ok){
+              if(!ok){ restore(); return; }
+              fb.textContent='Overwriting…';
+              fbPush(false, true, 'FORCE-OVERWRITE-CONFIRMED', 'settings-force-push');
+              setTimeout(restore, 2500);
+            });
+        }).catch(function(e){ restore(); uiAlert('Could not read the cloud first, so nothing was overwritten. '+((e&&e.message)||e)); });
+    };
+  }, 300);
   // Update the sync dot after render
   setTimeout(function(){
     var dot = document.getElementById('sync-dot');
@@ -21080,7 +21196,7 @@ function _trjCtlPts_(){
 // which is the failure mode this page exists to avoid. The real entries are used as they are, and
 // when there are too few the FTP projection is suppressed instead of fitted to two points.
 function _trjFtpPts_(){
-  var h=(typeof _ftpHist_==='function')?_ftpHist_():[];
+  var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
   return _trjWindow_(h.map(function(e){
     return (e&&e.date&&e.ftp!=null&&isFinite(+e.ftp))?{t:_trjDay_(e.date), y:+e.ftp}:null;
   }).filter(function(x){return x&&x.t!=null;}));
@@ -22672,7 +22788,7 @@ function _cvFtp_(now){
   if(typeof _FTP_RETEST_DATE==='undefined') return '';
   now=now||new Date();
   var today=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2)+'-'+('0'+now.getDate()).slice(-2);
-  var h=(typeof _ftpHist_==='function')?_ftpHist_():[];
+  var h=(typeof _ftpHistLive_==='function')?_ftpHistLive_():[];
   var sorted=(typeof _ftpSort_==='function')?_ftpSort_(h):h.slice();
   var ri=-1; for(var i=0;i<sorted.length;i++){ if(sorted[i].source==='retest') ri=i; }
   if(ri>=0 && today && today>=sorted[ri].date){
@@ -25941,26 +26057,30 @@ function _goalTargets_(){
 // never an invented past value.
 var _FTP_DEFAULT=186;   // _FTP_RETEST_DATE is declared up with the block constants — one source
 function _ftpToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// RAW - callers that MUTATE the log (ftpRecord_) need the real array, tombstones included.
 function _ftpHist_(){ if(typeof st==='undefined'||!st) return []; if(!Array.isArray(st.ftpHistory)) st.ftpHistory=[]; return st.ftpHistory; }
+// LIVE - what every reader wants. A tombstone carries a date and no ftp, so anything that trusted
+// entry.ftp would otherwise read undefined.
+function _ftpHistLive_(){ return _ftpHist_().filter(function(h){ return h && !h.deleted && h.ftp>0; }); }
 function _ftpSort_(h){ return h.slice().sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); }); }
 // Append (or same-day correct) an FTP entry. No-op when the value equals the current latest, so the
 // log records genuine CHANGES only. source: 'baseline'|'manual'|'retest'.
 function ftpRecord_(ftp, source, dateStr){
   ftp=parseInt(ftp,10); if(!(ftp>0)) return null;
   var h=_ftpHist_(), date=dateStr||_ftpToday_();
-  var sorted=_ftpSort_(h), last=sorted.length?sorted[sorted.length-1]:null;
+  var sorted=_ftpSort_(_ftpHistLive_()), last=sorted.length?sorted[sorted.length-1]:null;
   // Auto-tag the first change dated on/after the retest as a retest, so Coach V can see the discontinuity.
   if(!source){ source=(date>=_FTP_RETEST_DATE && (!last || last.date<_FTP_RETEST_DATE))?'retest':'manual'; }
   // Same-day correction: overwrite today's entry rather than stacking two.
   var same=null; for(var i=0;i<h.length;i++){ if(h[i].date===date){ same=h[i]; break; } }
-  if(same){ if(same.ftp!==ftp){ same.ftp=ftp; same.source=source; } return same; }
+  if(same){ if(same.ftp!==ftp || same.deleted){ same.ftp=ftp; same.source=source; if(same.deleted) delete same.deleted; } return same; }
   if(last && last.ftp===ftp) return last;          // no change -> no new entry
   var e={date:date, ftp:ftp, source:source}; h.push(e); return e;
 }
 // The FTP effective ON a given date: the latest entry with date <= dateStr. Before the log begins,
 // the first recorded FTP; with no log at all, the current st.ftp, then the default. Never invents.
 function ftpOn_(dateStr){
-  var h=_ftpHist_(); dateStr=dateStr||_ftpToday_();
+  var h=_ftpHistLive_(); dateStr=dateStr||_ftpToday_();
   if(!h.length) return parseInt((typeof st!=='undefined'&&st&&st.ftp)||_FTP_DEFAULT,10)||_FTP_DEFAULT;
   var sorted=_ftpSort_(h), eff=null;
   for(var i=0;i<sorted.length;i++){ if(sorted[i].date<=dateStr) eff=sorted[i]; else break; }
@@ -25973,7 +26093,7 @@ function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETES
 function ftpSyncHistory_(){
   if(typeof st==='undefined'||!st) return;
   var cur=parseInt(st.ftp||0,10); if(!(cur>0)) return;
-  var h=_ftpHist_();
+  var h=_ftpHistLive_();
   if(!h.length){ ftpRecord_(cur,'baseline'); return; }
   var sorted=_ftpSort_(h);
   if(sorted[sorted.length-1].ftp!==cur) ftpRecord_(cur, null);
