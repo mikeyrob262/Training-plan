@@ -16810,7 +16810,7 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -20068,6 +20068,337 @@ function nextMilestones_(projections, n){
 // Records = best time per segment + PR progression (each improvement). Milestones = first threshold
 // crossings (separate tab). One computation shape, two framings; this is the "best" framing.
 function _segFmtT_(sec){ sec=Math.round(+sec||0); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h>0?(h+':'+('0'+m).slice(-2)):(''+m))+':'+('0'+s).slice(-2); }
+// ==================== SEGMENT ATTACK: the physics model ====================
+//
+// Everything below is PURE and unit-testable. It answers one question per segment: given the power
+// this athlete can actually hold for this long, and today's wind on this bearing, what time would
+// they ride - and how likely is that to beat the PR.
+//
+// THE EQUATION. Steady-state cycling power, the standard resistive decomposition:
+//
+//   P * eff = v * ( Crr*m*g*cos(atan(G)) + m*g*sin(atan(G)) + 0.5*rho*CdA*(v+w)^2 * sign(v+w) )
+//              \______rolling______/   \_____gravity_____/   \__________aero__________/
+//
+//   v = ground speed (m/s), w = HEADWIND component along travel (m/s, negative for tailwind),
+//   G = grade as a fraction, rho = air density, eff = drivetrain efficiency.
+//
+// Power rises monotonically with v, so it inverts by bisection rather than solving the cubic.
+//
+// WHY CdA IS FITTED, NOT ASSUMED. Textbook CdA/Crr would make every number here a guess about
+// equipment and position this app has never measured. Instead CdA is fitted per segment by least
+// squares against the athlete's OWN past efforts on that segment - each one a (time, power) pair.
+// A systematic error in mass, Crr, drivetrain or rider position is absorbed into the fitted CdA and
+// CANCELS when the same segment is projected forward. The model is therefore anchored to measured
+// reality on that specific stretch of road, not to a catalogue value.
+//
+// WHERE THE PROBABILITY COMES FROM. Not a feel. Fitting leaves residuals - the gap between each
+// past effort's actual time and what the model says it should have been. Their standard deviation
+// IS the model's demonstrated error on this segment, and it already contains day-to-day
+// variability the model does not explain (wind on those days, fatigue, traffic, GPS). So:
+//
+//   P(beat PR) = Phi( (t_PR - t_predicted) / sigma )
+//
+// This is deliberately CONSERVATIVE: sigma includes historical wind scatter, while t_predicted
+// already corrects for today's wind, so the same uncertainty is counted twice. That pushes
+// probabilities toward 50% rather than toward confident-looking extremes.
+//
+// A probability is only ever shown when sigma was measured from at least _SA_MIN_FIT efforts. With
+// fewer, there is no error distribution and the segment gets a wind-only call and no number.
+var _SA_G=9.807, _SA_EFF=0.976, _SA_CRR=0.005;
+var _SA_MIN_FIT=3;              // efforts needed before a residual sigma means anything
+var _SA_CDA_LO=0.18, _SA_CDA_HI=0.75;   // physiological bounds; a fit outside these is rejected
+// Air density from temperature and elevation. Both real inputs: temp from the weather fetch,
+// elevation from the segment. Falls back to sea-level 15C only when neither is known.
+function _saRho_(tempF, elevM){
+  var t=(tempF!=null&&isFinite(tempF))?((tempF-32)*5/9):15;
+  var h=(elevM!=null&&isFinite(elevM))?elevM:0;
+  var p=101325*Math.pow(1-2.25577e-5*h, 5.25588);
+  return p/(287.058*(t+273.15));
+}
+// HEADWIND component along the direction of travel, m/s. Positive = headwind (costs time).
+// Open-Meteo reports the direction the wind blows FROM, so it is turned around first - the same
+// convention the ride-weather panel already uses.
+function _saHeadwind_(bearingDeg, windFromDeg, windMph){
+  if(bearingDeg==null || windFromDeg==null || !(windMph>0)) return 0;
+  var toward=(windFromDeg+180)%360;
+  var delta=((toward-bearingDeg+540)%360)-180;       // -180..180, 0 = pure tailwind
+  return -(windMph*0.44704)*Math.cos(delta*Math.PI/180);
+}
+// Watts required to hold ground speed v.
+function _saPowerAt_(v, grade, rho, cda, mass, w){
+  if(!(v>0)) return 0;
+  var th=Math.atan(grade||0);
+  var roll=_SA_CRR*mass*_SA_G*Math.cos(th);
+  var grav=mass*_SA_G*Math.sin(th);
+  var air=v+(w||0);
+  var aero=0.5*rho*cda*air*air*(air<0?-1:1);
+  return v*(roll+grav+aero)/_SA_EFF;
+}
+// Invert the above for v. Bisection, because power is monotonic in v over the bracket.
+function _saSolveV_(power, grade, rho, cda, mass, w){
+  if(!(power>0)) return null;
+  var lo=0.5, hi=30, mid, i;
+  if(_saPowerAt_(hi,grade,rho,cda,mass,w)<power) return hi;
+  for(i=0;i<60;i++){
+    mid=(lo+hi)/2;
+    if(_saPowerAt_(mid,grade,rho,cda,mass,w)<power) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2;
+}
+// Fit CdA to this segment's own efforts by least squares on TIME. Each effort supplies a
+// (seconds, watts) pair; wind on those days is unknown and is left to the residuals.
+// Returns null when the efforts cannot support a fit — never a default.
+function _saFitCdA_(efforts, grade, distM, rho, mass){
+  var use=(efforts||[]).filter(function(e){ return e && e.s>0 && e.w>0; });
+  if(use.length<1 || !(distM>0)) return null;
+  var best=null, bestErr=Infinity, c;
+  for(c=_SA_CDA_LO; c<=_SA_CDA_HI+1e-9; c+=0.005){
+    var err=0, ok=true;
+    for(var i=0;i<use.length;i++){
+      var v=_saSolveV_(use[i].w, grade, rho, c, mass, 0);
+      if(!(v>0)){ ok=false; break; }
+      var d=(distM/v)-use[i].s;
+      err+=d*d;
+    }
+    if(ok && err<bestErr){ bestErr=err; best=c; }
+  }
+  if(best==null) return null;
+  // A fit pinned to either bound is the optimiser giving up, not a measurement.
+  if(best<=_SA_CDA_LO+1e-9 || best>=_SA_CDA_HI-1e-9) return null;
+  return { cda:Math.round(best*1000)/1000, n:use.length, rmse:Math.sqrt(bestErr/use.length) };
+}
+// Residual standard deviation of the fit, in SECONDS. This is the model's measured error on this
+// segment and the only thing a probability is ever built from.
+function _saSigma_(efforts, grade, distM, rho, mass, cda){
+  var use=(efforts||[]).filter(function(e){ return e && e.s>0 && e.w>0; });
+  if(use.length<_SA_MIN_FIT) return null;
+  var res=[], i;
+  for(i=0;i<use.length;i++){
+    var v=_saSolveV_(use[i].w, grade, rho, cda, mass, 0);
+    if(!(v>0)) return null;
+    res.push((distM/v)-use[i].s);
+  }
+  var mean=res.reduce(function(a,b){ return a+b; },0)/res.length;
+  var varr=res.reduce(function(a,b){ return a+(b-mean)*(b-mean); },0)/(res.length-1);
+  var sd=Math.sqrt(varr);
+  return (isFinite(sd) && sd>0) ? sd : null;
+}
+// How much evidence a projection actually rests on. Surfaced next to every probability, because a
+// 3-effort fit and a 15-effort fit produce numbers that LOOK identical and are not remotely alike:
+// sigma at n=3 has two degrees of freedom and will swing as more efforts arrive. Thresholds match
+// the real distribution in this athlete's library - of 126 segments that qualify at all, 67 sit in
+// the 3-4 band, so "thin" is the common case here and has to read differently at a glance.
+function _saEvidence_(n){
+  if(!(n>0)) return { key:'none', label:'no fit', col:'#64748b' };
+  if(n>=10) return { key:'strong', label:n+' efforts', col:'#22c55e' };
+  if(n>=5)  return { key:'fair',   label:n+' efforts', col:'#f59e0b' };
+  return { key:'thin', label:'only '+n+' efforts', col:'#f97316' };
+}
+function _saHaversineM_(lat1,lon1,lat2,lon2){
+  if(lat1==null||lon1==null||lat2==null||lon2==null) return null;
+  var R=6371000, p=Math.PI/180;
+  var dLat=(lat2-lat1)*p, dLon=(lon2-lon1)*p;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)
+       +Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+// SINUOSITY: recorded length divided by the straight line between the endpoints.
+//
+// Wind is resolved against ONE bearing - start point to end point - which is exact for a straight
+// segment and progressively wronger as the road bends, because the true headwind component varies
+// along the route and this collapses it to a single value. A proper fix needs the segment polyline
+// (another endpoint, another N calls) and per-point integration.
+//
+// What IS computable from the stored endpoints is how much the segment bends: a ratio near 1.0 is
+// straight and the single bearing is trustworthy; 1.3 means the road wanders and the wind call is
+// approximate; an out-and-back returns to its start, so the ratio explodes and the bearing is
+// meaningless. Flagged rather than silently corrected - inventing a curvature discount would be
+// exactly the false precision this feature is built to avoid.
+var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6;
+// A standing time counts as a real PR target only if it was set at >=85% of today's capability for
+// that duration. Below that the athlete was cruising, not racing, and the comparison is meaningless.
+var _SA_CONTEST_MIN=0.85;
+function _saSinuosity_(seg, distM){
+  if(!seg || !(distM>0)) return null;
+  var straight=_saHaversineM_(seg.startLat, seg.startLon, seg.endLat, seg.endLon);
+  if(straight==null || straight<20) return (straight!=null)?99:null;   // returns to its start
+  return Math.round(distM/straight*100)/100;
+}
+function _saNormCdf_(z){
+  // Abramowitz & Stegun 7.1.26 on erf; plenty for a probability rendered to whole percent.
+  var s=(z<0)?-1:1, x=Math.abs(z)/Math.SQRT2;
+  var t=1/(1+0.3275911*x);
+  var y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return 0.5*(1+s*y);
+}
+// Best power this athlete has actually held for this DURATION, from the per-ride power curves.
+// Recent window first, because a capability from two years ago is not today's form; the all-time
+// value is only used as a labelled fallback. Log-log interpolation between the stored durations,
+// which is how a power-duration curve behaves - never an extrapolation past the ends.
+var _SA_DURS=[5,15,30,60,120,300,600,1200,1800,3600];
+function _saCapability_(rides, durSec, days, todayYMD){
+  if(!(durSec>0)) return null;
+  var cut=null;
+  if(days>0 && todayYMD){
+    var d=new Date(todayYMD+'T00:00:00'); d.setDate(d.getDate()-days);
+    cut=d.toISOString().slice(0,10);
+  }
+  var best={}, any=false;
+  (rides||[]).forEach(function(r){
+    if(!r || r.deleted || !r.powerCurve) return;
+    if(cut && String(r.date||'').slice(0,10)<cut) return;
+    _SA_DURS.forEach(function(t){
+      var w=+r.powerCurve[t];
+      if(w>0 && (!best[t] || w>best[t])){ best[t]=w; any=true; }
+    });
+  });
+  if(!any) return null;
+  var have=_SA_DURS.filter(function(t){ return best[t]>0; });
+  if(!have.length) return null;
+  if(durSec<=have[0]) return { w:best[have[0]], at:have[0], exact:(durSec===have[0]) };
+  if(durSec>=have[have.length-1]) return { w:best[have[have.length-1]], at:have[have.length-1], exact:false };
+  for(var i=1;i<have.length;i++){
+    if(durSec===have[i]) return { w:best[have[i]], at:have[i], exact:true };
+    if(durSec<have[i]){
+      var t0=have[i-1], t1=have[i], w0=best[t0], w1=best[t1];
+      var f=(Math.log(durSec)-Math.log(t0))/(Math.log(t1)-Math.log(t0));
+      return { w:Math.round(Math.exp(Math.log(w0)+f*(Math.log(w1)-Math.log(w0)))), at:durSec, exact:false };
+    }
+  }
+  return null;
+}
+// Wind call, reusing the app's existing three-bucket rule verbatim (ride-weather panel): within 45
+// degrees of the travel direction is a tailwind, beyond 135 a headwind, anything else a crosswind.
+// No graded percentage - the app has never had one, and inventing it here would be exactly the
+// false precision this feature is most exposed to.
+function _saWindCall_(bearingDeg, windFromDeg){
+  if(bearingDeg==null || windFromDeg==null) return null;
+  var toward=(windFromDeg+180)%360;
+  var diff=Math.abs(((bearingDeg-toward+540)%360)-180);
+  return (diff<45)?'tailwind':((diff>135)?'headwind':'crosswind');
+}
+// One segment, fully evaluated. Returns a record whose tier says exactly how far the data got:
+//
+//   'full'     bearing + >=3 powered efforts + a capability number -> projected time AND probability
+//   'wind'     bearing only -> the wind call, no projection, NO probability
+//   'excluded' no bearing at all -> cannot be reasoned about, and says so
+//
+// Nothing is defaulted. Every missing input downgrades the tier instead of being filled in, which
+// is what stops this feature from manufacturing confidence it has not earned.
+function _saEvaluate_(seg, ctx){
+  var out={ id:seg&&seg.id, name:(seg&&seg.name)||'Segment', tier:'excluded', why:'' };
+  if(!seg){ out.why='no segment'; return out; }
+  out.distMi=(seg.distMi!=null)?seg.distMi:null;
+  out.grade=(seg.grade!=null)?seg.grade:null;
+  out.bearing=(seg.bearing!=null)?seg.bearing:null;
+  out.prSec=(+seg.prSec>0)?+seg.prSec:null;
+  out.prDate=seg.prDate||null;
+  out.starred=!!seg.starred;
+  if(out.bearing==null){ out.why='no coordinates stored for this segment yet'; return out; }
+
+  out.wind=_saWindCall_(out.bearing, ctx.windFromDeg);
+  out.windMph=(ctx.windMph!=null)?ctx.windMph:null;
+  out.tier='wind';
+
+  var distM=(out.distMi!=null)?out.distMi*1609.344:null;
+  if(!(distM>0)){ out.why='no distance recorded'; return out; }
+  // How far the single bearing can be trusted on THIS segment.
+  out.sinuosity=_saSinuosity_(seg, distM);
+  out.windApprox=(out.sinuosity!=null && out.sinuosity>=_SA_SINUOUS);
+  if(out.sinuosity!=null && out.sinuosity>=_SA_SINUOUS_BAD){
+    // A road that doubles back has no single direction of travel; a tail/head call would be
+    // asserting something the geometry cannot support.
+    out.wind=null;
+    out.windNote='too winding for a single wind call';
+  }
+  // The PR is the target. Strava's stored prSec is preferred because it is server-side and
+  // all-time; but syncSegmentPRs_ only ever covered STARRED segments, so most segments have none.
+  // The effort history the backfill built is the next best thing: the fastest effort on record IS
+  // a PR. It is flagged as derived, because that history only covers rides with a Strava id - a
+  // faster effort on a FIT-only ride would not be in it.
+  if(!(out.prSec>0)){
+    var fastest=null;
+    (seg.efforts||[]).forEach(function(e){ if(e && e.s>0 && (!fastest || e.s<fastest.s)) fastest=e; });
+    if(fastest){ out.prSec=fastest.s; out.prDate=fastest.d||null; out.prFromHistory=true; }
+  }
+  if(!(out.prSec>0)){ out.why='no PR time and no effort history to derive one'; return out; }
+
+  var eff=(seg.efforts||[]).filter(function(e){ return e && e.s>0 && e.w>0; });
+  out.nEfforts=(seg.efforts||[]).length;
+  out.nPowered=eff.length;
+  if(eff.length<_SA_MIN_FIT){
+    out.why=eff.length?('only '+eff.length+' effort'+(eff.length===1?'':'s')+' with power - '+_SA_MIN_FIT+' needed to measure the model error'):'no efforts with power data';
+    return out;
+  }
+  var rho=_saRho_(ctx.tempF, seg.elevM);
+  var fit=_saFitCdA_(eff, (out.grade||0)/100, distM, rho, ctx.massKg);
+  if(!fit){ out.why='the efforts do not support a stable fit'; return out; }
+  var sigma=_saSigma_(eff, (out.grade||0)/100, distM, rho, ctx.massKg, fit.cda);
+  if(!(sigma>0)){ out.why='model error could not be measured from these efforts'; return out; }
+
+  // The power that actually set the PR, matched by date - this is what Phase 0's effort history
+  // exists to provide, and it is what makes the form check real rather than notional.
+  var prEff=null, i;
+  for(i=0;i<eff.length;i++){ if(out.prDate && eff[i].d===out.prDate){ prEff=eff[i]; break; } }
+  if(!prEff){ for(i=0;i<eff.length;i++){ if(Math.abs(eff[i].s-out.prSec)<=1){ prEff=eff[i]; break; } } }
+  out.prWatts=prEff?Math.round(prEff.w):null;
+
+  var cap=_saCapability_(ctx.rides, out.prSec, 90, ctx.todayYMD);
+  var capStale=false;
+  if(!cap){ cap=_saCapability_(ctx.rides, out.prSec, 0, ctx.todayYMD); capStale=true; }
+  if(!cap){ out.why='no power-curve history to judge current capability'; return out; }
+  out.capW=Math.round(cap.w);
+  out.capStale=capStale;
+
+  var w=_saHeadwind_(out.bearing, ctx.windFromDeg, ctx.windMph);
+  var v=_saSolveV_(cap.w, (out.grade||0)/100, rho, fit.cda, ctx.massKg, w);
+  if(!(v>0)){ out.why='no solution for today conditions'; return out; }
+  out.tPred=Math.round(distM/v);
+  out.cda=fit.cda;
+  out.nFit=fit.n;
+  out.delta=out.tPred-out.prSec;                       // negative = faster than the PR
+  out.headwindMs=Math.round(w*100)/100;
+
+  // PREDICTION uncertainty, not fit uncertainty. The residual sigma describes how well the model
+  // explains efforts already made; predicting a NEW effort also carries the error in the fitted
+  // parameter itself, which is the textbook sqrt(1 + 1/n) inflation. With n small - and n here is
+  // often 3 or 4 - that term is not negligible, and omitting it would make the model look more
+  // certain the LESS evidence it has.
+  var sigPred=sigma*Math.sqrt(1+1/Math.max(1,fit.n));
+  out.sigma=Math.round(sigPred*10)/10;
+  var raw=Math.round(_saNormCdf_((out.prSec-out.tPred)/sigPred)*100);
+
+  // Then clamped to 5..95. This is not cosmetic hedging: sigma is measured from efforts the athlete
+  // ACTUALLY COMPLETED at a known power, so it cannot describe the things that decide a real
+  // attempt - whether they go all-out today, traffic, a red light, a mechanical, a missed turn.
+  // Those risks are real, unmodelled, and one-sided, so 100% is never an honest number to print.
+  out.prob=Math.max(5, Math.min(95, raw));
+  out.probCapped=(raw>95||raw<5);
+  out.probRaw=raw;
+  // Evidence weight travels WITH the probability so the two can never be read apart.
+  out.evidence=_saEvidence_(fit.n);
+
+  // IS THIS ACTUALLY A PR CONTEST?
+  //
+  // The first render of this page listed 77 "winnable" segments, every one at the 95% ceiling, with
+  // deltas like -2:45. The maths was right and the meaning was wrong: the target time came from the
+  // fastest effort in synced history, and on most segments that effort was a soft pass. Beating a
+  // 108W cruise with a 234W capability is not a PR attempt, it is arithmetic - and dressing it as a
+  // 95% chance of a PR is exactly the false confidence this feature is supposed to refuse.
+  //
+  // So a segment only counts as CONTESTED when the standing time was set at an effort comparable to
+  // what the athlete can do now. Everything else is real and still worth knowing - it means they
+  // have never gone hard there - but it is labelled that way instead of ranked as a PR opportunity.
+  out.prEffortRatio=(out.prWatts>0 && out.capW>0)?Math.round(out.prWatts/out.capW*100)/100:null;
+  out.contested=(out.prEffortRatio!=null && out.prEffortRatio>=_SA_CONTEST_MIN);
+  if(out.prWatts>0 && !out.contested){
+    out.note='best recorded pass was soft ('+out.prWatts+'W vs '+out.capW+'W today) - you have never attacked this';
+  } else if(out.prWatts==null){
+    out.note='the standing time has no power recorded, so it cannot be judged as an effort';
+  }
+  out.tier='full';
+  return out;
+}
 // PURE + testable. store = st.segments (object keyed by id). Returns records sorted most-ridden first.
 // NO window cap (all-time is honest here). A segment with no PR time is skipped.
 function segmentRecordsCompute_(store){
@@ -22326,7 +22657,262 @@ function aiRenderTrajectory_(){
     +'relationship between training and adaptation that cannot be derived from one athlete&rsquo;s history.</div>';
 }
 
+// ==================== SEGMENT ATTACK: the page ====================
+var _SA_COMPASS8=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+function _saCompassLbl_(deg){ return (deg==null)?'':_SA_COMPASS8[Math.round(((deg%360)+360)%360/22.5)%16]; }
+function _saMMSS_(sec){
+  if(!(sec>0)) return '—';
+  var m=Math.floor(sec/60), s=Math.round(sec%60);
+  if(s===60){ m++; s=0; }
+  return m+':'+('0'+s).slice(-2);
+}
+function _saDelta_(d){
+  if(d==null) return '';
+  var s=(d<0?'-':'+')+_saMMSS_(Math.abs(d));
+  return s.replace('-0:','-0:').replace('+0:','+0:');
+}
+// A compass rose with a needle on the segment bearing. The needle is the SEGMENT's direction of
+// travel; the wind arrow is drawn from the same centre, pointing where the wind is blowing TO.
+function _saRose_(bearing, windFromDeg, size){
+  var S=size||64, c=S/2, r=c-9;
+  function pt(deg, rad){ var a=(deg-90)*Math.PI/180; return [(c+rad*Math.cos(a)).toFixed(1),(c+rad*Math.sin(a)).toFixed(1)]; }
+  var g='<svg viewBox="0 0 '+S+' '+S+'" width="'+S+'" height="'+S+'" style="display:block">'
+    +'<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="#232a38" stroke-width="1"/>';
+  [['N',0],['E',90],['S',180],['W',270]].forEach(function(m){
+    var p=pt(m[1], r+5.5);
+    g+='<text x="'+p[0]+'" y="'+(+p[1]+3).toFixed(1)+'" text-anchor="middle" font-size="7" fill="#5b6678">'+m[0]+'</text>';
+  });
+  if(bearing!=null){
+    var a=pt(bearing, r-3), b=pt((bearing+180)%360, r-10);
+    g+='<line x1="'+b[0]+'" y1="'+b[1]+'" x2="'+a[0]+'" y2="'+a[1]+'" stroke="#f97316" stroke-width="2.4" stroke-linecap="round"/>'
+      +'<circle cx="'+a[0]+'" cy="'+a[1]+'" r="2.6" fill="#f97316"/>';
+  }
+  if(windFromDeg!=null){
+    var toward=(windFromDeg+180)%360, w1=pt(windFromDeg, r-6), w2=pt(toward, r-6);
+    g+='<line x1="'+w1[0]+'" y1="'+w1[1]+'" x2="'+w2[0]+'" y2="'+w2[1]+'" stroke="#60a5fa" stroke-width="1.2" stroke-dasharray="3 2" opacity=".85"/>';
+  }
+  return g+'</svg>';
+}
+// Route SKETCH, not a map. Only the two endpoints are stored, so the shape between them is unknown
+// and is drawn as a straight line - oriented to the real bearing so the direction is truthful even
+// though the path is not. A real trace needs the segment polyline, which is a separate endpoint and
+// another call per segment; drawing an invented curve here would be a lie about the road.
+function _saSketch_(ev){
+  var W=170, H=96, pad=16;
+  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;font-size:9.5px;color:#5b6678;text-align:center;padding:8px">no route data</div>';
+  var a=(ev.bearing-90)*Math.PI/180;
+  var cx=W/2, cy=H/2, L=Math.min(W,H)/2-pad;
+  var x1=cx-L*Math.cos(a), y1=cy-L*Math.sin(a), x2=cx+L*Math.cos(a), y2=cy+L*Math.sin(a);
+  var wig=(ev.windApprox||(ev.sinuosity!=null&&ev.sinuosity>=_SA_SINUOUS))
+    ? '<text x="'+(W-6)+'" y="'+(H-6)+'" text-anchor="end" font-size="8" fill="#f59e0b">bends</text>' : '';
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid #1c2130">'
+    +'<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round"/>'
+    +'<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#22c55e" stroke="#0d1016" stroke-width="1.5"/>'
+    +'<circle cx="'+x2.toFixed(1)+'" cy="'+y2.toFixed(1)+'" r="4" fill="#e8edf5" stroke="#0d1016" stroke-width="1.5"/>'
+    +'<text x="6" y="'+(H-6)+'" font-size="8" fill="#5b6678">start &rarr; end</text>'+wig+'</svg>';
+}
+// The win-probability ring. Stroke length IS the probability; the label under it is a word for the
+// same number, never a second, different claim.
+function _saRing_(pct, col, size){
+  var S=size||96, c=S/2, r=c-8, C=2*Math.PI*r, off=C*(1-Math.max(0,Math.min(100,pct))/100);
+  return '<svg viewBox="0 0 '+S+' '+S+'" width="'+S+'" height="'+S+'" style="display:block">'
+    +'<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="#232a38" stroke-width="8"/>'
+    +'<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="8" stroke-linecap="round"'
+    +' stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+c+' '+c+')"/>'
+    +'<text x="'+c+'" y="'+(c+7)+'" text-anchor="middle" font-size="22" font-weight="800" fill="#f1f5f9">'+Math.round(pct)+'%</text>'
+    +'</svg>';
+}
+function _saProbWord_(p){ return (p>=80)?'Very High':((p>=65)?'High':((p>=45)?'Moderate':'Long shot')); }
+function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b'); }
+// Assemble the whole page. Reads st.segments (Phase 0 backfill), the weather cache and the power
+// curves; computes nothing that _saEvaluate_ does not.
+function aiRenderSegAttack_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var keys=Object.keys(store);
+  var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
+  var cur=(wx&&wx.current)?wx.current:null;
+  try{ if(!cur && typeof _trjKickWeather_==='function') _trjKickWeather_(); }catch(e){}
+  var esc=aiEsc_;
+  // One renderer, both surfaces. The row is a 5-column grid on desktop that collapses in stages:
+  // the sketch drops out first (it is a schematic, not information), then the row stacks entirely.
+  var H='<style>'
+    +'.sa-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'
+    +'.sa-row{display:grid;grid-template-columns:minmax(0,1.35fr) auto minmax(0,1fr) minmax(0,1.1fr) minmax(0,.8fr);'
+      +'gap:16px;align-items:start;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:16px 18px;margin-top:12px}'
+    +'@media(max-width:1180px){.sa-strip{grid-template-columns:repeat(2,minmax(0,1fr))}'
+      +'.sa-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr)}.sa-map{display:none}}'
+    +'@media(max-width:820px){.sa-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}'
+      +'.sa-ring{grid-column:1/-1;display:flex;flex-direction:column;align-items:center}}'
+    +'@media(max-width:520px){.sa-strip{grid-template-columns:1fr}.sa-row{grid-template-columns:1fr}'
+      +'.sa-ring{grid-column:auto}}'
+    +'</style><div style="padding:2px 0 30px">';
+
+  // ---- title ----
+  H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">'
+    +'<div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">Segment Attack</span>'
+    +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#f97316;background:#f973161f;border-radius:6px;padding:3px 7px">BETA</span></div>'
+    +'<div style="font-size:12.5px;color:#8b97ab;margin-top:5px">Given today&rsquo;s wind, your form, and your segment history.</div></div></div>';
+
+  if(!keys.length){
+    return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:13px;line-height:1.6">'
+      +'No segment history yet.<br>Sync segment efforts from Settings, then this page fills in.</div></div>';
+  }
+
+  // ---- context for the model ----
+  var lbs=parseFloat((typeof st!=='undefined'&&st&&st.weight)||0);
+  var bikeKg=9;                                    // a road bike; the fitted CdA absorbs the error
+  var massKg=(lbs>0)?(lbs/2.20462+bikeKg):null;
+  var fit=(typeof getFitness_==='function')?getFitness_():null;
+  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
+  var todayYMD=(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })();
+  var ctx={ windFromDeg:cur?cur.winddirection_10m:null, windMph:cur?cur.windspeed_10m:null,
+            tempF:cur?cur.temperature_2m:null, massKg:massKg, rides:rides, todayYMD:todayYMD };
+
+  // ---- conditions / form / potential / analyzed ----
+  var windLbl=cur?(_saCompassLbl_(cur.winddirection_10m)+' '+Math.round(cur.windspeed_10m)+' mph'):'—';
+  var CARD='background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 16px;min-width:0';
+  var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5b6678';
+  H+='<div class="sa-strip">';
+  H+='<div style="'+CARD+'"><div style="'+LBL+'">Today&rsquo;s conditions</div>'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px">'
+    +'<div style="min-width:0"><div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.1">'+esc(windLbl)+'</div>'
+    +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">'
+    +(cur&&cur.windgusts_10m!=null?('Gusts '+Math.round(cur.windgusts_10m)+' mph<br>'):'')
+    +(cur?('Temp '+Math.round(cur.temperature_2m)+'&deg;F'+(cur.relativehumidity_2m!=null?(' &middot; Humidity '+Math.round(cur.relativehumidity_2m)+'%'):'')):'Weather unavailable')
+    +'</div></div>'+(cur?_saRose_(null, cur.winddirection_10m, 62):'')+'</div></div>';
+  var ftpNow=(typeof st!=='undefined'&&st)?(parseInt(st.ftp,10)||null):null;
+  H+='<div style="'+CARD+'"><div style="'+LBL+'">Your form</div>'
+    +'<div style="margin-top:9px">'
+    +(fit&&fit.ctl?('<div style="font-size:20px;font-weight:800;color:#22c55e;line-height:1.1">CTL '+fit.ctl+'</div>'
+      +'<div style="font-size:10.5px;color:#8b97ab;margin-top:5px">'+(ftpNow?('FTP '+ftpNow+'W &middot; '):'')+'ATL '+fit.atl+' &middot; TSB '+(fit.tsb>=0?'+':'')+fit.tsb+'</div>'
+      +(fit.stale?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">fitness data is not from today</div>':''))
+     :'<div style="font-size:11.5px;color:#5b6678;line-height:1.5">No reliable fitness series &mdash; projections fall back to power history alone.</div>')
+    +'</div></div>';
+  H+='<div id="sa-potential" style="'+CARD+'"><div style="'+LBL+'">PR potential today</div><div style="margin-top:9px" id="sa-pot-body"></div></div>';
+  H+='<div style="'+CARD+'"><div style="'+LBL+'">Segments analyzed</div>'
+    +'<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.1;margin-top:9px">'+keys.length+'</div>'
+    +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">in your ride history</div></div>';
+  H+='</div>';
+
+  // ---- evaluate everything ----
+  var evals=keys.map(function(k){ return _saEvaluate_(store[k], ctx); });
+  var full=evals.filter(function(e){ return e.tier==='full'; });
+  var windOnly=evals.filter(function(e){ return e.tier==='wind'; });
+  var excluded=evals.filter(function(e){ return e.tier==='excluded'; });
+  // Winnable = a real projection that beats the PR. Ranked by probability, then by how much time.
+  var beats=full.filter(function(e){ return e.delta<0; });
+  // Contested segments first: everything at the 95% ceiling ranks identically on probability, so a
+  // genuine contest must not be buried under a list of segments never ridden hard.
+  var win=beats.filter(function(e){ return e.contested; })
+    .sort(function(a,b){ return (b.prob-a.prob)||(a.delta-b.delta); });
+  var untested=beats.filter(function(e){ return !e.contested; })
+    .sort(function(a,b){ return a.delta-b.delta; });
+
+  var potHtml;
+  if(!cur) potHtml='<div style="font-size:11.5px;color:#5b6678;line-height:1.5">Waiting on today&rsquo;s weather.</div>';
+  else if(!full.length) potHtml='<div style="font-size:11.5px;color:#5b6678;line-height:1.5">No segment has enough powered efforts to project yet.</div>';
+  else {
+    var top=win.length?win[0].prob:0;
+    var word=win.length?((top>=80)?'High':((top>=65)?'Good':'Modest')):'Low';
+    var col=win.length?_saProbCol_(top):'#64748b';
+    potHtml='<div style="font-size:20px;font-weight:800;color:'+col+';line-height:1.1">'+word+'</div>'
+      +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">'
+      +win.length+' of '+full.length+' projectable segment'+(full.length===1?'':'s')+' project faster than your PR today.</div>';
+  }
+  H=H.replace('<div style="margin-top:9px" id="sa-pot-body"></div>','<div style="margin-top:9px">'+potHtml+'</div>');
+
+  // ---- ranked list ----
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 4px">'
+    +'<div><div style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.01em">'
+    +(win.length?(win.length+' SEGMENT'+(win.length===1?' IS':'S ARE')+' WINNABLE TODAY'):'NO CONTESTED SEGMENT PROJECTS FASTER TODAY')+'</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:4px">'
+    +(win.length?'Ranked by modelled chance of beating a time you actually raced, in today&rsquo;s wind.'
+                :'No segment where you have gone hard projects faster today. Nothing is padded to fill the list.')
+    +'</div></div></div>';
+
+  win.slice(0,10).forEach(function(e, i){
+    var col=_saProbCol_(e.prob), ev=e.evidence||{label:'',col:'#64748b'};
+    H+='<div class="sa-row">'
+      // rank + identity
+      +'<div class="sa-id"><div style="display:flex;align-items:center;gap:9px">'
+        +'<span style="flex:none;width:22px;height:22px;border-radius:6px;background:#f973161f;color:#f97316;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">'+(i+1)+'</span>'
+        +'<span style="font-size:15px;font-weight:700;color:#f1f5f9;overflow-wrap:anywhere">'+esc(e.name)+'</span>'
+        +(e.starred?'<span style="color:#f59e0b;font-size:12px">&#9733;</span>':'')+'</div>'
+      +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'
+        +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
+        +(e.grade!=null?('   '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')+'</div>'
+      +'<div style="margin-top:9px"><div style="'+LBL+'">Your PR</div>'
+        +'<div style="font-size:19px;font-weight:800;color:#e8edf5;line-height:1.1;margin-top:2px">'+_saMMSS_(e.prSec)+'</div>'
+        +(e.prDate?('<div style="font-size:10px;color:#5b6678;margin-top:2px">'+esc(e.prDate)+'</div>'):'')
+        +(e.prWatts?('<div style="font-size:10px;color:#5b6678">set at '+e.prWatts+'W</div>'):'')
+      +'</div></div>'
+      // sketch
+      +'<div class="sa-map">'+_saSketch_(e)+'</div>'
+      // edge
+      +'<div class="sa-edge"><div style="'+LBL+'">Today&rsquo;s edge</div>'
+        +'<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'
+        +'<div style="min-width:0"><div style="font-size:14px;font-weight:700;color:'+(e.wind==='tailwind'?'#22c55e':(e.wind==='headwind'?'#ef4444':'#f59e0b'))+';text-transform:capitalize">'
+        +esc(e.wind||'no call')+'</div>'
+        +(e.windMph!=null?('<div style="font-size:11px;color:#8b97ab;margin-top:2px">'+Math.round(e.windMph)+' mph</div>'):'')
+        +'</div>'+_saRose_(e.bearing, ctx.windFromDeg, 58)+'</div>'
+        +'<div style="font-size:10.5px;color:#8b97ab;margin-top:7px">Segment bearing<br>'+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')</div>'
+        +(e.windNote?('<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">'+esc(e.windNote)+'</div>')
+          :(e.windApprox?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':''))
+      +'</div>'
+      // projection
+      +'<div class="sa-proj"><div style="'+LBL+'">PR projection</div>'
+        +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:7px">'
+        +'<span style="font-size:21px;font-weight:800;color:#f1f5f9;line-height:1">'+_saMMSS_(e.tPred)+'</span>'
+        +'<span style="font-size:11.5px;font-weight:800;color:#22c55e;background:#22c55e1a;border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
+        +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
+        +'<div style="font-size:10px;color:'+ev.col+';margin-top:5px;font-weight:700">'+esc(ev.label)+'</div>'
+        +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px">target is your best RECORDED pass, not a Strava PR</div>':'')
+        +'<div style="font-size:10px;color:#5b6678;margin-top:3px;line-height:1.5">'
+          +'&plusmn;'+Math.round(e.sigma)+'s model error'
+          +(e.capW?(' &middot; '+e.capW+'W capability'+(e.capStale?' (older data)':'')):'')
+        +'</div></div>'
+      // ring
+      +'<div class="sa-ring"><div style="'+LBL+';text-align:center">Win probability</div>'
+        +'<div style="display:flex;justify-content:center;margin-top:6px">'+_saRing_(e.prob, col, 92)+'</div>'
+        +'<div style="text-align:center;font-size:11px;font-weight:700;color:'+col+';margin-top:4px">'+_saProbWord_(e.prob)+'</div></div>'
+      +'</div>';
+  });
+
+  // ---- segments that beat their standing time but were never actually raced ----
+  // Real information, deliberately NOT ranked as PR opportunities: the standing time was a cruise,
+  // so "you would beat it" is arithmetic rather than a contest. Listed plainly, no probability ring.
+  if(untested.length){
+    H+='<div style="margin-top:22px"><div style="font-size:13px;font-weight:800;color:#cbd5e1">'
+      +untested.length+' MORE YOU HAVE NEVER GONE HARD ON</div>'
+      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:4px">Your best recorded pass on these was well below the power you can hold now, so there is no PR here to contest &mdash; only a time that has never been tested. No probability is shown, because beating a cruise is not a prediction.</div>'
+      +'<div style="margin-top:10px;background:#111318;border:1px solid #1c2130;border-radius:14px;padding:6px 16px">';
+    untested.slice(0,8).forEach(function(e){
+      H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #171b26;flex-wrap:wrap">'
+        +'<span style="font-size:12.5px;color:#e8edf5;overflow-wrap:anywhere">'+esc(e.name)+'</span>'
+        +'<span style="font-size:11px;color:#8b97ab;white-space:nowrap">best '+_saMMSS_(e.prSec)
+        +(e.prWatts?(' at '+e.prWatts+'W'):'')+' &middot; you hold '+e.capW+'W now</span></div>';
+    });
+    H+='</div></div>';
+  }
+
+  // ---- what could not be projected, and why ----
+  H+='<div style="margin-top:20px;background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 16px">'
+    +'<div style="'+LBL+'">What is not in the list</div>'
+    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:8px;line-height:1.6">'
+    +'<b style="color:#cbd5e1">'+full.length+'</b> segment'+(full.length===1?'':'s')+' had enough powered efforts to project: '
+    +'<b style="color:#cbd5e1">'+win.length+'</b> a real contest, <b style="color:#cbd5e1">'+untested.length+'</b> never ridden hard, '
+    +'<b style="color:#cbd5e1">'+(full.length-win.length-untested.length)+'</b> slower than the standing time today.<br>'
+    +'<b style="color:#cbd5e1">'+windOnly.length+'</b> have a bearing but not enough powered efforts, so they get a wind call and no probability.<br>'
+    +'<b style="color:#cbd5e1">'+excluded.length+'</b> lack the coordinates to reason about at all.'
+    +'</div>'
+    +'<div style="font-size:10px;color:#5b6678;margin-top:9px;line-height:1.5">A projection needs '+_SA_MIN_FIT
+    +' efforts recorded with power on the same segment. As more rides sync, segments move up this list on their own.</div>'
+    +'</div>';
+
+  return H+'</div>';
+}
 function aiRenderTab_(tab, ded){
+  if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Attack — render error.</div>';
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
@@ -36279,7 +36865,18 @@ function fetchRideSegments(r, cb, force, quiet){
           avgPwr: se.average_watts!=null?Math.round(se.average_watts):null,
           prRank: se.pr_rank||null,
           komRank: se.kom_rank||null,
-          starred: !!s.starred
+          starred: !!s.starred,
+          // Segment Attack needs three things this mapper used to throw away. The endpoints give a
+          // bearing (there is no other source for one - st.segments stored no coordinates at all),
+          // and the date is what lets a standing time be matched to the effort that set it, which
+          // is the only way to know the POWER behind it. Without the date, PR power was underivable
+          // for every segment in the library.
+          startLat: (s.start_latlng&&s.start_latlng.length>1)?s.start_latlng[0]:null,
+          startLon: (s.start_latlng&&s.start_latlng.length>1)?s.start_latlng[1]:null,
+          endLat: (s.end_latlng&&s.end_latlng.length>1)?s.end_latlng[0]:null,
+          endLon: (s.end_latlng&&s.end_latlng.length>1)?s.end_latlng[1]:null,
+          date: String(se.start_date_local||'').slice(0,10)||null,
+          elapsed: se.elapsed_time||null
         };
       }).slice(0,100);
       // quiet: the backfill wants the efforts, NOT 641 rides' worth of cached segment arrays in

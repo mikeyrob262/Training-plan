@@ -346,6 +346,18 @@ try {
     fail('the Coach V yesterday recap regressed (see above).');
   }
 
+  // ---- 23. Segment Attack: the physics against external references, the CdA fit recovering a
+  //          known value, and the probability being measured rather than felt.
+  console.log(`${D}· checking the Segment Attack model…${X}`);
+  try {
+    const so = execSync('node scripts/segment-attack-model-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Segment Attack model regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
