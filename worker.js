@@ -20231,6 +20231,22 @@ function _saNormCdf_(z){
   var y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
   return 0.5*(1+s*y);
 }
+// The ride source for CAPABILITY, and the one place in the app that must NOT use
+// allRidesDeduped_.
+//
+// allRidesDeduped_ serves the /store_v2 snapshot, whose schema is deliberately slim - avgHr, date,
+// elapsedSec, movingSec, name, trainingLoad, type and a few ids. There is no powerCurve field in it
+// at all, on any of its 2,892 activities. Every other surface is fine with that because none of
+// them ask for per-duration power; this one does, and reading through the snapshot made
+// _saCapability_ return null for every segment, which dropped all 126 projectable segments to the
+// wind-only tier and printed "0 segments had enough powered efforts to project".
+//
+// The curves live only on the raw records in st.rides (104 of 645 carry one), so that is the source
+// here. Tombstones are filtered by _saCapability_ itself.
+function _saPowerRides_(){
+  var raw=(typeof st!=='undefined' && st && Array.isArray(st.rides))?st.rides:[];
+  return raw;
+}
 // Best power this athlete has actually held for this DURATION, from the per-ride power curves.
 // Recent window first, because a capability from two years ago is not today's form; the all-time
 // value is only used as a labelled fallback. Log-log interpolation between the stored durations,
@@ -22806,7 +22822,7 @@ function aiRenderSegAttack_(){
   var bikeKg=9;                                    // a road bike; the fitted CdA absorbs the error
   var massKg=(lbs>0)?(lbs/2.20462+bikeKg):null;
   var fit=(typeof getFitness_==='function')?getFitness_():null;
-  var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]);
+  var rides=_saPowerRides_();
   var todayYMD=(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })();
   var ctx={ windFromDeg:cur?cur.winddirection_10m:null, windMph:cur?cur.windspeed_10m:null,
             tempF:cur?cur.temperature_2m:null, massKg:massKg, rides:rides, todayYMD:todayYMD };
@@ -22972,7 +22988,7 @@ function _saEvalAll_(){
   var lbs=parseFloat((typeof st!=='undefined'&&st&&st.weight)||0);
   var ctx={ windFromDeg:cur?cur.winddirection_10m:null, windMph:cur?cur.windspeed_10m:null,
             tempF:cur?cur.temperature_2m:null, massKg:(lbs>0)?(lbs/2.20462+9):null,
-            rides:(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]),
+            rides:_saPowerRides_(),
             todayYMD:(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })() };
   return { ctx:ctx, cur:cur, list:Object.keys(store).map(function(k){ return _saEvaluate_(store[k], ctx); }) };
 }

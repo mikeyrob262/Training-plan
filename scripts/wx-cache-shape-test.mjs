@@ -79,5 +79,35 @@ check('a failed fetch leaves a truthy slot with no payload', [!!failed, !!failed
 check('...so a slot-only guard would wrongly report a hit', !!failed, true);
 console.log('  ' + Y + '(that is why the kicker now tests wxCache_.weather.data, not wxCache_.weather)' + X);
 
+
+// ---------------------------------------------------------------------------------------------
+// Capability must NOT be read through allRidesDeduped_.
+//
+// That function serves the /store_v2 snapshot, whose schema carries no powerCurve on any of its
+// 2,892 activities. Reading capability through it returned null for every segment and printed
+// "0 segments had enough powered efforts to project" while the store itself held 126 qualifying
+// segments. The curves exist only on the raw st.rides records.
+// ---------------------------------------------------------------------------------------------
+console.log('\n=== capability reads the RAW ride library, not the snapshot ===');
+const capSrc = src.slice(src.indexOf('function _saPowerRides_('), src.indexOf('function _saCapability_('));
+check('_saPowerRides_ reads st.rides', /Array\.isArray\(st\.rides\)\)\?st\.rides:\[\]/.test(capSrc), true);
+check('...and never allRidesDeduped_', /allRidesDeduped_/.test(capSrc), false);
+// Brace-matched body rather than a fixed window: aiRenderSegAttack_ opens with a large inline CSS
+// block, and a short slice stopped before reaching the line under test — a passing-looking test
+// that was measuring nothing.
+function fnBody(name){
+  const i = src.indexOf('function ' + name + '(');
+  let j = src.indexOf('{', i), d = 0;
+  for (; j < src.length; j++) { const c = src[j]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+  return src.slice(i, j + 1);
+}
+['aiRenderSegAttack_', '_saEvalAll_'].forEach((fn) => {
+  const body = fnBody(fn);
+  check(fn + ' sources capability rides from _saPowerRides_', /_saPowerRides_\(\)/.test(body), true);
+  check(fn + ' does not feed the snapshot into the model ctx',
+    /rides:\(typeof allRidesDeduped_/.test(body) || /var rides=\(typeof allRidesDeduped_/.test(body), false);
+});
+check('the reason is recorded at the code', /no powerCurve field in it/.test(src), true);
+
 console.log('\n' + (fails ? R+fails+' CHECK(S) FAILED'+X : G+'wx-cache-shape: all checks passed'+X));
 process.exit(fails ? 1 : 0);
