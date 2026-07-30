@@ -334,6 +334,18 @@ try {
     fail('the Analytics goal cards regressed (see above).');
   }
 
+  // ---- 22. Coach V's yesterday recap must account for EVERY activity on the prior day, including
+  //          the 'other' bucket (strength) that the old ride|run filter excluded outright.
+  console.log(`${D}· checking the yesterday recap…${X}`);
+  try {
+    const so = execSync('node scripts/cv-yesterday-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Coach V yesterday recap regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

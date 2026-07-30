@@ -23026,40 +23026,94 @@ function _cvDoneNote_(sport, def){
 // Every figure is omitted when absent rather than defaulted — a missing TSS must read as nothing,
 // never as 0. The closing verdict is bucketed off recorded TSS with fixed thresholds, so it is a
 // restatement of a real number rather than a judgement invented on top of one; no TSS, no verdict.
+function _cvEsc_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); }
+// The figures actually recorded on ONE activity. Sport-aware, because the previous version only
+// knew how to describe a ride: a strength session carries no distance and no power, so with those
+// two the only vocabulary it had, it had nothing to say and was dropped entirely. Its DURATION is
+// the session.
+function _cvActBits_(act){
+  var o=act.obj, bits=[];
+  var dist=parseFloat(o.distance), hasDist=(isFinite(dist) && dist>0);
+  if(hasDist) bits.push((Math.round(dist*10)/10)+'mi');
+  if(!hasDist){
+    var secs=(typeof actSecs_==='function')?actSecs_(o):0;
+    if(secs>0) bits.push(Math.round(secs/60)+'min');
+  }
+  var pw=parseFloat(o.avgPwr);
+  if(act.sport==='ride' && isFinite(pw) && pw>0) bits.push(Math.round(pw)+'W avg');
+  var tss=parseFloat(o.tss);
+  if(isFinite(tss) && tss>0) bits.push(Math.round(tss)+' TSS');
+  return bits;
+}
+function _cvActName_(act){
+  var o=act.obj;
+  var n=String(o.name||'').trim() || (act.sport==='run'?'Run':(act.sport==='other'?'Session':'Ride'));
+  return (n.length>42)?(n.slice(0,41)+'…'):n;
+}
+// Bucketed off RECORDED TSS with fixed thresholds, so it restates a real number rather than
+// inventing a judgement on top of one. No TSS, no verdict.
+function _cvVerdict_(tss){
+  if(!(tss>0)) return '';
+  return (tss>=150)?' Big day — respect the recovery.'
+       :(tss>=80)?' Solid base work.'
+       :' Light day, which is the point.';
+}
 function _cvYesterdayLine_(act){
   if(!act || !act.obj) return '';
-  var o=act.obj, esc=function(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;'; }); };
-  var name=String(o.name||'').trim() || (act.sport==='run'?'Run':'Ride');
-  if(name.length>42) name=name.slice(0,41)+'…';
-  var bits=[];
-  var dist=parseFloat(o.distance);
-  if(isFinite(dist) && dist>0) bits.push((Math.round(dist*10)/10)+'mi');
-  var pw=parseFloat(o.avgPwr);
-  if(act.sport!=='run' && isFinite(pw) && pw>0) bits.push(Math.round(pw)+'W avg');
-  var tss=parseFloat(o.tss);
-  var hasTss=isFinite(tss) && tss>0;
-  if(hasTss) bits.push(Math.round(tss)+' TSS');
-  var verdict='';
-  if(hasTss) verdict=(tss>=150)?' Big day — respect the recovery.'
-                   :(tss>=80)?' Solid base work.'
-                   :' Light day, which is the point.';
-  return 'Yesterday: '+esc(name)+(bits.length?(' — '+bits.join(', ')+'.'):'.')+verdict;
+  var bits=_cvActBits_(act), tss=parseFloat(act.obj.tss);
+  return 'Yesterday: '+_cvEsc_(_cvActName_(act))+(bits.length?(' — '+bits.join(', ')+'.'):'.')
+    +_cvVerdict_(isFinite(tss)?tss:0);
+}
+// Two or more activities on the day. Leads with the count and the combined load, then names every
+// one — the failure this replaces was a 20-mile ride and a strength session vanishing behind a
+// 3.3-mile run, with nothing on the card to suggest anything else had happened.
+//
+// The total sums only TSS that was actually recorded. When some activity on the day carries none,
+// the total is labelled "recorded" so a partial figure never reads as the day's whole load.
+function _cvYesterdayMulti_(acts){
+  var total=0, anyTss=false, missing=0, parts=[];
+  acts.forEach(function(a){
+    var t=parseFloat(a.obj.tss);
+    if(isFinite(t) && t>0){ total+=t; anyTss=true; } else missing++;
+    var b=_cvActBits_(a);
+    parts.push(_cvEsc_(_cvActName_(a))+(b.length?(' ('+b.join(', ')+')'):''));
+  });
+  var head='Yesterday: '+acts.length+' activities'
+    +(anyTss?(' — '+Math.round(total)+' TSS'+(missing?' recorded':'')):'')+'. ';
+  return head+parts.join(' &middot; ')+'.'+_cvVerdict_(anyTss?total:0);
 }
 function _cvYesterday_(dateKey){
   if(typeof activitiesForDate_!=='function' || typeof parseDayKey!=='function') return null;
   var d=parseDayKey(dateKey); if(isNaN(d.getTime())) return null;
   d.setDate(d.getDate()-1);
   var yk=(typeof _tbDK_==='function')?_tbDK_(d):null; if(!yk) return null;
-  var acts=activitiesForDate_(yk).filter(function(a){ return a.sport==='ride'||a.sport==='run'; });
+  // NO sport filter. The old one kept only ride|run, which meant _actSport_'s 'other' bucket -
+  // weight training, swims, walks, yoga - could never appear. Strength is a primary driver of this
+  // block, so silently excluding it was the larger half of the bug.
+  //
+  // Deduped first: st.rides holds every sport INCLUDING runs, and st.runs is a separate array, so
+  // activitiesForDate_ can return the same run from both. Counting it twice would inflate both the
+  // activity count and the TSS total.
+  var seen={}, acts=[];
+  activitiesForDate_(yk).forEach(function(a){
+    if(!a || !a.obj) return;
+    var o=a.obj, k;
+    if(o.stravaId!=null && o.stravaId!=='') k='s'+String(o.stravaId);
+    else if(o.id!=null && o.id!=='') k='i'+String(o.id);
+    else k='n'+String(o.name||'')+'|'+String(o.distance||'')+'|'+String(o.date||'');
+    if(seen[k]) return;
+    seen[k]=1; acts.push(a);
+  });
   if(!acts.length) return null;
   // Richest first: the entry carrying TSS/power says more than a bare distance row, and a day can
-  // hold both a synced ride and a stub.
+  // hold both a synced ride and a stub. Now only decides ORDER and the headline sport, not which
+  // single activity survives.
   acts.sort(function(a,b){
     var sc=function(x){ return (parseFloat(x.obj.tss)>0?2:0)+(parseFloat(x.obj.avgPwr)>0?1:0); };
     return sc(b)-sc(a);
   });
-  var line=_cvYesterdayLine_(acts[0]);
-  return line?{line:line, sport:acts[0].sport}:null;
+  var line=(acts.length===1)?_cvYesterdayLine_(acts[0]):_cvYesterdayMulti_(acts);
+  return line?{line:line, sport:acts[0].sport, n:acts.length}:null;
 }
 // ==================== Coach V post-session debrief ====================
 // Reads ONLY what the app already holds: the prescription from blockPlanFor_, the recorded ride
