@@ -270,6 +270,19 @@ try {
     fail('the Power-to-Weight card regressed (see above).');
   }
 
+  // ---- 17. Settings-style scalars merge last-write-wins, not max. Guards the direction that
+  //          was structurally impossible before: a value going DOWN (FTP, any goal, resting HR),
+  //          and a stale device re-pushing an old value over a legitimately lower one.
+  console.log(`${D}· checking the settings merge rule…${X}`);
+  try {
+    const so = execSync('node scripts/lww-merge-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the settings merge rule regressed — a numeric setting may be one-way again (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

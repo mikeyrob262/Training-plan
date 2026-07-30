@@ -5752,6 +5752,91 @@ function arrayToIndexObject_(arr){
   arr.forEach(function(v, i){ if(v !== null && v !== undefined) obj[i] = v; });
   return obj;
 }
+// ===== SETTINGS-STYLE SCALARS: last-write-wins, NOT max ======================
+// mergeState_ resolves two numbers with Math.max. That is correct for a clock or a
+// migration counter, and WRONG for every user-set value: it makes them one-way. An FTP
+// could be raised and never lowered - typing 183 over 190 in Settings merged straight
+// back to 190 and pushed it, on both sync directions (the 5s poll merges remote into
+// local; fbPush merges remote into local BEFORE the PUT). Same for every goal, for
+// resting HR - where DOWN is the improvement - and for cached snapshots like lastTSB,
+// which could only ever drift positive.
+//
+// The fields below are resolved by whichever SIDE was written last instead. Everything
+// not listed keeps max-merge, which is why this is an allowlist and not a rewrite of
+// mergeState_ - that function also merges ride items, where max is load-bearing.
+var _LWW_TOP = ['ftp','weight','maxHR','restingHR','vo2max','calBaseline','protBaseline',
+                'yearlyMileageGoal','stravaAthleteId','wxTempF'];
+// Nested settings-style scalars, by container.
+var _LWW_SUB = { goalTargets:['annualMi','ctl','ftpW','weeklyMi','weightLb','wkg'],
+                 settings:['lastCTL','lastATL','lastTSB'] };
+// DELIBERATELY still max-merged, because monotonic is the correct semantics:
+//   lastUpdate, fitSeriesAt   - clocks; max IS the newer one, and lastUpdate is the very
+//                               timestamp this mechanism compares, so it must not be LWW.
+//   _planMig, _strLogMig      - migration version counters; must never run backwards.
+//   athleteStats.*            - lifetime Strava totals. Monotonic in practice; a genuine
+//                               downward correction (a deleted ride) would not stick, but
+//                               these are refetched wholesale, so leaving them on max.
+function _lwwPaths_(){
+  var out = [], i, k;
+  for(i=0;i<_LWW_TOP.length;i++) out.push([null, _LWW_TOP[i]]);
+  for(k in _LWW_SUB){ if(!Object.prototype.hasOwnProperty.call(_LWW_SUB,k)) continue;
+    for(i=0;i<_LWW_SUB[k].length;i++) out.push([k, _LWW_SUB[k][i]]); }
+  return out;
+}
+function _lwwGet_(root, p){
+  if(!root || typeof root!=='object') return undefined;
+  var host = p[0]==null ? root : root[p[0]];
+  if(!host || typeof host!=='object') return undefined;
+  return host[p[1]];
+}
+function _lwwSet_(root, p, v){
+  if(!root || typeof root!=='object') return;
+  if(p[0]==null){ root[p[1]] = v; return; }
+  if(!root[p[0]] || typeof root[p[0]]!=='object') root[p[0]] = {};
+  root[p[0]][p[1]] = v;
+}
+// Root-level merge for the two sync directions. Runs the ordinary merge, then re-decides
+// ONLY the allowlisted scalars by clock. Present-vs-absent is never a contest: a side that
+// does not carry the field cannot win it, so this can never blank a value.
+function mergeStateRoot_(local, remote){
+  var out = mergeState_(local, remote);
+  try{
+    var lt = (local && typeof local.lastUpdate==='number') ? local.lastUpdate : 0;
+    var rt = (remote && typeof remote.lastUpdate==='number') ? remote.lastUpdate : 0;
+    var remoteWins = rt > lt;   // tie -> local keeps its own edit
+    var paths = _lwwPaths_(), i, p, lv, rv;
+    for(i=0;i<paths.length;i++){
+      p = paths[i];
+      lv = _lwwGet_(local, p); rv = _lwwGet_(remote, p);
+      var hasL = (lv!==undefined && lv!==null && lv!=='');
+      var hasR = (rv!==undefined && rv!==null && rv!=='');
+      if(!hasL && !hasR) continue;
+      if(hasL && !hasR){ _lwwSet_(out, p, lv); continue; }
+      if(!hasL && hasR){ _lwwSet_(out, p, rv); continue; }
+      _lwwSet_(out, p, remoteWins ? rv : lv);
+    }
+  }catch(e){ console.error('[lww] merge failed, falling back to plain merge: '+(e&&e.message)); }
+  return out;
+}
+// Shadow of the allowlisted values as of the last save/merge. saveLocal_ compares against
+// it so that a LOCAL edit stamps st.lastUpdate and therefore wins the next merge. Without
+// this, lastUpdate only moved on push, so a fresh local edit still carried an OLD clock and
+// lost to remote - the bug would have survived the fix.
+var _lwwShadow_ = null;
+function _lwwSnapshot_(){
+  var m = {}, paths = _lwwPaths_(), i;
+  for(i=0;i<paths.length;i++) m[(paths[i][0]||'')+'.'+paths[i][1]] = _lwwGet_(st, paths[i]);
+  return m;
+}
+// Returns true when an allowlisted value changed since the last snapshot.
+function _lwwTouch_(){
+  try{
+    var now = _lwwSnapshot_(), changed = false, k;
+    if(_lwwShadow_){ for(k in now){ if(now[k] !== _lwwShadow_[k]){ changed = true; break; } } }
+    _lwwShadow_ = now;
+    return changed;
+  }catch(e){ return false; }
+}
 function mergeState_(a, b){
   if(a == null) return b;
   if(b == null) return a;
@@ -6809,6 +6894,11 @@ function slimForStorage_(s){
 // local-persistence path is what let a QuotaExceededError hide, so every save
 // silently failed and freshly-added items vanished on reload.
 function saveLocal_(){
+  // A LOCAL edit to a settings-style scalar has to advance the clock, or mergeStateRoot_
+  // will see a stale local timestamp and hand the field to remote - discarding the edit
+  // that was just made. lastUpdate used to move only on push, which is exactly that hole.
+  // Pull-driven saves do NOT trip this: applyFirebaseData reseeds the shadow before saving.
+  try{ if(typeof _lwwTouch_==='function' && _lwwTouch_()) st.lastUpdate = Date.now(); }catch(e){}
   // Durable write: FULL state (tombstones + GPS included) to IndexedDB, which has no
   // ~5MB cap. This is the real persistence path now.
   var idbOk=false;
@@ -6875,7 +6965,11 @@ function applyFirebaseData(data){
     var _dc=function(a){ if(!a) return 0; var L=Array.isArray(a)?a:Object.keys(a).map(function(k){return a[k];}); var n=0; L.forEach(function(r){ if(r&&r.deleted&&(r.deleteReason==null||r.deleteReason==='')) n++; }); return n; };
     try{ _rn=_dc(data.rides); _ln=_dc(st.rides); }catch(e){}
   }
-  st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+  st = normalizeState_(mergeStateRoot_(st, preNormalizeRemoteArrays_(data)));
+  // The settings-style scalars just took their value from the merge, not from the user.
+  // Reseed the shadow so the saveLocal_ below does not read that as a local edit and stamp
+  // a fresh clock onto it - which would make this device win every future merge.
+  try{ if(typeof _lwwTouch_==='function') _lwwTouch_(); }catch(e){}
   // Persist the merged+deduped result — this poll path was the ONE normalizeState_ caller that
   // never did, so an in-memory duplicate-collapse (and any merged remote change) was dropped on
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
@@ -6934,7 +7028,10 @@ function fbPush(silent, forceOverwrite, confirmToken, tag){
   .catch(function(){ return null; })
   .then(function(remote){
     if(!forceOverwrite && remote && typeof remote==='object' && !Array.isArray(remote) && Object.keys(remote).length){
-      st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(remote)));
+      st = normalizeState_(mergeStateRoot_(st, preNormalizeRemoteArrays_(remote)));
+      // Same reason as the poll path: whatever the merge decided is now the baseline, so the
+      // saveLocal_ after a successful PUT must not mistake it for a fresh local edit.
+      try{ if(typeof _lwwTouch_==='function') _lwwTouch_(); }catch(e){}
     }
     var saveData = JSON.parse(JSON.stringify(st));
     if(Array.isArray(saveData)) saveData=Object.assign({},saveData);
@@ -6989,7 +7086,8 @@ function fbPull(silent){
     if(data && typeof data==='object' && Object.keys(data).length){
       if(Array.isArray(data)) data=Object.assign({},data);
       if(Array.isArray(st)) st=Object.assign({},st);
-      st = normalizeState_(mergeState_(st, preNormalizeRemoteArrays_(data)));
+      st = normalizeState_(mergeStateRoot_(st, preNormalizeRemoteArrays_(data)));
+      try{ if(typeof _lwwTouch_==='function') _lwwTouch_(); }catch(e){}   // adopted, not edited
       saveLocal_();
       try{ if(typeof migrateCorruptTracks_==='function') migrateCorruptTracks_(); }catch(e){}  // heal mismatched lats/lons
       document.querySelectorAll('.wo-chk').forEach(function(e){e.className='wo-chk';e.textContent='';});
