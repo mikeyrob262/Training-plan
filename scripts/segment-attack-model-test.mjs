@@ -16,7 +16,7 @@ function ex(n){ const i=src.indexOf('function '+n+'('); if(i<0) throw new Error(
 function exv(n){ let j=src.indexOf('var '+n+'='); if(j<0) j=src.indexOf('var '+n+' ='); if(j<0) throw new Error('missing var '+n); return src.slice(j, src.indexOf('\n', j))+'\n'; }
 
 let code = exv('_SA_G') + exv('_SA_MIN_FIT') + exv('_SA_CDA_LO') + exv('_SA_DURS') + exv('_SA_SINUOUS') + exv('_SA_CONTEST_MIN');
-for (const f of ['_saRho_','_saHeadwind_','_saPowerAt_','_saSolveV_','_saFitCdA_','_saSigma_','_saEvidence_','_saHaversineM_','_saSinuosity_',
+for (const f of ['_saPowerNeeded_','_saTailwindNeeded_','_saRho_','_saHeadwind_','_saPowerAt_','_saSolveV_','_saFitCdA_','_saSigma_','_saEvidence_','_saHaversineM_','_saSinuosity_',
                  '_saNormCdf_','_saCapability_','_saWindCall_','_saEvaluate_']) code += ex(f);
 const M = new Function(code + ';return {_saRho_,_saHeadwind_,_saPowerAt_,_saSolveV_,_saFitCdA_,_saSigma_,'
   + '_saNormCdf_,_saCapability_,_saWindCall_,_saEvaluate_,_saEvidence_,_saSinuosity_,_SA_MIN_FIT};')();
@@ -235,6 +235,50 @@ check('no rides in the window -> null (caller falls back and LABELS it)',
 check('the stale fallback is flagged on the record',
   M._saEvaluate_(SEG, { ...CTX, rides:[{ date:'2019-01-01', powerCurve:RIDES[0].powerCurve }] }).capStale, true);
 check('no power curve anywhere -> null, not a guess', M._saCapability_([{date:'2026-07-20'}], 300, 90, '2026-07-30'), null);
+
+// ---------------------------------------------------------------------------------------------
+// 8. "What would it take" — both answers are INVERSIONS of the model already fitted. Appended
+//    here rather than in a new file because they must be tested against the SAME fixture the
+//    projection uses; a separate harness could drift from it.
+// ---------------------------------------------------------------------------------------------
+const M2 = new Function(code
+  + ';return {_saPowerNeeded_,_saTailwindNeeded_,_saSolveV_,_saPowerAt_};')();
+// Today's along-track tailwind, in mph, off the record the projection already carries.
+const ctxTailwindMph = (rec) => Math.max(0, -rec.headwindMs) / 0.44704;
+console.log('\n' + C + '=== 8. what would it take (model inversions) ===' + X);
+// Round-trip: the watts the inversion reports must, fed back through the forward model, reproduce
+// the target time. If that fails the two directions disagree and neither can be trusted.
+const RHO2 = M._saRho_(64, 200), CDA2 = full.cda, TGT = full.prSec;
+const wNeed = M2._saPowerNeeded_(DIST, TGT, GRADE, RHO2, CDA2, MASS, full.headwindMs);
+const backV = M2._saSolveV_(wNeed, GRADE, RHO2, CDA2, MASS, full.headwindMs);
+near('power inversion round-trips to the target time', DIST / backV, TGT, 2);
+check('and the record carries it', full.wattsNeeded, wNeed);
+check('the gap is against TODAY capability', full.wattsGap, full.wattsNeeded - full.capW);
+// Tailwind inversion: feeding the returned tailwind back in must also hit the target.
+// The answer is the tailwind needed FROM CALM, which is the useful form: today's actual wind is
+// already in tPred, so this says what conditions the segment wants in general.
+const twNeed = M2._saTailwindNeeded_(DIST, TGT, GRADE, RHO2, CDA2, MASS, full.capW);
+check('a target needing help returns a positive tailwind', twNeed > 0, true);
+const calmV = M2._saSolveV_(full.capW, GRADE, RHO2, CDA2, MASS, 0);
+check('...and it is 0 when calm alone already beats the target',
+  M2._saTailwindNeeded_(DIST, Math.round(DIST / calmV) + 30, GRADE, RHO2, CDA2, MASS, full.capW), 0);
+check('today already exceeds what it needs, which is why it projects a win',
+  ctxTailwindMph(full) > twNeed, true);
+// Now a target that today's capability cannot reach without help.
+const hardTgt = Math.round(TGT * 0.72);
+const tw2 = M2._saTailwindNeeded_(DIST, hardTgt, GRADE, RHO2, CDA2, MASS, full.capW);
+check('a harder target returns a real tailwind requirement', tw2 > 0, true);
+const vBack = M2._saSolveV_(full.capW, GRADE, RHO2, CDA2, MASS, -(tw2 * 0.44704));
+near('...which round-trips to that target', DIST / vBack, hardTgt, 3);
+check('an impossible target returns null, not a fantasy number',
+  M2._saTailwindNeeded_(DIST, 5, GRADE, RHO2, CDA2, MASS, full.capW), null);
+check('no power -> null', M2._saTailwindNeeded_(DIST, TGT, GRADE, RHO2, CDA2, MASS, 0), null);
+check('no target -> null', M2._saPowerNeeded_(DIST, 0, GRADE, RHO2, CDA2, MASS, 0), null);
+// These are only ever offered on a full-tier record.
+check('a wind-only segment carries no what-it-would-take',
+  [thin.wattsNeeded, thin.tailwindNeeded], [undefined, undefined]);
+console.log('  ' + Y + 'needs ' + wNeed + 'W today (holds ' + full.capW + 'W); '
+  + (twNeed === 0 ? 'no wind help required' : twNeed + ' mph tailwind') + X);
 
 console.log('\n' + (fails ? R+fails+' CHECK(S) FAILED'+X : G+'segment-attack-model: all checks passed'+X));
 process.exit(fails ? 1 : 0);

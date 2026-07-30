@@ -16810,7 +16810,7 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
 function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -20277,6 +20277,33 @@ function _saWindCall_(bearingDeg, windFromDeg){
   var diff=Math.abs(((bearingDeg-toward+540)%360)-180);
   return (diff<45)?'tailwind':((diff>135)?'headwind':'crosswind');
 }
+// WHAT WOULD IT TAKE? Both answers are INVERSIONS of the model already fitted - no new capability,
+// no new assumption, nothing invented. They are only ever offered for a segment that already
+// reached the 'full' tier, i.e. one with a fitted CdA and a measured sigma.
+//
+//   power  : hold the target time at TODAY's wind, and read off the watts. Direct - the power
+//            equation is explicit in v, so this is a single evaluation, not a search.
+//   tailwind: hold TODAY's capability and ask what along-track wind makes the target time. The
+//            equation is monotonic in w, so it bisects. Returned as the pure tailwind speed that
+//            would produce that component; a segment already fast enough returns 0.
+function _saPowerNeeded_(distM, targetSec, grade, rho, cda, mass, w){
+  if(!(distM>0) || !(targetSec>0)) return null;
+  return Math.round(_saPowerAt_(distM/targetSec, grade, rho, cda, mass, w||0));
+}
+function _saTailwindNeeded_(distM, targetSec, grade, rho, cda, mass, power){
+  if(!(distM>0) || !(targetSec>0) || !(power>0)) return null;
+  var vNeed=distM/targetSec;
+  // w is the HEADWIND component; more tailwind (more negative) means more speed for the same power.
+  var lo=-25, hi=25, mid, i;   // +/- 25 m/s brackets anything real
+  if(_saSolveV_(power, grade, rho, cda, mass, hi)>=vNeed) return 0;      // fast enough into a gale
+  if(_saSolveV_(power, grade, rho, cda, mass, lo)<vNeed) return null;    // no wind on earth does it
+  for(i=0;i<60;i++){
+    mid=(lo+hi)/2;
+    if(_saSolveV_(power, grade, rho, cda, mass, mid)>=vNeed) lo=mid; else hi=mid;
+  }
+  var wNeed=(lo+hi)/2;
+  return Math.round(Math.max(0,-wNeed)/0.44704*10)/10;                   // m/s headwind -> mph tailwind
+}
 // One segment, fully evaluated. Returns a record whose tier says exactly how far the data got:
 //
 //   'full'     bearing + >=3 powered efforts + a capability number -> projected time AND probability
@@ -20389,6 +20416,10 @@ function _saEvaluate_(seg, ctx){
   // So a segment only counts as CONTESTED when the standing time was set at an effort comparable to
   // what the athlete can do now. Everything else is real and still worth knowing - it means they
   // have never gone hard there - but it is labelled that way instead of ranked as a PR opportunity.
+  // What it would take, in the two currencies the athlete can actually act on.
+  out.wattsNeeded=_saPowerNeeded_(distM, out.prSec, (out.grade||0)/100, rho, fit.cda, ctx.massKg, w);
+  out.wattsGap=(out.wattsNeeded!=null)?(out.wattsNeeded-out.capW):null;
+  out.tailwindNeeded=_saTailwindNeeded_(distM, out.prSec, (out.grade||0)/100, rho, fit.cda, ctx.massKg, cap.w);
   out.prEffortRatio=(out.prWatts>0 && out.capW>0)?Math.round(out.prWatts/out.capW*100)/100:null;
   out.contested=(out.prEffortRatio!=null && out.prEffortRatio>=_SA_CONTEST_MIN);
   if(out.prWatts>0 && !out.contested){
@@ -22751,7 +22782,7 @@ function aiRenderSegAttack_(){
   H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">'
     +'<div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">Segment Attack</span>'
     +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#f97316;background:#f973161f;border-radius:6px;padding:3px 7px">BETA</span></div>'
-    +'<div style="font-size:12.5px;color:#8b97ab;margin-top:5px">Given today&rsquo;s wind, your form, and your segment history.</div></div></div>';
+    +'<div style="font-size:12.5px;color:#8b97ab;margin-top:5px">Given today&rsquo;s wind, your form, and your segment history.</div></div>'+'<button onclick="aiSetTab_(&#39;seglib&#39;)" style="background:none;border:1px solid #232a38;color:#f97316;font-size:11.5px;font-weight:700;border-radius:9px;padding:8px 13px;cursor:pointer;font-family:inherit;white-space:nowrap">Browse all segments &rsaquo;</button></div>';
 
   if(!keys.length){
     return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:13px;line-height:1.6">'
@@ -22911,8 +22942,186 @@ function aiRenderSegAttack_(){
 
   return H+'</div>';
 }
+// ==================== SEGMENT LIBRARY: browse every segment, not just today's picks ====================
+// The attack page answers "what should I hit today". This answers "tell me about ANY of them", which
+// is a different question and needs the whole library - including the ones that cannot be projected,
+// marked as such rather than hidden.
+var _saQ='', _saFilter='all', _saSort='prob', _saOpen=null;
+function _saEvalAll_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
+  var cur=(wx&&wx.current)?wx.current:null;
+  var lbs=parseFloat((typeof st!=='undefined'&&st&&st.weight)||0);
+  var ctx={ windFromDeg:cur?cur.winddirection_10m:null, windMph:cur?cur.windspeed_10m:null,
+            tempF:cur?cur.temperature_2m:null, massKg:(lbs>0)?(lbs/2.20462+9):null,
+            rides:(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st&&st.rides)||[]),
+            todayYMD:(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })() };
+  return { ctx:ctx, cur:cur, list:Object.keys(store).map(function(k){ return _saEvaluate_(store[k], ctx); }) };
+}
+window.saSearch_=function(v){ _saQ=String(v||''); _saPaint_(); };
+window.saFilter_=function(f){ _saFilter=f; _saPaint_(); };
+window.saSort_=function(s){ _saSort=s; _saPaint_(); };
+window.saOpen_=function(id){ _saOpen=id; _saPaint_(); try{ window.scrollTo(0,0); }catch(e){} };
+window.saClose_=function(){ _saOpen=null; _saPaint_(); };
+function _saPaint_(){
+  var el=document.getElementById('sa-lib-body');
+  if(el) el.innerHTML=_saLibBody_();
+  var inp=document.getElementById('sa-lib-q');
+  if(inp && document.activeElement!==inp) inp.value=_saQ;
+}
+function _saTierChip_(e){
+  if(e.tier==='full') return '<span style="font-size:9.5px;font-weight:700;color:#22c55e;background:#22c55e1a;border-radius:5px;padding:2px 6px">projectable</span>';
+  if(e.tier==='wind') return '<span style="font-size:9.5px;font-weight:700;color:#f59e0b;background:#f59e0b1a;border-radius:5px;padding:2px 6px">wind only</span>';
+  return '<span style="font-size:9.5px;font-weight:700;color:#64748b;background:#64748b1a;border-radius:5px;padding:2px 6px">no data</span>';
+}
+function _saLibBody_(){
+  var A=_saEvalAll_(), list=A.list, ctx=A.ctx, esc=aiEsc_;
+  if(_saOpen){
+    var one=list.filter(function(x){ return x.id===_saOpen; })[0];
+    if(one) return _saDetail_(one, ctx);
+  }
+  var q=_saQ.trim().toLowerCase();
+  var f=list.filter(function(e){
+    if(q && String(e.name||'').toLowerCase().indexOf(q)<0) return false;
+    if(_saFilter==='contest') return e.tier==='full' && e.contested;
+    if(_saFilter==='untested') return e.tier==='full' && !e.contested;
+    if(_saFilter==='thin') return e.tier==='full' && e.evidence && e.evidence.key==='thin';
+    if(_saFilter==='strong') return e.tier==='full' && e.evidence && (e.evidence.key==='strong'||e.evidence.key==='fair');
+    if(_saFilter==='nodata') return e.tier!=='full';
+    return true;
+  });
+  var S=_saSort;
+  f.sort(function(a,b){
+    if(S==='name') return String(a.name||'').localeCompare(String(b.name||''));
+    if(S==='dist') return (b.distMi||0)-(a.distMi||0);
+    if(S==='evidence') return ((b.nFit||0)-(a.nFit||0));
+    // probability: only 'full' rows have one, and they always sort above rows that do not.
+    var ap=(a.tier==='full')?a.prob:-1, bp=(b.tier==='full')?b.prob:-1;
+    return (bp-ap)||String(a.name||'').localeCompare(String(b.name||''));
+  });
+  var H='<div style="font-size:11.5px;color:#8b97ab;margin-bottom:10px">'+f.length+' of '+list.length+' segments</div>';
+  if(!f.length) return H+'<div style="padding:34px 12px;text-align:center;color:#5b6678;font-size:12.5px">Nothing matches that.</div>';
+  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:2px 14px">';
+  f.slice(0,150).forEach(function(e){
+    var pc=(e.tier==='full')?_saProbCol_(e.prob):'#64748b';
+    H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #171b26;cursor:pointer;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:150px"><div style="font-size:13px;color:#e8edf5;overflow-wrap:anywhere">'+esc(e.name)+'</div>'
+      +'<div style="font-size:10.5px;color:#5b6678;margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
+      +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
+      +(e.prSec?(' &middot; best '+_saMMSS_(e.prSec)):'')
+      +_saTierChip_(e)
+      +(e.tier==='full'?('<span style="color:'+(e.contested?'#22c55e':'#8b97ab')+'">'+(e.contested?'contest':'never raced')+'</span>'):'')
+      +(e.tier==='full'&&e.evidence?('<span style="color:'+e.evidence.col+'">'+esc(e.evidence.label)+'</span>'):'')
+      +'</div></div>'
+      +'<div style="text-align:right;min-width:64px">'
+      +(e.tier==='full'&&e.contested?('<div style="font-size:16px;font-weight:800;color:'+pc+'">'+e.prob+'%</div>')
+        :(e.tier==='full'?'<div style="font-size:11px;color:#5b6678">no contest</div>'
+        :'<div style="font-size:11px;color:#5b6678">&mdash;</div>'))
+      +'</div><span style="color:#5b6678;font-size:14px">&rsaquo;</span></div>';
+  });
+  H+='</div>';
+  if(f.length>150) H+='<div style="font-size:10.5px;color:#5b6678;margin-top:8px">Showing the first 150. Search to narrow.</div>';
+  return H;
+}
+// Detail. Everything here comes from the SAME _saEvaluate_ record the attack page uses - the model
+// is not re-run differently, and nothing new is derived for this view.
+function _saDetail_(e, ctx){
+  var esc=aiEsc_, LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5b6678';
+  var H='<div><button onclick="saClose_()" style="background:none;border:1px solid #232a38;color:#8b97ab;font-size:11.5px;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit">&lsaquo; All segments</button></div>';
+  H+='<div style="margin-top:14px;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:18px 20px">';
+  H+='<div style="font-size:19px;font-weight:800;color:#f1f5f9;overflow-wrap:anywhere">'+esc(e.name)+'</div>';
+  H+='<div style="font-size:11.5px;color:#8b97ab;margin-top:5px">'
+    +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
+    +(e.grade!=null?(' &middot; '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')
+    +(e.bearing!=null?(' &middot; bearing '+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')'):'')
+    +'</div>';
+  // standing time + how it was set
+  H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px">';
+  H+='<div><div style="'+LBL+'">'+(e.prFromHistory?'Best recorded':'Strava PR')+'</div>'
+    +'<div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1;margin-top:3px">'+_saMMSS_(e.prSec)+'</div>'
+    +(e.prDate?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+esc(e.prDate)+'</div>'):'')
+    +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px;line-height:1.4">derived from your synced efforts, not a Strava PR</div>':'')
+    +'</div>';
+  H+='<div><div style="'+LBL+'">Power that set it</div>'
+    +'<div style="font-size:22px;font-weight:800;color:'+(e.prWatts?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.prWatts?(e.prWatts+'W'):'not recorded')+'</div>'
+    +(e.prEffortRatio!=null?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+Math.round(e.prEffortRatio*100)+'% of what you hold now</div>'):'')
+    +'</div>';
+  H+='<div><div style="'+LBL+'">Today&rsquo;s capability</div>'
+    +'<div style="font-size:22px;font-weight:800;color:'+(e.capW?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.capW?(e.capW+'W'):'unknown')+'</div>'
+    +(e.capStale?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px">from older rides</div>':'')
+    +'</div>';
+  H+='</div>';
+
+  if(e.tier!=='full'){
+    H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130">'
+      +'<div style="font-size:12.5px;color:#cbd5e1;line-height:1.6">Not projectable yet &mdash; '+esc(e.why||'insufficient data')+'.</div>'
+      +(e.wind?('<div style="font-size:11.5px;color:#8b97ab;margin-top:8px">Today it is a <b style="color:#e8edf5">'+esc(e.wind)+'</b> on this bearing'+(e.windMph!=null?(' at '+Math.round(e.windMph)+' mph'):'')+'. No probability is shown, because the model has nothing to measure its error against.</div>'):'')
+      +(e.windNote?('<div style="font-size:11px;color:#f59e0b;margin-top:6px">'+esc(e.windNote)+'</div>'):'')
+      +'</div></div>';
+    return H;
+  }
+
+  // projection today
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;align-items:start">';
+  H+='<div><div style="'+LBL+'">Projected today</div>'
+    +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
+    +'<span style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1">'+_saMMSS_(e.tPred)+'</span>'
+    +'<span style="font-size:12px;font-weight:800;color:'+(e.delta<0?'#22c55e':'#ef4444')+';background:'+(e.delta<0?'#22c55e1a':'#ef44441a')+';border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
+    +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'+esc(e.wind||'no wind call')+(e.windMph!=null?(' '+Math.round(e.windMph)+' mph'):'')+' &middot; &plusmn;'+Math.round(e.sigma)+'s model error</div>'
+    +(e.windApprox?'<div style="font-size:10px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':'')
+    +'</div>';
+  H+='<div style="text-align:center">'+(e.contested
+      ? ('<div style="'+LBL+'">Win probability</div><div style="display:flex;justify-content:center;margin-top:5px">'+_saRing_(e.prob,_saProbCol_(e.prob),86)+'</div>'
+         +'<div style="font-size:11px;font-weight:700;color:'+_saProbCol_(e.prob)+';margin-top:3px">'+_saProbWord_(e.prob)+(e.probCapped?' (capped)':'')+'</div>'
+         +'<div style="font-size:10px;color:'+(e.evidence?e.evidence.col:'#5b6678')+';margin-top:3px">'+esc(e.evidence?e.evidence.label:'')+'</div>')
+      : ('<div style="'+LBL+'">Not a contest</div><div style="font-size:11.5px;color:#8b97ab;margin-top:8px;line-height:1.55">'+esc(e.note||'')+'</div>'))
+    +'</div>';
+  H+='</div>';
+
+  // WHAT WOULD IT TAKE — both figures are inversions of the same fitted model.
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130">'
+    +'<div style="'+LBL+'">What it would take</div><div style="font-size:12.5px;color:#cbd5e1;margin-top:8px;line-height:1.7">';
+  if(e.wattsNeeded!=null){
+    H+='&bull; <b style="color:#f1f5f9">'+e.wattsNeeded+'W</b> to match '+_saMMSS_(e.prSec)+' in today&rsquo;s wind'
+      +(e.wattsGap!=null?(' &mdash; '+(e.wattsGap<=0?('<span style="color:#22c55e">'+Math.abs(e.wattsGap)+'W below what you hold</span>')
+                                                   :('<span style="color:#f59e0b">'+e.wattsGap+'W more than you hold</span>'))):'')+'<br>';
+  }
+  if(e.tailwindNeeded!=null){
+    H+='&bull; '+(e.tailwindNeeded<=0
+      ? 'at today&rsquo;s capability the time falls <b style="color:#22c55e">regardless of wind</b>'
+      : ('a <b style="color:#f1f5f9">'+e.tailwindNeeded.toFixed(1)+' mph tailwind</b> on this bearing would do it at today&rsquo;s capability'))+'<br>';
+  }
+  H+='</div><div style="font-size:10px;color:#5b6678;margin-top:7px;line-height:1.5">Both are the same fitted model solved backwards &mdash; the watts from the power equation directly, the wind by bisection. Neither introduces an assumption the projection above does not already make.</div></div>';
+  return H+'</div>';
+}
+function aiRenderSegLibrary_(){
+  var A=_saEvalAll_();
+  var esc=aiEsc_;
+  var H='<div style="padding:2px 0 30px">';
+  H+='<div style="font-size:22px;font-weight:800;color:#f1f5f9;margin-bottom:4px">Segment Library</div>'
+    +'<div style="font-size:12.5px;color:#8b97ab;margin-bottom:14px">Every segment in your history, whether or not today favours it.</div>';
+  if(!A.list.length) return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:13px">No segment history yet.</div></div>';
+  if(!A.cur) H+='<div style="font-size:11px;color:#f59e0b;margin-bottom:10px">Today&rsquo;s weather has not loaded, so probabilities are unavailable until it does.</div>';
+  H+='<input id="sa-lib-q" oninput="saSearch_(this.value)" placeholder="Search segments…" '
+    +'style="width:100%;box-sizing:border-box;background:#111318;border:1px solid #232a38;border-radius:10px;color:#e8edf5;font-size:13px;padding:10px 12px;font-family:inherit;margin-bottom:10px">';
+  var chips=[['all','All'],['contest','Real contests'],['untested','Never raced'],['thin','Thin data'],['strong','Well supported'],['nodata','Not projectable']];
+  H+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">';
+  chips.forEach(function(c){
+    H+='<button onclick="saFilter_(&#39;'+c[0]+'&#39;)" id="sa-f-'+c[0]+'" style="background:'+(_saFilter===c[0]?'#f973161f':'#111318')+';border:1px solid '+(_saFilter===c[0]?'#f97316':'#232a38')+';color:'+(_saFilter===c[0]?'#f97316':'#8b97ab')+';font-size:11px;font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer;font-family:inherit">'+c[1]+'</button>';
+  });
+  H+='</div>';
+  var sorts=[['prob','Chance'],['name','Name'],['dist','Distance'],['evidence','Evidence']];
+  H+='<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><span style="font-size:10.5px;color:#5b6678">Sort</span>';
+  sorts.forEach(function(s){
+    H+='<button onclick="saSort_(&#39;'+s[0]+'&#39;)" style="background:none;border:none;color:'+(_saSort===s[0]?'#f97316':'#5b6678')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 4px">'+s[1]+'</button>';
+  });
+  H+='</div>';
+  H+='<div id="sa-lib-body">'+_saLibBody_()+'</div>';
+  return H+'</div>';
+}
 function aiRenderTab_(tab, ded){
   if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Attack — render error.</div>';
+  if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Library — render error.</div>';
   if(tab==='trends') return aiRenderTrends_(ded);
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
