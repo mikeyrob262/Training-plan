@@ -27631,7 +27631,7 @@ function dsShowAnalytics(){
   var goals=[
     {label:'FTP', value:''+FTP, unit:'W', goal:'Goal '+_G.ftpW+'W', color:'#a855f7',
      pts:_ftpPts, target:_G.ftpW, empty:'Log an FTP change and this becomes a trend.'},
-    {label:'Weight', value:BWT.toFixed(1), unit:'lbs', goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e',
+    {label:'Weight', value:(BWT==null?String.fromCharCode(0x2014):BWT.toFixed(1)), unit:'lbs', goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e',
      pts:_wtPts, target:_G.weightLb, empty:'Log a few weigh-ins and this becomes a trend.'},
     {label:'W/kg', value:wkgStr_(wkgNow), unit:'W/kg', goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7',
      pts:_wkgPts, target:_G.wkg, empty:'Needs weigh-ins or 20-min power history.'},
