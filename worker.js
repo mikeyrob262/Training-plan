@@ -16080,6 +16080,86 @@ function dataSourceNote_(which){
        if(primed) n=_storeV2Rides.length; }catch(e){}
   return primed ? ('Rides only, from the uploaded snapshot ('+n.toLocaleString()+' activities) plus rides synced since.') : LEG;
 }
+// ==================== corrupt-TSS repair (console-invoked, dry-run by default) ================
+// 40 live rides carry a physically impossible np — 2,556 to 7,413 W, every one with avgPwr 0 — and
+// the TSS formula then ran CORRECTLY on it at an implied FTP of ~195, producing values up to
+// 907,732. The corruption is in np; tss is a faithful derivative of it.
+//
+// Nothing here guesses a replacement. A correct TSS needs np and the FTP in effect that day: np is
+// the corrupt input, avgPwr is 0 on the .fit records, and st.ftpHistory does not begin until
+// 2026-07-25 while these rides run from 2020-04-25. So the fields are CLEARED, not recomputed.
+//
+// Three details decide whether the repair survives, all verified against the live database first:
+//   - null is NOT usable. Firebase deletes a key written as null, on PATCH and on whole-object PUT
+//     alike, and applyRideSync_ only protects a field when existing[f]!==undefined — so a nulled
+//     field comes back on the next sync. The sentinel is 0, which every v>0 guard reads as absent
+//     and which is inert if an unguarded sum ever reaches it (-1 would silently subtract).
+//   - mergeItemFast_ falls through to mergeState_, which resolves numbers with Math.max. A cleared
+//     0 against a remote 907,732 merges back to 907,732 — unless editedAt/_edited is stamped, which
+//     is what the EDIT-WINS block keys on. markRideEdited_ is therefore load-bearing, not hygiene.
+//   - tssCleared is the durable marker so the surfaces keep saying "n unscored" instead of letting
+//     a month of real training read as a genuine 0.
+//
+// Deliberately NOT touched: avgPwr (plausible on the Strava twins, and clearing np lets _blockPwr_
+// fall back to it), and two marginal rides — a 4.5 mi run at 140 TSS and a swim at 685 — whose
+// values the cycling-calibrated rate rule flags but cannot honestly call corrupt.
+var _TSS_REPAIR_NP_MAX=2000;      // above this, np is not a human power output
+function _tssRepairTargets_(){
+  var out=[];
+  (st.rides||[]).forEach(function(r,i){
+    if(!r || r.deleted) return;
+    var np=parseFloat(r.np);
+    if(!(isFinite(np) && np>_TSS_REPAIR_NP_MAX)) return;   // the unambiguous rule, nothing marginal
+    out.push({i:i, r:r, key:(typeof rideKey==='function')?rideKey(r):null,
+              date:String(r.date||'').slice(0,10), sport:String(r.sportType||r.type||'(untyped)'),
+              tss:r.tss, np:r.np, avgPwr:r.avgPwr});
+  });
+  return out;
+}
+function repairCorruptTss_(commit){
+  try{
+    var t=_tssRepairTargets_();
+    console.log('[tss-repair] '+t.length+' ride(s) with np > '+_TSS_REPAIR_NP_MAX+'W (impossible for a human)');
+    t.forEach(function(x){ console.log('  '+x.date+'  '+String(x.sport).padEnd(12)
+      +' tss='+String(x.tss).padStart(7)+'  np='+String(x.np).padStart(6)+'W  avgPwr='+x.avgPwr+'  '+x.key); });
+    if(!t.length){ console.log('[tss-repair] nothing to do.'); return; }
+    if(!commit){
+      console.log('[tss-repair] DRY RUN — nothing written. Each ride would get tss=0, np=0, ifPct=0,');
+      console.log('[tss-repair] tssCleared=true, and an _edited mask so the clear survives sync + max-merge.');
+      console.log('[tss-repair] Run repairCorruptTss_(true) to apply (it will back up first and confirm).');
+      return;
+    }
+    // BACK UP FIRST — a local file, downloaded before a single field changes.
+    var backup=JSON.stringify({savedAt:new Date().toISOString(), reason:'pre-tss-repair',
+      rides:t.map(function(x){ return {key:x.key, date:x.date, tss:x.r.tss, np:x.r.np,
+        ifPct:x.r.ifPct, avgPwr:x.r.avgPwr, name:x.r.name, stravaId:x.r.stravaId}; })});
+    try{
+      var blob=new Blob([backup],{type:'application/json'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='tss-repair-backup-'+dayKey_()+'.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+      console.log('[tss-repair] backup downloaded ('+t.length+' rides, original values).');
+    }catch(e){ console.error('[tss-repair] ABORT — backup failed: '+((e&&e.message)||e)); return; }
+    var go=function(ok){
+      if(!ok){ console.log('[tss-repair] cancelled — nothing written.'); return; }
+      var n=0;
+      t.forEach(function(x){
+        var r=x.r;
+        r.tss=0; r.np=0; if(r.ifPct!==undefined) r.ifPct=0;
+        r.tssCleared=true;
+        if(typeof markRideEdited_==='function') markRideEdited_(r, ['tss','np','ifPct','tssCleared']);
+        n++;
+      });
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+      try{ st.lastUpdate=Date.now(); }catch(e){}
+      console.log('[tss-repair] cleared '+n+' ride(s) and stamped the edit mask. Verify with repairCorruptTss_().');
+    };
+    var msg='Clear tss/np/ifPct on '+t.length+' rides whose np is physically impossible? '
+      +'A backup of the original values has just been downloaded. They will read as "unscored", not as 0 TSS.';
+    if(typeof uiConfirm==='function') uiConfirm(msg,{title:'Repair corrupt TSS', okText:'Repair'}).then(go);
+    else go(window.confirm(msg));
+  }catch(e){ console.error('[tss-repair] failed: '+((e&&e.message)||e)); }
+}
 function recentRides_(n){
   // PINNED to the legacy path — Recent Activity shows every activity type, and
   // allRidesDeduped_ is now ride-typed. Migrate with the dashboard pass (Group E),
@@ -25585,7 +25665,11 @@ function calRollup_(list){
     var d=parseFloat(r.distance)||0;
     var _t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
     var t=(_t==null)?0:_t;
-    if(_t==null && parseFloat(r.tss)>0) tssUnknown++;
+    // A REPAIRED ride still counts as unscored. repairCorruptTss_ zeroes the corrupt value and
+    // stamps tssCleared, so without this clause a month of real training whose TSS was unusable
+    // would quietly stop saying "n unscored" and start reading as a genuine 0 — reintroducing the
+    // exact false-zero F1 removed, just from the other direction.
+    if(_t==null && (parseFloat(r.tss)>0 || r.tssCleared)) tssUnknown++;
     var e=(typeof _actElevGain_==='function'?_actElevGain_(r):parseFloat(r.elev))||0;
     var sc=actSecs_(r);
     miles+=d; tss+=t; elev+=e; secs+=sc;
@@ -27918,7 +28002,7 @@ function dsShowCalendar(){
       // An excluded value is COUNTED, not just dropped. Jan 2026 is 3 rides and 216 miles whose
       // stored TSS is all unusable: "0" alone would read as a month of no training stress, which is
       // a different false claim from the 1,593,772 this used to print.
-      if(_t==null && parseFloat(r.tss)>0) totTssUnknown++;
+      if(_t==null && (parseFloat(r.tss)>0 || r.tssCleared)) totTssUnknown++;
       totTSS+=t; totSecs+=sec; mTot+=dist;
       if(c==='run'){ nRun++; mRun+=dist; if(dist>longRun) longRun=dist; }
       else if(c==='workout'){ nWk++; wkSecs+=sec; }
