@@ -23183,7 +23183,11 @@ function aiRenderSegLibrary_(){
 function aiRenderTab_(tab, ded){
   if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Attack — render error.</div>';
   if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Library — render error.</div>';
-  if(tab==='trends') return aiRenderTrends_(ded);
+  // Wrapped like every sibling. Trends guards its own sub-computations (_trStory_, _trDrivers_,
+  // _trPredictions_, _trWatchDay_) but the dispatch itself was bare, so a throw anywhere in the
+  // rest of the body — coverage, the PMC block, chart assembly — escaped aiRenderTab_ and took the
+  // whole Athlete Intelligence page down instead of degrading to one tab saying it failed.
+  if(tab==='trends') return _aiSafe_('Trends', function(){return aiRenderTrends_(ded);}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Trends — render error.</div>';
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
@@ -27629,7 +27633,7 @@ function dsShowAnalytics(){
      pts:_ftpPts, target:_G.ftpW, empty:'Log an FTP change and this becomes a trend.'},
     {label:'Weight', value:BWT.toFixed(1), unit:'lbs', goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e',
      pts:_wtPts, target:_G.weightLb, empty:'Log a few weigh-ins and this becomes a trend.'},
-    {label:'W/kg', value:wkgNow.toFixed(2), unit:'W/kg', goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7',
+    {label:'W/kg', value:wkgStr_(wkgNow), unit:'W/kg', goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7',
      pts:_wkgPts, target:_G.wkg, empty:'Needs weigh-ins or 20-min power history.'},
     {label:'Weekly Distance', value:''+_last7, unit:'mi', goal:'Goal '+_G.weeklyMi+' mi', color:'#3b82f6',
      pts:_wkMiPts, target:_G.weeklyMi, empty:'Needs a couple of weeks of rides.'},
@@ -28870,7 +28874,7 @@ function dsShowDashboard(){
   var iq=(typeof athleteIQ_==='function')?athleteIQ_():{score:null};
   var fit=(typeof getFitness_==='function')?getFitness_():{ctl:0,atl:0,tsb:0,d7:null};
   var rdy=readinessFromTSB_(fit.tsb);
-  var wkg=(typeof currentWkg_==='function')?currentWkg_():0;
+  var wkg=(typeof currentWkg_==='function')?currentWkg_():null;
   // CTL/ATL/TSB 7-day deltas from the single fitness source (computed once).
   var dlt=(fit&&fit.d7)?{ctl:Math.round(fit.d7.ctl),atl:Math.round(fit.d7.atl),tsb:Math.round(fit.d7.tsb)}:{ctl:null,atl:null,tsb:null};
   // Weight change (real, from the weight log).
@@ -28987,7 +28991,7 @@ function dsShowDashboard(){
   iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+trendC+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+trendC+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+trendArrow+'</svg></div>';
   iqInner+='<div style="font-size:13px;color:#94a3b8;margin-top:4px">'+trendNote+'</div>';
   iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
-  [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',Math.round(lastWt*10)/10,wtChange]].forEach(function(s){
+  [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',(lastWt==null?String.fromCharCode(0x2014):Math.round(lastWt*10)/10),wtChange]].forEach(function(s){
     iqInner+='<div style="min-width:0"><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
   });
   iqInner+='</div></div></div>';
@@ -29017,7 +29021,7 @@ function dsShowDashboard(){
     return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:9px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
-  rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkg.toFixed(2),'W/kg','FTP + weight',spark(wkgSeries.length>1?wkgSeries:[wkg,wkg],ACC.blue,100,22));
+  rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkgStr_(wkg),'W/kg',(wkg==null?'needs a weight':'FTP + weight'),spark(wkgSeries.length>1?wkgSeries:(wkg==null?[]:[wkg,wkg]),ACC.blue,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.teal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3"/></svg>',ACC.teal,weekHM,'Total Time','This Week',spark(timeSeries,ACC.teal,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg>',ACC.green,weekActs,'Activities','This Week',spark(actSeries,ACC.green,100,22));
   rc+='</div>';
