@@ -27857,8 +27857,12 @@ function dsShowCalendar(){
       distSeries.push(ds0); tssSeries.push(ts0); timeSeries.push(tm0); actSeries.push(dl0.length);
     }
     // stats
-    var nRide=0,nRun=0,nWk=0,mRide=0,mRun=0,mTot=0,wkSecs=0,totSecs=0,totTSS=0,longRide=0,longRun=0;
-    monthRides.forEach(function(r){ var c=actClass(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
+    var nRide=0,nRun=0,nWk=0,mRide=0,mRun=0,mTot=0,wkSecs=0,totSecs=0,totTSS=0,longRide=0,longRun=0,totTssUnknown=0;
+    monthRides.forEach(function(r){ var c=actClass(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),_t=constRideTSS_(r),t=(_t||0);
+      // An excluded value is COUNTED, not just dropped. Jan 2026 is 3 rides and 216 miles whose
+      // stored TSS is all unusable: "0" alone would read as a month of no training stress, which is
+      // a different false claim from the 1,593,772 this used to print.
+      if(_t==null && parseFloat(r.tss)>0) totTssUnknown++;
       totTSS+=t; totSecs+=sec; mTot+=dist;
       if(c==='run'){ nRun++; mRun+=dist; if(dist>longRun) longRun=dist; }
       else if(c==='workout'){ nWk++; wkSecs+=sec; }
@@ -27924,7 +27928,8 @@ function dsShowCalendar(){
     H+=statCard(calIcon('Ride',24,C_RIDE),C_RIDE,nRide,'Rides',Math.round(mRide)+' mi',C_RIDE);
     H+=statCard(calIcon('Run',24,C_RUN),C_RUN,nRun,'Runs',(Math.round(mRun*10)/10)+' mi',C_RUN);
     H+=statCard(calIcon('Strength',24,C_WORK),C_WORK,nWk,'Workouts',fmtFull(wkSecs),C_WORK);
-    H+=statCard(FLAME,CAL.tss,totTSS,'TSS','This Month',CAL.tss);
+    // The sub-label names the excluded rides rather than letting a short total pass as complete.
+    H+=statCard(FLAME,CAL.tss,totTSS,'TSS',(totTssUnknown?(totTssUnknown+' unscored'):'This Month'),CAL.tss);
     H+=statCard(PULSE,CAL.time,totAct,'Total Activities','This Month','#64748b');
     H+='</div>';
 
