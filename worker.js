@@ -7658,7 +7658,9 @@ function checkForNewAchievements(){
   rides.forEach(function(r){
     if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
     if(r.np && r.np>bestNP && r.np<=NP_CEILING) bestNP=r.np;
-    if(r.tss && r.tss>highestTSS && r.tss<=TSS_CEILING) highestTSS=r.tss;
+    // constRideTSS_, not the flat TSS_CEILING: 600 is below a real hard century (the Holland 100
+    // scored 699 over 6h49m) so the ceiling was discarding genuine rides as well as corrupt ones.
+    var _rt7=(typeof constRideTSS_==='function')?constRideTSS_(r):null; if(_rt7 && _rt7>highestTSS) highestTSS=_rt7;
   });
 
   function recordIfNew(key, label, value){
@@ -8370,10 +8372,10 @@ function renderHomeTSSAndPR(){
   rides.forEach(function(r){
     if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
     if(r.np&&r.np>bestNP) bestNP=r.np;
-    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    var _hts=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0); if(_hts&&_hts>highestTSS) highestTSS=_hts;
     if(r.date&&r.tss){
       var wk=getWeekKey(new Date(r.date));
-      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+(r.tss||0);
+      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+((typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(parseFloat(r.tss)||0));
     }
   });
   var wTSSLabels2=[],wTSSData2=[];
@@ -9157,10 +9159,10 @@ function showProg(){
   rides.forEach(function(r){
     if(parseFloat(r.distance||0)>longestRide) longestRide=parseFloat(r.distance||0);
     if(r.np&&r.np>bestNP) bestNP=r.np;
-    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    var _hts=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0); if(_hts&&_hts>highestTSS) highestTSS=_hts;
     if(r.date&&r.tss){
       var wk=getWeekKey(new Date(r.date));
-      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+(r.tss||0);
+      weekTSSmap2[wk]=(weekTSSmap2[wk]||0)+((typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(parseFloat(r.tss)||0));
     }
   });
   // Last 8 weeks TSS
@@ -13883,7 +13885,7 @@ function renderPerf(container){
     var cal=parseFloat(r.calories)||0;
     if(mi>longestRide){longestRide=mi;longestRideName=r.name||'Activity';}
     if(r.np&&r.np>highestNP) highestNP=r.np;
-    if(r.tss&&r.tss>highestTSS) highestTSS=r.tss;
+    var _hts=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0); if(_hts&&_hts>highestTSS) highestTSS=_hts;
     if(r.avgSpeed&&r.avgSpeed>fastestSpeed) fastestSpeed=r.avgSpeed;
     if(d&&d>=yearStart){
       totalMiles+=mi;totalHours+=hrs;totalElev+=el;totalCals+=cal;
@@ -13892,7 +13894,7 @@ function renderPerf(container){
       var mk=d.getFullYear()+'-'+d.getMonth();
       monthlyMiles[mk]=(monthlyMiles[mk]||0)+mi;
       var wk=getWeekKey(d);
-      weekTSSmap[wk]=(weekTSSmap[wk]||0)+(r.tss||0);
+      weekTSSmap[wk]=(weekTSSmap[wk]||0)+(constRideTSS_(r)||0);
       if(r.np) npTrend.push({d:d,np:r.np});
     }
   });
@@ -25920,7 +25922,7 @@ function dsShowAICoach(){
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
   var todayActual=(st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   var upcoming=[];
   for(var di=todayIdx+1;di<7;di++){
@@ -25956,7 +25958,7 @@ function dsShowAICoach(){
       +' WEATHER:'+wstr
       +' BIKES:'+(bikeOpts||'none')
       +' NUTRITION TODAY:'+Math.round(todayNutr.cal)+'cal '+Math.round(todayNutr.p)+'g protein '+Math.round(todayNutr.c)+'g carbs '+Math.round(todayNutr.f)+'g fat'
-      +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
+      +' RECENT RIDES:'+recentRides.map(function(r){return r.name+' '+r.date+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join(', ')
       +' UPCOMING:'+upcoming.join(', ')
       +' Write a daily briefing with exactly 6 labeled sections. Use these exact labels on their own line: DECISION, TODAY, FORM CHECK, KEY FOCUS, NUTRITION TIP, WEATHER NOTE. DECISION is one punchy sentence max 15 words. Other sections 2-3 sentences. Be direct.'+COACH_GONOGO;
 
@@ -29639,7 +29641,7 @@ function openDesktopRideDetail(idx, _noFetch){
   var main=main2;
 
   var ifVal=r.ifPct?r.ifPct/100:(npVal&&FTP?npVal/FTP:0);
-  var rideScore=Math.min(99,Math.max(50,Math.round(70+(ifVal-0.75)*40+((r.tss||0)-80)*0.1)));
+  var rideScore=Math.min(99,Math.max(50,Math.round(70+(ifVal-0.75)*40+((constRideTSS_(r)||0)-80)*0.1)));
   var scoreColor=rideScore>=80?'#4ADE80':rideScore>=65?'#F59E0B':'#E24B4A';
   var scoreArc=Math.round(rideScore/100*163);
 
@@ -30355,8 +30357,11 @@ function renderAchievementStrip(wrap, r, idx){
   if(isBestBy(function(x){return x.elev;})){
     badges.push({icon:'mountain', label:'Most climbing', val:r.elev+' ft'});
   }
-  if(isBestBy(function(x){return x.tss;})){
-    badges.push({icon:'flame', label:'Highest TSS', val:''+r.tss});
+  // Guarded on both sides: ranked by constRideTSS_ and LABELLED with it, so a corrupt import can
+  // neither win the badge nor be printed on it.
+  if(isBestBy(function(x){ return (typeof constRideTSS_==='function')?constRideTSS_(x):x.tss; })){
+    var _bt=(typeof constRideTSS_==='function')?constRideTSS_(r):r.tss;
+    if(_bt) badges.push({icon:'flame', label:'Highest TSS', val:''+_bt});
   }
   if(isBestBy(function(x){return (x.peak20 || (x.powerCurve && x.powerCurve[1200])) || null;})){
     var p20=r.peak20 || (r.powerCurve && r.powerCurve[1200]);
@@ -31291,12 +31296,17 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
       if(ri===idx || ride.deleted) return;
       var dd=parseFloat(ride.distance||0); if(dd>otherMaxDist) otherMaxDist=dd;
       if(ride.np && ride.np>otherMaxNP && ride.np<=NP_CEILING) otherMaxNP=ride.np;
-      if(ride.tss && ride.tss>otherMaxTSS && ride.tss<=TSS_CEILING) otherMaxTSS=ride.tss;
+      // Both sides of this comparison go through constRideTSS_ — a flat 600 ceiling rejected a real
+      // 699 century as readily as a corrupt 907,732, so the PR chip could be withheld from the very
+      // ride that earned it.
+      var _ot=(typeof constRideTSS_==='function')?constRideTSS_(ride):null;
+      if(_ot && _ot>otherMaxTSS) otherMaxTSS=_ot;
     });
     var thisDist=parseFloat(r.distance||0);
     if(thisDist>0 && thisDist>otherMaxDist) prChips.push('Longest ride '+thisDist.toFixed(1)+' mi');
     if(r.np && r.np<=NP_CEILING && r.np>otherMaxNP) prChips.push('Best NP '+r.np+'W');
-    if(r.tss && r.tss<=TSS_CEILING && r.tss>otherMaxTSS) prChips.push('Highest TSS '+Math.round(r.tss));
+    var _thisTss=(typeof constRideTSS_==='function')?constRideTSS_(r):null;
+    if(_thisTss && _thisTss>otherMaxTSS) prChips.push('Highest TSS '+_thisTss);
 
     // (3) Notable-effort highlights - this ride's standout numbers.
     var effChips=[];
@@ -36834,7 +36844,7 @@ function fetchTodaysDecision(weatherStr, callback){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
   var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   ensureBikes();
   var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
@@ -36851,7 +36861,7 @@ function fetchTodaysDecision(weatherStr, callback){
     +'. TODAYS WEATHER: '+(weatherStr||'unavailable')
     +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
     +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
-      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0);
+      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0);
     }).join('; ')
     +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.'+COACH_GONOGO;
 
@@ -36923,7 +36933,7 @@ function showAICoach(){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
   var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   // Get upcoming workouts this week
   var upcoming = [];
@@ -36967,7 +36977,7 @@ function showAICoach(){
     +'. AVAILABLE BIKES: '+(bikeOptions||'none logged')
     +'. TODAYS NUTRITION SO FAR: '+Math.round(todayNutrition.cal)+' cal, '+Math.round(todayNutrition.p)+'g protein, '+Math.round(todayNutrition.c)+'g carbs, '+Math.round(todayNutrition.f)+'g fat'
     +'. RECENT RIDES (last 7 days): '+recentRides.map(function(r){
-      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(r.tss||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
+      return r.name+' ('+r.date+'): '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';
     }).join('; ')
     +'. UPCOMING THIS WEEK: '+upcoming.map(function(u){return u.day+': '+u.name;}).join(', ')
     +'. Write a concise daily briefing with 6 sections labeled: 1. DECISION (ONE single punchy sentence, max 15 words, stating the one clear call for today - e.g. naming a specific bike if weather favors one, or telling them to rest, or naming the key workout - this is the headline, be maximally direct) 2. TODAY (expand in 2-3 sentences, recommend a specific bike by name if weather conditions favor one, e.g. crosswinds/rain) 3. FORM CHECK 4. KEY FOCUS 5. NUTRITION TIP (factor in what they have already eaten today) 6. WEATHER NOTE (call out anything that should change today\\'s ride, like wind direction or rain risk). Keep sections 2-6 to 2-3 sentences each. Be direct and motivating.'+COACH_GONOGO
