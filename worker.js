@@ -9149,7 +9149,7 @@ function showProg(){
   var ctl=pmcLast?Math.round(pmcLast.ctl):0;
   var ftp=parseInt(st.ftp||186);
   var bwt=stWeightLb_();
-  var wkg=Math.round(ftp/(bwt/2.20462)*100)/100;
+  var wkg=wkgStr_(wkgFromW_(ftp));
   var vo2=st.vo2max||'—';
 
   // Personal records from rides + weekly TSS
@@ -10250,7 +10250,7 @@ function foodCategoryIconHTML_(foodName){
 }
 
 function calcMTGT(){
-  var wt = stWeightLb_(); // lbs
+  var wt = nutrWeightLb_(); // lbs — assumed when none is logged; see nutrWeightLb_
   var targets = {
     HIGH: {
       cal: Math.round(wt * 15.5),
@@ -10682,7 +10682,7 @@ function fluidGoalOz_(dateKey, wt, workout){
   return Math.round((baselineOz+ridingOz)*mult);
 }
 function calcTrainingAwareTargets_(dateKey){
-  var wt=stWeightLb_();
+  var wt=nutrWeightLb_();
   var ftp=parseInt(st.ftp||186);
   var workout=getWorkoutForDate_(dateKey);
   if(!workout || workout.isRest){
@@ -10744,7 +10744,7 @@ function calcTrainingAwareTargets_(dateKey){
 function calcFuelTheWorkout_(dateKey){
   var workout=getWorkoutForDate_(dateKey);
   if(!workout || workout.isRest || !workout.isRide) return null;
-  var wt=stWeightLb_();
+  var wt=nutrWeightLb_();
   var hours=workout.minutes/60;
   var beforeCarb=Math.round(wt*0.3); // ~pre-ride carb topping, standard guidance
   var duringCarbPerHr=workout.isHard?75:60; // g carb/hr, standard endurance fueling range
@@ -13163,7 +13163,9 @@ var METRIC_TEACH={
       {c:"#00C896", label:"4.0+", desc:"Cat 1 / elite territory."}
     ],
     forYou:function(ctx){
-      var w=ctx.wkg||0, band=w>=4?"elite territory":w>=3.5?"a genuinely quick engine":w>=3.14?"past your Chase-1 target":w>=3?"strong club-racer range":w>=2.5?"a solid trained base":"still building";
+      var w=ctx.wkg;
+      if(w==null) return "W/kg is FTP divided by bodyweight, so it needs a weight on file. Log one in Settings and this fills in — a figure computed from a guessed weight would look exactly like a measured one, which is worse than showing nothing.";
+      var band=w>=4?"elite territory":w>=3.5?"a genuinely quick engine":w>=3.14?"past your Chase-1 target":w>=3?"strong club-racer range":w>=2.5?"a solid trained base":"still building";
       var s="Yours: "+w.toFixed(2)+" W/kg — "+band+". ";
       s+="One honest caveat: this is FTP / weight, and your FTP is a manual number that looks stale — so treat the W/kg figure as a rough placeholder until FTP is re-anchored.";
       return s;
@@ -13369,7 +13371,7 @@ function teachCtx_(){
   var pmc=teachPMC_();
   var race=(typeof getNextRace_==="function")?getNextRace_():null;
   var ftp=parseInt((typeof st!=="undefined"&&st.ftp)||186)||186;
-  var wkg=(typeof currentWkg_==="function")?(currentWkg_()||0):0;
+  var wkg=(typeof currentWkg_==="function")?currentWkg_():null;   // null, not 0 — see currentWkg_
   var lr=null;
   try{
     var rr=(st.rides||[]).filter(function(r){return r && !r.deleted && (r.np||r.avgPwr);});
@@ -13544,10 +13546,10 @@ function renderPerf(container){
   var BWT=stWeightLb_();
   var pmcData=fitnessSeries_();
   var pcurve=computePowerCurve(rides);
-  var wkg=FTP/BWT*2.20462;
+  var wkg=wkgFromW_(FTP);                 // null when no bodyweight is recorded
   var targetFTP=215,targetBW=151;
   var targetWkg=targetFTP/targetBW*2.20462;
-  var wkgPct=Math.min(100,Math.round((wkg/targetWkg)*100));
+  var wkgPct=(wkg!=null)?Math.min(100,Math.round((wkg/targetWkg)*100)):null;
 
   // Zone colors & names
   var zones=[
@@ -13659,14 +13661,16 @@ function renderPerf(container){
 
   // -- W/KG HERO CARD
   // W/kg category labels
-  var wkgLabel=wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational';
-  var wkgColor=wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b';
+  // No bodyweight -> no category. Letting the comparisons fall through would print "Recreational",
+  // which is a verdict on the athlete drawn from a number that was never measured.
+  var wkgLabel=(wkg==null)?'Log a weight for W/kg':(wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational');
+  var wkgColor=(wkg==null)?'#64748b':(wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b');
   html+='<div style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
     +'<div>'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Current W/kg</div>'
-    +'<div style="font-size:24px;font-weight:800;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkg.toFixed(2)+'</div>'
-    +'<div style="font-size:11px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' &middot; '+FTP+'W &middot; '+BWT+'lbs</div>'
+    +'<div style="font-size:24px;font-weight:800;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkgStr_(wkg)+'</div>'
+    +'<div style="font-size:11px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' &middot; '+FTP+'W &middot; '+(BWT==null?String.fromCharCode(0x2014):BWT+'lbs')+'</div>'
     +'</div>'
     +'<div style="text-align:right">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Target</div>'
@@ -13695,14 +13699,14 @@ function renderPerf(container){
       if(!spark){
         // No weigh-in history to draw. Say so rather than falling back to the bar this replaced.
         return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-          +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+          +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
           +'<div style="font-size:10.5px;color:var(--t3);margin-top:3px">Log a few weigh-ins and this becomes a trend line toward '+targetWkg.toFixed(2)+'.</div>';
       }
       var rule=_onChart
         ? '<div style="position:absolute;left:0;right:0;top:'+((1-_tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
         : '';
       return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-        +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+wkgPct+'%</span></div>'
+        +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
         +'<div style="position:relative">'+spark+rule+'</div>';
     })()
     +'</div>';
@@ -13835,7 +13839,7 @@ function renderPerf(container){
     {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:null,spark:_gcFitPts_('ctl',90),sparkC:_gcHue_(0)},
     {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:null,spark:_gcFitPts_('atl',90),sparkC:_gcHue_(1)},
     {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null,spark:_gcFitPts_('tsb',90),sparkC:_gcHue_(2)},
-    {key:'wkg',lbl:'W/kg',v:_tc.wkg.toFixed(2),sub:'FTP-based',c:'#FC4C02',desc:'watts / kg',barW:null},
+    {key:'wkg',lbl:'W/kg',v:wkgStr_(_tc.wkg),sub:(_tc.wkg==null?'needs a weight':'FTP-based'),c:'#FC4C02',desc:'watts / kg',barW:null},
     {key:'ftp',lbl:'FTP',v:_tc.ftp+'W',sub:'Manual',c:'#94a3b8',desc:'may be stale',barW:null},
     {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'last ride',c:'#60a5fa',desc:'avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)',barW:null},
     {key:'if',lbl:'IF',v:(_tc.ifv?_tc.ifv.toFixed(2):'—'),sub:'last ride',c:'#f59e0b',desc:'avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)',barW:null},
@@ -14009,7 +14013,7 @@ function renderPerf(container){
   html+='<div style="border-top:1px solid var(--b1);margin-top:10px;padding-top:8px">';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Best NP</span><span style="font-weight:700;color:var(--orange)">'+(highestNP||'&mdash;')+(highestNP?'W':'')+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">FTP</span><span style="font-weight:700">'+FTP+'W</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">W/kg</span><span style="font-weight:700;color:var(--blue)">'+wkg.toFixed(2)+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">W/kg</span><span style="font-weight:700;color:var(--blue)">'+wkgStr_(wkg)+'</span></div>';
   html+='</div></div>';
 
   // Weekly Load (TSS) - flat stat rows replacing the bar chart, since the
@@ -14366,7 +14370,9 @@ function renderRideList(container, limit){
     // is re-resolved to a position inside openRideDetail at click time instead. Falls back
     // to the old position when handles are rolled back, so this line is safe either way.
     var realIdx=(STORE_V2_HANDLES && typeof rideHandle_==='function') ? rideHandle_(r) : st.rides.indexOf(r);
-    var rwkg=r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
+    // null when no weight is on file — the row omits the W/kg chip entirely rather than printing
+    // a figure derived from a guess (the render below is already gated on rwkg being truthy).
+    var _rw=wkgFromW_(r.np||r.avgPwr); var rwkg=(_rw==null)?null:_rw.toFixed(2);
     var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
     if(rideIsIndoor(r) && /run|jog/i.test(sport)) sport='Treadmill';
     var icon=activityIcon_(sport,36);
@@ -14700,7 +14706,7 @@ function buildPowerCurveChart(pcurve, FTP, BWT){
   [0,2,4,6,8].forEach(function(i){
     if(i < pcurve.length){
       var p = pcurve[i];
-      var wkg = (p.watts/BWT*2.20462).toFixed(1);
+      var wkg = wkgStr_(wkgFromW_(p.watts),1);
       svg += '<circle cx="'+scaleX(i)+'" cy="'+scaleY(p.watts)+'" r="3" fill="#00C896"/>';
       svg += '<text x="'+scaleX(i)+'" y="'+(H-1)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,.4)" font-family="-apple-system,sans-serif">'+labels[i]+'</text>';
       svg += '<text x="'+scaleX(i)+'" y="'+(scaleY(p.watts)-5)+'" text-anchor="middle" font-size="8" fill="#00C896" font-family="-apple-system,sans-serif">'+p.watts+'W</text>';
@@ -14714,7 +14720,7 @@ function buildPowerCurveChart(pcurve, FTP, BWT){
   var tbl = '<div style="display:grid;grid-template-columns:repeat('+keyDurs.length+',1fr);gap:6px;margin-top:10px">';
   keyDurs.forEach(function(p){
     var lbl = p.dur===60?'1 min':p.dur===300?'5 min':p.dur===1200?'20 min':'60 min';
-    var wkg = (p.watts/BWT*2.20462).toFixed(2);
+    var wkg = wkgStr_(wkgFromW_(p.watts));
     tbl += '<div style="background:var(--s2);border-radius:10px;padding:8px;text-align:center">'
       + '<div style="font-size:9px;color:var(--t3);margin-bottom:2px">'+lbl+'</div>'
       + '<div style="font-size:16px;font-weight:800;color:#00C896">'+p.watts+'W</div>'
@@ -25917,7 +25923,9 @@ function dsShowAICoach(){
   var ctl=_fCoach.ctl, atl=_fCoach.atl, tsb=_fCoach.tsb;
   var ftp=parseInt(st.ftp||186);
   var weight=stWeightLb_();
-  var wkg=(ftp/weight*2.20462).toFixed(2);
+  // The prompt must not assert a W/kg built on a guessed weight — the model repeats whatever it is
+  // told, so a fabricated figure comes back as a confident coaching sentence.
+  var _wk=wkgFromW_(ftp); var wkg=(_wk==null)?'unknown (no weight logged)':_wk.toFixed(2);
 
   var weekData=ws(cw);
   var dayShort=['mon','tue','wed','thu','fri','sat','sun'];
@@ -25954,7 +25962,7 @@ function dsShowAICoach(){
 
   function runBriefing(wstr){
     var prompt='You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
-      +' FTP:'+ftp+'W Weight:'+weight+'lbs W/kg:'+wkg
+      +' FTP:'+ftp+'W Weight:'+(weight==null?'not logged':weight+'lbs')+' W/kg:'+wkg
       +' CTL:'+ctl+' ATL:'+atl+' TSB:'+tsb+(tsb<-20?' TIRED':tsb>5?' FRESH':' NEUTRAL')
       +' NEXT RACE:'+raceStr
       +' TODAY ALREADY LOGGED:'+(todayActual||'nothing yet')
@@ -26207,7 +26215,9 @@ function openAICoachPlanGen(){
 
     var ftp=parseInt(st.ftp||186);
     var weight=stWeightLb_();
-    var wkg=(ftp/weight*2.20462).toFixed(2);
+    // The prompt must not assert a W/kg built on a guessed weight — the model repeats whatever it is
+  // told, so a fabricated figure comes back as a confident coaching sentence.
+  var _wk=wkgFromW_(ftp); var wkg=(_wk==null)?'unknown (no weight logged)':_wk.toFixed(2);
     var a2=(st.rides||[]).filter(function(r){return !r.deleted;}).concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
     a2.forEach(function(a){a.load=unifiedLoad(a);});
     var wl2=a2.filter(function(a){return a.load>0;});
@@ -26218,7 +26228,7 @@ function openAICoachPlanGen(){
     var rStr=_planRace?_planRace.name+' in '+_planRace.daysOut+' days'+(_planRace.target?' (target '+_planRace.target+')':''):'none scheduled';
 
     var prompt='You are an expert endurance coach. Design a '+nW+'-week training plan.'
-      +' ATHLETE: FTP '+ftp+'W '+weight+'lbs '+wkg+' W/kg CTL '+ctl2+' ATL '+atl2+' TSB '+tsb2+'.'
+      +' ATHLETE: FTP '+ftp+'W '+(weight==null?'weight not logged':weight+'lbs')+' '+wkg+' W/kg CTL '+ctl2+' ATL '+atl2+' TSB '+tsb2+'.'
       +' RACE: '+rStr+'. DAYS/WEEK: '+nD+'. REST DAYS: '+(7-nD)+' per week.'
       +' CONSTRAINTS: '+(constraints||'none')+'.'
       +' Return ONLY a raw JSON array, no markdown, no explanation.'
@@ -27419,7 +27429,7 @@ function dsShowAnalytics(){
   })();
   var wkgHero=teachCard_(
     '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgNow.toFixed(2)+'</div><div style="font-size:13px;color:#64748b">W/kg</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:#64748b">W/kg</div>'
       +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Target</div>'
       +'<div style="font-size:15px;font-weight:800;color:#FFB938;line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
     +_wkgChart
@@ -27457,7 +27467,7 @@ function dsShowAnalytics(){
     {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#3b82f6',cap:'42-day load'},
     {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f97316',cap:'7-day load'},
     {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e',cap:tsbLabel},
-    {key:'wkg',label:'W/kg',sub:'W/kg',frac:Math.min(1,wkgNow/5),center:wkgNow.toFixed(2),color:'#a855f7',cap:'vs 3.14 target'}
+    {key:'wkg',label:'W/kg',sub:'W/kg',frac:(wkgNow==null?0:Math.min(1,wkgNow/5)),center:wkgStr_(wkgNow),color:'#a855f7',cap:(wkgNow==null?'needs a weight':'vs 3.14 target')}
   ].forEach(function(g){
     var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
       +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,84)+'</div>'
@@ -27517,7 +27527,7 @@ function dsShowAnalytics(){
     var _wkgD=(wkgHistory.length>=2)?(Math.round((wkgHistory[wkgHistory.length-1]-wkgHistory[wkgHistory.length-2])*100)/100):0;
     wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">W/kg Trend</div>'
       +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
-        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgNow.toFixed(2)+'</span><span style="font-size:12px;color:#94a3b8">W/kg</span>'
+        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgStr_(wkgNow)+'</span><span style="font-size:12px;color:#94a3b8">W/kg</span>'
         +(_wkgD!==0?'<span style="font-size:10px;font-weight:700;color:'+(_wkgD>=0?'#22c55e':'#ef4444')+'">'+(_wkgD>=0?'\\u2191':'\\u2193')+' '+Math.abs(_wkgD).toFixed(2)+' vs last week</span>':'')
       +'</div>'
       +'<div style="position:relative;height:104px"><canvas id="ds-wkg-chart"></canvas></div>';
@@ -28198,21 +28208,24 @@ function readinessFromTSB_(tsb){
 }
 // Category W/kg = FTP ÷ bodyweight (kg). This is the metric Chase-1 (3.14 W/kg)
 // is defined by and, unlike per-ride average power, is always available.
-function currentWkg_(){
-  var ftp=parseFloat(st.ftp||186), kg=stWeightLb_()/2.20462;
-  return (kg>0)?Math.round((ftp/kg)*100)/100:0;
-}
+// null, not 0, when bodyweight is unknown. Zero is a value: it renders as "0.00 W/kg" and reads as
+// a measured catastrophe rather than an absent input.
+function currentWkg_(){ return wkgFromW_(parseFloat(st.ftp||186)); }
 // Honest W/kg trend. Preferred: best 20-min power ÷ kg per ride (a true fitness
 // signal) when at least 3 rides carry a 20-min peak. Fallback: FTP ÷ each
 // logged bodyweight over time (weight is the lever being actively chased).
 // Returns {source, pts:[{date,wkg}]} — empty pts when there simply isn't data.
 function wkgTrend_(){
-  var ftp=parseFloat(st.ftp||186), kg=stWeightLb_()/2.20462;
+  var ftp=parseFloat(st.ftp||186), _lb=stWeightLb_();
+  // The 20-min branch divides by current bodyweight. With none recorded that divisor was null,
+  // which coerces to 0 and yields Infinity for every point — a chart of Infinity rather than an
+  // empty one. The weigh-in branch below is unaffected: it uses each entry's OWN logged weight.
+  var kg=(_lb==null)?null:(_lb/2.20462);
   var list; try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
   var raw=list.filter(function(r){return r&&!r.deleted&&r.date&&(r.peak20||(r.powerCurve&&r.powerCurve[1200]));})
     .map(function(r){var p=r.peak20||r.powerCurve[1200];return {date:normDate(r.date), p:p};})
     .sort(function(a,b){return a.date>b.date?1:-1;});
-  if(raw.length>=3){
+  if(raw.length>=3 && kg>0){
     // Rolling BEST 20-min power over a trailing 42-day window, sampled weekly.
     // Plotting each ride's raw 20-min power made the line swing 1.4-2.6 — a
     // recovery ride's low effort cratered it, an interval ride spiked it. The
@@ -30186,7 +30199,9 @@ function openRideDetail(idx, _noFetch){
   // Hero stat row - generous 2x3 grid (matching the reference's Time/
   // Distance/Intensity/HR/Power/TSS layout) plus a full-width Calories
   // row, instead of a cramped single 4-cell strip.
-  var rwkg = r.np&&BWT?(r.np/BWT*2.20462).toFixed(2):r.avgPwr?(r.avgPwr/BWT*2.20462).toFixed(2):null;
+  // The avgPwr branch used to skip the BWT check, so with no weight it divided by null and printed
+  // Infinity W/kg. Both branches now go through the one guarded computation.
+  var _rw2=wkgFromW_(r.np||r.avgPwr); var rwkg=(_rw2==null)?null:_rw2.toFixed(2);
   var heroRow=document.createElement('div');
   heroRow.style.cssText='padding:0 16px;flex-shrink:0';
   var heroGrid=document.createElement('div');
@@ -31248,7 +31263,7 @@ function renderRidePerformanceTab(body, r, idx, FTP, BWT){
       +'<div style="font-size:10px;font-weight:700;color:var(--t3);text-align:right;padding-left:8px">PR</div></div>';
     peakDurs.forEach(function(pd,i){
       var w=r.powerCurve[pd.d]; if(!w) return;
-      var wkg2=(w/BWT*2.20462).toFixed(1);
+      var wkg2=wkgStr_(wkgFromW_(w),1);
       var zc=w>=FTP*1.21?'#a855f7':w>=FTP*1.06?'#ef4444':w>=FTP*.91?'#f59e0b':w>=FTP*.76?'#22c55e':'#3b82f6';
       var isPR=!globalBest[pd.d]||w>=globalBest[pd.d];
       var bg=i%2===0?'var(--s1)':'var(--s2)';
@@ -33975,15 +33990,31 @@ function calWeekLabel_(dt){
 // way to name one is from local parts. The FIT importer has carried this note since ingest (see
 // result.date there); this is the same rule, hoisted to one function every caller shares.
 function dayKey_(d){ d=d||new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-// ONE body weight in pounds. Nineteen sites each parsed st.weight with their own fallback and had
-// drifted to THREE different invented defaults — 160, 162 and 162.5 — so an athlete with no weight
-// set would read three different W/kg depending which card they opened, from the same FTP.
-// The fallback is a placeholder, reachable only when no weight is recorded anywhere; when a weight
-// IS set (the normal case) none of these numbers is ever used. Worth revisiting whether an unknown
-// weight should fabricate a W/kg at all rather than degrade to "—", but that is a behaviour change
-// across every power-to-weight surface, not a de-duplication.
-var _WEIGHT_LB_FALLBACK=160;
-function stWeightLb_(){ var v=parseFloat((typeof st!=='undefined'&&st)?st.weight:NaN); return (v>0)?v:_WEIGHT_LB_FALLBACK; }
+// ONE body weight in pounds, and NULL when none is recorded — never an invented one.
+//
+// Nineteen sites each parsed st.weight with their own fallback and had drifted to three different
+// made-up defaults (160, 162, 162.5), so an athlete with no weight set read three different W/kg
+// from the same FTP depending which card they opened. Unifying them to a single default fixed the
+// disagreement but kept the deeper fault: a W/kg computed from a guessed bodyweight is not a
+// measurement, it is a number with the same shape as one, and it is indistinguishable on screen
+// from a real one. So there is no default. No weight means no W/kg, and the surfaces say so.
+function stWeightLb_(){ var v=parseFloat((typeof st!=='undefined'&&st)?st.weight:NaN); return (v>0)?v:null; }
+// Watts -> W/kg, or null when either input is unknown. THE power-to-weight computation.
+function wkgFromW_(watts){
+  var lb=stWeightLb_(), w=parseFloat(watts);
+  if(lb==null || !(w>0)) return null;
+  return Math.round((w/(lb/2.20462))*100)/100;
+}
+// The em-dash rule in one place, so no caller reinvents "what do I print when it is unknown".
+function wkgStr_(v,dp){ return (v==null||!isFinite(v))?String.fromCharCode(0x2014):Number(v).toFixed(dp==null?2:dp); }
+// NUTRITION ONLY, and knowingly a fabrication. Calorie and macro targets are grams-per-pound
+// formulas, so with no weight on file they either assume one or the whole fuelling feature goes
+// blank. This keeps today's behaviour rather than silently degrading a working surface — but the
+// number IS invented, exactly like the W/kg fallback that was just removed, and the honest fix is
+// the same one: no weight, no target. That is a product decision about the Nutrition page, not a
+// de-duplication, so it is named and flagged here instead of being made quietly.
+var _NUTR_ASSUMED_LB=160;
+function nutrWeightLb_(){ var v=stWeightLb_(); return (v==null)?_NUTR_ASSUMED_LB:v; }
 function _wkDayKey_(d){ return dayKey_(d); }
 function weekWindowMonSun_(now){
   var mon=now?new Date(now.getFullYear(),now.getMonth(),now.getDate()):new Date();
@@ -36866,7 +36897,7 @@ function fetchTodaysDecision(weatherStr, callback){
   }).join('; ');
 
   var prompt = 'You are a personal cycling coach. Today is '+todayName+'.'
-    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs'
+    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+(weight==null?'not logged':weight+'lbs')
     +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
     +'. TODAY ALREADY LOGGED: '+(todayActual||'nothing yet')
@@ -36931,7 +36962,7 @@ function showAICoach(){
 
   var ftp = parseInt(st.ftp||186);
   var weight = stWeightLb_();
-  var wkg = (ftp/weight*2.20462).toFixed(2);
+  var _wk3=wkgFromW_(ftp); var wkg=(_wk3==null)?'unknown (no weight logged)':_wk3.toFixed(2);
 
   // Get this week's plan
   var weekData = ws(cw);
@@ -36981,7 +37012,7 @@ function showAICoach(){
 
   function runAICoachPrompt(weatherStr){
   var prompt = 'You are a personal cycling coach giving a daily training briefing. Today is '+todayName+'.'
-    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+weight+'lbs, W/kg: '+wkg
+    +' ATHLETE PROFILE: FTP: '+ftp+'W, Weight: '+(weight==null?'not logged':weight+'lbs')+', W/kg: '+wkg
     +', CTL (fitness): '+Math.round(ctl)+', ATL (fatigue): '+Math.round(atl)+', TSB (form): '+Math.round(tsb)
     +(tsb < -20 ? ' (TIRED)' : tsb > 5 ? ' (FRESH)' : ' (NEUTRAL)')
     +'. TODAY ALREADY LOGGED: '+(todayActual||'nothing yet')
