@@ -12317,13 +12317,28 @@ function constSportLabel_(sport){
   return pretty.charAt(0).toUpperCase()+pretty.slice(1);
 }
 function constAllDigits_(s){ if(!s.length) return false; for(var i=0;i<s.length;i++){ var ch=s.charCodeAt(i); if(ch<48||ch>57) return false; } return true; }
-// Canonical ride TSS for display: the stored r.tss guarded by the app's
-// TSS_CEILING (600), so a garbage import value (e.g. 144647) reads as "no TSS"
-// rather than an impossible number. Returns a rounded number, or null when
-// absent/garbage — callers render "—", never a raw fallback. The ride-detail
-// TRAINING STRESS card reads the same r.tss field, so a valid ride (Gaines ~50)
-// matches; only implausible values diverge (to "—").
-function constRideTSS_(r){ var v=parseFloat(r && r.tss); if(!(v>0) || v>600) return null; return Math.round(v); }
+// Canonical ride TSS for display and for every total. The stored r.tss is guarded, so a garbage
+// import value reads as "no TSS" rather than an impossible number: 43 live rides carry corrupt
+// values up to 907,732 (a 6h16m ride), and any surface summing them raw printed 1,593,772 TSS for
+// January 2026. Returns a rounded number, or null when absent/implausible — callers render "—" or
+// exclude it, never a raw fallback.
+//
+// The bound is RATE-based, not a flat ceiling. It used to be a flat 600, which is below a real hard
+// century: the Holland 100 (6h49m, NP 217) scored a legitimate 699 and was being thrown away as
+// garbage, as was a 4h47m 642. TSS is duration x intensity^2 x 100, so the only duration-free way to
+// call a value impossible is per hour — and an hour at IF 1.41 (200 TSS) is already beyond human, so
+// anything above that rate is an import artefact, not a big day. Checked against the whole library:
+// this keeps 699/6.83h and 642/4.78h, and rejects 685 in 0.80h, 811 in 0.05h, and all 39 of the
+// five-figure values. The short floor stops a genuine 10-minute effort being rejected for being brief.
+// Duration unknown -> fall back to the old flat ceiling, the only bound available.
+var _TSS_MAX_PER_HOUR=200, _TSS_SHORT_FLOOR=60, _TSS_NO_DURATION_MAX=600;
+function constRideTSS_(r){
+  var v=parseFloat(r && r.tss); if(!(v>0)) return null;
+  var secs=(typeof _durSec_==='function')?_durSec_(r):0;
+  var ceil=(secs>0)?Math.max(_TSS_SHORT_FLOOR,(secs/3600)*_TSS_MAX_PER_HOUR):_TSS_NO_DURATION_MAX;
+  if(v>ceil) return null;
+  return Math.round(v);
+}
 // Clean display name. Raw FIT/GPX/TCX filenames and all-digit ids (e.g.
 // "16153052294.fit") are not names — fall back to "<Sport> · <dist> mi". No
 // backslash regexes (the template literal strips them). Returns {text,isFallback}
@@ -25521,11 +25536,19 @@ function calSportBucket_(r){
 // Elevation routes through _actElevGain_, not a bare r.elev: rides store gain in .elev but the
 // runs library uses .elevation and some imports carry only the stream, so r.elev alone silently
 // reported every run as zero climbing.
+// TSS flows through constRideTSS_, the one canonical guard. Summing parseFloat(r.tss) raw made this
+// the single loudest wrong number in the app: both calendar renderers and every week card roll up
+// through here, so one corrupt import turned January 2026 into "1,593,772 TSS" across 3 activities.
+// An unusable value is EXCLUDED and counted in tssUnknown, so a caller can say "n unscored" instead
+// of quietly presenting a short total as a complete one.
 function calRollup_(list){
-  var miles=0, tss=0, rc=0, elev=0, secs=0;
+  var miles=0, tss=0, rc=0, elev=0, secs=0, tssUnknown=0;
   var by={};
   (list||[]).forEach(function(r){
-    var d=parseFloat(r.distance)||0, t=parseFloat(r.tss)||0;
+    var d=parseFloat(r.distance)||0;
+    var _t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    var t=(_t==null)?0:_t;
+    if(_t==null && parseFloat(r.tss)>0) tssUnknown++;
     var e=(typeof _actElevGain_==='function'?_actElevGain_(r):parseFloat(r.elev))||0;
     var sc=actSecs_(r);
     miles+=d; tss+=t; elev+=e; secs+=sc;
@@ -25538,7 +25561,7 @@ function calRollup_(list){
     by[k].miles=Math.round(by[k].miles*10)/10;   // a 3.3 mi run must not round to 3
     by[k].tss=Math.round(by[k].tss); by[k].elev=Math.round(by[k].elev); by[k].secs=Math.round(by[k].secs);
   });
-  return {miles:Math.round(miles), tss:Math.round(tss), elev:Math.round(elev), secs:Math.round(secs), acts:(list||[]).length, rideCount:rc, bySport:by};
+  return {miles:Math.round(miles), tss:Math.round(tss), elev:Math.round(elev), secs:Math.round(secs), acts:(list||[]).length, rideCount:rc, bySport:by, tssUnknown:tssUnknown};
 }
 // The per-sport week lines, built ONCE and rendered by both the desktop week rail and the mobile
 // WK column — only the icon helper and the type sizes differ per surface.
@@ -27828,12 +27851,14 @@ function dsShowCalendar(){
     // month activities + per-day series for the summary sparklines
     var monthRides=[], distSeries=[], tssSeries=[], timeSeries=[], actSeries=[];
     for(var _dd=1;_dd<=daysInMonth;_dd++){ var nd2=normDate(viewYear+'-'+(viewMonth+1)+'-'+_dd); var dl0=ridesByDate[nd2]||[];
-      var ds0=0,ts0=0,tm0=0; dl0.forEach(function(r){ monthRides.push(r); ds0+=parseFloat(r.distance)||0; ts0+=parseFloat(r.tss)||0; tm0+=durSecs(r); });
+      // TSS via the canonical guard — an implausible import contributes nothing rather than
+      // detonating the month sparkline's scale (one corrupt ride made every other day a flat line).
+      var ds0=0,ts0=0,tm0=0; dl0.forEach(function(r){ monthRides.push(r); ds0+=parseFloat(r.distance)||0; ts0+=(constRideTSS_(r)||0); tm0+=durSecs(r); });
       distSeries.push(ds0); tssSeries.push(ts0); timeSeries.push(tm0); actSeries.push(dl0.length);
     }
     // stats
     var nRide=0,nRun=0,nWk=0,mRide=0,mRun=0,mTot=0,wkSecs=0,totSecs=0,totTSS=0,longRide=0,longRun=0;
-    monthRides.forEach(function(r){ var c=actClass(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=parseFloat(r.tss)||0;
+    monthRides.forEach(function(r){ var c=actClass(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       totTSS+=t; totSecs+=sec; mTot+=dist;
       if(c==='run'){ nRun++; mRun+=dist; if(dist>longRun) longRun=dist; }
       else if(c==='workout'){ nWk++; wkSecs+=sec; }
@@ -27970,7 +27995,7 @@ function dsShowCalendar(){
             H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
           } else {
             dl.slice(0,2).forEach(function(r){
-              var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=Math.round(parseFloat(r.tss)||0);
+              var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
               var main=dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec);
               var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
               if(nm.length>20) nm=nm.slice(0,19)+'…';
@@ -28099,7 +28124,7 @@ function dsShowCalendar(){
     var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
     var H='<div style="flex:1;min-height:0;overflow-y:auto;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:6px 4px">';
     if(!list.length){ H+='<div style="padding:44px;text-align:center;color:#5b6678;font-size:13px">No activities this month.</div>'; }
-    list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
+    list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       var idx=rideRefOf_(r);
       var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
       var dObj=new Date(normDate(r.date)+'T00:00:00');
@@ -28125,7 +28150,7 @@ function dsShowCalendar(){
       H+='<div data-cal="cell" data-date="'+nd+'"'+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'')+' style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
       H+='<div style="font-size:11px;color:#8592a6;font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
       H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
-      dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=Math.round(parseFloat(r.tss)||0);
+      dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
         var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
         H+='<div style="margin-top:5px;padding:6px 8px;border-radius:8px;background:'+col+'14;border:1px solid '+col+'33">'
           +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:#e8edf5">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
@@ -28222,7 +28247,7 @@ function dsAttention_(){
   // Weekly TSS this vs last (real).
   function tssWin(d0,d1){ var c0=new Date(); c0.setDate(c0.getDate()-d0); var c1=new Date(); c1.setDate(c1.getDate()-d1);
     var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10);
-    return Math.round((st.rides||[]).filter(function(r){return r&&!r.deleted&&r.date&&r.date>s1&&r.date<=s0;}).reduce(function(s,r){return s+(parseFloat(r.tss)||0);},0)); }
+    return Math.round((st.rides||[]).filter(function(r){return r&&!r.deleted&&r.date&&r.date>s1&&r.date<=s0;}).reduce(function(s,r){return s+(constRideTSS_(r)||0);},0)); }
   var wkThis=tssWin(0,7), wkLast=tssWin(7,14);
   // Recovery / fatigue (TSB).
   // A deep TSB only opens ACTION RECOMMENDED when it is deeper than the block asked for. In a base
@@ -28986,7 +29011,7 @@ function dsShowDashboard(){
     var stype=r.sportType||r.type||'Ride'; if((typeof rideIsIndoor==='function'&&rideIsIndoor(r))&&/run|jog/i.test(stype)) stype='Treadmill';
     var ridx=rideRefOf_(r); if(rideRefOk_(ridx)===false && r.stravaId) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
-    var dist=parseFloat(r.distance)||0, tss=Math.round(parseFloat(r.tss)||0);
+    var dist=parseFloat(r.distance)||0, tss=(constRideTSS_(r)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
     ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
     ra+='<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,30)+'</div>';
@@ -29114,7 +29139,7 @@ function dsShowDashboard(){
   // "Optimal Range" marker (real: CTL is your sustainable daily load), plus the
   // real week-over-week change. Matches the reference chart.
   var maxDay=Math.max.apply(null,tssSeries.concat([1]));
-  var lastWeekTSS=0; (function(){ var c0=new Date(); c0.setHours(0,0,0,0); c0.setDate(c0.getDate()-7); var c1=new Date(c0); c1.setDate(c1.getDate()-7); var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10); (st.rides||[]).forEach(function(r){ if(r&&!r.deleted&&r.date){ var kk=normDate(r.date); if(kk>s1&&kk<=s0) lastWeekTSS+=parseFloat(r.tss)||0; } }); })();
+  var lastWeekTSS=0; (function(){ var c0=new Date(); c0.setHours(0,0,0,0); c0.setDate(c0.getDate()-7); var c1=new Date(c0); c1.setDate(c1.getDate()-7); var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10); (st.rides||[]).forEach(function(r){ if(r&&!r.deleted&&r.date){ var kk=normDate(r.date); if(kk>s1&&kk<=s0) lastWeekTSS+=(constRideTSS_(r)||0); } }); })();
   lastWeekTSS=Math.round(lastWeekTSS);
   var tlPct=lastWeekTSS>0?Math.round((weekTSS-lastWeekTSS)/lastWeekTSS*100):null;
   var optTarget=Math.round((fit.ctl||0)*1.3);
@@ -33941,7 +33966,7 @@ function weekLoadMonSun_(rides, now){
     if(!r || r.deleted || !r.date) return;
     var k=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
     if(tssByDay[k]==null) return;
-    var t=parseFloat(r.tss)||0;
+    var t=(typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(parseFloat(r.tss)||0);
     var sec=(r.movingSecs?parseFloat(r.movingSecs):((typeof parseDurToMin==='function')?parseDurToMin(r.duration)*60:0))||0;
     tssByDay[k]+=t; secsByDay[k]+=sec; actsByDay[k]+=1;
     tss+=t; secs+=sec; acts+=1;
