@@ -56,6 +56,14 @@ const evening = new Date(2026, 6, 31, 21, 30, 0);          // 21:30 local, whate
 check('dayKey_ uses local calendar parts', D1(evening), '2026-07-31');
 check('dayKey_ pads month and day', D1(new Date(2026,0,5)), '2026-01-05');
 check('dayKey_ handles a year boundary', D1(new Date(2025,11,31,23,59)), '2025-12-31');
+// INVARIANT: headline CTL/ATL/TSB come from getFitness_, never from the tail of a page's own PMC
+// array. Analytics drifted back onto its array tail and showed 57/53/+4 against 58/58/0 everywhere
+// else — the same fact, a day apart, because getFitness_ prefers today's live poll and the cached
+// daily series does not. This is the Jul-18 single-source rule; it has now regressed once.
+const headlineFit = codeLines.filter(L => /\b(lastCTL|lastATL|lastTSB)\s*=/.test(L));
+check('headline CTL/ATL/TSB are assigned somewhere', headlineFit.length>0, true);
+check('every headline CTL/ATL/TSB assignment consults getFitness_',
+      headlineFit.filter(L => !/getFitness_|_fitAn/.test(L)).map(L=>L.trim().slice(0,60)), []);
 // INVARIANT: ONE block-week implementation. A second inline copy had no end bound and would have
 // counted "Block Wk 47" after the block closed.
 check('block week computed in exactly one place', countCode(/Math\.floor\(\s*_dd\s*\/\s*7\s*\)/g), 0);

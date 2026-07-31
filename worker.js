@@ -27348,9 +27348,18 @@ function dsShowAnalytics(){
   var wkgHistory=_wt.pts.map(function(p){return p.wkg;});
   var wkgLabels=_wt.pts.map(function(p){return String(p.date).slice(5);});
 
-  var lastTSB=tsbArr[tsbArr.length-1]||0;
-  var lastCTL=ctlArr[ctlArr.length-1]||0;
-  var lastATL=atlArr[atlArr.length-1]||0;
+  // HEADLINE CTL/ATL/TSB come from getFitness_, the one canonical source — not from the tail of the
+  // arrays this page builds for its own chart. Those arrays end at the newest CACHED daily point,
+  // while getFitness_ prefers today's live Intervals poll when there is one, so taking the tail put
+  // Analytics a day behind every other surface: 57/53/+4 here against 58/58/0 on the Dashboard and
+  // Athlete Intelligence, from the same data on the same screen-refresh. TSB 0 versus +4 is not
+  // cosmetic — it is "Optimal" against "Fresh" as a readiness verdict on the same day.
+  // This is the Jul-18 single-source rule (P1/P2) drifting back; the arrays stay as the chart's
+  // series, they are just no longer the source of the numbers printed beside it.
+  var _fitAn=(typeof getFitness_==='function')?getFitness_():null;
+  var lastTSB=(_fitAn&&_fitAn.loaded)?_fitAn.tsb:(tsbArr[tsbArr.length-1]||0);
+  var lastCTL=(_fitAn&&_fitAn.loaded)?_fitAn.ctl:(ctlArr[ctlArr.length-1]||0);
+  var lastATL=(_fitAn&&_fitAn.loaded)?_fitAn.atl:(atlArr[atlArr.length-1]||0);
   var tsbColor=lastTSB>=10?'#4ade80':lastTSB>=-10?'#60a5fa':lastTSB>=-25?'#f59e0b':'#e24b4a';
   var tsbLabel=lastTSB>=10?'Fresh':lastTSB>=-10?'Optimal':lastTSB>=-25?'Tired':'Very Tired';
 
@@ -27454,9 +27463,15 @@ function dsShowAnalytics(){
   })();
   var wkgHero=teachCard_(
     '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
+    // C2: say what the big number IS. It is FTP / bodyweight, while the line beneath plots a
+    // different measure (best 20-min power / kg when there are no weigh-ins), so the natural
+    // reading — that the line ends at the number above it — is wrong. Measured 2.54 against a
+    // line ending at 2.84. The chart's own caption already names its series; this names the
+    // headline's, so the two are legible as two measurements rather than one that disagrees.
     +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:#64748b">W/kg</div>'
       +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Target</div>'
       +'<div style="font-size:15px;font-weight:800;color:#FFB938;line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:3px">FTP &divide; bodyweight'+((wkgNow!=null&&_wt&&_wt.pts&&_wt.pts.length>1)?(' &middot; the line below plots '+_wt.source+', a different measure'):'')+'</div>'
     +_wkgChart
     +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
     +'<div style="font-size:9px;color:#64748b;margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
