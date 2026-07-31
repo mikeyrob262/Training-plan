@@ -7888,6 +7888,22 @@ var ANATOMY_MAP={
   // traps-upper exists as BOTH m-f- and m-b-; the approved note said only "traps-upper". Bear crawl is
   // a front-loaded scapular hold, so the front id is the one that reads — say the word for both.
   'Bear crawl hold':  { pri:['m-f-abs','m-f-obliques'], sec:['m-f-delt-front','m-f-quad','m-f-traps-upper'] },
+  // ---- Strength C (upper & power) ----
+  // Five movements the map did not already hold, authored here rather than aliased: an overhead
+  // press is not a bench press and a rollout is not a plank, so routing them through ANATOMY_ALIAS
+  // would put the wrong muscles on the diagram. Only existing muscle ids are used. None uses the
+  // lengthening channel — all five are strengthening movements, so 'len' stays empty rather than
+  // being padded to look complete. Pull-up, Barbell bench press, Dumbbell row and Pallof press
+  // already resolve (the last three via the normalized key / a spelling alias).
+  'Slam ball overhead slam':    { pri:['m-b-lat','m-f-abs'], sec:['m-b-triceps','m-f-delt-front','m-b-glute-max','m-b-erector'] },
+  'Barbell overhead press':     { pri:['m-f-delt-front','m-b-triceps','m-f-traps-upper'], sec:['m-f-abs','m-f-serratus','m-f-pec'] },
+  'Slam ball rotational throw': { pri:['m-f-obliques','m-f-abs'], sec:['m-b-lat','m-f-delt-front','m-b-glute-med','m-b-erector'] },
+  'Ab wheel rollout':           { pri:['m-f-abs'], sec:['m-b-lat','m-f-obliques','m-f-delt-front','m-f-serratus','m-b-erector'] },
+  'Band pull-apart / face pull':{ pri:['m-b-rear-delt','m-b-rhomboid','m-b-traps-mid'], sec:['m-b-traps-upper','m-f-forearm-flex'] },
+  // ---- Strength D ----
+  // Quad sits in PRIMARY, which is what separates this from the strict overhead press above: the leg
+  // drive is the lift, not an assist. Every other movement in Strength D already resolves.
+  'Barbell push press':         { pri:['m-f-delt-front','m-b-triceps','m-f-quad'], sec:['m-b-glute-max','m-f-traps-upper','m-f-abs','m-b-erector'] },
   'Superman hold':    { pri:['m-b-erector','m-b-glute-max'], sec:['m-b-rhomboid','m-b-hamstring','m-b-rear-delt'] },
   'Good mornings':    { pri:['m-b-hamstring','m-b-erector','m-b-glute-max'], sec:['m-f-adductor'] },
   'Copenhagen plank': { pri:['m-f-adductor','m-f-obliques'], sec:['m-f-abs','m-b-glute-med','m-f-delt-front'] },
@@ -7945,6 +7961,8 @@ var ANATOMY_ALIAS={
   // ---- Swap-dropdown alternates that are the SAME movement under another name. Reviewed; each
   // resolves to an existing key, so none of these carry new muscle assignments.
   'pull up':'Pull-up / Lat Pulldown',
+  // Spelling only: Strength C names the bar explicitly. Same movement, same muscles.
+  'barbell bench press':'Bench press',
   'band pulldown':'Pull-up / Lat Pulldown',
   'pallof press band':'Pallof press',
   'band pallof press':'Pallof press',
@@ -8239,6 +8257,78 @@ function planCardHTML_(s, dateKey){
         : '')
     +(done?'<span style="font-size:14px;color:#1D9E75;flex-shrink:0">✓</span>':'')
     +'</div>'+lines.join('')+'</div>';
+}
+// Swap a lower-body strength session for Strength C. Same user-owned write path as swapMobility_,
+// so the swap claims the day and the generator will not overwrite it.
+//
+// Deliberately does NOT reschedule the displaced session. The block's rule is explicit — a missed
+// session does not move to Sunday, the week fails its own rule and starts clean Monday — so quietly
+// relocating Strength B would contradict the one thing the block is strict about. Coach V states
+// the cost in the recommendation instead of hiding it here.
+function swapToStrengthC_(dateKey, sessId){
+  try{
+    if(typeof planSessionsForDate_!=='function' || typeof planUpsertSession_!=='function') return;
+    var list=planSessionsForDate_(dateKey)||[], sess=null;
+    for(var i=0;i<list.length;i++){ if(String(list[i].id||'')===String(sessId||'')){ sess=list[i]; break; } }
+    if(!sess && list.length) sess=list.filter(function(x){ return x && x.type==='strength'; })[0]||null;
+    if(!sess || sess.type!=='strength') return;
+    var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS.strengthC:null; if(!def) return;
+    var was=sess.name||'the lower-body session';
+    var patch={ id:sess.id, type:'strength', intent:'strengthC', name:def.name,
+                status:(sess.status==='completed'?sess.status:'planned') };
+    planUpsertSession_(dateKey, patch, ['type','intent','name','status'], 'user');
+    try{ sv(); }catch(e){}
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Swapped '+was+' for '+def.name); }catch(e){}
+  }catch(e){ try{ console.error('[strengthC-swap]', e && e.message); }catch(_e){} }
+}
+// Coach V: should today's lower-body session become Strength C to protect the legs?
+//
+// Returns null unless every condition holds, and the sentence NAMES the evidence rather than
+// asserting a feeling — the same standard the rest of the panel is held to. Three real signals:
+//   1. today actually prescribes a lower-body strength session (nothing to protect otherwise);
+//   2. tomorrow prescribes a ride that needs legs (group or long);
+//   3. the legs are already loaded — two of the last three days carried a hard session, or form
+//      has gone negative.
+// The message states what the swap COSTS (the lower-body session is not rescheduled), because the
+// block has no makeup affordance and a recommendation that hid that would be selling the swap.
+var _CV_PROTECT_TSB=-10;
+function _cvProtectLegs_(dateKey, now){
+  try{
+    if(typeof blockPlanFor_!=='function' || !dateKey) return null;
+    var today=blockPlanFor_(dateKey); if(!today || !today.sessions) return null;
+    var lower=null;
+    today.sessions.forEach(function(s){ if(s && (s.intent==='strengthA'||s.intent==='strengthB')) lower=s; });
+    if(!lower) return null;                                   // nothing lower-body to protect
+    var d=_blockDay_(dateKey); if(!d) return null;
+    var tomorrow=blockPlanFor_(_tbDK_(new Date(d.getTime()+86400000)));
+    var ride=null;
+    if(tomorrow && tomorrow.sessions) tomorrow.sessions.forEach(function(s){ if(s && (s.intent==='group'||s.intent==='long')) ride=s; });
+    if(!ride) return null;                                    // nothing coming that needs the legs
+    // How loaded are the legs already? Count hard sessions actually LOGGED in the last three days.
+    var hard=0, ftp=parseInt((typeof st!=='undefined'&&st&&st.ftp)||186)||186;
+    for(var k=1;k<=3;k++){
+      var dk=_tbDK_(new Date(d.getTime()-k*86400000));
+      try{
+        var acts=(typeof activitiesForDate_==='function')?activitiesForDate_(dk):[];
+        for(var a=0;a<acts.length;a++){
+          var o=acts[a]&&acts[a].obj; if(!o) continue;
+          var kind=(typeof _blockSessionOf_==='function')?_blockSessionOf_(o, ftp, dk):null;
+          if(kind==='vo2'||kind==='threshold'){ hard++; break; }
+          if(acts[a].sport==='ride' && (parseFloat(o.distance)||0)>=40){ hard++; break; }
+        }
+      }catch(e){}
+    }
+    var fit=(typeof getFitness_==='function')?getFitness_():null;
+    var tsb=(fit&&fit.loaded&&typeof fit.tsb==='number')?fit.tsb:null;
+    var tired=(tsb!=null && tsb<=_CV_PROTECT_TSB);
+    if(hard<2 && !tired) return null;                         // legs are fine — no recommendation
+    var why=(hard>=2)?(hard+' hard days in the last three'):('form at '+(tsb>0?'+':'')+tsb);
+    var rideName=(ride.rx&&ride.rx.name)||'a long ride';
+    return why.charAt(0).toUpperCase()+why.slice(1)+', and '+rideName.toLowerCase()+' tomorrow. '
+      +'Swap '+(lower.rx&&lower.rx.name||'the strength session')+' for Strength C and keep the legs for tomorrow — '
+      +'you get a full upper-body and power session instead. The lower-body work is not rescheduled: it is a swap, not a deferral.';
+  }catch(e){ return null; }
 }
 function todayWorkoutHTML(){
   // Phase 0: renders today's real session(s) from st.plan (was: cloning the static
@@ -24378,6 +24468,9 @@ function coachV_(dateKey, now){
     fuel:(typeof _cvFuel_==='function')?_cvFuel_(dateKey, intent, done):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
+    // Proactive leg-protection swap. Null on every day the conditions do not hold — Coach V is
+    // supposed to catch this, not wait to be asked.
+    protect:(typeof _cvProtectLegs_==='function')?_cvProtectLegs_(dateKey, now):null,
     milestone:_cvMilestone_(now),
     ftp:_cvFtp_(now),
     slide:_cvSlide_(now),
@@ -24428,6 +24521,16 @@ function _coachVPanel_(now){
     // watt targets are. Absent entirely on an adequately-fuelled day.
     if(cv.fuel && cv.fuel.length){
       H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:12.5px;color:#e2e8f0;line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
+    }
+    // Leg-protection swap, ABOVE the session instructions for the same reason as the fuel check:
+    // it changes WHICH session today is, so it has to be read before the prescription for the one
+    // being replaced. Carries the action, so the recommendation is one tap from being taken.
+    if(cv.protect){
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.35);font-size:12.5px;color:#e2e8f0;line-height:1.6;overflow-wrap:anywhere">'
+        +'<b style="color:#f97316">Protect the legs &mdash; </b>'+cv.protect
+        +'<div onclick="if(window.swapToStrengthC_)swapToStrengthC_(&#39;'+dk+'&#39;,&#39;'+((cv.primary&&cv.primary.id)||'')+'&#39;)" '
+        +'style="margin-top:8px;display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid rgba(249,115,22,.55);color:#f97316;font-weight:700;font-size:12px;cursor:pointer">Swap to Strength C</div>'
+        +'</div>';
     }
     cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
     if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
@@ -24846,7 +24949,7 @@ function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color
 // read the same blockPlanFor_ resolver. Renders nothing when the week is outside the block.
 var _TB_ICOL={ rest:'#5b6678', mobility:'#a855f7', z2:'#14b8a6', threshold:'#FC4C02', vo2:'#a855f7',
   group:'#22c55e', long:'#22c55e', recovery:'#64748b', easyRun:'#4D9FFF', run10k:'#4D9FFF',
-  optional:'#5b6678', strengthA:'#ef4444', strengthB:'#ef4444', chalet:'#f59e0b', alpe:'#f59e0b', tenk:'#f59e0b', ventop:'#f59e0b' };
+  optional:'#5b6678', strengthA:'#ef4444', strengthB:'#ef4444', strengthC:'#f97316', strengthD:'#dc2626', chalet:'#f59e0b', alpe:'#f59e0b', tenk:'#f59e0b', ventop:'#f59e0b' };
 function _tbDK_(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function _tbWeekStrip_(now){
   if(typeof _trainingBlock_!=='function' || typeof blockPlanFor_!=='function') return '';
@@ -32458,7 +32561,7 @@ var SESSION_OPTIONS = [
   'Z2 Endurance Ride','Z3 Tempo Ride','Z4 Threshold Ride','Group Ride',
   'Easy Run','Tempo Run','Long Run','Fartlek Run',
   'Zwift','Zwift Intervals','Zwift Race',
-  'Strength A','Strength B',
+  'Strength A','Strength B','Strength C — Upper & Power','Strength D — Full Body Power',
   'Yoga / Mobility','Walk','Rest / Recovery'
 ];
 
@@ -34208,7 +34311,15 @@ function sessionTypeFromName_(name){
 }
 function sessionIntentFromName_(name, type){
   var s=String(name||'').toLowerCase();
-  if(type==='strength') return /strength b|posterior|single|rdl|split/.test(s)?'strengthB':'strengthA';
+  // Upper is tested FIRST. This function's fallthrough is strengthA, so without a branch here any
+  // upper-body session name would silently resolve to Strength A and prescribe squats.
+  if(type==='strength'){
+    // D is tested BEFORE C: "Strength D — Full Body Power" would otherwise be caught by C's
+    // press/pull/power vocabulary, and every unmatched strength name still falls through to A.
+    if(/strength d|full body|push press/.test(s)) return 'strengthD';
+    if(/strength c|upper|press|pull|row|slam/.test(s)) return 'strengthC';
+    return /strength b|posterior|single|rdl|split/.test(s)?'strengthB':'strengthA';
+  }
   if(type==='mobility') return 'mobility';
   if(/threshold|z4|interval/.test(s)) return 'threshold';
   if(/vo2|v02/.test(s)) return 'vo2';
@@ -34322,6 +34433,15 @@ function planClearDay_(dateKey){
 var SESSION_DEFS={
   strengthA:{ type:'strength', name:'Strength A',  exGroup:'strengthA', note:'Lower & axial load — the bone and structural stimulus cycling never provides.' },
   strengthB:{ type:'strength', name:'Strength B',  exGroup:'strengthB', note:'Posterior chain, single-leg and core — opposes the flexed riding position.' },
+  // Strength C — the leg-light option. NOT part of the weekly template or the block phases: it exists
+  // to be SWAPPED IN when the legs need protecting (two hard days behind, a group ride tomorrow), so
+  // adding it to the rotation would defeat its own purpose. Upper- and trunk-dominant by design;
+  // power is expressed through the trunk (slams, throws) rather than through loaded legs.
+  strengthC:{ type:'strength', name:'Strength C — Upper & Power', exGroup:'strengthC', note:'Upper body and trunk power. Legs stay fresh — this is the session to take when tomorrow needs your legs.' },
+  // Strength D — the opposite case. Five compound barbell lifts and a power lift, for a day the legs
+  // are FRESH and general strength is the point. Explicitly not a fatigue-protection swap, and not a
+  // session to take the day before a group ride.
+  strengthD:{ type:'strength', name:'Strength D — Full Body Power', exGroup:'strengthD', note:'Heavy, general, whole-body. Take this when the legs are fresh — it is the opposite of a leg-protection day.' },
   // Mobility pool. Four fixed routines that ROTATE BY SWAP, not by periodization — see the
   // deload exemption in _planExercises_. 'mobility' stays the key for A so every session
   // already stored with intent:'mobility' keeps resolving; B/C/D are additive.
@@ -40296,6 +40416,33 @@ var EX_LIBRARY=[
   {name:'Single-leg RDL', sets:2, reps:8, pct1RM:'', group:'strengthB'},
   {name:'Dead bug', sets:2, reps:10, pct1RM:'', group:'strengthB'},
   {name:'Bird dog', sets:2, reps:10, pct1RM:'', group:'strengthB'},
+  // ---- Strength C (upper & power, leg-light) — built on the equipment actually owned:
+  // slam ball, bands, ab wheel, dumbbells, barbell, pull-up bar. Ordered power-first, then the
+  // heavy compounds, then accessories: the explosive work needs a fresh nervous system, and the
+  // pulling volume is deliberately >= the pressing volume (a cyclist's posture needs it, and so
+  // does a swim catch).
+  {name:'Slam ball overhead slam', sets:4, reps:6, pct1RM:'', group:'strengthC'},
+  {name:'Pull-up', sets:4, reps:8, pct1RM:'', group:'strengthC'},
+  {name:'Barbell bench press', sets:4, reps:6, pct1RM:75, group:'strengthC'},
+  {name:'Barbell overhead press', sets:3, reps:8, pct1RM:65, group:'strengthC'},
+  {name:'Dumbbell row', sets:3, reps:10, pct1RM:'', group:'strengthC', perSide:true},
+  {name:'Slam ball rotational throw', sets:3, reps:8, pct1RM:'', group:'strengthC', perSide:true},
+  {name:'Ab wheel rollout', sets:3, reps:8, pct1RM:'', group:'strengthC'},
+  {name:'Band pull-apart / face pull', sets:3, reps:15, pct1RM:'', group:'strengthC'},
+  {name:'Pallof press', sets:3, reps:10, pct1RM:'', group:'strengthC', perSide:true},
+  // ---- Strength D (full body strength & power, fresh legs) — power lift first while the nervous
+  // system is fresh, then the heavy compounds, then carries and trunk. Shares trap-bar deadlift
+  // with A and the slam/rollout with C on purpose: a shared movement vocabulary means logged history
+  // and 1RM data carry across sessions instead of fragmenting.
+  {name:'Barbell push press', sets:5, reps:3, pct1RM:70, group:'strengthD'},
+  {name:'Back squat', sets:4, reps:5, pct1RM:80, group:'strengthD'},
+  {name:'Trap-bar deadlift', sets:3, reps:5, pct1RM:80, group:'strengthD'},
+  {name:'Pull-up', sets:4, reps:6, pct1RM:'', group:'strengthD'},
+  {name:'Barbell bench press', sets:3, reps:6, pct1RM:75, group:'strengthD'},
+  {name:'Dumbbell row', sets:3, reps:10, pct1RM:'', group:'strengthD', perSide:true},
+  {name:'Slam ball overhead slam', sets:3, reps:6, pct1RM:'', group:'strengthD'},
+  {name:'Loaded carry (farmer)', sets:3, reps:40, pct1RM:'', group:'strengthD'},
+  {name:'Ab wheel rollout', sets:3, reps:8, pct1RM:'', group:'strengthD'},
   // Mobility A (hip / ankle) — the original routine. sets/reps values are UNCHANGED; the
   // perSide/secs flags are presentation only, so the card reads "2×45s /side" instead of
   // the ambiguous "2×45". Group stays 'mobility' so every stored session keeps resolving.
