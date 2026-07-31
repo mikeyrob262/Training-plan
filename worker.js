@@ -9148,7 +9148,7 @@ function showProg(){
   var pmcLast=st.pmcHistory&&st.pmcHistory.length?st.pmcHistory[st.pmcHistory.length-1]:null;
   var ctl=pmcLast?Math.round(pmcLast.ctl):0;
   var ftp=parseInt(st.ftp||186);
-  var bwt=parseFloat(st.weight||160);
+  var bwt=stWeightLb_();
   var wkg=Math.round(ftp/(bwt/2.20462)*100)/100;
   var vo2=st.vo2max||'—';
 
@@ -9412,8 +9412,12 @@ function showSet(){
   html+='<div style="background:var(--s1);margin:0 16px 10px;border-radius:14px;border:1px solid var(--b1);padding:14px 16px">'
     +'<div class="ci-lbl" style="margin-bottom:10px;font-weight:700">Goals</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 12px">'
-    +'<div><div class="ci-lbl">FTP (W)</div><input class="ci-in" type="number" value="'+_Gm.ftpW+'" id="gt-ftpW"></div>'
-    +'<div><div class="ci-lbl">Weight (lb)</div><input class="ci-in" type="number" value="'+_Gm.weightLb+'" id="gt-weightLb"></div>'
+    // TARGET, not current. Profile above holds the real FTP/weight that price every watt and W/kg
+    // in the app; these are what you are aiming AT, and are read only by the goal projections.
+    // Both said plain "FTP (W)" / "Weight (lb)", one screen apart — which reads as the same field
+    // twice and invites editing the goal expecting the block to reprice, which it never would.
+    +'<div><div class="ci-lbl">FTP target (W)</div><input class="ci-in" type="number" value="'+_Gm.ftpW+'" id="gt-ftpW"></div>'
+    +'<div><div class="ci-lbl">Weight target (lb)</div><input class="ci-in" type="number" value="'+_Gm.weightLb+'" id="gt-weightLb"></div>'
     +'<div><div class="ci-lbl">W/kg</div><input class="ci-in" type="number" step="0.01" value="'+_Gm.wkg+'" id="gt-wkg"></div>'
     +'<div><div class="ci-lbl">Weekly miles</div><input class="ci-in" type="number" value="'+_Gm.weeklyMi+'" id="gt-weeklyMi"></div>'
     +'<div><div class="ci-lbl">Annual miles</div><input class="ci-in" type="number" value="'+_Gm.annualMi+'" id="gt-annualMi"></div>'
@@ -10246,7 +10250,7 @@ function foodCategoryIconHTML_(foodName){
 }
 
 function calcMTGT(){
-  var wt = parseFloat(st.weight||160); // lbs
+  var wt = stWeightLb_(); // lbs
   var targets = {
     HIGH: {
       cal: Math.round(wt * 15.5),
@@ -10678,7 +10682,7 @@ function fluidGoalOz_(dateKey, wt, workout){
   return Math.round((baselineOz+ridingOz)*mult);
 }
 function calcTrainingAwareTargets_(dateKey){
-  var wt=parseFloat(st.weight||160);
+  var wt=stWeightLb_();
   var ftp=parseInt(st.ftp||186);
   var workout=getWorkoutForDate_(dateKey);
   if(!workout || workout.isRest){
@@ -10740,7 +10744,7 @@ function calcTrainingAwareTargets_(dateKey){
 function calcFuelTheWorkout_(dateKey){
   var workout=getWorkoutForDate_(dateKey);
   if(!workout || workout.isRest || !workout.isRide) return null;
-  var wt=parseFloat(st.weight||160);
+  var wt=stWeightLb_();
   var hours=workout.minutes/60;
   var beforeCarb=Math.round(wt*0.3); // ~pre-ride carb topping, standard guidance
   var duringCarbPerHr=workout.isHard?75:60; // g carb/hr, standard endurance fueling range
@@ -13537,7 +13541,7 @@ function renderPerf(container){
   if(!st.rides) st.rides=[];
   var rides=st.rides.filter(function(r){return !r.deleted;});
   var FTP=parseInt(st.ftp||186);
-  var BWT=parseFloat(st.weight||160);
+  var BWT=stWeightLb_();
   var pmcData=fitnessSeries_();
   var pcurve=computePowerCurve(rides);
   var wkg=FTP/BWT*2.20462;
@@ -14352,7 +14356,7 @@ function renderRideList(container, limit){
     });
     html+='</div>';
   }
-  var FTP=parseInt(st.ftp||186),BWT=parseFloat(st.weight||160);
+  var FTP=parseInt(st.ftp||186),BWT=stWeightLb_();
   var listGroup=document.createElement('div');
   listGroup.style.cssText='margin:0 16px';
   rides.forEach(function(r,idx){
@@ -25739,8 +25743,8 @@ function dsShowSettings(){
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Goals</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">'
-    +_gInput('gt-ftpW','FTP (W)',_G.ftpW)
-    +_gInput('gt-weightLb','Weight (lb)',_G.weightLb)
+    +_gInput('gt-ftpW','FTP target (W)',_G.ftpW)
+    +_gInput('gt-weightLb','Weight target (lb)',_G.weightLb)
     +_gInput('gt-wkg','W/kg',_G.wkg,'0.01')
     +_gInput('gt-weeklyMi','Weekly miles',_G.weeklyMi)
     +_gInput('gt-annualMi','Annual miles',_G.annualMi)
@@ -25912,7 +25916,7 @@ function dsShowAICoach(){
   var _fCoach=getFitness_();
   var ctl=_fCoach.ctl, atl=_fCoach.atl, tsb=_fCoach.tsb;
   var ftp=parseInt(st.ftp||186);
-  var weight=parseFloat(st.weight||162);
+  var weight=stWeightLb_();
   var wkg=(ftp/weight*2.20462).toFixed(2);
 
   var weekData=ws(cw);
@@ -26202,7 +26206,7 @@ function openAICoachPlanGen(){
     goBtn.disabled=true; goBtn.textContent='Generating...'; goBtn.style.opacity='.6'; cancelBtn.disabled=true;
 
     var ftp=parseInt(st.ftp||186);
-    var weight=parseFloat(st.weight||162);
+    var weight=stWeightLb_();
     var wkg=(ftp/weight*2.20462).toFixed(2);
     var a2=(st.rides||[]).filter(function(r){return !r.deleted;}).concat((st.runs||[]).map(function(r){return {date:r.date,avgHR:r.avgHR,duration:r.time,rpe:r.rpe,deleted:false};}));
     a2.forEach(function(a){a.load=unifiedLoad(a);});
@@ -27239,7 +27243,7 @@ function dsShowAnalytics(){
   try{ rides=dedupeRides_(st.rides||[]).kept.filter(function(r){return r&&!r.deleted;}); }
   catch(e){ rides=(st.rides||[]).filter(function(r){return r&&!r.deleted;}); }
   var FTP=parseInt(st.ftp||186);
-  var BWT=parseFloat(st.weight||162.5);
+  var BWT=stWeightLb_();
 
   // ---- Range selector (7D/4W/12W/6M/1Y) drives the time-windowed views -------
   var RANGE=(st.anRange&&/^(7D|4W|12W|6M|1Y)$/.test(st.anRange))?st.anRange:'12W';
@@ -28195,7 +28199,7 @@ function readinessFromTSB_(tsb){
 // Category W/kg = FTP ÷ bodyweight (kg). This is the metric Chase-1 (3.14 W/kg)
 // is defined by and, unlike per-ride average power, is always available.
 function currentWkg_(){
-  var ftp=parseFloat(st.ftp||186), kg=parseFloat(st.weight||162.5)/2.20462;
+  var ftp=parseFloat(st.ftp||186), kg=stWeightLb_()/2.20462;
   return (kg>0)?Math.round((ftp/kg)*100)/100:0;
 }
 // Honest W/kg trend. Preferred: best 20-min power ÷ kg per ride (a true fitness
@@ -28203,7 +28207,7 @@ function currentWkg_(){
 // logged bodyweight over time (weight is the lever being actively chased).
 // Returns {source, pts:[{date,wkg}]} — empty pts when there simply isn't data.
 function wkgTrend_(){
-  var ftp=parseFloat(st.ftp||186), kg=parseFloat(st.weight||162.5)/2.20462;
+  var ftp=parseFloat(st.ftp||186), kg=stWeightLb_()/2.20462;
   var list; try{ list=dedupeRides_(st.rides||[]).kept; }catch(e){ list=st.rides||[]; }
   var raw=list.filter(function(r){return r&&!r.deleted&&r.date&&(r.peak20||(r.powerCurve&&r.powerCurve[1200]));})
     .map(function(r){var p=r.peak20||r.powerCurve[1200];return {date:normDate(r.date), p:p};})
@@ -28845,7 +28849,7 @@ function dsShowDashboard(){
   var dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var dateStr=dayNames[now.getDay()]+', '+monthNames[now.getMonth()]+' '+now.getDate()+', '+now.getFullYear();
   var ftp=parseInt(st.ftp||186);
-  var bwt=parseFloat(st.weight||162.5);
+  var bwt=stWeightLb_();
 
   // ---------- REAL DATA ----------
   var rides=(st.rides||[]).slice().sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
@@ -29563,7 +29567,7 @@ function openDesktopRideDetail(idx, _noFetch){
     return;
   }
   var FTP=parseInt(st.ftp||186);
-  var BWT=parseFloat(st.weight||160);
+  var BWT=stWeightLb_();
   var NL=String.fromCharCode(10);
 
   var npVal=r.np||r.avgPwr||0;
@@ -30135,7 +30139,7 @@ function openRideDetail(idx, _noFetch){
   if(old) old.remove();
 
   var FTP = parseInt(st.ftp||186);
-  var BWT = parseFloat(st.weight||160);
+  var BWT = stWeightLb_();
 
   var overlay = document.createElement('div');
   overlay.id = 'ride-detail-modal';
@@ -33971,6 +33975,15 @@ function calWeekLabel_(dt){
 // way to name one is from local parts. The FIT importer has carried this note since ingest (see
 // result.date there); this is the same rule, hoisted to one function every caller shares.
 function dayKey_(d){ d=d||new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// ONE body weight in pounds. Nineteen sites each parsed st.weight with their own fallback and had
+// drifted to THREE different invented defaults — 160, 162 and 162.5 — so an athlete with no weight
+// set would read three different W/kg depending which card they opened, from the same FTP.
+// The fallback is a placeholder, reachable only when no weight is recorded anywhere; when a weight
+// IS set (the normal case) none of these numbers is ever used. Worth revisiting whether an unknown
+// weight should fabricate a W/kg at all rather than degrade to "—", but that is a behaviour change
+// across every power-to-weight surface, not a de-duplication.
+var _WEIGHT_LB_FALLBACK=160;
+function stWeightLb_(){ var v=parseFloat((typeof st!=='undefined'&&st)?st.weight:NaN); return (v>0)?v:_WEIGHT_LB_FALLBACK; }
 function _wkDayKey_(d){ return dayKey_(d); }
 function weekWindowMonSun_(now){
   var mon=now?new Date(now.getFullYear(),now.getMonth(),now.getDate()):new Date();
@@ -36833,7 +36846,7 @@ function fetchTodaysDecision(weatherStr, callback){
   var ctl=_fitCoach.ctl, atl=_fitCoach.atl, tsb=_fitCoach.tsb;
 
   var ftp = parseInt(st.ftp||186);
-  var weight = parseFloat(st.weight||162);
+  var weight = stWeightLb_();
 
   var weekData = ws(cw);
   var todayIdx = today.getDay()===0?6:today.getDay()-1;
@@ -36917,7 +36930,7 @@ function showAICoach(){
   var ctl=_fitCoach2.ctl, atl=_fitCoach2.atl, tsb=_fitCoach2.tsb;
 
   var ftp = parseInt(st.ftp||186);
-  var weight = parseFloat(st.weight||162);
+  var weight = stWeightLb_();
   var wkg = (ftp/weight*2.20462).toFixed(2);
 
   // Get this week's plan
@@ -38179,7 +38192,7 @@ function renderWeatherOverviewTab(body){
 
   ensureBikes();
   var ftp=parseInt(st.ftp||186);
-  var weight=parseFloat(st.weight||162);
+  var weight=stWeightLb_();
 
   // Shared cache (getWeather_) — same fetch as the Weather page/Dashboard/Alerts,
   // with last-known fallback on failure. getWeather_'s superset query carries every
