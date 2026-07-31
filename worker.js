@@ -24354,7 +24354,96 @@ function _blockHr_(r){ var v=(r&&r.avgHR!=null)?+r.avgHR:((r&&r.avgHr!=null)?+r.
 function _blockElev_(r){ return Math.round(parseFloat((r&&r.elev!=null)?r.elev:(r&&r.elevation))||0); }
 function _blockTss_(r){ var v=parseFloat(r&&r.tss); return (v>0&&v<=600)?v:0; }
 
-function _blockSessionOf_(r, ftp){
+// Share of a session's work intervals that must reach the band floor before the ride is called
+// that session. Half, because the question here is identity ("was this the VO2 workout?"), not
+// execution quality ("was every rep in band?") — the checks below still grade the execution.
+var _BLOCK_IV_MIN_HIT=0.5;
+// Do this ride's stored laps contain the prescribed work intervals, at the prescribed intensity?
+//
+// Counts only laps that are BOTH about the prescribed work length AND at or above the band floor,
+// then requires at least half the prescribed reps. Counting every lap inside the duration tolerance
+// as a candidate does not work: a 4x4's 3-minute recoveries sit within tolerance of its 4-minute
+// efforts, so the recoveries dilute the ratio and a perfectly executed session scores 4/9. The
+// efforts are what is being counted, so only the efforts are counted.
+//
+// Needs >=3 laps: a ride whose whole duration is one lap (Strava's default when no workout was
+// loaded) carries no structure, and its single lap average is just the ride average again.
+function _blockLapsHit_(r, struct, targets){
+  try{
+    var laps=(r && r.laps);
+    if(!Array.isArray(laps) || laps.length<3) return false;
+    if(!targets || targets.powerLo==null) return false;
+    var si=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
+    if(!si || !(si.n>=2) || !(si.workMin>=1)) return false;
+    var workSec=si.workMin*60;
+    var tol=Math.max(45, Math.round(workSec*0.35));   // same tolerance the debrief matcher uses
+    var hits=0;
+    for(var i=0;i<laps.length;i++){
+      var lp=laps[i]; if(!lp) continue;
+      var t=(lp.time!=null)?+lp.time:((lp.elapsed!=null)?+lp.elapsed:0);
+      var w=(lp.avgPwr!=null)?+lp.avgPwr:NaN;
+      if(!(t>0) || !(w>0)) continue;
+      if(Math.abs(t-workSec)>tol) continue;
+      if(w>=targets.powerLo) hits++;
+    }
+    return hits>=Math.max(2, Math.ceil(si.n/2));
+  }catch(e){ return false; }
+}
+// The intent a ride's own WORK INTERVALS confirm, or null. It only ever confirms the session the
+// block PRESCRIBED for that date, so this can never promote a hard group ride into a VO2 session it
+// was not — it decides whether the prescribed one actually happened at the prescribed intensity.
+//
+// Two readers, in order of how directly they see the efforts: stored device laps (_blockLapsHit_),
+// then the decimated power stream (_cvStreamIntervals_, the same reader the session debrief uses —
+// it derives the interval clock from the struct and scans for the alignment that separates work
+// from recovery off r.chartPwr). The Intervals.icu WORK-tagged path is deliberately NOT used: that
+// endpoint refuses Strava-sourced activities, which is every Zwift session, i.e. exactly the
+// structured ones. See the note above _cvStreamIntervals_.
+//
+// For the stream reader, REACHING the floor is the test, not sitting inside the band: an interval
+// over the top is a harder effort, not a different session. Jul 23 2026 measured 185/214/169/206W
+// against a 174-192W band — only one strictly "in band", but unmistakably the VO2 session.
+function _blockIntervalIntent_(r, dateKey){
+  try{
+    if(!r || !dateKey) return null;
+    if(typeof blockPlanFor_!=='function' || typeof _cvStreamIntervals_!=='function') return null;
+    var bp=blockPlanFor_(dateKey); if(!bp || !bp.sessions || !bp.sessions.length) return null;
+    for(var i=0;i<bp.sessions.length;i++){
+      var s=bp.sessions[i];
+      if(!s || !s.struct) continue;
+      if(s.intent!=='vo2' && s.intent!=='threshold' && s.intent!=='z2') continue;
+      var t=(s.rx && s.rx.targets)?s.rx.targets:null;
+      if(!t || t.powerLo==null || t.powerHi==null) continue;
+      // Stored device laps FIRST. When a structured session was ridden as a Zwift/Garmin workout the
+      // laps ARE the intervals, at true per-lap average power — no window means, no alignment scan,
+      // no stream-density floor. Jul 28 2026 carries 601s@97 / 240s@200 / 180s@106 / 240s@200 /
+      // 180s@108 / 240s@207 / 180s@103 / 300s@200 / ... : the 4x4 verbatim, four work laps at
+      // 200-207W against a 174W floor, while whole-ride NP read 160W.
+      if(_blockLapsHit_(r, s.struct, t)) return s.intent;
+      // Else fall back to the decimated power stream (rides with no laps, or one whole-ride lap).
+      var out=_cvStreamIntervals_(r, s.intent, t, s.struct, true);
+      if(!out || !out.vals || !out.vals.length) continue;   // no structure found, or stream too coarse
+      var hit=0; out.vals.forEach(function(v){ if(v>=out.lo) hit++; });
+      if((hit/out.vals.length)>=_BLOCK_IV_MIN_HIT) return s.intent;
+    }
+    return null;
+  }catch(e){ return null; }
+}
+// Session identity. Measured from the work intervals where the stream allows it, inferred from
+// whole-ride NP otherwise.
+//
+// NP alone cannot see a structured session: a 4x4 averages its recoveries, warm-up and cool-down
+// into the number. The prescribed VO2 ride on Jul 28 2026 logged NP 160 against FTP 183 — 0.87x,
+// so the ratio bands filed it as 'threshold' — while the VO2 gate sat at 1.06x (194W), which NOTHING
+// has cleared since the block opened. Since a week passes only with all three of threshold/VO2/Z2
+// present, that made a clean week unreachable by construction: the streak could never leave 0 and
+// the retest would slide another week every Monday, each slide reported as a missed week.
+//
+// The ratio bands remain the fallback for unprescribed days, unparseable structs, and streams too
+// coarse to average an effort. This narrows the inference; it does not pretend to replace it.
+function _blockSessionOf_(r, ftp, dateKey){
+  var iv=_blockIntervalIntent_(r, dateKey);
+  if(iv) return iv;
   var pw=_blockPwr_(r); if(pw==null || !(ftp>0)) return null;
   var ratio=pw/ftp;
   if(ratio>=1.06) return 'vo2';
@@ -24370,7 +24459,7 @@ function _blockWeekAssess_(rides, ftp, now){
   var cyc=_blockCyc_(rides).filter(function(r){ var d=_blockDay_(r.date); return d && d>=ws && d<we; });
   var withPwr=cyc.filter(function(r){ return _blockPwr_(r)!=null; }).length;
   var sess={ threshold:[], vo2:[], z2:[] };
-  cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp); if(t) sess[t].push(r); });
+  cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp, String(r.date||'').slice(0,10)); if(t) sess[t].push(r); });
   function pick(list){ return (list&&list.length)?list[0]:null; }
   var thrRide=pick(sess.threshold), vo2Ride=pick(sess.vo2), z2Ride=pick(sess.z2);
   var checks=[
@@ -24399,7 +24488,18 @@ function _blockWeekAssess_(rides, ftp, now){
 }
 
 function _blockStreak_(rides, ftp, now){
-  var start=_blockWeekStart_(_blockDay_(_BLOCK_START)||now);
+  // The streak only ever assesses WHOLE block weeks. _BLOCK_START is Fri Jul 24 2026, and
+  // _blockWeekStart_ of that is Mon Jul 20 — four days BEFORE the block existed. Seeding the
+  // cursor there made Jul 20-26 a "completed" week, judged it against a rule that needs three
+  // sessions on three separate days, and failed it on the strength of a stub the athlete was
+  // never training in. That single phantom failure is what produced completed=1/streak=0 ->
+  // slideWeeks=1 -> "a missed week slid the retest to Sep 3" and "0 of 4 clean weeks banked".
+  // No week was missed. When the block opens mid-week, week 1 is the first FULL Monday week.
+  // (_blockProgress_ already handles this boundary on the calendar-time side; this is the
+  // quality side of the same edge.)
+  var _bs=_blockDay_(_BLOCK_START)||now;
+  var start=_blockWeekStart_(_bs);
+  if(start.getTime()<_bs.getTime()) start=new Date(start.getTime()+7*86400000);
   var curWS=_blockWeekStart_(now);
   var weeks=[]; var w=new Date(start.getTime());
   while(w.getTime()<curWS.getTime()){
@@ -27805,12 +27905,22 @@ function dsShowCalendar(){
 
     // ---- build week rows (prev/next month days shown faint) ----
     var cells=[];
-    for(var i=0;i<firstDow;i++){ cells.push({d:prevDays-firstDow+1+i,inMonth:false}); }
-    for(var d=1;d<=daysInMonth;d++){ cells.push({d:d,inMonth:true,date:normDate(viewYear+'-'+(viewMonth+1)+'-'+d)}); }
-    var nx=1; while(cells.length%7!==0){ cells.push({d:nx++,inMonth:false}); }
+    // EVERY cell carries a real date key, pad cells included. inMonth now controls STYLING
+    // only (the faint day number), never whether the day has content. It used to gate the
+    // content too, and pad cells were built with no date at all — so a real session on a
+    // pad day rendered as an empty box. July 2026 is the worst case: Jul 1 is a Wednesday
+    // and the month is 31 days, so the grid pads to exactly ONE trailing cell, Aug 1 — and
+    // that Saturday's Group Ride disappeared from row 5 while Jul 4/11/18/25 all showed it.
+    // new Date() normalizes the month under/overflow, so Dec->Jan and Jan->Dec are free.
+    var _cellKey=function(y,m,dd){ var t=new Date(y,m,dd); return normDate(t.getFullYear()+'-'+(t.getMonth()+1)+'-'+t.getDate()); };
+    for(var i=0;i<firstDow;i++){ var _pd=prevDays-firstDow+1+i; cells.push({d:_pd,inMonth:false,date:_cellKey(viewYear,viewMonth-1,_pd)}); }
+    for(var d=1;d<=daysInMonth;d++){ cells.push({d:d,inMonth:true,date:_cellKey(viewYear,viewMonth,d)}); }
+    var nx=1; while(cells.length%7!==0){ cells.push({d:nx,inMonth:false,date:_cellKey(viewYear,viewMonth+1,nx)}); nx++; }
     var weeks=[]; for(var s2=0;s2<cells.length;s2+=7) weeks.push(cells.slice(s2,s2+7));
     var N=weeks.length;
-    var weekRoll=weeks.map(function(wk){ var wr=[]; wk.forEach(function(c){ if(c.inMonth){ (ridesByDate[c.date]||[]).forEach(function(r){ wr.push(r); }); } }); return calRollup_(wr); });
+    // A row is a WEEK, so its rollup counts all seven days. Skipping pad days made the first
+    // and last rows silently short — row 5 of July 2026 summed six days and called it a week.
+    var weekRoll=weeks.map(function(wk){ var wr=[]; wk.forEach(function(c){ if(c.date){ (ridesByDate[c.date]||[]).forEach(function(r){ wr.push(r); }); } }); return calRollup_(wr); });
     var maxWkTSS=Math.max(1,Math.max.apply(null,weekRoll.map(function(x){return x.tss;}).concat([0])));
 
     if(calView==='agenda'){
@@ -27830,14 +27940,14 @@ function dsShowCalendar(){
       H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid #171c2b;border-radius:12px;overflow:hidden">';
       weeks.forEach(function(wk){
         wk.forEach(function(c){
-          var isToday=c.inMonth && c.date===todayStr;
-          var dl=c.inMonth?(ridesByDate[c.date]||[]):[];
+          var isToday=!!c.date && c.date===todayStr;
+          var dl=c.date?(ridesByDate[c.date]||[]):[];
           // Planned workout for this date (persisted override) — shown on ALL days,
           // alongside any completed activity, gated by the Planned/Rest filters.
-          var planRaw=(c.inMonth && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
+          var planRaw=(c.date && calFilter.planned && typeof getPlannedWorkoutForDate==='function')?(getPlannedWorkoutForDate(c.date)||null):null;
           // getPlannedWorkoutForDate excludes rest (rest != workout), so surface a
           // rest DAY here or the cell draws blank. A rest-only day -> synthetic Rest.
-          if(!planRaw && c.inMonth && calFilter.planned && typeof planSessionsForDate_==='function'){
+          if(!planRaw && c.date && calFilter.planned && typeof planSessionsForDate_==='function'){
             var _rs=planSessionsForDate_(c.date).filter(function(x){ return x && x.type==='rest'; })[0];
             if(_rs) planRaw={ name:'Rest', type:'rest', intent:'', sessions:[_rs] };
           }
@@ -27846,16 +27956,16 @@ function dsShowCalendar(){
           var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
           var idx=dl.length?rideRefOf_(dl[0]):-1;
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
-          var attrs=' data-cal="cell"'+(c.inMonth?(' data-date="'+c.date+'"'):'')+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'');
+          var attrs=' data-cal="cell"'+(c.date?(' data-date="'+c.date+'"'):'')+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'');
           H+='<div'+attrs+' style="position:relative;border-right:1px solid #171c2b;border-bottom:1px solid #171c2b;padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
           if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
-          var complete=c.inMonth && typeof isDayComplete==='function' && isDayComplete(c.date);
-          if((isRest||complete) && c.inMonth){
+          var complete=!!c.date && typeof isDayComplete==='function' && isDayComplete(c.date);
+          if((isRest||complete) && c.date){
             H+='<div style="position:relative;width:22px;height:22px;border-radius:50%;background:#4ade80;color:#08210f;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center">'+c.d+'</div>';
           } else {
             H+='<div style="position:relative;font-size:12.5px;font-weight:'+(isToday?'800':'600')+';color:'+(!c.inMonth?'#39424f':(isToday?'#4ade80':'#c7d0dd'))+'">'+c.d+'</div>';
           }
-          if(c.inMonth && typeof _calMilestoneFlag_==='function'){ H+=_calMilestoneFlag_(c.date); }
+          if(c.date && typeof _calMilestoneFlag_==='function'){ H+=_calMilestoneFlag_(c.date); }
           if(isRest){
             H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
           } else {
