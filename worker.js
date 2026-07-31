@@ -16062,6 +16062,24 @@ function allRidesLegacy_(){
   });
   return out;
 }
+// WHICH library a surface is reading, in words, for the surface to print.
+//
+// The Calendar and Athlete Intelligence deliberately read different sets: the calendars and
+// Recent Activity are pinned to allRidesLegacy_ (every sport, from the device library) while the
+// AI page reads allRidesDeduped_, which serves the hand-uploaded /store_v2 snapshot plus the live
+// tail and is RIDE-TYPED. For July 2026 that is 24 activities / 1,770 TSS on one surface and 17 /
+// 1,670 on the other, from the same month — and over 90 days the AI set has FEWER activities but
+// MORE miles, so it is not even a subset. That gap is real and is not resolved here; what is fixed
+// is that it was invisible. Each surface now says what it counted, so two numbers that disagree
+// can be read as two different questions rather than one of them being broken.
+function dataSourceNote_(which){
+  var LEG='All activity types, from your device library.';
+  if(which==='legacy') return LEG;
+  var primed=false, n=0;
+  try{ primed=!!(typeof STORE_V2_READS!=='undefined' && STORE_V2_READS && typeof _storeV2Rides!=='undefined' && _storeV2Rides);
+       if(primed) n=_storeV2Rides.length; }catch(e){}
+  return primed ? ('Rides only, from the uploaded snapshot ('+n.toLocaleString()+' activities) plus rides synced since.') : LEG;
+}
 function recentRides_(n){
   // PINNED to the legacy path — Recent Activity shows every activity type, and
   // allRidesDeduped_ is now ride-typed. Migrate with the dashboard pass (Group E),
@@ -23258,6 +23276,9 @@ function aiRenderOverview_(container){
   // calendar years, and the looser phrasing sits two inches from "Real numbers only". _hdrYrs is a
   // span of calendar years by construction (max-min+1), so this names it for what it is.
   H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' calendar years of data. Real numbers only.</div>';
+  // Name the library. This page and the Calendar count different sets on purpose, and the totals
+  // therefore disagree for the same month — see dataSourceNote_.
+  H+='<div style="font-size:11px;color:#5b6678;margin-top:4px">'+dataSourceNote_('deduped')+'</div>';
   // tabs
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
@@ -27952,6 +27973,8 @@ function dsShowCalendar(){
     H+=statCard(FLAME,CAL.tss,totTSS,'TSS',(totTssUnknown?(totTssUnknown+' unscored'):'This Month'),CAL.tss);
     H+=statCard(PULSE,CAL.time,totAct,'Total Activities','This Month','#64748b');
     H+='</div>';
+    // Name the library these totals came from — see dataSourceNote_.
+    H+='<div style="font-size:10.5px;color:#5b6678;margin:-2px 2px 0;flex-shrink:0">'+dataSourceNote_('legacy')+'</div>';
 
     // ---- build week rows (prev/next month days shown faint) ----
     var cells=[];

@@ -371,6 +371,23 @@ try {
     fail('the Segment Attack model regressed (see above).');
   }
 
+  // ---- 25. Cross-surface agreement (Phase 0). Every bug that audit found was ONE fact computed
+  //          two ways and disagreeing on screen, with nothing to indicate anything was wrong: a
+  //          month total of 1,593,772 TSS, today's session showing tomorrow's after 8pm, three
+  //          different W/kg from three different invented bodyweights. None threw. This guards the
+  //          five categories — date identity, FTP/weight/goal sources, plan-vs-calendar, totals,
+  //          and honest failure — and is mutation-tested: reintroducing any of the eight original
+  //          bugs makes it fail.
+  console.log(`${D}· checking cross-surface agreement…${X}`);
+  try {
+    const so = execSync('node scripts/cross-surface-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('two surfaces disagree about the same fact again (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
