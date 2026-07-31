@@ -16,7 +16,9 @@ function ex(n){ const i=src.indexOf('function '+n+'('); if(i<0) throw new Error(
 function exv(n){ let j=src.indexOf('var '+n+'='); if(j<0) j=src.indexOf('var '+n+' ='); if(j<0) throw new Error('missing var '+n); return src.slice(j, src.indexOf('\n', j))+'\n'; }
 
 let code = exv('_SA_G') + exv('_SA_MIN_FIT') + exv('_SA_CDA_LO') + exv('_SA_DURS') + exv('_SA_SINUOUS') + exv('_SA_CONTEST_MIN');
-for (const f of ['_saPowerNeeded_','_saTailwindNeeded_','_saRho_','_saHeadwind_','_saPowerAt_','_saSolveV_','_saFitCdA_','_saSigma_','_saEvidence_','_saHaversineM_','_saSinuosity_',
+// dayKey_ is the canonical LOCAL day-key builder _saCapability_ now cuts its lookback with, in
+// place of toISOString (which lands a local-midnight Date on the previous day east of Greenwich).
+for (const f of ['dayKey_','_saPowerNeeded_','_saTailwindNeeded_','_saRho_','_saHeadwind_','_saPowerAt_','_saSolveV_','_saFitCdA_','_saSigma_','_saEvidence_','_saHaversineM_','_saSinuosity_',
                  '_saNormCdf_','_saCapability_','_saWindCall_','_saEvaluate_']) code += ex(f);
 const M = new Function(code + ';return {_saRho_,_saHeadwind_,_saPowerAt_,_saSolveV_,_saFitCdA_,_saSigma_,'
   + '_saNormCdf_,_saCapability_,_saWindCall_,_saEvaluate_,_saEvidence_,_saSinuosity_,_SA_MIN_FIT};')();

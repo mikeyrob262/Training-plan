@@ -9524,7 +9524,7 @@ function showSet(){
       var blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'});
       var a=document.createElement('a');
       a.href=URL.createObjectURL(blob);
-      a.download='mikey-training-backup-'+new Date().toISOString().slice(0,10)+'.json';
+      a.download='mikey-training-backup-'+dayKey_()+'.json';
       a.click();
     });
   }
@@ -9578,7 +9578,7 @@ function saveProfile(){
 function expData(){
   var blob=new Blob([JSON.stringify({v:1,d:st},null,2)],{type:'application/json'});
   var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');a.href=url;a.download='ej_backup_'+new Date().toISOString().split('T')[0]+'.json';
+  var a=document.createElement('a');a.href=url;a.download='ej_backup_'+dayKey_()+'.json';
   document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
   toast('Backup downloaded!');
 }
@@ -18045,7 +18045,7 @@ function _gcWkgPts_(days){
   if(typeof st==='undefined' || !st || !Array.isArray(st.weightLog)) return [];
   if(typeof ftpOn_!=='function') return [];
   var cut=null;
-  if(days>0){ var d=new Date(); d.setDate(d.getDate()-days); cut=d.toISOString().slice(0,10); }
+  if(days>0){ var d=new Date(); d.setDate(d.getDate()-days); cut=dayKey_(d); }
   var wl=st.weightLog.filter(function(w){
     var v=(w&&w.weight!=null)?parseFloat(w.weight):NaN;
     return w && w.date && isFinite(v) && v>0 && (!cut || String(w.date).slice(0,10)>=cut);
@@ -20272,7 +20272,7 @@ function _saCapability_(rides, durSec, days, todayYMD){
   var cut=null;
   if(days>0 && todayYMD){
     var d=new Date(todayYMD+'T00:00:00'); d.setDate(d.getDate()-days);
-    cut=d.toISOString().slice(0,10);
+    cut=dayKey_(d);
   }
   var best={}, any=false;
   (rides||[]).forEach(function(r){
@@ -28218,7 +28218,7 @@ function wkgTrend_(){
       var start=new Date(end); start.setDate(start.getDate()-42);
       var best=0;
       for(var i=0;i<raw.length;i++){ var d=new Date(raw[i].date); if(d>start && d<=end && raw[i].p>best) best=raw[i].p; }
-      if(best>0) pts.push({date:end.toISOString().slice(0,10), wkg:Math.round((best/kg)*100)/100});
+      if(best>0) pts.push({date:dayKey_(end), wkg:Math.round((best/kg)*100)/100});
     }
     if(pts.length>=2) return {source:'best 20-min power (42-day rolling)', pts:pts};
   }
@@ -28251,7 +28251,7 @@ function dsAttention_(){
   var inTaper=(_verdict.phase==='peaking') || (_nextRace && _nextRace.daysOut!=null && _nextRace.daysOut<=10);
   // Weekly TSS this vs last (real).
   function tssWin(d0,d1){ var c0=new Date(); c0.setDate(c0.getDate()-d0); var c1=new Date(); c1.setDate(c1.getDate()-d1);
-    var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10);
+    var s0=dayKey_(c0), s1=dayKey_(c1);
     return Math.round((st.rides||[]).filter(function(r){return r&&!r.deleted&&r.date&&r.date>s1&&r.date<=s0;}).reduce(function(s,r){return s+(constRideTSS_(r)||0);},0)); }
   var wkThis=tssWin(0,7), wkLast=tssWin(7,14);
   // Recovery / fatigue (TSB).
@@ -28481,7 +28481,7 @@ function openRecoveryEditor_(){
     // (one entry per day; today's overwrites an earlier same-day save).
     if(st.hrv!=null && st.restingHR!=null){
       if(!Array.isArray(st.recoveryLog)) st.recoveryLog=[];
-      var tk=(typeof getTodayKey==='function')?getTodayKey():new Date().toISOString().slice(0,10);
+      var tk=(typeof getTodayKey==='function')?getTodayKey():dayKey_();
       st.recoveryLog=st.recoveryLog.filter(function(x){return x&&x.date!==tk;});
       st.recoveryLog.push({date:tk, hrv:st.hrv, rhr:st.restingHR});
       if(st.recoveryLog.length>90) st.recoveryLog=st.recoveryLog.slice(-90);
@@ -29144,7 +29144,7 @@ function dsShowDashboard(){
   // "Optimal Range" marker (real: CTL is your sustainable daily load), plus the
   // real week-over-week change. Matches the reference chart.
   var maxDay=Math.max.apply(null,tssSeries.concat([1]));
-  var lastWeekTSS=0; (function(){ var c0=new Date(); c0.setHours(0,0,0,0); c0.setDate(c0.getDate()-7); var c1=new Date(c0); c1.setDate(c1.getDate()-7); var s0=c0.toISOString().slice(0,10), s1=c1.toISOString().slice(0,10); (st.rides||[]).forEach(function(r){ if(r&&!r.deleted&&r.date){ var kk=normDate(r.date); if(kk>s1&&kk<=s0) lastWeekTSS+=(constRideTSS_(r)||0); } }); })();
+  var lastWeekTSS=0; (function(){ var c0=new Date(); c0.setHours(0,0,0,0); c0.setDate(c0.getDate()-7); var c1=new Date(c0); c1.setDate(c1.getDate()-7); var s0=dayKey_(c0), s1=dayKey_(c1); (st.rides||[]).forEach(function(r){ if(r&&!r.deleted&&r.date){ var kk=normDate(r.date); if(kk>s1&&kk<=s0) lastWeekTSS+=(constRideTSS_(r)||0); } }); })();
   lastWeekTSS=Math.round(lastWeekTSS);
   var tlPct=lastWeekTSS>0?Math.round((weekTSS-lastWeekTSS)/lastWeekTSS*100):null;
   var optTarget=Math.round((fit.ctl||0)*1.3);
@@ -29482,16 +29482,13 @@ function dsInitProfile(){
   // in the app); outside it, fall back to the plan week. Either way the label says which.
   var pb=document.getElementById('ds-profile-badge');
   if(pb){
-    var _bw=null;
-    try{
-      if(typeof _BLOCK_START!=='undefined' && typeof _blockDay_==='function' && typeof _blockDaysBetween_==='function'){
-        var _bs=_blockDay_(_BLOCK_START), _td=new Date(); _td.setHours(0,0,0,0);
-        var _dd=_blockDaysBetween_(_bs, _td);
-        if(_dd>=0) _bw=Math.floor(_dd/7)+1;
-      }
-    }catch(e){}
+    // ONE block-week implementation. This used to recompute it inline off _BLOCK_START with no end
+    // bound, so once the block finishes on Nov 11 the badge would keep counting — "Block Wk 47" —
+    // while _blockWeekOf_, which every other surface uses, correctly returns 0 outside the window.
+    // Two implementations of the same number is exactly what this phase exists to remove.
+    var _bw=0; try{ if(typeof _blockWeekOf_==='function') _bw=_blockWeekOf_(new Date()); }catch(e){}
     var cw=(typeof getCurrentPlanWeek==='function')?getCurrentPlanWeek():1;
-    pb.textContent=(_bw!=null)?('Block Wk '+_bw):('Plan Wk '+cw);
+    pb.textContent=(_bw>0)?('Block Wk '+_bw):('Plan Wk '+cw);
   }
 }
 
@@ -33952,7 +33949,19 @@ function calWeekLabel_(dt){
 //   a real 52 from the Jul 28 VO2 ride.
 // Day keys are built from LOCAL parts: toISOString reads a local-midnight Date in UTC and lands on
 // the wrong day west of Greenwich, which would silently drop the ride at either end of the window.
-function _wkDayKey_(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+// THE day key. Built from LOCAL calendar parts, never toISOString.
+//
+// toISOString serialises the instant in UTC, so west of Greenwich a Date taken after 20:00 EDT
+// (19:00 EST) already reads as tomorrow: at 21:30 on Jul 31 2026, getTodayKey() is 2026-07-31 and
+// new Date().toISOString().slice(0,10) is 2026-08-01. Measured consequence — the same lookup that
+// returns "Threshold, Strength A" from the local key returns "Group Ride" from the ISO key, so
+// every evening the app quietly served the NEXT day's session, range cutoff and week window.
+// East of Greenwich the same call fails the other way, landing a local-midnight Date on the
+// previous day. Both directions are one bug: a calendar day is a local fact, and the only correct
+// way to name one is from local parts. The FIT importer has carried this note since ingest (see
+// result.date there); this is the same rule, hoisted to one function every caller shares.
+function dayKey_(d){ d=d||new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function _wkDayKey_(d){ return dayKey_(d); }
 function weekWindowMonSun_(now){
   var mon=now?new Date(now.getFullYear(),now.getMonth(),now.getDate()):new Date();
   mon.setHours(0,0,0,0);
@@ -36385,7 +36394,7 @@ function serviceComponent(bikeId, componentIndex){
   confirmBtn.addEventListener('click', function(){
     if(c.dueEvery != null){ c.milesSince = 0; }
     if(c.pct != null){ c.pct = 100; }
-    c.lastServiced = new Date().toISOString().slice(0,10);
+    c.lastServiced = dayKey_();
     sv();
     closeServiceModal();
     showBikeDetail(bikeId);
@@ -38219,7 +38228,7 @@ function renderOverviewContent(body, wxData, ftp, weight){
   var fullDayPoints=[]; // midnight-to-midnight today, for the scrollable Wind/Range charts
   if(hourly && hourly.time){
     var now=new Date();
-    var todayStr=now.toISOString().slice(0,10);
+    var todayStr=dayKey_(now);
     var candidates=[];
     for(var i=0;i<hourly.time.length;i++){
       var hourDate=new Date(hourly.time[i]);
@@ -39276,7 +39285,7 @@ function showWeatherHistory(){
     var day2=new Date(today);day2.setDate(today.getDate()+2);
     var day3=new Date(today);day3.setDate(today.getDate()+3);
 
-    function fmt(d){return d.toISOString().split('T')[0];}
+    function fmt(d){return dayKey_(d);}
     var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -39414,7 +39423,7 @@ function showWeatherHistory(){
     var s0=startHour,s1=Math.min(23,s0+durH);
 
     // Need 2 days of forecast if ride goes overnight or we want tomorrow
-    var today=new Date().toISOString().split('T')[0];
+    var today=dayKey_();
     var endDate=rideDate;
 
     fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon

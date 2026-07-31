@@ -23,7 +23,9 @@ function extract(name){ const i=src.indexOf('function '+name+'('); if(i<0) throw
 function extractVar(name){ const i=src.indexOf('var '+name+'='); if(i<0) throw new Error('var not found: '+name); return src.slice(i, src.indexOf('\n', i))+'\n'; }
 
 let code = extractVar('_GC_WKG') + extractVar('_YVY_MON');
-for (const f of ['_gcYMD_','_gcMonLab_','_gcSpark_','_gcSparkFoot_','_gcTrend_','_gcWkgPts_','_goalTargets_']) code += extract(f);
+// dayKey_ is the canonical LOCAL day-key builder _gcWkgPts_ now cuts its window with (it used to
+// call toISOString, which after 20:00 EDT names tomorrow and silently drops a day of weigh-ins).
+for (const f of ['dayKey_','_gcYMD_','_gcMonLab_','_gcSpark_','_gcSparkFoot_','_gcTrend_','_gcWkgPts_','_goalTargets_']) code += extract(f);
 const mk = (st, ftpOn) => new Function('st','ftpOn_', code + '\n;return {_gcWkgPts_,_gcTrend_,_goalTargets_,_GC_WKG};')(st, ftpOn);
 
 let fails=0;
