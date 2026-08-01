@@ -5162,6 +5162,15 @@ function backfillStravaCalories_(limit, done){
 }
 try{ if(typeof window!=='undefined') window.backfillStravaCalories_=backfillStravaCalories_; }catch(e){}
 try{ if(typeof window!=='undefined') window._zwoCoachV_=function(dk){ return _zwoCoachV_(dk); }; }catch(e){}
+// Console handles for the Zwift folder, so a stuck grant can be inspected and reset without the UI.
+try{ if(typeof window!=='undefined'){
+  window.zwiftPickFolder_=function(){ return zwiftPickFolder_(); };
+  window.zwiftForgetFolder_=function(){ return zwiftForgetFolder_(); };
+  window.zwiftCheckFolder_=function(){ return zwiftGetHandle_().then(function(h){
+    if(!h){ console.log('[zwift-dir] none set'); return null; }
+    return zwiftVerify_(h).then(function(v){ console.log('[zwift-dir] name="'+h.name+'" ok='+v.ok+' - '+v.why); return v; });
+  }); };
+} }catch(e){}
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
   if(!st.stravaToken && !st.stravaRefreshToken){ cb(null); return; }
   if(st.stravaRefreshToken){
@@ -24540,15 +24549,23 @@ function _coachVPanel_(now){
     // ceiling to hold), so the link simply is not offered rather than producing a file to ignore.
     var _cvz=(typeof _zwoFor_==='function')?_zwoFor_(cv.primary, dk):null;
     if(_cvz){
+      // Send-to-Zwift is the PRIMARY action once a folder is set; the download stays beside it as
+      // the fallback for another machine or browser. The button starts in the download state and is
+      // upgraded asynchronously — reading the stored handle is async, and blocking the panel's
+      // render on IDB to decide a label would stall the whole card.
       H+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
+        +'<div id="cv-zwo-row" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
         +'<div id="cv-zwo" onclick="if(window._zwoCoachV_)_zwoCoachV_(&#39;'+dk+'&#39;)" '
         +'style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+P+';cursor:pointer">'
         +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+P+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>'
-        +'Download for Zwift (.zwo)</div>'
-        +'<div style="font-size:10.5px;color:#5b6678;margin-top:5px;line-height:1.5">'
+        +'<span id="cv-zwo-label">Download for Zwift (.zwo)</span></div>'
+        +'<div id="cv-zwo-alt" style="display:none;font-size:11.5px;color:#5b6678;cursor:pointer;text-decoration:underline">Download instead</div>'
+        +'</div>'
+        +'<div id="cv-zwo-note" style="font-size:10.5px;color:#5b6678;margin-top:5px;line-height:1.5">'
           +_cvz.blocks+' block'+(_cvz.blocks===1?'':'s')+' &middot; '+_cvz.lo+'&ndash;'+_cvz.hi+'W at FTP '+_cvz.ftp
-          +'. Drop it in Documents&#92;Zwift&#92;Workouts&#92;&lt;your Zwift ID&gt;&#92; and it appears under Custom Workouts.</div>'
+          +'. <span id="cv-zwo-dest" style="cursor:pointer;text-decoration:underline">Set up one-click send to Zwift</span></div>'
         +'</div>';
+      try{ setTimeout(function(){ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dk); }, 0); }catch(e){}
     }
     H+='</div>';
   } else if(cv.primary){
@@ -25194,7 +25211,174 @@ function _zwoDownload_(dateKey, sid){
   var s=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, sid):null;
   _zwoEmit_(_zwoFor_(s, dateKey), dateKey, sid);
 }
+// ==================== Send to Zwift (File System Access API) ==========================
+// One-click delivery straight into Zwift's workout folder, instead of download-then-drag.
+//
+// THE FOLDER. Determined from Zwift's own logs on this machine, not from recency:
+//   Log.txt  "[INFO] Player ID: 4284972"  (every rotated log, no other id appears)
+//   Log.txt  "path C:/Users/.../AppData/Local/Zwift/Workouts/4284972/workouts.files"
+// (written with forward slashes ON PURPOSE: a backslash before a digit is a legacy octal escape,
+//  which this file cannot contain even inside a comment — the whole app is one template literal,
+//  and esbuild rejects the build. Cost one build to rediscover.)
+// Note %LOCALAPPDATA%, NOT Documents. Zwift moved off Documents; the Documents\Zwift tree on this
+// machine is dead (activities stop Jul 2024, logs Jan 2025) and is ALSO OneDrive-redirected, so
+// "Documents\Zwift\Workouts" resolves to three different places depending on how you ask. Two stale
+// player-id folders and an empty GUID folder live there, which is what made a previous attempt look
+// like it had worked. The picker cannot be given a path, so the athlete picks once and the handle is
+// persisted; everything below exists to make sure the handle still points somewhere real.
+var ZWIFT_DIR_KEY='zwiftWorkoutDir';
+var ZWIFT_EXPECT_ID='4284972';          // this machine's player id, per the logs above
+var ZWIFT_MARKER='workouts.files';      // a file ZWIFT writes — proof the folder is really Zwift's
+// Keyed IDB access over the SAME db/store the state cache uses (aiq/kv). A second database for one
+// handle would be a second thing to migrate, back up and reason about.
+function idbGetKey_(k){
+  return idbOpen_().then(function(db){ return new Promise(function(res,rej){
+    var tx=db.transaction(IDB_STORE,'readonly'), s=tx.objectStore(IDB_STORE), rq=s.get(k);
+    rq.onsuccess=function(){ res(rq.result||null); }; rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+function idbSetKey_(k,v){
+  return idbOpen_().then(function(db){ return new Promise(function(res,rej){
+    var tx=db.transaction(IDB_STORE,'readwrite'), s=tx.objectStore(IDB_STORE), rq=(v===null?s.delete(k):s.put(v,k));
+    rq.onsuccess=function(){ res(true); }; rq.onerror=function(){ rej(rq.error); };
+  }); });
+}
+// Every backslash here comes from fromCharCode(92). Writing them as escapes inside this file is the
+// documented trap: the whole app is served in ONE template literal, so a backslash before a closing
+// quote serves as an escaped quote and takes the entire script out at load.
+function _zwiftPathHint_(){ var BS=String.fromCharCode(92);
+  return 'AppData'+BS+'Local'+BS+'Zwift'+BS+'Workouts'+BS+ZWIFT_EXPECT_ID+BS; }
+function zwiftSupported_(){ try{ return typeof window!=='undefined' && typeof window.showDirectoryPicker==='function'; }catch(e){ return false; } }
+function zwiftGetHandle_(){ return idbGetKey_(ZWIFT_DIR_KEY).catch(function(){ return null; }); }
+function zwiftForgetFolder_(){ return idbSetKey_(ZWIFT_DIR_KEY,null).then(function(){
+  try{ if(typeof toast==='function') toast('Zwift folder forgotten'); }catch(e){}
+  try{ if(typeof _cvRepaint_==='function') _cvRepaint_(); }catch(e){} return true; }); }
+// A stored handle loses its permission grant across reloads. queryPermission first so an already-
+// granted handle is silent; request only when needed, and only from a click (the API requires a
+// user gesture, which is why this is never called on render).
+function zwiftPerm_(h){
+  if(!h || !h.queryPermission) return Promise.resolve(true);
+  return h.queryPermission({mode:'readwrite'}).then(function(p){
+    if(p==='granted') return true;
+    return h.requestPermission({mode:'readwrite'}).then(function(p2){ return p2==='granted'; });
+  }).catch(function(){ return false; });
+}
+// THE SAFETY CHECK. Runs before EVERY write, not just at pick time: a handle can outlive the folder
+// it pointed at, and writing a workout into the wrong directory fails silently — the file lands, the
+// app says "sent", and it never appears in Zwift. Two independent signals, either sufficient:
+//   name matches the known player id, or Zwift's own workouts.files is present.
+// Neither -> refuse and ask for a re-pick. A handle that merely EXISTS proves nothing.
+function zwiftVerify_(h){
+  if(!h) return Promise.resolve({ok:false, why:'no folder set'});
+  var byName=(String(h.name||'')===ZWIFT_EXPECT_ID);
+  return h.getFileHandle(ZWIFT_MARKER).then(function(){
+    return {ok:true, why:(byName?('folder '+h.name+' + '+ZWIFT_MARKER):(ZWIFT_MARKER+' present')), name:h.name, marker:true};
+  }).catch(function(){
+    if(byName) return {ok:true, why:'folder name is '+ZWIFT_EXPECT_ID+' (no '+ZWIFT_MARKER+' yet)', name:h.name, marker:false};
+    return {ok:false, why:'"'+(h.name||'?')+'" is not '+ZWIFT_EXPECT_ID+' and has no '+ZWIFT_MARKER, name:h.name, marker:false};
+  });
+}
+function zwiftPickFolder_(){
+  if(!zwiftSupported_()){ try{ uiAlert('This browser cannot write to a folder. Use the download and drag it in, or open the app in Chrome or Edge on the desktop.'); }catch(e){} return Promise.resolve(false); }
+  return window.showDirectoryPicker({id:'zwift-workouts', mode:'readwrite'}).then(function(h){
+    return zwiftPerm_(h).then(function(okPerm){
+      if(!okPerm){ try{ uiAlert('Write permission was not granted, so nothing was saved.'); }catch(e){} return false; }
+      return zwiftVerify_(h).then(function(v){
+        if(!v.ok){
+          // Path built with fromCharCode(92): a backslash immediately before a closing quote is
+          // served as an escaped quote and breaks the whole template literal.
+          try{ uiAlert('That does not look like your Zwift workouts folder — '+v.why+'.'+String.fromCharCode(10)+String.fromCharCode(10)
+            +'Pick this one instead:'+String.fromCharCode(10)+_zwiftPathHint_()); }catch(e){}
+          return false;
+        }
+        return idbSetKey_(ZWIFT_DIR_KEY,h).then(function(){
+          try{ if(typeof toast==='function') toast('Zwift folder set - '+v.why); }catch(e){}
+          try{ if(typeof _cvRepaint_==='function') _cvRepaint_(); }catch(e){}
+          return true;
+        });
+      });
+    });
+  }).catch(function(e){
+    if(e && e.name==='AbortError') return false;              // the athlete cancelled; not an error
+    try{ console.error('[zwift-dir] '+((e&&e.message)||e)); }catch(_e){}
+    return false;
+  });
+}
+// Write one .zwo. Re-verifies first, every time. Returns true only when the bytes actually landed.
+// Upgrade the Coach V export row once the stored handle is known. Runs after render because reading
+// IDB is async and the panel must not wait on it. Re-verifies rather than trusting that a handle
+// exists: a folder that no longer checks out should read as "needs re-picking", not as ready.
+function _zwoWireDest_(dk){
+  try{
+    var lab=document.getElementById('cv-zwo-label'), note=document.getElementById('cv-zwo-dest'),
+        alt=document.getElementById('cv-zwo-alt');
+    if(!lab||!note) return;
+    if(!zwiftSupported_()){
+      note.outerHTML='<span style="color:#5b6678">Drop it in '+_zwiftPathHint_()+' and it appears under Custom Workouts.</span>';
+      return;
+    }
+    note.onclick=function(ev){ try{ ev.stopPropagation(); }catch(e){} zwiftPickFolder_(); };
+    if(alt) alt.onclick=function(ev){ try{ ev.stopPropagation(); }catch(e){}
+      var s=null; try{ var cv=coachV_(dk,new Date()); s=cv&&cv.primary; }catch(e){}
+      _zwoDownloadFile_(_zwoFor_(s,dk), dk, 'cv'); };
+    zwiftGetHandle_().then(function(h){
+      if(!h) return;                                  // stays "Download" + the set-up link
+      return zwiftVerify_(h).then(function(v){
+        if(!v.ok){
+          note.textContent='Zwift folder needs re-picking - '+v.why;
+          note.style.color='#f59e0b';
+          return;
+        }
+        lab.textContent='Send to Zwift';
+        if(alt) alt.style.display='inline';
+        note.textContent='Goes straight into '+(v.name||ZWIFT_EXPECT_ID)+' - change folder';
+      });
+    });
+  }catch(e){ try{ console.error('[zwo-wire] '+((e&&e.message)||e)); }catch(_e){} }
+}
+function zwiftSendFile_(z){
+  return zwiftGetHandle_().then(function(h){
+    if(!h) return {sent:false, reason:'no-folder'};
+    return zwiftPerm_(h).then(function(okPerm){
+      if(!okPerm) return {sent:false, reason:'permission'};
+      return zwiftVerify_(h).then(function(v){
+        if(!v.ok) return {sent:false, reason:'verify', why:v.why};
+        return h.getFileHandle(z.filename,{create:true})
+          .then(function(fh){ return fh.createWritable(); })
+          .then(function(w){ return w.write(z.xml).then(function(){ return w.close(); }); })
+          .then(function(){ return {sent:true, why:v.why}; });
+      });
+    });
+  }).catch(function(e){ try{ console.error('[zwift-send] '+((e&&e.message)||e)); }catch(_e){} return {sent:false, reason:'error', why:(e&&e.message)||String(e)}; });
+}
+// Send-to-Zwift when a verified folder is set; download otherwise. The download path is NOT removed
+// — it is the fallback for another machine, another browser, or a folder that stops verifying.
 function _zwoEmit_(z, dateKey, sid){
+  if(!z){ try{ if(typeof toast==='function') toast('No ERG target for this session'); }catch(e){} return; }
+  if(zwiftSupported_()){
+    zwiftGetHandle_().then(function(h){
+      if(!h){ _zwoDownloadFile_(z, dateKey, sid); return; }
+      zwiftSendFile_(z).then(function(r){
+        if(r.sent){
+          try{ console.log('[zwo] SENT '+z.filename+' -> Zwift ('+r.why+')'); }catch(e){}
+          try{ if(typeof toast==='function') toast('Sent to Zwift - '+z.filename); }catch(e){}
+          return;
+        }
+        // Never fail silently into a download the athlete did not ask for: say WHY the folder was
+        // refused, then fall back so the workout still reaches them.
+        try{ console.warn('[zwo] send refused ('+r.reason+(r.why?': '+r.why:'')+') - falling back to download'); }catch(e){}
+        if(r.reason==='verify' || r.reason==='permission'){
+          try{ uiAlert('Could not write to your Zwift folder - '+(r.why||r.reason)+'.'+String.fromCharCode(10)+String.fromCharCode(10)
+            +'Downloading the file instead. Re-pick the folder from the Coach V card to fix it.'); }catch(e){}
+        }
+        _zwoDownloadFile_(z, dateKey, sid);
+      });
+    });
+    return;
+  }
+  _zwoDownloadFile_(z, dateKey, sid);
+}
+function _zwoDownloadFile_(z, dateKey, sid){
   try{
     try{ console.log('[zwo] build for '+dateKey+' '+(sid||'')+' -> '
       +(z?('OK '+z.filename+'  blocks='+z.blocks+'  band '+z.lo+'-'+z.hi+'W @ FTP '+z.ftp
