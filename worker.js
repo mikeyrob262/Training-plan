@@ -29705,7 +29705,11 @@ function dsShowCalendar(){
     return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:14px">'
       +'<div style="width:44px;height:44px;flex-shrink:0;border-radius:11px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="display:flex;align-items:baseline;gap:7px">'
+      // wrap, not nowrap-and-clip: at 1280-1366 the number + label + right-hand text do not fit on
+      // one line, and the label was the thing that lost. Letting the right-hand value drop to a
+      // second line keeps every label readable at every desktop width instead of trading which one
+      // gets cut.
+      +'<div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap">'
       +'<span style="font-size:23px;font-weight:800;color:var(--d-head);line-height:1">'+big+'</span>'
       +'<span style="font-size:12.5px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span>'
       +(right?'<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:'+(rightCol||'#94a3b8')+';white-space:nowrap">'+right+'</span>':'')
