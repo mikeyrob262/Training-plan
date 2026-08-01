@@ -5206,7 +5206,7 @@ try{ if(typeof window!=='undefined') window.backfillStravaCalories_=backfillStra
 // itself. The result is unbounded recursion on the first call: "RangeError: Maximum call stack size
 // exceeded", thrown before the real body ever runs. Shipped here twice — it made the Zwift folder
 // picker do nothing (the click never reached showDirectoryPicker) and had silently broken the
-// Coach V .zwo button the same way.
+// Dr. Smurkel .zwo button the same way.
 // Direct assignment is safe because the right-hand side is evaluated before the property is
 // overwritten. A wrapper is only safe over a LOCAL captured first, which is what checkFolder does.
 try{ if(typeof window!=='undefined'){
@@ -8320,7 +8320,7 @@ function planCardHTML_(s, dateKey){
 //
 // Deliberately does NOT reschedule the displaced session. The block's rule is explicit — a missed
 // session does not move to Sunday, the week fails its own rule and starts clean Monday — so quietly
-// relocating Strength B would contradict the one thing the block is strict about. Coach V states
+// relocating Strength B would contradict the one thing the block is strict about. Dr. Smurkel states
 // the cost in the recommendation instead of hiding it here.
 function swapToStrengthC_(dateKey, sessId){
   try{
@@ -8380,7 +8380,7 @@ function swapRideTo_(dateKey, defKey, sessId){
 // Direct assignment — window.f=function(){return f();} is infinite recursion in a classic script.
 try{ if(typeof window!=='undefined'){ window.swapRideTo_=swapRideTo_; } }catch(e){}
 
-// Coach V: should today's lower-body session become Strength C to protect the legs?
+// Dr. Smurkel: should today's lower-body session become Strength C to protect the legs?
 //
 // Returns null unless every condition holds, and the sentence NAMES the evidence rather than
 // asserting a feeling — the same standard the rest of the panel is held to. Three real signals:
@@ -14692,7 +14692,7 @@ function fitnessSeries_(){
 //   3. nothing — zeros with source:'none' and stale:true, so a caller can say "not loaded"
 //      instead of rendering an invented number.
 // There is deliberately no local fallback. A wrong CTL/ATL is worse than an absent one: it drives
-// the attention panel, Coach V and the readiness gauge, and it looked authoritative while being
+// the attention panel, Dr. Smurkel and the readiness gauge, and it looked authoritative while being
 // wrong for weeks.
 function getFitness_(){
   var series=[]; try{ series=fitnessSeries_()||[]; }catch(e){ series=[]; }
@@ -23850,7 +23850,7 @@ function generateBlockPlan_(){
   }catch(e){ try{ console.log('[blockGen] err', e&&e.message); }catch(_e){} return {error:String(e&&e.message||e)}; }
 }
 
-// ==================== Coach V (Part 6 — core) ====================
+// ==================== Dr. Smurkel (Part 6 — core) ====================
 // Athlete IQ's coaching voice: direct, no fluff, block-aware, and derived from data only. Everything
 // here comes from st.trainingBlock (blockPlanFor_), the fitness model (getFitness_), the milestone
 // dates (_blockNextMilestone_) and ftpHistory. NOTHING is invented — a form line only appears when
@@ -24062,7 +24062,7 @@ function _cvFtp_(now){
   }
   return '';
 }
-// PURE. The full Coach V read for a given day. Null outside the block.
+// PURE. The full Dr. Smurkel read for a given day. Null outside the block.
 // The honest thing to say when a week slips: the internal gates slide, the real events do not, and
 // the gap between them changes. Empty when nothing has slid.
 function _cvSlide_(now){
@@ -24103,7 +24103,7 @@ function hrvBaseline_(asOfKey){
   }
   return out;
 }
-// Coach V's HRV readiness line. Gate (per the build brief):
+// Dr. Smurkel's HRV readiness line. Gate (per the build brief):
 //   < 14 accumulated days -> "Establishing baseline - N of 14 days" (count only, no verdict).
 //   >= 14 days            -> readiness vs the rolling baseline (within / above / below ~1 SD).
 //   automated null today  -> fall back to a manual st.recoveryLog entry for the SAME date, labelled.
@@ -24149,7 +24149,7 @@ function _cvHrv_(now){
 // and there is no positive reinforcement here.
 //
 // NO FABRICATION: the day is looked up in st.nl DIRECTLY before nutritionForDate is called, because
-// nutritionForDate goes through getNDay(), which CREATES an empty day shell on read. Coach V is a
+// nutritionForDate goes through getNDay(), which CREATES an empty day shell on read. Dr. Smurkel is a
 // read-only observer of the food log and must not manufacture days the athlete never opened. Key
 // dialect is tolerated both ways (padded and legacy unpadded) so a Plan-page open before the
 // nutrition migration has run can't read an existing log as an empty one and flag it falsely.
@@ -24305,7 +24305,7 @@ function _cvYesterday_(dateKey){
   var line=(acts.length===1)?_cvYesterdayLine_(acts[0]):_cvYesterdayMulti_(acts);
   return line?{line:line, sport:acts[0].sport, n:acts.length}:null;
 }
-// ==================== Coach V post-session debrief ====================
+// ==================== Dr. Smurkel post-session debrief ====================
 // Reads ONLY what the app already holds: the prescription from blockPlanFor_, the recorded ride
 // from st.rides, the FTP in force on that date, and the same intent from the prior week. No
 // Intervals.icu dependency — that endpoint serves auto-detected power surges, not the prescribed
@@ -24607,7 +24607,7 @@ function coachV_(dateKey, now){
     fuel:(typeof _cvFuel_==='function')?_cvFuel_(dateKey, intent, done):[],
     expect:(intent&&_CV_EXPECT[intent])||'',
     form:primary?_cvForm_(intent, tsb):'',
-    // Proactive leg-protection swap. Null on every day the conditions do not hold — Coach V is
+    // Proactive leg-protection swap. Null on every day the conditions do not hold — Dr. Smurkel is
     // supposed to catch this, not wait to be asked.
     protect:(typeof _cvProtectLegs_==='function')?_cvProtectLegs_(dateKey, now):null,
     milestone:_cvMilestone_(now),
@@ -24617,7 +24617,7 @@ function coachV_(dateKey, now){
     tsb:tsb
   };
 }
-// The Coach V panel — one shared renderer, mounted on the Plan page by BOTH desktop and mobile.
+// The Dr. Smurkel panel — one shared renderer, mounted on the Plan page by BOTH desktop and mobile.
 function _coachVPanel_(now){
   now=now||new Date();
   var dk=(typeof _tbDK_==='function')?_tbDK_(new Date(now.getFullYear(),now.getMonth(),now.getDate())):null;
@@ -24630,9 +24630,9 @@ function _coachVPanel_(now){
   // identity + milestone voice
   H+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">'
     +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:'+P+'">V</span>'
-    +'<div><div style="font-size:13px;font-weight:800;color:var(--d-head)">Coach V</div>'
+    +'<div><div style="font-size:13px;font-weight:800;color:var(--d-head)">Dr. Smurkel</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim)">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
-  // Yesterday recap sits above the milestone voice — it is the most recent fact Coach V has, and it
+  // Yesterday recap sits above the milestone voice — it is the most recent fact Dr. Smurkel has, and it
   // only ever renders when today has nothing logged against it (coachV_ gates that).
   if(cv.yesterday && cv.yesterday.line){
     H+='<div style="font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid var(--d-chip);overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
@@ -25355,8 +25355,8 @@ function _zwoEsc_(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c)
 function _zwoPwr_(w, ftp){ return (ftp>0 && w>0) ? (Math.round(w/ftp*1000)/1000) : null; }
 // TWO session shapes reach this builder and they nest differently:
 //   st.plan  (session-detail sheet) -> { type, intent, name, targets, block:{ struct } }
-//   blockPlanFor_ (Coach V)         -> { intent, struct, rx:{ type, name, targets } }
-// Reading only the first is why the export produced nothing for a Coach V session. Normalise once.
+//   blockPlanFor_ (Dr. Smurkel)         -> { intent, struct, rx:{ type, name, targets } }
+// Reading only the first is why the export produced nothing for a Dr. Smurkel session. Normalise once.
 function _zwoSession_(s){
   if(!s) return null;
   var rx=s.rx||s;
@@ -25475,7 +25475,7 @@ function _zwoFor_(s0, dateKey){
              ftp:Math.round(ftp), lo:Math.round(lo), hi:Math.round(hi), blocks:blocks.length };
   }catch(e){ try{ console.error('[zwo] '+((e&&e.message)||e)); }catch(_e){} return null; }
 }
-// Coach V holds the blockPlanFor_ session for today; the sheet holds the st.plan one. Both end up
+// Dr. Smurkel holds the blockPlanFor_ session for today; the sheet holds the st.plan one. Both end up
 // here, so the file a rider gets is identical whichever card they pressed.
 function _zwoDownloadSession_(s, dateKey){ _zwoEmit_(_zwoFor_(s, dateKey), dateKey, 'cv'); }
 function _zwoCoachV_(dateKey){
@@ -25581,10 +25581,10 @@ function zwiftPickFolder_(){
   });
 }
 // Write one .zwo. Re-verifies first, every time. Returns true only when the bytes actually landed.
-// Upgrade the Coach V export row once the stored handle is known. Runs after render because reading
+// Upgrade the Dr. Smurkel export row once the stored handle is known. Runs after render because reading
 // IDB is async and the panel must not wait on it. Re-verifies rather than trusting that a handle
 // exists: a folder that no longer checks out should read as "needs re-picking", not as ready.
-// hostId lets EVERY export host share this: the Coach V card (today), the session-detail sheet, and
+// hostId lets EVERY export host share this: the Dr. Smurkel card (today), the session-detail sheet, and
 // the day editor the calendar opens for any other day. Loading NEXT Tuesday's VO2 into Zwift is the
 // actual use case, and it was unreachable while this only existed on today's card.
 // ONE export block, built from _zwoFor_ and rendered by every host. Returns '' when the session has
@@ -25681,7 +25681,7 @@ function _zwoEmit_(z, dateKey, sid){
         try{ console.warn('[zwo] send refused ('+r.reason+(r.why?': '+r.why:'')+') - falling back to download'); }catch(e){}
         if(r.reason==='verify' || r.reason==='permission'){
           try{ uiAlert('Could not write to your Zwift folder - '+(r.why||r.reason)+'.'+String.fromCharCode(10)+String.fromCharCode(10)
-            +'Downloading the file instead. Re-pick the folder from the Coach V card to fix it.'); }catch(e){}
+            +'Downloading the file instead. Re-pick the folder from the Dr. Smurkel card to fix it.'); }catch(e){}
         }
         _zwoDownloadFile_(z, dateKey, sid);
       });
@@ -25771,7 +25771,247 @@ function openSessionOrEditor_(dateKey, sid){
 // check; the single "Mark session complete" button is inert until every step is checked. Marking
 // complete links a recorded ride for the day when one exists (ride-verified, the same evidence the
 // consistency ring reads) and otherwise records an honest self-report that does NOT feed that count.
-// ==================== Coach V — post-ride interval debrief (piece 3) ====================
+// ==================== Dr. Smurkel — FULL post-activity debrief ====================
+//
+// The rule-based _cvDebrief_ answers "did you hit the band". This answers the question the athlete
+// actually asks after a session: what did that do to me, where does it sit in the week, and what
+// happens next. All of it already existed in the app and none of it was reaching the model — the
+// old prompt carried the ride's own numbers and nothing else, which is why the verdict could only
+// ever be a pass/fail band check.
+//
+// EVERY field is nullable and every null stays null. The anti-fabrication rule is the whole point:
+// a debrief that invents a cadence or asserts a zone split it did not measure is worse than one
+// that says the figure was not recorded (see the elevation-gain lesson in the prompt FACTS block).
+function _smNum_(v){ var n=parseFloat(v); return isFinite(n)?n:null; }
+function _smZones_(r, ftp){
+  try{
+    var zt=(typeof rideZoneTime_==='function')?rideZoneTime_(r, ftp):null;
+    if(!zt || !zt.z) return null;
+    var tot=zt.z.reduce(function(s,x){ return s+(x||0); }, 0);
+    if(!(tot>0)) return null;
+    var lbl=['Z1 recovery','Z2 endurance','Z3 tempo','Z4 threshold','Z5+ VO2 and above'];
+    return { src:zt.src, total:tot,
+      parts:zt.z.map(function(sec,i){ return { zone:lbl[i], secs:Math.round(sec||0), pct:Math.round((sec||0)/tot*100) }; })
+        .filter(function(x){ return x.secs>0; }) };
+  }catch(e){ return null; }
+}
+// Notable efforts from the device laps: what the athlete would actually recognise from the ride.
+// Laps under a minute are noise on a long ride, so they are dropped rather than listed.
+function _smLaps_(r, ftp){
+  try{
+    var laps=r && r.laps;
+    if(!Array.isArray(laps) || laps.length<2) return null;
+    var out=[];
+    laps.forEach(function(lp){
+      if(!lp) return;
+      var t=(lp.time!=null)?+lp.time:((lp.elapsed!=null)?+lp.elapsed:0);
+      var w=(lp.avgPwr!=null)?+lp.avgPwr:NaN;
+      if(!(t>=60) || !(w>0)) return;
+      var z=null;
+      if(ftp>0){ var p=w/ftp; z=(p<0.56)?'Z1':(p<0.76)?'Z2':(p<0.91)?'Z3':(p<1.06)?'Z4':'Z5+'; }
+      out.push({ secs:Math.round(t), w:Math.round(w), zone:z });
+    });
+    if(!out.length) return null;
+    // The hardest efforts and the longest sustained blocks are the two things worth naming.
+    var byPower=out.slice().sort(function(a,b){ return b.w-a.w; }).slice(0,4);
+    var byTime=out.slice().sort(function(a,b){ return b.secs-a.secs; }).slice(0,3);
+    return { count:out.length, hardest:byPower, longest:byTime };
+  }catch(e){ return null; }
+}
+function _smurkelContext_(dateKey, ride){
+  var C={ dateKey:dateKey };
+  try{
+    var prof=(typeof _actProfile_==='function')?_actProfile_(ride):{noun:'ride', cyclingPower:true};
+    var ftp=(typeof ftpOn_==='function')?_smNum_(ftpOn_(dateKey)):_smNum_(st && st.ftp);
+    var secs=(typeof _durSec_==='function')?_durSec_(ride):null;
+    var np=_smNum_(ride.np), avg=_smNum_(ride.avgPwr);
+    C.noun=prof.noun; C.cyclingPower=!!prof.cyclingPower; C.ftp=ftp;
+    C.act={
+      name:ride.name||null, date:String(ride.date||'').slice(0,10),
+      miles:_smNum_(ride.distance), duration:ride.duration||null, secs:secs||null,
+      tss:(typeof constRideTSS_==='function')?constRideTSS_(ride):_smNum_(ride.tss),
+      np:np, avg:avg, ftp:ftp,
+      IF:(np!=null&&ftp>0)?Math.round(np/ftp*100)/100:null,
+      VI:(np!=null&&avg>0)?Math.round(np/avg*100)/100:null,
+      cadence:_smNum_(ride.cadence!=null?ride.cadence:ride.avgCadence),
+      avgHR:_smNum_(ride.avgHR), maxHR:_smNum_(ride.maxHR),
+      pctMaxHR:(function(){ var h=_smNum_(ride.avgHR), m=_smNum_(st && st.maxHR)||172; return (h>0&&m>0)?Math.round(h/m*100):null; })(),
+      elevGain:(typeof _actElevGain_==='function')?_actElevGain_(ride):null,
+      pace:ride.pace||null
+    };
+    C.zones=C.cyclingPower?_smZones_(ride, ftp):null;
+    C.laps=C.cyclingPower?_smLaps_(ride, ftp):null;
+    // The prescription, and whether the athlete claimed the day themselves.
+    try{
+      var rx=(typeof _ridePrescriptionFor_==='function')?_ridePrescriptionFor_(ride):null;
+      C.rx=rx?{ name:rx.name, intent:rx.intent, lo:rx.lo, hi:rx.hi, zone:rx.zone, rules:rx.rules }:null;
+      var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+      C.swapped=!!(bp && bp.via==='user');
+      C.blockWeek=bp?bp.weekInPhase:null; C.phase=bp?bp.phaseLabel:null;
+      if(rx && typeof _blockWorkMeasure_==='function' && rx.intent){
+        var wm=_blockWorkMeasure_(ride, dateKey, rx.intent);
+        C.workIntervals=wm?{ vals:wm.vals, lo:wm.lo, hi:wm.hi, source:wm.source }:null;
+      }
+    }catch(e){}
+    // Fitness — the single source, plus whether this is the block's high-water mark.
+    try{
+      var f=(typeof getFitness_==='function')?getFitness_():null;
+      C.fitness=f?{ ctl:f.ctl, atl:f.atl, tsb:f.tsb, ramp:f.ramp, loaded:f.loaded }:null;
+      var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+      if(f && f.loaded && series.length){
+        var peak=0; series.forEach(function(p){ if((p.ctl||0)>peak) peak=p.ctl; });
+        C.fitness.ctlIsBlockHigh=(f.ctl>=Math.round(peak));
+        C.fitness.ctlPeakSeen=Math.round(peak);
+      }
+    }catch(e){}
+    // The week this session sits in: TSS per day, named, plus the total.
+    try{
+      var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+      try{ if(typeof getRuns==='function') all=all.concat(getRuns()); }catch(e){}
+      var d=(typeof _blockDay_==='function')?_blockDay_(dateKey):new Date(dateKey+'T00:00:00');
+      var wl=(typeof weekLoadMonSun_==='function')?weekLoadMonSun_(all, d):null;
+      if(wl){
+        var DN=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        C.week={ total:wl.tss, acts:wl.acts, days:wl.days.map(function(k,i){
+          var names=(all||[]).filter(function(r){ return r && !r.deleted && (typeof normDate==='function'?normDate(r.date):String(r.date).slice(0,10))===k; })
+            .map(function(r){ return r.name||'activity'; });
+          return { day:DN[i], date:k, tss:Math.round(wl.tssByDay[k]||0), activities:names };
+        }) };
+      }
+      // Which of the block's three required sessions happened this week.
+      if(typeof _blockWeekAssess_==='function'){
+        var wa=_blockWeekAssess_(all, ftp||186, d);
+        C.weekCheck={ pass:wa.pass, tss:wa.tss, distinctDays:wa.distinctCount,
+          sessions:wa.checks.map(function(c){ return { name:c.label, done:c.done, met:c.ok, detail:c.val||null, how:c.cond||null }; }) };
+      }
+      // Is tomorrow a rest day in the plan?
+      if(typeof blockPlanFor_==='function' && d){
+        var tmr=(typeof _tbDK_==='function')?_tbDK_(new Date(d.getTime()+86400000)):null;
+        var tb=tmr?blockPlanFor_(tmr):null;
+        C.tomorrow=tb&&tb.sessions?tb.sessions.map(function(s){ return s.intent; }):null;
+      }
+    }catch(e){}
+  }catch(e){}
+  return C;
+}
+
+// Render the context as FACTS the model may quote, with unknowns named as unknown rather than
+// dropped — a missing line reads as "not applicable", a line that says "not recorded" cannot be
+// mistaken for zero.
+function _smurkelFacts_(C){
+  var L=[], a=C.act||{}, NL=String.fromCharCode(10);
+  var n=function(v,suf,dp){ if(v==null) return 'not recorded'; var x=(dp!=null)?(Math.round(v*Math.pow(10,dp))/Math.pow(10,dp)):Math.round(v); return x+(suf||''); };
+  L.push('ACTIVITY: '+(a.name||'unnamed')+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
+  L.push('  distance '+n(a.miles,' mi',1)+', time '+(a.duration||'not recorded')+', TSS '+n(a.tss)+'.');
+  if(C.cyclingPower){
+    L.push('  NP '+n(a.np,'W')+', average power '+n(a.avg,'W')+', FTP '+n(a.ftp,'W')
+      +', IF '+n(a.IF,'',2)+', variability index '+n(a.VI,'',2)+'.');
+    if(a.np!=null && a.ftp>0) L.push('  NP is '+Math.round(a.np/a.ftp*100)+'% of FTP.');
+  } else if(a.pace){ L.push('  pace '+a.pace+' per mile. Running power is NOT comparable to cycling FTP.'); }
+  L.push('  cadence '+n(a.cadence,' rpm')+', average HR '+n(a.avgHR,' bpm')
+    +(a.pctMaxHR!=null?(' ('+a.pctMaxHR+'% of max HR)'):'')+', elevation gain '+n(a.elevGain,' ft')+'.');
+  if(C.rx){
+    L.push('PRESCRIPTION: '+C.rx.name+(C.rx.lo!=null&&C.rx.hi!=null?(', target band '+C.rx.lo+'-'+C.rx.hi+'W'):', no specific power band')
+      +(C.rx.zone?(' ('+C.rx.zone+')'):'')+'.');
+    if(C.rx.rules) L.push('  execution rules: '+C.rx.rules);
+    if(C.swapped) L.push('  NOTE: the athlete swapped this session themselves — it is what they chose to do, not a deviation from the plan.');
+  } else { L.push('PRESCRIPTION: none on file for this date.'); }
+  if(C.workIntervals && C.workIntervals.vals && C.workIntervals.vals.length){
+    L.push('WORK INTERVALS (measured from '+(C.workIntervals.source==='laps'?'device laps':'the power stream')+'): '
+      +C.workIntervals.vals.map(function(v,i){ return '#'+(i+1)+' '+v+'W'; }).join(', ')
+      +' against a '+C.workIntervals.lo+'-'+C.workIntervals.hi+'W band. The whole-ride average INCLUDES warm-up, recoveries and cool-down and is NOT the prescribed effort.');
+  }
+  if(C.zones){
+    L.push('TIME IN ZONE (from '+C.zones.src+'):');
+    C.zones.parts.forEach(function(p){ L.push('  '+p.zone+': '+Math.round(p.secs/60)+' min ('+p.pct+'%)'); });
+  } else { L.push('TIME IN ZONE: not available for this activity.'); }
+  if(C.laps){
+    L.push('NOTABLE EFFORTS (device laps over a minute; '+C.laps.count+' qualifying):');
+    C.laps.hardest.forEach(function(x){ L.push('  hardest: '+Math.round(x.secs/60)+'m'+(x.secs%60)+'s at '+x.w+'W'+(x.zone?(' '+x.zone):'')); });
+    C.laps.longest.forEach(function(x){ L.push('  longest: '+Math.round(x.secs/60)+'m'+(x.secs%60)+'s at '+x.w+'W'+(x.zone?(' '+x.zone):'')); });
+  }
+  if(C.fitness && C.fitness.loaded){
+    L.push('FITNESS: Fitness (CTL) '+C.fitness.ctl+', Fatigue (ATL) '+C.fitness.atl+', Form (TSB) '+(C.fitness.tsb>0?'+':'')+C.fitness.tsb+'.');
+    if(C.fitness.ctlIsBlockHigh) L.push('  this Fitness figure is the highest recorded in the series so far.');
+  } else { L.push('FITNESS: not loaded — do not state CTL, ATL or Form.'); }
+  if(C.blockWeek) L.push('BLOCK: week '+C.blockWeek+(C.phase?(' of the '+C.phase+' phase'):'')+'.');
+  if(C.week){
+    L.push('THIS WEEK (Mon-Sun), TSS by day:');
+    C.week.days.forEach(function(d){ L.push('  '+d.day+': '+d.tss+' TSS'+(d.activities.length?(' — '+d.activities.join('; ')):' — nothing logged')); });
+    L.push('  week total: '+C.week.total+' TSS across '+C.week.acts+' activities.');
+  }
+  if(C.weekCheck){
+    L.push('THE BLOCK REQUIRES three quality sessions a week, on three separate days. This week:');
+    C.weekCheck.sessions.forEach(function(s){
+      L.push('  '+s.name+': '+(s.done?(s.met?'done and met its condition':'done but did NOT meet its condition'):'NOT DONE')
+        +(s.detail?(' ('+s.detail+')'):''));
+    });
+    L.push('  clean week: '+(C.weekCheck.pass?'yes':'no')+'; sessions on '+C.weekCheck.distinctDays+' separate days.');
+  }
+  if(C.tomorrow) L.push('TOMORROW is prescribed: '+(C.tomorrow.length?C.tomorrow.join(', '):'nothing')+'.');
+  return L.join(NL);
+}
+var _SM_PERSONA='You are Dr. Smurkel, this athlete profile: a direct, warm, funny endurance coach who has '
+  +'been following this athlete all block. You are blunt about fatigue and generous about real work. You use '
+  +'the occasional emoji and the occasional joke, never more than one per section. You never pad.';
+// The full debrief. Cached on the prompt hash exactly like the ride insight, so a completed session
+// settles on ONE reading — the numbers behind it cannot change unless the ride or the week changes,
+// and if they do the hash changes and it regenerates.
+function fetchSmurkelDebrief_(dateKey, ride, callback){
+  var C, facts;
+  try{ C=_smurkelContext_(dateKey, ride); facts=_smurkelFacts_(C); }
+  catch(e){ callback('Could not assemble the debrief.', null); return; }
+  var NL=String.fromCharCode(10);
+  var prompt=_SM_PERSONA+NL+NL
+    +'Here is everything known about the session just completed and the week around it.'+NL+facts+NL+NL
+    +'Write the post-session debrief. Rules that override any instinct to be encouraging:'+NL
+    +'- Use ONLY the figures above. Never invent one, never round a "not recorded" to zero, never infer '
+      +'a number from another number. If something was not recorded, either say so or leave it out.'+NL
+    +'- Do not describe terrain, weather or how it felt. You were not there and none of that is above.'+NL
+    +'- If a prescription is on file, judge against THAT intent. If WORK INTERVALS are given, they are the '
+      +'prescribed effort — never call the session short because the whole-ride average sits under the band.'+NL
+    +'- Be specific. "Solid effort" is worthless; "47 minutes at 135W is real aerobic base work" is the job.'+NL+NL
+    +'Structure it with short bold-style section headings on their own lines, in this order, skipping any '
+    +'section you have no data for:'+NL
+    +'1. A title line: the activity name and a one-line riff on it. One emoji allowed.'+NL
+    +'2. The Honest Assessment — what the effort actually was, with the key numbers, each marked with a tick '
+      +'when it is where it should be.'+NL
+    +'3. The Zone Breakdown — where the time went, and the notable efforts by name.'+NL
+    +'4. The Form Picture — Fitness/Fatigue/Form, the week TSS by day as a short list, and what that total means.'+NL
+    +'5. Week Scorecard — the three required sessions, each ticked or crossed. Name any that is missing and '
+      +'say when it should go next week.'+NL
+    +'6. Bottom Line — two sentences maximum, and the one thing to do next.'+NL+NL
+    +'Plain text, no markdown asterisks. Around 300-400 words.';
+  var key=_ciHash_(prompt);
+  var hit=_ciGet_(key);
+  if(hit!=null){ callback(null, hit); return; }
+  if(_CI_INFLIGHT[key]){ _CI_INFLIGHT[key].push({cb:callback}); return; }
+  _CI_INFLIGHT[key]=[{cb:callback}];
+  var settle=function(err, text){
+    var waiting=_CI_INFLIGHT[key]||[]; delete _CI_INFLIGHT[key];
+    if(!err && text) _ciPut_(key, text);
+    waiting.forEach(function(w){ try{ w.cb(err, err?null:text); }catch(e){} });
+  };
+  var ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  var to=setTimeout(function(){ if(ac) ac.abort(); }, 30000);
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:1400, messages:[{role:'user',content:prompt}] }),
+    signal:ac?ac.signal:undefined
+  })
+  .then(function(res){ return res.json(); })
+  .then(function(d){
+    clearTimeout(to);
+    var text=d.content && d.content[0] && d.content[0].text;
+    text=(text||'').trim();
+    if(!text){ settle('Debrief unavailable.', null); return; }
+    settle(null, text);
+  })
+  .catch(function(){ clearTimeout(to); settle('Could not reach Dr. Smurkel right now.', null); });
+}
+try{ if(typeof window!=='undefined'){ window.fetchSmurkelDebrief_=fetchSmurkelDebrief_; window._smurkelContext_=_smurkelContext_; window._smurkelFacts_=_smurkelFacts_; } }catch(e){}
+
+// ==================== Dr. Smurkel — post-ride interval debrief (piece 3) ====================
 // Lines a completed ride's Intervals.icu interval data up against the prescribed _sessionSteps_. The
 // prescription (N intervals of M min @ X–Y W) comes from the app; the ACTUAL work intervals come from
 // Intervals (tagged WORK, with real avg power/HR/duration). Debriefs ONLY when the ride's intervals
@@ -25841,7 +26081,7 @@ function _debriefMatch_(steps, icu){
              over:(w.watts!=null && hi!=null && w.watts>hi), under:(w.watts!=null && lo!=null && w.watts<lo) }; });
   return { mapped:true, N:N, M:M, lo:lo, hi:hi, pairs:pairs };
 }
-function _debriefHead_(ACC){ return '<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+ACC+';margin-bottom:6px">Coach V · Session debrief</div>'; }
+function _debriefHead_(ACC){ return '<div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:'+ACC+';margin-bottom:6px">Dr. Smurkel · Session debrief</div>'; }
 function _debriefRender_(m, ACC){
   var head=_debriefHead_(ACC);
   if(!m || !m.mapped){
@@ -26059,7 +26299,7 @@ function renderBlockPlan_(container){
   // strip. One shared panel, both renderers via this mount.
   try{ if(typeof _coachVPanel_==='function') H+=_coachVPanel_(now); }catch(e){ try{ console.error('[coachV] '+((e&&e.message)||e)); }catch(_e){} }
 
-  // ---- REFERENCE STRIP: Days | Roadmap | Progress (drops below Coach V) ----
+  // ---- REFERENCE STRIP: Days | Roadmap | Progress (drops below Dr. Smurkel) ----
   H+='<div class="blk-top" style="margin-top:14px">';
   // days
   var daysInner=_blockHdr_('Days to next milestone');
@@ -26169,7 +26409,7 @@ function renderBlockPlan_(container){
   var ins=_blockInsight_();
   H+='<div style="background:linear-gradient(90deg,rgba(168,85,247,.14),rgba(34,197,94,.08));border:1px solid #2a2340;border-radius:16px;padding:16px 18px;margin-top:14px;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
     +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#a855f722;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z','#a855f7',18)+'</span>'
-    +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:var(--c-purple);text-transform:uppercase;letter-spacing:.06em">AI Coach insight'+(ins.computed?' &middot; from your data':'')+'</div>'
+    +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:var(--c-purple);text-transform:uppercase;letter-spacing:.06em">Dr. Smurkel'+(ins.computed?' &middot; from your data':'')+'</div>'
     +'<div style="font-size:13px;color:var(--d-t2);line-height:1.5;margin-top:3px">'+ins.text+'</div></div></div>';
 
   // ---- Current Form (only within 10 days of an attempt) ----
@@ -27809,7 +28049,7 @@ function _goalTargets_(){
   return g;
 }
 
-// ==================== FTP history: append-only log over time (Coach V dependency) ====================
+// ==================== FTP history: append-only log over time (Dr. Smurkel dependency) ====================
 // Every FTP change appends {date, ftp, source}; ftpOn_(date) returns the FTP effective on any date,
 // so a session is priceable to the FTP that was true when it happened. Aug 27 2026 is the block's
 // planned retest — a KNOWN discontinuity where power and zone history change meaning. No fake data:
@@ -27829,7 +28069,7 @@ function ftpRecord_(ftp, source, dateStr){
   ftp=parseInt(ftp,10); if(!(ftp>0)) return null;
   var h=_ftpHist_(), date=dateStr||_ftpToday_();
   var sorted=_ftpSort_(_ftpHistLive_()), last=sorted.length?sorted[sorted.length-1]:null;
-  // Auto-tag the first change dated on/after the retest as a retest, so Coach V can see the discontinuity.
+  // Auto-tag the first change dated on/after the retest as a retest, so Dr. Smurkel can see the discontinuity.
   if(!source){ source=(date>=_FTP_RETEST_DATE && (!last || last.date<_FTP_RETEST_DATE))?'retest':'manual'; }
   // Same-day correction: overwrite today's entry rather than stacking two.
   var same=null; for(var i=0;i<h.length;i++){ if(h[i].date===date){ same=h[i]; break; } }
@@ -27846,7 +28086,7 @@ function ftpOn_(dateStr){
   for(var i=0;i<sorted.length;i++){ if(sorted[i].date<=dateStr) eff=sorted[i]; else break; }
   return eff?eff.ftp:sorted[0].ftp;
 }
-// True when a [from,to] date range crosses the planned retest — the discontinuity Coach V flags.
+// True when a [from,to] date range crosses the planned retest — the discontinuity Dr. Smurkel flags.
 function ftpCrossesRetest_(fromDate, toDate){ return String(fromDate)<_FTP_RETEST_DATE && String(toDate)>=_FTP_RETEST_DATE; }
 // Reconcile the log with the current st.ftp: seed on first run, append when st.ftp changed outside a
 // recorded write (self-healing, so no write site can silently escape the log). Idempotent.
@@ -30784,7 +31024,7 @@ function openDesktopRideDetail(idx, _noFetch){
     '<div class="ds-rp">'+
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'+
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-        '<span style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">AI Coach Insight</span>'+
+        '<span style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Dr. Smurkel</span>'+
         '<span style="font-size:8px;color:var(--d-t4);border:1px solid var(--d-line2);padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-left:auto;cursor:pointer"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
       '</div>'+
@@ -31226,7 +31466,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
   coachSection.style.cssText='margin-bottom:24px';
   coachSection.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:14px">'
     +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
-    +'<span style="font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">AI Coach Insight</span>'
+    +'<span style="font-size:12px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Dr. Smurkel</span>'
     +'<span style="font-size:9px;font-weight:600;color:var(--t3);border:1px solid var(--b1);padding:2px 6px;border-radius:6px">Beta</span></div>'
     +'<div id="ride-coach-body" style="font-size:14px;color:var(--t2);line-height:1.6">Analyzing this ride&hellip;</div>';
   wrap.appendChild(coachSection);
@@ -31339,7 +31579,7 @@ function renderCoachInsightContent(el, text){
 // Intents where deficit framing ("left on the table", "could have pushed") is WRONG — a base/
 // endurance/recovery/group ride is executed correctly by staying in the band, not by peak power.
 var _CV_BASE_INTENTS={z2:1, recovery:1, group:1, long:1, easyRun:1, run10k:1};
-// The prescription for a ride, resolved from that date's planned session (the intent Coach V holds).
+// The prescription for a ride, resolved from that date's planned session (the intent Dr. Smurkel holds).
 // Null when the date has no ride prescription — the caller must then NOT render an execution verdict.
 function _ridePrescriptionFor_(r){
   if(!r || !r.date || typeof blockPlanFor_!=='function') return null;
@@ -41008,7 +41248,7 @@ function _scoreDaySessions_(dateKey){
 // rule — a second copy of this comparison is exactly how the timezone bug below would come back.
 // A date-only (or leading-date) string like '2026-07-25' must be compared AS WRITTEN. new Date()
 // treats it as UTC midnight, which rolls back a calendar day in a behind-UTC timezone (Michigan) —
-// so today's ride read as yesterday and Coach V never flipped to its post-ride state. Compare the
+// so today's ride read as yesterday and Dr. Smurkel never flipped to its post-ride state. Compare the
 // normalized YYYY-MM-DD directly; only fall back to Date parsing for a genuine timestamp value.
 function _actSameDay_(ds, keyNorm, target){
   if(!ds) return false;
@@ -41537,7 +41777,7 @@ function openDayEditor(dateKey, targetId){
 
   // Zwift export for ANY day, not just today. Clicking a calendar day opens THIS editor (only the
   // plan chip routes to the session-detail sheet), so without this the feature was reachable only
-  // from today's Coach V card — while the real use case is loading next Tuesday's VO2 in advance.
+  // from today's Dr. Smurkel card — while the real use case is loading next Tuesday's VO2 in advance.
   // Same _zwoFor_/_zwoDownload_ path as the other two hosts; no duplicated build logic.
   try{
     var _dz=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, targetId||''):null;
@@ -43183,7 +43423,7 @@ window.onload = function(){
         // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
         // only gen sessions — so the version guard is an optimisation, not correctness.
         try{ if(typeof generateBlockPlan_==='function' && (typeof _TB_VERSION!=='undefined') && st._blockPlanGen!==_TB_VERSION){ generateBlockPlan_(); st._blockPlanGen=_TB_VERSION; } }catch(e){}
-        // Seed / self-heal the append-only FTP log so no write site can escape it (Coach V dependency).
+        // Seed / self-heal the append-only FTP log so no write site can escape it (Dr. Smurkel dependency).
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
         // Fill nutrients onto already-logged items whose database row gained them after the fact.
         try{ if(typeof backfillNutrientsFromDB_==='function') backfillNutrientsFromDB_(); }catch(e){}
