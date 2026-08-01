@@ -28487,9 +28487,13 @@ function dsShowCalendar(){
           var restPlan=planRaw && (planRaw.type==='rest' || /rest|recovery|off/i.test(planRaw.name||''));
           if(restPlan && !calFilter.rest){ planRaw=null; restPlan=false; }
           var isRest=restPlan && !dl.length;   // full rest-day treatment only when nothing completed
-          var idx=dl.length?rideRefOf_(dl[0]):-1;
+          // The cell itself no longer carries a ride handle. ONE handle per cell meant every card
+          // in a multi-activity day opened dl[0]: clicking the Zwift Threshold ride on Jul 31
+          // opened the Weight Training, and a third activity hidden behind "+N more" could not be
+          // reached at all. Each card now owns its own handle and the cell resolves by DATE —
+          // one activity opens it, several open a picker, none opens the day editor.
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
-          var attrs=' data-cal="cell"'+(c.date?(' data-date="'+c.date+'"'):'')+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'');
+          var attrs=' data-cal="cell"'+(c.date?(' data-date="'+c.date+'"'):'');
           H+='<div'+attrs+' style="position:relative;border-right:1px solid #171c2b;border-bottom:1px solid #171c2b;padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
           if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
           var complete=!!c.date && typeof isDayComplete==='function' && isDayComplete(c.date);
@@ -28508,12 +28512,15 @@ function dsShowCalendar(){
               var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
               if(nm.length>20) nm=nm.slice(0,19)+'…';
               var sub=fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'');
-              H+='<div style="margin-top:4px;padding:4px 7px;border-radius:7px;background:'+col+'14;border:1px solid '+col+'33;overflow:hidden">'
+              var _ri=rideRefOf_(r);
+              H+='<div'+(rideRefOk_(_ri)?(' data-cal="act" data-idx="'+rideRefData_(_ri)+'"'):'')+' style="margin-top:4px;padding:4px 7px;border-radius:7px;background:'+col+'14;border:1px solid '+col+'33;overflow:hidden">'
                 +'<div style="display:flex;align-items:center;gap:4px;line-height:1.1">'+calIcon(rideSport_(r)||'Ride',12,col)+'<span style="font-size:11.5px;font-weight:800;color:#e8edf5;white-space:nowrap">'+main+'</span></div>'
                 +'<div style="font-size:10px;color:#9aa7bd;margin-top:1px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
                 +'<div style="font-size:9px;color:#5f6b7e;margin-top:1px;line-height:1.15;white-space:nowrap">'+sub+'</div></div>';
             });
-            if(dl.length>2){ H+='<div style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600">+'+(dl.length-2)+' more</div>'; }
+            // Clickable, and it opens the picker — otherwise the 3rd+ activity of a day has no
+            // route to its detail view from this surface at all.
+            if(dl.length>2){ H+='<div data-cal="more" data-date="'+c.date+'" style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600;cursor:pointer;text-decoration:underline">+'+(dl.length-2)+' more</div>'; }
             // Planned marker — compact dashed chip when there is ALSO a completed
             // activity, or the centered icon+name on an otherwise-empty day.
             // Render EVERY live planned session, each glyph + name from the SAME
@@ -28612,10 +28619,19 @@ function dsShowCalendar(){
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
       else if(a==='gen'){ calFilterOpen=false; if(typeof openPlanGenerator_==='function') openPlanGenerator_(); }
       else if(a==='planchip'){ calFilterOpen=false; var pd=t.getAttribute('data-date'); var psid=t.getAttribute('data-sid'); if(pd && typeof openSessionOrEditor_==='function') openSessionOrEditor_(pd, psid||undefined); else if(pd && typeof openDayEditor==='function') openDayEditor(pd, psid||undefined); }
-      else if(a==='cell'){ calFilterOpen=false; var idx=t.getAttribute('data-idx'), dt=t.getAttribute('data-date');
-        // parseInt would turn a handle into NaN and openRideDetail would silently no-op.
-        if(idx!=null) openRideDetail(rideRefFromAttr_(idx));
-        else if(dt && typeof openDayEditor==='function') openDayEditor(dt);
+      // An activity CARD — it owns its own handle, so what you clicked is what opens.
+      // parseInt would turn a handle into NaN and openRideDetail would silently no-op.
+      else if(a==='act'){ calFilterOpen=false; var ai=t.getAttribute('data-idx');
+        if(ai!=null) openRideDetail(rideRefFromAttr_(ai));
+      }
+      // The cell background, the day number, or "+N more" — resolve by DATE, not by a
+      // baked-in handle, so a day with several activities offers all of them.
+      else if(a==='cell'||a==='more'){ calFilterOpen=false;
+        var dt=t.getAttribute('data-date'); if(!dt) return;
+        var dayl=ridesByDate[dt]||[];
+        if(dayl.length>1){ calDayPick_(dt,dayl); }
+        else if(dayl.length===1){ var _i1=rideRefOf_(dayl[0]); if(rideRefOk_(_i1)) openRideDetail(_i1); }
+        else if(typeof openDayEditor==='function'){ openDayEditor(dt); }
       }
     });
     mc.appendChild(wrap);
@@ -28625,6 +28641,45 @@ function dsShowCalendar(){
     return '<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</span><span style="font-size:9px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
       +'<div style="height:12px;margin-top:3px">'+spark+'</div></div>';
+  }
+
+  // Day picker — a day can hold more than one activity, and the grid can only draw two of them.
+  // Rather than guess which one the click meant, list every activity on that date and let the
+  // choice be explicit. Mobile has done this since it was written; the desktop grid did not.
+  function calDayPick_(dateKey,list){
+    try{
+      var dObj=new Date(normDate(dateKey)+'T00:00:00');
+      var dstr=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dObj.getDay()]
+        +', '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dObj.getMonth()]+' '+dObj.getDate();
+      var ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(3,6,14,.72);z-index:400;display:flex;align-items:center;justify-content:center';
+      var box=document.createElement('div');
+      box.style.cssText='background:#0e1220;border:1px solid #232b3d;border-radius:16px;padding:16px;width:330px;max-height:76vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)';
+      var H='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678">'+list.length+' ACTIVITIES</div>'
+        +'<div style="font-size:14px;font-weight:800;color:#e8edf5;margin:2px 0 12px">'+dstr+'</div>';
+      list.forEach(function(r,i){
+        var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
+        var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+        H+='<div data-pick="'+i+'" style="display:flex;align-items:center;gap:11px;padding:10px 11px;margin-bottom:6px;border-radius:11px;background:#131829;border:1px solid #1f2739;cursor:pointer">'
+          +'<div style="width:32px;height:32px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+calIcon(rideSport_(r)||'Ride',18,col)+'</div>'
+          +'<div style="flex:1;min-width:0">'
+          +'<div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+          +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div>'
+          +'</div></div>';
+      });
+      H+='<div data-pick="cancel" style="text-align:center;padding:9px;margin-top:2px;font-size:13px;color:#8592a6;cursor:pointer">Cancel</div>';
+      box.innerHTML=H;
+      box.addEventListener('click',function(e){
+        var b=e.target.closest('[data-pick]'); if(!b) return;
+        var v=b.getAttribute('data-pick');
+        ov.remove();
+        if(v==='cancel') return;
+        var r=list[parseInt(v,10)]; if(!r) return;
+        var ri=rideRefOf_(r); if(rideRefOk_(ri)) openRideDetail(ri);
+      });
+      ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+      ov.appendChild(box); document.body.appendChild(ov);
+    }catch(e){}
   }
 
   // Agenda view — chronological list of the month's activities.
@@ -28637,7 +28692,7 @@ function dsShowCalendar(){
       var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
       var dObj=new Date(normDate(r.date)+'T00:00:00');
       var dstr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dObj.getDay()]+' '+(dObj.getMonth()+1)+'/'+dObj.getDate();
-      H+='<div data-cal="cell"'+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
+      H+='<div'+(rideRefOk_(idx)?(' data-cal="act" data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
         +'<div style="width:54px;font-size:11px;color:#8592a6;font-weight:600">'+dstr+'</div>'
         +'<div style="width:36px;height:36px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center">'+calIcon(rideSport_(r)||'Ride',20,col)+'</div>'
         +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
@@ -28654,13 +28709,15 @@ function dsShowCalendar(){
     for(var i=0;i<7;i++){ var dt=new Date(mon); dt.setDate(mon.getDate()+i);
       var nd=normDate(dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate());
       var dl=ridesByDate[nd]||[]; var isToday=nd===today;
-      var idx=dl.length?rideRefOf_(dl[0]):-1;
-      H+='<div data-cal="cell" data-date="'+nd+'"'+(rideRefOk_(idx)?(' data-idx="'+rideRefData_(idx)+'"'):'')+' style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
+      // Same single-hit-target bug as the month grid: the column carried one handle for the whole
+      // day, so every card in it opened dl[0]. Handles live on the cards now.
+      H+='<div data-cal="cell" data-date="'+nd+'" style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
       H+='<div style="font-size:11px;color:#8592a6;font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
       H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
       dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
         var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
-        H+='<div style="margin-top:5px;padding:6px 8px;border-radius:8px;background:'+col+'14;border:1px solid '+col+'33">'
+        var _wi=rideRefOf_(r);
+        H+='<div'+(rideRefOk_(_wi)?(' data-cal="act" data-idx="'+rideRefData_(_wi)+'"'):'')+' style="margin-top:5px;padding:6px 8px;border-radius:8px;cursor:pointer;background:'+col+'14;border:1px solid '+col+'33">'
           +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:#e8edf5">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
           +'<div style="font-size:10px;color:#9aa7bd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
           +'<div style="font-size:9px;color:#5f6b7e">'+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div>';

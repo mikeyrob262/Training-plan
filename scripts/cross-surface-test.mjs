@@ -96,6 +96,19 @@ check('pad cells are built WITH a date', /inMonth:false,\s*date:_cellKey\(/.test
 // INVARIANT: cell content keys off the date, not off inMonth (which is styling only).
 check('the plan chip is gated on the date, not the month', /var planRaw=\(c\.date &&/.test(src), true);
 check('the week rollup counts all seven days', /wk\.forEach\(function\(c\)\{ if\(c\.date\)\{/.test(src), true);
+// INVARIANT: a click target resolves to the activity that was CLICKED. Baking one handle onto the
+// day cell (rideRefOf_(dl[0])) meant every card in a multi-activity day opened the first one —
+// Jul 31 rendered "Weight Training" + "Zwift Threshold" and both opened the Weight Training —
+// and the 3rd+ activity behind "+N more" had no route to its detail view at all.
+check('no calendar cell bakes in the first activity as its handle',
+  countCode(/data-idx="'\+rideRefData_\(idx\)\+'"'\):''\)\+' style="min-height/g)
+  + countCode(/var idx=dl\.length\?rideRefOf_\(dl\[0\]\):-1;/g), 0);
+check('activity cards carry their own handle', countCode(/data-cal="act" data-idx="'\+rideRefData_\(/g) >= 3, true);
+check('"+N more" is a click target, not dead text', /data-cal="more" data-date="'\+c\.date\+'"/.test(src), true);
+// BEHAVIOUR: the day-level click resolves by date and offers every activity, rather than guessing.
+check('the cell branch resolves the day from ridesByDate', /a==='cell'\|\|a==='more'/.test(src), true);
+check('a multi-activity day opens a picker', /if\(dayl\.length>1\)\{ calDayPick_\(dt,dayl\); \}/.test(src), true);
+check('the picker lists every activity, not the first two', /list\.forEach\(function\(r,i\)\{/.test(src), true);
 
 // ── 4. COUNTS / TSS / DISTANCE TOTALS ─────────────────────────────────────────────────────────
 console.log('\n'+C+'=== 4. one TSS per ride, and totals that exclude what they cannot use ==='+X);
