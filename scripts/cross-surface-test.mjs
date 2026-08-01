@@ -272,6 +272,16 @@ check('ownership is NOT inferred from the edit mask', countCode(/s\._edited && s
 check('...and the override is scoped to ride/attempt intents',
   /d2\.type==='ride'\|\|d2\.type==='attempt'/.test(src), true);
 check('...and reports that it came from the athlete, not the template', /via='user'/.test(src), true);
+// INVARIANT: every coach surface speaks as Dr. Smurkel, in second person, and none of them asserts
+// a missing elevation as zero. (r.elev||0) is the construct that made the model report "flat
+// terrain, zero elevation gain" on a trail run that climbed 37ft.
+check('no coach prompt claims a separate analyst voice', countCode(/You are a cycling data analyst/g), 0);
+check('the Analytics tab speaks as Dr. Smurkel', /var prompt = _SM_PERSONA/.test(src), true);
+check('...in second person', /never third person/.test(src), true);
+check('no prompt asserts a missing elevation as zero', countCode(/elevation '\+\(r\.elev\|\|0\)/g), 0);
+check('the honest elevation helper is used instead', /elevation '\+_smElev_\(r\)/.test(src), true);
+// INVARIANT: a completed ride's analysis settles, like the other two coach calls.
+check('the Analytics insight is cached on its prompt', /var _anKey=_ciHash_\(prompt\)/.test(src), true);
 check('the coach prompt measures the work intervals', /_blockWorkMeasure_\(r, _dk, _wi\[_i\]\)/.test(src), true);
 check('...and tells the model the whole-ride average is not the prescribed effort',
   /The whole-ride average above INCLUDES warm-up, recoveries and cool-down/.test(src), true);

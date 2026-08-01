@@ -25811,6 +25811,14 @@ function openSessionOrEditor_(dateKey, sid){
 // a debrief that invents a cadence or asserts a zone split it did not measure is worse than one
 // that says the figure was not recorded (see the elevation-gain lesson in the prompt FACTS block).
 function _smNum_(v){ var n=parseFloat(v); return isFinite(n)?n:null; }
+// Elevation for a PROMPT. Never "0ft" for a missing field: (r.elev||0) is the exact construct that
+// made the model report "flat terrain, zero elevation gain" on a trail run that climbed 37ft, and
+// r.elev alone misses the runs library's r.elevation. _actElevGain_ resolves both and returns null
+// when nothing was recorded, which has to reach the model as words, not as a number.
+function _smElev_(r){
+  var g=(typeof _actElevGain_==='function')?_actElevGain_(r):(r&&r.elev!=null?parseFloat(r.elev):null);
+  return (g==null)?'not recorded':(Math.round(g)+'ft');
+}
 function _smZones_(r, ftp){
   try{
     var zt=(typeof rideZoneTime_==='function')?rideZoneTime_(r, ftp):null;
@@ -26003,9 +26011,12 @@ function _smurkelFacts_(C){
   if(C.tomorrow) L.push('TOMORROW is prescribed: '+(C.tomorrow.length?C.tomorrow.join(', '):'nothing')+'.');
   return L.join(NL);
 }
-var _SM_PERSONA='You are Dr. Smurkel, this athlete profile: a direct, warm, funny endurance coach who has '
-  +'been following this athlete all block. You are blunt about fatigue and generous about real work. You use '
-  +'the occasional emoji and the occasional joke, never more than one per section. You never pad.';
+// No apostrophes in here: a backslash-escaped quote inside this template literal loses a backslash
+// level on the way out and terminates the string. Phrase around it.
+var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has been following this athlete all block: '
+  +'direct, warm and funny. You speak TO the athlete as "you" and never about them in the third person. '
+  +'You are blunt about fatigue and generous about real work. You use the occasional emoji and the '
+  +'occasional joke, never more than one per section. You never pad.';
 // The full debrief. Cached on the prompt hash exactly like the ride insight, so a completed session
 // settles on ONE reading — the numbers behind it cannot change unless the ride or the week changes,
 // and if they do the hash changes and it regenerates.
@@ -33159,15 +33170,23 @@ function renderRideAnalysisTab(body, r, idx, FTP, BWT){
     return i!==idx && !ride.deleted && ride.distance && r.distance && Math.abs(ride.distance-r.distance)<5 && ride.avgPwr;
   }).slice(0,5);
 
-  var prompt = 'You are a cycling data analyst. Analyze this ride and produce genuine cross-signal insights, not just a restatement of the numbers. '
-    +'THIS RIDE: '+(r.distance||'?')+'mi, avg power '+(r.avgPwr||'?')+'W, NP '+(r.np||'?')+'W, avg HR '+(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elevation '+(r.elev||0)+'ft. '
-    +'SIMILAR PAST RIDES (same rider, similar distance): '+similarRides.map(function(sr){
+  var prompt = _SM_PERSONA+String.fromCharCode(10)+String.fromCharCode(10)
+    +'Analyze this ride and produce genuine cross-signal insights, not just a restatement of the numbers. '
+    +'Speak directly to the athlete as "you" — never third person ("the rider", "the athlete"). '
+    +'THIS RIDE: '+(r.distance||'?')+'mi, avg power '+(r.avgPwr||'?')+'W, NP '+(r.np||'?')+'W, avg HR '+(r.avgHR||'?')+'bpm, TSS '+(r.tss||'?')+', elevation '+_smElev_(r)+'. '
+    +'YOUR SIMILAR PAST RIDES (similar distance): '+similarRides.map(function(sr){
       return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm';
     }).join('; ')+'. '
     +'Give 3-4 short bullet-style insights (each starting with "- "), each one connecting two different signals '
     +'(e.g. comparing this ride to a similar past one, noting if power was higher despite similar effort, or any other genuine pattern in the data provided). '
     +'Be specific and use the actual numbers given. If there is not enough data for a genuine comparison, say so plainly rather than inventing detail.';
 
+  // Same settled-verdict rule as the other two coach calls: this analyses a COMPLETED ride, so it
+  // must not produce different cross-signal claims every time the tab is opened. Keyed on the prompt
+  // hash, so it regenerates only when the ride or its comparison set actually changes.
+  var _anKey=_ciHash_(prompt);
+  var _anHit=_ciGet_(_anKey);
+  if(_anHit!=null){ renderAnalysisContent(wrap, _anHit); return; }
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -33176,6 +33195,7 @@ function renderRideAnalysisTab(body, r, idx, FTP, BWT){
   .then(function(res){ return res.json(); })
   .then(function(d){
     var text = d.content && d.content[0] && d.content[0].text;
+    if(text) _ciPut_(_anKey, text);
     renderAnalysisContent(wrap, text);
   })
   .catch(function(){
