@@ -249,6 +249,23 @@ check('the elevation fallback names itself too', /elevation proxy - no interval 
 check('no hardcoded "over the cap" verdict', countCode(/— over the cap/g), 0);
 check('the row states the reason the check computed', /\(c\.miss\|\|'outside the prescription'\)/.test(src), true);
 
+// INVARIANT: the LLM path gets the same treatment as the rule-based one. The coach prompt used to
+// receive only the whole-ride average, so a 2x20 whose work laps ran 167/166W inside a 156-174W band
+// was reported to the model as 140.8W and came back "Threshold Target Missed". Same dilution,
+// different path.
+check('the coach prompt measures the work intervals', /_blockWorkMeasure_\(r, _dk, _wi\[_i\]\)/.test(src), true);
+check('...and tells the model the whole-ride average is not the prescribed effort',
+  /The whole-ride average above INCLUDES warm-up, recoveries and cool-down/.test(src), true);
+check('...and names where the measurement came from', /the device laps.*the power stream/.test(src), true);
+// INVARIANT: a colour handed to a helper as an ARGUMENT still has to be themeable. statCell renders
+// color:'+color+', so a literal '#fff' at the call site was invisible to every hex->var sweep and
+// left four blank cells on a white card.
+check('no bare white passed into statCell', countCode(/statCell\([^)]*,'#(fff|ffffff)'/gi), 0);
+// Line-based: a statCell argument list can contain its own parens (parseFloat(...), an IIFE), so a
+// [^)]* character class stops short and undercounts.
+check('the ride-detail stat row is themed',
+  codeLines.filter(L => /statCell\(.*var\(--d-t1\)/.test(L)).length >= 4, true);
+
 // BEHAVIOUR: the grading rule itself.
 const BLK = new Function(asServed(ex('_blockWorkHit_')+ex('_blockWorkMean_'))
   +';return {_blockWorkHit_,_blockWorkMean_};')();

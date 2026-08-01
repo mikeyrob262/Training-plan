@@ -20229,7 +20229,10 @@ function aiRenderMilestones_(){
     H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
     H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:var(--d-raise)"></div>';
     tl.forEach(function(p,i){ var c=_MS_COL[p.category], _yr=p.projectedDate.slice(0,4), mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" "+((+_yr>=2100)?_yr:("&#39;"+p.projectedDate.slice(2,4)));
-      var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:var(--d-t1);letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
+      // Stays #fff: this sits on the saturated category circle below, whose background lives on the
+      // PARENT element — so the "does this block set a background?" test that decided the rest of
+      // the white text could not see it, and themed this one into dark ink on a saturated badge.
+      var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:#fff;letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
       H+='<div style="flex:1;text-align:center;position:relative;z-index:1">'
         +'<div style="font-size:9px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
         +'<div style="width:44px;height:44px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 0 4px '+c+'22">'+inner+'</div>'
@@ -30462,13 +30465,17 @@ function openDesktopRideDetail(idx, _noFetch){
 
     // STATS BAR — 7 cols matching reference exactly
     '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--d-line);flex-shrink:0;background:var(--d-panel)">'+
-      statCell(r.duration||'--','Time','#fff')+
-      statCell(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance','#fff')+
+      // statCell takes its colour as an ARGUMENT, so these literals never sit next to a "color:"
+      // in the source and no hex->var sweep could see them. In light mode that left Time,
+      // Distance, Avg Power and Calories rendering #fff on a #FFFFFF card - contrast 1.0, four
+      // blank cells - while Avg HR and TSS survived only because they happened to be coloured.
+      statCell(r.duration||'--','Time','var(--d-t1)')+
+      statCell(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance','var(--d-t1)')+
       statCell(wkg+(wkg!=='--'?' W/kg':''),'Intensity','#FC4C02')+
       statCell(r.avgHR?r.avgHR+' bpm':'--','Avg HR','#E24B4A')+
-      statCell(r.avgPwr?r.avgPwr+' w':'--','Avg Power','#fff')+
-      statCell(tss+(tss!=='--'?' TSS':''),'Training Stress','#F59E0B')+
-      statCell((function(){var _t=rideCalText_(r);return _t==='—'?'--':_t;})(),'Calories','#fff',true)+
+      statCell(r.avgPwr?r.avgPwr+' w':'--','Avg Power','var(--d-t1)')+
+      statCell(tss+(tss!=='--'?' TSS':''),'Training Stress','var(--c-amber)')+
+      statCell((function(){var _t=rideCalText_(r);return _t==='—'?'--':_t;})(),'Calories','var(--d-t1)',true)+
     '</div>'+
 
     // TABS
@@ -31365,8 +31372,29 @@ function fetchRideCoachInsight(r, callback){
   var gain=_actElevGain_(r);
   var tele=Noun+': '+(r.distance||'?')+' miles, '+(r.duration||'unknown duration')+'. ';
   if(prof.foot && r.pace) tele+='Pace: '+r.pace+' per mile. ';
+  // The WORK INTERVALS, when the session prescribed intervals and they can be measured. Handing the
+  // model only the whole-ride average is the same dilution _blockWeekAssess_ had: Jul 31 2026 was a
+  // 2x20 whose work laps ran 167W and 166W inside a 156-174W band — executed correctly — but the
+  // ride carries a 10 min warm-up, two recoveries and a cool-down, so the whole-ride average is
+  // 140.8W. The model was told 140.8 against 156-174 and returned "Threshold Target Missed — Power
+  // Fell Short Throughout". It reasoned correctly from a number that did not describe the work.
+  var _work=null;
+  try{
+    if(prof.cyclingPower && typeof _blockWorkMeasure_==='function'){
+      var _dk=String(r.date||'').slice(0,10);
+      var _wi=(rx&&rx.intent)?[rx.intent]:['threshold','vo2','z2'];
+      for(var _i=0;_i<_wi.length && !_work;_i++) _work=_blockWorkMeasure_(r, _dk, _wi[_i]);
+    }
+  }catch(e){ _work=null; }
   if(prof.cyclingPower){
     tele+='Avg power: '+(r.avgPwr||'unknown')+'W, NP: '+(r.np||'unknown')+'W, FTP: '+FTP+'W. ';
+    if(_work && _work.vals && _work.vals.length){
+      tele+='WORK INTERVALS (measured from '+(_work.source==='laps'?'the device laps':'the power stream')+'): '
+        +_work.vals.map(function(v,i){ return 'interval '+(i+1)+' '+v+'W'; }).join(', ')+'. '
+        +'The whole-ride average above INCLUDES warm-up, recoveries and cool-down, so it is NOT the '
+        +'effort that was prescribed — judge execution on the WORK INTERVALS and say so explicitly. '
+        +'Do not describe the session as falling short because the whole-ride average sits below the band. ';
+    }
   } else if(r.avgPwr){
     tele+='Avg power: '+r.avgPwr+'W'+(r.np?(', NP: '+r.np+'W'):'')
       +' — this is '+noun+' power. It is NOT comparable to a cycling FTP: do not compare it to FTP, do not call it a percentage of FTP, and do not assign it a cycling power zone. ';
