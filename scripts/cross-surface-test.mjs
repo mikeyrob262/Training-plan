@@ -167,6 +167,38 @@ check('the calendar names its data source', /dataSourceNote_\('legacy'\)/.test(s
 check('Athlete Intelligence names its data source', /dataSourceNote_\('deduped'\)/.test(src), true);
 check('and the note distinguishes the two libraries', /Rides only, from the uploaded snapshot/.test(src) && /All activity types, from your device library/.test(src), true);
 
+// ── 6. .zwo EXPORT: an interval session must never flatten ────────────────────────────────────
+console.log('\n'+C+'=== 6. a VO2/Threshold export is a STRUCTURE, or it is nothing ==='+X);
+// The failure this guards shipped and was caught in Zwift, not here: a VO2 with no resolvable
+// struct exported as ONE 45-minute block at the band midpoint — which for VO2 is 100% of FTP.
+// Zwift rendered it as Z4 100%, a completely different and far harder session than prescribed.
+const ZWO = new Function('st', asServed(
+  'var _ZWO_WARM_SEC=600,_ZWO_COOL_SEC=300,_ZWO_REC_PWR=0.55;'
+ +'var _ZWO_INTERVAL_INTENTS={vo2:1,threshold:1};'
+ +'var SESSION_DEFS={vo2:{type:"ride",name:"VO2",durationMin:45},threshold:{type:"ride",name:"Threshold",durationMin:60},z2:{type:"ride",name:"Z2",durationMin:90}};'
+ +ex('_zwoEsc_')+ex('_zwoPwr_')+ex('_structIntervals_')+ex('_zwoSession_')+ex('_zwoStructFor_')+ex('_zwoFor_'))
+ +';return {_zwoFor_,_structIntervals_,_zwoStructFor_};')({ftp:183});
+const mk=(intent,struct)=>({type:'ride', intent:intent, name:intent,
+  targets:{powerLo:174, powerHi:192, ftp:183, durationMin:45}, block:(struct?{struct:struct}:null)});
+const kinds=(z)=>{ if(!z) return null; const m=z.xml.match(/<(Warmup|SteadyState|IntervalsT|Cooldown)/g)||[]; return m.map(x=>x.slice(1)); };
+const vo2ok = ZWO._zwoFor_(mk('vo2','4x4 min, 3 min recovery, flat'),'2026-08-04');
+check('VO2 with a struct exports Warmup+IntervalsT+Cooldown', kinds(vo2ok), ['Warmup','IntervalsT','Cooldown']);
+const thrOk = ZWO._zwoFor_(mk('threshold','2x20 min'),'2026-08-07');
+check('Threshold with a struct exports discrete blocks', kinds(thrOk), ['Warmup','SteadyState','SteadyState','SteadyState','Cooldown']);
+// THE BUG: no struct on the session at all. Without a block to fall back on it must REFUSE.
+const vo2NoStruct = ZWO._zwoFor_(mk('vo2',''),'2026-08-02');
+check('VO2 with NO resolvable structure refuses (never a flat block)', vo2NoStruct, null);
+const thrNoStruct = ZWO._zwoFor_(mk('threshold',''),'2026-08-02');
+check('Threshold with NO resolvable structure refuses', thrNoStruct, null);
+// and a continuous intent is still allowed to be one block
+const z2 = ZWO._zwoFor_(mk('z2',''),'2026-08-03');
+check('a continuous Z2 still exports one steady block', kinds(z2), ['SteadyState']);
+// belt and braces: no interval export may ever be a lone SteadyState
+[['vo2','4x4 min, 3 min recovery, flat'],['threshold','2x20 min'],['vo2',''],['threshold','']].forEach(([i,s])=>{
+  const z=ZWO._zwoFor_(mk(i,s),'2026-08-04'); const k=kinds(z);
+  check('   '+i+' ('+(s||'no struct')+') is never a single flat block', !(k && k.length===1 && k[0]==='SteadyState'), true);
+});
+
 console.log('');
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);

@@ -25142,6 +25142,38 @@ function _zwoSession_(s){
            struct:(s.struct||(s.block&&s.block.struct)||(rx.block&&rx.block.struct)||''),
            block:(s.block||rx.block||null) };
 }
+// Intents whose prescription IS a structure. For these, a file without warm-up/interval/recovery
+// blocks is not a degraded export — it is a different and far harder workout, so it must never be
+// written. "4x4 min at 174-192W" flattened to one block is 45 continuous minutes AT FTP.
+var _ZWO_INTERVAL_INTENTS={vo2:1, threshold:1};
+// The prescribed structure for an intent on a date, when the session object carries none.
+//
+// A session the athlete ADDED or SWAPPED onto a day has no block.struct — only generator-written
+// days carry one. That is exactly the case that produced the flat file: the Aug 2 VO2 sits on a day
+// the block prescribes as 'optional', so it had no struct, and the builder fell through.
+// Nothing here invents a structure. It reads the one the athlete's OWN block prescribes for that
+// intent: first the same date, then the phase containing that date.
+function _zwoStructFor_(intent, dateKey, given){
+  if(given) return given;
+  try{
+    var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
+    if(bp && bp.sessions){
+      for(var i=0;i<bp.sessions.length;i++){
+        if(bp.sessions[i] && bp.sessions[i].intent===intent && bp.sessions[i].struct) return bp.sessions[i].struct;
+      }
+    }
+    var d=(typeof _blockDay_==='function')?_blockDay_(dateKey):null;
+    var pf=(d && typeof _tbPhaseFor_==='function')?_tbPhaseFor_(d):null;
+    var ph=pf&&pf.phase;
+    if(ph && ph.week){
+      for(var w=0;w<ph.week.length;w++){
+        var slots=ph.week[w]||[];
+        for(var j=0;j<slots.length;j++){ if(slots[j] && slots[j].i===intent && slots[j].s) return slots[j].s; }
+      }
+    }
+  }catch(e){}
+  return '';
+}
 function _zwoFor_(s0, dateKey){
   try{
     var s=_zwoSession_(s0);
@@ -25161,7 +25193,7 @@ function _zwoFor_(s0, dateKey){
     if(!(ftp>0)) return null;                         // cannot express power without an FTP
     var mid=_zwoPwr_((lo+hi)/2, ftp);
     if(mid==null) return null;
-    var struct=s.struct||'';
+    var struct=_zwoStructFor_(intent, dateKey, s.struct||'');
     var iv=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
     var blocks=[], warm=_zwoPwr_(lo*0.62,ftp);
     if(iv && iv.workMin>0 && (intent==='vo2')){
@@ -25179,6 +25211,15 @@ function _zwoFor_(s0, dateKey){
       }
       blocks.push("<Cooldown Duration='"+_ZWO_COOL_SEC+"' PowerLow='0.75' PowerHigh='0.4'/>");
     } else {
+      // REFUSE rather than flatten. An interval intent that reached here has no resolvable
+      // structure, and writing the continuous block below would hand the rider 45 minutes at the
+      // band midpoint — for VO2 that is FTP, held for the entire session. A missing file is a
+      // visible failure; a plausible file that is a different workout is not.
+      if(_ZWO_INTERVAL_INTENTS[intent]){
+        try{ console.warn('[zwo] refusing '+intent+' on '+dateKey+': no interval structure resolved'
+          +' (session carries no block.struct and the block prescribes none for this intent)'); }catch(e){}
+        return null;
+      }
       // Continuous ride (Z2, recovery, long): one steady block at the band midpoint for the whole
       // prescribed duration. No warm-up/cool-down blocks — they would be ridden at the same
       // intensity anyway, and adding them would lengthen the session beyond what was prescribed.

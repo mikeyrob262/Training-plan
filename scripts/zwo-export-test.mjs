@@ -30,8 +30,12 @@ function extractVar(name){ const i=src.indexOf('var '+name+'='); if(i<0) throw n
 //   untagged template literal:  \\ -> \    and any other \X -> X
 const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : c));
 
-let code = extractVar('_ZWO_WARM_SEC');
-for (const f of ['_structIntervals_','_zwoEsc_','_zwoPwr_','_zwoSession_','_zwoFor_']) code += extract(f);
+// _ZWO_INTERVAL_INTENTS + _zwoStructFor_ are new dependencies of _zwoFor_: an interval session whose
+// structure cannot be resolved must now REFUSE rather than flatten into one block at the band
+// midpoint. Without them here _zwoFor_ throws inside its own try/catch and silently returns null,
+// which is how this harness failed — a missing extraction, not a behaviour change.
+let code = extractVar('_ZWO_WARM_SEC') + extractVar('_ZWO_INTERVAL_INTENTS');
+for (const f of ['_structIntervals_','_zwoEsc_','_zwoPwr_','_zwoSession_','_zwoStructFor_','_zwoFor_']) code += extract(f);
 code = asServed(code);
 const M = new Function('st','ftpOn_','blockPlanFor_','_planSessionFromDef_',
   code + '\n;return {_structIntervals_,_zwoSession_,_zwoFor_,_zwoPwr_};')(
