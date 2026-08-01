@@ -180,6 +180,11 @@ check('no window export calls its own name (infinite recursion)', selfWrap, []);
 // caught this assertion doing.
 const dispatches = [...src.matchAll(/if\(tab==='([a-z]+)'\)\s*return\s+([A-Za-z_$][\w$]*)/g)]
   .map(m => ({tab:m[1], callee:m[2]}));
+// INVARIANT: no tab in AI_TABS may fall through to "coming soon" when its card already exists.
+// 'changed' did exactly that - aiCardWhatChanged_ was built and rendering inside Overview while the
+// tab told the athlete the feature had not shipped.
+check('the What Changed tab is wired to its card', /if\(tab===.changed.\) return _aiSafe_\(.WhatChanged./.test(src), true);
+check('...and its empty state says WHY, not a blank page', /Not enough activity in the last two months/.test(src), true);
 check('every AI tab dispatch exists', dispatches.length>0, true);
 check('every AI tab dispatch returns _aiSafe_ FIRST',
       dispatches.filter(d => d.callee !== '_aiSafe_').map(d => d.tab+' -> '+d.callee), []);

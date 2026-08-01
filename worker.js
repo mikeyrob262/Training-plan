@@ -23492,6 +23492,17 @@ function aiRenderSegLibrary_(){
 function aiRenderTab_(tab, ded){
   if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Attack — render error.</div>';
   if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Library — render error.</div>';
+  // 'changed' was in AI_TABS and clickable as its own tab, but had no case here — it fell through to
+  // the generic "coming soon" fallback below even though aiCardWhatChanged_ already exists and
+  // already renders real month-over-month deltas inside the Overview tab. The feature was built;
+  // only this tab's wiring was missing, so the app was telling the athlete a shipped feature had not
+  // shipped. Same honest-empty-state rule as everywhere else: the card returns '' when there is not
+  // enough data (fewer than 4 combined activities across the two months), and that must say so
+  // rather than render a blank page.
+  if(tab==='changed') return _aiSafe_('WhatChanged', function(){
+    var h=aiCardWhatChanged_(ded);
+    return h || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough activity in the last two months to show what changed yet.</div>';
+  }) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">What Changed — render error.</div>';
   // Wrapped like every sibling. Trends guards its own sub-computations (_trStory_, _trDrivers_,
   // _trPredictions_, _trWatchDay_) but the dispatch itself was bare, so a throw anywhere in the
   // rest of the body — coverage, the PMC block, chart assembly — escaped aiRenderTab_ and took the
