@@ -28912,22 +28912,39 @@ function _favActivities_(){
 }
 // A star control for any activity detail view. Same markup on every surface.
 function favStarHTML_(a, id){
-  var on=_isFavorite_(a);
-  return '<span id="'+(id||'fav-star')+'" data-fav="1" title="'+(on?'Starred — click to remove':'Star this activity')+'" '
-    +'style="cursor:pointer;font-size:17px;line-height:1;color:'+(on?'var(--c-amber)':'var(--d-t4)')+'">'+(on?'&#9733;':'&#9734;')+'</span>';
+  var on=_isFavorite_(a), k=_favKey_(a);
+  if(!k) return '';
+  // The KEY travels in the DOM, so the control needs no wiring pass. It was first wired with an
+  // onclick assigned inside the coach-insight callback, which meant the star only became clickable
+  // once an unrelated network call returned — it rendered, and did nothing.
+  return '<span id="'+(id||'fav-star')+'" data-favkey="'+((typeof _cvEsc_==='function')?_cvEsc_(k):k)+'" '
+    +'title="'+(on?'Starred — click to remove':'Star this activity')+'" '
+    +'style="cursor:pointer;font-size:17px;line-height:1;color:'+(on?'var(--c-amber)':'#6B7280')+'">'+(on?'&#9733;':'&#9734;')+'</span>';
 }
-function favStarWire_(a, id){
-  try{
-    var el=document.getElementById(id||'fav-star'); if(!el) return;
-    el.onclick=function(ev){
-      try{ ev.stopPropagation(); }catch(e){}
-      var on=_favToggle_(a);
-      el.innerHTML=on?'&#9733;':'&#9734;';
-      el.style.color=on?'var(--c-amber)':'var(--d-t4)';
-      el.title=on?'Starred — click to remove':'Star this activity';
-    };
-  }catch(e){}
+// Toggle straight from the key. One delegated listener serves every surface that renders a star.
+function _favToggleKey_(k){
+  if(!k) return false;
+  var m=_favMap_();
+  m[k]=(m[k]===true)?false:true;
+  try{ if(typeof sv==='function') sv(); }catch(e){}
+  try{ if(typeof toast==='function') toast(m[k]?'Starred':'Star removed'); }catch(e){}
+  return m[k];
 }
+try{
+  if(typeof document!=='undefined' && typeof window!=='undefined' && !window.__favDelegated){
+    window.__favDelegated=1;
+    document.addEventListener('click', function(ev){
+      var t=ev.target&&ev.target.closest?ev.target.closest('[data-favkey]'):null;
+      if(!t) return;
+      ev.stopPropagation();
+      var on=_favToggleKey_(t.getAttribute('data-favkey'));
+      t.innerHTML=on?'&#9733;':'&#9734;';
+      t.style.color=on?'var(--c-amber)':'#6B7280';
+      t.title=on?'Starred — click to remove':'Star this activity';
+    }, true);
+  }
+}catch(e){}
+function favStarWire_(){ /* no longer needed — the star is delegated off data-favkey */ }
 try{ if(typeof window!=='undefined'){ window._favToggle_=_favToggle_; window._isFavorite_=_isFavorite_; window._favActivities_=_favActivities_; } }catch(e){}
 
 // ONE date-bucket builder for the calendar. Both surfaces call it, so a month total on one can
