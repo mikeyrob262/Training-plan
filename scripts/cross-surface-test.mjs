@@ -143,6 +143,16 @@ codeLines.forEach((L,i)=>{ NULLABLE.forEach(id=>{
   if(re.test(L) && !guard.test(L)) unguarded.push(id+' @ line '+(i+1));
 }); });
 check('no unguarded .toFixed on a nullable weight/wkg', unguarded, []);
+// INVARIANT: no window export wraps a call to its OWN name. This file is a classic script, so a
+// top-level `function f(){}` IS window.f; `window.f = function(){ return f(); }` replaces that
+// binding and the bare f inside resolves to the wrapper — unbounded recursion, RangeError on the
+// first click, thrown before the real body runs. It shipped twice: the Zwift folder picker did
+// nothing, and the Coach V .zwo button was silently broken the same way.
+// Scanned over the comment-stripped source: the note above spells the broken form out on purpose,
+// and a check that flagged its own documentation would be noise.
+const selfWrap = [...codeLines.join('\n').matchAll(/window\.([A-Za-z_$][\w$]*)\s*=\s*function\s*\(([^)]*)\)\s*\{\s*return\s+([A-Za-z_$][\w$]*)\s*\(/g)]
+  .filter(m => m[1] === m[3]).map(m => m[1]);
+check('no window export calls its own name (infinite recursion)', selfWrap, []);
 // INVARIANT: every Athlete Intelligence tab degrades to its own error, not the whole page.
 // Checked on the RETURNED EXPRESSION, not the line. A line-wide search passes a bare dispatch as
 // long as something later on the same line happens to mention _aiSafe_ — which a mutation test

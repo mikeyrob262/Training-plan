@@ -5161,14 +5161,26 @@ function backfillStravaCalories_(limit, done){
   });
 }
 try{ if(typeof window!=='undefined') window.backfillStravaCalories_=backfillStravaCalories_; }catch(e){}
-try{ if(typeof window!=='undefined') window._zwoCoachV_=function(dk){ return _zwoCoachV_(dk); }; }catch(e){}
-// Console handles for the Zwift folder, so a stuck grant can be inspected and reset without the UI.
+// Exposing a top-level function on window: ASSIGN IT, never wrap it in a call to its own name.
+//
+// This file is a classic script, so a top-level function declaration IS window.f — the declaration
+// and the property are the same binding. Writing
+//     window.f = function(){ return f(); };
+// therefore REPLACES that binding, and the bare f inside the wrapper resolves to the wrapper
+// itself. The result is unbounded recursion on the first call: "RangeError: Maximum call stack size
+// exceeded", thrown before the real body ever runs. Shipped here twice — it made the Zwift folder
+// picker do nothing (the click never reached showDirectoryPicker) and had silently broken the
+// Coach V .zwo button the same way.
+// Direct assignment is safe because the right-hand side is evaluated before the property is
+// overwritten. A wrapper is only safe over a LOCAL captured first, which is what checkFolder does.
 try{ if(typeof window!=='undefined'){
-  window.zwiftPickFolder_=function(){ return zwiftPickFolder_(); };
-  window.zwiftForgetFolder_=function(){ return zwiftForgetFolder_(); };
-  window.zwiftCheckFolder_=function(){ return zwiftGetHandle_().then(function(h){
+  window._zwoCoachV_=_zwoCoachV_;
+  window.zwiftPickFolder_=zwiftPickFolder_;
+  window.zwiftForgetFolder_=zwiftForgetFolder_;
+  var _zGet=zwiftGetHandle_, _zVer=zwiftVerify_;      // captured BEFORE any global is reassigned
+  window.zwiftCheckFolder_=function(){ return _zGet().then(function(h){
     if(!h){ console.log('[zwift-dir] none set'); return null; }
-    return zwiftVerify_(h).then(function(v){ console.log('[zwift-dir] name="'+h.name+'" ok='+v.ok+' - '+v.why); return v; });
+    return _zVer(h).then(function(v){ console.log('[zwift-dir] name="'+h.name+'" ok='+v.ok+' - '+v.why); return v; });
   }); };
 } }catch(e){}
 function withStravaToken_(cb){                     // refresh-first, mirrors fetchStravaStreams_
