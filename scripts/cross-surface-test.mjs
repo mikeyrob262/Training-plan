@@ -259,6 +259,31 @@ check('an empty measurement is 0, never a pass', BLK._blockWorkHit_(m([],174,192
 check('a null measurement is 0, never a pass', BLK._blockWorkHit_(null), 0);
 check('mean of nothing is null, not 0', BLK._blockWorkMean_(m([],174,192)), null);
 
+// BEHAVIOUR: the lap matcher must not count RECOVERY laps as work. The duration tolerance is wide
+// (max(45, workSec*0.35) = 84s for a 4 min interval) and a 3 min recovery sits inside it. Counting
+// hits upward hid this; a hit RATIO divides by the count, so it turned a clean session into a miss.
+const LAP = new Function(asServed(ex('_structIntervals_')+ex('_blockLapPowers_')+ex('_blockLapsHit_'))
+  +';return {_blockLapPowers_,_blockLapsHit_};')();
+// The real Jul 28 2026 VO2 ride, verbatim: warm-up, 4x4 at 200-207W with 3 min recoveries, cool-down.
+const jul28 = [[601,97],[240,200],[180,106],[240,200],[180,108],[240,207],[180,103],[240,200],[180,100],[300,83]]
+  .map(([time, avgPwr]) => ({ time, avgPwr }));
+const VO2T = { powerLo:174, powerHi:192 };
+const got = LAP._blockLapPowers_({ laps: jul28 }, '4x4 min, 3 min recovery, flat', VO2T);
+check('a 4x4 yields FOUR work intervals, not nine', got.vals.length, 4);
+check('   ...and they are the work laps, in order', got.vals, [200,200,207,200]);
+check('   ...so the hit ratio is 1.0, not 0.44', BLK._blockWorkHit_({vals:got.vals, lo:VO2T.powerLo}), 1);
+check('   ...and identity still confirms the session', LAP._blockLapsHit_({ laps: jul28 }, '4x4 min, 3 min recovery, flat', VO2T), true);
+// A struct with no stated recovery falls back to "keep the hardest n"
+const noRec = LAP._blockLapPowers_({ laps: jul28 }, '4x4 min', VO2T);
+check('no stated recovery still yields n intervals', noRec.vals.length, 4);
+check('   ...the hardest ones', noRec.vals, [200,200,207,200]);
+// A genuinely missed session must still be able to fail
+const soft = [[601,97],[240,150],[180,100],[240,148],[180,102],[240,151],[180,99],[240,149],[180,101],[300,83]]
+  .map(([time, avgPwr]) => ({ time, avgPwr }));
+const softV = LAP._blockLapPowers_({ laps: soft }, '4x4 min, 3 min recovery, flat', VO2T);
+check('a session ridden 25W under the floor still fails', BLK._blockWorkHit_({vals:softV.vals, lo:VO2T.powerLo}) >= 0.5, false);
+check('   ...on four intervals, so the failure is about watts not counting', softV.vals.length, 4);
+
 console.log('');
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);

@@ -24645,6 +24645,13 @@ function _blockLapPowers_(r, struct, targets){
     if(!si || !(si.n>=2) || !(si.workMin>=1)) return null;
     var workSec=si.workMin*60;
     var tol=Math.max(45, Math.round(workSec*0.35));   // same tolerance the debrief matcher uses
+    // That tolerance is wide enough to swallow the RECOVERY laps: a 4x4 with 3 min recovery has
+    // workSec 240 and tol 84, so the 180s recoveries sit inside 156-324 and match too. Counting
+    // hits upward hid it — recoveries simply never cleared the floor — but a hit RATIO divides by
+    // the contaminated count, and Jul 28 2026 read as 200/106/200/108/207/103/200/100/83W, four
+    // work laps out of "nine intervals" (0.44), failing a session that was executed exactly as
+    // prescribed. A lap nearer the recovery clock than the work clock is a recovery.
+    var recSec=(si.recMin!=null && si.recMin>0)?si.recMin*60:null;
     var vals=[];
     for(var i=0;i<laps.length;i++){
       var lp=laps[i]; if(!lp) continue;
@@ -24652,7 +24659,16 @@ function _blockLapPowers_(r, struct, targets){
       var w=(lp.avgPwr!=null)?+lp.avgPwr:NaN;
       if(!(t>0) || !(w>0)) continue;
       if(Math.abs(t-workSec)>tol) continue;
+      if(recSec!=null && Math.abs(t-recSec)<Math.abs(t-workSec)) continue;
       vals.push(Math.round(w));
+    }
+    // Belt and braces for structs that state no recovery: the protocol says how many work intervals
+    // exist, so more matches than that means something else got in. Keep the hardest n, in order.
+    if(vals.length>si.n){
+      var cut=vals.slice().sort(function(a,b){ return b-a; })[si.n-1];
+      var kept=[];
+      vals.forEach(function(v){ if(v>=cut && kept.length<si.n) kept.push(v); });
+      vals=kept;
     }
     return { vals:vals, n:si.n, need:Math.max(2, Math.ceil(si.n/2)) };
   }catch(e){ return null; }
