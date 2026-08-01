@@ -28951,6 +28951,147 @@ try{
 function favStarWire_(){ /* no longer needed — the star is delegated off data-favkey */ }
 try{ if(typeof window!=='undefined'){ window._favToggle_=_favToggle_; window._isFavorite_=_isFavorite_; window._favActivities_=_favActivities_; } }catch(e){}
 
+// Monthly consistency — active days against the athlete's own cadence goal. Lifted out of
+// dsShowCalendar so the Coach Grade and the month stats strip read ONE consistency number; a second
+// one that could disagree with the ring already on screen is the bug this app keeps re-finding.
+function _monthConsistency_(y, m, byDate, now){
+  try{
+    var dim=new Date(y,m+1,0).getDate();
+    var isCur=(now && y===now.getFullYear() && m===now.getMonth());
+    var future=(now && (y>now.getFullYear() || (y===now.getFullYear() && m>now.getMonth())));
+    if(future) return null;
+    var active=0;
+    for(var d=1;d<=dim;d++){
+      var k=(typeof normDate==='function')?normDate(y+'-'+(m+1)+'-'+d):null;
+      var list=(k&&byDate&&byDate[k])||[];
+      if(list.length) active++;
+    }
+    var wkGoal=parseInt((typeof st!=='undefined'&&(st.daysPerWeek||st.trainingDays||st.planDaysPerWeek))||0,10)||5;
+    var elapsed=isCur?now.getDate():dim;
+    var expected=Math.max(1,Math.round(elapsed*wkGoal/7));
+    var ratio=active/expected;
+    return { active:active, expected:expected, elapsed:elapsed, ratio:ratio,
+             outOf10:Math.max(0,Math.min(10,Math.round(ratio*10))) };
+  }catch(e){ return null; }
+}
+// ==================== COACH GRADE ====================
+//
+// 0-100, weighted toward EXECUTION-ADHERENCE per the block's north star: doing the prescribed work
+// matters more than the numbers it produced. The breakdown is stated, not hidden, and every
+// component is a real computation reused from elsewhere in the app:
+//
+//   40%  Execution-adherence — the block's quality sessions for the weeks of this month, graded by
+//        _blockWeekAssess_, which grades WORK INTERVALS rather than whole-ride averages.
+//   30%  Consistency        — _monthConsistency_, the same number the month stats ring shows.
+//   30%  Goal trajectory    — did FTP and CTL move TOWARD their st.goalTargets over the month.
+//                             Flat is neutral (half marks); moving away is a real penalty.
+//
+// A component with no data is DROPPED and the remaining weights renormalised, and the card says
+// which ones counted. A grade computed from one component out of three is not the same claim as a
+// grade computed from three, and it must not look like one.
+var _CG_W={exec:40, consist:30, goal:30};
+function _coachGrade_(y, m, byDate, now){
+  try{
+    if(!now) now=new Date();
+    if(y>now.getFullYear() || (y===now.getFullYear() && m>now.getMonth())) return null;   // not started
+    var parts=[], notes=[];
+    // ---- 40% execution-adherence
+    try{
+      if(typeof _blockWeekAssess_==='function' && typeof _blockWeekStart_==='function'){
+        var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+        var ftp=(typeof ftpOn_==='function')?(parseInt(ftpOn_((typeof dayKey_==='function')?dayKey_(now):null),10)||186):186;
+        var done=0, met=0, seen={};
+        var dim=new Date(y,m+1,0).getDate();
+        for(var d=1;d<=dim;d++){
+          var day=new Date(y,m,d);
+          if(day.getTime()>now.getTime()) break;
+          var ws=_blockWeekStart_(day); if(!ws) continue;
+          var key=ws.getTime(); if(seen[key]) continue; seen[key]=1;
+          var a=_blockWeekAssess_(all, ftp, new Date(ws.getTime()+3*86400000));
+          if(!a || !a.checks) continue;
+          a.checks.forEach(function(c){ if(c.done){ done++; if(c.ok) met++; } });
+        }
+        if(done>0){ parts.push({k:'exec', w:_CG_W.exec, v:met/done, label:'Execution', detail:met+' of '+done+' prescribed sessions met their condition'}); }
+        else notes.push('no prescribed sessions logged this month');
+      }
+    }catch(e){ notes.push('execution not computable'); }
+    // ---- 30% consistency
+    var cons=_monthConsistency_(y, m, byDate, now);
+    if(cons && cons.expected>0){
+      parts.push({k:'consist', w:_CG_W.consist, v:Math.min(1,cons.ratio),
+                  label:'Consistency', detail:cons.active+' active days against a target of '+cons.expected});
+    } else notes.push('consistency not computable');
+    // ---- 30% goal trajectory
+    try{
+      var g=(typeof _goalTargets_==='function')?_goalTargets_():null;
+      var mStart=(typeof normDate==='function')?normDate(y+'-'+(m+1)+'-1'):null;
+      var endD=new Date(Math.min(new Date(y,m+1,0).getTime(), now.getTime()));
+      var mEnd=(typeof dayKey_==='function')?dayKey_(endD):null;
+      var moves=[];
+      if(g && typeof ftpOn_==='function' && mStart && mEnd){
+        var f0=parseFloat(ftpOn_(mStart)), f1=parseFloat(ftpOn_(mEnd));
+        if(isFinite(f0)&&isFinite(f1)&&g.ftpW>f0){ moves.push({name:'FTP', v:_cgToward_(f0,f1,g.ftpW)}); }
+      }
+      if(g && typeof fitnessSeries_==='function'){
+        var ser=fitnessSeries_()||[];
+        var c0=null,c1=null;
+        ser.forEach(function(p){ if(p.date<=mStart) c0=p.ctl; if(p.date<=mEnd) c1=p.ctl; });
+        if(c0!=null&&c1!=null&&g.ctl>c0){ moves.push({name:'Fitness', v:_cgToward_(c0,c1,g.ctl)}); }
+      }
+      if(moves.length){
+        var sum=0; moves.forEach(function(x){ sum+=x.v; });
+        parts.push({k:'goal', w:_CG_W.goal, v:sum/moves.length, label:'Goal trajectory',
+                    detail:moves.map(function(x){ return x.name; }).join(' and ')+' movement toward target'});
+      } else notes.push('no goal movement recorded this month');
+    }catch(e){ notes.push('goal trajectory not computable'); }
+    if(!parts.length) return null;
+    var wSum=0, acc=0;
+    parts.forEach(function(p){ wSum+=p.w; acc+=p.w*p.v; });
+    var score=Math.round(acc/wSum*100);
+    return { score:score, letter:_cgLetter_(score), parts:parts, notes:notes,
+             partial:(wSum<(_CG_W.exec+_CG_W.consist+_CG_W.goal)), weightUsed:wSum };
+  }catch(e){ return null; }
+}
+// Movement toward a target, 0..1. Flat is 0.5 — neutral, neither credited nor punished. Moving
+// AWAY scores below 0.5 and is visible, never hidden or floored at neutral.
+function _cgToward_(from, to, target){
+  if(!isFinite(from)||!isFinite(to)||!isFinite(target)) return 0.5;
+  var gap=target-from;
+  if(gap===0) return 1;
+  var moved=(to-from)/gap;                       // 1 = closed the whole gap this month
+  if(moved<=0) return Math.max(0, 0.5+moved*2);  // away from target -> below neutral
+  return Math.min(1, 0.5+Math.min(0.5, moved*2.5));
+}
+// Stated mapping, no curve.
+function _cgLetter_(s){ return s>=90?'A':s>=80?'B':s>=70?'C':s>=60?'D':'F'; }
+function _cgColour_(s){ return s>=90?'var(--c-green)':s>=80?'var(--c-blue)':s>=70?'var(--c-amber)':'var(--c-red)'; }
+// The tappable breakdown, matching the teaching-layer pattern ("tap any metric to learn what it
+// means and why for YOU"). Every number in it is the number the grade was computed from.
+function coachGradeExplain_(y, m){
+  try{
+    var now=new Date();
+    var by=_calByDate_((typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]));
+    var g=_coachGrade_(y, m, by, now);
+    var MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    if(!g){ if(typeof uiAlert==='function') uiAlert('No Coach Grade for '+MONF[m]+' '+y+' — nothing computable for that month yet.'); return; }
+    var NL=String.fromCharCode(10);
+    var L=['Coach Grade for '+MONF[m]+' '+y+': '+g.letter+' ('+g.score+'/100)', ''];
+    g.parts.forEach(function(p){
+      L.push(p.label+' — '+Math.round(p.w/g.weightUsed*100)+'% of this grade, scored '+Math.round(p.v*100)+'%');
+      L.push('   '+p.detail);
+    });
+    if(g.partial){
+      L.push('');
+      L.push('Weighted over the components that had data ('+g.weightUsed+' of 100 points of the full formula).');
+      if(g.notes.length) L.push('Not counted: '+g.notes.join('; ')+'.');
+    }
+    L.push('');
+    L.push('Full formula: 40% execution-adherence (prescribed sessions that met their condition, graded on work intervals), 30% consistency (active days vs your cadence goal), 30% goal trajectory (FTP and Fitness moving toward your targets). 90+=A, 80+=B, 70+=C, 60+=D.');
+    if(typeof uiAlert==='function') uiAlert(L.join(NL)); else console.log(L.join(NL));
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window.coachGradeExplain_=coachGradeExplain_; } }catch(e){}
+
 // ONE date-bucket builder for the calendar. Both surfaces call it, so a month total on one can
 // never disagree with the same month on the other.
 function _calByDate_(list){
@@ -29410,6 +29551,13 @@ function calYearHTML_(y, byDate, now){
       });
       H+='</div>';
     }
+    // Coach Grade — stated, tappable, and absent when nothing is computable rather than guessed.
+    if(!future){
+      var cg=_coachGrade_(y, m, byDate, now);
+      if(cg){
+        H+='<div data-cal="cgrade" data-ym="'+y+'-'+(m+1)+'" title="Tap for the breakdown" style="position:absolute;top:11px;right:'+(fav?'30':'12')+'px;font-size:12px;font-weight:800;color:'+_cgColour_(cg.score)+';cursor:pointer">'+cg.letter+(cg.partial?'<span style="font-size:9px;color:var(--d-t4)">*</span>':'')+'</div>';
+      }
+    }
     if(lab){
       H+='<div style="display:flex;align-items:center;gap:6px;margin-top:9px" title="'+((typeof _cvEsc_==='function')?_cvEsc_(lab.why):'')+'">'
         +'<span style="width:7px;height:7px;border-radius:50%;background:'+(lab.planned?'#a855f7':accent)+';flex-shrink:0"></span>'
@@ -29553,15 +29701,24 @@ function dsShowCalendar(){
     var wkGoal=parseInt(st.daysPerWeek||st.trainingDays||st.planDaysPerWeek||0,10)||5;
     var elapsed=isCurMonth?now.getDate():daysInMonth;
     var expected=Math.max(1,Math.round(elapsed*wkGoal/7));
-    var consist10=Math.max(0,Math.min(10,Math.round(nActive/expected*10)));
+    // ONE consistency number — the Coach Grade reads the same helper, so the grade and the ring on
+    // this strip cannot disagree.
+    var _mc=_monthConsistency_(viewYear, viewMonth, ridesByDate, now);
+    var consist10=_mc?_mc.outOf10:Math.max(0,Math.min(10,Math.round(nActive/expected*10)));
 
     var H='';
     // ---- top bar ----
     H+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">';
-    H+='<div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:var(--d-head)">Calendar</div>';
+    // The Year view is a different question, so it gets a different title, and the stepper moves
+    // YEARS rather than months — a month arrow inside a year view is the same class of mismatch as
+    // a control that looks live and is not.
+    var _isYr=(calView==='year');
+    H+='<div><div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:var(--d-head)">'+(_isYr?'Training Calendar':'Calendar')+'</div>'
+      +(_isYr?'<div style="font-size:12px;color:var(--d-t4);margin-top:2px">Your year at a glance. Every day counts.</div>':'')
+      +'</div>';
     H+='<div style="display:flex;align-items:center;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;overflow:hidden">';
     H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div>';
-    H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:var(--d-head);min-width:118px;text-align:center">'+monthNames[viewMonth]+' '+viewYear+'</div>';
+    H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:var(--d-head);min-width:'+(_isYr?'70':'118')+'px;text-align:center">'+(_isYr?viewYear:(monthNames[viewMonth]+' '+viewYear))+'</div>';
     H+='<div data-cal="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div>';
     H+='</div>';
     H+='<div data-cal="today" style="padding:8px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--d-soft)">Today</div>';
@@ -29791,12 +29948,18 @@ function dsShowCalendar(){
     wrap.addEventListener('click',function(e){
       var t=e.target.closest('[data-cal]'); if(!t) return;
       var a=t.getAttribute('data-cal');
-      if(a==='prev'){ calFilterOpen=false; viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} renderCalendar(); }
-      else if(a==='next'){ calFilterOpen=false; viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); }
+      if(a==='prev'){ calFilterOpen=false;
+        if(calView==='year'){ viewYear--; } else { viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} }
+        renderCalendar(); }
+      else if(a==='next'){ calFilterOpen=false;
+        if(calView==='year'){ viewYear++; } else { viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} }
+        renderCalendar(); }
       else if(a==='today'){ calFilterOpen=false; viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
       // A chapter card opens its month — the same drill-down the month tiles already had.
       else if(a==='toplan'){ calFilterOpen=false; if(typeof navToPlan_==='function') navToPlan_(); }
+      else if(a==='cgrade'){ calFilterOpen=false; var _cg=String(t.getAttribute('data-ym')||'').split('-');
+        if(_cg.length===2 && typeof coachGradeExplain_==='function') coachGradeExplain_(parseInt(_cg[0],10), parseInt(_cg[1],10)-1); }
       else if(a==='ymonth'){ var _ym=String(t.getAttribute('data-ym')||'').split('-');
         if(_ym.length===2){ viewYear=parseInt(_ym[0],10); viewMonth=parseInt(_ym[1],10)-1; calView='month'; calFilterOpen=false; renderCalendar(); } }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }

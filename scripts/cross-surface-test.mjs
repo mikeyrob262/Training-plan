@@ -298,6 +298,17 @@ const srcLines = src.split(String.fromCharCode(10));
 const lineOf = (needle) => srcLines.findIndex(L => L.startsWith(needle));
 const calStart = lineOf('function dsShowCalendar(');
 // INVARIANT: ONE momentum computation. Two that can disagree is the taperVerdict_-class bug.
+// INVARIANT: ONE consistency number. The Coach Grade and the month stats ring must not disagree.
+check('there is exactly one consistency helper', countCode(/function _monthConsistency_/g), 1);
+check('the month stats strip reads it', /var _mc=_monthConsistency_\(viewYear, viewMonth/.test(src), true);
+// INVARIANT: the Coach Grade formula is STATED and its weights live in one place.
+check('the grade weights are declared once', countCode(/var _CG_W=/g), 1);
+check('the letter mapping is stated, no curve', /s>=90\?.A.:s>=80\?.B.:s>=70\?.C.:s>=60\?.D.:.F./.test(src), true);
+check('the breakdown is tappable', src.indexOf('data-cal="cgrade"') > 0, true);
+check('a component with no data is dropped, not zeroed', /partial:\(wSum</.test(src), true);
+check('...and a partial grade says so', /Weighted over the components that had data/.test(src), true);
+check('moving AWAY from a goal scores below neutral', /if\(moved<=0\) return Math\.max\(0, 0\.5\+moved\*2\)/.test(src), true);
+check('execution-adherence grades via _blockWeekAssess_', /_blockWeekAssess_\(all, ftp, new Date\(ws\.getTime\(\)\+3\*86400000\)\)/.test(src), true);
 check('there is exactly one momentum verdict', countCode(/function _momentumVerdict_/g), 1);
 check('the AI card reads it rather than recomputing', countCode(/ramp>=2\?\[.Improving./g), 0);
 // INVARIANT: every highlight is computed or explicitly absent, and an absent one is not clickable.
