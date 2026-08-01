@@ -8339,6 +8339,47 @@ function swapToStrengthC_(dateKey, sessId){
     try{ if(typeof toast==='function') toast('Swapped '+was+' for '+def.name); }catch(e){}
   }catch(e){ try{ console.error('[strengthC-swap]', e && e.message); }catch(_e){} }
 }
+// Swap the RIDE (or attempt) prescribed for a date to a different SESSION_DEFS key. Same user-owned
+// write path as swapToStrengthC_/swapMobility_, so the swap CLAIMS the day and the generator will
+// not overwrite it.
+//
+// This exists because the prescription is what the coach grades against: _ridePrescriptionFor_
+// returns the def's note as "Execution rules" straight into the prompt. Riding a solo route attempt
+// on a day the block prescribed a group ride meant the model was told to judge "Sit in for the first
+// 20 mi. Race only the last 10-15. Do not chase if dropped." — advice about a ride that did not
+// happen. Fixing the ride's numbers is pointless if the intent it is measured against is wrong.
+//
+// Like swapToStrengthC_, this does NOT reschedule the displaced session. The block's rule is that a
+// missed session does not move; hiding that here would contradict it.
+function swapRideTo_(dateKey, defKey, sessId){
+  try{
+    if(typeof planSessionsForDate_!=='function' || typeof planUpsertSession_!=='function'){
+      console.warn('[swap] plan write path unavailable'); return false;
+    }
+    var defs=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS:null;
+    var def=defs?defs[defKey]:null;
+    if(!def){ console.warn('[swap] unknown session key: '+defKey); return false; }
+    if(def.type!=='ride' && def.type!=='attempt'){ console.warn('[swap] '+defKey+' is not a ride or attempt'); return false; }
+    var list=planSessionsForDate_(dateKey)||[], sess=null;
+    for(var i=0;i<list.length;i++){ if(String(list[i].id||'')===String(sessId||'')){ sess=list[i]; break; } }
+    if(!sess) sess=list.filter(function(x){ return x && (x.type==='ride'||x.type==='attempt'); })[0]||null;
+    if(!sess){ console.warn('[swap] no ride or attempt session on '+dateKey); return false; }
+    var was=sess.name||sess.intent||'the planned session';
+    var patch={ id:sess.id, type:def.type, intent:defKey, name:def.name,
+                status:(sess.status==='completed'?sess.status:'planned') };
+    planUpsertSession_(dateKey, patch, ['type','intent','name','status'], 'user');
+    try{ sv(); }catch(e){}
+    try{ console.log('[swap] '+dateKey+': '+was+' -> '+def.name+'  (intent '+defKey+')'); }catch(e){}
+    try{ if(typeof _cvRepaint_==='function') _cvRepaint_(); }catch(e){}
+    try{ if(typeof showHomeDash==='function' && (typeof isDesktop!=='function' || !isDesktop())) showHomeDash(); }catch(e){}
+    try{ if(typeof dsShowDashboard==='function' && typeof isDesktop==='function' && isDesktop()) dsShowDashboard(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Swapped '+was+' for '+def.name); }catch(e){}
+    return true;
+  }catch(e){ try{ console.error('[swap]', e && e.message); }catch(_e){} return false; }
+}
+// Direct assignment — window.f=function(){return f();} is infinite recursion in a classic script.
+try{ if(typeof window!=='undefined'){ window.swapRideTo_=swapRideTo_; } }catch(e){}
+
 // Coach V: should today's lower-body session become Strength C to protect the legs?
 //
 // Returns null unless every condition holds, and the sentence NAMES the evidence rather than
@@ -34968,6 +35009,12 @@ var SESSION_DEFS={
   optional: { type:'optional', name:'Optional',                       note:'Nothing hard, and NEVER a makeup. Good legs, spin easy; otherwise rest.' },
   chalet:   { type:'attempt', name:'Chalet Reynard attempt', pctFtp:[83,86], durationMin:90, note:'15 min warmup, then a conservative 155-160W band for the first 30 min. Long-climb endurance test — pace it, do not send the bottom.' },
   alpe:     { type:'attempt', name:'Alpe du Zwift — sub-70',           note:'A time trial, not a max effort. Even pacing beats a hot start every time.' },
+  // Deliberately carries NO pctFtp. A route attempt has no prescribed band, and inventing one would
+  // hand the coach a target the ride was never ridden to. The note becomes "Execution rules" in the
+  // coach prompt (_ridePrescriptionFor_ returns def.note as rules), so it has to describe how to
+  // JUDGE the effort — the group-ride note it replaces was telling the model to assess bunch tactics
+  // on a ride with no bunch in it.
+  fuhgeddaboudit:{ type:'attempt', name:'Fuhgeddaboudit attempt',      note:'Hard solo route attempt in New York. Ridden on its own terms as a sustained time-trial effort — there is no group to sit in on and no wheels to follow, so judge sustained output and pacing across the effort, not bunch tactics and not a steady-state ideal.' },
   tenk:     { type:'attempt', name:'10k race',                         note:'Race day. Warm up properly, then run your race.' },
   ventop:   { type:'attempt', name:'Ven-Top summit',                   note:'The full summit attempt — everything the block was built for.' }
 };
