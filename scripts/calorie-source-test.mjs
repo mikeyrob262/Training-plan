@@ -106,7 +106,10 @@ check('...even though the card shows ~781', A.rideCalText_(RIDE), '~781 Cal');
 
 console.log('\n=== source guard: no surface prints kJ as Cal ===');
 check('no site renders rideKj_ with a Cal label', /rideKj_\([^)]*\)[^;]{0,80}' Cal'/.test(src), false);
-check('the desktop Burned cell reads through rideCalText_', /rideCalText_\(r\)\+'<\/div><div style="font-size:9px;color:#64748b">/.test(src), true);
+// The colour here is incidental — it was only ever an anchor to identify the call site, and pinning
+// a literal hex made this fail the moment desktop colours moved to theme variables for light mode.
+// Match the structure, not the palette.
+check('the desktop Burned cell reads through rideCalText_', /rideCalText_\(r\)\+'<\/div><div style="font-size:9px;color:[^"]+">/.test(src), true);
 check('the backfill exists and is newest-first', /function backfillStravaCalories_[\s\S]{0,700}\(a\.date<b\.date\)\?1:-1/.test(src), true);
 check('the sync calls it', /backfillStravaCalories_\(40,/.test(src), true);
 check('every /activities/{id} fetch harvests the payload',

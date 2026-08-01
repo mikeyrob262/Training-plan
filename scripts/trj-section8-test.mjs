@@ -148,7 +148,9 @@ console.log('\n=== the filled bar: an OWNER-GRANTED, SCOPED exception to the no-
 const rowArea = html.slice(html.indexOf('WEEK-BY-WEEK'), html.indexOf('WHAT THIS MEANS'));
 check('a filled bar is drawn per week', (rowArea.match(/height:100%;border-radius:4px;background:#/g) || []).length, 8);
 check('its width is the ratio, not an arbitrary fill', /width:103\.0%|width:100\.0%/.test(rowArea), true);
-check('on a track that is the full 0-200% scale', /height:7px;border-radius:4px;background:#1c2130;overflow:hidden/.test(rowArea), true);
+// Colour-agnostic: the track's surface moved to a theme variable when desktop gained light mode.
+// What matters here is the geometry (a full-width 0-200% track), not which grey fills it.
+check('on a track that is the full 0-200% scale', /height:7px;border-radius:4px;background:[^;]+;overflow:hidden/.test(rowArea), true);
 check('the scale and its ceiling are stated', /shared 0&ndash;200% scale &middot; a full-width bar is 200% of prescribed/.test(html), true);
 check('each bar carries the exact number as a title', /title="206% of prescribed"/.test(rowArea), true);
 // Proportions: 200% must be the full track and everything else a true fraction of it.

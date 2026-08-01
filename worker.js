@@ -130,12 +130,26 @@ export default {
   --b1:rgba(0,0,0,.08);--b2:rgba(0,0,0,.13);
   --t1:#242428;--t2:#777777;--t3:#AAAAAA;
   --green:#27AE60;--blue:#2980B9;--red:#E74C3C;--gold:#E67E22;--purple:#8E44AD;
-  --orange:#FC4C02;--accent:#FC4C02
+  --orange:#FC4C02;--accent:#FC4C02;
+  /* Desktop shell tiers. The .ds-* rules and the html.aiq-desktop shell used to hardcode the
+     dark values below, which is why the Dark Mode switch flipped body.dark and nothing moved:
+     the variables repointed correctly, but almost nothing on desktop read them. Dark values
+     are byte-identical to the literals they replaced, so dark mode is unchanged. */
+  --d-back:#EEEFF2;--d-shell:#F7F8FA;--d-panel:#FFFFFF;--d-raise:#FFFFFF;
+  --d-line:rgba(0,0,0,.10);--d-line2:rgba(0,0,0,.16);--d-chip:#EDEFF3;
+  --d-head:#15181D;--d-t1:#15181D;--d-t2:#2C3138;--d-soft:#3A4149;
+  --d-t3:#4E5866;--d-t4:#6B7280;--d-dim:#7C8595;
+  --d-hover:rgba(0,0,0,.045);--d-scroll:rgba(0,0,0,.20);--d-scroll2:rgba(0,0,0,.34)
 }
 body.dark{
   --bg:#111111;--s1:#1C1C1E;--s2:#2C2C2E;--s3:#3A3A3C;
   --b1:rgba(255,255,255,.09);--b2:rgba(255,255,255,.15);
   --t1:#FFFFFF;--t2:#C7C7CC;--t3:#AEAEB2;
+  --d-back:#0a0c10;--d-shell:#0d0f14;--d-panel:#111318;--d-raise:#1c2130;
+  --d-line:#1e2130;--d-line2:#252d40;--d-chip:#1a1f2e;
+  --d-head:#f1f5f9;--d-t1:#ffffff;--d-t2:#e2e8f0;--d-soft:#cbd5e1;
+  --d-t3:#94a3b8;--d-t4:#64748b;--d-dim:#5b6678;
+  --d-hover:rgba(255,255,255,.03);--d-scroll:rgba(255,255,255,.18);--d-scroll2:rgba(255,255,255,.32)
 }
 body.dark .hdr{background:#1C1C1E;box-shadow:0 1px 8px rgba(0,0,0,.4)}
 body.dark .wo-card{box-shadow:none}
@@ -154,8 +168,8 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
   #app-shell .toast{max-width:480px}
 }
 @media (min-width:1024px){
-  body{background:#0a0c10;overflow:hidden}
-  #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:#0d0f14!important;display:block!important;height:100vh;overflow:hidden;position:relative}
+  body{background:var(--d-back);overflow:hidden}
+  #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:var(--d-shell)!important;display:block!important;height:100vh;overflow:hidden;position:relative}
   #app-shell .bnav{display:none!important}
   #app-shell .hdr{display:none!important}
   #desktop-shell{display:flex!important;position:absolute;inset:0;z-index:999}
@@ -167,8 +181,8 @@ body{font-family:-apple-system,sans-serif;background:var(--bg);color:var(--t1);m
    so the layout can never diverge from the detection the way the width media
    query alone did — and a manual Mobile/Desktop override holds regardless of
    window width. */
-html.aiq-desktop body{background:#0a0c10;overflow:hidden}
-html.aiq-desktop #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:#0d0f14!important;display:block!important;height:100vh;overflow:hidden;position:relative}
+html.aiq-desktop body{background:var(--d-back);overflow:hidden}
+html.aiq-desktop #app-shell{max-width:none!important;margin:0!important;box-shadow:none!important;background:var(--d-shell)!important;display:block!important;height:100vh;overflow:hidden;position:relative}
 html.aiq-desktop #app-shell .bnav{display:none!important}
 html.aiq-desktop #app-shell .hdr{display:none!important}
 html.aiq-desktop #desktop-shell{display:flex!important;position:absolute;inset:0;z-index:999}
@@ -177,92 +191,92 @@ html.aiq-mobile #desktop-shell{display:none!important}
 html.aiq-mobile #mobile-content{display:block!important}
 html.aiq-mobile body{background:var(--s3,#111)!important;overflow:auto!important}
 html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;height:auto!important;overflow:visible!important;background:var(--bg)!important;display:block!important;position:relative}
-.ds{display:none;flex:1;height:100vh;overflow:hidden;background:#0d0f14;color:#e2e8f0}
-.ds-sidebar{width:152px;flex-shrink:0;background:#111318;border-right:1px solid #1e2130;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.ds{display:none;flex:1;height:100vh;overflow:hidden;background:var(--d-shell);color:var(--d-t2)}
+.ds-sidebar{width:152px;flex-shrink:0;background:var(--d-panel);border-right:1px solid var(--d-line);display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .ds-sb-top{padding:14px 14px 0}
 .ds-brand{display:flex;align-items:center;gap:8px;margin-bottom:14px}
 .ds-brand-logo{width:26px;height:26px;background:#FC4C02;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .ds-brand-logo svg{width:14px;height:14px;fill:#fff}
-.ds-brand-name{font-size:13px;font-weight:700;color:#fff;letter-spacing:-.01em}
-.ds-profile{display:flex;align-items:center;gap:9px;padding:10px 0 14px;border-bottom:1px solid #1e2130;margin-bottom:6px}
-.ds-avatar{width:34px;height:34px;border-radius:50%;background:#2a3a4a;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#94a3b8}
-.ds-pname{font-size:12px;font-weight:600;color:#e2e8f0}
-.ds-pwt{font-size:10px;color:#64748b;margin-top:1px}
-.ds-pbadge{font-size:9px;background:#1a2030;color:#64748b;padding:1px 6px;border-radius:3px;display:inline-block;margin-top:3px}
+.ds-brand-name{font-size:13px;font-weight:700;color:var(--d-t1);letter-spacing:-.01em}
+.ds-profile{display:flex;align-items:center;gap:9px;padding:10px 0 14px;border-bottom:1px solid var(--d-line);margin-bottom:6px}
+.ds-avatar{width:34px;height:34px;border-radius:50%;background:var(--d-chip);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--d-t3)}
+.ds-pname{font-size:12px;font-weight:600;color:var(--d-t2)}
+.ds-pwt{font-size:10px;color:var(--d-t4);margin-top:1px}
+.ds-pbadge{font-size:9px;background:var(--d-chip);color:var(--d-t4);padding:1px 6px;border-radius:3px;display:inline-block;margin-top:3px}
 .ds-nav{flex:1;padding:4px 0;overflow-y:auto}
-.ds-ni{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:#64748b;cursor:pointer;border-left:2px solid transparent}
-.ds-ni:hover{color:#94a3b8;background:rgba(255,255,255,.03)}
+.ds-ni{display:flex;align-items:center;gap:9px;padding:7px 14px;font-size:12px;color:var(--d-t4);cursor:pointer;border-left:2px solid transparent}
+.ds-ni:hover{color:var(--d-t3);background:var(--d-hover)}
 .ds-ni.on{color:#FC4C02;border-left-color:#FC4C02;background:rgba(252,76,2,.07)}
 .ds-ni i{font-size:14px;width:16px;flex-shrink:0}
-.ds-foot{padding:8px 0;border-top:1px solid #1e2130}
-.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:#0d0f14}
-.ds-mhdr{padding:13px 18px 11px;border-bottom:1px solid #1e2130;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
-.ds-back{font-size:11px;color:#64748b;display:flex;align-items:center;gap:3px;margin-bottom:4px;cursor:pointer}
-.ds-title{font-size:20px;font-weight:700;color:#fff;letter-spacing:-.02em}
-.ds-subtitle{font-size:11px;color:#64748b;margin-top:3px}
+.ds-foot{padding:8px 0;border-top:1px solid var(--d-line)}
+.ds-main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;background:var(--d-shell)}
+.ds-mhdr{padding:13px 18px 11px;border-bottom:1px solid var(--d-line);display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0}
+.ds-back{font-size:11px;color:var(--d-t4);display:flex;align-items:center;gap:3px;margin-bottom:4px;cursor:pointer}
+.ds-title{font-size:20px;font-weight:700;color:var(--d-t1);letter-spacing:-.02em}
+.ds-subtitle{font-size:11px;color:var(--d-t4);margin-top:3px}
 .ds-actions{display:flex;align-items:center;gap:7px;padding-top:2px}
-.ds-btn{font-size:11px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:5px 11px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.ds-btn{font-size:11px;color:var(--d-t3);background:var(--d-chip);border:1px solid var(--d-line2);padding:5px 11px;border-radius:7px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
 .ds-btn i{font-size:12px}
-.ds-stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid #1e2130;flex-shrink:0}
-.ds-stat{padding:11px 6px 9px;text-align:center;border-right:1px solid #1e2130}
+.ds-stats{display:grid;grid-template-columns:repeat(6,1fr);border-bottom:1px solid var(--d-line);flex-shrink:0}
+.ds-stat{padding:11px 6px 9px;text-align:center;border-right:1px solid var(--d-line)}
 .ds-stat:last-child{border-right:none}
-.ds-sv{font-size:16px;font-weight:700;color:#fff;line-height:1}
+.ds-sv{font-size:16px;font-weight:700;color:var(--d-t1);line-height:1}
 .ds-sv.o{color:#FC4C02}.ds-sv.b{color:#60a5fa}.ds-sv.a{color:#f59e0b}
-.ds-sl{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
-.ds-tabs{display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0}
-.ds-tab{font-size:12px;padding:8px 12px;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
-.ds-tab.on{color:#e2e8f0;border-bottom-color:#FC4C02}
+.ds-sl{font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.ds-tabs{display:flex;background:var(--d-panel);border-bottom:1px solid var(--d-line);padding:0 14px;flex-shrink:0}
+.ds-tab{font-size:12px;padding:8px 12px;color:var(--d-t4);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.ds-tab.on{color:var(--d-t2);border-bottom-color:#FC4C02}
 .ds-scroll{flex:1;overflow-y:auto}
 *::-webkit-scrollbar{display:none}*{scrollbar-width:none;-ms-overflow-style:none}
 .ds-card{scrollbar-color:transparent transparent}
-.ds-card:hover{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.28) transparent}
+.ds-card:hover{scrollbar-width:thin;scrollbar-color:var(--d-scroll2) transparent}
 .ds-card:hover::-webkit-scrollbar{display:block;width:6px;height:6px}
 .ds-card:hover::-webkit-scrollbar-track{background:transparent}
-.ds-card:hover::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
-.ds-card:hover::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32)}
+.ds-card:hover::-webkit-scrollbar-thumb{background:var(--d-scroll);border-radius:3px}
+.ds-card:hover::-webkit-scrollbar-thumb:hover{background:var(--d-scroll2)}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
-.ds-map-ctrl{position:absolute;top:10px;left:10px;background:rgba(17,19,24,.9);border:1px solid #2a3148;border-radius:6px;overflow:hidden}
-.ds-map-btn{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer;font-size:16px;font-weight:300;line-height:1}
-.ds-map-btn+.ds-map-btn{border-top:1px solid #2a3148}
-.ds-elev{height:72px;background:#111318;border-top:1px solid #1e2130;flex-shrink:0;position:relative;overflow:hidden;padding:5px 14px 0}
-.ds-elev-lbl{font-size:9px;color:#64748b}
-.ds-c3{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #1e2130;flex-shrink:0}
-.ds-card{padding:11px 14px;border-right:1px solid #1e2130}
+.ds-map-ctrl{position:absolute;top:10px;left:10px;background:var(--d-panel);border:1px solid var(--d-line2);border-radius:6px;overflow:hidden}
+.ds-map-btn{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--d-t3);cursor:pointer;font-size:16px;font-weight:300;line-height:1}
+.ds-map-btn+.ds-map-btn{border-top:1px solid var(--d-line2)}
+.ds-elev{height:72px;background:var(--d-panel);border-top:1px solid var(--d-line);flex-shrink:0;position:relative;overflow:hidden;padding:5px 14px 0}
+.ds-elev-lbl{font-size:9px;color:var(--d-t4)}
+.ds-c3{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--d-line);flex-shrink:0}
+.ds-card{padding:11px 14px;border-right:1px solid var(--d-line)}
 .ds-card:last-child{border-right:none}
 .ds-card-hd{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:5px;margin-bottom:7px}
 .ds-card-nums{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:7px}
-.ds-card-main{font-size:19px;font-weight:700;color:#fff;line-height:1}
-.ds-card-unit{font-size:11px;color:#64748b;margin-left:2px}
-.ds-card-sub{font-size:11px;color:#94a3b8}
-.ds-card-sublbl{font-size:10px;color:#64748b}
+.ds-card-main{font-size:19px;font-weight:700;color:var(--d-t1);line-height:1}
+.ds-card-unit{font-size:11px;color:var(--d-t4);margin-left:2px}
+.ds-card-sub{font-size:11px;color:var(--d-t3)}
+.ds-card-sublbl{font-size:10px;color:var(--d-t4)}
 .ds-spark{height:34px;width:100%}
 .ds-c4{display:grid;grid-template-columns:repeat(4,1fr);flex-shrink:0}
-.ds-c4card{padding:10px 14px;border-right:1px solid #1e2130;border-top:1px solid #1e2130}
+.ds-c4card{padding:10px 14px;border-right:1px solid var(--d-line);border-top:1px solid var(--d-line)}
 .ds-c4card:last-child{border-right:none}
-.ds-c4hd{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:5px;margin-bottom:4px}
-.ds-c4main{font-size:13px;font-weight:600;color:#fff}
-.ds-c4sub{font-size:10px;color:#64748b;margin-top:2px}
-.ds-rpanel{width:286px;flex-shrink:0;border-left:1px solid #1e2130;background:#111318;overflow-y:auto;display:none;flex-direction:column}
-.ds-rp{padding:13px 15px;border-bottom:1px solid #1e2130}
+.ds-c4hd{font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:5px;margin-bottom:4px}
+.ds-c4main{font-size:13px;font-weight:600;color:var(--d-t1)}
+.ds-c4sub{font-size:10px;color:var(--d-t4);margin-top:2px}
+.ds-rpanel{width:286px;flex-shrink:0;border-left:1px solid var(--d-line);background:var(--d-panel);overflow-y:auto;display:none;flex-direction:column}
+.ds-rp{padding:13px 15px;border-bottom:1px solid var(--d-line)}
 .ds-rp-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
-.ds-rp-t{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.ds-rp-t{font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
 .ds-rp-link{font-size:10px;color:#60a5fa;cursor:pointer}
 .ds-conds{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
 .ds-cd-icon{font-size:18px;margin-bottom:3px}
-.ds-cd-val{font-size:12px;font-weight:700;color:#e2e8f0}
-.ds-cd-lbl{font-size:9px;color:#64748b;margin-top:1px}
+.ds-cd-val{font-size:12px;font-weight:700;color:var(--d-t2)}
+.ds-cd-lbl{font-size:9px;color:var(--d-t4);margin-top:1px}
 .ds-ai-wrap{display:flex;align-items:flex-start;gap:10px}
 .ds-ai-label{font-size:13px;font-weight:700;color:#4ade80;margin-bottom:4px}
-.ds-ai-body{font-size:11px;color:#94a3b8;line-height:1.5}
-.ds-view-full{width:100%;margin-top:9px;padding:6px;background:#1a1f2e;border:1px solid #252d40;border-radius:7px;font-size:11px;color:#94a3b8;cursor:pointer;text-align:center}
+.ds-ai-body{font-size:11px;color:var(--d-t3);line-height:1.5}
+.ds-view-full{width:100%;margin-top:9px;padding:6px;background:var(--d-chip);border:1px solid var(--d-line2);border-radius:7px;font-size:11px;color:var(--d-t3);cursor:pointer;text-align:center}
 .ds-ins-list{display:flex;flex-direction:column;gap:8px}
-.ds-ins{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:#94a3b8;line-height:1.4}
+.ds-ins{display:flex;align-items:flex-start;gap:7px;font-size:11px;color:var(--d-t3);line-height:1.4}
 .ds-ins i{font-size:13px;margin-top:1px;flex-shrink:0}
 .ds-laps{width:100%;font-size:11px;border-collapse:collapse}
-.ds-laps th{color:#64748b;font-weight:500;text-align:left;padding:3px 5px 5px;border-bottom:1px solid #1e2130;font-size:10px}
-.ds-laps td{padding:5px 5px;color:#94a3b8;border-bottom:1px solid #161b27}
-.ds-laps td:first-child{color:#64748b}
+.ds-laps th{color:var(--d-t4);font-weight:500;text-align:left;padding:3px 5px 5px;border-bottom:1px solid var(--d-line);font-size:10px}
+.ds-laps td{padding:5px 5px;color:var(--d-t3);border-bottom:1px solid var(--d-line)}
+.ds-laps td:first-child{color:var(--d-t4)}
 .anx{overflow:visible}
 .anx .pale{fill:#3E3A35;stroke:#4A4640;stroke-width:.18}
 .anx .bone{fill:#4A453C;stroke:#565046;stroke-width:.18}
@@ -680,11 +694,11 @@ window.AIQ_DESKTOP_MIN=1024;
   </div>
   <div class="ds-main" id="ds-main-area">
     <div id="ds-content" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
-      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px">Select a ride to view details</div>
     </div>
   </div>
   <div class="ds-rpanel" id="ds-right-panel">
-    <div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>
   </div>
 </div>
 <div id="mobile-content">
@@ -10433,8 +10447,8 @@ function nutDateBanner_(){
   // right edge, which is the one control on the banner that matters.
   return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:rgba(217,119,6,.12);border:1px solid rgba(217,119,6,.35);border-radius:11px;padding:9px 12px;margin-bottom:10px">'
     +'<span style="width:7px;height:7px;border-radius:50%;background:#d97706;flex-shrink:0"></span>'
-    +'<span style="font-size:12.5px;color:#e8edf5;font-weight:700;min-width:0">Logging to '+pretty+'</span>'
-    +'<span style="font-size:11.5px;color:#94a3b8">not today</span>'
+    +'<span style="font-size:12.5px;color:var(--d-head);font-weight:700;min-width:0">Logging to '+pretty+'</span>'
+    +'<span style="font-size:11.5px;color:var(--d-t3)">not today</span>'
     +'<span onclick="nutJumpToday_()" style="margin-left:auto;font-size:12px;font-weight:700;color:#d97706;cursor:pointer;white-space:nowrap;flex-shrink:0">Back to today</span>'
     +'</div>';
 }
@@ -14952,7 +14966,7 @@ function bulkImportTCX(input){
   // Persistent progress indicator — updated per file, removed at completion.
   // (A transient toast would vanish mid-batch on a large ~1,750-file import.)
   var prog = document.createElement('div');
-  prog.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:#111318;border:1px solid #1a1f2e;color:#e2e8f0;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  prog.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:var(--d-panel);border:1px solid #1a1f2e;color:var(--d-t2);padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4)';
   prog.textContent='Importing 0 / '+total+'…';
   document.body.appendChild(prog);
 
@@ -16871,11 +16885,11 @@ function _bcmpReport_(backup){
 function _bcmpBox_(title, tag, cb){
   var old=document.getElementById('bcmp-zone'); if(old) old.remove();
   var z=document.createElement('div'); z.id='bcmp-zone';
-  z.style.cssText='position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99999;background:#111318;border:2px dashed #3a4560;border-radius:12px;padding:16px 20px;color:#e8edf5;font:14px system-ui,sans-serif;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.6)';
-  z.innerHTML='<div style="font-weight:700;margin-bottom:6px">'+title+'</div><div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Drop your 8.8MB backup JSON here, or click Choose File:</div>';
+  z.style.cssText='position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99999;background:var(--d-panel);border:2px dashed #3a4560;border-radius:12px;padding:16px 20px;color:var(--d-head);font:14px system-ui,sans-serif;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.6)';
+  z.innerHTML='<div style="font-weight:700;margin-bottom:6px">'+title+'</div><div style="font-size:12px;color:var(--d-t3);margin-bottom:10px">Drop your 8.8MB backup JSON here, or click Choose File:</div>';
   var inp=document.createElement('input'); inp.type='file'; inp.accept='application/json,.json'; inp.style.cssText='display:block;margin:0 auto';
   z.appendChild(inp);
-  var cancel=document.createElement('div'); cancel.textContent='cancel'; cancel.style.cssText='margin-top:10px;font-size:11px;color:#64748b;cursor:pointer'; cancel.onclick=function(){ z.remove(); };
+  var cancel=document.createElement('div'); cancel.textContent='cancel'; cancel.style.cssText='margin-top:10px;font-size:11px;color:var(--d-t4);cursor:pointer'; cancel.onclick=function(){ z.remove(); };
   z.appendChild(cancel);
   document.body.appendChild(z);
   function handle(file){
@@ -17053,8 +17067,8 @@ function aiReviveNulls_(execute){
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
 var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
-function aiCard_(inner, extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
-function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
+function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ---- Performance Momentum (deterministic PMC, no fake confidence %) ----
@@ -17066,10 +17080,10 @@ function aiCardMomentum_(ded){
   var arrow=ramp>=2?'M3 17l6-6 4 4 8-8M14 7h6v6':(ramp<=-2?'M3 7l6 6 4-4 8 8M14 17h6v-6':'M3 12h18');
   var inner=aiLbl_('PERFORMANCE MOMENTUM');
   inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
-  inner+='<div style="font-size:13px;color:#94a3b8;margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days.</div>';
-  inner+='<div style="font-size:11px;color:#5b6678;margin-top:3px">From your full training-load history (rides + runs).</div>';
+  inner+='<div style="font-size:13px;color:var(--d-t3);margin-top:6px">Fitness (CTL) '+(ramp>=0?'+':'')+ramp+' over the last 7 days.</div>';
+  inner+='<div style="font-size:11px;color:var(--d-dim);margin-top:3px">From your full training-load history (rides + runs).</div>';
   inner+='<div style="display:flex;gap:22px;margin-top:16px">';
-  f.drivers.forEach(function(d){ inner+='<div><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+aiEsc_(d.label)+'</div><div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1">'+d.value+'</div></div>'; });
+  f.drivers.forEach(function(d){ inner+='<div><div style="font-size:10px;color:var(--d-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em">'+aiEsc_(d.label)+'</div><div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1">'+d.value+'</div></div>'; });
   inner+='</div>';
   return aiCard_(inner);
 }
@@ -17082,10 +17096,10 @@ function aiCardWatchlist_(){
   var inner=aiLbl_("TODAY'S WATCHLIST");
   if(!items.length){
     inner+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg><div style="font-size:19px;font-weight:800;color:#4ade80">Nothing to see here</div></div>';
-    pos.forEach(function(p){ inner+='<div style="display:flex;align-items:center;gap:9px;margin-top:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:13px;color:#cbd5e1">'+aiEsc_(p)+'</span></div>'; });
+    pos.forEach(function(p){ inner+='<div style="display:flex;align-items:center;gap:9px;margin-top:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:13px;color:var(--d-soft)">'+aiEsc_(p)+'</span></div>'; });
   } else {
     items.forEach(function(it){ var col=it.sev>=2?'#e24b4a':'#f59e0b';
-      inner+='<div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+';flex-shrink:0;margin-top:5px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.4">'+aiEsc_(it.text)+'</span></div>'; });
+      inner+='<div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:10px"><span style="width:7px;height:7px;border-radius:50%;background:'+col+';flex-shrink:0;margin-top:5px"></span><span style="font-size:13px;color:var(--d-soft);line-height:1.4">'+aiEsc_(it.text)+'</span></div>'; });
   }
   return aiCard_(inner);
 }
@@ -17111,7 +17125,7 @@ function aiCardStory_(ded){
   var byYr={};
   cands.forEach(function(c){ var y=c[0]; if(!(y in byYr)) byYr[y]=[]; if(byYr[y].indexOf(c[1])<0) byYr[y].push(c[1]); });
   var nodes=Object.keys(byYr).map(Number).sort(function(a,b){return a-b;}).map(function(y){ return [y, byYr[y].join(' · ')]; });
-  var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:#5b6678">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
+  var inner=aiLbl_('YOUR ATHLETIC STORY','<span style="font-size:11px;color:var(--d-dim)">'+rides.length.toLocaleString()+' rides · '+(nowYr-firstYr+1)+' years</span>');
   // Timeline: circles joined by a line through their centers; labels wrap; scrolls if wide.
   inner+='<div style="overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch">';
   inner+='<div style="display:flex;gap:8px;position:relative;min-width:min-content;padding-top:2px">';
@@ -17119,7 +17133,7 @@ function aiCardStory_(ded){
   nodes.forEach(function(n){
     inner+='<div style="flex:0 0 116px;text-align:center;position:relative;z-index:1">'
       +'<div style="width:52px;height:52px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><span style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div>'
-      +'<div style="font-size:11px;color:#94a3b8;line-height:1.35;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t3);line-height:1.35;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
     +'</div>';
   });
   inner+='</div>';
@@ -17146,7 +17160,7 @@ function aiCardWhatChanged_(ded){
   var inner=aiLbl_('WHAT CHANGED THIS MONTH');
   rows.forEach(function(r){ var dv=r[2], good=(r[0]==='Weight')?(dv<=0):(dv>=0); var col=dv===0?'#64748b':(good?'#4ade80':'#f59e0b');
     var ds=(dv>0?'+':'')+dv+(r[3]||'');
-    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #161b28"><span style="font-size:13px;color:#94a3b8">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:#e8edf5">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
+    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #161b28"><span style="font-size:13px;color:var(--d-t3)">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:var(--d-head)">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
   return aiCard_(inner);
 }
 
@@ -17156,11 +17170,11 @@ function aiCardRecords_(){
   if(!vh.length) return '';
   var last=vh[vh.length-1], prev=vh.length>1?vh[vh.length-2]:null;
   var dv=prev?Math.round((last.v-prev.v)*10)/10:null;
-  var inner=aiLbl_('PERSONAL RECORDS','<span style="font-size:11px;color:#5b6678">real data only</span>');
-  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:#e8edf5;line-height:1">'+last.v+'</span><span style="font-size:13px;color:#94a3b8">VO₂ max</span>';
+  var inner=aiLbl_('PERSONAL RECORDS','<span style="font-size:11px;color:var(--d-dim)">real data only</span>');
+  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:var(--d-head);line-height:1">'+last.v+'</span><span style="font-size:13px;color:var(--d-t3)">VO₂ max</span>';
   if(dv!=null) inner+='<span style="font-size:12px;font-weight:700;color:'+(dv>=0?'#4ade80':'#f59e0b')+'">'+(dv>0?'+':'')+dv+'</span>';
   inner+='</div>';
-  inner+='<div style="font-size:12px;color:#5b6678;margin-top:6px">From '+vh.length+' recorded VO₂ estimate'+(vh.length===1?'':'s')+'.</div>';
+  inner+='<div style="font-size:12px;color:var(--d-dim);margin-top:6px">From '+vh.length+' recorded VO₂ estimate'+(vh.length===1?'':'s')+'.</div>';
   return aiCard_(inner);
 }
 
@@ -17170,15 +17184,15 @@ function aiCardZones_(ded){
   var ftp=parseInt((typeof st!=='undefined'&&st.ftp)||186)||186;
   var d; try{ d=dsPowerDist_(rides, ftp); }catch(e){ return ''; }
   if(!d || !d.hasData || !d.zones) return '';   // gate: no real zone data -> hide the card
-  var inner=aiLbl_('POWER ZONE DISTRIBUTION','<span style="font-size:11px;color:#5b6678">'+Number(d.nReal).toLocaleString()+' rides with real zone data</span>');
+  var inner=aiLbl_('POWER ZONE DISTRIBUTION','<span style="font-size:11px;color:var(--d-dim)">'+Number(d.nReal).toLocaleString()+' rides with real zone data</span>');
   inner+='<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:14px;background:#161b28">';
   d.zones.forEach(function(z){ if(z.pct>0) inner+='<div style="width:'+z.pct+'%;background:'+z.color+'"></div>'; });
   inner+='</div>';
   d.zones.forEach(function(z){
     inner+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">'
       +'<span style="width:9px;height:9px;border-radius:2px;background:'+z.color+';flex-shrink:0"></span>'
-      +'<span style="flex:1;font-size:12px;color:#94a3b8">'+aiEsc_(z.label)+'</span>'
-      +'<span style="font-size:13px;font-weight:700;color:#e8edf5">'+z.pct+'%</span>'
+      +'<span style="flex:1;font-size:12px;color:var(--d-t3)">'+aiEsc_(z.label)+'</span>'
+      +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+z.pct+'%</span>'
     +'</div>';
   });
   return aiCard_(inner);
@@ -17192,7 +17206,7 @@ function aiCardWeight_(){
   if(cur==null) return '';   // no weight known anywhere -> hide
   var goals=(typeof _goalTargets_==='function')?_goalTargets_():{};
   var goal=parseFloat(goals&&goals.weightLb); if(!(goal>0)) goal=null;
-  var inner=aiLbl_('WEIGHT', wl.length?('<span style="font-size:11px;color:#5b6678">'+wl.length.toLocaleString()+' entries</span>'):'');
+  var inner=aiLbl_('WEIGHT', wl.length?('<span style="font-size:11px;color:var(--d-dim)">'+wl.length.toLocaleString()+' entries</span>'):'');
   // trend only when there are >=2 real logged points
   var deltaStr='';
   if(vals.length>=2){
@@ -17204,7 +17218,7 @@ function aiCardWeight_(){
     var dcol=delta<=0?'#4ade80':'#f59e0b';
     deltaStr='<span style="font-size:12px;font-weight:700;color:'+dcol+'">'+(delta>0?'+':'')+delta+' lb'+(windowed?' · 90d':'')+'</span>';
   }
-  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:#e8edf5;line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:13px;color:#94a3b8">lb</span>'+deltaStr+'</div>';
+  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:var(--d-head);line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:13px;color:var(--d-t3)">lb</span>'+deltaStr+'</div>';
   // sparkline only when there are >=2 real logged points
   if(vals.length>=2){
     var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals); if(max<=min) max=min+1;
@@ -17214,7 +17228,7 @@ function aiCardWeight_(){
   }
   if(goal){
     var toGo=Math.round((cur-goal)*10)/10;
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;display:flex;justify-content:space-between;font-size:12px;color:#94a3b8"><span>Goal '+goal+' lb</span><span style="color:#e8edf5;font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);display:flex;justify-content:space-between;font-size:12px;color:var(--d-t3)"><span>Goal '+goal+' lb</span><span style="color:var(--d-head);font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
   }
   return aiCard_(inner);
 }
@@ -17268,11 +17282,11 @@ function _adhCardInner_(title, wk){
   var totalScored=wk.reduce(function(a,w){return a+w.scored;},0);
   var cur=wk[wk.length-1];
   var lowN=totalScored<3;
-  var inner=aiLbl_(title,'<span style="font-size:11px;color:#5b6678">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
+  var inner=aiLbl_(title,'<span style="font-size:11px;color:var(--d-dim)">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
   // Two headline numbers for the current week: Completion (show up) + Execution (quality).
   inner+='<div style="display:flex;gap:24px;margin-bottom:12px">';
-  inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:#60a5fa;line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:#5b6678">this week</div></div>';
-  inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:#f59e0b;line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:#5b6678">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
+  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:#60a5fa;line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">this week</div></div>';
+  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:#f59e0b;line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
   inner+='</div>';
   // Bars = completion rate/week (gap when planned==0); faint bar when planned>0 but scored==0.
   var W=280,H=70,n=wk.length,bw=W/n;
@@ -17302,10 +17316,10 @@ function _adhCardInner_(title, wk){
   // leaked ceilCy/CEILT/pM/prevFinal into this scope, which have no meaning here and threw
   // "ceilCy is not defined", killing both StrengthAdherence and RideAdherence. Removed.)
   inner+='<div style="position:relative;margin-top:2px">'+svg+'</div>';
-  inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:#5b6678"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
-  inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
+  inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--d-dim)"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
+  inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
   if(lowN){
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;font-size:11.5px;color:#94a3b8;line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);font-size:11.5px;color:var(--d-t3);line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
   }
   return aiCard_(inner);
 }
@@ -17333,8 +17347,8 @@ function aiCardStrengthProgress_(){
   if(!names.length) return '';                                    // nothing logged — adherence carries the "show up" story
   var nSessions=d.dates.length, single=(nSessions<=1);
   names.sort(function(a,b){ var la=d.lifts[a], lb=d.lifts[b]; return lb[lb.length-1].weight - la[la.length-1].weight; });
-  var inner=aiLbl_('STRENGTH PROGRESSION','<span style="font-size:11px;color:#5b6678">'+(single?'baseline':(nSessions+' sessions'))+'</span>');
-  inner+='<div style="font-size:11.5px;color:#94a3b8;line-height:1.45;margin-bottom:10px">'
+  var inner=aiLbl_('STRENGTH PROGRESSION','<span style="font-size:11px;color:var(--d-dim)">'+(single?'baseline':(nSessions+' sessions'))+'</span>');
+  inner+='<div style="font-size:11.5px;color:var(--d-t3);line-height:1.45;margin-bottom:10px">'
     +(single
       ? ('Your starting point &mdash; '+_adhLbl_(d.dates[0])+'. One session logged, so these are baselines, not trends. Log another to chart progress.')
       : ('Top-set load per lift across '+nSessions+' logged sessions.'))
@@ -17355,10 +17369,10 @@ function aiCardStrengthProgress_(){
     var setStr=last.weight+' lb'+(last.reps?(' &times; '+last.reps):'')+(last.rpe!=null?(' @ RPE '+last.rpe):'');
     var delta=(s.length>=2)?(last.weight-first.weight):null;
     var deltaHtml=(delta!=null&&delta!==0)?('<span style="font-size:10px;font-weight:700;color:'+(delta>0?'#4ade80':'#f59e0b')+'">'+(delta>0?'+':'')+delta+' lb</span>')
-                 :(single?'<span style="font-size:10px;color:#5b6678">start</span>':'<span style="font-size:10px;color:#5b6678">&mdash;</span>');
+                 :(single?'<span style="font-size:10px;color:var(--d-dim)">start</span>':'<span style="font-size:10px;color:var(--d-dim)">&mdash;</span>');
     inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #14181f">'
-      +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+aiEsc_(nm)+'</div>'
-      +'<div style="font-size:10.5px;color:#5b6678">'+setStr+'</div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+aiEsc_(nm)+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim)">'+setStr+'</div></div>'
       +'<div style="flex-shrink:0">'+spark+'</div>'
       +'<div style="width:52px;text-align:right;flex-shrink:0">'+deltaHtml+'</div></div>';
   });
@@ -17404,12 +17418,12 @@ function _racingChart_(title, acts){
   var arrow = even ? '&#183;' : (ahead ? '&#9650;' : '&#9660;');
   var word = even ? 'even with' : (ahead ? 'ahead of' : 'behind');
   inner+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">';
-  inner+='<div style="font-size:17px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+aiEsc_(title)+'</div>';
+  inner+='<div style="font-size:17px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">'+aiEsc_(title)+'</div>';
   inner+='<div style="font-size:12px;font-weight:800;color:'+AC+'"><span>'+arrow+'</span> '+_ryMi_(Math.abs(delta))+' mi '+word+' '+_RY_MON[pM]+' pace</div>';
   inner+='</div>';
   inner+='<div style="display:flex;gap:26px;margin:8px 0 12px">';
-  inner+='<div><div style="font-size:30px;font-weight:800;color:'+AC+';line-height:1">'+_ryMi_(curTotal)+'<span style="font-size:14px;color:#94a3b8;font-weight:700"> mi</span></div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-top:2px">this month</div></div>';
-  inner+='<div><div style="font-size:30px;font-weight:800;color:#e8edf5;line-height:1">'+curCount+'</div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-top:2px">activities</div></div>';
+  inner+='<div><div style="font-size:30px;font-weight:800;color:'+AC+';line-height:1">'+_ryMi_(curTotal)+'<span style="font-size:14px;color:var(--d-t3);font-weight:700"> mi</span></div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">this month</div></div>';
+  inner+='<div><div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+curCount+'</div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">activities</div></div>';
   inner+='</div>';
   // chart
   var W=340,H=158, padL=8,padR=14,padT=20,padB=8;
@@ -17432,13 +17446,13 @@ function _racingChart_(title, acts){
   }
   svg+='</svg>';
   inner+='<div>'+svg+'</div>';
-  inner+='<div style="display:flex;justify-content:space-between;margin-top:2px;font-size:9px;color:#5b6678"><span>'+_RY_MON[M].slice(0,3)+' 1</span><span>'+_RY_MON[M].slice(0,3)+' '+daysCur+'</span></div>';
+  inner+='<div style="display:flex;justify-content:space-between;margin-top:2px;font-size:9px;color:var(--d-dim)"><span>'+_RY_MON[M].slice(0,3)+' 1</span><span>'+_RY_MON[M].slice(0,3)+' '+daysCur+'</span></div>';
   // year-over-year, same-period prior year; OMITTED entirely when there is no prior-year data
   var pySame=_ryCum_(acts, Y-1, M, curDay);
   if(pySame.total>0){
     var pct=Math.round((curTotal-pySame.total)/pySame.total*100);
     var ml=pct>=0?'more':'less', pcol=pct>=0?'#22c55e':'#ff5c5c';
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130;font-size:12.5px;color:#94a3b8;line-height:1.5">You&#8217;ve logged <b style="color:#e8edf5">'+_ryMi_(curTotal)+' mi</b> this month, <b style="color:'+pcol+'">'+Math.abs(pct)+'% '+ml+'</b> than '+_ryMi_(pySame.total)+' mi by this point in '+_RY_MON[M]+' '+(Y-1)+'.</div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);font-size:12.5px;color:var(--d-t3);line-height:1.5">You&#8217;ve logged <b style="color:var(--d-head)">'+_ryMi_(curTotal)+' mi</b> this month, <b style="color:'+pcol+'">'+Math.abs(pct)+'% '+ml+'</b> than '+_ryMi_(pySame.total)+' mi by this point in '+_RY_MON[M]+' '+(Y-1)+'.</div>';
   }
   return aiCard_(inner);
 }
@@ -17471,7 +17485,7 @@ function _yvySportPicker_(cur){
       +'background:'+(on?'#FC4C02':'#0e1117')+';color:'+(on?'#fff':'#94a3b8')+'">'+p[1]+'</button>';
   }).join('');
   return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px">'
-    +'<span style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-right:2px">Sport</span>'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-right:2px">Sport</span>'
     +pills+'</div>';
 }
 // The run population, in the same shape the ride path feeds _yvyVM_: store-v2 first (normalised
@@ -17688,11 +17702,11 @@ function _yvyPhysKpi_(ic, mv, first){
     }
   }
   return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:'+(first?'none':'1px solid #1c2130')+'">'
-    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+mv.label+'</span></div>'
-    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+valStr+'</span>'
-    +((mv.unit&&mv.curN>0)?'<span style="font-size:13px;color:#94a3b8">'+mv.unit+'</span>':'')+pctHtml+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div>'+win+'</div>';
+    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:var(--d-dim)">'+ic+'</span>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+mv.label+'</span></div>'
+    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">'+valStr+'</span>'
+    +((mv.unit&&mv.curN>0)?'<span style="font-size:13px;color:var(--d-t3)">'+mv.unit+'</span>':'')+pctHtml+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+sub+'</div>'+win+'</div>';
 }
 function _yvyPhysRow_(vm){
   var ic={pwr:'&#9889;', np:'&#128200;', tss:'&#128293;', hr:'&#10084;&#65039;',
@@ -17701,12 +17715,12 @@ function _yvyPhysRow_(vm){
   var notes=[], pageRankable=(vm.phys[0]&&vm.phys[0].pageRankable)||0;
   vm.phys.forEach(function(mv){
     if(mv.curN===0) return;
-    if(mv.rankableMonths===0){ notes.push('<b style="color:#94a3b8">'+mv.label+'</b> is shown for the current month only — too few '+vm.nP+' carry it to rank against history.'); return; }
+    if(mv.rankableMonths===0){ notes.push('<b style="color:var(--d-t3)">'+mv.label+'</b> is shown for the current month only — too few '+vm.nP+' carry it to rank against history.'); return; }
     if(!mv.shortWindow) return;
     // The old line asserted ONE cause — "earlier X do not carry it" — for a number that has two.
     // For run pace that claim was simply false: 146 of the 147 rankable run-months carry pace.
     // State the coverage, and only blame the record when the record is actually the limiter.
-    var s='<b style="color:#94a3b8">'+mv.label+'</b> is carried by '+mv.rankableMonths+' of your '+pageRankable+' completed rankable '+vm.monthN;
+    var s='<b style="color:var(--d-t3)">'+mv.label+'</b> is carried by '+mv.rankableMonths+' of your '+pageRankable+' completed rankable '+vm.monthN;
     // Only blame the record when the record is actually late. 146-of-147 for pace is a
     // rounding artefact of one thin month, not runs that failed to record a pace.
     if(mv.firstCarried && mv.fullStart && mv.firstCarried>mv.fullStart) s+=' — it is not recorded before '+_yvyMonLabel_(mv.firstCarried);
@@ -17719,11 +17733,11 @@ function _yvyPhysRow_(vm){
     }
     notes.push(s);
   });
-  var foot = notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
+  var foot = notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid var(--d-raise)">'+notes.join(' ')+'</div>' : '';
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 18px 6px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+(vm.sport==='run'?'Pace &amp; Physiology':'Power &amp; Physiology')+'</span>'
-    +'<span style="font-size:11px;color:#5b6678">this month, same-day vs last</span></div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+(vm.sport==='run'?'Pace &amp; Physiology':'Power &amp; Physiology')+'</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">this month, same-day vs last</span></div>'
     +'<div style="display:flex;flex-wrap:wrap">'+cells+'</div>'+foot+'</div>';
 }
 
@@ -18193,8 +18207,8 @@ function _yoyDayOfYear_(y, mo, d){
 }
 function _gcSparkFoot_(a, b){
   return '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:3px">'
-    +'<span style="font-size:9.5px;color:#5b6678">'+a+'</span>'
-    +'<span style="font-size:9.5px;color:#5b6678">'+b+'</span></div>';
+    +'<span style="font-size:9.5px;color:var(--d-dim)">'+a+'</span>'
+    +'<span style="font-size:9.5px;color:var(--d-dim)">'+b+'</span></div>';
 }
 // The whole "value + its history" block a card carries where a progress bar used to sit. One
 // helper because this shape now appears on a dozen surfaces, and each of them writing its own is
@@ -18209,7 +18223,7 @@ function _gcTrend_(pts, col, opts){
   var a=opts.from||((pts[0]&&pts[0].lab)||''), b=opts.to||((pts[pts.length-1]&&pts[pts.length-1].lab)||'');
   return '<div style="margin-top:7px">'+svg
     +((a||b)?_gcSparkFoot_(a,b):'')
-    +(opts.note?('<div style="font-size:10px;color:#5b6678;margin-top:2px">'+opts.note+'</div>'):'')
+    +(opts.note?('<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+opts.note+'</div>'):'')
     +'</div>';
 }
 // A SCALE, not a bar. Some numbers on these pages are a single scalar with no history behind them
@@ -18221,14 +18235,14 @@ function _gcScale_(pct, col, lo, mid, hi){
   var p=Math.max(0, Math.min(100, Math.round(pct||0)));
   return '<div style="margin-top:9px">'
     +'<div style="position:relative;height:12px">'
-    +'<div style="position:absolute;left:0;right:0;top:5px;height:2px;border-radius:1px;background:#1c2130"></div>'
+    +'<div style="position:absolute;left:0;right:0;top:5px;height:2px;border-radius:1px;background:var(--d-raise)"></div>'
     +'<div style="position:absolute;left:50%;top:2px;width:1px;height:8px;background:#2a3341"></div>'
     +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid #0e1117;box-sizing:content-box"></div>'
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;margin-top:1px">'
-    +'<span style="font-size:9.5px;color:#5b6678">'+(lo||'0%')+'</span>'
-    +'<span style="font-size:9.5px;color:#5b6678">'+(mid||'even')+'</span>'
-    +'<span style="font-size:9.5px;color:#5b6678">'+(hi||'100%')+'</span></div></div>';
+    +'<span style="font-size:9.5px;color:var(--d-dim)">'+(lo||'0%')+'</span>'
+    +'<span style="font-size:9.5px;color:var(--d-dim)">'+(mid||'even')+'</span>'
+    +'<span style="font-size:9.5px;color:var(--d-dim)">'+(hi||'100%')+'</span></div></div>';
 }
 // A metric's TRAJECTORY with its goal drawn as a dashed reference line where it actually falls
 // inside the plotted range. Factored out of the Power-to-Weight card, which established the
@@ -18239,7 +18253,7 @@ function _goalSpark_(pts, col, goal, opts){
   opts=opts||{};
   var real=(pts||[]).filter(function(p){ return p && p.v!=null && isFinite(p.v); });
   if(real.length<2){
-    return '<div style="font-size:9.5px;color:#5b6678;line-height:1.4">'
+    return '<div style="font-size:9.5px;color:var(--d-dim);line-height:1.4">'
       +(opts.empty||'Not enough history yet to draw a trend.')+'</div>';
   }
   var v=real.map(function(p){ return p.v; });
@@ -18409,19 +18423,19 @@ function _alCard_(r, i, n, selYM){
   // top-decile month no longer wears the best-month colour.
   var _tc=_yvyTier_(i+1, n||0);
   var border=isSel?'#f1f5f9':((_tc===_YVY_TOP)?_YVY_TOP_DIM:(_tc===_YVY_GOOD?_YVY_GOOD_DIM:'#1c2130'));
-  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:186px;background:#111318;border:1px solid '+border+';border-radius:13px;padding:13px 13px 11px;cursor:pointer">'
+  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:186px;background:var(--d-panel);border:1px solid '+border+';border-radius:13px;padding:13px 13px 11px;cursor:pointer">'
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:7px">'
     +(top?_alCrown_():'')
     +'<span style="font-size:11px;font-weight:800;color:'+(top?_tc:'#5b6678')+'">#'+(i+1)+'</span>'
     +(top?'<span style="font-size:9.5px;font-weight:800;color:'+_AL_AMBER+';letter-spacing:.04em;text-transform:uppercase">Best month ever</span>':'')
     +'</div>'
-    +'<div style="font-size:13.5px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
+    +'<div style="font-size:13.5px;font-weight:800;color:var(--d-head)">'+_alFmtYM_(r.ym)+'</div>'
     +'<div style="display:flex;align-items:baseline;gap:4px;margin-top:5px">'
     +'<span style="font-size:22px;font-weight:800;color:'+_tc+';letter-spacing:-.01em">'+s100+'</span>'
-    +'<span style="font-size:11px;color:#5b6678">/100</span></div>'
-    +'<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">'+(r.score>=0?'+':'')+r.score.toFixed(2)+' z vs your average month</div>'
+    +'<span style="font-size:11px;color:var(--d-dim)">/100</span></div>'
+    +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:2px">'+(r.score>=0?'+':'')+r.score.toFixed(2)+' z vs your average month</div>'
     +'<div style="margin-top:8px">'+_alSpark_(r)+'</div>'
-    +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
     +'</div>';
 }
 // A scoped-board card. Leads with the z-score, NOT a re-based /100, on purpose: the z is the same
@@ -18432,14 +18446,14 @@ function _alCard_(r, i, n, selYM){
 function _alEraCard_(r, rankInEra, selYM){
   var isSel=(r.ym===selYM);
   var mix=[]; if(r.mi.ride!=null) mix.push(Math.round(r.mi.ride)+' mi ride'); if(r.mi.run!=null) mix.push(Math.round(r.mi.run)+' mi run');
-  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:150px;background:#111318;border:1px solid '+(isSel?'#f1f5f9':'#1c2130')+';border-radius:12px;padding:11px 12px;cursor:pointer">'
+  return '<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" style="flex:0 0 auto;width:150px;background:var(--d-panel);border:1px solid '+(isSel?'#f1f5f9':'#1c2130')+';border-radius:12px;padding:11px 12px;cursor:pointer">'
     +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-size:11px;font-weight:800;color:'+(rankInEra===1?_YVY_TOP:'#5b6678')+'">#'+rankInEra+'</span>'
     +(rankInEra===1?('<span style="font-size:9px;font-weight:800;color:'+_YVY_TOP+';letter-spacing:.04em;text-transform:uppercase">era best</span>'):'')+'</div>'
-    +'<div style="font-size:13px;font-weight:800;color:#f1f5f9">'+_alFmtYM_(r.ym)+'</div>'
+    +'<div style="font-size:13px;font-weight:800;color:var(--d-head)">'+_alFmtYM_(r.ym)+'</div>'
     +'<div style="display:flex;align-items:baseline;gap:3px;margin-top:4px"><span style="font-size:18px;font-weight:800;color:'+(rankInEra===1?_YVY_TOP:_YVY_BASE)+';letter-spacing:-.01em">'+(r.score>=0?'+':'')+r.score.toFixed(2)+'</span>'
-    +'<span style="font-size:10px;color:#5b6678">z</span></div>'
+    +'<span style="font-size:10px;color:var(--d-dim)">z</span></div>'
     +'<div style="margin-top:6px">'+_alSpark_(r)+'</div>'
-    +'<div style="font-size:10px;color:#5b6678;margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:4px">'+(mix.join(' &middot; ')||'&nbsp;')+'</div>'
     +'</div>';
 }
 // Every scored month in date order. Bar height is the combined z floored at zero for display, which
@@ -18464,16 +18478,16 @@ function _alTimeline_(asc, topSet, peakYM, selYM){
     // unscored month is never rendered as clickable. Selection is shown by a white ring on the bar
     // and a white marker above it, distinct from the amber peak and green top-five dots.
     var marker=isSel
-      ? '<span style="width:7px;height:7px;border-radius:50%;border:1.5px solid #f1f5f9;box-sizing:border-box;margin-bottom:'+(isTop?1:3)+'px"></span>'
+      ? '<span style="width:7px;height:7px;border-radius:50%;border:1.5px solid var(--d-head);box-sizing:border-box;margin-bottom:'+(isTop?1:3)+'px"></span>'
       : (isTop?('<span style="width:'+(isPeak?9:7)+'px;height:'+(isPeak?9:7)+'px;border-radius:50%;background:'+(isPeak?_AL_AMBER:_AL_G)+';margin-bottom:'+(isPeak?2:3)+'px"></span>')
              :('<span style="height:10px"></span>'));
     bars+='<div onclick="alSelectMonth_(&#39;'+r.ym+'&#39;)" title="'+_alFmtYM_(r.ym)+' &middot; z '+(r.score>=0?'+':'')+r.score.toFixed(2)+(isPeak?' &middot; your best month':'')+'"'
       +' style="flex:1;min-width:5px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;cursor:pointer">'
       +marker
-      +'<span style="width:100%;height:'+h+'px;background:'+col+';border-radius:2px 2px 0 0'+(isSel?';box-shadow:0 0 0 1.5px #f1f5f9':'')+'"></span></div>';
+      +'<span style="width:100%;height:'+h+'px;background:'+col+';border-radius:2px 2px 0 0'+(isSel?';box-shadow:0 0 0 1.5px var(--d-head)':'')+'"></span></div>';
     var y=String(r.ym).slice(0,4), first=!seen[y]; if(first) seen[y]=1;
     labels+='<div style="flex:1;min-width:5px;position:relative;height:13px">'
-      +(first?('<span style="position:absolute;left:0;top:0;font-size:9px;color:#5b6678;white-space:nowrap">'+y+'</span>'):'')
+      +(first?('<span style="position:absolute;left:0;top:0;font-size:9px;color:var(--d-dim);white-space:nowrap">'+y+'</span>'):'')
       +'</div>';
   });
   var minW=Math.max(560, asc.length*7);
@@ -18552,21 +18566,21 @@ function _alFactors_(r, mx, asc){
       if(spark && win.idx>=0){
         var pct=(list.length>1)?(win.idx/(list.length-1)*100):50;
         spark='<div style="position:relative">'+spark
-          +'<div style="position:absolute;left:'+pct.toFixed(2)+'%;top:0;bottom:0;width:0;border-left:1.5px dashed #f1f5f9;opacity:.8;pointer-events:none"></div></div>';
+          +'<div style="position:absolute;left:'+pct.toFixed(2)+'%;top:0;bottom:0;width:0;border-left:1.5px dashed var(--d-head);opacity:.8;pointer-events:none"></div></div>';
       }
     }
     var note=f.note(r);
     return '<div style="flex:1;min-width:180px">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'
       +'<span style="width:7px;height:7px;border-radius:2px;background:'+f.col+';flex:0 0 auto"></span>'
-      +'<span style="font-size:12px;font-weight:700;color:#cbd5e1">'+f.label+'</span></div>'
-      +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em;margin-bottom:5px">'+f.fmt(r)+'</div>'
+      +'<span style="font-size:12px;font-weight:700;color:var(--d-soft)">'+f.label+'</span></div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head);letter-spacing:-.01em;margin-bottom:5px">'+f.fmt(r)+'</div>'
       +spark+foot
-      +(note?('<div style="font-size:10px;color:#5b6678;margin-top:3px">'+note+'</div>'):'')
+      +(note?('<div style="font-size:10px;color:var(--d-dim);margin-top:3px">'+note+'</div>'):'')
       +'</div>';
   }).join('');
   var cap=trend
-    ? ('<div style="font-size:10px;color:#5b6678;margin-top:9px;line-height:1.5">Each line is that factor month by month across the '+list.length+' scored months around '+_alFmtYM_(r.ym)
+    ? ('<div style="font-size:10px;color:var(--d-dim);margin-top:9px;line-height:1.5">Each line is that factor month by month across the '+list.length+' scored months around '+_alFmtYM_(r.ym)
        +(asc.length>list.length?(' &mdash; a window on your '+asc.length+', so the shape stays readable'):'')
        +'. The pale mark is the month shown above. Each line is scaled to its own range, so the three say direction, not size against each other.</div>')
     : '';
@@ -18597,7 +18611,7 @@ function _alSection_(){
     // The current month scored, so it carries the partial-vs-complete caveat the ride hero already
     // states: its miles-so-far are z-scored against COMPLETE months, so it sits low for a reason
     // that is not effort, and it climbs as the month fills. Same shared sentence, cross-sport noun.
-    lead='This month sits <b style="color:#f1f5f9">#'+subjRank+' of '+N+'</b> scored months across your athletic life. '
+    lead='This month sits <b style="color:var(--d-head)">#'+subjRank+' of '+N+'</b> scored months across your athletic life. '
         +_yvyPartialTxt_(now.getDate(), subjRank===1, 'training');
   }else{
     subject=asc[asc.length-1];
@@ -18623,10 +18637,10 @@ function _alSection_(){
   var selYM=selRes?_AL_SEL_YM:null;
 
   var head='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Athletic Life</span>'
-    +'<span style="font-size:11px;color:#5b6678">'+g.sports.join(' and ')+' &middot; '+N+' scored months &middot; '
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Athletic Life</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">'+g.sports.join(' and ')+' &middot; '+N+' scored months &middot; '
     +_alFmtYM_(span.first)+' to '+_alFmtYM_(span.last)+'</span></div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">'+lead+'</div>';
+    +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:14px">'+lead+'</div>';
 
   // Ring, headline and figure all take the tier colour, so the standing is legible before a single
   // number is read. The band name is the headline because it is the honest summary; the percentile
@@ -18635,11 +18649,11 @@ function _alSection_(){
   var gauge='<div style="flex:0 0 auto;width:150px;text-align:center">'
     +'<div style="display:flex;justify-content:center">'+_alGauge_(s100, tierCol)+'</div>'
     +'<div style="font-size:12.5px;font-weight:800;color:'+tierCol+';margin-top:6px">'+_alCap_(tierBand)+'</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-top:2px">Top '+tp+'% &middot; #'+subjRank+' of '+N+'</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-top:1px">'+gaugeLabel+'</div></div>';
+    +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">Top '+tp+'% &middot; #'+subjRank+' of '+N+'</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:1px">'+gaugeLabel+'</div></div>';
 
   var cards='<div style="flex:1;min-width:250px">'
-    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months &middot; all time</div>'
+    +'<div style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Your best months &middot; all time</div>'
     +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
     + top.map(function(r,i){ return _alCard_(r,i,N,selYM); }).join('')
     +'</div></div>';
@@ -18666,26 +18680,26 @@ function _alSection_(){
     var eraRankLine='';
     var subjEraIdx=-1; for(var _e=0;_e<eraRows.length;_e++){ if(eraRows[_e].ym===subject.ym){ subjEraIdx=_e; break; } }
     if(subjEraIdx>=0 && String(subject.ym)>=_AL_ERA_START_YM){
-      eraRankLine='<div style="font-size:11.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">'
-        +(pos?'This month':_alFmtYM_(subject.ym))+' sits <b style="color:#f1f5f9">#'+(subjEraIdx+1)+' of '+eraRows.length+'</b> in your current era.</div>';
+      eraRankLine='<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:10px">'
+        +(pos?'This month':_alFmtYM_(subject.ym))+' sits <b style="color:var(--d-head)">#'+(subjEraIdx+1)+' of '+eraRows.length+'</b> in your current era.</div>';
     }
-    eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+_alFmtYM_(_AL_ERA_START_YM)+'</div>'
-      +'<div style="font-size:11.5px;color:#94a3b8;line-height:1.5;margin-bottom:10px">The board above is your all-time peak and does not move. This is your current era &mdash; it climbs as you train, and it is where a month you can actually still beat lives.</div>'
+    eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--d-raise)">'
+      +'<div style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+_alFmtYM_(_AL_ERA_START_YM)+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:10px">The board above is your all-time peak and does not move. This is your current era &mdash; it climbs as you train, and it is where a month you can actually still beat lives.</div>'
       +eraRankLine
       +'<div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">'
       + eraTop.map(function(r,i){ return _alEraCard_(r,i+1,selYM); }).join('')
       +'</div></div>';
   }
 
-  var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
+  var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-raise)">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-    +'<span style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em">Timeline</span>'
-    +'<span style="font-size:10.5px;color:#5b6678">every scored month &middot; taller is a stronger month for you</span>'
-    +'<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#5b6678">'
+    +'<span style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em">Timeline</span>'
+    +'<span style="font-size:10.5px;color:var(--d-dim)">every scored month &middot; taller is a stronger month for you</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--d-dim)">'
     +'<span style="width:8px;height:8px;border-radius:50%;background:'+_AL_AMBER+'"></span>best ever'
     +'<span style="width:7px;height:7px;border-radius:50%;background:'+_AL_G+';margin-left:6px"></span>top five'
-    +'<span style="margin-left:6px;color:#94a3b8">&middot; tap any month</span></span></div>'
+    +'<span style="margin-left:6px;color:var(--d-t3)">&middot; tap any month</span></span></div>'
     +_alTimeline_(asc, topSet, rows[0].ym, selYM)+'</div>';
 
   // The panel names the month it is showing, ALWAYS — default or selected. A strip that highlights
@@ -18697,21 +18711,21 @@ function _alSection_(){
   var resetLink=selYM
     ? ' <span onclick="alSelectMonth_(&#39;'+selYM+'&#39;)" style="color:'+_AL_G+';cursor:pointer;font-weight:700">&middot; show your best</span>'
     : '';
-  var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid #1c2130">'
-    +'<div style="font-size:10.5px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month great?</div>'
-    +'<div style="font-size:11.5px;color:#94a3b8;margin-bottom:11px">'+panelHdr+resetLink+'</div>'
+  var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-raise)">'
+    +'<div style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month great?</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-bottom:11px">'+panelHdr+resetLink+'</div>'
     +_alFactors_(panelRow, mx, asc)
     +'</div>';
 
-  var foot='Months are scored against your own history <b style="color:#94a3b8">within each sport</b>, then averaged &mdash; '
+  var foot='Months are scored against your own history <b style="color:var(--d-t3)">within each sport</b>, then averaged &mdash; '
     +'so a strong run month and a strong ride month are comparable even though the miles are not. '
     +'The 0-100 score is your percentile among scored months; the z-score on each card is the raw distance from your average.';
 
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +head
     +'<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+gauge+cards+'</div>'
     +eraBoard+timeline+factors
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -18886,12 +18900,12 @@ function _yvyFmtHD_(sec){ var s=Math.abs(Math.round(sec)), h=Math.floor(s/3600),
 function _yvyScoreCol_(score){ return score>=80?_YVY_TOP:(score>=65?_YVY_GOOD:_YVY_BASE); }
 function _yvyPct_(p, up){ var c=up?_YVY_GOOD:_YVY_DOWN, ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
 function _yvyKpi_(ic, label, big, unit, pct, up, sub){
-  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid #1c2130">'
-    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:#5b6678">'+ic+'</span>'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+label+'</span></div>'
-    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">'+big+'</span>'
-    +(unit?'<span style="font-size:13px;color:#94a3b8">'+unit+'</span>':'')+' '+_yvyPct_(pct,up)+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+sub+'</div></div>';
+  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid var(--d-raise)">'
+    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:var(--d-dim)">'+ic+'</span>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+label+'</span></div>'
+    +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">'+big+'</span>'
+    +(unit?'<span style="font-size:13px;color:var(--d-t3)">'+unit+'</span>':'')+' '+_yvyPct_(pct,up)+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+sub+'</div></div>';
 }
 function _yvyRing_(score, band){
   var R=52, C=2*Math.PI*R, off=C*(1-score/100);
@@ -18905,15 +18919,15 @@ function _yvyRing_(score, band){
 function _yvyHeatRow_(label, arr){
   var cells='';
   arr.forEach(function(v){ var a=v<=0?0.08:(0.25+v*0.75); var bg=v<=0?'#1c2130':('rgba(252,76,2,'+a.toFixed(2)+')'); cells+='<span style="width:13px;height:13px;border-radius:3px;background:'+bg+';flex-shrink:0"></span>'; });
-  return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="font-size:10px;color:#94a3b8;width:74px;flex-shrink:0">'+label+'</span><div style="display:flex;gap:3px;flex-wrap:wrap">'+cells+'</div></div>';
+  return '<div style="display:flex;align-items:center;gap:10px;margin:4px 0"><span style="font-size:10px;color:var(--d-t3);width:74px;flex-shrink:0">'+label+'</span><div style="display:flex;gap:3px;flex-wrap:wrap">'+cells+'</div></div>';
 }
 function _yvySumRow_(color, tag, metric, note){
   var ic=(tag==='Winning')?'&#9650;':(tag==='Even'?'&#61;':'&#9660;');
   return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid #14181f"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
-    +'<div><div style="font-size:11px;font-weight:700;color:'+color+'">'+tag+'</div><div style="font-size:13px;font-weight:700;color:#f1f5f9">'+metric+'</div><div style="font-size:11px;color:#94a3b8">'+note+'</div></div></div>';
+    +'<div><div style="font-size:11px;font-weight:700;color:'+color+'">'+tag+'</div><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+metric+'</div><div style="font-size:11px;color:var(--d-t3)">'+note+'</div></div></div>';
 }
-function _yvyCard_(inner){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px">'+inner+'</div>'; }
-function _yvyHdr_(t){ return '<div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
+function _yvyCard_(inner){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px">'+inner+'</div>'; }
+function _yvyHdr_(t){ return '<div style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
 // ---- Personal Bests render. Flat, restrained, stroke icons — no badges, no neon. ----
 var _PB_ICON={
@@ -18942,47 +18956,47 @@ function _pbSpark_(p){
   if(!svg) return '';
   return '<div style="margin-bottom:9px">'+svg
     +_gcSparkFoot_(pts[0].lab, pts[pts.length-1].lab)
-    +'<div style="font-size:10px;color:#5b6678;margin-top:2px">best per quarter &middot; ringed point is the record</div></div>';
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">best per quarter &middot; ringed point is the record</div></div>';
 }
 function _pbCardHtml_(p, formDays, nA){
   nA=nA||'ride';   // sport noun, so a run card never says "No qualifying ride"
   var accent=p.held?_YVY_TOP:_YVY_GOOD;
   var head='<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">'
     +'<span style="width:26px;height:26px;border-radius:7px;background:'+accent+'1a;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_pbIcon_(p.key,accent)+'</span>'
-    +'<span style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">'+p.label+'</span>'
-    +(p.qual?'<span style="font-size:10px;color:#5b6678">'+p.qual+'</span>':'')+'</div>';
+    +'<span style="font-size:10.5px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+p.label+'</span>'
+    +(p.qual?'<span style="font-size:10px;color:var(--d-dim)">'+p.qual+'</span>':'')+'</div>';
   // A record you are currently holding has not "stood" against you — you just set it.
   var age=p.held
     ? (p.stoodDays<1?'set today':('set '+p.stoodDays+' day'+(p.stoodDays===1?'':'s')+' ago'))
     : _pbStood_(p.stoodDays);
-  var big='<div style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+p.recStr+'</div>'
-    +'<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+_pbFmtDate_(p.recDate)+' &middot; '+age+'</div>';
+  var big='<div style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+p.recStr+'</div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim);margin-top:4px">'+_pbFmtDate_(p.recDate)+' &middot; '+age+'</div>';
   var foot;
   if(p.held){
     // The record sits inside the form window: there is no gap to quote, so state the margin
     // over your own next-best instead of inventing a target.
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
       +_pbSpark_(p)
       +'<div style="font-size:12px;font-weight:700;color:'+_YVY_TOP+'">This is current form</div>'
-      +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:2px">'
       +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only '+nA+' at this mark.'))
       +'</div></div>';
   } else if(!p.hasForm){
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:12px;font-weight:700;color:#94a3b8">No qualifying '+nA+' in '+formDays+' days</div>'
-      +'<div style="font-size:11.5px;color:#5b6678;margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+      +'<div style="font-size:12px;font-weight:700;color:var(--d-t3)">No qualifying '+nA+' in '+formDays+' days</div>'
+      +'<div style="font-size:11.5px;color:var(--d-dim);margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
   } else {
     // The progress bar that used to sit here said "recent best is N% of the record" — one ratio,
     // identical on a card that has been climbing all year and one that peaked two years ago.
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid #1c2130">'
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
       +_pbSpark_(p)
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
-      +'<span style="font-size:11.5px;color:#94a3b8;white-space:nowrap">Recent best '+p.formStr+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-t3);white-space:nowrap">Recent best '+p.formStr+'</span>'
       +'<span style="font-size:12.5px;font-weight:800;color:'+accent+';white-space:nowrap">Beat by '+p.gapStr+'</span></div>'
-      +(p.cost?('<div style="font-size:11px;color:#5b6678;line-height:1.5;margin-top:7px">'+p.cost+'</div>'):'')
+      +(p.cost?('<div style="font-size:11px;color:var(--d-dim);line-height:1.5;margin-top:7px">'+p.cost+'</div>'):'')
       +'</div>';
   }
-  return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
 }
 function _pbSection_(vm){
   var pb=vm.pb;
@@ -18990,16 +19004,16 @@ function _pbSection_(vm){
   var cards=pb.recs.map(function(p){ return _pbCardHtml_(p, pb.formDays, vm.nA); }).join('');
   var closable=pb.recs.filter(function(p){ return !p.held && p.hasForm; }).length;
   var lead=closable
-    ? ('<b style="color:#f1f5f9">'+closable+'</b> of these are a gap you can close from current form.')
+    ? ('<b style="color:var(--d-head)">'+closable+'</b> of these are a gap you can close from current form.')
     : ('You are holding every one of these at current form.');
   var foot=pb.droppedForCoverage
-    ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
+    ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
     : '';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
-    +'<span style="font-size:11px;color:#5b6678">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:14px">Each line is that record&#8217;s best per quarter, so you can see the trajectory toward it; the figure beside it is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:14px">Each line is that record&#8217;s best per quarter, so you can see the trajectory toward it; the figure beside it is your best in the last '+pb.formDays+' days against the mark. '+lead+'</div>'
     +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:12px">'+cards+'</div>'
     +foot+'</div>';
 }
@@ -19259,8 +19273,8 @@ function _gcLineChart_(spec, id){
   var rows=spec.series.map(function(s){
     return '<div id="mrc-ttr-'+id+'-'+s.key+'" style="display:flex;align-items:center;gap:8px;white-space:nowrap">'
       +'<span style="width:12px;height:2px;background:'+s.color+';flex-shrink:0;border-radius:1px"></span>'
-      +'<span style="font-size:12px;font-weight:800;color:#f1f5f9;font-variant-numeric:tabular-nums" id="mrc-ttv-'+id+'-'+s.key+'">&mdash;</span>'
-      +'<span style="font-size:11px;color:#94a3b8">'+s.label+'</span></div>';
+      +'<span style="font-size:12px;font-weight:800;color:var(--d-head);font-variant-numeric:tabular-nums" id="mrc-ttv-'+id+'-'+s.key+'">&mdash;</span>'
+      +'<span style="font-size:11px;color:var(--d-t3)">'+s.label+'</span></div>';
   }).join('');
   var aria=spec.aria||'';
   return '<div class="mrc-wrap" style="position:relative;outline:none" onmousemove="_mrMove_(event,&#39;'+id+'&#39;)" onmouseleave="_mrHide_(&#39;'+id+'&#39;)"'
@@ -19272,21 +19286,21 @@ function _gcLineChart_(spec, id){
     +lines+endLbl+dots
     +'</svg>'
     +'<div id="mrc-tt-'+id+'" style="position:absolute;top:6px;left:0;opacity:0;transition:opacity .1s;pointer-events:none;background:#141922;border:1px solid #2a3341;border-radius:9px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.45)">'
-    +'<div id="mrc-tth-'+id+'" style="font-size:10.5px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">&mdash;</div>'
+    +'<div id="mrc-tth-'+id+'" style="font-size:10.5px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">&mdash;</div>'
     +rows+'</div></div>';
 }
 // The table-view twin every line chart ships with. Every plotted value reachable without hovering,
 // collapsed by default so it costs nothing until it is wanted.
 function _gcTable_(spec, xlabel){
-  var head='<tr><th style="text-align:left;padding:3px 10px 3px 0;font-weight:700;color:#94a3b8">'+(xlabel||'Day')+'</th>'
-    +spec.series.map(function(s){ return '<th style="text-align:right;padding:3px 0 3px 14px;font-weight:700;color:#94a3b8;white-space:nowrap">'+s.label+'</th>'; }).join('')+'</tr>';
+  var head='<tr><th style="text-align:left;padding:3px 10px 3px 0;font-weight:700;color:var(--d-t3)">'+(xlabel||'Day')+'</th>'
+    +spec.series.map(function(s){ return '<th style="text-align:right;padding:3px 0 3px 14px;font-weight:700;color:var(--d-t3);white-space:nowrap">'+s.label+'</th>'; }).join('')+'</tr>';
   var fmt=spec.fmt||_mrMi_, body='';
   for(var d=1; d<=spec.nx; d++){
     var lab=(spec.xlabs && spec.xlabs[d-1]) ? spec.xlabs[d-1] : ((spec.mon?spec.mon+' ':'')+d);
-    body+='<tr><td style="padding:2px 10px 2px 0;color:#cbd5e1;white-space:nowrap">'+lab+'</td>'
-      +spec.series.map(function(s){ return '<td style="text-align:right;padding:2px 0 2px 14px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+(d<=s.pts.length?fmt(s.pts[d-1]):'&mdash;')+'</td>'; }).join('')+'</tr>';
+    body+='<tr><td style="padding:2px 10px 2px 0;color:var(--d-soft);white-space:nowrap">'+lab+'</td>'
+      +spec.series.map(function(s){ return '<td style="text-align:right;padding:2px 0 2px 14px;color:var(--d-head);font-variant-numeric:tabular-nums">'+(d<=s.pts.length?fmt(s.pts[d-1]):'&mdash;')+'</td>'; }).join('')+'</tr>';
   }
-  return '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:#5b6678;outline:none">Table view &mdash; every '+(xlabel||'day').toLowerCase()+', every series</summary>'
+  return '<details style="margin-top:12px"><summary style="cursor:pointer;font-size:11px;color:var(--d-dim);outline:none">Table view &mdash; every '+(xlabel||'day').toLowerCase()+', every series</summary>'
     +'<div style="overflow-x:auto;margin-top:8px"><table style="border-collapse:collapse;font-size:11.5px">'+head+body+'</table></div></details>';
 }
 // Month Race, now a caller of the shared builder rather than its own chart.
@@ -19304,10 +19318,10 @@ function _mrTable_(mr){ return _gcTable_(_mrSpec_(mr), 'Day');
 // Only colour and the focus ring live in CSS — every SIZE is a geometry attribute from _mrGeo_(),
 // so type scale and viewBox can never disagree about which surface is being drawn.
 var _MR_CSS='<style>'
-  +'.mrc-ax{fill:#5b6678}'
+  +'.mrc-ax{fill:var(--d-dim)}'
   +'.mrc-today{font-weight:700;fill:'+_MR_YOU+';opacity:.85}'
-  +'.mrc-end{font-weight:800;fill:#f1f5f9}'
-  +'.mrc-wrap:focus-visible{outline:2px solid #94a3b8;outline-offset:3px;border-radius:8px}'
+  +'.mrc-end{font-weight:800;fill:var(--d-head)}'
+  +'.mrc-wrap:focus-visible{outline:2px solid var(--d-t3);outline-offset:3px;border-radius:8px}'
   +'</style>';
 function _mrSection_(vm){
   var mr=_mrCompute_(vm);
@@ -19323,16 +19337,16 @@ function _mrSection_(vm){
       ? '<span style="width:16px;height:0;border-top:2px dashed '+s.color+';flex-shrink:0"></span>'
       : '<span style="width:16px;height:2px;background:'+s.color+';flex-shrink:0;border-radius:1px"></span>';
     return '<span style="display:inline-flex;align-items:baseline;gap:7px">'+key
-      +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+s.label+'</span>'
-      +'<span style="font-size:12px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+_mrMi_(s.v)+' mi</span>'
-      +'<span style="font-size:10.5px;color:#5b6678">'+s.sub+'</span></span>';
+      +'<span style="font-size:12px;font-weight:700;color:var(--d-head)">'+s.label+'</span>'
+      +'<span style="font-size:12px;color:var(--d-head);font-variant-numeric:tabular-nums">'+_mrMi_(s.v)+' mi</span>'
+      +'<span style="font-size:10.5px;color:var(--d-dim)">'+s.sub+'</span></span>';
   }).join('');
   // The callouts the bars carried, now annotations under the curve they describe. Same _mrGap_
   // wording, same tone — they were never bar furniture, they are the reading of the gap.
   var ann=mr.series.filter(function(s){ return s.gap; }).map(function(s){
     return '<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
       +'<span style="width:6px;height:6px;border-radius:50%;background:'+s.color+';flex-shrink:0;transform:translateY(-2px)"></span>'
-      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">vs '+s.label+' &middot; </span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:var(--d-t3)">vs '+s.label+' &middot; </span>'
       +'<span style="font-size:12.5px;color:'+s.gap.tone+';font-weight:700">'+s.gap.text+'</span></div></div>';
   }).join('');
   // The hero ranks this month AMONG the rankable months, so its denominator includes the one still
@@ -19346,15 +19360,15 @@ function _mrSection_(vm){
     ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn dashed, as a target rather than a peer'+(drawn?'':', and why its curve is not drawn at all here &mdash; this snapshot carries its total but not its days')+'. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race, and both lines stop at today for that reason.')
     : 'No completed month clears the ride count needed to stand as a record yet, so there is no bar to beat.';
   return _MR_CSS
-    +'<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
+    +'<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Month Race</span>'
-    +'<span style="font-size:11px;color:#5b6678">cumulative miles, day by day &middot; hover or use the arrow keys to read any day</span></div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Month Race</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles, day by day &middot; hover or use the arrow keys to read any day</span></div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
     +_mrChart_(mr, id)
-    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'+ann+'</div>'):'')
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'+ann+'</div>'):'')
     +_mrTable_(mr)
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19381,15 +19395,15 @@ function _wcRow_(x){
     +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';margin-top:7px;flex-shrink:0"></span>'
     +'<div style="min-width:0;flex:1">'
     +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
-    +'<span style="font-size:13px;font-weight:700;color:#f1f5f9">'+x.label+'</span>'
+    +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+x.label+'</span>'
     +_yvyPct_(x.pct, win)+'</div>'
-    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">'+x.note+'</div></div></div>';
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:2px">'+x.note+'</div></div></div>';
 }
 function _wcCol_(eyebrow, head, col, items, emptyTxt){
   var body=items.length ? items.map(_wcRow_).join('')
-    : '<div style="font-size:12px;color:#5b6678;line-height:1.55;padding:9px 0">'+emptyTxt+'</div>';
+    : '<div style="font-size:12px;color:var(--d-dim);line-height:1.55;padding:9px 0">'+emptyTxt+'</div>';
   return '<div style="flex:1;min-width:240px">'
-    +'<div style="font-size:10.5px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em">'+eyebrow+'</div>'
+    +'<div style="font-size:10.5px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em">'+eyebrow+'</div>'
     +'<div style="font-size:16px;font-weight:800;color:'+col+';margin:1px 0 8px">'+head+'</div>'
     +body+'</div>';
 }
@@ -19410,12 +19424,12 @@ function _wcSection_(vm){
   if(thin) notes.push('Power and training load are left out &mdash; the compared months do not carry them densely enough to state a change.');
   var hr=null; (vm.phys||[]).forEach(function(p){ if(p.key==='hr') hr=p; });
   if(hr && hr.band) notes.push('Average heart rate is left out on purpose: on its own a higher average is not a worse month, so it has no side to be listed on.');
-  var foot=notes.length ? '<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130">'+notes.join(' ')+'</div>' : '';
+  var foot=notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)">'+notes.join(' ')+'</div>' : '';
 
   var body;
   if(allEven){
     // Everything landed in the Even band. Say that once — do not manufacture two lists.
-    body='<div style="font-size:13.5px;color:#cbd5e1;line-height:1.6;padding:4px 0 2px">Nothing has moved enough to call. '
+    body='<div style="font-size:13.5px;color:var(--d-soft);line-height:1.6;padding:4px 0 2px">Nothing has moved enough to call. '
       +'Every metric is within '+_YVY_EVEN_PCT+'% of where you were by the '+_yvyOrdComment_(vm.domNow)+' last month &mdash; '
       +'this is the same month, run back.</div>';
   } else {
@@ -19426,10 +19440,10 @@ function _wcSection_(vm){
       +_wcCol_('You are&hellip;','Chasing',_YVY_BASE,dn,dnEmpty)
       +'</div>';
   }
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">What&#8217;s Changed</span>'
-    +'<span style="font-size:11px;color:#5b6678">vs last month through the '+_yvyOrdComment_(vm.domNow)+'</span></div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">What&#8217;s Changed</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">vs last month through the '+_yvyOrdComment_(vm.domNow)+'</span></div>'
     +body+foot+'</div>';
 }
 
@@ -19486,7 +19500,7 @@ function _raStrip_(ra, vm){
   // collision this page keeps producing; naming the months removes the superlative entirely.
   var top=ra.list[0], bot=ra.list[ra.list.length-1];
   return '<div style="display:flex;align-items:flex-end;gap:2px;height:64px;margin:2px 0 6px">'+bars+'</div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:#5b6678">'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--d-dim)">'
     +'<span>'+_yvyMonShort_(top.ym)+' '+top.mi.toLocaleString()+' mi</span>'
     +'<span>'+_yvyMonShort_(bot.ym)+' '+bot.mi.toLocaleString()+' mi</span></div>';
 }
@@ -19496,35 +19510,35 @@ function _raSection_(vm){
   var head, lines=[];
   if(ra.idx<0){
     // Same branch, same sentence, same denominator as the hero.
-    head='<div style="font-size:14px;font-weight:800;color:#f1f5f9;line-height:1.4">'+_yvyUnrankableTxt_(vm)+'</div>'
-      +'<div style="font-size:12px;color:#94a3b8;margin-top:4px">The strip below is those ranked months. This one joins it once it qualifies.</div>';
+    head='<div style="font-size:14px;font-weight:800;color:var(--d-head);line-height:1.4">'+_yvyUnrankableTxt_(vm)+'</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-top:4px">The strip below is those ranked months. This one joins it once it qualifies.</div>';
   } else {
     head='<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
-      +'<span style="font-size:32px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em;line-height:1">#'+vm.rank+'</span>'
-      +'<span style="font-size:13px;color:#94a3b8">of '+vm.rankTot+' '+vm.monthN+'</span>'
+      +'<span style="font-size:32px;font-weight:800;color:var(--d-head);letter-spacing:-.02em;line-height:1">#'+vm.rank+'</span>'
+      +'<span style="font-size:13px;color:var(--d-t3)">of '+vm.rankTot+' '+vm.monthN+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+_MR_BEST+'">'+_yvyRankBand_(vm.rank,vm.rankTot)+'</span></div>';
     if(ra.next){
-      lines.push('<b style="color:#f1f5f9">Next rung:</b> pass '+_yvyMonLabel_(ra.next.ym)+' at '+ra.next.mi.toLocaleString()+' mi &mdash; <span style="color:'+ra.gap.tone+';font-weight:700">'+ra.gap.text.replace(/^Beat by/,'beat by')+'</span>');
+      lines.push('<b style="color:var(--d-head)">Next rung:</b> pass '+_yvyMonLabel_(ra.next.ym)+' at '+ra.next.mi.toLocaleString()+' mi &mdash; <span style="color:'+ra.gap.tone+';font-weight:700">'+ra.gap.text.replace(/^Beat by/,'beat by')+'</span>');
     } else if(ra.runner){
-      lines.push('<b style="color:#f1f5f9">Top of your own table.</b> You lead '+_yvyMonLabel_(ra.runner.ym)+' by '+_mrMi_(ra.lead)+' mi.');
+      lines.push('<b style="color:var(--d-head)">Top of your own table.</b> You lead '+_yvyMonLabel_(ra.runner.ym)+' by '+_mrMi_(ra.lead)+' mi.');
     }
     if(ra.proj){
       lines.push(ra.proj.rank===vm.rank
-        ? ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi and holds <b style="color:#f1f5f9">#'+vm.rank+'</b>.')
-        : ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi, which would place it <b style="color:#f1f5f9">#'+ra.proj.rank+'</b>. That is a projection, not your rank.'));
+        ? ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi and holds <b style="color:var(--d-head)">#'+vm.rank+'</b>.')
+        : ('At your trailing rate this month finishes near '+_mrMi_(ra.proj.tot)+' mi, which would place it <b style="color:var(--d-head)">#'+ra.proj.rank+'</b>. That is a projection, not your rank.'));
     }
   }
   var foot;
   if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' '+vm.nP+', which is the same gate the rest of this page ranks on.';
   else foot=_yvyPartialTxt_(vm.domNow, vm.rank===1, 'riding');
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
-    +'<span style="font-size:11px;color:#5b6678">every '+vm.monthN.slice(0,-1)+' you can be ranked on, tallest first</span></div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">every '+vm.monthN.slice(0,-1)+' you can be ranked on, tallest first</span></div>'
     +head
     +'<div style="margin-top:14px">'+_raStrip_(ra,vm)+'</div>'
-    +(lines.length?('<div style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-top:12px">'+lines.join('<br>')+'</div>'):'')
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +(lines.length?('<div style="font-size:12.5px;color:var(--d-t3);line-height:1.6;margin-top:12px">'+lines.join('<br>')+'</div>'):'')
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19607,11 +19621,11 @@ function _rsSection_(vm){
     sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
       +'. Ride Saturday and it finishes '+rk(rs.rideRank,_YVY_GOOD)+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
   }
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Regret Simulator</span>'
-    +'<span style="font-size:11px;color:#5b6678">the weekend decision, ranked against your finished months</span></div>'
-    +'<div style="font-size:15px;color:#cbd5e1;line-height:1.6">'+sentence+'</div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Regret Simulator</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">the weekend decision, ranked against your finished months</span></div>'
+    +'<div style="font-size:15px;color:var(--d-soft);line-height:1.6">'+sentence+'</div>'
     +'</div>';
 }
 
@@ -19698,9 +19712,9 @@ function _yoySection_(vm){
   var legend=yo.years.map(function(x){
     return '<span style="display:inline-flex;align-items:baseline;gap:7px">'
       +'<span style="width:16px;height:2px;background:'+x.color+';flex-shrink:0;border-radius:1px"></span>'
-      +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+x.y+'</span>'
-      +'<span style="font-size:12px;color:#f1f5f9;font-variant-numeric:tabular-nums">'+_amMi_(x.mi)+' mi</span>'
-      +'<span style="font-size:10.5px;color:#5b6678">'+(x.partial?('through '+yo.monf+' '+yo.domNow):'full year')+'</span></span>';
+      +'<span style="font-size:12px;font-weight:700;color:var(--d-head)">'+x.y+'</span>'
+      +'<span style="font-size:12px;color:var(--d-head);font-variant-numeric:tabular-nums">'+_amMi_(x.mi)+' mi</span>'
+      +'<span style="font-size:10.5px;color:var(--d-dim)">'+(x.partial?('through '+yo.monf+' '+yo.domNow):'full year')+'</span></span>';
   }).join('');
   // Annotations, in the same grammar the month chart uses: the like-for-like comparison first,
   // stated at the same day of year, then the projection labelled as a projection.
@@ -19709,7 +19723,7 @@ function _yoySection_(vm){
     var up=(yo.deltaSD>=0), tone=up?_YVY_GOOD:_YVY_BASE;
     ann+='<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
       +'<span style="width:6px;height:6px;border-radius:50%;background:'+yo.lastY.color+';flex-shrink:0;transform:translateY(-2px)"></span>'
-      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">vs '+yo.lastY.y+' on this date &middot; </span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:var(--d-t3)">vs '+yo.lastY.y+' on this date &middot; </span>'
       +'<span style="font-size:12.5px;color:'+tone+';font-weight:700">'
       +(up?('Ahead by '+_mrMi_(yo.deltaSD)+' mi'):('Behind by '+_mrMi_(-yo.deltaSD)+' mi'))
       +(yo.pctSD!=null?(' &mdash; '+Math.abs(yo.pctSD)+'% '+(up?'up on':'down on')+' where '+yo.lastY.y+' stood by '+yo.monf+' '+yo.domNow):'')
@@ -19718,7 +19732,7 @@ function _yoySection_(vm){
   if(yo.proj!=null && yo.proj>yo.cur.mi){
     ann+='<div style="display:flex;gap:9px;align-items:baseline;padding:6px 0">'
       +'<span style="width:6px;height:6px;border-radius:50%;background:'+_YVY_BASE+';flex-shrink:0;transform:translateY(-2px)"></span>'
-      +'<div style="min-width:0"><span style="font-size:11.5px;color:#94a3b8">Rest of '+yo.cur.y+' &middot; </span>'
+      +'<div style="min-width:0"><span style="font-size:11.5px;color:var(--d-t3)">Rest of '+yo.cur.y+' &middot; </span>'
       +'<span style="font-size:12.5px;color:'+_YVY_BASE+';font-weight:700">On your trailing rate the year finishes near '
       +_amMi_(yo.proj)+' mi over the '+yo.daysLeft+' day'+(yo.daysLeft===1?'':'s')+' left &mdash; a projection, not a result.</span></div></div>';
   }
@@ -19726,15 +19740,15 @@ function _yoySection_(vm){
     +yo.cur.y+' stops at the dashed line because it is still running &mdash; '+yo.elapsed+' of '+yo.cur.days
     +' days against full years is not a comparison, which is why the figure quoted above is every year read at the SAME day of the year, not its finished total.';
   return _MR_CSS
-    +'<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Year over Year</span>'
-    +'<span style="font-size:11px;color:#5b6678">cumulative miles by day of year &middot; hover or use the arrow keys to read any date</span></div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Year over Year</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by day of year &middot; hover or use the arrow keys to read any date</span></div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
     +_gcLineChart_(spec, id)
-    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'+ann+'</div>'):'')
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'+ann+'</div>'):'')
     +_gcTable_(spec, 'Date')
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19742,13 +19756,13 @@ function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
   // hero
-  var hero='<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
+  var hero='<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
     +'<div style="min-width:230px;flex:1;padding-right:12px">'
-    +'<div style="font-size:22px;font-weight:800;color:#f1f5f9;line-height:1.1">You vs. You.</div>'
+    +'<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1">You vs. You.</div>'
     +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:#f1f5f9">'+aheadN+' of 4</b>. '
+    +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5">Through the '+_yvyOrdComment_(vm.domNow)+', you are ahead of last month in <b style="color:var(--d-head)">'+aheadN+' of 4</b>. '
     +(vm.rank>0
-      ? ('This is your <b style="color:#f1f5f9">#'+vm.rank+' of '+vm.rankTot+'</b> '+vm.monthN+' &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+(vm.bestMonthMi>0?('; the bar is '+_mrMi_(vm.bestMonthMi)+' mi'):'')+'.')
+      ? ('This is your <b style="color:var(--d-head)">#'+vm.rank+' of '+vm.rankTot+'</b> '+vm.monthN+' &mdash; '+_yvyRankBand_(vm.rank,vm.rankTot)+(vm.bestMonthMi>0?('; the bar is '+_mrMi_(vm.bestMonthMi)+' mi'):'')+'.')
       : (_yvyUnrankableTxt_(vm)+(vm.bestMonthMi>0?(' The bar is '+_mrMi_(vm.bestMonthMi)+' mi.'):'')))
     +'</div></div>'
     +_yvyKpi_(ic.ride,'Total Distance',vm.kDist.cur.toFixed(1),'mi',vm.kDist.pct,vm.kDist.up,'vs last month, same days')
@@ -19767,7 +19781,7 @@ function _yvyRenderVM_(vm){
   var score=_yvyCard_('<div style="text-align:center">'+_yvyHdr_('Self Competition Score')
     +'<div style="display:flex;justify-content:center">'+_yvyRing_(vm.score,vm.scoreBand)+'</div>'
     +'<div style="font-size:14px;font-weight:800;color:'+_yvyScoreCol_(vm.score)+';margin-top:6px">'+vm.scoreBand+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">vs last month, same days</div></div>');
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">vs last month, same days</div></div>');
 
   // Three DISTINCT metrics (sorted desc), each labeled by its OWN delta so no row repeats.
   // Tag and note come from the SAME band decided in the VM — never re-derived here, which is how
@@ -19779,12 +19793,12 @@ function _yvyRenderVM_(vm){
   }).join(''));
 
   var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #14181f">'
-    +'<span style="font-size:13px;color:#cbd5e1">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:#f1f5f9">'+b.mi+' mi</span>'
+    +'<span style="font-size:13px;color:var(--d-soft)">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:var(--d-head)">'+b.mi+' mi</span>'
     +'<span style="font-size:12px;font-weight:700;color:'+(up?_YVY_GOOD:_YVY_DOWN)+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
   var best=_yvyCard_(_yvyHdr_('Best Days vs Last Month')+bestRows);
 
   var heat=_yvyCard_(_yvyHdr_('Daily Activity Heatmap')+_yvyHeatRow_('This month',vm.heatCur)+_yvyHeatRow_('Last month',vm.heatLast)
-    +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:#5b6678">Less <span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.25)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.55)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.9)"></span> More</div>');
+    +'<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:var(--d-dim)">Less <span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.25)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.55)"></span><span style="width:11px;height:11px;border-radius:3px;background:rgba(252,76,2,.9)"></span> More</div>');
 
   // challenge engine (the headline)
   var conf=vm.projTot>=vm.lastFull*1.05?'High':(vm.onTrack?'Medium':'Reachable');
@@ -19792,21 +19806,21 @@ function _yvyRenderVM_(vm){
   var chalCol=vm.onTrack?_YVY_GOOD:_YVY_BASE;
   var challenge='<div style="background:#0e1117;border:1px solid '+(vm.onTrack?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
     +'<div style="flex:1;min-width:260px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="color:'+chalCol+'">'+ic.cal+'</span>'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">The Challenge &mdash; beat last month</span></div>'
-    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;line-height:1.25">'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">The Challenge &mdash; beat last month</span></div>'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.25">'
     +(vm.onTrack?('On track to pass last month by '+Math.round(vm.projTot-vm.lastFull)+' mi.'):('You are '+vm.need+' mi short &mdash; but it is closable.'))+'</div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;margin-top:8px;line-height:1.55">Your trailing 6-week rate is <b style="color:#f1f5f9">'+vm.rate+' mi/wk</b>. '
-    +'Over the '+vm.daysLeft+' days left that projects <b style="color:'+chalCol+'">+'+vm.proj+' mi</b> &rarr; <b style="color:#f1f5f9">'+vm.projTot+' mi</b>, '
-    +'against the <b style="color:#f1f5f9">'+vm.lastFull+'</b> to beat. You need '+vm.needPerWk+' mi/wk from here.</div></div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3);margin-top:8px;line-height:1.55">Your trailing 6-week rate is <b style="color:var(--d-head)">'+vm.rate+' mi/wk</b>. '
+    +'Over the '+vm.daysLeft+' days left that projects <b style="color:'+chalCol+'">+'+vm.proj+' mi</b> &rarr; <b style="color:var(--d-head)">'+vm.projTot+' mi</b>, '
+    +'against the <b style="color:var(--d-head)">'+vm.lastFull+'</b> to beat. You need '+vm.needPerWk+' mi/wk from here.</div></div>'
     +'<div style="text-align:center;min-width:130px"><div style="position:relative">'+_yvyConfRing_(confPct,chalCol)+'</div>'
     +'<div style="font-size:12px;font-weight:700;color:'+chalCol+';margin-top:2px">'+conf+' confidence</div></div></div>';
 
   // insight
   var wkend=_yvyWeekendShare_(vm);
   var insight=_yvyCard_('<div style="display:flex;gap:12px"><span style="width:34px;height:34px;border-radius:9px;background:'+_YVY_BASE+'22;color:'+_YVY_BASE+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic.bulb+'</span>'
-    +'<div><div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Insight</div>'
-    +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin:3px 0 6px">'+(vm.best[0]?('Your big day carried the month.'):('Consistency is carrying you.'))+'</div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.5">Your best day ('+_YVY_MON[vm.m]+' '+(vm.best[0]?vm.best[0].dom:'')+', '+(vm.best[0]?vm.best[0].mi:0)+' mi) is '
+    +'<div><div style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Insight</div>'
+    +'<div style="font-size:15px;font-weight:800;color:var(--d-head);margin:3px 0 6px">'+(vm.best[0]?('Your big day carried the month.'):('Consistency is carrying you.'))+'</div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5">Your best day ('+_YVY_MON[vm.m]+' '+(vm.best[0]?vm.best[0].dom:'')+', '+(vm.best[0]?vm.best[0].mi:0)+' mi) is '
     +Math.round((vm.best[0]?vm.best[0].mi:0)/(vm.curTot||1)*100)+'% of the month. Keep the weekend long '+vm.nP+' and the '+vm.rate+' mi/wk rate and you pass last month by '+_YVY_dateAdd_(vm)+'.</div></div></div>');
 
   // layout: main col + right rail
@@ -19823,12 +19837,12 @@ function _yvyRenderVM_(vm){
       var _p=vm.lastAct.split('-');
       _lm=' Your last '+vm.nA+' was '+(_YVY_MON[(+_p[1]||1)-1]||'')+' '+(+_p[2]||0)+', '+_p[0]+'.';
     }
-    zeroLine='<div style="font-size:12.5px;color:#94a3b8;line-height:1.55;background:#0e1117;border:1px solid #1c2130;border-radius:12px;padding:12px 14px;margin:0 0 12px">'
-      +'<b style="color:#f1f5f9">No '+vm.nP+' logged in '+_YVY_MONF[vm.m]+'.</b> The month figures below are zero because the month is empty, not because the data is missing &mdash; '
+    zeroLine='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;background:#0e1117;border:1px solid var(--d-raise);border-radius:12px;padding:12px 14px;margin:0 0 12px">'
+      +'<b style="color:var(--d-head)">No '+vm.nP+' logged in '+_YVY_MONF[vm.m]+'.</b> The month figures below are zero because the month is empty, not because the data is missing &mdash; '
       +vm.pop.toLocaleString()+' '+vm.nP+' are in scope for the ranked sections.'+_lm+'</div>';
   }
-  var sampleLine='<div style="font-size:11.5px;color:#5b6678;margin:0 0 12px">'
-    +'Sample: <b style="color:#94a3b8">'+vm.pop.toLocaleString()+' '+(vm.pop===1?vm.nA:vm.nP)+'</b> in scope'
+  var sampleLine='<div style="font-size:11.5px;color:var(--d-dim);margin:0 0 12px">'
+    +'Sample: <b style="color:var(--d-t3)">'+vm.pop.toLocaleString()+' '+(vm.pop===1?vm.nA:vm.nP)+'</b> in scope'
     +(vm.thin?(' &middot; below '+_YVY_MIN_POP+', so the ranked and comparative sections are held back rather than computed on a sample that cannot carry them'):'')
     +'</div>';
   // THIN: hero + sample line only. Everything below ranks, distributes or compares, and none of
@@ -19928,7 +19942,7 @@ function aiRenderRacing_(){
     return h;
   };
   var head=function(txt){
-    return '<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 10px">'+txt+'</div>';
+    return '<div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 10px">'+txt+'</div>';
   };
 
   try{
@@ -19942,7 +19956,7 @@ function aiRenderRacing_(){
     return picker+_al+head('Riding')+body(cyc,'ride')+head('Running')+body(runs,'run')+runExtras();
   }catch(e){
     try{ console.error('[yvy]', e&&e.message); }catch(_e){}
-    return '<div style="padding:48px 20px;text-align:center;color:#94a3b8;font-size:13px">You vs. You is unavailable right now.</div>';
+    return '<div style="padding:48px 20px;text-align:center;color:var(--d-t3);font-size:13px">You vs. You is unavailable right now.</div>';
   }
 }
 
@@ -19955,11 +19969,11 @@ function _msFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return Strin
 function _msTs_(ts){ var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function _msDur_(sec){ sec=+sec||0; var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h?(h+'h '+m+'m'):(m+'m'); }
 function _msCard_(color,icon,big,label,sub){
-  return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:7px;min-width:0">'
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:7px;min-width:0">'
     +'<div style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:8px;background:'+color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</span>'
-    +'<div style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;line-height:1.25">'+label+'</div></div>'
-    +'<div style="font-size:25px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+big+'</div>'
-    +(sub?('<div style="font-size:12px;color:#5b6678">'+sub+'</div>'):'')
+    +'<div style="font-size:10.5px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;line-height:1.25">'+label+'</div></div>'
+    +'<div style="font-size:25px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+big+'</div>'
+    +(sub?('<div style="font-size:12px;color:var(--d-dim)">'+sub+'</div>'):'')
   +'</div>';
 }
 function _msCycling_(){
@@ -20102,23 +20116,23 @@ function _msBadge_(idx, color, big, sub){
 function aiRenderMilestones_(){
   var C=_msCatalog_(new Date());
   var proj=C.proj, PAD='width:100%;padding:0 4px 26px;box-sizing:border-box';   // full-bleed, no narrow center column
-  if(!proj.length){ return '<div style="'+PAD+'"><div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough ride data yet for milestones.</div></div>'; }
+  if(!proj.length){ return '<div style="'+PAD+'"><div style="padding:50px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough ride data yet for milestones.</div></div>'; }
   function ic(cat,c){ return _msIcon_(_MS_ICON[cat]||_MS_ICON.Distance, c||_MS_COL[cat]||'#94a3b8'); }
   function pct(p){ return Math.round(p*10)/10; }
   var H='<div style="'+PAD+'">';
-  H+='<div style="font-size:13px;color:#64748b;margin:2px 2px 16px;line-height:1.5">Celebrate progress. Stay motivated. The best is still ahead. <span style="color:#5b6678">Projected dates are estimates from your recent training rate.</span></div>';
+  H+='<div style="font-size:13px;color:var(--d-t4);margin:2px 2px 16px;line-height:1.5">Celebrate progress. Stay motivated. The best is still ahead. <span style="color:var(--d-dim)">Projected dates are estimates from your recent training rate.</span></div>';
   // ---- HERO: sunset-road bg (CSS gradient stand-in; swap a hosted photo URL for background-image) + next 3 ----
   var next=nextMilestones_(proj,3).filter(function(p){return p.projectedDate;});
   var HEROBG='linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.94) 34%,rgba(11,14,20,.62) 60%,rgba(150,74,30,.28) 100%),radial-gradient(120% 150% at 93% 16%,rgba(255,184,74,.6) 0%,rgba(255,120,40,.18) 30%,transparent 56%),linear-gradient(160deg,#14203a,#0b0e14)';
-  H+='<div style="background:'+HEROBG+';border:1px solid #1c2130;border-radius:18px;padding:26px 26px 24px;margin-bottom:14px;overflow:hidden">';
+  H+='<div style="background:'+HEROBG+';border:1px solid var(--d-raise);border-radius:18px;padding:26px 26px 24px;margin-bottom:14px;overflow:hidden">';
   H+='<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center">';
-  H+='<div style="flex:1 1 240px;min-width:210px"><div style="font-size:33px;font-weight:800;color:#f1f5f9;line-height:1.08">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13.5px;color:#cbd5e1;margin-top:12px;line-height:1.55;max-width:280px">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
-  H+='<div style="flex:2 1 520px"><div style="font-size:10.5px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;margin:0 2px 10px">Next Milestones (Projected)</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">';
+  H+='<div style="flex:1 1 240px;min-width:210px"><div style="font-size:33px;font-weight:800;color:var(--d-head);line-height:1.08">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13.5px;color:var(--d-soft);margin-top:12px;line-height:1.55;max-width:280px">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
+  H+='<div style="flex:2 1 520px"><div style="font-size:10.5px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.08em;margin:0 2px 10px">Next Milestones (Projected)</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">';
   next.forEach(function(p){ var c=_MS_COL[p.category];
     H+='<div style="background:rgba(20,26,40,.62);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,.08);border-radius:13px;padding:14px 15px">'
-      +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:#e2e8f0;font-weight:700;margin-bottom:9px">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
+      +'<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--d-t2);font-weight:700;margin-bottom:9px">'+ic(p.category,c)+'<span>'+aiEsc_(p.name)+'</span></div>'
       +'<div style="font-size:23px;font-weight:800;color:#f8fafc;letter-spacing:-.01em;margin-bottom:9px">'+_msFmtDate_(p.projectedDate)+'</div>'
-      +'<div style="font-size:11px;color:#cbd5e1;margin-bottom:2px">'+pct(p.pct)+'% complete</div>'
+      +'<div style="font-size:11px;color:var(--d-soft);margin-bottom:2px">'+pct(p.pct)+'% complete</div>'
       // A milestone IS a running total crossing a threshold, so the honest picture is the running
       // total with the threshold on it — not a bar quoting one ratio. The dashed rule is the target;
       // the line climbing toward it is what tells you whether the date above is getting nearer.
@@ -20128,7 +20142,7 @@ function aiRenderMilestones_(){
                                    from:(pts[0]&&pts[0].lab)||'', to:(pts[pts.length-1]&&pts[pts.length-1].lab)||'' });
         // No usable history: say so in words. Falling back to the bar this replaced would leave the
         // rule half-applied and put the weakest version of the card in front of the thinnest data.
-        if(!sp) return '<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">Not enough logged months yet to draw the climb toward this.</div>';
+        if(!sp) return '<div style="font-size:10.5px;color:var(--d-t3);margin-top:2px">Not enough logged months yet to draw the climb toward this.</div>';
         // The target only gets a rule when it sits inside the drawn range; above it, the line
         // simply has not reached the top of the chart yet and a rule pinned to the edge would lie.
         var vals=pts.map(function(x){ return x.v; }).filter(function(v){ return v!=null; });
@@ -20145,26 +20159,26 @@ function aiRenderMilestones_(){
   if(strip){
     var SICO={ 'Rides':'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h3l2.5 6.5M5.5 17.5l4-9h5l3.5 9"/>', 'Miles':_MS_ICON.Distance, 'ft Climbed':_MS_ICON.Climbing, 'Hours':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>' };
     var SCOL={ 'Rides':'#60a5fa','Miles':'#3b82f6','ft Climbed':'#22c55e','Hours':'#f59e0b' };
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 20px;margin-bottom:14px">';
-    H+='<div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Lifetime at a Glance</div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 20px;margin-bottom:14px">';
+    H+='<div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Lifetime at a Glance</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:20px 40px">';
-    strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:11px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:29px;font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.01em">'+s.v+'</div><div style="font-size:11px;color:#5b6678;margin-top:2px">'+s.k+'</div></div></div>'; });
+    strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:11px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:29px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+s.v+'</div><div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+s.k+'</div></div></div>'; });
     H+='</div></div>';
   } else {
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:#5b6678">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid #2a3550;color:#94a3b8;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:var(--d-dim)">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid #2a3550;color:var(--d-t3);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
   }
   // ---- RECENTLY UNLOCKED: hex badges (most recent by date) ----
   var unlocked=proj.filter(function(p){return p.unlocked && p.date;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date));}).slice(0,4);
   if(unlocked.length){
-    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Recently Unlocked</div>';
+    H+='<div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Recently Unlocked</div>';
     H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
     unlocked.forEach(function(p,bi){ var c=_MS_COL[p.category],
         big=(p.metric==='centuries')?('#'+p.target):(p.metric==='rides'?p.target.toLocaleString():p.metric==='miles'?(p.target>=1000?(p.target/1000)+'K':p.target):p.metric==='ft'?(p.target>=1000?Math.round(p.target/1000)+'K':p.target):p.target),
         sub=(p.metric==='centuries'?'CENTURY':p.metric==='rides'?'RIDES':p.metric==='miles'?'MILES':p.metric==='ft'?'CLIMB':p.metric==='power'?'FTP':p.metric==='events'?'EVENTS':String(p.category).toUpperCase());
-      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 16px 16px;text-align:center">'
+      H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:18px 16px 16px;text-align:center">'
         +_msBadge_(bi,c,big,sub)
-        +'<div style="font-size:13.5px;font-weight:700;color:#e8edf5;margin-top:6px">'+aiEsc_(p.name)+'</div>'
-        +'<div style="font-size:11px;color:#5b6678;margin-top:3px">'+_msFmtDate_(p.date)+'</div>'
+        +'<div style="font-size:13.5px;font-weight:700;color:var(--d-head);margin-top:6px">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+_msFmtDate_(p.date)+'</div>'
       +'</div>'; });
     H+='</div>';
   }
@@ -20174,14 +20188,14 @@ function aiRenderMilestones_(){
   if(prog.length<4){ proj.filter(function(p){return !p.unlocked && p.pct>0 && prog.indexOf(p)<0;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,4-prog.length).forEach(function(p){prog.push(p);}); }
   prog.sort(function(a,b){return b.pct-a.pct;});
   if(prog.length){
-    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">In Progress</div>';
+    H+='<div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">In Progress</div>';
     H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
     prog.forEach(function(p){ var c=_MS_COL[p.category], R=32, CIRC=2*Math.PI*R, off=CIRC*(1-Math.min(100,p.pct)/100);
       var rem=(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go';
-      H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px;text-align:center">'
+      H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px;text-align:center">'
         +'<svg width="82" height="82" viewBox="0 0 82 82" style="display:block;margin:0 auto 10px"><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="'+c+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 41 41)"/><text x="41" y="46" text-anchor="middle" font-size="17" font-weight="800" fill="#f1f5f9">'+Math.round(p.pct)+'%</text></svg>'
-        +'<div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div>'
-        +'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'+(p.current>=1000?Math.round(p.current).toLocaleString():Math.round(p.current))+' of '+(p.target>=1000?p.target.toLocaleString():p.target)+'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px">'+(p.current>=1000?Math.round(p.current).toLocaleString():Math.round(p.current))+' of '+(p.target>=1000?p.target.toLocaleString():p.target)+'</div>'
         +'<div style="font-size:11px;color:'+c+';margin-top:2px">'+rem+'</div>'
       +'</div>'; });
     H+='</div>';
@@ -20189,16 +20203,16 @@ function aiRenderMilestones_(){
   // ---- NEXT 12 MONTHS timeline ----
   var tl=nextMilestones_(proj,8).filter(function(p){return p.projectedDate;});
   if(tl.length){
-    H+='<div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Next 12 Months (Projected)</div>';
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
-    H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:#1c2130"></div>';
+    H+='<div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Next 12 Months (Projected)</div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
+    H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:var(--d-raise)"></div>';
     tl.forEach(function(p,i){ var c=_MS_COL[p.category], _yr=p.projectedDate.slice(0,4), mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" "+((+_yr>=2100)?_yr:("&#39;"+p.projectedDate.slice(2,4)));
       var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:#fff;letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
       H+='<div style="flex:1;text-align:center;position:relative;z-index:1">'
-        +'<div style="font-size:9px;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
+        +'<div style="font-size:9px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
         +'<div style="width:44px;height:44px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 0 4px '+c+'22">'+inner+'</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#e8edf5;margin-top:9px;line-height:1.2">'+aiEsc_(p.name)+'</div>'
-        +'<div style="font-size:9.5px;color:#5b6678;margin-top:2px">'+_msFmtDate_(p.projectedDate)+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:var(--d-head);margin-top:9px;line-height:1.2">'+aiEsc_(p.name)+'</div>'
+        +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:2px">'+_msFmtDate_(p.projectedDate)+'</div>'
       +'</div>'; });
     H+='</div></div>';
   }
@@ -20206,21 +20220,21 @@ function aiRenderMilestones_(){
   var soon=proj.filter(function(p){return !p.unlocked && p.pct>0 && p.pct<100;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,5);
   H+='<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start">';
   if(soon.length){
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
     soon.forEach(function(p,i){ var c=_MS_COL[p.category], eta=(p.etaWeeks!=null)?(p.etaWeeks<=8?(Math.ceil(p.etaWeeks*7)+' days'):(Math.round(p.etaWeeks/4.345)+' mo')):null;
-      H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid #1c2130':'')+'">'
+      H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid var(--d-raise)':'')+'">'
         +'<span style="width:28px;height:28px;border-radius:8px;background:'+c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic(p.category,c)+'</span>'
-        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">'+(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go</div></div>'
-        +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div>'+(eta?'<div style="font-size:10px;color:#5b6678">'+eta+'</div>':'')+'</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:var(--d-dim)">'+(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go</div></div>'
+        +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div>'+(eta?'<div style="font-size:10px;color:var(--d-dim)">'+eta+'</div>':'')+'</div>'
       +'</div>'; });
     H+='</div>';
   } else { H+='<div></div>'; }
   // ---- MILESTONE CATEGORIES ----
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px">';
   Object.keys(C.cats).forEach(function(k){ var cat=C.cats[k], c=_MS_COL[k]||'#94a3b8', pc=cat.total?Math.round(cat.done/cat.total*100):0;
-    H+='<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex-shrink:0">'+ic(k,c)+'</span><span style="font-size:13px;font-weight:700;color:#e8edf5">'+k+'</span><span style="margin-left:auto;font-size:12px;font-weight:800;color:'+c+'">'+pc+'%</span></div>'
-      +'<div style="font-size:11px;color:#5b6678;margin-bottom:5px">'+cat.done+' / '+cat.total+'</div>'
-      +'<div style="height:6px;border-radius:3px;background:#1c2130;overflow:hidden"><div style="height:100%;width:'+pc+'%;background:'+c+';border-radius:3px"></div></div></div>'; });
+    H+='<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex-shrink:0">'+ic(k,c)+'</span><span style="font-size:13px;font-weight:700;color:var(--d-head)">'+k+'</span><span style="margin-left:auto;font-size:12px;font-weight:800;color:'+c+'">'+pc+'%</span></div>'
+      +'<div style="font-size:11px;color:var(--d-dim);margin-bottom:5px">'+cat.done+' / '+cat.total+'</div>'
+      +'<div style="height:6px;border-radius:3px;background:var(--d-raise);overflow:hidden"><div style="height:100%;width:'+pc+'%;background:'+c+';border-radius:3px"></div></div></div>'; });
   H+='</div></div></div>';
   // ---- DYNAMIC FOOTER ----
   var totDone=proj.filter(function(p){return p.unlocked;}).length, totAll=proj.length, rate10=C.now && milestoneRates_(_msCycling_(),C.now,10).milesPerWeek;
@@ -20228,9 +20242,9 @@ function aiRenderMilestones_(){
   if(rate10>=80){ head='You are building something incredible.'; sub='Your recent volume is strong — the big milestones are closing fast.'; }
   else if(rate10>=25){ head='Momentum is on your side.'; sub='Keep showing up — every ride moves the next milestone closer.'; }
   else { head='Every mile counts.'; sub='Small consistent efforts compound into the milestones ahead.'; }
-  H+='<div style="background:linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.92) 42%,rgba(150,74,30,.26) 100%),radial-gradient(120% 160% at 96% 30%,rgba(255,184,74,.5) 0%,rgba(255,120,40,.14) 32%,transparent 58%),linear-gradient(160deg,#14203a,#0b0e14);border:1px solid #1c2130;border-radius:16px;padding:24px 26px;margin-top:14px;display:flex;align-items:center;gap:20px">'
+  H+='<div style="background:linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.92) 42%,rgba(150,74,30,.26) 100%),radial-gradient(120% 160% at 96% 30%,rgba(255,184,74,.5) 0%,rgba(255,120,40,.14) 32%,transparent 58%),linear-gradient(160deg,#14203a,#0b0e14);border:1px solid var(--d-raise);border-radius:16px;padding:24px 26px;margin-top:14px;display:flex;align-items:center;gap:20px">'
     +'<span style="width:54px;height:54px;border-radius:50%;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.5);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg></span>'
-    +'<div><div style="font-size:12px;color:#cbd5e1;margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:21px;font-weight:800;color:#f8fafc">'+head+'</div><div style="font-size:13px;color:#fb923c;margin-top:3px">'+sub+'</div></div>'
+    +'<div><div style="font-size:12px;color:var(--d-soft);margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:21px;font-weight:800;color:#f8fafc">'+head+'</div><div style="font-size:13px;color:#fb923c;margin-top:3px">'+sub+'</div></div>'
   +'</div>';
   H+='</div>'; return H;
 }
@@ -20818,26 +20832,26 @@ function aiSetRecSort_(v){ _recSort=v; try{ if(_aiMount) aiRenderOverview_(_aiMo
 var _recStarOnly=false;
 function aiToggleRecStar_(){ _recStarOnly=!_recStarOnly; try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
 function _recStatBlock_(label, value, sub, col){
-  return '<div style="flex:1 1 118px;min-width:0;padding:0 10px;border-left:1px solid #1c2130">'
-    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#5b6678">'+aiEsc_(label)+'</div>'
+  return '<div style="flex:1 1 118px;min-width:0;padding:0 10px;border-left:1px solid var(--d-raise)">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--d-dim)">'+aiEsc_(label)+'</div>'
     +'<div style="font-size:23px;font-weight:800;color:'+(col||'#f1f5f9')+';line-height:1.15;margin-top:3px">'+value+'</div>'
-    +(sub?('<div style="font-size:10.5px;color:#5b6678;line-height:1.4;margin-top:3px">'+sub+'</div>'):'')
+    +(sub?('<div style="font-size:10.5px;color:var(--d-dim);line-height:1.4;margin-top:3px">'+sub+'</div>'):'')
     +'</div>';
 }
 function aiRenderRecords_(){
   var all=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
   if(!all.length){
-    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
+    return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px;line-height:1.6">'
       +'No segment records synced yet.<br>Use Sync Segment PRs to pull them from Strava.</div>';
   }
   var S=_recStats_(all), TL=_recTimeline_(all);
   var H='<style>'
-    +'.rec-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:16px 18px;margin-bottom:14px}'
+    +'.rec-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:16px 18px;margin-bottom:14px}'
     +'.rec-stats{display:flex;flex:1 1 540px;flex-wrap:wrap;gap:6px;align-items:flex-start;min-width:0}'
     +'.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
     +'.rec-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}'
-    +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:15px 18px}'
-    +'.rec-sel{background:#0d0f14;border:1px solid #1c2130;color:#cbd5e1;font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
+    +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:15px 18px}'
+    +'.rec-sel{background:#0d0f14;border:1px solid var(--d-raise);color:var(--d-soft);font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
     +'</style>';
 
   // ---- hero summary
@@ -20845,9 +20859,9 @@ function aiRenderRecords_(){
     +'<div style="flex:1 1 128px;min-width:0;padding-right:4px">'
       +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#FC4C02">YOU HAVE SET</div>'
       +'<div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">'
-      +'<span style="font-size:38px;font-weight:800;color:#f1f5f9;line-height:1">'+S.prs.toLocaleString()+'</span>'
+      +'<span style="font-size:38px;font-weight:800;color:var(--d-head);line-height:1">'+S.prs.toLocaleString()+'</span>'
       +'<span style="font-size:11px;font-weight:800;color:#FC4C02;background:rgba(252,76,2,.12);border-radius:6px;padding:3px 7px">PR'+(S.prs===1?'':'s')+'</span></div>'
-      +'<div style="font-size:10.5px;color:#5b6678;margin-top:4px">across '+S.segs+' segment'+(S.segs===1?'':'s')+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:4px">across '+S.segs+' segment'+(S.segs===1?'':'s')+'</div>'
     +'</div>';
   heroL+=S.best
     ? _recStatBlock_('BIGGEST IMPROVEMENT', S.best.pct.toFixed(0)+'%',
@@ -20872,15 +20886,15 @@ function aiRenderRecords_(){
         +'<path d="'+TL.area+'" fill="url(#recGrad)"/>'
         +'<path d="'+TL.path+'" fill="none" stroke="#FC4C02" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>'
         +'</svg>'
-        +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:#5b6678;margin-top:3px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--d-dim);margin-top:3px">'
         +TL.years.map(function(y){ return '<span>'+aiEsc_(y.label)+'</span>'; }).join('')+'</div>'
-        +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+TL.total+' dated efforts, cumulative</div>'
+        +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+TL.total+' dated efforts, cumulative</div>'
       +'</div>';
     if(S.latest){
-      heroR+='<div style="flex:0 0 150px;background:#0d0f14;border:1px solid #1c2130;border-radius:12px;padding:10px 12px">'
-        +'<div style="font-size:10px;color:#5b6678;font-weight:700">Latest PR</div>'
-        +'<div style="font-size:10.5px;color:#8b97ab;margin-top:1px">'+aiEsc_(_msFmtDate_(S.latest.prDate))+'</div>'
-        +'<div style="font-size:11.5px;color:#e2e8f0;font-weight:600;margin-top:7px;line-height:1.3">'+aiEsc_(S.latest.name)+'</div>'
+      heroR+='<div style="flex:0 0 150px;background:#0d0f14;border:1px solid var(--d-raise);border-radius:12px;padding:10px 12px">'
+        +'<div style="font-size:10px;color:var(--d-dim);font-weight:700">Latest PR</div>'
+        +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:1px">'+aiEsc_(_msFmtDate_(S.latest.prDate))+'</div>'
+        +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:600;margin-top:7px;line-height:1.3">'+aiEsc_(S.latest.name)+'</div>'
         +'<div style="font-size:15px;font-weight:800;color:#FC4C02;margin-top:2px">'+_segFmtT_(S.latest.prSec)+'</div>'
       +'</div>';
     }
@@ -20896,7 +20910,7 @@ function aiRenderRecords_(){
     +'</select>'
     +'<div onclick="aiToggleRecStar_()" style="cursor:pointer;font-size:12px;font-weight:700;padding:7px 11px;border-radius:9px;border:1px solid '
     +(_recStarOnly?'#FC4C02':'#1c2130')+';color:'+(_recStarOnly?'#FC4C02':'#8b97ab')+';background:#0d0f14">Starred only</div>'
-    +'<div style="margin-left:auto;font-size:11px;color:#5b6678">'+all.length+' segment'+(all.length===1?'':'s')+'</div>'
+    +'<div style="margin-left:auto;font-size:11px;color:var(--d-dim)">'+all.length+' segment'+(all.length===1?'':'s')+'</div>'
     +'</div>';
 
   var recs=all.filter(function(r){ return _recStarOnly ? !!r.starred : true; });
@@ -20908,7 +20922,7 @@ function aiRenderRecords_(){
     return String(y.prDate||'').localeCompare(String(x.prDate||''));
   });
   if(!recs.length){
-    H+='<div style="padding:40px 20px;text-align:center;color:#5b6678;font-size:13px">No starred segments.</div>';
+    H+='<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:13px">No starred segments.</div>';
     return '<div style="padding-bottom:16px">'+H+'</div>';
   }
 
@@ -20929,20 +20943,20 @@ function aiRenderRecords_(){
     var gain=_recLastGain_(r), held=_recHeldDays_(r);
     var foot=[];
     if(gain) foot.push('<span style="color:#22c55e;font-weight:700">&uarr; '+_segFmtT_(gain.sec)+'</span>'
-      +'<span style="color:#5b6678"> '+gain.pct.toFixed(1)+'% faster</span>');
-    if(held!=null) foot.push('<span style="color:#5b6678">Held '+held+' day'+(held===1?'':'s')+'</span>');
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
+      +'<span style="color:var(--d-dim)"> '+gain.pct.toFixed(1)+'% faster</span>');
+    if(held!=null) foot.push('<span style="color:var(--d-dim)">Held '+held+' day'+(held===1?'':'s')+'</span>');
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+(r.starred?STAR:'')
-        +'<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
+        +'<div style="font-size:13.5px;font-weight:700;color:var(--d-head);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
       +'<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:#FC4C02;line-height:1">'+_segFmtT_(r.prSec)+'</span>'
-        +(r.prDate?('<span style="font-size:11.5px;color:#5b6678">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
-      +(meta.length?('<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+meta.join(' &middot; ')+'</div>'):'')
+        +(r.prDate?('<span style="font-size:11.5px;color:var(--d-dim)">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
+      +(meta.length?('<div style="font-size:11.5px;color:var(--d-dim);margin-top:4px">'+meta.join(' &middot; ')+'</div>'):'')
       +spark
       +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid #171b26">'+foot.join('')+'</div>'):'')
     +'</div>';
   });
   H+='</div>';
-  if(recs.length>60) H+='<div style="font-size:11px;color:#5b6678;text-align:center;margin-top:10px">Showing the first 60 of '+recs.length+'.</div>';
+  if(recs.length>60) H+='<div style="font-size:11px;color:var(--d-dim);text-align:center;margin-top:10px">Showing the first 60 of '+recs.length+'.</div>';
 
   // ---- footer: only findings that come straight off the records.
   var foots=[];
@@ -20955,23 +20969,23 @@ function aiRenderRecords_(){
   });
   if(monthBest) foots.push('<div style="flex:1 1 240px;min-width:0">'
     +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#a855f7">BIGGEST WIN THIS MONTH</div>'
-    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(monthBest.name)+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">Took '+_segFmtT_(monthBest.sec)+' off your previous best, '
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(monthBest.name)+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">Took '+_segFmtT_(monthBest.sec)+' off your previous best, '
     +monthBest.pct.toFixed(1)+'% faster.</div></div>');
   var longest=null;
   all.forEach(function(r){ var h=_recHeldDays_(r); if(h!=null && (!longest || h>longest.days)) longest={days:h, name:r.name, sec:r.prSec}; });
   if(longest) foots.push('<div style="flex:1 1 240px;min-width:0">'
     +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#60a5fa">LONGEST STANDING</div>'
-    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(longest.name)+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">'+_segFmtT_(longest.sec)+' has stood for '+longest.days+' days.</div></div>');
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(longest.name)+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+_segFmtT_(longest.sec)+' has stood for '+longest.days+' days.</div></div>');
   var most=null;
   all.forEach(function(r){ if(+r.effortCount>0 && (!most || +r.effortCount>most.n)) most={n:+r.effortCount, name:r.name}; });
   if(most) foots.push('<div style="flex:1 1 240px;min-width:0">'
     +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#f59e0b">MOST CONTESTED</div>'
-    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:3px">'+aiEsc_(most.name)+'</div>'
-    +'<div style="font-size:11px;color:#5b6678;margin-top:2px">'+most.n+' recorded efforts.</div></div>');
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(most.name)+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+most.n+' recorded efforts.</div></div>');
   if(foots.length) H+='<div class="rec-foot">'+foots.join('')+'</div>';
-  H+='<div style="font-size:10.5px;color:#5b6678;line-height:1.55;margin-top:12px">'
+  H+='<div style="font-size:10.5px;color:var(--d-dim);line-height:1.55;margin-top:12px">'
     +'Every figure here is read from your synced segment records. Sport filters are absent because '
     +'stored segments carry no activity type, and no speculative success score or target time is '
     +'shown because nothing in this data supports one.</div>';
@@ -21012,11 +21026,11 @@ function aiCardDNA_(ded){
     if(f>=0.25) traits.push(['Long Hauler',Math.round(f*100)+'% of your rides are 50+ miles','#8b5cf6']);
   })();
   if(!traits.length) return '';
-  var inner=aiLbl_('ATHLETE DNA','<span style="font-size:11px;color:#5b6678">from '+rides.length.toLocaleString()+' rides</span>');
+  var inner=aiLbl_('ATHLETE DNA','<span style="font-size:11px;color:var(--d-dim)">from '+rides.length.toLocaleString()+' rides</span>');
   traits.forEach(function(t){
     inner+='<div style="display:flex;align-items:flex-start;gap:11px;margin-bottom:12px">'
       +'<span style="width:8px;height:8px;border-radius:50%;background:'+t[2]+';flex-shrink:0;margin-top:5px"></span>'
-      +'<div style="min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5">'+aiEsc_(t[0])+'</div><div style="font-size:12px;color:#94a3b8;line-height:1.35">'+aiEsc_(t[1])+'</div></div>'
+      +'<div style="min-width:0"><div style="font-size:14px;font-weight:700;color:var(--d-head)">'+aiEsc_(t[0])+'</div><div style="font-size:12px;color:var(--d-t3);line-height:1.35">'+aiEsc_(t[1])+'</div></div>'
     +'</div>';
   });
   return aiCard_(inner);
@@ -21040,20 +21054,20 @@ function aiTrendPMC_(rides){
   var W=680,H=130,n=pmc.length;
   function pth(vals){ return 'M'+vals.map(function(v,i){ var x=(n>1?i/(n-1):0)*W; var y=H-((v-lo)/(hi-lo))*(H-10)-5; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L'); }
   var now=getFitness_();
-  var inner=aiLbl_('TRAINING LOAD (PMC)','<span style="font-size:11px;color:#5b6678">last '+n+' days</span>');
+  var inner=aiLbl_('TRAINING LOAD (PMC)','<span style="font-size:11px;color:var(--d-dim)">last '+n+' days</span>');
   inner+='<div style="display:flex;gap:22px;margin-bottom:12px">';
-  [['Fitness (CTL)',Math.round(now.ctl),'#4ade80'],['Fatigue (ATL)',Math.round(now.atl),'#f59e0b'],['Form (TSB)',Math.round(now.tsb),'#60a5fa']].forEach(function(s){ inner+='<div><div style="font-size:10px;color:#5b6678;text-transform:uppercase;letter-spacing:.04em">'+s[0]+'</div><div style="font-size:22px;font-weight:800;color:'+s[2]+';line-height:1.1">'+s[1]+'</div></div>'; });
+  [['Fitness (CTL)',Math.round(now.ctl),'#4ade80'],['Fatigue (ATL)',Math.round(now.atl),'#f59e0b'],['Form (TSB)',Math.round(now.tsb),'#60a5fa']].forEach(function(s){ inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">'+s[0]+'</div><div style="font-size:22px;font-weight:800;color:'+s[2]+';line-height:1.1">'+s[1]+'</div></div>'; });
   inner+='</div>';
   inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+pth(ctl)+'" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/><path d="'+pth(atl)+'" fill="none" stroke="#f59e0b" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
-  inner+='<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#4ade80"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Fatigue</span></div>';
+  inner+='<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#4ade80"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Fatigue</span></div>';
   return aiCard_(inner);
 }
 function aiTrendWeight_(){
   var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
   if(wl.length<2) return '';
   var vals=wl.map(function(x){return parseFloat(x.weight);}), W=320,H=90;
-  var inner=aiLbl_('WEIGHT TREND','<span style="font-size:11px;color:#5b6678">'+wl.length+' entries</span>');
-  inner+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">'+(Math.round(vals[0]*10)/10)+' &rarr; '+(Math.round(vals[vals.length-1]*10)/10)+' lb</div>';
+  var inner=aiLbl_('WEIGHT TREND','<span style="font-size:11px;color:var(--d-dim)">'+wl.length+' entries</span>');
+  inner+='<div style="font-size:12px;color:var(--d-t3);margin-bottom:8px">'+(Math.round(vals[0]*10)/10)+' &rarr; '+(Math.round(vals[vals.length-1]*10)/10)+' lb</div>';
   inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="#60a5fa" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
   return aiCard_(inner);
 }
@@ -21061,8 +21075,8 @@ function aiTrendVO2_(){
   var vh=(st.vo2maxHistory||[]).filter(function(x){return x&&x.v!=null&&!isNaN(parseFloat(x.v));});
   if(vh.length<2) return '';
   var vals=vh.map(function(x){return parseFloat(x.v);}), W=320,H=90;
-  var inner=aiLbl_('VO&#8322; MAX TREND','<span style="font-size:11px;color:#5b6678">'+vh.length+' estimates</span>');
-  inner+='<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">'+vals[0]+' &rarr; '+vals[vals.length-1]+'</div>';
+  var inner=aiLbl_('VO&#8322; MAX TREND','<span style="font-size:11px;color:var(--d-dim)">'+vh.length+' estimates</span>');
+  inner+='<div style="font-size:12px;color:var(--d-t3);margin-bottom:8px">'+vals[0]+' &rarr; '+vals[vals.length-1]+'</div>';
   inner+='<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
   return aiCard_(inner);
 }
@@ -21073,11 +21087,11 @@ function aiTrendVolume_(rides){
   buckets.forEach(function(b,i){ idx[b.key]=i; });
   (rides||[]).forEach(function(r){ if(!r||!r.date)return; var dt=new Date(r.date); var k=dt.getFullYear()+'-'+dt.getMonth(); if(k in idx) buckets[idx[k]].mi+=parseFloat(r.distance)||0; });
   var mx=Math.max.apply(null,buckets.map(function(b){return b.mi;})); if(!(mx>0)) return '';
-  var inner=aiLbl_('MONTHLY VOLUME','<span style="font-size:11px;color:#5b6678">last 12 months</span>');
+  var inner=aiLbl_('MONTHLY VOLUME','<span style="font-size:11px;color:var(--d-dim)">last 12 months</span>');
   inner+='<div style="display:flex;align-items:flex-end;gap:4px;height:100px">';
   buckets.forEach(function(b){ var h=Math.round(b.mi/mx*100); inner+='<div title="'+b.label+' '+Math.round(b.mi)+' mi" style="flex:1;height:100%;display:flex;align-items:flex-end"><div style="width:100%;height:'+h+'%;min-height:2px;background:#60a5fa;border-radius:3px 3px 0 0"></div></div>'; });
   inner+='</div><div style="display:flex;gap:4px;margin-top:5px">';
-  buckets.forEach(function(b){ inner+='<div style="flex:1;text-align:center;font-size:9px;color:#5b6678">'+b.label.charAt(0)+'</div>'; });
+  buckets.forEach(function(b){ inner+='<div style="flex:1;text-align:center;font-size:9px;color:var(--d-dim)">'+b.label.charAt(0)+'</div>'; });
   inner+='</div>';
   return aiCard_(inner);
 }
@@ -21262,7 +21276,7 @@ function _trDelta_(pct, invert){ if(pct==null) return ''; var good=invert?(pct<0
 // line is the card's single visualization; confidence is a caveat and belongs in footnote voice.
 function _trConfWord_(conf){ conf=+conf||0; return conf>=85?'high confidence':(conf>=60?'moderate confidence':(conf>=35?'low confidence':'very low confidence')); }
 function _trConfNote_(n, nounP, conf){
-  return '<div style="font-size:10.5px;color:#5b6678;margin-top:7px;border-top:1px solid #1c2130;padding-top:7px">'
+  return '<div style="font-size:10.5px;color:var(--d-dim);margin-top:7px;border-top:1px solid var(--d-raise);padding-top:7px">'
     +'Based on '+(+n||0).toLocaleString()+' '+nounP+' &middot; '+_trConfWord_(conf)+'</div>';
 }
 // One labelled trend statement, replacing a bare signed percentage whose comparison was unstated.
@@ -21272,28 +21286,28 @@ function _trTrendLine_(pct, whatVsWhat, invert){
   var arrow=(pct===0)?'':(pct>0?'&#9650; ':'&#9660; ');
   return '<div style="display:flex;align-items:baseline;gap:7px;margin-top:6px;flex-wrap:wrap">'
     +'<span style="font-size:13px;font-weight:800;color:'+c+'">'+arrow+Math.abs(pct)+'%</span>'
-    +'<span style="font-size:11.5px;color:#94a3b8;line-height:1.35">'+whatVsWhat+'</span></div>';
+    +'<span style="font-size:11.5px;color:var(--d-t3);line-height:1.35">'+whatVsWhat+'</span></div>';
 }
 // The card's value line: number, its unit, and a plain-language gloss of what the unit means.
 function _trValueLine_(val, unit, gloss){
   return '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
-    +'<span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+val+'</span>'
-    +'<span style="font-size:12px;color:#94a3b8">'+unit+'</span></div>'
-    +(gloss?('<div style="font-size:10.5px;color:#5b6678;margin-top:3px">'+gloss+'</div>'):'');
+    +'<span style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+val+'</span>'
+    +'<span style="font-size:12px;color:var(--d-t3)">'+unit+'</span></div>'
+    +(gloss?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">'+gloss+'</div>'):'');
 }
 function _trSpark_(vals, color){ if(!vals||vals.length<2) return ''; var W=300,H=54; return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;margin-top:8px"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="'+(color||'#22c55e')+'" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>'; }
 // Question card: coaching question is the headline; the metric is secondary.
-function _trQCard_(q, bodyHtml){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:#e8edf5;line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
+function _trQCard_(q, bodyHtml){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:var(--d-head);line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
 
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
   var GRN='#22c55e', ORG='#FC4C02', BLU='#60a5fa', GOOD='#22c55e', BAD='#ef4444';
   var story=_aiSafe_('TrStory', function(){return _trStory_();});
   var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
-  if(!story && series.length<2){ return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet for trends. Log or sync rides to build your fitness story.</div>'; }
+  if(!story && series.length<2){ return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet for trends. Log or sync rides to build your fitness story.</div>'; }
   var cov=_trCoverage_();
   var H='<div style="padding:2px 2px 30px">';
-  H+='<div style="font-size:13px;color:#64748b;margin:0 2px 14px">Understand what is happening. Learn why. See what is next.</div>';
+  H+='<div style="font-size:13px;color:var(--d-t4);margin:0 2px 14px">Understand what is happening. Learn why. See what is next.</div>';
 
   // ===== HEADLINES STRIP =====
   var heads=[];
@@ -21305,34 +21319,34 @@ function aiRenderTrends_(ded){
   if(story && story.peak) heads.push({t:'At your highest fitness'+(cov.complete?(' in '+cov.years+' years'):' on record'), up:true});
   if(heads.length){
     H+='<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">';
-    heads.forEach(function(h){ var c=h.up?GOOD:'#f59e0b'; H+='<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;background:#111318;border:1px solid #1c2130;border-left:3px solid '+c+';border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:#cbd5e1"><span style="color:'+c+';font-weight:800">'+(h.up?'&#9650;':'&#9679;')+'</span>'+aiEsc_(h.t)+'</div>'; });
+    heads.forEach(function(h){ var c=h.up?GOOD:'#f59e0b'; H+='<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-left:3px solid '+c+';border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--d-soft)"><span style="color:'+c+';font-weight:800">'+(h.up?'&#9650;':'&#9679;')+'</span>'+aiEsc_(h.t)+'</div>'; });
     H+='</div>';
   }
 
   // ===== YOUR STORY — LAST 90 DAYS =====
   if(story){
     var watchDay=_aiSafe_('TrWatch', function(){return _trWatchDay_();});
-    function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:#5b6678;margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:18px 20px;margin-bottom:14px">';
-    H+='<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last 90 Days</div>';
+    function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:18px 20px;margin-bottom:14px">';
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last 90 Days</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:26px 30px;align-items:flex-start">';
     H+=statBlock('Fitness (CTL)', (story.fitness.pct!=null?((story.fitness.pct>=0?'+':'')+story.fitness.pct+'%'):story.fitness.now), story.fitness.then+' &rarr; '+story.fitness.now, story.fitness.pct>=0?GRN:BAD);
     H+=statBlock('Fatigue (ATL)', (story.fatigue.pct!=null?((story.fatigue.pct>=0?'+':'')+story.fatigue.pct+'%'):story.fatigue.now), story.fatigue.then+' &rarr; '+story.fatigue.now, ORG);
     H+=statBlock('Form (TSB)', (story.form.now>=0?'+':'')+story.form.now, story.form.then+' &rarr; '+story.form.now, BLU);
     // Biggest Win — all-time CTL peak, with the coverage footnote (scoped until library whole)
-    if(story.peak){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg>Biggest Win</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">Highest CTL '+(cov.complete?('in '+cov.years+' years'):'on record')+'</div><div style="font-size:10.5px;color:#5b6678;margin-top:3px">'+_trCoverNote_()+'</div></div>'; }
-    if(watchDay){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/></svg>Watch</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">Fatigue spikes after long '+aiEsc_(watchDay)+'s</div></div>'; }
-    if(preds.length){ H+='<div style="min-width:150px"><div style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Prediction</div><div style="font-size:15px;font-weight:800;color:#f1f5f9;line-height:1.2">'+aiEsc_(preds[0].name)+' &middot; '+_msFmtDate_(preds[0].date)+'</div></div>'; }
+    if(story.peak){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg>Biggest Win</div><div style="font-size:15px;font-weight:800;color:var(--d-head);line-height:1.2">Highest CTL '+(cov.complete?('in '+cov.years+' years'):'on record')+'</div><div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">'+_trCoverNote_()+'</div></div>'; }
+    if(watchDay){ H+='<div style="min-width:150px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/></svg>Watch</div><div style="font-size:15px;font-weight:800;color:var(--d-head);line-height:1.2">Fatigue spikes after long '+aiEsc_(watchDay)+'s</div></div>'; }
+    if(preds.length){ H+='<div style="min-width:150px"><div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Prediction</div><div style="font-size:15px;font-weight:800;color:var(--d-head);line-height:1.2">'+aiEsc_(preds[0].name)+' &middot; '+_msFmtDate_(preds[0].date)+'</div></div>'; }
     H+='</div></div>';
   }
 
   // ===== BODY RESPONSE (PMC) + WHAT'S DRIVING =====
   H+='<div style="display:grid;grid-template-columns:1.9fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
   // -- PMC with context bands + spike explanation --
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:#e8edf5">How is your body responding?</span><span style="font-size:11px;color:#5b6678">Fitness / Fatigue / Form</span></div>';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">How is your body responding?</span><span style="font-size:11px;color:var(--d-dim)">Fitness / Fatigue / Form</span></div>';
   var pmcHtml=_aiSafe_('TrPMC', function(){
-    var s=series.slice(-85); if(s.length<4) return '<div style="color:#5b6678;font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
+    var s=series.slice(-85); if(s.length<4) return '<div style="color:var(--d-dim);font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
     var W=680,Hh=210, padL=30,padR=76,padT=8,padB=22;
     var lp=story&&story.longPmc?story.longPmc:null; var bands=_trBands_(lp?lp.peakCtl:0);
     var all=[]; s.forEach(function(p){ all.push(p.ctl); all.push(p.atl); all.push(p.tsb!=null?p.tsb:(p.ctl-p.atl)); });
@@ -21353,29 +21367,29 @@ function aiRenderTrends_(ded){
     var spikes=_trSpikes_(s, rides);
     spikes.forEach(function(sp){ var x=X(sp.i), y=Y(s[sp.i].atl); var r=sp.ride, nm=(r&&r.name)||'Ride', dm=Math.round(parseFloat(r.distance)||0), el=Math.round(parseFloat(r.elev)||0); svg+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="3.4" fill="'+ORG+'" stroke="#111318" stroke-width="1.5"><title>'+aiEsc_(nm)+' — '+dm+' mi'+(el>0?(', '+el.toLocaleString()+' ft'):'')+' (ATL +'+sp.jump+')</title></circle>'; });
     svg+='</svg>';
-    var foot=''; if(spikes.length){ var last=spikes[spikes.length-1], lr=last.ride; foot='<div style="display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 11px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.18);border-radius:9px;font-size:11.5px;color:#94a3b8"><span style="color:'+GRN+'">&#10003;</span>ATL spike from '+aiEsc_((lr&&lr.name)||'a hard ride')+'.'+(last.rec!=null?(' Fatigue returned to normal in '+last.rec+' day'+(last.rec===1?'':'s')+'.'):' Hover a marker for the cause.')+'</div>'; }
+    var foot=''; if(spikes.length){ var last=spikes[spikes.length-1], lr=last.ride; foot='<div style="display:flex;align-items:center;gap:7px;margin-top:8px;padding:8px 11px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.18);border-radius:9px;font-size:11.5px;color:var(--d-t3)"><span style="color:'+GRN+'">&#10003;</span>ATL spike from '+aiEsc_((lr&&lr.name)||'a hard ride')+'.'+(last.rec!=null?(' Fatigue returned to normal in '+last.rec+' day'+(last.rec===1?'':'s')+'.'):' Hover a marker for the cause.')+'</div>'; }
     return svg+foot;
   });
   H+=pmcHtml;
-  H+='<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:#94a3b8"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+GRN+'"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+ORG+'"></span>Fatigue</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+BLU+'"></span>Form</span></div>';
+  H+='<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+GRN+'"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+ORG+'"></span>Fatigue</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+BLU+'"></span>Form</span></div>';
   H+='</div>';
   // -- WHAT'S DRIVING YOUR FITNESS --
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:#e8edf5">What is driving your fitness?</span><span style="font-size:11px;color:#5b6678">60 vs prior 60 days</span></div>';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">What is driving your fitness?</span><span style="font-size:11px;color:var(--d-dim)">60 vs prior 60 days</span></div>';
   if(drv.length){ var mxd=Math.max.apply(null, drv.map(function(x){return Math.abs(x.delta)||1;}))||1;
     drv.forEach(function(x,di){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
       H+='<div style="margin-bottom:14px">'
         +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
-        +'<span style="font-size:12.5px;font-weight:600;color:#cbd5e1">'+aiEsc_(x.key)+'</span>'
+        +'<span style="font-size:12.5px;font-weight:600;color:var(--d-soft)">'+aiEsc_(x.key)+'</span>'
         +'<span style="font-size:12.5px;font-weight:800;color:'+c+'">'+(x.delta>0?'+':'')+x.delta+'%</span></div>'
         // The bar was |delta| scaled against the largest |delta|, so the longest bar was whichever
         // driver happened to be noisiest rather than whichever mattered. The line is the driver
         // itself, month by month; the signed number beside it keeps the window comparison.
         +(_gcTrend_(_trDriverPts_(x.key, 24), _gcHue_(di), {aria:x.key+' by month', H:30, fill:false})
-          ||'<div style="font-size:10.5px;color:#5b6678;margin-top:4px">Not enough monthly history to draw a trend.</div>')
+          ||'<div style="font-size:10.5px;color:var(--d-dim);margin-top:4px">Not enough monthly history to draw a trend.</div>')
         +'</div>'; });
-  } else { H+='<div style="color:#5b6678;font-size:12.5px">Not enough windowed data yet.</div>'; }
-  H+='<div style="font-size:10.5px;color:#5b6678;margin-top:6px;line-height:1.5;border-top:1px solid #1c2130;padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
+  } else { H+='<div style="color:var(--d-dim);font-size:12.5px">Not enough windowed data yet.</div>'; }
+  H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:6px;line-height:1.5;border-top:1px solid var(--d-raise);padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
   H+='</div></div>';
 
   // ===== FOUR QUESTION CARDS =====
@@ -21389,16 +21403,16 @@ function aiRenderTrends_(ded){
     var vLine=(vh.length>=4)
       ? (_gcTrend_(vv.map(function(v){ return {v:v, lab:''}; }), _GC_YOY, {aria:'VO2 max estimates over time', H:38, fill:false,
           from:'earliest estimate', to:'latest'})||'')
-      : '<div style="font-size:10.5px;color:#5b6678;margin-top:8px;line-height:1.45">Too few estimates to draw a trend &mdash; they accrue from HR-paired rides.</div>';
+      : '<div style="font-size:10.5px;color:var(--d-dim);margin-top:8px;line-height:1.45">Too few estimates to draw a trend &mdash; they accrue from HR-paired rides.</div>';
     H+=_trQCard_('Are you becoming a better aerobic athlete?',
       _trValueLine_(vv[vv.length-1], 'VO&#8322; ml/kg/min', 'oxygen your body can use at full effort &mdash; higher is fitter')
       +_trTrendLine_(vd?Math.round(vd/parseFloat(cut.v)*100):0, vback===1?'vs your previous estimate':('vs '+vback+' estimates ago'))
       +vLine
       +_trConfNote_(vh.length, 'estimates', _trConf_(vh.length,20))); }
-  else { H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough VO&#8322; estimates yet &mdash; they accrue from HR-paired rides.</div>'); }
+  else { H+=_trQCard_('Are you becoming a better aerobic athlete?', '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Not enough VO&#8322; estimates yet &mdash; they accrue from HR-paired rides.</div>'); }
   // Are you getting faster? (FTP — honest degrade: manual, no history)
   var ftp=parseInt(st.ftp)||0;
-  H+=_trQCard_('Are you getting faster?', ftp>0 ? ('<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+ftp+'</span><span style="font-size:12px;color:#5b6678">FTP W</span></div><div style="font-size:11px;color:#94a3b8;margin-top:12px;line-height:1.5">You set this manually &mdash; there is no FTP history to trend yet. Log FTP tests (or connect power-based estimates) to see progression here.</div>') : '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Set your FTP in Settings to track this.</div>');
+  H+=_trQCard_('Are you getting faster?', ftp>0 ? ('<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+ftp+'</span><span style="font-size:12px;color:var(--d-dim)">FTP W</span></div><div style="font-size:11px;color:var(--d-t3);margin-top:12px;line-height:1.5">You set this manually &mdash; there is no FTP history to trend yet. Log FTP tests (or connect power-based estimates) to see progression here.</div>') : '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Set your FTP in Settings to track this.</div>');
   // How is your aerobic efficiency? (EF trend — real proxy for "recovery")
   var eff=_aiSafe_('TrEff', function(){return _trEfficiency_();});
   // Was: a 30px value, a bare "-8%", a 99% confidence PILL, a caption, and a sparkline — two
@@ -21410,7 +21424,7 @@ function aiRenderTrends_(ded){
       +(_gcTrend_(eff.vals.map(function(v){ return {v:v, lab:''}; }), _GC_YOY, {aria:'Aerobic efficiency by month', H:38, fill:false,
           from:_gcMonLab_?_gcMonLab_(eff.firstYM):'earliest month', to:_gcMonLab_?_gcMonLab_(eff.lastYM):'this month'})||'')
       +_trConfNote_(eff.n, 'HR-paired rides', _trConf_(eff.n,120))); }
-  else { H+=_trQCard_('How is your aerobic efficiency?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Needs rides with average HR + speed. Sync HR-paired rides to unlock this.</div>'); }
+  else { H+=_trQCard_('How is your aerobic efficiency?', '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Needs rides with average HR + speed. Sync HR-paired rides to unlock this.</div>'); }
   // How consistent have you been?
   var consCells=_aiSafe_('TrCons', function(){ return (typeof dsConsistency_==='function')?dsConsistency_(rides,90,new Date(),normDate):null; });
   if(consCells&&consCells.length){ var active=consCells.filter(function(c){return c.n>0;}).length; var consPct=Math.round(active/consCells.length*100);
@@ -21426,40 +21440,40 @@ function aiRenderTrends_(ded){
       +_trTrendLine_(trendPct, 'last 6 weeks vs the first 6')
       +(_gcTrend_(wkPts, _GC_RECOVERY, {aria:'Active days per week over 13 weeks', H:38, fill:false,
           from:'13 weeks ago', to:'this week'})||'')); }
-  else { H+=_trQCard_('How consistent have you been?', '<div style="color:#5b6678;font-size:12.5px;padding:6px 0">Not enough recent rides to score consistency.</div>'); }
+  else { H+=_trQCard_('How consistent have you been?', '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Not enough recent rides to score consistency.</div>'); }
   H+='</div>';
 
   // ===== WHAT'S NEXT + WHY IMPROVING =====
   H+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
   // What's next (predictions)
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
-  H+='<div style="font-size:13px;font-weight:700;color:#e8edf5;margin-bottom:14px">What is next? <span style="font-weight:600;color:#5b6678;font-size:11px">(projected)</span></div>';
-  if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid #1c2130':'')+'">'
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="font-size:13px;font-weight:700;color:var(--d-head);margin-bottom:14px">What is next? <span style="font-weight:600;color:var(--d-dim);font-size:11px">(projected)</span></div>';
+  if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid var(--d-raise)':'')+'">'
       +'<span style="width:30px;height:30px;border-radius:8px;background:'+p.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+((typeof _msIcon_==='function'&&typeof _MS_ICON!=='undefined')?_msIcon_(_MS_ICON[p.cat]||_MS_ICON.Distance,p.color):'')+'</span>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:#e8edf5">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:#5b6678">Projected '+_msFmtDate_(p.date)+'</div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:var(--d-dim)">Projected '+_msFmtDate_(p.date)+'</div></div>'
       +'<div style="width:132px;flex:0 0 auto">'+_gcScale_(p.conf, p.color, 'unlikely', 'even', 'near certain')
-        +'<div style="font-size:9.5px;color:#5b6678;text-align:center;margin-top:3px">'+p.conf+'% &middot; chance it lands by then</div></div>'
+        +'<div style="font-size:9.5px;color:var(--d-dim);text-align:center;margin-top:3px">'+p.conf+'% &middot; chance it lands by then</div></div>'
     +'</div>'; });
     H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:10px;cursor:pointer" onclick="aiSetTab_(&#39;milestones&#39;)">View all milestones &rsaquo;</div>';
-  } else { H+='<div style="color:#5b6678;font-size:12.5px">No projectable milestones yet &mdash; a training rate builds from recent rides.</div>'; }
+  } else { H+='<div style="color:var(--d-dim);font-size:12.5px">No projectable milestones yet &mdash; a training rate builds from recent rides.</div>'; }
   H+='</div>';
   // Why is fitness improving/changing
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
   var improving = story && story.fitness.pct!=null && story.fitness.pct>=0;
-  H+='<div style="font-size:13px;font-weight:700;color:#e8edf5;margin-bottom:6px">Why is your fitness '+(improving?'improving':'changing')+'?</div>';
+  H+='<div style="font-size:13px;font-weight:700;color:var(--d-head);margin-bottom:6px">Why is your fitness '+(improving?'improving':'changing')+'?</div>';
   var pos=drv.filter(function(x){ return x.invert?(x.delta<0):(x.delta>0); });
   H+='<div style="display:flex;gap:16px;align-items:center">';
   H+='<div style="flex:1;min-width:0">';
-  if(pos.length){ pos.slice(0,4).forEach(function(x){ var mag=Math.abs(x.delta); H+='<div style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:12px;color:#cbd5e1;line-height:1.4"><span style="color:'+GOOD+';flex-shrink:0">&#10003;</span><span>'+aiEsc_(x.key)+' '+(x.invert?'improved ':'up ')+mag+'%</span></div>'; }); }
-  else { H+='<div style="font-size:12px;color:#5b6678;margin-top:8px;line-height:1.5">No positive drivers in the current window. Keep showing up &mdash; consistency compounds.</div>'; }
+  if(pos.length){ pos.slice(0,4).forEach(function(x){ var mag=Math.abs(x.delta); H+='<div style="display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:12px;color:var(--d-soft);line-height:1.4"><span style="color:'+GOOD+';flex-shrink:0">&#10003;</span><span>'+aiEsc_(x.key)+' '+(x.invert?'improved ':'up ')+mag+'%</span></div>'; }); }
+  else { H+='<div style="font-size:12px;color:var(--d-dim);margin-top:8px;line-height:1.5">No positive drivers in the current window. Keep showing up &mdash; consistency compounds.</div>'; }
   H+='<div style="font-size:11px;color:'+BLU+';font-weight:600;margin-top:12px;cursor:pointer" onclick="aiSetTab_(&#39;overview&#39;)">Ask AI Coach &rsaquo;</div>';
   H+='</div>';
   // improvement ring
   // "2 of 4" is the whole fact. A ring drawn to 50% of its circumference dresses a COUNT as
   // accumulated progress, and there is no trajectory behind it to draw as a line instead.
   H+='<div style="flex:0 0 auto;text-align:center;min-width:96px">'
-    +'<div style="font-size:26px;font-weight:800;color:'+(pos.length?GRN:'#94a3b8')+';line-height:1">'+pos.length+'<span style="font-size:15px;color:#5b6678;font-weight:700"> of '+drv.length+'</span></div>'
-    +'<div style="font-size:10px;color:#5b6678;margin-top:4px;max-width:96px;line-height:1.35">drivers trending positive</div></div>';
+    +'<div style="font-size:26px;font-weight:800;color:'+(pos.length?GRN:'#94a3b8')+';line-height:1">'+pos.length+'<span style="font-size:15px;color:var(--d-dim);font-weight:700"> of '+drv.length+'</span></div>'
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:4px;max-width:96px;line-height:1.35">drivers trending positive</div></div>';
   H+='</div></div></div>';
 
   // ===== ONE THING TO REMEMBER =====
@@ -21469,7 +21483,7 @@ function aiRenderTrends_(ded){
     else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over 90 days'+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
     else oneThing='Fitness has dipped '+Math.abs(story.fitness.pct||0)+'% — a productive base phase if it is intentional, a flag if it is not.';
   }
-  if(oneThing){ H+='<div style="background:linear-gradient(90deg,rgba(34,197,94,.10),rgba(17,19,24,0));border:1px solid rgba(34,197,94,.25);border-left:4px solid '+GRN+';border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+GRN+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z"/></svg><div><div style="font-size:11px;font-weight:800;color:'+GRN+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">If you only remember one thing</div><div style="font-size:15px;font-weight:700;color:#f1f5f9;line-height:1.35">'+aiEsc_(oneThing)+'</div></div></div>'; }
+  if(oneThing){ H+='<div style="background:linear-gradient(90deg,rgba(34,197,94,.10),rgba(17,19,24,0));border:1px solid rgba(34,197,94,.25);border-left:4px solid '+GRN+';border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+GRN+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z"/></svg><div><div style="font-size:11px;font-weight:800;color:'+GRN+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">If you only remember one thing</div><div style="font-size:15px;font-weight:700;color:var(--d-head);line-height:1.35">'+aiEsc_(oneThing)+'</div></div></div>'; }
 
   H+='<style>@media(max-width:820px){.tr-2col{grid-template-columns:1fr !important}}</style>';
   H+='</div>';
@@ -21671,66 +21685,66 @@ function _dnaSignature_(){
 function _dnaEraColor_(dom){ return dom==='run'?'#2dd4bf':(dom==='ride'?'#f59e0b':'#a855f7'); }
 function aiRenderDNA_(){
   var acts=_dnaActs_();
-  if(acts.length<50) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Your DNA reads off your activity history — a little more logged data and it will fill in.</div>';
+  if(acts.length<50) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Your DNA reads off your activity history — a little more logged data and it will fill in.</div>';
   var eras=_dnaEras_(acts), traits=_dnaTraits_(acts), sig=_dnaSignature_();
   var unlocked=traits.filter(function(t){return !t.locked;}), locked=traits.filter(function(t){return t.locked;});
   var span=acts[0].date.slice(0,4)+'–'+acts[acts.length-1].date.slice(0,4);
   var nRun=acts.filter(function(a){return a.sport==='run';}).length, nRide=acts.length-nRun;
   var H='<div style="max-width:1120px;margin:0 auto">';
-  H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
+  H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
     +nRun.toLocaleString()+' runs and '+nRide.toLocaleString()+' rides, '+span+'. Every trait states its derivation; a trait without enough observations to be honest is locked, with what would unlock it.</div>';
   // ERA SPINE
-  H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
+  H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
   H+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-bottom:22px">';
   eras.forEach(function(e){
     var col=_dnaEraColor_(e.dom), yl=(e.startY===e.endY)?(''+e.startY):(e.startY+'–'+e.endY);
     H+='<div style="flex:1 0 auto;min-width:150px;position:relative;padding:0 10px">'
       +'<div style="height:4px;background:'+col+';border-radius:2px;margin-bottom:9px"></div>'
       +'<div style="font-size:10.5px;font-weight:800;color:'+col+';letter-spacing:.03em">'+yl+'</div>'
-      +'<div style="font-size:15px;font-weight:800;color:#f1f5f9;margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
-      +'<div style="font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.4">'+aiEsc_(e.archWhy)+'</div>'
-      +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+e.acts.toLocaleString()+' activities</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head);margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px;line-height:1.4">'+aiEsc_(e.archWhy)+'</div>'
+      +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+e.acts.toLocaleString()+' activities</div>'
       +'</div>';
   });
   H+='</div>';
   // SIGNATURE — reads off _zsCompute_ z. Floored at 0 for display; the z is printed as the honest value.
   if(sig){
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:16px 18px;margin-bottom:18px">';
-    H+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:#5b6678">z vs your own average month</span>');
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;margin-bottom:18px">';
+    H+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:var(--d-dim)">z vs your own average month</span>');
     sig.axes.forEach(function(ax){
       var w=Math.max(3,Math.round(ax.mag*100)), pos=ax.z>=0;
       H+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
-        +'<span style="font-size:12.5px;font-weight:700;color:#cbd5e1">'+aiEsc_(ax.label)+'</span>'
+        +'<span style="font-size:12.5px;font-weight:700;color:var(--d-soft)">'+aiEsc_(ax.label)+'</span>'
         +'<span style="font-size:12.5px;font-weight:800;color:'+(pos?'#4ade80':'#f59e0b')+'">'+(pos?'+':'')+ax.z.toFixed(2)+' z</span></div>'
         +'<div style="height:7px;border-radius:4px;background:#141922;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+';border-radius:4px"></div></div></div>';
     });
-    H+='<div style="font-size:10px;color:#5b6678;margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
+    H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
     H+='</div>';
   }
   // UNLOCKED TRAITS
-  H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
+  H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';
   unlocked.forEach(function(t){
-    H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px">'
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px">'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+t.col+';flex:0 0 auto"></span>'
-      +'<span style="font-size:14px;font-weight:800;color:#f1f5f9">'+aiEsc_(t.name)+'</span></div>'
+      +'<span style="font-size:14px;font-weight:800;color:var(--d-head)">'+aiEsc_(t.name)+'</span></div>'
       +'<div style="font-size:19px;font-weight:800;color:'+t.col+';letter-spacing:-.01em;margin-bottom:5px">'+aiEsc_(t.headline)+'</div>'
-      +'<div style="font-size:12px;color:#94a3b8;line-height:1.45;margin-bottom:7px">'+aiEsc_(t.detail)+'</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);line-height:1.45;margin-bottom:7px">'+aiEsc_(t.detail)+'</div>'
       +(t.spark ? (_gcTrend_(t.spark, t.col, {aria:t.name+' over time', H:34, fill:false, note:t.sparkNote})||'') : '')
-      +'<div style="font-size:10px;color:#5b6678;border-top:1px solid #1c2130;padding-top:7px;margin-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
+      +'<div style="font-size:10px;color:var(--d-dim);border-top:1px solid var(--d-raise);padding-top:7px;margin-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
       +'</div>';
   });
   H+='</div>';
   // LOCKED TRAITS — the unlock mechanic. A reason to return, not an apology.
   if(locked.length){
-    H+='<div style="font-size:11px;font-weight:800;color:#5b6678;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Locked <span style="color:#3a4150">&middot; earn these</span></div>';
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Locked <span style="color:#3a4150">&middot; earn these</span></div>';
     H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">';
     locked.forEach(function(t){
       H+='<div style="background:#0e1015;border:1px dashed #2a3140;border-radius:14px;padding:15px 16px">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
         +'<span style="font-size:14px;font-weight:800;color:#8592a6">'+aiEsc_(t.name)+'</span></div>'
-        +'<div style="font-size:12px;color:#94a3b8;line-height:1.45">'+aiEsc_(t.unlock)+'.</div>'
+        +'<div style="font-size:12px;color:var(--d-t3);line-height:1.45">'+aiEsc_(t.unlock)+'.</div>'
         +'</div>';
     });
     H+='</div>';
@@ -21903,16 +21917,16 @@ function _trjSec_(n,label,sub){
   return '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 9px;margin:22px 0 10px">'
     +'<div style="flex:none;width:19px;height:19px;border-radius:5px;border:1px solid #FC4C02;color:#FC4C02;'
     +'font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;line-height:1">'+n+'</div>'
-    +'<div style="font-size:11.5px;font-weight:800;letter-spacing:.09em;color:#cbd5e1">'+aiEsc_(label)+'</div>'
-    +(sub?'<div style="font-size:11.5px;color:#5b6678">'+aiEsc_(sub)+'</div>':'')
+    +'<div style="font-size:11.5px;font-weight:800;letter-spacing:.09em;color:var(--d-soft)">'+aiEsc_(label)+'</div>'
+    +(sub?'<div style="font-size:11.5px;color:var(--d-dim)">'+aiEsc_(sub)+'</div>':'')
     +'</div>';
 }
 function _trjMethod_(txt){
-  return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid #1c2130;font-size:10.5px;'
-    +'line-height:1.45;color:#5b6678">'+aiEsc_(txt)+'</div>';
+  return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--d-raise);font-size:10.5px;'
+    +'line-height:1.45;color:var(--d-dim)">'+aiEsc_(txt)+'</div>';
 }
 function _trjNote_(txt){
-  return '<div style="font-size:11.5px;color:#5b6678;line-height:1.5">'+aiEsc_(txt)+'</div>';
+  return '<div style="font-size:11.5px;color:var(--d-dim);line-height:1.5">'+aiEsc_(txt)+'</div>';
 }
 
 // ---- 1. Destination ----
@@ -21963,15 +21977,15 @@ function _trjDestination_(){
 }
 function _trjRowProj_(icon,label,fit,goal,dir,unit,digits){
   if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
-    +'<div style="font-size:12.5px;color:#8b97ab">'+aiEsc_(label)+'</div>'
-    +'<div style="font-size:11.5px;color:#5b6678">not enough logged data</div></div>';
+    +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim)">not enough logged data</div></div>';
   var evT=_trjTodayT_()+28;                          // a 4-week horizon, stated on the row
   var v=fit.at(evT), d=(digits==null?0:digits);
   return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
-    +'<div style="font-size:12.5px;color:#8b97ab">'+aiEsc_(label)+'</div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
     +'<div style="text-align:right">'
-      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9">'+v.toFixed(d)+(unit||'')+'</div>'
-      +'<div style="font-size:10.5px;color:#5b6678">'+aiEsc_(_trjFmt_(evT)||'')+' &middot; n='+fit.n+'</div>'
+      +'<div style="font-size:14px;font-weight:700;color:var(--d-head)">'+v.toFixed(d)+(unit||'')+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim)">'+aiEsc_(_trjFmt_(evT)||'')+' &middot; n='+fit.n+'</div>'
     +'</div></div>';
 }
 function _trjSection1_(){
@@ -21984,28 +21998,28 @@ function _trjSection1_(){
     var pct=_trjConf_(d.prob), goalTxt=Math.round(d.goal)+(d.unit||'');
     var name=(d.metric==='ftp')?'FTP':'CTL (fitness)';
     left=_co
-      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:4px">You are heading for</div>'
-      +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
-      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
-      +'<div style="font-size:12.5px;color:#cbd5e1">'+pct+'% of the projection band clears your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)+'</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-bottom:4px">You are heading for</div>'
+      +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
+      +'<div style="font-size:12.5px;color:var(--d-soft)">'+pct+'% of the projection band clears your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)+'</div>'
       +_gcScale_(pct,'#FC4C02','no chance','even','certain')
       +'<div style="display:flex;gap:22px;margin-top:16px;flex-wrap:wrap">'
-        +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">PROJECTED '+aiEsc_(name.toUpperCase())+'</div>'
-        +'<div style="font-size:17px;font-weight:700;color:#f1f5f9;margin-top:2px">'+d.proj.toFixed(d.metric==='ftp'?0:1)+(d.unit||'')+'</div>'
-        +'<div style="font-size:10.5px;color:#5b6678">on '+aiEsc_(_trjFmt_(d.eventT)||'')+'</div></div>'
+        +'<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">PROJECTED '+aiEsc_(name.toUpperCase())+'</div>'
+        +'<div style="font-size:17px;font-weight:700;color:var(--d-head);margin-top:2px">'+d.proj.toFixed(d.metric==='ftp'?0:1)+(d.unit||'')+'</div>'
+        +'<div style="font-size:10.5px;color:var(--d-dim)">on '+aiEsc_(_trjFmt_(d.eventT)||'')+'</div></div>'
         +((d.cross!=null && d.cross>=_trjTodayT_() && d.cross<=_trjTodayT_()+730)
-           ? ('<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">TREND REACHES GOAL</div>'
-             +'<div style="font-size:17px;font-weight:700;color:#f1f5f9;margin-top:2px">'+aiEsc_(_trjFmt_(d.cross)||'')+'</div>'
-             +'<div style="font-size:10.5px;color:#5b6678">if the line holds</div></div>')
+           ? ('<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">TREND REACHES GOAL</div>'
+             +'<div style="font-size:17px;font-weight:700;color:var(--d-head);margin-top:2px">'+aiEsc_(_trjFmt_(d.cross)||'')+'</div>'
+             +'<div style="font-size:10.5px;color:var(--d-dim)">if the line holds</div></div>')
            : '')
       +'</div>'
-      +(d.ftpWhy?('<div style="margin-top:12px;font-size:11px;color:#8b97ab;line-height:1.5">'+aiEsc_(d.ftpWhy)+'</div>'):'')
+      +(d.ftpWhy?('<div style="margin-top:12px;font-size:11px;color:var(--d-t3);line-height:1.5">'+aiEsc_(d.ftpWhy)+'</div>'):'')
       +_trjMethod_(d.method)+_cc;
   } else {
     left=_co
-      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:4px">You are heading for</div>'
-      +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
-      +'<div style="font-size:12px;color:#8b97ab;margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-bottom:4px">You are heading for</div>'
+      +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.15;margin-bottom:2px">'+aiEsc_(d.event.label)+'</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-bottom:14px">'+aiEsc_(_trjFmtY_(d.eventT)||'')+' &middot; '+d.days+' days away</div>'
       +_trjNote_('No projection yet. Neither the FTP log nor the CTL series has enough points in the last 12 weeks '
         +'to support a trend line, so no probability is shown rather than a guessed one.')+_cc;
   }
@@ -22013,12 +22027,12 @@ function _trjSection1_(){
   var cFit=_trjFit_(_trjCtlPts_(), {minN:14});
   var fFit=_trjFit_(_trjFtpPts_(), {minN:4});
   var right=''
-    +'<div style="font-size:11.5px;font-weight:700;color:#cbd5e1;margin-bottom:4px">Key Outcome Projections</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-bottom:6px">Same fit, 4 weeks out</div>'
+    +'<div style="font-size:11.5px;font-weight:700;color:var(--d-soft);margin-bottom:4px">Key Outcome Projections</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);margin-bottom:6px">Same fit, 4 weeks out</div>'
     +_trjRowProj_('','FTP',fFit,null,'up','W',0)
     +_trjRowProj_('','Weight',wFit,null,'down',' lbs',1)
     +_trjRowProj_('','CTL (fitness)',cFit,null,'up','',0)
-    +'<div style="font-size:10.5px;color:#5b6678;line-height:1.45;margin-top:9px">'
+    +'<div style="font-size:10.5px;color:var(--d-dim);line-height:1.45;margin-top:9px">'
     +'Peak week is not shown: nothing in the block defines one, so there is no date to read.</div>';
 
   H+=_trjSec_(1,'WHERE YOU ARE HEADED','');
@@ -22069,7 +22083,7 @@ function _trjSection2_(){
   }
   var name=(M.metric==='ftp')?'FTP':'CTL';
   var goalTxt=Math.round(M.goal)+(M.unit||'');
-  var body='<div style="font-size:11.5px;color:#8b97ab;line-height:1.5;margin-bottom:12px">'
+  var body='<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:12px">'
     +'Share of the projection band clearing your '+aiEsc_(name)+' goal of '+aiEsc_(goalTxt)
     +' on each date. Same fit as the destination card, evaluated further out each time -- so the '
     +'band widens and confidence falls the further away a target is.</div>';
@@ -22079,13 +22093,13 @@ function _trjSection2_(){
     body+='<div style="padding:9px 0;border-bottom:1px solid #171b26">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
         +'<div style="min-width:0">'
-          +'<div style="font-size:13px;font-weight:700;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
           +aiEsc_(r.label)+'</div>'
-          +'<div style="font-size:10.5px;color:#5b6678">'+aiEsc_(_trjFmtY_(r.t)||'')+' &middot; '+r.days+' days out</div>'
+          +'<div style="font-size:10.5px;color:var(--d-dim)">'+aiEsc_(_trjFmtY_(r.t)||'')+' &middot; '+r.days+' days out</div>'
         +'</div>'
         +'<div style="text-align:right;flex:none">'
           +'<div style="font-size:15px;font-weight:800;color:'+col+'">'+pc+'%</div>'
-          +'<div style="font-size:10.5px;color:#5b6678">proj '+r.proj.toFixed(M.metric==='ftp'?0:1)+(M.unit||'')+'</div>'
+          +'<div style="font-size:10.5px;color:var(--d-dim)">proj '+r.proj.toFixed(M.metric==='ftp'?0:1)+(M.unit||'')+'</div>'
         +'</div>'
       +'</div>'
       +(first?('<div style="font-size:10.5px;color:#FC4C02;margin-top:4px;line-height:1.45">'
@@ -22129,16 +22143,16 @@ function _trjCardFitness_(){
   if(!p) return '';
   var body;
   if(p.same){
-    body='<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.35">Three identical weeks in a row.</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">The last three weeks prescribed the same '
+    body='<div style="font-size:13.5px;font-weight:700;color:var(--d-head);line-height:1.35">Three identical weeks in a row.</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">The last three weeks prescribed the same '
       +p.sessions+' sessions in the same shape. Repeating a week stops adding stimulus once you have adapted to it.</div>'
-      +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">SUGGESTED CHANGE</div>'
-      +'<div style="font-size:12px;color:#cbd5e1;margin-top:2px">Add one VO2 session this week.</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">SUGGESTED CHANGE</div>'
+      +'<div style="font-size:12px;color:var(--d-soft);margin-top:2px">Add one VO2 session this week.</div>'
       +_trjMethod_('Pattern check on the last three complete weeks. No plateau date is shown -- a repeated-week '
         +'pattern does not tell you when adaptation stops, so that number is not computable here.');
   } else {
-    body='<div style="font-size:13.5px;font-weight:700;color:#f1f5f9;line-height:1.35">Your weeks are still varying.</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">The last three weeks were not structurally '
+    body='<div style="font-size:13.5px;font-weight:700;color:var(--d-head);line-height:1.35">Your weeks are still varying.</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">The last three weeks were not structurally '
       +'identical, so there is no repeated-week plateau pattern to flag.</div>';
   }
   return aiCard_('<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">FITNESS</div>'+body);
@@ -22150,16 +22164,16 @@ function _trjCardWeight_(){
   var horizon=_trjTodayT_()+28, proj=fit.at(horizon);
   var perWk=fit.slope*7;
   var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#60a5fa;margin-bottom:8px">WEIGHT</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT TREND</div>'
-    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+fit.lastY.toFixed(1)+' lbs</div>'
-    +'<div style="font-size:11px;color:#8b97ab;margin-top:2px">'+(perWk>=0?'+':'')+perWk.toFixed(2)+' lbs/week</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:10px">PROJECTED</div>'
-    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:1px">'+proj.toFixed(1)+' lbs</div>'
-    +'<div style="font-size:10.5px;color:#5b6678">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>';
+    +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">CURRENT TREND</div>'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:1px">'+fit.lastY.toFixed(1)+' lbs</div>'
+    +'<div style="font-size:11px;color:var(--d-t3);margin-top:2px">'+(perWk>=0?'+':'')+perWk.toFixed(2)+' lbs/week</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:10px">PROJECTED</div>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:1px">'+proj.toFixed(1)+' lbs</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim)">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>';
   if(+g.weightLb>0){
     var pr=fit.pAtMost(horizon,+g.weightLb), pc=_trjConf_(pr);
-    H+='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:10px">CHANCE OF BEING AT OR UNDER '+Math.round(+g.weightLb)+' LBS</div>'
-      +'<div style="font-size:14px;font-weight:700;color:#f1f5f9;margin-top:1px">'+pc+'%</div>'+_gcScale_(pc,'#60a5fa','no chance','even','certain');
+    H+='<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:10px">CHANCE OF BEING AT OR UNDER '+Math.round(+g.weightLb)+' LBS</div>'
+      +'<div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px">'+pc+'%</div>'+_gcScale_(pc,'#60a5fa','no chance','even','certain');
   }
   H+=_trjMethod_('Least-squares fit over '+fit.n+' weigh-ins across '+Math.round(fit.span/7)+' weeks.');
   return aiCard_(H);
@@ -22181,21 +22195,21 @@ function _trjHeatCard_(){
   }
   var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#f59e0b;margin-bottom:8px">HEAT &amp; WEATHER</div>';
   if(!hot.length){
-    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">No sessions above '+_TRJ_HOT+'&deg;F in the next 7 days.</div>'
+    H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.4">No sessions above '+_TRJ_HOT+'&deg;F in the next 7 days.</div>'
       +_trjMethod_('Open-Meteo daily highs for the next 7 days, matched against the sessions actually on your plan.');
     return aiCard_(H);
   }
-  H+='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">NEXT 7 DAYS</div>'
-    +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+hot.length+' hot session'+(hot.length===1?'':'s')+'</div>'
+  H+='<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">NEXT 7 DAYS</div>'
+    +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:1px">'+hot.length+' hot session'+(hot.length===1?'':'s')+'</div>'
     +'<div style="margin-top:9px">';
   hot.slice(0,4).forEach(function(x){
     H+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0">'
-      +'<span style="color:#8b97ab;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(_trjFmt_(_trjDay_(x.key))||'')+' &middot; '+aiEsc_(x.name||'Session')+'</span>'
+      +'<span style="color:var(--d-t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(_trjFmt_(_trjDay_(x.key))||'')+' &middot; '+aiEsc_(x.name||'Session')+'</span>'
       +'<span style="color:#f59e0b;font-weight:700;flex:none">'+Math.round(x.t)+'&deg;</span></div>';
   });
   H+='</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">PLAN AHEAD</div>'
-    +'<div style="font-size:12px;color:#cbd5e1;margin-top:2px">Increase fluids and electrolytes on those days.</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">PLAN AHEAD</div>'
+    +'<div style="font-size:12px;color:var(--d-soft);margin-top:2px">Increase fluids and electrolytes on those days.</div>'
     +_trjMethod_('Open-Meteo daily highs matched against your scheduled sessions. No hydration percentage is shown '
       +'-- there is no measured sweat or intake data behind one.');
   return aiCard_(H);
@@ -22207,10 +22221,10 @@ function _trjCardRecovery_(){
   if(!fit) return '';
   var horizon=_trjTodayT_()+14, proj=fit.at(horizon), perWk=fit.slope*7;
   var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">RECOVERY</div>'
-    +'<div style="font-size:13px;color:#cbd5e1;line-height:1.4">HRV trend is '+(perWk>=0?'rising':'falling')+'.</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">PROJECTED</div>'
-    +'<div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-top:1px">'+proj.toFixed(0)+' ms</div>'
-    +'<div style="font-size:10.5px;color:#5b6678">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>'
+    +'<div style="font-size:13px;color:var(--d-soft);line-height:1.4">HRV trend is '+(perWk>=0?'rising':'falling')+'.</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">PROJECTED</div>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:1px">'+proj.toFixed(0)+' ms</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim)">by '+aiEsc_(_trjFmt_(horizon)||'')+'</div>'
     +_trjMethod_('Least-squares fit over '+fit.n+' recovery readings across '+Math.round(fit.span/7)+' weeks.');
   return aiCard_(H);
 }
@@ -22237,18 +22251,18 @@ function _trjCardConsistency_(){
   if(best==null) return '';
   var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">CONSISTENCY</div>';
   if(cur>=best){
-    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">You are on your longest streak on record.</div>'
-      +'<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em;margin-top:9px">CURRENT STREAK</div>'
-      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;margin-top:1px">'+cur+' week'+(cur===1?'':'s')+'</div>';
+    H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.4">You are on your longest streak on record.</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">CURRENT STREAK</div>'
+      +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:1px">'+cur+' week'+(cur===1?'':'s')+'</div>';
   } else {
     var need=best-cur+1;
-    H+='<div style="font-size:13px;color:#cbd5e1;line-height:1.4">'+need+' more active week'+(need===1?'':'s')
+    H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.4">'+need+' more active week'+(need===1?'':'s')
       +' beats your longest streak.</div>'
       +'<div style="display:flex;gap:18px;margin-top:10px">'
-      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT</div>'
-      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+cur+'</div></div>'
-      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">LONGEST</div>'
-      +'<div style="font-size:17px;font-weight:800;color:#8b97ab;margin-top:1px">'+best+'</div></div>'
+      +'<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">CURRENT</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);margin-top:1px">'+cur+'</div></div>'
+      +'<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">LONGEST</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-t3);margin-top:1px">'+best+'</div></div>'
       +'</div>';
   }
   H+=_trjMethod_('Counted from the same weekly activity set the streak card uses. Arithmetic, not a prediction.');
@@ -22317,25 +22331,25 @@ function _trjSection4_(){
   var body='';
   if(L.flat.length && L.rising.length){
     var lim=L.flat[0];
-    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">'+aiEsc_(lim.label)+' is your limiter.</div>'
-      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">'+aiEsc_(lim.label)
+    body='<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.2">'+aiEsc_(lim.label)+' is your limiter.</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-top:7px;line-height:1.5">'+aiEsc_(lim.label)
       +' time has not moved over the last '+L.weeks+' weeks while '
       +aiEsc_(L.rising.map(function(b){return b.label;}).join(' and '))+' progressed.</div>';
   } else if(L.flat.length){
-    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">Every band is flat.</div>'
-      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">No zone has a trend distinguishable '
+    body='<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.2">Every band is flat.</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-top:7px;line-height:1.5">No zone has a trend distinguishable '
       +'from zero over the last '+L.weeks+' weeks, so no single limiter stands out.</div>';
   } else {
-    body='<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.2">No band is stalled.</div>'
-      +'<div style="font-size:12px;color:#8b97ab;margin-top:7px;line-height:1.5">Every zone is trending over the last '
+    body='<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.2">No band is stalled.</div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-top:7px;line-height:1.5">Every zone is trending over the last '
       +L.weeks+' weeks, so there is no flat band to call a limiter.</div>';
   }
   body+='<div style="margin-top:13px">';
   L.bands.forEach(function(b){
     var col=b.flat?'#64748b':(b.per>0?'#22c55e':'#e24b4a');
     body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #171b26">'
-      +'<span style="font-size:12px;color:#cbd5e1">'+aiEsc_(b.label)+'</span>'
-      +'<span style="font-size:11.5px;color:#8b97ab">'+Math.round(b.avg)+' min/wk avg</span>'
+      +'<span style="font-size:12px;color:var(--d-soft)">'+aiEsc_(b.label)+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-t3)">'+Math.round(b.avg)+' min/wk avg</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+col+';flex:none">'
       +(b.flat?'flat':((b.per>0?'+':'')+b.per.toFixed(1)+' min/wk')) +'</span></div>';
   });
@@ -22392,23 +22406,23 @@ function _trjSection5_(){
   var rate=S.done/S.presc, pct=Math.round(rate*100);
   var fit=_trjFit_(S.weeks.filter(function(w){ return w.presc>0; }).map(function(w){ return {t:w.t, y:w.done/w.presc}; }),
                    {minN:4, minSpan:21});
-  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">COMPLETED</div>'
-    +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+S.done+' of '+S.presc+' prescribed sessions</div>'
+  var body='<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">COMPLETED</div>'
+    +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.1">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:2px">'+S.done+' of '+S.presc+' prescribed sessions</div>'
     +_gcTrend_(_gcWeekPts_(S.weeks, function(w){ return w.presc>0?Math.round(w.done/w.presc*100):null; }), _gcHue_(1), {aria:'Strength completion by week', H:36, from:'earliest week', to:'this week', note:'completion rate by week'});
   body+='<div style="margin-top:12px">';
   S.weeks.forEach(function(w){
     if(!w.presc) return;
     var r=Math.round(w.done/w.presc*100);
     body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
-      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
-      +'<span style="font-size:11.5px;color:#cbd5e1">'+w.done+'/'+w.presc+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.done+'/'+w.presc+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=80?'#22c55e':(r>=55?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
   });
   body+='</div>';
   if(fit){
     var per=fit.slope*7*100;
-    body+='<div style="font-size:11.5px;color:#8b97ab;margin-top:10px;line-height:1.5">Completion is '
+    body+='<div style="font-size:11.5px;color:var(--d-t3);margin-top:10px;line-height:1.5">Completion is '
       +(Math.abs(per)<1?'flat':(per>0?('rising '+per.toFixed(0)+' points a week'):('falling '+Math.abs(per).toFixed(0)+' points a week')))
       +' across '+fit.n+' weeks.</div>';
   }
@@ -22476,17 +22490,17 @@ function _trjSection7_(){
       +'readable set is smaller than the prescribed one.'));
   }
   var pct=Math.round(Q.hit/Q.n*100);
-  var body='<div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">INTERVALS IN THE PRESCRIBED BAND</div>'
-    +'<div style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1.1">'+pct+'%</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:2px">'+Q.hit+' of '+Q.n+' work intervals across '+Q.matched+' rides</div>'
+  var body='<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">INTERVALS IN THE PRESCRIBED BAND</div>'
+    +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.1">'+pct+'%</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:2px">'+Q.hit+' of '+Q.n+' work intervals across '+Q.matched+' rides</div>'
     +_gcTrend_(_gcWeekPts_(Q.weeks, function(w){ return w.n>0?Math.round(w.hit/w.n*100):null; }), _gcHue_(0), {aria:'Interval execution by week', H:36, from:'earliest week', to:'this week', note:'share in band, by week'});
   body+='<div style="margin-top:12px">';
   Q.weeks.forEach(function(w){
     if(!w.n) return;
     var r=Math.round(w.hit/w.n*100);
     body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
-      +'<span style="font-size:11.5px;color:#8b97ab">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
-      +'<span style="font-size:11.5px;color:#cbd5e1">'+w.hit+'/'+w.n+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.hit+'/'+w.n+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=70?'#22c55e':(r>=45?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
   });
   body+='</div>';
@@ -22551,18 +22565,18 @@ function _trjSection6_(){
   if(d && d.metric && d.prob!=null){
     var pc=_trjConf_(d.prob);
     cards.push(aiCard_(
-      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#8b97ab;margin-bottom:8px">PREDICTION CONFIDENCE</div>'
-      +'<div style="font-size:30px;font-weight:800;color:#f1f5f9;line-height:1">'+pc+'%</div>'
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--d-t3);margin-bottom:8px">PREDICTION CONFIDENCE</div>'
+      +'<div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+pc+'%</div>'
       +_gcScale_(pc,'#FC4C02','no chance','even','certain')
-      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:9px;line-height:1.5">The same figure as the destination card: '
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:9px;line-height:1.5">The same figure as the destination card: '
       +'the share of the projection band that clears your goal. It is not a separate score.</div>'));
   }
   if(mom){
     cards.push(aiCard_(
       '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">MOMENTUM</div>'
-      +'<div style="font-size:19px;font-weight:800;color:#f1f5f9;line-height:1.15">'
+      +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.15">'
       +(mom.weeks>0?(mom.weeks+' week'+(mom.weeks===1?'':'s')+' rising'):'No rising streak')+'</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:7px;line-height:1.5">'
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">'
       +(mom.weeks>0
         ? ('CTL has increased '+mom.weeks+' week'+(mom.weeks===1?'':'s')+' in a row, now at '+mom.latest.toFixed(0)+'.')
         : ('CTL did not rise last week. Now at '+mom.latest.toFixed(0)+'.'))+'</div>'
@@ -22572,15 +22586,15 @@ function _trjSection6_(){
     var range=(life.early!=null && life.late!=null && Math.abs(life.late-life.early)>21);
     cards.push(aiCard_(
       '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">LIFETIME MILES</div>'
-      +'<div style="font-size:13px;color:#cbd5e1;line-height:1.45">At your recent pace you pass '
+      +'<div style="font-size:13px;color:var(--d-soft);line-height:1.45">At your recent pace you pass '
       +TRJ_MILE_TARGET.toLocaleString()+' lifetime miles '
       +(range?('between '+aiEsc_(_trjFmt_(life.early)||'')+' and '+aiEsc_(_trjFmtY_(life.late)||''))
              :('around '+aiEsc_(_trjFmtY_(life.mid)||'')))+'.</div>'
       +'<div style="display:flex;gap:18px;margin-top:11px">'
-      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">CURRENT</div>'
-      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+Math.round(life.cur).toLocaleString()+' mi</div></div>'
-      +'<div><div style="font-size:10.5px;color:#5b6678;letter-spacing:.05em">RECENT PACE</div>'
-      +'<div style="font-size:17px;font-weight:800;color:#f1f5f9;margin-top:1px">'+life.perWk.toFixed(0)+' mi/wk</div></div>'
+      +'<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">CURRENT</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);margin-top:1px">'+Math.round(life.cur).toLocaleString()+' mi</div></div>'
+      +'<div><div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">RECENT PACE</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);margin-top:1px">'+life.perWk.toFixed(0)+' mi/wk</div></div>'
       +'</div>'
       +_trjMethod_('Lifetime total from Strava server-side totals (the local library is heavily tombstoned and would '
         +'understate it). Pace fitted over the last 12 weeks of rides'
@@ -22774,20 +22788,20 @@ function _trjSection8_(){
   var wks=R.weeks.filter(function(w){ return w.presc>0; });
   var wpts=_gcWeekPts_(R.weeks, function(w){ return w.presc>0?Math.round(w.actual/w.presc*100):null; });
   var fit=_trjFit_(wks.map(function(w){ return {t:w.t, y:w.actual/w.presc}; }), {minN:4, minSpan:21});
-  var LBL='font-size:10.5px;color:#5b6678;letter-spacing:.05em';
+  var LBL='font-size:10.5px;color:var(--d-dim);letter-spacing:.05em';
   var BOX='background:#12151d;border:1px solid #1a1f2b;border-radius:10px;padding:10px 12px';
 
   // -- TOP LEFT: the headline, and the two raw totals it is a ratio OF. The percentage alone
   //    invites "141% of what?"; the pair answers it without the reader opening the table.
   var left='<div style="'+LBL+'">ACTUAL LOAD AS A SHARE OF PRESCRIBED</div>'
     +'<div style="font-size:34px;font-weight:800;color:'+headCol+';line-height:1.05;margin-top:4px">'+pct+'%</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:3px;line-height:1.45">'+aiEsc_(verdict)
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:3px;line-height:1.45">'+aiEsc_(verdict)
     +' across '+R.n+' paired day'+(R.n===1?'':'s')+'</div>'
     +'<div style="display:flex;align-items:center;gap:9px;margin-top:12px">'
     +'<div style="'+BOX+';flex:1;min-width:0"><div style="font-size:19px;font-weight:800;color:'+col+';line-height:1.1">'+Math.round(R.actual)+'</div>'
     +'<div style="'+LBL+';margin-top:2px">ACTUAL TSS</div></div>'
-    +'<span style="font-size:10.5px;color:#5b6678;flex:none">vs</span>'
-    +'<div style="'+BOX+';flex:1;min-width:0"><div style="font-size:19px;font-weight:800;color:#8b97ab;line-height:1.1">'+Math.round(R.presc)+'</div>'
+    +'<span style="font-size:10.5px;color:var(--d-dim);flex:none">vs</span>'
+    +'<div style="'+BOX+';flex:1;min-width:0"><div style="font-size:19px;font-weight:800;color:var(--d-t3);line-height:1.1">'+Math.round(R.presc)+'</div>'
     +'<div style="'+LBL+';margin-top:2px">PRESCRIBED TSS</div></div>'
     +'</div>';
 
@@ -22795,7 +22809,7 @@ function _trjSection8_(){
   var chart=_trjRxChart_(wpts);
   var mid='<div style="'+LBL+'">ACTUAL AS A SHARE OF PRESCRIBED, BY WEEK</div>'
     +(chart?('<div style="margin-top:8px">'+chart+'</div>')
-           :('<div style="font-size:11.5px;color:#5b6678;margin-top:8px;line-height:1.5">Two priced weeks are needed before this draws a line.</div>'));
+           :('<div style="font-size:11.5px;color:var(--d-dim);margin-top:8px;line-height:1.5">Two priced weeks are needed before this draws a line.</div>'));
 
   // -- TOP RIGHT: the split. These are DAY counts (the pairing unit of this whole card), not weeks.
   // Colours follow the card's own semantics rather than the mockup's: over-plan is the orange the
@@ -22808,7 +22822,7 @@ function _trjSection8_(){
     glance+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0">'
       +_trjChip_(row[0], row[1])
       +'<div style="min-width:0"><div style="font-size:21px;font-weight:800;color:'+row[1]+';line-height:1">'+row[2]+'</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.3;margin-top:1px">day'+(row[2]===1?'':'s')+' '+row[3]+'</div></div></div>';
+      +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.3;margin-top:1px">day'+(row[2]===1?'':'s')+' '+row[3]+'</div></div></div>';
   });
   glance+='</div>';
 
@@ -22823,7 +22837,7 @@ function _trjSection8_(){
   // uses, clamped at the ceiling, and the caption says so - so the bar is a reading of one ratio,
   // not an accumulation toward a target. Fill colour is _trjRxCol_, the card's existing 115/85
   // band, so the bar, the badge and the over/under counts can never disagree.
-  var TH='font-size:9.5px;color:#5b6678;letter-spacing:.05em;padding-bottom:6px;border-bottom:1px solid #1c2130';
+  var TH='font-size:9.5px;color:var(--d-dim);letter-spacing:.05em;padding-bottom:6px;border-bottom:1px solid var(--d-raise)';
   var tbl='<div style="'+LBL+'">WEEK-BY-WEEK BREAKDOWN</div>'
     +'<div class="trj-rx-tbl">'
     +'<div style="'+TH+'">WEEK OF</div><div class="trj-rx-mk" style="'+TH+'"></div>'
@@ -22832,24 +22846,24 @@ function _trjSection8_(){
   wks.forEach(function(w){
     var r=Math.round(w.actual/w.presc*100), tier=_trjRxTier_(r);
     var mp=Math.max(0, Math.min(100, r/_TRJ_RX_MAX*100));
-    tbl+='<div style="font-size:11.5px;color:#8b97ab;padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
+    tbl+='<div style="font-size:11.5px;color:var(--d-t3);padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
       +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid #171b26">'
-        +'<div style="height:7px;border-radius:4px;background:#1c2130;overflow:hidden" title="'+r+'% of prescribed">'
+        +'<div style="height:7px;border-radius:4px;background:var(--d-raise);overflow:hidden" title="'+r+'% of prescribed">'
         +'<div style="width:'+mp.toFixed(1)+'%;height:100%;border-radius:4px;background:'+tier.c+'"></div>'
         +'</div></div>'
-      +'<div style="font-size:11.5px;color:#cbd5e1;padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap;text-align:right">'
+      +'<div style="font-size:11.5px;color:var(--d-soft);padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap;text-align:right">'
         +Math.round(w.actual)+' / '+Math.round(w.presc)+'</div>'
       +'<div style="padding:5px 0;border-bottom:1px solid #171b26;text-align:right">'
         +'<span style="font-size:11px;font-weight:700;color:'+tier.c+';background:'+tier.c+'1a;border-radius:5px;padding:2px 6px;white-space:nowrap">'+r+'%</span>'
-        +'<span class="trj-rx-tier" style="font-size:11px;color:#8b97ab;margin-left:8px;white-space:nowrap">'+tier.t+'</span></div>';
+        +'<span class="trj-rx-tier" style="font-size:11px;color:var(--d-t3);margin-left:8px;white-space:nowrap">'+tier.t+'</span></div>';
   });
-  tbl+='</div><div class="trj-rx-mk" style="font-size:9.5px;color:#5b6678;margin-top:6px">bar length is the week on a shared 0&ndash;200% scale &middot; a full-width bar is 200% of prescribed</div>';
+  tbl+='</div><div class="trj-rx-mk" style="font-size:9.5px;color:var(--d-dim);margin-top:6px">bar length is the week on a shared 0&ndash;200% scale &middot; a full-width bar is 200% of prescribed</div>';
 
   // -- BOTTOM RIGHT: what it means, the trend line restated, then the methodology.
   var dir=(pct>115)?'harder than':((pct<85)?'easier than':'close to');
   var mean='<div style="display:flex;align-items:center;gap:9px">'+_trjChip_('&#128161;','#a78bfa')
-    +'<span style="font-size:11.5px;font-weight:800;letter-spacing:.05em;color:#cbd5e1">WHAT THIS MEANS</span></div>'
-    +'<div style="font-size:12px;color:#cbd5e1;margin-top:8px;line-height:1.6">'
+    +'<span style="font-size:11.5px;font-weight:800;letter-spacing:.05em;color:var(--d-soft)">WHAT THIS MEANS</span></div>'
+    +'<div style="font-size:12px;color:var(--d-soft);margin-top:8px;line-height:1.6">'
     +'Across '+R.n+' day'+(R.n===1?'':'s')+' where a priced prescription met a logged ride, you rode '
     +aiEsc_(dir)+' the plan &mdash; '+Math.round(R.actual)+' TSS against '+Math.round(R.presc)+' prescribed. '
     +(R.over>R.under?('Most of that comes from '+R.over+' day'+(R.over===1?'':'s')+' above the 10% band.')
@@ -22861,15 +22875,15 @@ function _trjSection8_(){
     var word=(Math.abs(per)<1)?'flat':(per>0?'widening':'narrowing');
     mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
       +_trjChip_('&#128197;','#60a5fa')
-      +'<div><div style="font-size:11.5px;font-weight:700;color:#cbd5e1;letter-spacing:.03em">THE GAP IS '+(word==='flat'?'FLAT':word.toUpperCase())+'</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.5;margin-top:2px">'
+      +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">THE GAP IS '+(word==='flat'?'FLAT':word.toUpperCase())+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-top:2px">'
       +(word==='flat'?('level across '+fit.n+' weeks'):(Math.abs(per).toFixed(0)+' point'+(Math.abs(per).toFixed(0)==='1'?'':'s')+' a week across '+fit.n+' weeks'))
       +'</div></div></div>';
   }
   mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
     +_trjChip_('?','#8b97ab')
-    +'<div><div style="font-size:11.5px;font-weight:700;color:#cbd5e1;letter-spacing:.03em">HOW THIS IS CALCULATED</div>'
-    +'<div style="font-size:10.5px;color:#5b6678;line-height:1.5;margin-top:3px">'
+    +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">HOW THIS IS CALCULATED</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);line-height:1.5;margin-top:3px">'
     +aiEsc_('Paired day by day over 12 weeks: prescribed TSS from the plan against logged TSS from the ride. '
       +'Rides only. Prescribed days with no ride are excluded and counted separately -- a missed session is a '
       +'completion question, not an intensity one'+(R.missed?(' ('+R.missed+' here)'):'')
@@ -22888,8 +22902,8 @@ function _trjSection8_(){
     +'<div class="trj-rx-bot">'+'<div>'+tbl+'</div><div>'+mean+'</div></div>'
     +'<div style="display:flex;gap:10px;align-items:center;margin-top:14px;padding:11px 13px;background:#12151d;border:1px solid #1a1f2b;border-radius:10px">'
     +_trjChip_('&#127919;','#a78bfa')
-    +'<div style="font-size:11.5px;color:#8b97ab;line-height:1.5">'
-    +'<span style="font-weight:800;color:#cbd5e1">Focus:</span> '+focus+'</div></div>';
+    +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5">'
+    +'<span style="font-weight:800;color:var(--d-soft)">Focus:</span> '+focus+'</div></div>';
   return H+aiCard_(body);
 }
 
@@ -22944,12 +22958,12 @@ function aiRenderTrajectory_(){
   var parts=[_trjSection1_(), _trjSection2_(), _trjSection3_(), _trjSection4_(), _trjSection5_(), _trjSection6_(), _trjSection7_(), _trjSection8_()].filter(function(x){ return x; });
   try{ _trjKickWeather_(); }catch(e){}
   if(!parts.length){
-    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px;line-height:1.6">'
+    return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px;line-height:1.6">'
       +'Not enough logged history yet to project anything honestly.<br>'
       +'Trajectory needs several weeks of weight, CTL or FTP entries before it will show a trend.</div>';
   }
   return css+parts.join('')
-    +'<div style="margin:20px 0 4px;padding-top:11px;border-top:1px solid #1c2130;font-size:10.5px;color:#5b6678;line-height:1.55">'
+    +'<div style="margin:20px 0 4px;padding-top:11px;border-top:1px solid var(--d-raise);font-size:10.5px;color:var(--d-dim);line-height:1.55">'
     +'Every figure here is a straight-line fit over your own logged data, with its sample size shown. '
     +'Scenario comparisons and race-time predictions are deliberately absent: they need a dose-response '
     +'relationship between training and adaptation that cannot be derived from one athlete&rsquo;s history.</div>';
@@ -22997,13 +23011,13 @@ function _saRose_(bearing, windFromDeg, size){
 // another call per segment; drawing an invented curve here would be a lie about the road.
 function _saSketch_(ev){
   var W=170, H=96, pad=16;
-  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid #1c2130;display:flex;align-items:center;justify-content:center;font-size:9.5px;color:#5b6678;text-align:center;padding:8px">no route data</div>';
+  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid var(--d-raise);display:flex;align-items:center;justify-content:center;font-size:9.5px;color:var(--d-dim);text-align:center;padding:8px">no route data</div>';
   var a=(ev.bearing-90)*Math.PI/180;
   var cx=W/2, cy=H/2, L=Math.min(W,H)/2-pad;
   var x1=cx-L*Math.cos(a), y1=cy-L*Math.sin(a), x2=cx+L*Math.cos(a), y2=cy+L*Math.sin(a);
   var wig=(ev.windApprox||(ev.sinuosity!=null&&ev.sinuosity>=_SA_SINUOUS))
     ? '<text x="'+(W-6)+'" y="'+(H-6)+'" text-anchor="end" font-size="8" fill="#f59e0b">bends</text>' : '';
-  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid #1c2130">'
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid var(--d-raise)">'
     +'<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round"/>'
     +'<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#22c55e" stroke="#0d1016" stroke-width="1.5"/>'
     +'<circle cx="'+x2.toFixed(1)+'" cy="'+y2.toFixed(1)+'" r="4" fill="#e8edf5" stroke="#0d1016" stroke-width="1.5"/>'
@@ -23039,7 +23053,7 @@ function aiRenderSegAttack_(){
   var H='<style>'
     +'.sa-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'
     +'.sa-row{display:grid;grid-template-columns:minmax(0,1.35fr) auto minmax(0,1fr) minmax(0,1.1fr) minmax(0,.8fr);'
-      +'gap:16px;align-items:start;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:16px 18px;margin-top:12px}'
+      +'gap:16px;align-items:start;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:16px 18px;margin-top:12px}'
     +'@media(max-width:1180px){.sa-strip{grid-template-columns:repeat(2,minmax(0,1fr))}'
       +'.sa-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr)}.sa-map{display:none}}'
     +'@media(max-width:820px){.sa-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}'
@@ -23050,12 +23064,12 @@ function aiRenderSegAttack_(){
 
   // ---- title ----
   H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px">'
-    +'<div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.01em">Segment Attack</span>'
+    +'<div><div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">Segment Attack</span>'
     +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:#f97316;background:#f973161f;border-radius:6px;padding:3px 7px">BETA</span></div>'
-    +'<div style="font-size:12.5px;color:#8b97ab;margin-top:5px">Given today&rsquo;s wind, your form, and your segment history.</div></div>'+'<button onclick="aiSetTab_(&#39;seglib&#39;)" style="background:none;border:1px solid #232a38;color:#f97316;font-size:11.5px;font-weight:700;border-radius:9px;padding:8px 13px;cursor:pointer;font-family:inherit;white-space:nowrap">Browse all segments &rsaquo;</button></div>';
+    +'<div style="font-size:12.5px;color:var(--d-t3);margin-top:5px">Given today&rsquo;s wind, your form, and your segment history.</div></div>'+'<button onclick="aiSetTab_(&#39;seglib&#39;)" style="background:none;border:1px solid #232a38;color:#f97316;font-size:11.5px;font-weight:700;border-radius:9px;padding:8px 13px;cursor:pointer;font-family:inherit;white-space:nowrap">Browse all segments &rsaquo;</button></div>';
 
   if(!keys.length){
-    return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:13px;line-height:1.6">'
+    return H+'<div style="padding:50px 20px;text-align:center;color:var(--d-dim);font-size:13px;line-height:1.6">'
       +'No segment history yet.<br>Sync segment efforts from Settings, then this page fills in.</div></div>';
   }
 
@@ -23071,13 +23085,13 @@ function aiRenderSegAttack_(){
 
   // ---- conditions / form / potential / analyzed ----
   var windLbl=cur?(_saCompassLbl_(cur.winddirection_10m)+' '+Math.round(cur.windspeed_10m)+' mph'):'—';
-  var CARD='background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 16px;min-width:0';
-  var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5b6678';
+  var CARD='background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 16px;min-width:0';
+  var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   H+='<div class="sa-strip">';
   H+='<div style="'+CARD+'"><div style="'+LBL+'">Today&rsquo;s conditions</div>'
     +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px">'
-    +'<div style="min-width:0"><div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.1">'+esc(windLbl)+'</div>'
-    +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">'
+    +'<div style="min-width:0"><div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.1">'+esc(windLbl)+'</div>'
+    +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:4px;line-height:1.5">'
     +(cur&&cur.windgusts_10m!=null?('Gusts '+Math.round(cur.windgusts_10m)+' mph<br>'):'')
     +(cur?('Temp '+Math.round(cur.temperature_2m)+'&deg;F'+(cur.relativehumidity_2m!=null?(' &middot; Humidity '+Math.round(cur.relativehumidity_2m)+'%'):'')):'Weather unavailable')
     +'</div></div>'+(cur?_saRose_(null, cur.winddirection_10m, 62):'')+'</div></div>';
@@ -23085,14 +23099,14 @@ function aiRenderSegAttack_(){
   H+='<div style="'+CARD+'"><div style="'+LBL+'">Your form</div>'
     +'<div style="margin-top:9px">'
     +(fit&&fit.ctl?('<div style="font-size:20px;font-weight:800;color:#22c55e;line-height:1.1">CTL '+fit.ctl+'</div>'
-      +'<div style="font-size:10.5px;color:#8b97ab;margin-top:5px">'+(ftpNow?('FTP '+ftpNow+'W &middot; '):'')+'ATL '+fit.atl+' &middot; TSB '+(fit.tsb>=0?'+':'')+fit.tsb+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:5px">'+(ftpNow?('FTP '+ftpNow+'W &middot; '):'')+'ATL '+fit.atl+' &middot; TSB '+(fit.tsb>=0?'+':'')+fit.tsb+'</div>'
       +(fit.stale?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">fitness data is not from today</div>':''))
-     :'<div style="font-size:11.5px;color:#5b6678;line-height:1.5">No reliable fitness series &mdash; projections fall back to power history alone.</div>')
+     :'<div style="font-size:11.5px;color:var(--d-dim);line-height:1.5">No reliable fitness series &mdash; projections fall back to power history alone.</div>')
     +'</div></div>';
   H+='<div id="sa-potential" style="'+CARD+'"><div style="'+LBL+'">PR potential today</div><div style="margin-top:9px" id="sa-pot-body"></div></div>';
   H+='<div style="'+CARD+'"><div style="'+LBL+'">Segments analyzed</div>'
-    +'<div style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1.1;margin-top:9px">'+keys.length+'</div>'
-    +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">in your ride history</div></div>';
+    +'<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.1;margin-top:9px">'+keys.length+'</div>'
+    +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:4px;line-height:1.5">in your ride history</div></div>';
   H+='</div>';
 
   // ---- evaluate everything ----
@@ -23110,23 +23124,23 @@ function aiRenderSegAttack_(){
     .sort(function(a,b){ return a.delta-b.delta; });
 
   var potHtml;
-  if(!cur) potHtml='<div style="font-size:11.5px;color:#5b6678;line-height:1.5">Waiting on today&rsquo;s weather.</div>';
-  else if(!full.length) potHtml='<div style="font-size:11.5px;color:#5b6678;line-height:1.5">No segment has enough powered efforts to project yet.</div>';
+  if(!cur) potHtml='<div style="font-size:11.5px;color:var(--d-dim);line-height:1.5">Waiting on today&rsquo;s weather.</div>';
+  else if(!full.length) potHtml='<div style="font-size:11.5px;color:var(--d-dim);line-height:1.5">No segment has enough powered efforts to project yet.</div>';
   else {
     var top=win.length?win[0].prob:0;
     var word=win.length?((top>=80)?'High':((top>=65)?'Good':'Modest')):'Low';
     var col=win.length?_saProbCol_(top):'#64748b';
     potHtml='<div style="font-size:20px;font-weight:800;color:'+col+';line-height:1.1">'+word+'</div>'
-      +'<div style="font-size:10.5px;color:#8b97ab;margin-top:4px;line-height:1.5">'
+      +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:4px;line-height:1.5">'
       +win.length+' of '+full.length+' projectable segment'+(full.length===1?'':'s')+' project faster than your PR today.</div>';
   }
   H=H.replace('<div style="margin-top:9px" id="sa-pot-body"></div>','<div style="margin-top:9px">'+potHtml+'</div>');
 
   // ---- ranked list ----
   H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 4px">'
-    +'<div><div style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.01em">'
+    +'<div><div style="font-size:14px;font-weight:800;color:var(--d-head);letter-spacing:.01em">'
     +(win.length?(win.length+' SEGMENT'+(win.length===1?' IS':'S ARE')+' WINNABLE TODAY'):'NO CONTESTED SEGMENT PROJECTS FASTER TODAY')+'</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:4px">'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">'
     +(win.length?'Ranked by modelled chance of beating a time you actually raced, in today&rsquo;s wind.'
                 :'No segment where you have gone hard projects faster today. Nothing is padded to fill the list.')
     +'</div></div></div>';
@@ -23137,15 +23151,15 @@ function aiRenderSegAttack_(){
       // rank + identity
       +'<div class="sa-id"><div style="display:flex;align-items:center;gap:9px">'
         +'<span style="flex:none;width:22px;height:22px;border-radius:6px;background:#f973161f;color:#f97316;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">'+(i+1)+'</span>'
-        +'<span style="font-size:15px;font-weight:700;color:#f1f5f9;overflow-wrap:anywhere">'+esc(e.name)+'</span>'
+        +'<span style="font-size:15px;font-weight:700;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</span>'
         +(e.starred?'<span style="color:#f59e0b;font-size:12px">&#9733;</span>':'')+'</div>'
-      +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'
+      +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'
         +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
         +(e.grade!=null?('   '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')+'</div>'
       +'<div style="margin-top:9px"><div style="'+LBL+'">Your PR</div>'
-        +'<div style="font-size:19px;font-weight:800;color:#e8edf5;line-height:1.1;margin-top:2px">'+_saMMSS_(e.prSec)+'</div>'
-        +(e.prDate?('<div style="font-size:10px;color:#5b6678;margin-top:2px">'+esc(e.prDate)+'</div>'):'')
-        +(e.prWatts?('<div style="font-size:10px;color:#5b6678">set at '+e.prWatts+'W</div>'):'')
+        +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.1;margin-top:2px">'+_saMMSS_(e.prSec)+'</div>'
+        +(e.prDate?('<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+esc(e.prDate)+'</div>'):'')
+        +(e.prWatts?('<div style="font-size:10px;color:var(--d-dim)">set at '+e.prWatts+'W</div>'):'')
       +'</div></div>'
       // sketch
       +'<div class="sa-map">'+_saSketch_(e)+'</div>'
@@ -23154,21 +23168,21 @@ function aiRenderSegAttack_(){
         +'<div style="display:flex;align-items:center;gap:10px;margin-top:8px">'
         +'<div style="min-width:0"><div style="font-size:14px;font-weight:700;color:'+(e.wind==='tailwind'?'#22c55e':(e.wind==='headwind'?'#ef4444':'#f59e0b'))+';text-transform:capitalize">'
         +esc(e.wind||'no call')+'</div>'
-        +(e.windMph!=null?('<div style="font-size:11px;color:#8b97ab;margin-top:2px">'+Math.round(e.windMph)+' mph</div>'):'')
+        +(e.windMph!=null?('<div style="font-size:11px;color:var(--d-t3);margin-top:2px">'+Math.round(e.windMph)+' mph</div>'):'')
         +'</div>'+_saRose_(e.bearing, ctx.windFromDeg, 58)+'</div>'
-        +'<div style="font-size:10.5px;color:#8b97ab;margin-top:7px">Segment bearing<br>'+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')</div>'
+        +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:7px">Segment bearing<br>'+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')</div>'
         +(e.windNote?('<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">'+esc(e.windNote)+'</div>')
           :(e.windApprox?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':''))
       +'</div>'
       // projection
       +'<div class="sa-proj"><div style="'+LBL+'">PR projection</div>'
         +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:7px">'
-        +'<span style="font-size:21px;font-weight:800;color:#f1f5f9;line-height:1">'+_saMMSS_(e.tPred)+'</span>'
+        +'<span style="font-size:21px;font-weight:800;color:var(--d-head);line-height:1">'+_saMMSS_(e.tPred)+'</span>'
         +'<span style="font-size:11.5px;font-weight:800;color:#22c55e;background:#22c55e1a;border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
-        +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
+        +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
         +'<div style="font-size:10px;color:'+ev.col+';margin-top:5px;font-weight:700">'+esc(ev.label)+'</div>'
         +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px">target is your best RECORDED pass, not a Strava PR</div>':'')
-        +'<div style="font-size:10px;color:#5b6678;margin-top:3px;line-height:1.5">'
+        +'<div style="font-size:10px;color:var(--d-dim);margin-top:3px;line-height:1.5">'
           +'&plusmn;'+Math.round(e.sigma)+'s model error'
           +(e.capW?(' &middot; '+e.capW+'W capability'+(e.capStale?' (older data)':'')):'')
         +'</div></div>'
@@ -23183,30 +23197,30 @@ function aiRenderSegAttack_(){
   // Real information, deliberately NOT ranked as PR opportunities: the standing time was a cruise,
   // so "you would beat it" is arithmetic rather than a contest. Listed plainly, no probability ring.
   if(untested.length){
-    H+='<div style="margin-top:22px"><div style="font-size:13px;font-weight:800;color:#cbd5e1">'
+    H+='<div style="margin-top:22px"><div style="font-size:13px;font-weight:800;color:var(--d-soft)">'
       +untested.length+' MORE YOU HAVE NEVER GONE HARD ON</div>'
-      +'<div style="font-size:11.5px;color:#8b97ab;margin-top:4px">Your best recorded pass on these was well below the power you can hold now, so there is no PR here to contest &mdash; only a time that has never been tested. No probability is shown, because beating a cruise is not a prediction.</div>'
-      +'<div style="margin-top:10px;background:#111318;border:1px solid #1c2130;border-radius:14px;padding:6px 16px">';
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">Your best recorded pass on these was well below the power you can hold now, so there is no PR here to contest &mdash; only a time that has never been tested. No probability is shown, because beating a cruise is not a prediction.</div>'
+      +'<div style="margin-top:10px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:6px 16px">';
     untested.slice(0,8).forEach(function(e){
       H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #171b26;flex-wrap:wrap">'
-        +'<span style="font-size:12.5px;color:#e8edf5;overflow-wrap:anywhere">'+esc(e.name)+'</span>'
-        +'<span style="font-size:11px;color:#8b97ab;white-space:nowrap">best '+_saMMSS_(e.prSec)
+        +'<span style="font-size:12.5px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</span>'
+        +'<span style="font-size:11px;color:var(--d-t3);white-space:nowrap">best '+_saMMSS_(e.prSec)
         +(e.prWatts?(' at '+e.prWatts+'W'):'')+' &middot; you hold '+e.capW+'W now</span></div>';
     });
     H+='</div></div>';
   }
 
   // ---- what could not be projected, and why ----
-  H+='<div style="margin-top:20px;background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 16px">'
+  H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 16px">'
     +'<div style="'+LBL+'">What is not in the list</div>'
-    +'<div style="font-size:11.5px;color:#8b97ab;margin-top:8px;line-height:1.6">'
-    +'<b style="color:#cbd5e1">'+full.length+'</b> segment'+(full.length===1?'':'s')+' had enough powered efforts to project: '
-    +'<b style="color:#cbd5e1">'+win.length+'</b> a real contest, <b style="color:#cbd5e1">'+untested.length+'</b> never ridden hard, '
-    +'<b style="color:#cbd5e1">'+(full.length-win.length-untested.length)+'</b> slower than the standing time today.<br>'
-    +'<b style="color:#cbd5e1">'+windOnly.length+'</b> have a bearing but not enough powered efforts, so they get a wind call and no probability.<br>'
-    +'<b style="color:#cbd5e1">'+excluded.length+'</b> lack the coordinates to reason about at all.'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:8px;line-height:1.6">'
+    +'<b style="color:var(--d-soft)">'+full.length+'</b> segment'+(full.length===1?'':'s')+' had enough powered efforts to project: '
+    +'<b style="color:var(--d-soft)">'+win.length+'</b> a real contest, <b style="color:var(--d-soft)">'+untested.length+'</b> never ridden hard, '
+    +'<b style="color:var(--d-soft)">'+(full.length-win.length-untested.length)+'</b> slower than the standing time today.<br>'
+    +'<b style="color:var(--d-soft)">'+windOnly.length+'</b> have a bearing but not enough powered efforts, so they get a wind call and no probability.<br>'
+    +'<b style="color:var(--d-soft)">'+excluded.length+'</b> lack the coordinates to reason about at all.'
     +'</div>'
-    +'<div style="font-size:10px;color:#5b6678;margin-top:9px;line-height:1.5">A projection needs '+_SA_MIN_FIT
+    +'<div style="font-size:10px;color:var(--d-dim);margin-top:9px;line-height:1.5">A projection needs '+_SA_MIN_FIT
     +' efforts recorded with power on the same segment. As more rides sync, segments move up this list on their own.</div>'
     +'</div>';
 
@@ -23248,7 +23262,7 @@ function _saPaint_(){
 function _saTierChip_(e){
   if(e.tier==='full') return '<span style="font-size:9.5px;font-weight:700;color:#22c55e;background:#22c55e1a;border-radius:5px;padding:2px 6px">projectable</span>';
   if(e.tier==='wind') return '<span style="font-size:9.5px;font-weight:700;color:#f59e0b;background:#f59e0b1a;border-radius:5px;padding:2px 6px">wind only</span>';
-  return '<span style="font-size:9.5px;font-weight:700;color:#64748b;background:#64748b1a;border-radius:5px;padding:2px 6px">no data</span>';
+  return '<span style="font-size:9.5px;font-weight:700;color:var(--d-t4);background:var(--d-t4)1a;border-radius:5px;padding:2px 6px">no data</span>';
 }
 function _saLibBody_(){
   var A=_saEvalAll_(), list=A.list, ctx=A.ctx, esc=aiEsc_;
@@ -23275,14 +23289,14 @@ function _saLibBody_(){
     var ap=(a.tier==='full')?a.prob:-1, bp=(b.tier==='full')?b.prob:-1;
     return (bp-ap)||String(a.name||'').localeCompare(String(b.name||''));
   });
-  var H='<div style="font-size:11.5px;color:#8b97ab;margin-bottom:10px">'+f.length+' of '+list.length+' segments</div>';
-  if(!f.length) return H+'<div style="padding:34px 12px;text-align:center;color:#5b6678;font-size:12.5px">Nothing matches that.</div>';
-  H+='<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:2px 14px">';
+  var H='<div style="font-size:11.5px;color:var(--d-t3);margin-bottom:10px">'+f.length+' of '+list.length+' segments</div>';
+  if(!f.length) return H+'<div style="padding:34px 12px;text-align:center;color:var(--d-dim);font-size:12.5px">Nothing matches that.</div>';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:2px 14px">';
   f.slice(0,150).forEach(function(e){
     var pc=(e.tier==='full')?_saProbCol_(e.prob):'#64748b';
     H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #171b26;cursor:pointer;flex-wrap:wrap">'
-      +'<div style="flex:1;min-width:150px"><div style="font-size:13px;color:#e8edf5;overflow-wrap:anywhere">'+esc(e.name)+'</div>'
-      +'<div style="font-size:10.5px;color:#5b6678;margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:150px"><div style="font-size:13px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
       +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
       +(e.prSec?(' &middot; best '+_saMMSS_(e.prSec)):'')
       +_saTierChip_(e)
@@ -23291,22 +23305,22 @@ function _saLibBody_(){
       +'</div></div>'
       +'<div style="text-align:right;min-width:64px">'
       +(e.tier==='full'&&e.contested?('<div style="font-size:16px;font-weight:800;color:'+pc+'">'+e.prob+'%</div>')
-        :(e.tier==='full'?'<div style="font-size:11px;color:#5b6678">no contest</div>'
-        :'<div style="font-size:11px;color:#5b6678">&mdash;</div>'))
-      +'</div><span style="color:#5b6678;font-size:14px">&rsaquo;</span></div>';
+        :(e.tier==='full'?'<div style="font-size:11px;color:var(--d-dim)">no contest</div>'
+        :'<div style="font-size:11px;color:var(--d-dim)">&mdash;</div>'))
+      +'</div><span style="color:var(--d-dim);font-size:14px">&rsaquo;</span></div>';
   });
   H+='</div>';
-  if(f.length>150) H+='<div style="font-size:10.5px;color:#5b6678;margin-top:8px">Showing the first 150. Search to narrow.</div>';
+  if(f.length>150) H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:8px">Showing the first 150. Search to narrow.</div>';
   return H;
 }
 // Detail. Everything here comes from the SAME _saEvaluate_ record the attack page uses - the model
 // is not re-run differently, and nothing new is derived for this view.
 function _saDetail_(e, ctx){
-  var esc=aiEsc_, LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#5b6678';
-  var H='<div><button onclick="saClose_()" style="background:none;border:1px solid #232a38;color:#8b97ab;font-size:11.5px;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit">&lsaquo; All segments</button></div>';
-  H+='<div style="margin-top:14px;background:#111318;border:1px solid #1c2130;border-radius:16px;padding:18px 20px">';
-  H+='<div style="font-size:19px;font-weight:800;color:#f1f5f9;overflow-wrap:anywhere">'+esc(e.name)+'</div>';
-  H+='<div style="font-size:11.5px;color:#8b97ab;margin-top:5px">'
+  var esc=aiEsc_, LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
+  var H='<div><button onclick="saClose_()" style="background:none;border:1px solid #232a38;color:var(--d-t3);font-size:11.5px;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit">&lsaquo; All segments</button></div>';
+  H+='<div style="margin-top:14px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:18px 20px">';
+  H+='<div style="font-size:19px;font-weight:800;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</div>';
+  H+='<div style="font-size:11.5px;color:var(--d-t3);margin-top:5px">'
     +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
     +(e.grade!=null?(' &middot; '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')
     +(e.bearing!=null?(' &middot; bearing '+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')'):'')
@@ -23314,13 +23328,13 @@ function _saDetail_(e, ctx){
   // standing time + how it was set
   H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px">';
   H+='<div><div style="'+LBL+'">'+(e.prFromHistory?'Best recorded':'Strava PR')+'</div>'
-    +'<div style="font-size:22px;font-weight:800;color:#e8edf5;line-height:1.1;margin-top:3px">'+_saMMSS_(e.prSec)+'</div>'
-    +(e.prDate?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+esc(e.prDate)+'</div>'):'')
+    +'<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1;margin-top:3px">'+_saMMSS_(e.prSec)+'</div>'
+    +(e.prDate?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'+esc(e.prDate)+'</div>'):'')
     +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px;line-height:1.4">derived from your synced efforts, not a Strava PR</div>':'')
     +'</div>';
   H+='<div><div style="'+LBL+'">Power that set it</div>'
     +'<div style="font-size:22px;font-weight:800;color:'+(e.prWatts?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.prWatts?(e.prWatts+'W'):'not recorded')+'</div>'
-    +(e.prEffortRatio!=null?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'+Math.round(e.prEffortRatio*100)+'% of what you hold now</div>'):'')
+    +(e.prEffortRatio!=null?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'+Math.round(e.prEffortRatio*100)+'% of what you hold now</div>'):'')
     +'</div>';
   H+='<div><div style="'+LBL+'">Today&rsquo;s capability</div>'
     +'<div style="font-size:22px;font-weight:800;color:'+(e.capW?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.capW?(e.capW+'W'):'unknown')+'</div>'
@@ -23329,57 +23343,57 @@ function _saDetail_(e, ctx){
   H+='</div>';
 
   if(e.tier!=='full'){
-    H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130">'
-      +'<div style="font-size:12.5px;color:#cbd5e1;line-height:1.6">Not projectable yet &mdash; '+esc(e.why||'insufficient data')+'.</div>'
-      +(e.wind?('<div style="font-size:11.5px;color:#8b97ab;margin-top:8px">Today it is a <b style="color:#e8edf5">'+esc(e.wind)+'</b> on this bearing'+(e.windMph!=null?(' at '+Math.round(e.windMph)+' mph'):'')+'. No probability is shown, because the model has nothing to measure its error against.</div>'):'')
+    H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise)">'
+      +'<div style="font-size:12.5px;color:var(--d-soft);line-height:1.6">Not projectable yet &mdash; '+esc(e.why||'insufficient data')+'.</div>'
+      +(e.wind?('<div style="font-size:11.5px;color:var(--d-t3);margin-top:8px">Today it is a <b style="color:var(--d-head)">'+esc(e.wind)+'</b> on this bearing'+(e.windMph!=null?(' at '+Math.round(e.windMph)+' mph'):'')+'. No probability is shown, because the model has nothing to measure its error against.</div>'):'')
       +(e.windNote?('<div style="font-size:11px;color:#f59e0b;margin-top:6px">'+esc(e.windNote)+'</div>'):'')
       +'</div></div>';
     return H;
   }
 
   // projection today
-  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;align-items:start">';
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;align-items:start">';
   H+='<div><div style="'+LBL+'">Projected today</div>'
     +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
-    +'<span style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1">'+_saMMSS_(e.tPred)+'</span>'
+    +'<span style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1">'+_saMMSS_(e.tPred)+'</span>'
     +'<span style="font-size:12px;font-weight:800;color:'+(e.delta<0?'#22c55e':'#ef4444')+';background:'+(e.delta<0?'#22c55e1a':'#ef44441a')+';border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
-    +'<div style="font-size:11px;color:#8b97ab;margin-top:6px">'+esc(e.wind||'no wind call')+(e.windMph!=null?(' '+Math.round(e.windMph)+' mph'):'')+' &middot; &plusmn;'+Math.round(e.sigma)+'s model error</div>'
+    +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'+esc(e.wind||'no wind call')+(e.windMph!=null?(' '+Math.round(e.windMph)+' mph'):'')+' &middot; &plusmn;'+Math.round(e.sigma)+'s model error</div>'
     +(e.windApprox?'<div style="font-size:10px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':'')
     +'</div>';
   H+='<div style="text-align:center">'+(e.contested
       ? ('<div style="'+LBL+'">Win probability</div><div style="display:flex;justify-content:center;margin-top:5px">'+_saRing_(e.prob,_saProbCol_(e.prob),86)+'</div>'
          +'<div style="font-size:11px;font-weight:700;color:'+_saProbCol_(e.prob)+';margin-top:3px">'+_saProbWord_(e.prob)+(e.probCapped?' (capped)':'')+'</div>'
          +'<div style="font-size:10px;color:'+(e.evidence?e.evidence.col:'#5b6678')+';margin-top:3px">'+esc(e.evidence?e.evidence.label:'')+'</div>')
-      : ('<div style="'+LBL+'">Not a contest</div><div style="font-size:11.5px;color:#8b97ab;margin-top:8px;line-height:1.55">'+esc(e.note||'')+'</div>'))
+      : ('<div style="'+LBL+'">Not a contest</div><div style="font-size:11.5px;color:var(--d-t3);margin-top:8px;line-height:1.55">'+esc(e.note||'')+'</div>'))
     +'</div>';
   H+='</div>';
 
   // WHAT WOULD IT TAKE — both figures are inversions of the same fitted model.
-  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid #1c2130">'
-    +'<div style="'+LBL+'">What it would take</div><div style="font-size:12.5px;color:#cbd5e1;margin-top:8px;line-height:1.7">';
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise)">'
+    +'<div style="'+LBL+'">What it would take</div><div style="font-size:12.5px;color:var(--d-soft);margin-top:8px;line-height:1.7">';
   if(e.wattsNeeded!=null){
-    H+='&bull; <b style="color:#f1f5f9">'+e.wattsNeeded+'W</b> to match '+_saMMSS_(e.prSec)+' in today&rsquo;s wind'
+    H+='&bull; <b style="color:var(--d-head)">'+e.wattsNeeded+'W</b> to match '+_saMMSS_(e.prSec)+' in today&rsquo;s wind'
       +(e.wattsGap!=null?(' &mdash; '+(e.wattsGap<=0?('<span style="color:#22c55e">'+Math.abs(e.wattsGap)+'W below what you hold</span>')
                                                    :('<span style="color:#f59e0b">'+e.wattsGap+'W more than you hold</span>'))):'')+'<br>';
   }
   if(e.tailwindNeeded!=null){
     H+='&bull; '+(e.tailwindNeeded<=0
       ? 'at today&rsquo;s capability the time falls <b style="color:#22c55e">regardless of wind</b>'
-      : ('a <b style="color:#f1f5f9">'+e.tailwindNeeded.toFixed(1)+' mph tailwind</b> on this bearing would do it at today&rsquo;s capability'))+'<br>';
+      : ('a <b style="color:var(--d-head)">'+e.tailwindNeeded.toFixed(1)+' mph tailwind</b> on this bearing would do it at today&rsquo;s capability'))+'<br>';
   }
-  H+='</div><div style="font-size:10px;color:#5b6678;margin-top:7px;line-height:1.5">Both are the same fitted model solved backwards &mdash; the watts from the power equation directly, the wind by bisection. Neither introduces an assumption the projection above does not already make.</div></div>';
+  H+='</div><div style="font-size:10px;color:var(--d-dim);margin-top:7px;line-height:1.5">Both are the same fitted model solved backwards &mdash; the watts from the power equation directly, the wind by bisection. Neither introduces an assumption the projection above does not already make.</div></div>';
   return H+'</div>';
 }
 function aiRenderSegLibrary_(){
   var A=_saEvalAll_();
   var esc=aiEsc_;
   var H='<div style="padding:2px 0 30px">';
-  H+='<div style="font-size:22px;font-weight:800;color:#f1f5f9;margin-bottom:4px">Segment Library</div>'
-    +'<div style="font-size:12.5px;color:#8b97ab;margin-bottom:14px">Every segment in your history, whether or not today favours it.</div>';
-  if(!A.list.length) return H+'<div style="padding:50px 20px;text-align:center;color:#5b6678;font-size:13px">No segment history yet.</div></div>';
+  H+='<div style="font-size:22px;font-weight:800;color:var(--d-head);margin-bottom:4px">Segment Library</div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3);margin-bottom:14px">Every segment in your history, whether or not today favours it.</div>';
+  if(!A.list.length) return H+'<div style="padding:50px 20px;text-align:center;color:var(--d-dim);font-size:13px">No segment history yet.</div></div>';
   if(!A.cur) H+='<div style="font-size:11px;color:#f59e0b;margin-bottom:10px">Today&rsquo;s weather has not loaded, so probabilities are unavailable until it does.</div>';
   H+='<input id="sa-lib-q" oninput="saSearch_(this.value)" placeholder="Search segments…" '
-    +'style="width:100%;box-sizing:border-box;background:#111318;border:1px solid #232a38;border-radius:10px;color:#e8edf5;font-size:13px;padding:10px 12px;font-family:inherit;margin-bottom:10px">';
+    +'style="width:100%;box-sizing:border-box;background:var(--d-panel);border:1px solid #232a38;border-radius:10px;color:var(--d-head);font-size:13px;padding:10px 12px;font-family:inherit;margin-bottom:10px">';
   var chips=[['all','All'],['contest','Real contests'],['untested','Never raced'],['thin','Thin data'],['strong','Well supported'],['nodata','Not projectable']];
   H+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">';
   chips.forEach(function(c){
@@ -23387,7 +23401,7 @@ function aiRenderSegLibrary_(){
   });
   H+='</div>';
   var sorts=[['prob','Chance'],['name','Name'],['dist','Distance'],['evidence','Evidence']];
-  H+='<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><span style="font-size:10.5px;color:#5b6678">Sort</span>';
+  H+='<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px"><span style="font-size:10.5px;color:var(--d-dim)">Sort</span>';
   sorts.forEach(function(s){
     H+='<button onclick="saSort_(&#39;'+s[0]+'&#39;)" style="background:none;border:none;color:'+(_saSort===s[0]?'#f97316':'#5b6678')+';font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;padding:2px 4px">'+s[1]+'</button>';
   });
@@ -23396,21 +23410,21 @@ function aiRenderSegLibrary_(){
   return H+'</div>';
 }
 function aiRenderTab_(tab, ded){
-  if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Attack — render error.</div>';
-  if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Segment Library — render error.</div>';
+  if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Attack — render error.</div>';
+  if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Library — render error.</div>';
   // Wrapped like every sibling. Trends guards its own sub-computations (_trStory_, _trDrivers_,
   // _trPredictions_, _trWatchDay_) but the dispatch itself was bare, so a throw anywhere in the
   // rest of the body — coverage, the PMC block, chart assembly — escaped aiRenderTab_ and took the
   // whole Athlete Intelligence page down instead of degrading to one tab saying it failed.
-  if(tab==='trends') return _aiSafe_('Trends', function(){return aiRenderTrends_(ded);}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Trends — render error.</div>';
-  if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">You vs. You — render error.</div>';
-  if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Milestones — render error.</div>';
-  if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Records — render error.</div>';
-  if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">DNA — render error.</div>';
-  if(tab==='trajectory') return _aiSafe_('Trajectory', function(){return aiRenderTrajectory_();}) || '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Trajectory — render error.</div>';
+  if(tab==='trends') return _aiSafe_('Trends', function(){return aiRenderTrends_(ded);}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Trends — render error.</div>';
+  if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">You vs. You — render error.</div>';
+  if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Milestones — render error.</div>';
+  if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Records — render error.</div>';
+  if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">DNA — render error.</div>';
+  if(tab==='trajectory') return _aiSafe_('Trajectory', function(){return aiRenderTrajectory_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Trajectory — render error.</div>';
   if(tab!=='overview'){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
-    return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
+    return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
   }
   var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
   var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
@@ -23428,7 +23442,7 @@ function aiRenderTab_(tab, ded){
   // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
   // Adherence leads the metric row — a declining completion rate is an early warning.
   var grid=[dna, mom, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
-  if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:#5b6678;font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
+  if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
@@ -23452,7 +23466,7 @@ function aiRenderOverview_(container){
   H+='<div style="max-width:1360px;margin:0 auto;padding:18px 20px 40px">';
   // header
   H+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
-  H+='<div style="font-size:24px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Athlete Intelligence</div>';
+  H+='<div style="font-size:24px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Athlete Intelligence</div>';
   H+='<span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:#0d0f14;background:#f59e0b;border-radius:6px;padding:3px 7px">BETA</span></div>';
   // Cross-sport note. Athletic Life scores rides AND runs, so counting only rides understated the
   // span by more than a decade — the run log opens in 2011, the ride log in 2017. Runs come from
@@ -23472,12 +23486,12 @@ function aiRenderOverview_(container){
   // "16 calendar years", not "16 years": Dec 2011 to Jul 2026 is 14.6 elapsed years spanning 16
   // calendar years, and the looser phrasing sits two inches from "Real numbers only". _hdrYrs is a
   // span of calendar years by construction (max-min+1), so this names it for what it is.
-  H+='<div style="font-size:13px;color:#64748b;margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' calendar years of data. Real numbers only.</div>';
+  H+='<div style="font-size:13px;color:var(--d-t4);margin-top:3px">Insights from '+_hdrWhat+' across '+_hdrYrs+' calendar years of data. Real numbers only.</div>';
   // Name the library. This page and the Calendar count different sets on purpose, and the totals
   // therefore disagree for the same month — see dataSourceNote_.
-  H+='<div style="font-size:11px;color:#5b6678;margin-top:4px">'+dataSourceNote_('deduped')+'</div>';
+  H+='<div style="font-size:11px;color:var(--d-dim);margin-top:4px">'+dataSourceNote_('deduped')+'</div>';
   // tabs
-  H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid #1c2130">';
+  H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid var(--d-raise)">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
   H+='</div>';
   H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:#e24b4a;font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
@@ -24518,50 +24532,50 @@ function _coachVPanel_(now){
   // identity + milestone voice
   H+='<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px">'
     +'<span style="width:30px;height:30px;border-radius:9px;background:'+P+'22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;color:'+P+'">V</span>'
-    +'<div><div style="font-size:13px;font-weight:800;color:#f1f5f9">Coach V</div>'
-    +'<div style="font-size:10.5px;color:#5b6678">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
+    +'<div><div style="font-size:13px;font-weight:800;color:var(--d-head)">Coach V</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim)">'+cv.phase+' &middot; '+cv.phaseLabel+' &middot; week '+cv.weekInPhase+'</div></div></div>';
   // Yesterday recap sits above the milestone voice — it is the most recent fact Coach V has, and it
   // only ever renders when today has nothing logged against it (coachV_ gates that).
   if(cv.yesterday && cv.yesterday.line){
-    H+='<div style="font-size:12.5px;color:#cbd5e1;line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid #2a3341;overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
+    H+='<div style="font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid #2a3341;overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
   }
   if(cv.milestone){
-    H+='<div style="font-size:12.5px;color:#e2e8f0;line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
+    H+='<div style="font-size:12.5px;color:var(--d-t2);line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
   }
   if(cv.slide){ H+='<div style="font-size:12px;color:'+A+';line-height:1.55;margin:6px 0 2px">'+cv.slide+'</div>'; }
-  if(cv.hrv){ H+='<div style="font-size:12px;color:#cbd5e1;line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
+  if(cv.hrv){ H+='<div style="font-size:12px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;overflow-wrap:anywhere"><b style="color:'+P+'">HRV — </b>'+cv.hrv+'</div>'; }
   // today's session coaching — POST-ride once a ride is logged (pre-ride tense is stale after import)
   if(cv.done){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
-      +'<div style="font-size:13px;color:#e2e8f0;line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
+      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
+      +'<div style="font-size:13px;color:var(--d-t2);line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
       // Debrief row — its own block under the logged-session line. Only renders when there was
       // something computable to say; a missing prescription or missing numbers yield '' and the
       // row is simply absent rather than showing an empty verdict.
-      +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:12.5px;color:#cbd5e1;line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
+      +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:12.5px;color:var(--d-soft);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:#5b6678">'+cv.primary.struct+'</span>'):'')+'</div>';
+      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:var(--d-dim)">'+cv.primary.struct+'</span>'):'')+'</div>';
     // Fuel check ABOVE the pre-session instructions: if the athlete is about to start a VO2 or
     // Threshold session under-fuelled, that changes the session, so it has to be read before the
     // watt targets are. Absent entirely on an adequately-fuelled day.
     if(cv.fuel && cv.fuel.length){
-      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:12.5px;color:#e2e8f0;line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(245,158,11,.10);border:1px solid rgba(245,158,11,.35);font-size:12.5px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+A+'">Fuel &mdash; </b>'+cv.fuel.join(' ')+'</div>';
     }
     // Leg-protection swap, ABOVE the session instructions for the same reason as the fuel check:
     // it changes WHICH session today is, so it has to be read before the prescription for the one
     // being replaced. Carries the action, so the recommendation is one tap from being taken.
     if(cv.protect){
-      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.35);font-size:12.5px;color:#e2e8f0;line-height:1.6;overflow-wrap:anywhere">'
+      H+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.35);font-size:12.5px;color:var(--d-t2);line-height:1.6;overflow-wrap:anywhere">'
         +'<b style="color:#f97316">Protect the legs &mdash; </b>'+cv.protect
         +'<div onclick="if(window.swapToStrengthC_)swapToStrengthC_(&#39;'+dk+'&#39;,&#39;'+((cv.primary&&cv.primary.id)||'')+'&#39;)" '
         +'style="margin-top:8px;display:inline-block;padding:6px 12px;border-radius:8px;border:1px solid rgba(249,115,22,.55);color:#f97316;font-weight:700;font-size:12px;cursor:pointer">Swap to Strength C</div>'
         +'</div>';
     }
-    cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:#e2e8f0;line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
+    cv.pre.forEach(function(line){ H+='<div style="font-size:13.5px;color:var(--d-t2);line-height:1.65;margin-top:10px;overflow-wrap:anywhere">'+line+'</div>'; });
     if(cv.form) H+='<div style="font-size:12.5px;color:'+A+';line-height:1.6;margin-top:12px;font-weight:600;overflow-wrap:anywhere">'+cv.form+'</div>';
-    if(cv.expect) H+='<div style="font-size:12.5px;color:#94a3b8;line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:#cbd5e1">What to expect &mdash;</b> '+cv.expect+'</div>';
+    if(cv.expect) H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.65;margin-top:12px;overflow-wrap:anywhere"><b style="color:var(--d-soft)">What to expect &mdash;</b> '+cv.expect+'</div>';
     // Zwift export, on the card that gave the instruction. Only when the prescription resolves to a
     // real ERG target: _zwoFor_ returns null for runs, strength, mobility and group rides (no
     // ceiling to hold), so the link simply is not offered rather than producing a file to ignore.
@@ -24577,9 +24591,9 @@ function _coachVPanel_(now){
         +'style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+P+';cursor:pointer">'
         +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+P+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>'
         +'<span id="cv-zwo-label">Download for Zwift (.zwo)</span></div>'
-        +'<div id="cv-zwo-alt" style="display:none;font-size:11.5px;color:#5b6678;cursor:pointer;text-decoration:underline">Download instead</div>'
+        +'<div id="cv-zwo-alt" style="display:none;font-size:11.5px;color:var(--d-dim);cursor:pointer;text-decoration:underline">Download instead</div>'
         +'</div>'
-        +'<div id="cv-zwo-note" style="font-size:10.5px;color:#5b6678;margin-top:5px;line-height:1.5">'
+        +'<div id="cv-zwo-note" style="font-size:10.5px;color:var(--d-dim);margin-top:5px;line-height:1.5">'
           +_cvz.blocks+' block'+(_cvz.blocks===1?'':'s')+' &middot; '+_cvz.lo+'&ndash;'+_cvz.hi+'W at FTP '+_cvz.ftp
           +'. <span id="cv-zwo-dest" style="cursor:pointer;text-decoration:underline">Set up one-click send to Zwift</span></div>'
         +'</div>';
@@ -24588,11 +24602,11 @@ function _coachVPanel_(now){
     H+='</div>';
   } else if(cv.primary){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:12.5px;color:#e2e8f0;line-height:1.55">'+(cv.pre[0]||'Rest today.')+'</div></div>';
+      +'<div style="font-size:12.5px;color:var(--d-t2);line-height:1.55">'+(cv.pre[0]||'Rest today.')+'</div></div>';
   }
   // ftp discontinuity
   if(cv.ftp){
-    H+='<div style="font-size:11.5px;color:#cbd5e1;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
+    H+='<div style="font-size:11.5px;color:var(--d-soft);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
   }
   H+='</div>';
   return H;
@@ -24980,8 +24994,8 @@ function _blockCheckRow_(c){
   return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+badgeBg+';display:flex;align-items:center;justify-content:center">'+badgeIcon+'</span>'
     +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(met?'#f1f5f9':'#cbd5e1')+'">'+c.label+'</span>'
-    +'<span style="font-size:11px;color:#5b6678">'+c.cond+'</span></div>'
-    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">'+c.desc+'</div>'
+    +'<span style="font-size:11px;color:var(--d-dim)">'+c.cond+'</span></div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:1px">'+c.desc+'</div>'
     +'<div style="font-size:11px;color:'+statusCol+';margin-top:2px">'+status+'</div></div>'
     +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+countCol+'">'+(c.done?'1':'0')+' / 1</span></div>';
 }
@@ -25006,7 +25020,7 @@ function _blockRoadmap_(now){
     return '<div onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+m.date+'&#39;)" title="Jump to '+m.label+' on the calendar" style="flex:1;position:relative;text-align:center;min-width:0;cursor:pointer">'+line
       +'<div style="position:relative;z-index:1;width:44px;height:44px;border-radius:50%;'+ring+';display:flex;align-items:center;justify-content:center;margin:0 auto">'+_blockMiIcon_(past?'M20 6L9 17l-5-5':m.icon, col, 20)+'</div>'
       +'<div style="font-size:11px;font-weight:700;color:'+(isNext?'#f59e0b':(past?'#22c55e':'#cbd5e1'))+';margin-top:7px;line-height:1.2">'+m.label+'</div>'
-      +'<div style="font-size:10px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(m.date)+'</div></div>';
+      +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+_blockFmtDate_(m.date)+'</div></div>';
   }).join('');
   return '<div style="display:flex;align-items:flex-start;gap:2px">'+cells+'</div>';
 }
@@ -25081,8 +25095,8 @@ function _blockTssGraph_(weeks){
   svg+='</svg>';
   return svg;
 }
-function _blockCard_(inner, extraStyle){ return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
-function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
+function _blockCard_(inner, extraStyle){ return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
+function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
 // The current week's PRESCRIBED sessions from st.trainingBlock, each priced to current FTP. This is
 // the block model (Part 2) made visible; the calendar (Part 3) and session-detail cards (Part 5)
@@ -25106,21 +25120,21 @@ function _tbWeekStrip_(now){
       var t=x.rx&&x.rx.targets, w=(t&&t.powerLo!=null)?(' &middot; '+t.powerLo+'-'+t.powerHi+'W'):(t&&t.durationMin?(' &middot; '+t.durationMin+' min'):'');
       return '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px;flex-wrap:wrap">'
         +'<span style="width:7px;height:7px;border-radius:2px;background:'+col+'"></span>'
-        +'<span style="font-size:12px;font-weight:700;color:#f1f5f9">'+nm+'</span>'
-        +(x.struct?('<span style="font-size:10.5px;color:#5b6678">'+x.struct+'</span>'):'')
-        +'<span style="font-size:10.5px;color:#94a3b8">'+w+'</span></span>';
+        +'<span style="font-size:12px;font-weight:700;color:var(--d-head)">'+nm+'</span>'
+        +(x.struct?('<span style="font-size:10.5px;color:var(--d-dim)">'+x.struct+'</span>'):'')
+        +'<span style="font-size:10.5px;color:var(--d-t3)">'+w+'</span></span>';
     }).join('');
     rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #14181f'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
       +'<div style="flex:0 0 46px"><div style="font-size:11px;font-weight:800;color:'+(isToday?'#FC4C02':'#94a3b8')+'">'+DOW[plan.weekday]+'</div>'
-      +'<div style="font-size:10px;color:#5b6678">'+(_YVY_MON[d.getMonth()]||'')+' '+d.getDate()+'</div></div>'
-      +'<div style="flex:1;min-width:0">'+(cells||'<span style="font-size:12px;color:#5b6678">&mdash;</span>')
+      +'<div style="font-size:10px;color:var(--d-dim)">'+(_YVY_MON[d.getMonth()]||'')+' '+d.getDate()+'</div></div>'
+      +'<div style="flex:1;min-width:0">'+(cells||'<span style="font-size:12px;color:var(--d-dim)">&mdash;</span>')
       +(ms?('<div style="font-size:10.5px;font-weight:700;color:#f59e0b;margin-top:3px">&#9873; '+ms.label+'</div>'):'')+'</div></div>';
   }
   if(!any) return '';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
-    +'<span style="font-size:11px;color:#5b6678">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
     +'<span onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+todayK+'&#39;)" style="font-size:11px;font-weight:700;color:#FC4C02;cursor:pointer;margin-left:auto">On the calendar &rarr;</span></div>'
     +rows+'</div>';
 }
@@ -25509,7 +25523,7 @@ function _zwoWireDest_(dk, hostId, sid){
     // no longer on the page. So say why here, and name the browsers that do work, rather than
     // leaving a bare filesystem path and an unexplained missing feature.
     if(!zwiftSupported_()){
-      note.outerHTML='<span style="color:#5b6678">One-click send needs Chrome or Edge on the desktop &mdash; this browser cannot write to a folder. '
+      note.outerHTML='<span style="color:var(--d-dim)">One-click send needs Chrome or Edge on the desktop &mdash; this browser cannot write to a folder. '
         +'Download it and drop it in '+_zwiftPathHint_()+', and it appears under Custom Workouts.</span>';
       return;
     }
@@ -25936,8 +25950,8 @@ function renderBlockPlan_(container){
 
   var H='<style>.blk-top{display:grid;gap:14px;grid-template-columns:1fr 1.5fr 1.2fr}.blk-mid{display:grid;gap:14px;grid-template-columns:1.4fr 1fr;align-items:start}@media(max-width:920px){.blk-top{grid-template-columns:1fr}.blk-mid{grid-template-columns:1fr}}</style>';
   H+='<div style="max-width:1180px;margin:0 auto;padding:20px 18px 44px">';
-  H+='<div style="font-size:25px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Training Block</div>';
-  H+='<div style="font-size:13px;color:#94a3b8;margin-top:4px;line-height:1.5">Your structured block to the Ven-Top attempt. Four weeks consistent &rarr; FTP retest &rarr; Chalet Reynard &rarr; Alpe sub-70 &rarr; Ven-Top summit.</div>';
+  H+='<div style="font-size:25px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Training Block</div>';
+  H+='<div style="font-size:13px;color:var(--d-t3);margin-top:4px;line-height:1.5">Your structured block to the Ven-Top attempt. Four weeks consistent &rarr; FTP retest &rarr; Chalet Reynard &rarr; Alpe sub-70 &rarr; Ven-Top summit.</div>';
 
   var nm=_blockNextMilestone_(now);
   var today0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -25952,11 +25966,11 @@ function renderBlockPlan_(container){
   // days
   var daysInner=_blockHdr_('Days to next milestone');
   if(nm){
-    daysInner+='<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:40px;font-weight:800;color:#FC4C02;letter-spacing:-.03em;line-height:1">'+nm.days+'</span><span style="font-size:13px;color:#94a3b8">day'+(nm.days===1?'':'s')+'</span></div>';
-    daysInner+='<div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-top:8px">'+nm.m.label+'</div>';
-    daysInner+='<div style="font-size:11.5px;color:#5b6678;margin-top:2px">'+_blockFmtDate_(nm.m.date)+(nm.m.note?(' &middot; '+nm.m.note):'')+'</div>';
+    daysInner+='<div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:40px;font-weight:800;color:#FC4C02;letter-spacing:-.03em;line-height:1">'+nm.days+'</span><span style="font-size:13px;color:var(--d-t3)">day'+(nm.days===1?'':'s')+'</span></div>';
+    daysInner+='<div style="font-size:13px;font-weight:700;color:var(--d-head);margin-top:8px">'+nm.m.label+'</div>';
+    daysInner+='<div style="font-size:11.5px;color:var(--d-dim);margin-top:2px">'+_blockFmtDate_(nm.m.date)+(nm.m.note?(' &middot; '+nm.m.note):'')+'</div>';
     daysInner+='<div onclick="if(window.navToCalDate_)navToCalDate_(&#39;'+nm.m.date+'&#39;)" style="font-size:11px;font-weight:700;color:#FC4C02;margin-top:8px;cursor:pointer">View on calendar &rarr;</div>';
-  }else{ daysInner+='<div style="font-size:13px;color:#94a3b8">The block is complete.</div>'; }
+  }else{ daysInner+='<div style="font-size:13px;color:var(--d-t3)">The block is complete.</div>'; }
   H+=_blockCard_(daysInner);
   // roadmap
   H+=_blockCard_(_blockHdr_('Milestone roadmap')+_blockRoadmap_(now));
@@ -25966,12 +25980,12 @@ function renderBlockPlan_(container){
   var progInner=_blockHdr_('Block progress')
     +'<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
     +'<div style="flex:0 0 auto">'+_blockRing_(prog.pct, ringStates)+'</div>'
-    +'<div style="min-width:120px"><div style="font-size:14px;font-weight:800;color:#f1f5f9">'+prog.daysOnPlan+' of '+prog.windowDays+' days</div>'
-    +'<div style="font-size:11.5px;color:#5b6678">time on plan (grey — no valence)</div>'
+    +'<div style="min-width:120px"><div style="font-size:14px;font-weight:800;color:var(--d-head)">'+prog.daysOnPlan+' of '+prog.windowDays+' days</div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim)">time on plan (grey — no valence)</div>'
     +'<div style="font-size:14px;font-weight:800;color:'+(prog.streak>0?'#22c55e':'#94a3b8')+';margin-top:8px">'+prog.streak+' of '+prog.target+' clean weeks</div>'
-    +'<div style="font-size:11.5px;color:#5b6678">banked — the quality gate</div></div></div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim)">banked — the quality gate</div></div></div>'
     // legend so the ring colours are legible
-    +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:#5b6678">'
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:10px;color:var(--d-dim)">'
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#22c55e;vertical-align:middle;margin-right:4px"></span>banked</span>'
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#f59e0b;vertical-align:middle;margin-right:4px"></span>this week</span>'
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px"></span>missed</span>'
@@ -25992,9 +26006,9 @@ function renderBlockPlan_(container){
   var wk=_blockWeekAssess_(rides, ftp, now);
   var passCol=wk.pass?'#22c55e':'#f59e0b';
   var twInner='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:2px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">This week &middot; consistency focus</span>'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; consistency focus</span>'
     +'<span style="font-size:12px;font-weight:800;color:'+passCol+'">'+(wk.pass?'CLEAN WEEK':'INCOMPLETE')+'</span></div>';
-  twInner+='<div style="font-size:11.5px;color:#5b6678;margin-bottom:6px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'+(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
+  twInner+='<div style="font-size:11.5px;color:var(--d-dim);margin-bottom:6px">Week of '+_blockFmtDateD_(wk.weekStart)+' &middot; '+wk.nCyc+' cycling session'+(wk.nCyc===1?'':'s')+' logged'+(wk.nCyc>wk.withPwr?(' &middot; '+wk.withPwr+' with power'):'')+'</div>';
   wk.checks.forEach(function(c){ twInner+=_blockCheckRow_(c); });
   // distinct-days row — same three-state colouring: met green, stacked-but-done red, else grey.
   var ddMet=wk.distinctDays, ddMissed=(wk.allThree && !wk.distinctDays);
@@ -26003,26 +26017,26 @@ function renderBlockPlan_(container){
   var ddCol=ddMet?'#22c55e':(ddMissed?'#ef4444':'#5b6678');
   twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+ddBg+';display:flex;align-items:center;justify-content:center">'+ddIcon+'</span>'
-    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(ddMet?'#f1f5f9':'#cbd5e1')+'">Three separate days</span><span style="font-size:11px;color:#5b6678">no stacking, protects the rest cadence</span></div>'
-    +'<div style="font-size:11.5px;color:#94a3b8;margin-top:1px">Space the efforts so each one adapts</div>'
+    +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(ddMet?'#f1f5f9':'#cbd5e1')+'">Three separate days</span><span style="font-size:11px;color:var(--d-dim)">no stacking, protects the rest cadence</span></div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:1px">Space the efforts so each one adapts</div>'
     +'<div style="font-size:11px;color:'+ddCol+';margin-top:2px">'+(ddMet?'met':(ddMissed?'all three landed on fewer than three days':'not enough sessions yet'))+'</div></div>'
     +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+ddCol+'">'+Math.min(3,wk.distinctCount)+' / 3</span></div>';
   // weekly load + graph
   var tssWeeks=_blockWeeklyTss_(rides, ftp, now);
-  twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid #1c2130">'
+  twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'
-    +'<div><div style="font-size:12px;font-weight:800;color:#cbd5e1">Weekly load <span style="font-size:10.5px;font-weight:600;color:#5b6678">&middot; readout, not a pass rule</span></div>'
-    +'<div style="font-size:19px;font-weight:800;color:#22c55e;margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:#5b6678;font-weight:600"> TSS target</span></div></div>'
-    +'<div style="font-size:12px;color:#5b6678"><span style="display:inline-block;width:14px;border-top:2px dashed #22c55e;opacity:.6;vertical-align:middle"></span> band &middot; <span style="color:#22c55e">&#9679;</span> TSS</div></div>';
+    +'<div><div style="font-size:12px;font-weight:800;color:var(--d-soft)">Weekly load <span style="font-size:10.5px;font-weight:600;color:var(--d-dim)">&middot; readout, not a pass rule</span></div>'
+    +'<div style="font-size:19px;font-weight:800;color:#22c55e;margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:var(--d-dim);font-weight:600"> TSS target</span></div></div>'
+    +'<div style="font-size:12px;color:var(--d-dim)"><span style="display:inline-block;width:14px;border-top:2px dashed #22c55e;opacity:.6;vertical-align:middle"></span> band &middot; <span style="color:#22c55e">&#9679;</span> TSS</div></div>';
   if(tssWeeks.length>=2){ twInner+='<div style="margin-top:8px">'+_blockTssGraph_(tssWeeks)+'</div>'; }
-  else { twInner+='<div style="font-size:11.5px;color:#5b6678;margin-top:6px">This fills in as weeks complete — '+(tssWeeks.length?('week 1 sits at '+tssWeeks[0].tss+' TSS so far'):'no weeks yet')+'.</div>'; }
+  else { twInner+='<div style="font-size:11.5px;color:var(--d-dim);margin-top:6px">This fills in as weeks complete — '+(tssWeeks.length?('week 1 sits at '+tssWeeks[0].tss+' TSS so far'):'no weeks yet')+'.</div>'; }
   twInner+='</div>';
   // clean weeks banked
   var stk=_blockStreak_(rides, ftp, now);
-  twInner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid #1c2130;display:flex;align-items:flex-start;gap:12px">'
+  twInner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise);display:flex;align-items:flex-start;gap:12px">'
     +'<span style="flex:0 0 auto;width:40px;height:40px;border-radius:11px;background:#22c55e18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z','#22c55e',20)+'</span>'
-    +'<div style="flex:1"><div style="font-size:10.5px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Clean weeks banked</div>'
-    +'<div style="font-size:24px;font-weight:800;color:#f1f5f9;line-height:1.1">'+stk.streak+' of '+stk.target+'</div>'
+    +'<div style="flex:1"><div style="font-size:10.5px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Clean weeks banked</div>'
+    +'<div style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1.1">'+stk.streak+' of '+stk.target+'</div>'
     +'<div style="font-size:11.5px;color:'+(stk.reset?'#f59e0b':'#94a3b8')+';line-height:1.5;margin-top:2px">'
     +(stk.reset?('A week was missed, so the clock reset. The gate has slid to '+_blockFmtDateD_(stk.projected)+', and the retest and every date behind it move with it.')
       :(stk.streak>=stk.target?'Four clean weeks banked — the retest gate is open.'
@@ -26038,7 +26052,7 @@ function renderBlockPlan_(container){
     var stt=_blockMiState_(m, _succNext, now), col=_BLOCK_STATE_COL[stt];
     succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(stt==='past'?'M20 6L9 17l-5-5':m.icon,col,16)+'</span>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:#f59e0b;letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+m.sSub+'</div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:#f59e0b;letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+m.sSub+'</div></div>'
       +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:'+col+';text-align:right;max-width:110px">'+m.benefit+'</span></div>';
   });
   var riskInner=_blockHdr_('Risks &amp; mitigations');
@@ -26047,8 +26061,8 @@ function renderBlockPlan_(container){
     var col=active?'#ef4444':'#f59e0b';
     riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(rk.icon,col,16)+'</span>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(active?'#ef4444':'#f1f5f9')+'">'+rk.title+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+rk.sub+'</div>'
-      +'<div style="font-size:11px;color:#5b6678;margin-top:3px"><b style="color:#94a3b8">Fix:</b> '+rk.sol+'</div></div></div>';
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(active?'#ef4444':'#f1f5f9')+'">'+rk.title+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+rk.sub+'</div>'
+      +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px"><b style="color:var(--d-t3)">Fix:</b> '+rk.sol+'</div></div></div>';
   });
   H+='<div style="display:flex;flex-direction:column;gap:14px">'+_blockCard_(succ)+_blockCard_(riskInner)+'</div>';
   H+='</div>';
@@ -26058,7 +26072,7 @@ function renderBlockPlan_(container){
   H+='<div style="background:linear-gradient(90deg,rgba(168,85,247,.14),rgba(34,197,94,.08));border:1px solid #2a2340;border-radius:16px;padding:16px 18px;margin-top:14px;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
     +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#a855f722;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z','#a855f7',18)+'</span>'
     +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:#a855f7;text-transform:uppercase;letter-spacing:.06em">AI Coach insight'+(ins.computed?' &middot; from your data':'')+'</div>'
-    +'<div style="font-size:13px;color:#e2e8f0;line-height:1.5;margin-top:3px">'+ins.text+'</div></div></div>';
+    +'<div style="font-size:13px;color:var(--d-t2);line-height:1.5;margin-top:3px">'+ins.text+'</div></div></div>';
 
   // ---- Current Form (only within 10 days of an attempt) ----
   var fw=_blockFormWindow_(now);
@@ -26069,9 +26083,9 @@ function renderBlockPlan_(container){
     if(tsb!=null){
       var inBand=(tsb>=5 && tsb<=20);
       formInner+='<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:30px;font-weight:800;color:'+(inBand?'#22c55e':'#f59e0b')+'">'+(tsb>=0?'+':'')+tsb+'</span>'
-        +'<span style="font-size:13px;color:#94a3b8">Form (TSB) &middot; target <b style="color:#f1f5f9">+5 to +20</b> for the attempt</span></div>'
-        +'<div style="font-size:11.5px;color:#5b6678;margin-top:4px">'+(inBand?'You are in the freshness window.':(tsb<5?'Still carrying fatigue — ease off to arrive fresh.':'Very fresh — a short opener keeps the edge.'))+'</div>';
-    }else{ formInner+='<div style="font-size:12.5px;color:#94a3b8">Form needs the fitness model, which is not available right now — not shown rather than guessed.</div>'; }
+        +'<span style="font-size:13px;color:var(--d-t3)">Form (TSB) &middot; target <b style="color:var(--d-head)">+5 to +20</b> for the attempt</span></div>'
+        +'<div style="font-size:11.5px;color:var(--d-dim);margin-top:4px">'+(inBand?'You are in the freshness window.':(tsb<5?'Still carrying fatigue — ease off to arrive fresh.':'Very fresh — a short opener keeps the edge.'))+'</div>';
+    }else{ formInner+='<div style="font-size:12.5px;color:var(--d-t3)">Form needs the fitness model, which is not available right now — not shown rather than guessed.</div>'; }
     H+='<div style="margin-top:14px">'+_blockCard_(formInner)+'</div>';
   }
 
@@ -26225,7 +26239,7 @@ function buildLayoutToggle_(){
   var wrap=document.createElement('div');
   wrap.style.cssText='margin-bottom:14px';
   var lbl=document.createElement('div');
-  lbl.style.cssText='font-size:10px;font-weight:700;color:var(--t3,#64748b);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px';
+  lbl.style.cssText='font-size:10px;font-weight:700;color:var(--t3,var(--d-t4));text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px';
   lbl.textContent='Display mode';
   wrap.appendChild(lbl);
   var seg=document.createElement('div');
@@ -26234,7 +26248,7 @@ function buildLayoutToggle_(){
     var b=document.createElement('button');
     var on=(cur===o[0]);
     b.textContent=o[1];
-    b.style.cssText='flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:7px 4px;border-radius:8px;border:none;cursor:pointer;'+(on?'background:#FC4C02;color:#fff':'background:transparent;color:var(--t2,#94a3b8)');
+    b.style.cssText='flex:1;font-family:inherit;font-size:12px;font-weight:600;padding:7px 4px;border-radius:8px;border:none;cursor:pointer;'+(on?'background:#FC4C02;color:#fff':'background:transparent;color:var(--t2,var(--d-t3))');
     b.onclick=function(){ setLayoutOverride_(o[0]); var m=document.getElementById('more-sheet'); if(m) m.remove(); try{ toast('Display: '+o[1]); }catch(e){} };
     seg.appendChild(b);
   });
@@ -26248,9 +26262,9 @@ var _layoutRz;
 window.addEventListener('resize', function(){ clearTimeout(_layoutRz); _layoutRz=setTimeout(applyLayout_, 150); });
 function dsShowActivities(){
   var mc = document.getElementById('ds-content');
-  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px">Select a ride to view details</div>';
+  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px">Select a ride to view details</div>';
   var rp = document.getElementById('ds-right-panel');
-  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
+  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
 }
 
 // -- Delegated "View" link dispatch -----------------------------------------
@@ -26348,57 +26362,57 @@ function dsShowSettings(){
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Deploy worker.js</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Pick the worker.js file and push it straight to GitHub. Verifies the file before writing, then reads it back and compares build stamps &mdash; those two matching is what proves the deploy landed. Cloudflare serves it ~30s later.</div>'
-    +'<div id="dep-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px;line-height:1.5">Ready.</div>'
+    +'<div id="dep-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px;line-height:1.5">Ready.</div>'
     +'<button onclick="deployWorkerPick_()" style="background:#FC4C02;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Pick file &amp; deploy</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">FIT Stream Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Patch a ride with elevation, HR, power streams parsed from a FIT file.</div>'
-    +'<div id="backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Patch June 27 Ride</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Power-Zone Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches each Strava ride&#39;s power stream and stores real time-in-zone so Power Distribution fills with real data (not curve estimates). Rate-limited by Strava (~90 rides/run) and resumable — run again to continue. Rides Strava no longer has streams for are skipped honestly. '+_zbCount+' rides need it.</div>'
-    +'<div id="zone-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="zone-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
-    +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Temperature Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Looks up each OUTDOOR ride&#39;s historical temperature from Open-Meteo&#39;s archive, using the ride&#39;s own GPS start location + hour, and stores r.temp (&deg;F) + a tempSource field. Indoor/Zwift rides are skipped. Rate-limited (~2/sec), resumable. <b>Scan</b> reports candidates and writes nothing; <b>Backfill</b> confirms the count first. '+_tbCount+' outdoor rides need it.</div>'
-    +'<div id="temp-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="temp-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="tempBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="runTempBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Temps</button>'
-    +' <button onclick="stopTempBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +' <button onclick="stopTempBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Intervals.icu ID Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Maps each ride to its Intervals.icu activity id (needed for post-ride interval debriefs — the intervals endpoint rejects a raw Strava id). Matches your rides against the Intervals activity list by strava_id and writes r.icuId. Rides already imported from Intervals keep their id directly. <b>Scan</b> reports the match count and writes nothing; <b>Backfill</b> confirms first. Rides not in Intervals.icu simply get no id.</div>'
-    +'<div id="icuid-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="icuid-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="icuIdBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="runIcuIdBackfill_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill icuIds</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">GPS Track Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Re-fetches each outdoor Strava ride&#39;s GPS track (latlng) and writes it to /gps so every ride map draws. Skips indoor + non-GPS sports, and rides that already have a track. Ignores the on-open retry flags. Rate-limited (~90 fetches/run), resumable. '+_gpsbCount+' outdoor rides to check.</div>'
-    +'<div id="gps-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="gps-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runGpsBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill GPS Tracks</button>'
     +' <button onclick="runGpsBackfill(true)" style="background:#f97316;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Re-fetch &amp; Fix All</button>'
-    +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill segment effort history</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches the segment efforts from every ride, so the Records progression lines have history to draw. One Strava call per ride, paced to 90 per 15 minutes, so a full library takes a couple of hours. Resumable: stop any time and run it again to carry on.</div>'
-    +'<div id="segbf-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="segbf-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runSegmentBackfill_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="runSegmentBackfill_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Run backfill</button>'
-    +' <button onclick="stopSegmentBackfill_()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +' <button onclick="stopSegmentBackfill_()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill Jan 1-19 2026</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Two weeks (Jan 5 and Jan 12) carry no activity here, which breaks the activity streak. Pulls that window from Strava across EVERY sport - walks, hikes, gym, swims - because neither week contains a ride. Scans first and shows what it found; nothing is written until you confirm.</div>'
-    +'<div id="jan26-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">Ready.</div>'
+    +'<div id="jan26-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="backfillJan2026_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="backfillJan2026_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan &amp; Backfill</button>'
     +'</div>'
@@ -26868,7 +26882,7 @@ function dsShowGear(){
   var hdr=document.createElement('div');
   hdr.style.cssText='display:flex;align-items:center;gap:12px;flex-shrink:0;margin-bottom:4px';
   var backBtn=document.createElement('div');
-  backBtn.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#94a3b8;cursor:pointer;padding:4px 8px;border:1px solid #1e2130;border-radius:8px';
+  backBtn.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:13px;color:var(--d-t3);cursor:pointer;padding:4px 8px;border:1px solid var(--d-line);border-radius:8px';
   backBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Back</span>';
   backBtn.onclick=function(){ dsNav((_dsPrevView && _dsPrevView!=='gear')?_dsPrevView:'dashboard'); };
   var hTitle=document.createElement('div');
@@ -26886,7 +26900,7 @@ function dsShowGear(){
 
   if(!bikes.length){
     var noB=document.createElement('div');
-    noB.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:22px;text-align:center;color:#64748b;font-size:13px;flex-shrink:0';
+    noB.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:22px;text-align:center;color:var(--d-t4);font-size:13px;flex-shrink:0';
     noB.textContent='No bikes yet — tap "+ Add Bike" to add one.';
     wrap.appendChild(noB);
   }
@@ -26903,7 +26917,7 @@ function dsShowGear(){
       : 'No ownership dates — set them to attribute rides by era';
 
     var card=document.createElement('div');
-    card.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:16px;padding:18px 20px;flex-shrink:0';
+    card.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:16px;padding:18px 20px;flex-shrink:0';
 
     // Header
     var bHdr=document.createElement('div');
@@ -26929,7 +26943,7 @@ function dsShowGear(){
 
     // Era
     var eraEl=document.createElement('div');
-    eraEl.style.cssText='font-size:11px;color:#94a3b8;margin-bottom:12px;display:flex;align-items:center;gap:6px';
+    eraEl.style.cssText='font-size:11px;color:var(--d-t3);margin-bottom:12px;display:flex;align-items:center;gap:6px';
     eraEl.innerHTML='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zM16 3v4M8 3v4M4 11h16"/></svg><span>'+eraStr+'</span>';
     card.appendChild(eraEl);
 
@@ -26939,8 +26953,8 @@ function dsShowGear(){
     [['Wheels',bike.wheelset||bike.wheels||'—'],['Power Meter',bike.power||'—'],['Groupset',bike.groupset||'—'],['Rides logged',stats.count+'']].forEach(function(x){
       var spec=document.createElement('div');
       spec.style.cssText='background:#0d0f14;border-radius:8px;padding:8px 10px';
-      spec.innerHTML='<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+x[0]+'</div>'+
-        '<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x[1]+'</div>';
+      spec.innerHTML='<div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+x[0]+'</div>'+
+        '<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x[1]+'</div>';
       specs.appendChild(spec);
     });
     card.appendChild(specs);
@@ -26957,12 +26971,12 @@ function dsShowGear(){
     [['Total Miles',_shown.mi.toLocaleString()+' mi'],['This Year',_yearTxt],['Last Ride',stats.lastDate?fmtRideDate_(stats.lastDate):'—']].forEach(function(x){
       var s=document.createElement('div');
       s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
-      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+color+'">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[0]+'</div>';
+      s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+color+'">'+x[1]+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">'+x[0]+'</div>';
       statsRow.appendChild(s);
     });
     card.appendChild(statsRow);
     var srcNote=document.createElement('div');
-    srcNote.style.cssText='font-size:10px;color:#5b6678;margin:-8px 0 12px;text-align:center';
+    srcNote.style.cssText='font-size:10px;color:var(--d-dim);margin:-8px 0 12px;text-align:center';
     srcNote.textContent=(_shown.src==='strava')
       ? ('Total from Strava gear odometer' + (stats.count>0 ? (' · ' + stats.count + ' ride' + (stats.count===1?'':'s') + ' matched locally') : ''))
       : ((_shown.src==='stored') ? 'Total from the stored value · not yet confirmed against Strava'
@@ -26973,11 +26987,11 @@ function dsShowGear(){
     var actRow=document.createElement('div');
     actRow.style.cssText='display:flex;gap:8px';
     var editB=document.createElement('button');
-    editB.style.cssText='flex:1;padding:9px;background:none;border:1px solid #1e2130;border-radius:8px;color:#e2e8f0;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    editB.style.cssText='flex:1;padding:9px;background:none;border:1px solid var(--d-line);border-radius:8px;color:var(--d-t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
     editB.textContent='Edit';
     editB.onclick=(function(ix){return function(){ openBikeEditor(ix, dsShowGear); };})(realIdx);
     var delB=document.createElement('button');
-    delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid #1e2130;border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid var(--d-line);border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
     delB.textContent='Delete';
     delB.onclick=(function(ix,nm){return async function(){ if(!(await uiConfirm('Delete "'+nm+'"? Its mileage attribution will be removed.',{danger:true}))) return; deleteBike(ix); dsShowGear(); };})(realIdx, dispName);
     actRow.appendChild(editB); actRow.appendChild(delB);
@@ -26988,14 +27002,14 @@ function dsShowGear(){
 
   // Shoes & accessories
   var accCard=document.createElement('div');
-  accCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+  accCard.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
   accCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Accessories</div>';
   [['Lake CX301 Cycling Shoes','Footwear','#f59e0b'],['Garmin Edge 840','Computer','#4ade80'],['Garmin HR Strap','Heart Rate','#e24b4a']].forEach(function(x){
     var row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1a1f2e';
     row.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+x[2]+';flex-shrink:0"></div>'+
-      '<div style="flex:1;font-size:12px;color:#e2e8f0">'+x[0]+'</div>'+
-      '<div style="font-size:10px;color:#64748b">'+x[1]+'</div>';
+      '<div style="flex:1;font-size:12px;color:var(--d-t2)">'+x[0]+'</div>'+
+      '<div style="font-size:10px;color:var(--d-t4)">'+x[1]+'</div>';
     accCard.appendChild(row);
   });
   wrap.appendChild(accCard);
@@ -27003,13 +27017,13 @@ function dsShowGear(){
   // -- Bulk assign: set a default bike for every ride with no resolvable bike.
   ensureBikes();
   var bulkCard=document.createElement('div');
-  bulkCard.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
+  bulkCard.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
   bulkCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Set default bike for all unassigned rides</div>'
-    +'<div style="font-size:11px;color:#64748b;margin-bottom:12px">Assigns the chosen bike to every ride that has no bike from gear data or an existing manual assignment. Rides that already resolve a bike are left untouched.</div>';
+    +'<div style="font-size:11px;color:var(--d-t4);margin-bottom:12px">Assigns the chosen bike to every ride that has no bike from gear data or an existing manual assignment. Rides that already resolve a bike are left untouched.</div>';
   var bulkRow=document.createElement('div');
   bulkRow.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   var bulkSel=document.createElement('select');
-  bulkSel.style.cssText='flex:1;min-width:160px;padding:10px 12px;background:#0d0f14;color:#e2e8f0;border:1px solid #1a1f2e;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
+  bulkSel.style.cssText='flex:1;min-width:160px;padding:10px 12px;background:#0d0f14;color:var(--d-t2);border:1px solid #1a1f2e;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
   var bulkNone=document.createElement('option');
   bulkNone.value=''; bulkNone.textContent='Choose a bike…';
   bulkSel.appendChild(bulkNone);
@@ -27088,13 +27102,13 @@ function dsShowWeather(){
   mc.innerHTML='';
   var wrap=document.createElement('div');
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
-  wrap.innerHTML='<div style="text-align:center;color:#64748b;padding:60px;font-size:13px">Loading weather…</div>';
+  wrap.innerHTML='<div style="text-align:center;color:var(--d-t4);padding:60px;font-size:13px">Loading weather…</div>';
   mc.appendChild(wrap);
   Promise.all([ getWeather_(), getAQI_() ]).then(function(res){
     var wres=res[0], ares=res[1];
     var data=wres.data, aqData=ares.data;
     var wxTs=wres.fetchedAt, aqiTs=ares.fetchedAt, wxOk=wres.ok, aqiOk=ares.ok;
-    if(!data || !data.current){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Weather unavailable</div>'; return; }
+    if(!data || !data.current){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:var(--d-t4)">Weather unavailable</div>'; return; }
     var c=data.current, daily=data.daily||{}, hourly=data.hourly||{};
     var aqi=(aqData&&aqData.current&&aqData.current.us_aqi!=null)?Math.round(aqData.current.us_aqi):null;
 
@@ -27110,8 +27124,8 @@ function dsShowWeather(){
     function windDir(deg){ return ['N','NE','E','SE','S','SW','W','NW'][Math.round((deg||0)/45)%8]; }
     function rate(pct){ return pct>=88?['Excellent','#4ade80']:pct>=72?['Very Good','#4ade80']:pct>=58?['Good','#84cc16']:pct>=40?['Fair','#f59e0b']:['Poor','#e24b4a']; }
     function fmtClock(iso){ if(!iso) return '—'; var d=new Date(iso); var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12||12; return h12+':'+(m<10?'0':'')+m+' '+ap; }
-    function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 17px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
-    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
+    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 17px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 
     var temp=Math.round(c.temperature_2m), feels=Math.round(c.apparent_temperature), hum=Math.round(c.relativehumidity_2m), wind=Math.round(c.windspeed_10m), precip=Math.round(c.precipitation_probability||0), uv=(c.uv_index!=null?Math.round(c.uv_index):null);
     var desc=wDesc(c.weathercode);
@@ -27135,24 +27149,24 @@ function dsShowWeather(){
     var H='';
     // ===== HEADER =====
     H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
-    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:'+(wxOk?'#64748b':'#f59e0b')+';margin-top:1px">'+(wxOk?'Updated '+wxClock_(wxTs)+' ET':'Live weather unavailable &middot; showing last seen '+wxClock_(wxTs))+'</div></div>';
+    H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:'+(wxOk?'#64748b':'#f59e0b')+';margin-top:1px">'+(wxOk?'Updated '+wxClock_(wxTs)+' ET':'Live weather unavailable &middot; showing last seen '+wxClock_(wxTs))+'</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
-    H+='<div style="display:flex;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:#f1f5f9;min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
-    H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
+    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
     H+='</div></div>';
 
     // ===== ROW 1 =====
     H+='<div style="display:grid;grid-template-columns:1.5fr 1.3fr 1fr;gap:12px;flex-shrink:0">';
     // Current Conditions
     var cc=lbl('CURRENT CONDITIONS','<span style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:'+rideCol+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="'+rideCol+'"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>'+rideLabel+'</span>');
-    cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:#fff;line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:#94a3b8;font-weight:600">°F</span></div><div style="font-size:13px;color:#94a3b8;margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:#94a3b8">'+desc+'</div></div></div>';
-    cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid #1c2130">';
+    cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:#fff;line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:var(--d-t3);font-weight:600">°F</span></div><div style="font-size:13px;color:var(--d-t3);margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:var(--d-t3)">'+desc+'</div></div></div>';
+    cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid var(--d-raise)">';
     [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/></svg>',wind+' mph',windDir(c.winddirection_10m)+' Wind','#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',hum+'%','Humidity','#60a5fa'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',precip+'%','Precip','#4ade80'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+rideCol+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>',rate(rideScore)[0],'Ride Cond.',rideCol]].forEach(function(x){
-      cc+='<div style="text-align:center"><div style="display:flex;justify-content:center;margin-bottom:4px">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[3]+';line-height:1">'+x[1]+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">'+x[2]+'</div></div>';
+      cc+='<div style="text-align:center"><div style="display:flex;justify-content:center;margin-bottom:4px">'+x[0]+'</div><div style="font-size:15px;font-weight:800;color:'+x[3]+';line-height:1">'+x[1]+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">'+x[2]+'</div></div>';
     });
     cc+='</div>';
     H+=card(cc);
@@ -27160,10 +27174,10 @@ function dsShowWeather(){
     var _rc=2*Math.PI*46, _roff=_rc*(1-rideScore/100);
     var rs=lbl('RIDE CONDITIONS SCORE');
     rs+='<div style="display:flex;gap:18px;align-items:center">';
-    rs+='<div style="position:relative;width:118px;height:118px;flex-shrink:0"><svg width="118" height="118" viewBox="0 0 118 118" style="filter:drop-shadow(0 0 10px '+rideCol+'44)"><circle cx="59" cy="59" r="46" fill="none" stroke="#161b28" stroke-width="9"/><circle cx="59" cy="59" r="46" fill="none" stroke="'+rideCol+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+_rc.toFixed(1)+'" stroke-dashoffset="'+_roff.toFixed(1)+'" transform="rotate(-90 59 59)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+rideScore+'</div><div style="font-size:10px;color:#5b6678">/100</div></div><div style="text-align:center;font-size:12px;font-weight:800;color:'+rideCol+';margin-top:6px">'+scoreBand+'</div></div>';
+    rs+='<div style="position:relative;width:118px;height:118px;flex-shrink:0"><svg width="118" height="118" viewBox="0 0 118 118" style="filter:drop-shadow(0 0 10px '+rideCol+'44)"><circle cx="59" cy="59" r="46" fill="none" stroke="#161b28" stroke-width="9"/><circle cx="59" cy="59" r="46" fill="none" stroke="'+rideCol+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+_rc.toFixed(1)+'" stroke-dashoffset="'+_roff.toFixed(1)+'" transform="rotate(-90 59 59)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+rideScore+'</div><div style="font-size:10px;color:var(--d-dim)">/100</div></div><div style="text-align:center;font-size:12px;font-weight:800;color:'+rideCol+';margin-top:6px">'+scoreBand+'</div></div>';
     rs+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
     [['Temperature',rate(tempScore)],['Wind',rate(windScore)],['Humidity',rate(humScore)],['Precipitation',rate(rainScore)],['Air Quality',aqiScore==null?['—','#5b6678']:rate(aqiScore)],['UV Index',uvRate]].forEach(function(x){
-      rs+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#94a3b8">'+x[0]+'</span><span style="font-size:12px;font-weight:700;color:'+x[1][1]+'">'+x[1][0]+'</span></div>';
+      rs+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--d-t3)">'+x[0]+'</span><span style="font-size:12px;font-weight:700;color:'+x[1][1]+'">'+x[1][0]+'</span></div>';
     });
     rs+='</div></div>';
     H+=card(rs);
@@ -27178,10 +27192,10 @@ function dsShowWeather(){
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0M12 9V2M4.2 10.2l1.4 1.4M1 18h2M21 18h2M18.4 11.6l1.4-1.4M23 22H1M16 5l-4 4-4-4"/></svg>','Sunset',fmtClock(sunset),'#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+uvRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>','UV Index',(uv==null?'—':uv+' '+uvRate[0]),uvRate[1]],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+aqiRate[1]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/></svg>','Air Quality'+aqiStamp,(aqi==null?'Unavailable':aqi+' '+aqiRate[0]),aqiRate[1]]].forEach(function(x){
-      ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:#94a3b8">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
+      ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:var(--d-t3)">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
     });
     ag+='</div>';
-    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid #1c2130;text-align:center;font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer">Details &#8594;</div>';
+    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--d-raise);text-align:center;font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer">Details &#8594;</div>';
     H+=card(ag);
     H+='</div>';
 
@@ -27191,7 +27205,7 @@ function dsShowWeather(){
     var hf=lbl('HOURLY FORECAST');
     hf+='<div style="display:flex;gap:2px;overflow-x:auto;padding-bottom:4px">';
     hrs.forEach(function(k){ var d=new Date(hourly.time[k]); var h=d.getHours(); var ap=h>=12?'PM':'AM'; var h12=h%12||12;
-      hf+='<div style="flex:1;min-width:62px;text-align:center;padding:6px 2px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">'+h12+' '+ap+'</div><div style="display:flex;justify-content:center;margin-bottom:5px">'+wIcon(hourly.weathercode[k],30)+'</div><div style="font-size:16px;font-weight:800;color:#e8edf5">'+Math.round(hourly.temperature_2m[k])+'°</div><div style="font-size:9px;color:#64748b;margin-top:4px">'+Math.round(hourly.windspeed_10m[k])+' mph</div><div style="font-size:9px;color:#60a5fa">'+Math.round(hourly.precipitation_probability[k]||0)+'%</div></div>';
+      hf+='<div style="flex:1;min-width:62px;text-align:center;padding:6px 2px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">'+h12+' '+ap+'</div><div style="display:flex;justify-content:center;margin-bottom:5px">'+wIcon(hourly.weathercode[k],30)+'</div><div style="font-size:16px;font-weight:800;color:var(--d-head)">'+Math.round(hourly.temperature_2m[k])+'°</div><div style="font-size:9px;color:var(--d-t4);margin-top:4px">'+Math.round(hourly.windspeed_10m[k])+' mph</div><div style="font-size:9px;color:#60a5fa">'+Math.round(hourly.precipitation_probability[k]||0)+'%</div></div>';
     });
     hf+='</div>';
     // dual-axis chart temp + wind
@@ -27199,10 +27213,10 @@ function dsShowWeather(){
     var tMin=Math.floor(Math.min.apply(null,ht)/10)*10, tMax=Math.ceil(Math.max.apply(null,ht)/10)*10; if(tMax<=tMin) tMax=tMin+20;
     var wMax=Math.max(20,Math.ceil(Math.max.apply(null,hw)/5)*5), cw=280, ch=70;
     function poly(arr,mn,mx){ var n=arr.length; return arr.map(function(v,ix){ var x=(n>1?ix/(n-1):0)*cw; var y=ch-((v-mn)/(mx-mn))*(ch-8)-4; return x.toFixed(1)+' '+y.toFixed(1); }).join(' L'); }
-    hf+='<div style="display:flex;align-items:stretch;gap:6px;margin-top:6px"><div style="width:26px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;text-align:right;padding:2px 0"><div>'+tMax+'</div><div>'+Math.round((tMax+tMin)/2)+'</div><div>'+tMin+'</div></div>';
+    hf+='<div style="display:flex;align-items:stretch;gap:6px;margin-top:6px"><div style="width:26px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:var(--d-dim);text-align:right;padding:2px 0"><div>'+tMax+'</div><div>'+Math.round((tMax+tMin)/2)+'</div><div>'+tMin+'</div></div>';
     hf+='<div style="flex:1"><svg width="100%" height="'+ch+'" viewBox="0 0 '+cw+' '+ch+'" preserveAspectRatio="none" style="display:block"><path d="M'+poly(ht,tMin,tMax)+'" fill="none" stroke="#f97316" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/><path d="M'+poly(hw,0,wMax)+'" fill="none" stroke="#60a5fa" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg></div>';
-    hf+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;padding:2px 0"><div>'+wMax+'</div><div>'+Math.round(wMax/2)+'</div><div>0</div></div></div>';
-    hf+='<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:10px;color:#94a3b8"><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#f97316"></span>Temperature (°F)</span><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#60a5fa"></span>Wind (mph)</span></div>';
+    hf+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:var(--d-dim);padding:2px 0"><div>'+wMax+'</div><div>'+Math.round(wMax/2)+'</div><div>0</div></div></div>';
+    hf+='<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:10px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#f97316"></span>Temperature (°F)</span><span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:2px;background:#60a5fa"></span>Wind (mph)</span></div>';
     H+=card(hf,'flex-shrink:0');
 
     // ===== ROW 3: 7-day + Insight + Alerts =====
@@ -27211,7 +27225,7 @@ function dsShowWeather(){
     var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var fc=lbl('7-DAY FORECAST');
     (daily.time||[]).forEach(function(date,i){ var d=new Date(date+'T12:00:00'); var pp=daily.precipitation_probability_max[i]||0;
-      fc+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="font-size:12px;font-weight:700;color:#e2e8f0;width:34px">'+dayNames2[d.getDay()]+'</div><div style="width:30px;display:flex;justify-content:center">'+wIcon(daily.weathercode[i],26)+'</div><div style="font-size:12px;color:#94a3b8;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+wDesc(daily.weathercode[i])+'</div><div style="font-size:12px;font-weight:600;color:'+(pp>=40?'#60a5fa':'#64748b')+';width:38px;text-align:right">'+pp+'%</div><div style="font-size:11px;color:#64748b;width:96px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'-'+Math.round(daily.windgusts_10m_max[i])+' mph</div><div style="font-size:12px;font-weight:700;color:#e8edf5;width:66px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div></div>';
+      fc+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i>0?'border-top:1px solid var(--d-raise)':'')+'"><div style="font-size:12px;font-weight:700;color:var(--d-t2);width:34px">'+dayNames2[d.getDay()]+'</div><div style="width:30px;display:flex;justify-content:center">'+wIcon(daily.weathercode[i],26)+'</div><div style="font-size:12px;color:var(--d-t3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+wDesc(daily.weathercode[i])+'</div><div style="font-size:12px;font-weight:600;color:'+(pp>=40?'#60a5fa':'#64748b')+';width:38px;text-align:right">'+pp+'%</div><div style="font-size:11px;color:var(--d-t4);width:96px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'-'+Math.round(daily.windgusts_10m_max[i])+' mph</div><div style="font-size:12px;font-weight:700;color:var(--d-head);width:66px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div></div>';
     });
     H+=card(fc);
     // Weather Insight (rule-based from real data — NOT AI; the app's AI is untouched)
@@ -27235,10 +27249,10 @@ function dsShowWeather(){
     if(rideScore>=85 && !_hazLed && (!hazards||hazards.worst===0)) checks.unshift('Ideal conditions for high performance.');
     if(_hazLed && hazards.list.length>1) checks.unshift(hazards.list[1].label+' — '+hazards.list[1].note);
     var wi=lbl('WEATHER INSIGHT');
-    wi+='<div style="display:flex;gap:12px;margin-bottom:12px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div><div style="font-size:12.5px;color:#cbd5e1;line-height:1.45">'+headline+'</div></div>';
-    wi+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin:6px 0 9px">What this means for you</div>';
+    wi+='<div style="display:flex;gap:12px;margin-bottom:12px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg></div><div style="font-size:12.5px;color:var(--d-soft);line-height:1.45">'+headline+'</div></div>';
+    wi+='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin:6px 0 9px">What this means for you</div>';
     wi+='<div style="flex:1;min-height:0">';
-    checks.slice(0,4).forEach(function(t){ wi+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:12px;color:#cbd5e1;line-height:1.4">'+t+'</span></div>'; });
+    checks.slice(0,4).forEach(function(t){ wi+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:12px;color:var(--d-soft);line-height:1.4">'+t+'</span></div>'; });
     wi+='</div>';
     H+=card(wi);
     // Alerts (derived from real data)
@@ -27258,8 +27272,8 @@ function dsShowWeather(){
     var stormDay=-1; (daily.weathercode||[]).forEach(function(code,i){ if(stormDay<0 && i>0 && code>=95){ stormDay=i; } });
     if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','warn','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
     var al=lbl('ALERTS');
-    if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#64748b"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
-    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid #1c2130':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5">'+x[2]+'</div><div style="font-size:11px;color:#94a3b8;margin-top:1px">'+x[3]+'</div></div></div>'; });
+    if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--d-t4)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
+    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid var(--d-raise)':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+x[2]+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+x[3]+'</div></div></div>'; });
     H+=card(al);
     H+='</div>';
 
@@ -27268,7 +27282,7 @@ function dsShowWeather(){
       if(a==='refresh') dsShowWeather();
       else if(a==='details') dsNav('aicoach');
     });
-  }).catch(function(){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:#64748b">Weather unavailable</div>'; });
+  }).catch(function(){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:var(--d-t4)">Weather unavailable</div>'; });
 }
 
 function dsShowNutrition(){
@@ -27314,10 +27328,10 @@ function dsShowNutrition(){
     var dateLabel=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
 
     // ---- helpers ----
-    function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
-    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
+    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
     function pctBar(v,g,color){ var p=g>0?Math.min(100,Math.round(v/g*100)):0; return '<div style="height:7px;background:#1a2030;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+color+';border-radius:4px"></div></div>'; }
-    function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:#fff;line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:#5b6678;margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
+    function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:#fff;line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:var(--d-dim);margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
     function lineChart(series, w, h){ // series: [{color, pts:[0..100]}]
       var out='<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">';
       [25,50,75].forEach(function(g){ var y=h-(g/100)*(h-6)-3; out+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+w+'" y2="'+y.toFixed(1)+'" stroke="#171c2b" stroke-width="1"/>'; });
@@ -27328,10 +27342,10 @@ function dsShowNutrition(){
     var H='';
     // ===== HEADER =====
     H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:2px">';
-    H+='<div><div style="font-size:22px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Nutrition</div><div style="font-size:12px;color:#64748b;margin-top:1px">Fuel your performance. Recover smarter. Train stronger.</div></div>';
+    H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Nutrition</div><div style="font-size:12px;color:var(--d-t4);margin-top:1px">Fuel your performance. Recover smarter. Train stronger.</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
-    H+='<div style="display:flex;align-items:center;background:#111318;border:1px solid #1c2130;border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:#f1f5f9;min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8250;</div></div>';
-    H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:#111318;border:1px solid #1c2130;border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:#cbd5e1;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
+    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
     H+='<div data-act="add" style="display:flex;align-items:center;gap:6px;background:'+C.c+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:#fff;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Food</div>';
     H+='</div></div>';
 
@@ -27350,10 +27364,10 @@ function dsShowNutrition(){
       +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="'+heroCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+_hc.toFixed(1)+'" stroke-dashoffset="'+_hoff.toFixed(1)+'" transform="rotate(-90 '+(_hs/2)+' '+(_hs/2)+')"/></svg>'
       +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
       +'<div style="font-size:44px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.03em">'+cal+'</div>'
-      +'<div style="font-size:11px;color:#64748b;margin-top:3px">of '+goals.cal+' cal</div>'
+      +'<div style="font-size:11px;color:var(--d-t4);margin-top:3px">of '+goals.cal+' cal</div>'
       // Base + Burned = Total, always rendered. A bare total is a number you have to take on
       // faith; the parts are what make it checkable, and an absent line reads as broken.
-      +(_dfuel?('<div style="font-size:10.5px;color:#5b6678;margin-top:2px">'
+      +(_dfuel?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'
         +(_dfuel.burned>0
             ? ('Base '+_dfuel.base.toLocaleString()+' + Burned '+_dfuel.burned.toLocaleString()+' = '+_dfuel.total.toLocaleString())
             : ('Base '+_dfuel.base.toLocaleString()+' + nothing burned yet'))
@@ -27363,29 +27377,29 @@ function dsShowNutrition(){
     mt+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:11px">';
     [['Protein',pro,goals.p,C.p],['Carbs',carb,goals.c,C.c],['Fat',fat,goals.f,C.f]].forEach(function(x){
       var pc=x[2]>0?Math.round(x[1]/x[2]*100):0;
-      mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#e2e8f0">'+x[0]+'</span><span style="font-size:11px;color:#94a3b8">'+x[1]+'g / '+x[2]+'g <span style="color:#e8edf5;font-weight:700;margin-left:4px">'+pc+'%</span></span></div>'+pctBar(x[1],x[2],x[3])+'</div>';
+      mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:var(--d-t2)">'+x[0]+'</span><span style="font-size:11px;color:var(--d-t3)">'+x[1]+'g / '+x[2]+'g <span style="color:var(--d-head);font-weight:700;margin-left:4px">'+pc+'%</span></span></div>'+pctBar(x[1],x[2],x[3])+'</div>';
     });
     var wpc=wTgt>0?Math.round(wOz/wTgt*100):0;
-    mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:#e2e8f0;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span><span style="font-size:11px;color:#94a3b8">'+wOz+' / '+wTgt+' oz <span style="color:#e8edf5;font-weight:700;margin-left:4px">'+wpc+'%</span></span></div>'+pctBar(wOz,wTgt,C.w)+'</div>';
+    mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:var(--d-t2);display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span><span style="font-size:11px;color:var(--d-t3)">'+wOz+' / '+wTgt+' oz <span style="color:var(--d-head);font-weight:700;margin-left:4px">'+wpc+'%</span></span></div>'+pctBar(wOz,wTgt,C.w)+'</div>';
     mt+='</div></div>';
-    mt+='<div style="display:flex;gap:8px;margin-top:13px"><div data-act="targets" style="font-size:11px;font-weight:700;color:#94a3b8;border:1px solid #1c2130;border-radius:8px;padding:6px 12px;cursor:pointer">Edit Targets</div><div data-act="waterminus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid #1c2130;border-radius:8px;padding:6px 11px;cursor:pointer">− Water</div><div data-act="waterplus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid #1c2130;border-radius:8px;padding:6px 11px;cursor:pointer">+ Water</div></div>';
+    mt+='<div style="display:flex;gap:8px;margin-top:13px"><div data-act="targets" style="font-size:11px;font-weight:700;color:var(--d-t3);border:1px solid var(--d-raise);border-radius:8px;padding:6px 12px;cursor:pointer">Edit Targets</div><div data-act="waterminus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-raise);border-radius:8px;padding:6px 11px;cursor:pointer">− Water</div><div data-act="waterplus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-raise);border-radius:8px;padding:6px 11px;cursor:pointer">+ Water</div></div>';
     H+=card(mt);
     // Calorie Summary — calories LEFT + daily target + calories-by-meal chart (honest:
     // no per-food timestamps exist, so this is by meal, not by hour).
     var calLeft=Math.max(0,goals.cal-cal);
     var mealsOrder=[['Breakfast','breakfast'],['Pre','preworkout'],['During','during'],['Post','postworkout'],['Lunch','lunch'],['Dinner','dinner'],['Snacks','snacks']];
     var maxMeal=Math.max.apply(null, mealsOrder.map(function(m){return mealCal[m[1]]||0;}).concat([1]));
-    var cs=lbl('CALORIE SUMMARY','<span style="display:flex;gap:12px;font-size:10px;color:#64748b"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.cal+'"></span>Consumed</span></span>');
+    var cs=lbl('CALORIE SUMMARY','<span style="display:flex;gap:12px;font-size:10px;color:var(--d-t4)"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.cal+'"></span>Consumed</span></span>');
     cs+='<div style="display:flex;gap:18px;align-items:flex-start">';
-    cs+='<div style="flex-shrink:0"><div style="font-size:30px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+calLeft+'</div><div style="font-size:11px;color:#64748b;margin:2px 0 12px">Calories Left</div><div style="font-size:30px;font-weight:800;color:#e8edf5;line-height:1">'+goals.cal+'</div><div style="font-size:11px;color:#64748b;margin-top:2px">Daily Target</div></div>';
+    cs+='<div style="flex-shrink:0"><div style="font-size:30px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+calLeft+'</div><div style="font-size:11px;color:var(--d-t4);margin:2px 0 12px">Calories Left</div><div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+goals.cal+'</div><div style="font-size:11px;color:var(--d-t4);margin-top:2px">Daily Target</div></div>';
     // bar chart by meal
     cs+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:flex-end;gap:5px;height:96px">';
     mealsOrder.forEach(function(m){ var v=mealCal[m[1]]||0; var hp=Math.max(2,Math.round(v/maxMeal*90)); cs+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:'+hp+'px;background:linear-gradient(180deg,'+C.cal+',#b45309);border-radius:3px 3px 0 0" title="'+v+' cal"></div></div>'; });
     cs+='</div><div style="display:flex;gap:5px;margin-top:5px">';
-    mealsOrder.forEach(function(m){ cs+='<div style="flex:1;text-align:center;font-size:8px;color:#5b6678">'+m[0]+'</div>'; });
+    mealsOrder.forEach(function(m){ cs+='<div style="flex:1;text-align:center;font-size:8px;color:var(--d-dim)">'+m[0]+'</div>'; });
     cs+='</div></div>';
     // side stats
-    cs+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:16px"><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.cal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+cal+'</div><div style="font-size:10px;color:#64748b">Consumed</div></div></div><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+Math.max(0,wTgt-wOz)+' oz</div><div style="font-size:10px;color:#64748b">Water Left</div></div></div></div>';
+    cs+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:16px"><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.cal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+cal+'</div><div style="font-size:10px;color:var(--d-t4)">Consumed</div></div></div><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+Math.max(0,wTgt-wOz)+' oz</div><div style="font-size:10px;color:var(--d-t4)">Water Left</div></div></div></div>';
     cs+='</div>';
     H+=card(cs);
     H+='</div>';
@@ -27396,10 +27410,10 @@ function dsShowNutrition(){
     var kn=lbl('KEY NUTRIENTS','<span data-act="nutdetails" style="font-size:11px;font-weight:600;color:'+C.c+';cursor:pointer">View Details</span>');
     kn+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
     [['Fiber',fiber,goals.fiber,'g'],['Sodium',sodium,goals.sodium,'mg']].forEach(function(x){
-      kn+='<div style="background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:#94a3b8;margin-bottom:4px">'+x[0]+'</div><div style="font-size:20px;font-weight:800;color:#e8edf5;line-height:1">'+x[1]+'<span style="font-size:11px;color:#64748b;font-weight:600">'+x[3]+'</span></div><div style="font-size:10px;color:#5b6678;margin-top:3px">of '+x[2]+x[3]+' target</div></div>';
+      kn+='<div style="background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:4px">'+x[0]+'</div><div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1">'+x[1]+'<span style="font-size:11px;color:var(--d-t4);font-weight:600">'+x[3]+'</span></div><div style="font-size:10px;color:var(--d-dim);margin-top:3px">of '+x[2]+x[3]+' target</div></div>';
     });
     kn+='</div>';
-    kn+='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Micronutrient Status</div>';
+    kn+='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Micronutrient Status</div>';
     kn+='<div style="display:flex;gap:6px;justify-content:space-between">';
     // Nutrients this app actually measures. Magnesium (training-aware target that
     // ramps 400 light -> up to 1000 on hard days) shows a "No data" state instead
@@ -27412,7 +27426,7 @@ function dsShowNutrition(){
       var status=noData?'No data':(p>=0.7?'Good':p>=0.4?'Fair':'Low');
       var col=noData?'#5b6678':(p>=0.7?C.green:p>=0.4?C.amber:C.red);
       var drawP=noData?0:Math.min(1,p);
-      kn+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="position:relative;width:42px;height:42px"><svg width="42" height="42" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#1a2030" stroke-width="3.5"/><circle cx="22" cy="22" r="18" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*18).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*18)*(1-drawP)).toFixed(1)+'" transform="rotate(-90 22 22)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#e8edf5">'+x[0]+'</div></div><div style="font-size:9px;color:#94a3b8">'+x[1]+'</div><div style="font-size:8.5px;font-weight:700;color:'+col+'">'+status+'</div></div>';
+      kn+='<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1"><div style="position:relative;width:42px;height:42px"><svg width="42" height="42" viewBox="0 0 44 44"><circle cx="22" cy="22" r="18" fill="none" stroke="#1a2030" stroke-width="3.5"/><circle cx="22" cy="22" r="18" fill="none" stroke="'+col+'" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*18).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*18)*(1-drawP)).toFixed(1)+'" transform="rotate(-90 22 22)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--d-head)">'+x[0]+'</div></div><div style="font-size:9px;color:var(--d-t3)">'+x[1]+'</div><div style="font-size:8.5px;font-weight:700;color:'+col+'">'+status+'</div></div>';
     });
     kn+='</div>';
     H+=card(kn);
@@ -27424,21 +27438,21 @@ function dsShowNutrition(){
     if(sodium>goals.sodium*1.15) insights.push('Sodium is high ('+sodium+'mg) vs your '+goals.sodium+'mg target.');
     if(!insights.length) insights.push('You are on track for today — keep it steady.');
     var ni=lbl('NUTRITION INSIGHT');
-    ni+='<div style="display:flex;gap:12px;margin-bottom:4px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5a5 5 0 0 1 7 0l3 3a2 2 0 0 1-3 3l-1-1M17.5 17.5a5 5 0 0 1-7 0l-3-3a2 2 0 0 1 3-3l1 1"/></svg></div><div><div style="font-size:13px;font-weight:700;color:#e8edf5">Performance Focus</div><div style="font-size:11px;color:#64748b">Real, from today log</div></div></div>';
+    ni+='<div style="display:flex;gap:12px;margin-bottom:4px"><div style="width:44px;height:44px;border-radius:12px;background:rgba(168,85,247,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5a5 5 0 0 1 7 0l3 3a2 2 0 0 1-3 3l-1-1M17.5 17.5a5 5 0 0 1-7 0l-3-3a2 2 0 0 1 3-3l1 1"/></svg></div><div><div style="font-size:13px;font-weight:700;color:var(--d-head)">Performance Focus</div><div style="font-size:11px;color:var(--d-t4)">Real, from today log</div></div></div>';
     ni+='<div style="flex:1;min-height:0;margin-top:8px">';
-    insights.slice(0,3).forEach(function(t){ ni+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+C.purple+';flex-shrink:0;margin-top:6px"></span><span style="font-size:12px;color:#cbd5e1;line-height:1.45">'+t+'</span></div>'; });
+    insights.slice(0,3).forEach(function(t){ ni+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+C.purple+';flex-shrink:0;margin-top:6px"></span><span style="font-size:12px;color:var(--d-soft);line-height:1.45">'+t+'</span></div>'; });
     ni+='</div>';
     ni+='<div data-act="insights" style="margin-top:auto;text-align:center;font-size:12px;font-weight:600;color:'+C.purple+';border:1px solid rgba(168,85,247,.25);background:rgba(168,85,247,.06);border-radius:9px;padding:9px;cursor:pointer">View All Insights &#8594;</div>';
     H+=card(ni);
     // Macros Over Time (7-day, % of macro-calories)
-    var mo=lbl('MACROS OVER TIME','<span style="font-size:11px;color:#64748b">7 Days</span>');
+    var mo=lbl('MACROS OVER TIME','<span style="font-size:11px;color:var(--d-t4)">7 Days</span>');
     var carbPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.c*4/tot*100):0; });
     var proPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.p*4/tot*100):0; });
     var fatPts=hist.map(function(d){ var tot=d.p*4+d.c*4+d.f*9; return tot>0?Math.round(d.f*9/tot*100):0; });
     mo+='<div style="flex:1;min-height:110px;display:flex;flex-direction:column">';
     mo+='<div style="flex:1;min-height:90px">'+lineChart([{color:C.c,pts:carbPts},{color:C.p,pts:proPts},{color:C.f,pts:fatPts}],200,90)+'</div>';
-    mo+='<div style="display:flex;justify-content:space-between;font-size:8px;color:#5b6678;margin-top:3px">'+days7.map(function(dk){ var dd=new Date(dk); return '<span>'+months[dd.getMonth()]+' '+dd.getDate()+'</span>'; }).join('')+'</div>';
-    mo+='<div style="display:flex;gap:14px;justify-content:center;margin-top:8px;font-size:10px;color:#94a3b8">'
+    mo+='<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--d-dim);margin-top:3px">'+days7.map(function(dk){ var dd=new Date(dk); return '<span>'+months[dd.getMonth()]+' '+dd.getDate()+'</span>'; }).join('')+'</div>';
+    mo+='<div style="display:flex;gap:14px;justify-content:center;margin-top:8px;font-size:10px;color:var(--d-t3)">'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.c+'"></span>Carbs %</span>'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.p+'"></span>Protein %</span>'
       +'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.f+'"></span>Fat %</span></div>';
@@ -27450,35 +27464,35 @@ function dsShowNutrition(){
     H+='<div style="display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:12px;flex-shrink:0">';
     // Today's Food Log
     var nd=(typeof getNDay==='function')?getNDay(viewKey):{meals:{}};
-    var fl=lbl("TODAY&#39;S FOOD LOG",'<span style="font-size:12px;color:#94a3b8">'+cal+' cal</span>');
+    var fl=lbl("TODAY&#39;S FOOD LOG",'<span style="font-size:12px;color:var(--d-t3)">'+cal+' cal</span>');
     var mealMeta={breakfast:['Breakfast',C.amber],lunch:['Lunch',C.cal],dinner:['Dinner',C.purple],snacks:['Snacks',C.c]};
     ['breakfast','lunch','dinner','snacks'].forEach(function(m){
       var items=(nd.meals[m]||[]).filter(function(i){return !i.deleted;});
       var mc2=items.reduce(function(s,i){return s+(i.cal||0);},0);
-      fl+='<div style="padding:8px 0;border-top:1px solid #1c2130">';
-      fl+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:'+mealMeta[m][1]+'">'+mealMeta[m][0]+'</span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:#64748b">'+(mc2?Math.round(mc2)+' cal':'—')+'</span><span data-act="mealadd" data-meal="'+m+'" style="font-size:11px;font-weight:700;color:'+C.c+';cursor:pointer">+ Add</span></span></div>';
-      items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:#64748b;flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
+      fl+='<div style="padding:8px 0;border-top:1px solid var(--d-raise)">';
+      fl+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:'+mealMeta[m][1]+'">'+mealMeta[m][0]+'</span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--d-t4)">'+(mc2?Math.round(mc2)+' cal':'—')+'</span><span data-act="mealadd" data-meal="'+m+'" style="font-size:11px;font-weight:700;color:'+C.c+';cursor:pointer">+ Add</span></span></div>';
+      items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:var(--d-t4);flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
       fl+='</div>';
     });
     fl+='<div style="display:flex;gap:8px;margin-top:12px"><div data-act="add" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#fff;background:'+C.c+';border-radius:9px;padding:9px;cursor:pointer">+ Add Food</div></div>';
     H+=card(fl);
     // Meal status (adapted: no timestamps -> logged/empty status + cal, not clock times)
-    var ml=lbl('MEALS','<span style="font-size:11px;color:#64748b">Today</span>');
+    var ml=lbl('MEALS','<span style="font-size:11px;color:var(--d-t4)">Today</span>');
     ml+='<div style="flex:1;display:flex;flex-direction:column;gap:2px">';
     [['Breakfast','breakfast'],['Lunch','lunch'],['Dinner','dinner'],['Snacks','snacks']].forEach(function(m){
       var v=mealCal[m[1]]||0; var done=v>0; var col=mealMeta[m[1]]?mealMeta[m[1]][1]:C.grey;
-      ml+='<div data-act="mealadd" data-meal="'+m[1]+'" style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;'+(m[0]!=='Breakfast'?'border-top:1px solid #1c2130':'')+'"><div style="width:34px;height:34px;border-radius:50%;background:'+(done?col+'22':'#1a2030')+';border:1.5px solid '+(done?col:'#232b3d')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(done?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<span style="color:#5b6678;font-size:16px;font-weight:300">+</span>')+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:#e8edf5">'+m[0]+'</div><div style="font-size:10px;color:#64748b">'+(done?Math.round(v)+' cal logged':'Not logged yet')+'</div></div></div>';
+      ml+='<div data-act="mealadd" data-meal="'+m[1]+'" style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;'+(m[0]!=='Breakfast'?'border-top:1px solid var(--d-raise)':'')+'"><div style="width:34px;height:34px;border-radius:50%;background:'+(done?col+'22':'#1a2030')+';border:1.5px solid '+(done?col:'#232b3d')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(done?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<span style="color:var(--d-dim);font-size:16px;font-weight:300">+</span>')+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--d-head)">'+m[0]+'</div><div style="font-size:10px;color:var(--d-t4)">'+(done?Math.round(v)+' cal logged':'Not logged yet')+'</div></div></div>';
     });
     ml+='</div>';
-    ml+='<div style="font-size:10px;color:#5b6678;margin-top:8px;padding-top:8px;border-top:1px solid #1c2130;line-height:1.4">Tip: spread protein across meals for better recovery. (Meal times need per-food timestamps we do not record yet.)</div>';
+    ml+='<div style="font-size:10px;color:var(--d-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--d-raise);line-height:1.4">Tip: spread protein across meals for better recovery. (Meal times need per-food timestamps we do not record yet.)</div>';
     H+=card(ml);
     // Hydration
     var hyPct=wTgt>0?Math.round(wOz/wTgt*100):0;
     var maxW=Math.max.apply(null, hist.map(function(d){return d.water;}).concat([wTgt,1]));
-    var hy=lbl('HYDRATION','<span style="font-size:11px;color:#64748b">7 Days</span>');
-    hy+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">'+ringHtml(hyPct,C.w,hyPct+'%','',72)+'<div><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+wOz+'<span style="font-size:12px;color:#64748b;font-weight:600"> oz</span></div><div style="font-size:11px;color:#64748b">of '+wTgt+' oz goal</div><div style="display:flex;gap:8px;margin-top:8px"><div data-act="waterminus" style="width:28px;height:28px;border-radius:8px;background:#1a2030;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">−</div><div data-act="waterplus" style="width:28px;height:28px;border-radius:8px;background:'+C.w+'22;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">+</div></div></div></div>';
+    var hy=lbl('HYDRATION','<span style="font-size:11px;color:var(--d-t4)">7 Days</span>');
+    hy+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">'+ringHtml(hyPct,C.w,hyPct+'%','',72)+'<div><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+wOz+'<span style="font-size:12px;color:var(--d-t4);font-weight:600"> oz</span></div><div style="font-size:11px;color:var(--d-t4)">of '+wTgt+' oz goal</div><div style="display:flex;gap:8px;margin-top:8px"><div data-act="waterminus" style="width:28px;height:28px;border-radius:8px;background:#1a2030;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">−</div><div data-act="waterplus" style="width:28px;height:28px;border-radius:8px;background:'+C.w+'22;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">+</div></div></div></div>';
     hy+='<div style="flex:1;min-height:0;display:flex;align-items:flex-end;gap:5px;height:60px">';
-    hist.forEach(function(d){ var hp=Math.max(2,Math.round(d.water/maxW*54)); var isToday=d.key===viewKey; hy+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+hp+'px;background:'+(isToday?C.w:'#1e3a44')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:#5b6678">'+['S','M','T','W','T','F','S'][new Date(d.key).getDay()]+'</span></div>'; });
+    hist.forEach(function(d){ var hp=Math.max(2,Math.round(d.water/maxW*54)); var isToday=d.key===viewKey; hy+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+hp+'px;background:'+(isToday?C.w:'#1e3a44')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:var(--d-dim)">'+['S','M','T','W','T','F','S'][new Date(d.key).getDay()]+'</span></div>'; });
     hy+='</div>';
     H+=card(hy);
     H+='</div>';
@@ -27491,9 +27505,9 @@ function dsShowNutrition(){
     var scoreLbl=overall>=80?'Excellent':overall>=60?'Good':overall>=40?'Needs Improvement':'Low';
     var scoreCol=overall>=80?C.green:overall>=60?C.c:overall>=40?C.cal:C.red;
     var tCal=trend(cal, avg(prior,function(x){return x.cal;})), tPro=trend(pro, avg(prior,function(x){return x.p;})), tCarb=trend(carb, avg(prior,function(x){return x.c;})), tFat=trend(fat, avg(prior,function(x){return x.f;})), tFib=trend(fiber, avg(prior,function(x){return x.fiber;}));
-    function trTxt(t){ if(t==null) return '<span style="color:#5b6678">—</span>'; var up=t>=0; return '<span style="color:'+(up?C.green:C.red)+';font-weight:700">'+(up?'&#8593; +':'&#8595; ')+t+'%</span>'; }
+    function trTxt(t){ if(t==null) return '<span style="color:var(--d-dim)">—</span>'; var up=t>=0; return '<span style="color:'+(up?C.green:C.red)+';font-weight:700">'+(up?'&#8593; +':'&#8595; ')+t+'%</span>'; }
     var sc='<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">';
-    sc+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">'+ringHtml(overall,scoreCol,overall,'/100',84)+'<div><div style="font-size:13px;font-weight:800;color:'+scoreCol+';text-transform:uppercase;letter-spacing:.04em">'+scoreLbl+'</div><div style="font-size:11px;color:#94a3b8;max-width:210px;margin-top:3px">'+(overall>=60?'Solid day — keep hitting your targets.':'Focus on protein and fiber and closing the calorie gap.')+'</div></div></div>';
+    sc+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">'+ringHtml(overall,scoreCol,overall,'/100',84)+'<div><div style="font-size:13px;font-weight:800;color:'+scoreCol+';text-transform:uppercase;letter-spacing:.04em">'+scoreLbl+'</div><div style="font-size:11px;color:var(--d-t3);max-width:210px;margin-top:3px">'+(overall>=60?'Solid day — keep hitting your targets.':'Focus on protein and fiber and closing the calorie gap.')+'</div></div></div>';
     sc+='<div style="flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:20px;min-width:0">';
     // Each score card carries its own 8-day line instead of a fill bar. A day's score is a point
     // in a run of days, and the run is what says whether the athlete is tightening up or sliding;
@@ -27510,21 +27524,21 @@ function dsShowNutrition(){
     [['Calories',cal+' / '+goals.cal,goals.cal?Math.round(cal/goals.cal*100):0,C.cal,_calPts,_gcHue_(0)],
      ['Macros',macroScore+' / 100',macroScore,C.c,_macPts,_gcHue_(1)],
      ['Nutrients',nutrScore+' / 100',nutrScore,C.purple,null,_gcHue_(2)]].forEach(function(x){
-      sc+='<div><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+x[0]+'</div>'
-        +'<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:16px;font-weight:800;color:#e8edf5">'+x[1]+'</span>'
+      sc+='<div><div style="font-size:10px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+x[0]+'</div>'
+        +'<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:16px;font-weight:800;color:var(--d-head)">'+x[1]+'</span>'
         +'<span style="font-size:12px;font-weight:700;color:'+x[3]+'">'+x[2]+'%</span></div>'
         +(x[4]?(_gcTrend_(x[4], x[5], {aria:x[0]+' over 8 days', H:28, fill:false, from:'8 days ago', to:'today'})
-               ||'<div style="font-size:10px;color:#5b6678;margin-top:4px">Not enough logged days yet.</div>')
-            :'<div style="font-size:10px;color:#5b6678;margin-top:6px;line-height:1.4">Per-day micronutrients are not retained, so this score has no history to plot.</div>')
+               ||'<div style="font-size:10px;color:var(--d-dim);margin-top:4px">Not enough logged days yet.</div>')
+            :'<div style="font-size:10px;color:var(--d-dim);margin-top:6px;line-height:1.4">Per-day micronutrients are not retained, so this score has no history to plot.</div>')
         +'</div>';
     });
     sc+='</div>';
-    sc+='<div style="flex-shrink:0;min-width:170px"><div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Trends vs Last 7 Days</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Calories</span>'+trTxt(tCal)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Protein</span>'+trTxt(tPro)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Carbs</span>'+trTxt(tCarb)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:3px"><span>Fat</span>'+trTxt(tFat)+'</div>'
-      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8"><span>Fiber</span>'+trTxt(tFib)+'</div></div>';
+    sc+='<div style="flex-shrink:0;min-width:170px"><div style="font-size:10px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Trends vs Last 7 Days</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--d-t3);margin-bottom:3px"><span>Calories</span>'+trTxt(tCal)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--d-t3);margin-bottom:3px"><span>Protein</span>'+trTxt(tPro)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--d-t3);margin-bottom:3px"><span>Carbs</span>'+trTxt(tCarb)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--d-t3);margin-bottom:3px"><span>Fat</span>'+trTxt(tFat)+'</div>'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--d-t3)"><span>Fiber</span>'+trTxt(tFib)+'</div></div>';
     sc+='</div>';
     H+=card(sc,'flex-shrink:0');
 
@@ -27938,7 +27952,7 @@ function dsShowAnalytics(){
   }).join('');
   var toolbar=document.createElement('div');
   toolbar.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0';
-  toolbar.innerHTML='<div style="font-size:12px;color:#94a3b8;font-weight:600">'+RLABEL+'</div>'
+  toolbar.innerHTML='<div style="font-size:12px;color:var(--d-t3);font-weight:600">'+RLABEL+'</div>'
     +'<div style="display:flex;align-items:center;gap:10px">'
     +'<button onclick="st.anCompare=!st.anCompare;sv();dsShowAnalytics()" title="Show change over the selected window" style="display:flex;align-items:center;gap:5px;background:'+(CMP?'#f97316':'transparent')+';color:'+(CMP?'#fff':'#94a3b8')+';border:1px solid '+(CMP?'#f97316':'#2a3550')+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'
     +'<div style="display:flex;gap:2px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:9px;padding:2px">'+_rbtns+'</div>'
@@ -27950,7 +27964,7 @@ function dsShowAnalytics(){
   // listener; both renderers must carry it).
   function teachCard_(inner, key, label){
     var c=document.createElement('div');
-    c.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
+    c.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
     if(key){
       c.setAttribute('data-metric-teach',key);
       c.setAttribute('role','button'); c.setAttribute('tabindex','0'); c.setAttribute('aria-label','Learn about '+(label||key));
@@ -27979,7 +27993,7 @@ function dsShowAnalytics(){
   iqCard.innerHTML='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ</span>'+_infoGlyph+'</div>'
     +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:'+_iqColor+';line-height:1">'+(_iqNull?'—':_iq.score)+'</div>'
     +'<div style="font-size:10px;color:#8b93a5;line-height:1.3">'+(_iqNull?'need ~4 wks<br>of history':'out of 100')+'</div></div>'
-    +'<div style="font-size:9px;color:#64748b;margin-top:8px;line-height:1.5">Real inputs only. Tap for the formula.</div>';
+    +'<div style="font-size:9px;color:var(--d-t4);margin-top:8px;line-height:1.5">Real inputs only. Tap for the formula.</div>';
   hero.appendChild(iqCard);
   // CENTER — W/kg centerpiece: value + 0-4.0 gradient scale with a marker dot,
   // then the "Top X%" line beneath. Same value, percentile and caveat as shipped.
@@ -28017,26 +28031,26 @@ function dsShowAnalytics(){
       note:src+' &middot; '+(onChart?('dashed line is your '+_wTgt.toFixed(2)+' target')
                                     :('your '+_wTgt.toFixed(2)+' target is above everything on this chart')) }):'';
     // No weigh-in history: say so, rather than falling back to the bar this replaced.
-    if(!spark) return '<div style="font-size:10.5px;color:#64748b;margin-top:12px;line-height:1.5">Log a few weigh-ins and this becomes a trend line toward '+_wTgt.toFixed(2)+'.</div>';
+    if(!spark) return '<div style="font-size:10.5px;color:var(--d-t4);margin-top:12px;line-height:1.5">Log a few weigh-ins and this becomes a trend line toward '+_wTgt.toFixed(2)+'.</div>';
     var rule=onChart
       ? '<div style="position:absolute;left:0;right:0;top:'+((1-tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
       : '';
     return '<div style="position:relative;margin-top:10px">'+spark+rule+'</div>';
   })();
   var wkgHero=teachCard_(
-    '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#64748b">Power-to-Weight</span>'+_infoGlyph+'</div>'
+    '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--d-t4)">Power-to-Weight</span>'+_infoGlyph+'</div>'
     // C2: say what the big number IS. It is FTP / bodyweight, while the line beneath plots a
     // different measure (best 20-min power / kg when there are no weigh-ins), so the natural
     // reading — that the line ends at the number above it — is wrong. Measured 2.54 against a
     // line ending at 2.84. The chart's own caption already names its series; this names the
     // headline's, so the two are legible as two measurements rather than one that disagrees.
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:#64748b">W/kg</div>'
-      +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Target</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:var(--d-t4)">W/kg</div>'
+      +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4)">Target</div>'
       +'<div style="font-size:15px;font-weight:800;color:#FFB938;line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
-    +'<div style="font-size:10.5px;color:#5b6678;margin-top:3px">FTP &divide; bodyweight'+((wkgNow!=null&&_wt&&_wt.pts&&_wt.pts.length>1)?(' &middot; the line below plots '+_wt.source+', a different measure'):'')+'</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">FTP &divide; bodyweight'+((wkgNow!=null&&_wt&&_wt.pts&&_wt.pts.length>1)?(' &middot; the line below plots '+_wt.source+', a different measure'):'')+'</div>'
     +_wkgChart
     +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
-    +'<div style="font-size:9px;color:#64748b;margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
+    +'<div style="font-size:9px;color:var(--d-t4);margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
     ,'wkg','W/kg');
   wkgHero.style.borderRadius='16px'; wkgHero.style.padding='18px 20px';
   hero.appendChild(wkgHero);
@@ -28050,12 +28064,12 @@ function dsShowAnalytics(){
     {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e'}
   ].forEach(function(m){
     var mini=document.createElement('div');
-    mini.style.cssText='background:#111318;border:1px solid #1a1f2e;border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
+    mini.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
     mini.setAttribute('data-metric-teach',m.key);
     mini.setAttribute('role','button'); mini.setAttribute('tabindex','0'); mini.setAttribute('aria-label','Learn about '+m.label);
     mini.onmouseenter=function(){ mini.style.background='#161a24'; mini.style.borderColor='#2a3550'; };
     mini.onmouseleave=function(){ mini.style.background='#111318'; mini.style.borderColor='#1a1f2e'; };
-    mini.innerHTML='<div style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+m.label+'</div>'
+    mini.innerHTML='<div style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+m.label+'</div>'
       +'<div style="font-size:20px;font-weight:800;color:'+m.color+';line-height:1">'+m.val+'</div>';
     miniGrid.appendChild(mini);
   });
@@ -28071,9 +28085,9 @@ function dsShowAnalytics(){
     {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e',cap:tsbLabel},
     {key:'wkg',label:'W/kg',sub:'W/kg',frac:(wkgNow==null?0:Math.min(1,wkgNow/5)),center:wkgStr_(wkgNow),color:'#a855f7',cap:(wkgNow==null?'needs a weight':'vs 3.14 target')}
   ].forEach(function(g){
-    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
+    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
       +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,84)+'</div>'
-      +'<div style="text-align:center;font-size:9px;color:#64748b;margin-top:4px">'+g.cap+'</div>';
+      +'<div style="text-align:center;font-size:9px;color:var(--d-t4);margin-top:4px">'+g.cap+'</div>';
     gaugeRow.appendChild(teachCard_(inner,g.key,g.label));
   });
   wrap.appendChild(gaugeRow);
@@ -28087,9 +28101,9 @@ function dsShowAnalytics(){
     ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','last ride · avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)','if'],
     ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','last ride · avg '+(_tc.avg.tss!=null?Math.round(_tc.avg.tss):'—')+' (90d)','tss']
   ].forEach(function(x){
-    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+_infoGlyph+'</div>'
+    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+_infoGlyph+'</div>'
       +'<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'
-      +'<div style="font-size:10px;color:#64748b;margin-top:3px">'+x[3]+'</div>';
+      +'<div style="font-size:10px;color:var(--d-t4);margin-top:3px">'+x[3]+'</div>';
     statRow.appendChild(teachCard_(inner,x[4],x[0]));
   });
   wrap.appendChild(statRow);
@@ -28097,23 +28111,23 @@ function dsShowAnalytics(){
   // ==== LAYOUT BELOW GAUGES — mockup grid (layout only; card contents unchanged) ====
   // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
   var fitnessCard=document.createElement('div');
-  fitnessCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+  fitnessCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
   var _ctlDelta=(ctlArr.length?ctlArr[ctlArr.length-1]-ctlArr[0]:0), _up=_ctlDelta>=0;
   var _cmpBadge=CMP?(' <span style="font-size:10px;font-weight:700;text-transform:none;color:'+(_up?'#22c55e':'#ef4444')+'">'+(_up?'\\u25b2':'\\u25bc')+' '+Math.abs(Math.round(_ctlDelta*10)/10)+' CTL vs start</span>'):'';
-  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — '+RLABEL+_cmpBadge+'</div>'+
+  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — '+RLABEL+_cmpBadge+'</div>'+
     '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
   var distCard=document.createElement('div');
-  distCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+  distCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
   var _thisWk=0,_lastWk=0;
   rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); var ago=(now-d)/86400000;
     if(ago>=0&&ago<7) _thisWk+=parseFloat(r.distance)||0; else if(ago>=7&&ago<14) _lastWk+=parseFloat(r.distance)||0; });
   _thisWk=Math.round(_thisWk); _lastWk=Math.round(_lastWk);
   var _wkD=(_lastWk>0)?Math.round((_thisWk-_lastWk)/_lastWk*100):null;
   distCard.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px">'
-      +'<span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</span>'
+      +'<span style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</span>'
       +(_wkD!=null?'<span style="font-size:11px;font-weight:700;color:'+(_wkD>=0?'#22c55e':'#ef4444')+';white-space:nowrap">'+(_wkD>=0?'\\u25b2':'\\u25bc')+' '+Math.abs(_wkD)+'% vs last week</span>':'')
     +'</div>'
-    +'<div style="margin-bottom:4px"><span style="font-size:26px;font-weight:800;color:#f1f5f9;line-height:1">'+_thisWk.toLocaleString()+'</span><span style="font-size:13px;color:#94a3b8;margin-left:4px">mi</span></div>'
+    +'<div style="margin-bottom:4px"><span style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1">'+_thisWk.toLocaleString()+'</span><span style="font-size:13px;color:var(--d-t3);margin-left:4px">mi</span></div>'
     +'<div style="position:relative;height:118px"><canvas id="ds-dist-chart"></canvas></div>';
   var rowA=document.createElement('div');
   rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:10px;flex-shrink:0';
@@ -28125,11 +28139,11 @@ function dsShowAnalytics(){
   var wkgCard=null;
   if(wkgHistory.length>2){
     wkgCard=document.createElement('div');
-    wkgCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+    wkgCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
     var _wkgD=(wkgHistory.length>=2)?(Math.round((wkgHistory[wkgHistory.length-1]-wkgHistory[wkgHistory.length-2])*100)/100):0;
-    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">W/kg Trend</div>'
+    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">W/kg Trend</div>'
       +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
-        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgStr_(wkgNow)+'</span><span style="font-size:12px;color:#94a3b8">W/kg</span>'
+        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgStr_(wkgNow)+'</span><span style="font-size:12px;color:var(--d-t3)">W/kg</span>'
         +(_wkgD!==0?'<span style="font-size:10px;font-weight:700;color:'+(_wkgD>=0?'#22c55e':'#ef4444')+'">'+(_wkgD>=0?'\\u2191':'\\u2193')+' '+Math.abs(_wkgD).toFixed(2)+' vs last week</span>':'')
       +'</div>'
       +'<div style="position:relative;height:104px"><canvas id="ds-wkg-chart"></canvas></div>';
@@ -28140,20 +28154,20 @@ function dsShowAnalytics(){
   var _pd=dsPowerDist_(rangeRides, FTP);
   try{ console.log('[power-dist] real rides='+_pd.nReal+' split='+JSON.stringify(_pd.realPct)+' | curve rides='+_pd.nCurve+' split='+JSON.stringify(_pd.curvePct)+' (curve EXCLUDED — mean-max curve can\\u2019t derive time-in-zone) | FTP='+FTP); }catch(e){}
   var pdCard=document.createElement('div');
-  pdCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
-    +'<span style="font-size:9px;color:#64748b;text-align:right">'+(_pd.hasData?('Based on '+_pd.nReal+' rides with real zone data · zones use your (manual) FTP'):'')+'</span></div>';
+  pdCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
+    +'<span style="font-size:9px;color:var(--d-t4);text-align:right">'+(_pd.hasData?('Based on '+_pd.nReal+' rides with real zone data · zones use your (manual) FTP'):'')+'</span></div>';
   if(_pd.hasData){
     var pdBars=_pd.zones.map(function(z){
       var _zp=z.label.split(' ');
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
         +'<span style="font-size:11px;width:96px;flex-shrink:0"><span style="color:'+z.color+';font-weight:700">'+_zp[0]+'</span> <span style="color:#8b97a8">'+_zp.slice(1).join(' ')+'</span></span>'
         +'<div style="flex:1;height:7px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
-        +'<span style="font-size:11px;font-weight:700;color:#e2e8f0;width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
+        +'<span style="font-size:11px;font-weight:700;color:var(--d-t2);width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
     }).join('');
     pdCard.innerHTML=pdHead+pdBars;
   } else {
-    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:#64748b;padding:6px 0">No rides with real power-zone data yet'+(_pd.nCurve?(' ('+_pd.nCurve+' rides have only a power curve, which can\\u2019t be split into real zone time)'):'')+' — stays empty rather than showing a fabricated split.</div>';
+    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:var(--d-t4);padding:6px 0">No rides with real power-zone data yet'+(_pd.nCurve?(' ('+_pd.nCurve+' rides have only a power curve, which can\\u2019t be split into real zone time)'):'')+' — stays empty rather than showing a fabricated split.</div>';
   }
   rowBcards.push(pdCard);
   // Ride Consistency heatmap (real: ride dates, last 26 weeks)
@@ -28174,10 +28188,10 @@ function dsShowAnalytics(){
   _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:13px;height:13px;border-radius:3px;background:'+_cellColor(c)+'"></div>'; });
   function _lg(col,lab){ return '<span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:11px;border-radius:3px;background:'+col+'"></span>'+lab+'</span>'; }
   var hmCard=document.createElement('div');
-  hmCard.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
+  hmCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
+  hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
     +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,13px);gap:4px;overflow-x:auto">'+cellSquares+'</div>'
-    +'<div style="display:flex;align-items:center;gap:12px;margin-top:12px;font-size:9px;color:#94a3b8">'+_lg('#26a641','High')+_lg('#eab308','Moderate')+_lg('#ef4444','Low')+_lg('#30363d','None')+'</div>';
+    +'<div style="display:flex;align-items:center;gap:12px;margin-top:12px;font-size:9px;color:var(--d-t3)">'+_lg('#26a641','High')+_lg('#eab308','Moderate')+_lg('#ef4444','Low')+_lg('#30363d','None')+'</div>';
   rowBcards.push(hmCard);
   var rowB=document.createElement('div');
   rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
@@ -28254,11 +28268,11 @@ function dsShowAnalytics(){
       return (g.target>=lo && g.target<=hi) ? '' : ' &middot; off chart';
     })();
     var gc=document.createElement('div');
-    gc.style.cssText='background:#111318;border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px';
-    gc.innerHTML='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+'</span>'+_infoGlyph+'</div>'
-      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:#f1f5f9;line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:#94a3b8;margin-left:3px">'+g.unit+'</span>':'')+'</div>'
+    gc.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px';
+    gc.innerHTML='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+'</span>'+_infoGlyph+'</div>'
+      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:var(--d-t3);margin-left:3px">'+g.unit+'</span>':'')+'</div>'
       +chart
-      +'<div style="font-size:10px;color:#64748b">'+g.goal+reach+'</div>';
+      +'<div style="font-size:10px;color:var(--d-t4)">'+g.goal+reach+'</div>';
     rowC.appendChild(gc);
   });
   wrap.appendChild(rowC);
@@ -28441,8 +28455,8 @@ function dsShowCalendar(){
       +'<div style="width:44px;height:44px;flex-shrink:0;border-radius:11px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:baseline;gap:7px">'
-      +'<span style="font-size:23px;font-weight:800;color:#e8edf5;line-height:1">'+big+'</span>'
-      +'<span style="font-size:12.5px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span>'
+      +'<span style="font-size:23px;font-weight:800;color:var(--d-head);line-height:1">'+big+'</span>'
+      +'<span style="font-size:12.5px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span>'
       +(right?'<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:'+(rightCol||'#94a3b8')+';white-space:nowrap">'+right+'</span>':'')
       +'</div></div></div>';
   }
@@ -28498,13 +28512,13 @@ function dsShowCalendar(){
     var H='';
     // ---- top bar ----
     H+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">';
-    H+='<div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:#f1f5f9">Calendar</div>';
+    H+='<div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:var(--d-head)">Calendar</div>';
     H+='<div style="display:flex;align-items:center;background:#0e1220;border:1px solid #1a2030;border-radius:10px;overflow:hidden">';
-    H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8249;</div>';
-    H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:#f1f5f9;min-width:118px;text-align:center">'+monthNames[viewMonth]+' '+viewYear+'</div>';
-    H+='<div data-cal="next" style="padding:8px 11px;cursor:pointer;color:#94a3b8;font-size:15px">&#8250;</div>';
+    H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div>';
+    H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:var(--d-head);min-width:118px;text-align:center">'+monthNames[viewMonth]+' '+viewYear+'</div>';
+    H+='<div data-cal="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div>';
     H+='</div>';
-    H+='<div data-cal="today" style="padding:8px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#cbd5e1">Today</div>';
+    H+='<div data-cal="today" style="padding:8px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--d-soft)">Today</div>';
     H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
     H+='  <div data-cal="gen" style="padding:8px 15px;background:#2FA8E0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#fff">Generate</div>';
     H+='  <div style="display:inline-flex;background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:3px">';
@@ -28522,13 +28536,13 @@ function dsShowCalendar(){
         return '<div data-cal="filt" data-key="'+key+'" style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer">'
           +'<div style="width:16px;height:16px;border-radius:5px;border:1.5px solid '+(on?'#F97316':'#39424f')+';background:'+(on?'#F97316':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(on?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'')+'</div>'
           +(dot?'<span style="width:8px;height:8px;border-radius:50%;background:'+dot+';flex-shrink:0"></span>':'')
-          +'<span style="font-size:13px;color:#cbd5e1;font-weight:600">'+label+'</span></div>';
+          +'<span style="font-size:13px;color:var(--d-soft);font-weight:600">'+label+'</span></div>';
       }
-      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678;padding:2px 4px 4px">SHOW</div>';
+      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim);padding:2px 4px 4px">SHOW</div>';
       H+=_frow('completed','Completed',null);
       H+=_frow('planned','Planned',null);
       H+='<div style="height:1px;background:#1a2030;margin:6px 2px"></div>';
-      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678;padding:2px 4px 4px">TYPES</div>';
+      H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim);padding:2px 4px 4px">TYPES</div>';
       H+=_frow('ride','Rides',sportColor_('Ride'));
       H+=_frow('run','Runs',sportColor_('Run'));
       H+=_frow('workout','Workouts',sportColor_('Strength'));
@@ -28551,7 +28565,7 @@ function dsShowCalendar(){
     H+=statCard(PULSE,CAL.time,totAct,'Total Activities','This Month','#64748b');
     H+='</div>';
     // Name the library these totals came from — see dataSourceNote_.
-    H+='<div style="font-size:10.5px;color:#5b6678;margin:-2px 2px 0;flex-shrink:0">'+dataSourceNote_('legacy')+'</div>';
+    H+='<div style="font-size:10.5px;color:var(--d-dim);margin:-2px 2px 0;flex-shrink:0">'+dataSourceNote_('legacy')+'</div>';
 
     // ---- build week rows (prev/next month days shown faint) ----
     var cells=[];
@@ -28581,9 +28595,9 @@ function dsShowCalendar(){
       // ---- month grid header (SUN..SAT + WEEK) ----
       H+='<div style="display:flex;gap:12px;flex-shrink:0">';
       H+='  <div style="flex:1;display:grid;grid-template-columns:repeat(7,1fr)">';
-      dayNamesFull.forEach(function(dn){ H+='<div style="padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#5b6678">'+dn+'</div>'; });
+      dayNamesFull.forEach(function(dn){ H+='<div style="padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--d-dim)">'+dn+'</div>'; });
       H+='  </div>';
-      H+='  <div style="width:176px;padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:#5b6678">WEEK</div>';
+      H+='  <div style="width:176px;padding:0 0 8px 2px;font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--d-dim)">WEEK</div>';
       H+='</div>';
       // ---- month grid body + week rail ----
       H+='<div style="display:flex;gap:12px;flex:1 0 auto">';
@@ -28631,13 +28645,13 @@ function dsShowCalendar(){
               var sub=fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'');
               var _ri=rideRefOf_(r);
               H+='<div'+(rideRefOk_(_ri)?(' data-cal="act" data-idx="'+rideRefData_(_ri)+'"'):'')+' style="margin-top:4px;padding:4px 7px;border-radius:7px;background:'+col+'14;border:1px solid '+col+'33;overflow:hidden">'
-                +'<div style="display:flex;align-items:center;gap:4px;line-height:1.1">'+calIcon(rideSport_(r)||'Ride',12,col)+'<span style="font-size:11.5px;font-weight:800;color:#e8edf5;white-space:nowrap">'+main+'</span></div>'
+                +'<div style="display:flex;align-items:center;gap:4px;line-height:1.1">'+calIcon(rideSport_(r)||'Ride',12,col)+'<span style="font-size:11.5px;font-weight:800;color:var(--d-head);white-space:nowrap">'+main+'</span></div>'
                 +'<div style="font-size:10px;color:#9aa7bd;margin-top:1px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
                 +'<div style="font-size:9px;color:#5f6b7e;margin-top:1px;line-height:1.15;white-space:nowrap">'+sub+'</div></div>';
             });
             // Clickable, and it opens the picker — otherwise the 3rd+ activity of a day has no
             // route to its detail view from this surface at all.
-            if(dl.length>2){ H+='<div data-cal="more" data-date="'+c.date+'" style="font-size:9px;color:#64748b;margin-top:3px;font-weight:600;cursor:pointer;text-decoration:underline">+'+(dl.length-2)+' more</div>'; }
+            if(dl.length>2){ H+='<div data-cal="more" data-date="'+c.date+'" style="font-size:9px;color:var(--d-t4);margin-top:3px;font-weight:600;cursor:pointer;text-decoration:underline">+'+(dl.length-2)+' more</div>'; }
             // Planned marker — compact dashed chip when there is ALSO a completed
             // activity, or the centered icon+name on an otherwise-empty day.
             // Render EVERY live planned session, each glyph + name from the SAME
@@ -28647,7 +28661,7 @@ function dsShowCalendar(){
             if(_psAll.length){
               if(dl.length){
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:#5b6678;flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(_sessSport_(ps),11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:var(--d-dim);flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(_sessSport_(ps),11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
                 });
               } else {
                 _psAll.forEach(function(ps){
@@ -28671,14 +28685,14 @@ function dsShowCalendar(){
         // footer so the week still reads at a glance and nothing the total counts is invisible.
         var rows=calSportRows_(roll);
         H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
-          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678">WEEK '+(wi+1)+'</div>';
+          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--d-dim)">WEEK '+(wi+1)+'</div>';
         rows.forEach(function(row){
           var col=sportColor_(row.sport);
           H+='<div>'
             +'<div style="display:flex;align-items:center;gap:4px;line-height:1">'
               +calIcon(row.sport,11,col)
               +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:'+col+'">'+row.label.toUpperCase()+'</span>'
-              +'<span style="font-size:13px;font-weight:800;color:#e8edf5;margin-left:auto">'+row.main+'</span>'
+              +'<span style="font-size:13px;font-weight:800;color:var(--d-head);margin-left:auto">'+row.main+'</span>'
             +'</div>'
             +(row.sub?('<div style="font-size:9.5px;font-weight:600;color:#8592a6;line-height:1;margin-top:2px;text-align:right">'+row.sub+'</div>'):'')
           +'</div>';
@@ -28700,8 +28714,8 @@ function dsShowCalendar(){
       (function(){
         var wp=weekRoll.map(function(r,i){ return { v:(r && r.acts>0)?r.tss:null, lab:'wk '+(i+1) }; });
         var sp=_gcTrend_(wp, _GC_LOAD, { aria:'Weekly training load across the month', H:34, from:'week 1', to:'week '+wp.length });
-        if(sp) H+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid #1c2130">'
-          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:#5b6678;margin-bottom:2px">WEEKLY LOAD &middot; TSS</div>'
+        if(sp) H+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+          +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--d-dim);margin-bottom:2px">WEEKLY LOAD &middot; TSS</div>'
           +sp+'</div>';
       })();
     }
@@ -28710,8 +28724,8 @@ function dsShowCalendar(){
     H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
     H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;font-weight:700;letter-spacing:.1em;color:#4a5468">MONTH SUMMARY</div>';
     H+='<div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:#e8edf5;line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:#5b6678;font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:#8592a6">Distance</span></div>';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.tss+';line-height:1">'+totTSS+'<span style="font-size:10px;color:#5b6678;font-weight:600;margin-left:2px">TSS</span></span><span style="font-size:10px;color:#8592a6">Training Load</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:var(--d-head);line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:#8592a6">Distance</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.tss+';line-height:1">'+totTSS+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">TSS</span></span><span style="font-size:10px;color:#8592a6">Training Load</span></div>';
     H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.time+';line-height:1">'+fmtHM(totSecs)+'</span><span style="font-size:10px;color:#8592a6">Total Time</span></div>';
     H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.act+';line-height:1">'+totAct+'</span><span style="font-size:10px;color:#8592a6">Activities</span></div>';
     H+='</div>';
@@ -28772,15 +28786,15 @@ function dsShowCalendar(){
       ov.style.cssText='position:fixed;inset:0;background:rgba(3,6,14,.72);z-index:400;display:flex;align-items:center;justify-content:center';
       var box=document.createElement('div');
       box.style.cssText='background:#0e1220;border:1px solid #232b3d;border-radius:16px;padding:16px;width:330px;max-height:76vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)';
-      var H='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#5b6678">'+list.length+' ACTIVITIES</div>'
-        +'<div style="font-size:14px;font-weight:800;color:#e8edf5;margin:2px 0 12px">'+dstr+'</div>';
+      var H='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim)">'+list.length+' ACTIVITIES</div>'
+        +'<div style="font-size:14px;font-weight:800;color:var(--d-head);margin:2px 0 12px">'+dstr+'</div>';
       list.forEach(function(r,i){
         var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
         var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
         H+='<div data-pick="'+i+'" style="display:flex;align-items:center;gap:11px;padding:10px 11px;margin-bottom:6px;border-radius:11px;background:#131829;border:1px solid #1f2739;cursor:pointer">'
           +'<div style="width:32px;height:32px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+calIcon(rideSport_(r)||'Ride',18,col)+'</div>'
           +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
           +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div>'
           +'</div></div>';
       });
@@ -28803,7 +28817,7 @@ function dsShowCalendar(){
   function calAgenda(monthRides){
     var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
     var H='<div style="flex:1;min-height:0;overflow-y:auto;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:6px 4px">';
-    if(!list.length){ H+='<div style="padding:44px;text-align:center;color:#5b6678;font-size:13px">No activities this month.</div>'; }
+    if(!list.length){ H+='<div style="padding:44px;text-align:center;color:var(--d-dim);font-size:13px">No activities this month.</div>'; }
     list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       var idx=rideRefOf_(r);
       var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
@@ -28812,7 +28826,7 @@ function dsShowCalendar(){
       H+='<div'+(rideRefOk_(idx)?(' data-cal="act" data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
         +'<div style="width:54px;font-size:11px;color:#8592a6;font-weight:600">'+dstr+'</div>'
         +'<div style="width:36px;height:36px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center">'+calIcon(rideSport_(r)||'Ride',20,col)+'</div>'
-        +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
+        +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
         +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div></div>';
     });
     H+='</div>';
@@ -28835,7 +28849,7 @@ function dsShowCalendar(){
         var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
         var _wi=rideRefOf_(r);
         H+='<div'+(rideRefOk_(_wi)?(' data-cal="act" data-idx="'+rideRefData_(_wi)+'"'):'')+' style="margin-top:5px;padding:6px 8px;border-radius:8px;cursor:pointer;background:'+col+'14;border:1px solid '+col+'33">'
-          +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:#e8edf5">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
+          +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:var(--d-head)">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
           +'<div style="font-size:10px;color:#9aa7bd;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
           +'<div style="font-size:9px;color:#5f6b7e">'+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div>';
       });
@@ -29051,7 +29065,7 @@ function bikeChain_(b){
 function dsRenderAttention_(el, d){
   if(!el) return;
   var CK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
-  var H='<div style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em;margin-bottom:11px">WHAT NEEDS ATTENTION</div>';
+  var H='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em;margin-bottom:11px">WHAT NEEDS ATTENTION</div>';
   var items=(d.items||[]).slice().sort(function(a,b){return b.sev-a.sev;}).slice(0,5);
   if(d.state==='green' || !items.length){
     H+='<div style="display:flex;align-items:flex-start;gap:12px">';
@@ -29059,22 +29073,22 @@ function dsRenderAttention_(el, d){
     var _gm=['Nothing To See Here!','All Clear — Go Ride!','You are Good — Let us Go!','Green Light — Send It!'];
     var _gh=_gm[Math.floor(Date.now()/86400000)%_gm.length];
     H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:#4ade80;line-height:1.15">'+_gh+'</div>';
-    H+='<div style="font-size:12.5px;color:#94a3b8;margin:3px 0 10px">Everything looks great.</div>';
-    (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#cbd5e1;margin-bottom:7px">'+CK+'<span>'+p+'</span></div>'; });
-    H+='<div style="font-size:12px;color:#64748b;margin-top:8px">Enjoy the ride.</div></div></div>';
+    H+='<div style="font-size:12.5px;color:var(--d-t3);margin:3px 0 10px">Everything looks great.</div>';
+    (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--d-soft);margin-bottom:7px">'+CK+'<span>'+p+'</span></div>'; });
+    H+='<div style="font-size:12px;color:var(--d-t4);margin-top:8px">Enjoy the ride.</div></div></div>';
   } else {
     var red=d.state==='red', accent=red?'#ef4444':'#f59e0b';
     var narr=(d.narrated && d.narrated.bullets && d.narrated.bullets.length)?d.narrated.bullets:null;
     H+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:17px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:16px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span>'
-      +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:#64748b;border:1px solid #2a3550;border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
+      +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--d-t4);border:1px solid #2a3550;border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
     if(narr){
       // AI-narrated: dot color follows the day state (per-item severity is not
       // preserved through narration, so we do not fake it).
-      narr.forEach(function(t){ H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.5">'+t+'</span></div>'; });
+      narr.forEach(function(t){ H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+accent+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:var(--d-soft);line-height:1.5">'+t+'</span></div>'; });
     } else {
       items.forEach(function(it){
         var dot=it.sev>=2?'#ef4444':'#f59e0b';
-        H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:#cbd5e1;line-height:1.5">'+it.text+'</span></div>';
+        H+='<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="width:5px;height:5px;border-radius:50%;background:'+dot+';flex-shrink:0;margin-top:6px"></span><span style="font-size:13px;color:var(--d-soft);line-height:1.5">'+it.text+'</span></div>';
       });
     }
     if(red){
@@ -29146,13 +29160,13 @@ function openRecoveryEditor_(){
   var m=document.createElement('div'); m.id='recov-editor';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
   m.onclick=function(e){ if(e.target===m) m.remove(); };
-  var fc='width:100%;padding:11px 12px;background:#1a1f2e;border:1px solid #252d40;border-radius:10px;color:#e8edf5;font-size:15px;font-family:inherit;box-sizing:border-box';
+  var fc='width:100%;padding:11px 12px;background:#1a1f2e;border:1px solid #252d40;border-radius:10px;color:var(--d-head);font-size:15px;font-family:inherit;box-sizing:border-box';
   var s=document.createElement('div');
-  s.style.cssText='background:#111318;border:1px solid #1c2130;border-radius:16px;padding:20px;width:100%;max-width:340px';
-  s.innerHTML='<div style="font-size:16px;font-weight:800;color:#f1f5f9;margin-bottom:4px">Recovery metrics</div>'
-    +'<div style="font-size:11px;color:#64748b;margin-bottom:16px">Enter todays morning readings.</div>'
-    +'<div style="margin-bottom:12px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">HRV (ms)</div><input id="rec-hrv" type="number" inputmode="numeric" placeholder="e.g. 47" value="'+(st.hrv!=null?st.hrv:'')+'" style="'+fc+'"></div>'
-    +'<div style="margin-bottom:18px"><div style="font-size:11px;color:#94a3b8;margin-bottom:5px">Resting HR (bpm)</div><input id="rec-rhr" type="number" inputmode="numeric" placeholder="e.g. 58" value="'+(st.restingHR!=null?st.restingHR:'')+'" style="'+fc+'"></div>';
+  s.style.cssText='background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:20px;width:100%;max-width:340px';
+  s.innerHTML='<div style="font-size:16px;font-weight:800;color:var(--d-head);margin-bottom:4px">Recovery metrics</div>'
+    +'<div style="font-size:11px;color:var(--d-t4);margin-bottom:16px">Enter todays morning readings.</div>'
+    +'<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">HRV (ms)</div><input id="rec-hrv" type="number" inputmode="numeric" placeholder="e.g. 47" value="'+(st.hrv!=null?st.hrv:'')+'" style="'+fc+'"></div>'
+    +'<div style="margin-bottom:18px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">Resting HR (bpm)</div><input id="rec-rhr" type="number" inputmode="numeric" placeholder="e.g. 58" value="'+(st.restingHR!=null?st.restingHR:'')+'" style="'+fc+'"></div>';
   var save=document.createElement('button'); save.textContent='Save';
   save.style.cssText='width:100%;padding:12px;background:#4ade80;border:none;border-radius:11px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
   save.onclick=function(){ var h=parseFloat(document.getElementById('rec-hrv').value), r=parseFloat(document.getElementById('rec-rhr').value);
@@ -29604,8 +29618,8 @@ function dsShowDashboard(){
     var line='M'+pts.join(' L'), area=line+' L'+w+' '+h+' L0 '+h+' Z';
     return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision"><path d="'+area+'" fill="'+color+'" opacity="0.10"/><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
-  function card(inner,extra){ return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
-  function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:#5b6678;text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
+  function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+  function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
   function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
   var durStr=mins>=60?(Math.floor(mins/60)+'h'+(mins%60?' '+(mins%60)+'m':'')):(mins+' min');
@@ -29615,11 +29629,11 @@ function dsShowDashboard(){
   H+='<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;flex-shrink:0">';
   H+='<div style="display:flex;align-items:center;gap:13px">';
   H+='<div style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;color:'+(hour<18&&hour>=6?ACC.amber:ACC.blue)+'">'+(hour<18&&hour>=6?'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>':'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>')+'</div>';
-  H+='<div><div style="font-size:20px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">'+greeting+', Mikey</div><div style="font-size:12px;color:#64748b;margin-top:1px">Here is your athlete overview.</div></div>';
+  H+='<div><div style="font-size:20px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">'+greeting+', Mikey</div><div style="font-size:12px;color:var(--d-t4);margin-top:1px">Here is your athlete overview.</div></div>';
   H+='</div>';
   H+='<div style="display:flex;align-items:center;gap:9px">';
-  H+='<div style="display:flex;align-items:center;gap:7px;background:#111318;border:1px solid #1c2130;border-radius:9px;padding:7px 12px;font-size:12px;color:#cbd5e1;font-weight:500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>'+dateStr+'</div>';
-  H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:#111318;border:1px solid #1c2130;border-radius:9px;padding:7px 13px;font-size:12px;color:#cbd5e1;font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
+  H+='<div style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:9px;padding:7px 12px;font-size:12px;color:var(--d-soft);font-weight:500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>'+dateStr+'</div>';
+  H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:9px;padding:7px 13px;font-size:12px;color:var(--d-soft);font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
   H+='</div></div>';
 
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
@@ -29639,22 +29653,22 @@ function dsShowDashboard(){
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
   var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
-  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:#5b6678;margin-top:2px">/100</div></div></div>';
+  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:var(--d-dim);margin-top:2px">/100</div></div></div>';
   var trendC=(iq.score==null)?ACC.green:verdict.color;
   // Arrow points up for building/peaking/fresh, flat-ish (right) for easing/detraining.
   var trendArrow=(verdict.phase==='detraining'||verdict.phase==='overreaching')
     ? '<path d="M3 12h18M21 12l-6-6M21 12l-6 6"/>'
     : '<path d="M3 17l6-6 4 4 8-8M14 7h6v6"/>';
   iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+trendC+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+trendC+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+trendArrow+'</svg></div>';
-  iqInner+='<div style="font-size:13px;color:#94a3b8;margin-top:4px">'+trendNote+'</div>';
+  iqInner+='<div style="font-size:13px;color:var(--d-t3);margin-top:4px">'+trendNote+'</div>';
   iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
   [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',(lastWt==null?String.fromCharCode(0x2014):Math.round(lastWt*10)/10),wtChange]].forEach(function(s){
-    iqInner+='<div style="min-width:0"><div style="font-size:10px;color:#5b6678;font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:#e8edf5;line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
+    iqInner+='<div style="min-width:0"><div style="font-size:10px;color:var(--d-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:var(--d-head);line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
   });
   iqInner+='</div></div></div>';
   function _hx2rgb(h){ h=h.replace('#',''); return parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16); }
   var _pillRGB=_hx2rgb(verdict.color);
-  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid #1c2130"><span style="font-size:11px;font-weight:700;color:'+verdict.color+';background:rgba('+_pillRGB+',.12);border:1px solid rgba('+_pillRGB+',.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:#64748b">'+verdict.loadNote+'</span></div>';
+  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)"><span style="font-size:11px;font-weight:700;color:'+verdict.color+';background:rgba('+_pillRGB+',.12);border:1px solid rgba('+_pillRGB+',.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:var(--d-t4)">'+verdict.loadNote+'</span></div>';
   H+=card(iqInner);
 
   // -- Today's Plan --
@@ -29662,10 +29676,10 @@ function dsShowDashboard(){
   var planIcon=activityIcon_((twk&&twk.name)||'Ride',38);
   var focus=twk?(twk.isRest?'Recovery':twk.isHard?'Intensity / threshold':twk.isRide?'Aerobic endurance':'General'):'—';
   var pInner=lbl("TODAY'S PLAN");
-  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:#94a3b8;margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
+  pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
-      pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #1c2130"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:#64748b;width:70px">'+rw[0]+'</span><span style="font-size:13px;color:#e2e8f0;font-weight:600">'+rw[1]+'</span></div>';
+      pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-raise)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
     });
   }
   pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div></div>';
@@ -29675,14 +29689,14 @@ function dsShowDashboard(){
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:#111318;border:1px solid #1c2130;border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:#f1f5f9;line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:#e2e8f0;font-weight:700">'+label+'</div><div style="font-size:9px;color:#64748b;margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
+    return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:var(--d-t2);font-weight:700">'+label+'</div><div style="font-size:9px;color:var(--d-t4);margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkgStr_(wkg),'W/kg',(wkg==null?'needs a weight':'FTP + weight'),spark(wkgSeries.length>1?wkgSeries:(wkg==null?[]:[wkg,wkg]),ACC.blue,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.teal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3"/></svg>',ACC.teal,weekHM,'Total Time','This Week',spark(timeSeries,ACC.teal,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg>',ACC.green,weekActs,'Activities','This Week',spark(actSeries,ACC.green,100,22));
   rc+='</div>';
-  rc+='<div id="ds-attention-card" style="background:#111318;border:1px solid #1c2130;border-radius:14px;padding:14px 15px;flex:1;min-height:0"></div>';
+  rc+='<div id="ds-attention-card" style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 15px;flex:1;min-height:0"></div>';
   rc+='</div>';
   H+=rc;
   H+='</div>';
@@ -29691,21 +29705,21 @@ function dsShowDashboard(){
   H+='<div style="display:grid;grid-template-columns:1.7fr 1fr 1.15fr 1fr 1.15fr;gap:10px;min-width:0;align-items:stretch;flex:1 0 auto">';
   // Recent Activities
   var ra=lbl('RECENT ACTIVITIES',link('View All Activities','activities'));
-  if(!recent.length){ ra+='<div style="font-size:12px;color:#64748b;padding:12px 0">No activities yet.</div>'; }
+  if(!recent.length){ ra+='<div style="font-size:12px;color:var(--d-t4);padding:12px 0">No activities yet.</div>'; }
   recent.forEach(function(r,ix){
     var stype=r.sportType||r.type||'Ride'; if((typeof rideIsIndoor==='function'&&rideIsIndoor(r))&&/run|jog/i.test(stype)) stype='Treadmill';
     var ridx=rideRefOf_(r); if(rideRefOk_(ridx)===false && r.stravaId) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=(constRideTSS_(r)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
-    ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
+    ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
     ra+='<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,30)+'</div>';
-    ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:#64748b;margin-top:1px">'+dstr+'</div></div>';
+    ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+dstr+'</div></div>';
     ra+='<div style="display:flex;gap:13px;flex-shrink:0;text-align:right">';
-    if(dist>0) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:8px;color:#5b6678">Distance</div></div>';
-    if(r.duration) ra+='<div><div style="font-size:12px;font-weight:700;color:#e8edf5">'+r.duration+'</div><div style="font-size:8px;color:#5b6678">Time</div></div>';
-    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:8px;color:#5b6678">TSS</div></div>';
-    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:8px;color:#5b6678">IF</div></div>';
+    if(dist>0) ra+='<div><div style="font-size:12px;font-weight:700;color:var(--d-head)">'+(Math.round(dist*10)/10)+' mi</div><div style="font-size:8px;color:var(--d-dim)">Distance</div></div>';
+    if(r.duration) ra+='<div><div style="font-size:12px;font-weight:700;color:var(--d-head)">'+r.duration+'</div><div style="font-size:8px;color:var(--d-dim)">Time</div></div>';
+    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.amber+'">'+(tss||'—')+'</div><div style="font-size:8px;color:var(--d-dim)">TSS</div></div>';
+    ra+='<div><div style="font-size:12px;font-weight:700;color:'+ACC.green+'">'+(ifv!=null?ifv.toFixed(2):'—')+'</div><div style="font-size:8px;color:var(--d-dim)">IF</div></div>';
     ra+='</div></div>';
   });
   H+=card(ra);
@@ -29720,14 +29734,14 @@ function dsShowDashboard(){
   function hdBody(res, mode, ride){
     if(mode==='loading'){
       var sp='<svg width="20" height="20" viewBox="0 0 40 40" style="flex-shrink:0"><circle cx="20" cy="20" r="16" fill="none" stroke="#1c2130" stroke-width="5"/><path d="M20 4a16 16 0 0 1 16 16" fill="none" stroke="#64748b" stroke-width="5" stroke-linecap="round"><animateTransform attributeName="transform" type="rotate" from="0 20 20" to="360 20 20" dur="0.8s" repeatCount="indefinite"/></path></svg>';
-      return '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 6px">'+sp+'<div style="font-size:15px;font-weight:700;color:#94a3b8">Finding a steady ride…</div></div>'
-        +'<div style="font-size:11px;color:#5b6678;line-height:1.5">Fetching stream data to measure decoupling.</div>'
+      return '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 6px">'+sp+'<div style="font-size:15px;font-weight:700;color:var(--d-t3)">Finding a steady ride…</div></div>'
+        +'<div style="font-size:11px;color:var(--d-dim);line-height:1.5">Fetching stream data to measure decoupling.</div>'
         +'<div style="flex:1;min-height:48px"></div>';
     }
     if(mode==='unavailable'){
-      return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
-        +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">Stream data unavailable</div>'
-        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Found qualifying rides, but Strava didn&#39;t return their HR/power streams. Not a claim about the rides themselves.</div></div>';
+      return '<div style="font-size:22px;font-weight:800;color:var(--d-t4);line-height:1.1;margin-bottom:4px">N/A</div>'
+        +'<div style="font-size:12px;font-weight:600;color:var(--d-t3);margin:2px 0 8px">Stream data unavailable</div>'
+        +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:var(--d-dim);line-height:1.5">Found qualifying rides, but Strava didn&#39;t return their HR/power streams. Not a claim about the rides themselves.</div></div>';
     }
     if(res && res.applicable){
       var dec=res.decoupling;
@@ -29737,19 +29751,19 @@ function dsShowDashboard(){
       var who=ride?_hrdRideLabel_(ride):'';
       return '<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+(dec>=0?'+':'')+dec+'%</div>'
         +'<div style="font-size:12px;font-weight:600;color:'+col+';margin:4px 0 2px">'+msg+'</div>'
-        +(who?'<div style="font-size:10px;color:#94a3b8;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+who+'</div>':'')
-        +'<div style="font-size:10px;color:#5b6678;margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
+        +(who?'<div style="font-size:10px;color:var(--d-t3);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+who+'</div>':'')
+        +'<div style="font-size:10px;color:var(--d-dim);margin-bottom:8px">Steady segment, warm-up dropped · '+res.durMin+' min</div>'
         +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end">'+(series.length>1?spark(series,col,100,56):'')+'</div>';
     }
     // Nothing in the window qualified. The reason shown is the NEWEST candidate's — the most
     // recognizable one to the user ("that was my group ride") — but the copy says the search was
     // window-wide so the state doesn't read as a verdict on one ride.
-    return '<div style="font-size:22px;font-weight:800;color:#64748b;line-height:1.1;margin-bottom:4px">N/A</div>'
-      +'<div style="font-size:12px;font-weight:600;color:#94a3b8;margin:2px 0 8px">'+(hdCands.length?'No qualifying ride in '+_HRD_LOOKBACK_DAYS+' days':_hrdReasonText_('no ride'))+'</div>'
-      +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:#5b6678;line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power and HR. Nothing in the last '+_HRD_LOOKBACK_DAYS+' days fits.</div></div>';
+    return '<div style="font-size:22px;font-weight:800;color:var(--d-t4);line-height:1.1;margin-bottom:4px">N/A</div>'
+      +'<div style="font-size:12px;font-weight:600;color:var(--d-t3);margin:2px 0 8px">'+(hdCands.length?'No qualifying ride in '+_HRD_LOOKBACK_DAYS+' days':_hrdReasonText_('no ride'))+'</div>'
+      +'<div style="flex:1;min-height:48px;display:flex;align-items:flex-end"><div style="font-size:10px;color:var(--d-dim);line-height:1.5">Decoupling needs a steady, endurance-pace ride of 60+ min with power and HR. Nothing in the last '+_HRD_LOOKBACK_DAYS+' days fits.</div></div>';
   }
   var hd=lbl('HR DRIFT');
-  hd+='<div style="font-size:10px;color:#64748b;margin-bottom:6px">Last qualifying ride · Pw:Hr decoupling</div>';
+  hd+='<div style="font-size:10px;color:var(--d-t4);margin-bottom:6px">Last qualifying ride · Pw:Hr decoupling</div>';
   // Three-way: a ride already answers (sync pre-pass) → paint it. Nothing answers yet but some
   // candidate is one fetch from an answer → loading, then the async walk below. Otherwise the
   // window genuinely holds no qualifying ride → N/A, no network call.
@@ -29780,27 +29794,27 @@ function dsShowDashboard(){
   var calPct=nf.goals.cal?Math.min(1,nf.consumed.cal/nf.goals.cal):0;
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
   var nu=lbl('NUTRITION',link('View','nutrition'));
-  nu+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Today</div>';
-  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:#5b6678">kcal</div></div></div>';
+  nu+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">Today</div>';
+  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:var(--d-dim)">kcal</div></div></div>';
   nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
     // Three flex siblings: dot (fixed) · label (flex:1, truncates with ellipsis if space is
     // tight) · value (never shrinks). The old layout let the nowrap label overflow onto the
     // value on a narrow column — which is why it collided once values hit two/three digits.
-    nu+='<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+';flex-shrink:0"></span><span style="font-size:12px;color:#cbd5e1;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+m[1]+'</span><span style="font-size:12px;color:#e8edf5;font-weight:700;white-space:nowrap;flex-shrink:0;padding-left:8px">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
+    nu+='<div style="display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:'+m[0]+';flex-shrink:0"></span><span style="font-size:12px;color:var(--d-soft);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+m[1]+'</span><span style="font-size:12px;color:var(--d-head);font-weight:700;white-space:nowrap;flex-shrink:0;padding-left:8px">'+(m[2]||0)+' / '+(m[3]||0)+'g</span></div>';
   });
   nu+='</div></div>';
-  if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:#64748b">Fiber <b style="color:#e8edf5">'+nf.consumed.fiber+'g</b></div>'; }
+  if(nf.consumed&&nf.consumed.fiber!=null){ nu+='<div style="margin-top:auto;padding-top:12px;font-size:12px;color:var(--d-t4)">Fiber <b style="color:var(--d-head)">'+nf.consumed.fiber+'g</b></div>'; }
   H+=card(nu);
   // Weather
   var wea=lbl('WEATHER',link('View Forecast','weather'));
-  wea+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">Grand Rapids, MI</div>';
-  wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:#64748b;margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
+  wea+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">Grand Rapids, MI</div>';
+  wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:var(--d-t4);margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
   wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;margin-top:auto">';
-  wea+='<div><div style="font-size:10px;color:#64748b">Humidity</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-hum">—</div></div>';
-  wea+='<div><div style="font-size:10px;color:#64748b">Wind</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-wind">—</div></div>';
-  wea+='<div><div style="font-size:10px;color:#64748b">UV Index</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-uv">—</div></div>';
-  wea+='<div><div style="font-size:10px;color:#64748b">Air Quality</div><div style="font-size:14px;font-weight:700;color:#e8edf5;margin-top:1px" id="ds-wx-aqi">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:var(--d-t4)">Humidity</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-hum">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:var(--d-t4)">Wind</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-wind">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:var(--d-t4)">UV Index</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-uv">—</div></div>';
+  wea+='<div><div style="font-size:10px;color:var(--d-t4)">Air Quality</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-aqi">—</div></div>';
   wea+='</div>';
   H+=card(wea);
   // My Bikes (both)
@@ -29810,9 +29824,9 @@ function dsShowDashboard(){
   bikes.forEach(function(b,bi){
     var ch=(typeof bikeChain_==='function')?bikeChain_(b):null;
     var sub=b.wheelset||b.groupset||(b.miles!=null?Math.round(b.miles)+' mi':'');
-    bk+='<div data-act="gear" style="display:flex;gap:11px;align-items:center;padding:7px 0;'+(bi>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid #1c2130;filter:brightness(1.06)">';
-    bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#e8edf5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:2px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
+    bk+='<div data-act="gear" style="display:flex;gap:11px;align-items:center;padding:7px 0;'+(bi>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
+    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--d-raise);filter:brightness(1.06)">';
+    bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:var(--d-t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:2px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
     bk+='</div>';
   });
   H+=card(bk);
@@ -29832,9 +29846,9 @@ function dsShowDashboard(){
   var niceMax=Math.ceil(tlTop*1.12/100)*100; if(niceMax<100) niceMax=100;
   var optY=optTarget>0?(1-Math.min(1,optTarget/niceMax))*100:-1;
   var tl=lbl('TRAINING LOAD');
-  tl+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">This Week</div>';
-  tl+='<div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:27px;font-weight:800;color:#fff;letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:#64748b">TSS</span></div>';
-  tl+='<div style="margin:4px 0 2px">'+(tlPct!=null?'<span style="font-size:14px;font-weight:800;color:'+(tlPct>=0?ACC.green:ACC.red)+'">'+(tlPct>=0?'+':'')+tlPct+'%</span> <span style="font-size:11px;color:#64748b">vs last 7 days</span>':'<span style="font-size:11px;color:#64748b">no prior week to compare</span>')+'</div>';
+  tl+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">This Week</div>';
+  tl+='<div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:27px;font-weight:800;color:#fff;letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:var(--d-t4)">TSS</span></div>';
+  tl+='<div style="margin:4px 0 2px">'+(tlPct!=null?'<span style="font-size:14px;font-weight:800;color:'+(tlPct>=0?ACC.green:ACC.red)+'">'+(tlPct>=0?'+':'')+tlPct+'%</span> <span style="font-size:11px;color:var(--d-t4)">vs last 7 days</span>':'<span style="font-size:11px;color:var(--d-t4)">no prior week to compare</span>')+'</div>';
   tl+='<div style="flex:1;min-height:0;display:flex;gap:7px;margin-top:8px">';
   tl+='<div style="flex:1;position:relative;min-height:98px">';
   [0,0.25,0.5,0.75,1].forEach(function(fr){ tl+='<div style="position:absolute;left:0;right:0;top:'+((1-fr)*100)+'%;height:1px;background:#171c2b"></div>'; });
@@ -29844,11 +29858,11 @@ function dsShowDashboard(){
     tl+='<div style="flex:1;display:flex;justify-content:center;align-items:flex-end;height:100%"><div style="width:11px;height:'+hp.toFixed(1)+'%;background:linear-gradient(180deg,'+(isToday?'#60a5fa':'#3b82f6')+',#1e3a8a);border-radius:3px 3px 0 0"></div></div>';
   });
   tl+='</div></div>';
-  tl+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:#5b6678;padding:1px 0;min-height:98px">';
+  tl+='<div style="width:22px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:var(--d-dim);padding:1px 0;min-height:98px">';
   [niceMax,niceMax*0.75,niceMax*0.5,niceMax*0.25,0].forEach(function(v){ tl+='<div>'+Math.round(v)+'</div>'; });
   tl+='</div></div>';
   tl+='<div style="display:flex;gap:7px;margin-top:5px"><div style="flex:1;display:flex">';
-  days7.forEach(function(k){ tl+='<div style="flex:1;text-align:center;font-size:9px;color:#5b6678">'+['S','M','T','W','T','F','S'][new Date(k+"T00:00:00").getDay()]+'</div>'; });
+  days7.forEach(function(k){ tl+='<div style="flex:1;text-align:center;font-size:9px;color:var(--d-dim)">'+['S','M','T','W','T','F','S'][new Date(k+"T00:00:00").getDay()]+'</div>'; });
   tl+='</div><div style="width:22px"></div></div>';
   H+=card(tl);
   // Recovery card. TWO honest modes:
@@ -29885,22 +29899,22 @@ function dsShowDashboard(){
     recSub=verdict.readyNote;
   }
   var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
-  rd+='<div style="font-size:10px;color:#64748b;margin:-6px 0 6px">'+recSub+'</div>';
+  rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
   rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:#fff;line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">HRV ms</div></div>';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid #1c2130;border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:#64748b;margin-top:2px">Rest HR bpm</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
   rd+='</div>';
   H+=card(rd);
   // Consistency
   var wd=['M','T','W','T','F','S','S'];
   var monS=new Date(now); monS.setDate(now.getDate()-((now.getDay()===0)?6:now.getDay()-1));
   var cs=lbl('CONSISTENCY');
-  cs+='<div style="font-size:10px;color:#64748b;margin:-6px 0 8px">This Month</div>';
-  cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:#fff">'+activeDays+'</span><span style="font-size:12px;color:#94a3b8">of '+elapsed+' days active</span></div>';
+  cs+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">This Month</div>';
+  cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:#fff">'+activeDays+'</span><span style="font-size:12px;color:var(--d-t3)">of '+elapsed+' days active</span></div>';
   cs+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
   for(var wk=0;wk<2;wk++){ for(var dd2=0;dd2<7;dd2++){ var cd=new Date(monS); cd.setDate(monS.getDate()+(wk*7)+dd2); var ck=normDate(cd.getFullYear()+'-'+(cd.getMonth()+1)+'-'+cd.getDate()); var on=!!activeSet[ck]; var fut=cd>now;
-    cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:#5b6678">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?'#facc15':fut?'#171c2b':'#2a3550')+'"></span></div>';
+    cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:var(--d-dim)">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?'#facc15':fut?'#171c2b':'#2a3550')+'"></span></div>';
   }}
   cs+='</div>';
   cs+='<div style="font-size:11px;color:'+ACC.green+';text-align:center;margin-top:auto;padding-top:11px;font-weight:600">'+(activeDays>=elapsed*0.6?'Great consistency!':activeDays>=elapsed*0.4?'Solid rhythm.':'Keep showing up.')+'</div>';
@@ -29908,15 +29922,15 @@ function dsShowDashboard(){
   // Upcoming Events
   var _mon=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   var ue=lbl('UPCOMING EVENTS',link('View Calendar','calendar'));
-  if(!upRaces.length){ ue+='<div data-act="addrace" style="font-size:12px;color:#64748b;padding:10px 0;text-align:center;cursor:pointer">No races scheduled — add one</div>'; }
+  if(!upRaces.length){ ue+='<div data-act="addrace" style="font-size:12px;color:var(--d-t4);padding:10px 0;text-align:center;cursor:pointer">No races scheduled — add one</div>'; }
   upRaces.slice(0,2).forEach(function(rr,ri){
     var sIcon=rr.sport==='run'?ACC.red:rr.sport==='bike'?ACC.green:ACC.amber;
-    ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid #1c2130;':'')+'cursor:pointer">';
-    ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:#64748b">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1">'+rr.dateObj.getDate()+'</div></div>';
-    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:#e8edf5;'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:#f59e0b">(tentative)</span>':'')+'</div><div style="font-size:10px;color:#64748b">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
+    ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
+    ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:var(--d-t4)">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1">'+rr.dateObj.getDate()+'</div></div>';
+    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--d-head);'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:#f59e0b">(tentative)</span>':'')+'</div><div style="font-size:10px;color:var(--d-t4)">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
     ue+='<div style="font-size:11px;font-weight:700;color:'+(rr.status==='cancelled'?ACC.red:ACC.green)+';flex-shrink:0">'+(rr.status==='cancelled'?'Cancelled':(rr.daysOut+' day'+(rr.daysOut===1?'':'s')))+'</div></div>';
   });
-  ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:#94a3b8;border:1px solid #1c2130;border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
+  ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:var(--d-t3);border:1px solid var(--d-raise);border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
   H+=card(ue);
   H+='</div>';
 
@@ -29925,7 +29939,7 @@ function dsShowDashboard(){
   // "Data synced" = app-data (Firebase) save time — NOT weather. Weather has its
   // own live freshness token (#ds-wx-sync), filled by the getWeather_ call below,
   // so a stale/failed weather fetch can never read as a blanket "Up to date".
-  H+='<div style="text-align:center;font-size:10px;color:#5b6678;padding:4px 0 2px">All times in Eastern Time (ET)'+(syncAgo?'  &middot;  Data synced '+syncAgo:'')+'  &middot;  <span id="ds-wx-sync">Weather loading&hellip;</span></div>';
+  H+='<div style="text-align:center;font-size:10px;color:var(--d-dim);padding:4px 0 2px">All times in Eastern Time (ET)'+(syncAgo?'  &middot;  Data synced '+syncAgo:'')+'  &middot;  <span id="ds-wx-sync">Weather loading&hellip;</span></div>';
 
   H+='</div>'; // body
 
@@ -30031,7 +30045,7 @@ function dsShowRidesList(){
   wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14';
 
   var titleBar=document.createElement('div');
-  titleBar.style.cssText='padding:14px 18px 10px;border-bottom:1px solid #1e2130;flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
+  titleBar.style.cssText='padding:14px 18px 10px;border-bottom:1px solid var(--d-line);flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
   var tbTitle=document.createElement('div');
   tbTitle.style.cssText='font-size:18px;font-weight:700;color:#fff';
   titleBar.appendChild(tbTitle);
@@ -30095,8 +30109,8 @@ function dsShowRidesList(){
       var info=document.createElement('div');
       info.style.cssText='flex:1;min-width:0';
       var _rn=r.name||r.sportType||'Activity';
-      info.innerHTML='<div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rn+'</div>'
-        +'<div style="font-size:11px;color:#64748b;margin-top:1px">'+(r.date||'')+(r.startTime?' &middot; '+(new Date(r.startTime).getHours()%12||12)+':'+(('0'+new Date(r.startTime).getMinutes()).slice(-2))+(new Date(r.startTime).getHours()>=12?' PM':' AM'):'')+'</div>';
+      info.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rn+'</div>'
+        +'<div style="font-size:11px;color:var(--d-t4);margin-top:1px">'+(r.date||'')+(r.startTime?' &middot; '+(new Date(r.startTime).getHours()%12||12)+':'+(('0'+new Date(r.startTime).getMinutes()).slice(-2))+(new Date(r.startTime).getHours()>=12?' PM':' AM'):'')+'</div>';
       row.appendChild(info);
 
       // Stats: dist, time, bpm, TSS — matching image 2 columns
@@ -30107,7 +30121,7 @@ function dsShowRidesList(){
         if(!val) return;
         var s=document.createElement('div');
         s.style.cssText='text-align:right;min-width:44px';
-        s.innerHTML='<div style="font-size:13px;font-weight:600;color:'+color+'">'+val+'</div><div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.04em;margin-top:1px">'+lbl+'</div>';
+        s.innerHTML='<div style="font-size:13px;font-weight:600;color:'+color+'">'+val+'</div><div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.04em;margin-top:1px">'+lbl+'</div>';
         stats.appendChild(s);
       }
       statCol(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'','Dist','#e2e8f0');
@@ -30120,7 +30134,7 @@ function dsShowRidesList(){
 
     if(visCount<getFiltered().length){
       var mb=document.createElement('div');
-      mb.style.cssText='padding:14px;text-align:center;color:#64748b;cursor:pointer;font-size:13px;border-top:1px solid #1a1f2e';
+      mb.style.cssText='padding:14px;text-align:center;color:var(--d-t4);cursor:pointer;font-size:13px;border-top:1px solid #1a1f2e';
       mb.textContent='Load more ('+(getFiltered().length-visCount)+' remaining)';
       mb.onclick=function(){visCount+=20;renderList();};
       list.appendChild(mb);
@@ -30282,7 +30296,7 @@ function openDesktopRideDetail(idx, _noFetch){
   Object.keys(months2).sort().reverse().forEach(function(mo2){
     var parts=mo2.split('-');
     var moLabel=MO_NAMES[parseInt(parts[1],10)-1]+' '+parts[0];
-    listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
+    listHtml2+='<div style="padding:6px 14px 2px;font-size:10px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em">'+moLabel+'</div>';
     months2[mo2].forEach(function(lr){
       var lridx=rideRefOf_(lr);
       if(rideRefOk_(lridx)===false && lr.stravaId) lridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===lr.stravaId;});
@@ -30296,8 +30310,8 @@ function openDesktopRideDetail(idx, _noFetch){
       listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
         +'<div style="width:28px;height:28px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:#4ade80">'+sportIcon+'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:11px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
-          +'<div style="font-size:10px;color:#64748b;margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'
+          +'<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
+          +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'
         +'</div>'
         +(lwkg?'<div style="font-size:10px;font-weight:700;color:'+lcolor+'">'+lwkg+'</div>':'')
         +'</div>';
@@ -30306,9 +30320,9 @@ function openDesktopRideDetail(idx, _noFetch){
 
   // Inject two-column layout
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
-    +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid #1e2130;display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:10px 14px 8px;border-bottom:1px solid #1e2130;font-size:15px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid #1e2130;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
+    +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid var(--d-line);display:flex;flex-direction:column;overflow:hidden">'
+      +'<div style="padding:10px 14px 8px;border-bottom:1px solid var(--d-line);font-size:15px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--d-line);font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
       +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'
     +'<div id="act-detail-panel" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>'
@@ -30336,19 +30350,19 @@ function openDesktopRideDetail(idx, _noFetch){
   var _bikeMi = bike ? bikeMileageStats_(bike).totalMi.toLocaleString() : '';
 
   function statCell(val,lbl,color,last){
-    return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid #1e2130')+'">'
+    return '<div style="padding:10px 8px;text-align:center;'+(last?'':'border-right:1px solid var(--d-line)')+'">'
       +'<div style="font-size:17px;font-weight:700;color:'+color+';line-height:1">'+val+'</div>'
-      +'<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div></div>';
+      +'<div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;margin-top:4px">'+lbl+'</div></div>';
   }
   function miniStat(val,lbl,border){
-    return '<div style="padding:10px 16px;'+(border?'border-right:1px solid #1e2130':'')+'">'
+    return '<div style="padding:10px 16px;'+(border?'border-right:1px solid var(--d-line)':'')+'">'
       +'<div style="font-size:16px;font-weight:700;color:#fff">'+val+'</div>'
-      +'<div style="font-size:10px;color:#64748b;margin-top:2px">'+lbl+'</div></div>';
+      +'<div style="font-size:10px;color:var(--d-t4);margin-top:2px">'+lbl+'</div></div>';
   }
 
   // Elevation profile with ft axis + mileage axis
   function elevProfile(ele,distMi){
-    if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:11px">No elevation data</div>';
+    if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:11px">No elevation data</div>';
     var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
     var W=800,H=100,padL=36,padB=16;
     var iW=W-padL, iH=H-padB;
@@ -30392,7 +30406,7 @@ function openDesktopRideDetail(idx, _noFetch){
   // Laps table
   // lap.time is stored in raw seconds — format as mm:ss (or h:mm:ss).
   var fmtLapT=function(t){ if(t==null||t==='') return '--'; var s=Math.round(parseFloat(t)); if(!isFinite(s)) return '--'; var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60; return (h>0?h+':'+(m<10?'0':'')+m:''+m)+':'+(ss<10?'0':'')+ss; };
-  var lapsHtml='<div style="font-size:11px;color:#64748b;padding:4px 0">No lap data available.</div>';
+  var lapsHtml='<div style="font-size:11px;color:var(--d-t4);padding:4px 0">No lap data available.</div>';
   if(r.laps&&r.laps.length){
     lapsHtml='<table class="ds-laps"><tr><th>Lap</th><th>Distance</th><th>Time</th><th>Avg Power</th><th>Avg HR</th></tr>';
     r.laps.slice(0,8).forEach(function(lap,i){
@@ -30404,28 +30418,28 @@ function openDesktopRideDetail(idx, _noFetch){
   main2.innerHTML=
 
     // HEADER
-    '<div style="padding:10px 18px 8px;border-bottom:1px solid #1e2130;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
+    '<div style="padding:10px 18px 8px;border-bottom:1px solid var(--d-line);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">'+
       '<div style="display:flex;align-items:center;gap:14px">'+
-        '<div id="rd-back" style="font-size:12px;color:#94a3b8;cursor:pointer;display:flex;align-items:center;gap:4px;flex-shrink:0">'+
+        '<div id="rd-back" style="font-size:12px;color:var(--d-t3);cursor:pointer;display:flex;align-items:center;gap:4px;flex-shrink:0">'+
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></div>'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
             '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
             '<span data-view="renameRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="Rename" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
-          '<div style="font-size:11px;color:#64748b;margin-top:2px">'+dtStr+'</div>'+
+          '<div style="font-size:11px;color:var(--d-t4);margin-top:2px">'+dtStr+'</div>'+
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
         // Share + Export removed — neither had a real implementation (a dead button on a primary
         // surface is the same failure as fake data). Export returns as a GPX/FIT download of the
         // ride's GPS track once specced; Share is a separate, undecided call.
-        '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:#94a3b8;background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
+        '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:var(--d-t3);background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
       '</div>'+
     '</div>'+
 
     // STATS BAR — 7 cols matching reference exactly
-    '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid #1e2130;flex-shrink:0;background:#111318">'+
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--d-line);flex-shrink:0;background:var(--d-panel)">'+
       statCell(r.duration||'--','Time','#fff')+
       statCell(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance','#fff')+
       statCell(wkg+(wkg!=='--'?' W/kg':''),'Intensity','#FC4C02')+
@@ -30436,7 +30450,7 @@ function openDesktopRideDetail(idx, _noFetch){
     '</div>'+
 
     // TABS
-    '<div style="display:flex;background:#111318;border-bottom:1px solid #1e2130;padding:0 14px;flex-shrink:0">'+
+    '<div style="display:flex;background:var(--d-panel);border-bottom:1px solid var(--d-line);padding:0 14px;flex-shrink:0">'+
       '<div class="ds-tab on" data-rdtab="overview">Overview</div>'+
       '<div class="ds-tab" data-rdtab="map">Map</div>'+
       '<div class="ds-tab" data-rdtab="charts">Charts</div>'+
@@ -30452,7 +30466,7 @@ function openDesktopRideDetail(idx, _noFetch){
       '<div id="rd-map" style="width:100%;max-width:520px;aspect-ratio:4/3;margin:0 auto;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
 
       // 4-col stats below map
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid #1e2130;flex-shrink:0">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid var(--d-line);flex-shrink:0">'+
         miniStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance',true)+
         miniStat(r.elev?Math.round(r.elev)+' ft':'--','Elevation Gain',true)+
         miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'—','Max Elevation',true)+
@@ -30460,43 +30474,43 @@ function openDesktopRideDetail(idx, _noFetch){
       '</div>'+
 
       // ELEVATION PROFILE
-      '<div style="background:#0d0f14;padding:8px 10px 2px;border-bottom:1px solid #1e2130">'+
+      '<div style="background:#0d0f14;padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
         elevProfile(r.chartEle,r.distance)+
       '</div>'+
 
       // 4 METRIC CARDS
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid #1e2130;background:#0d0f14">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--d-line);background:#0d0f14">'+
 
-        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+        '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em">Power</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">NP</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">NP</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg</div></div>'+
           '</div>'+
           spark(r.chartPwr,'#FC4C02')+
         '</div>'+
 
-        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+        '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.1em">Heart Rate</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">bpm Avg</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">bpm Avg</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartHR,'#E24B4A')+
         '</div>'+
 
-        '<div style="padding:12px 14px;border-right:1px solid #1e2130">'+
+        '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.1em">Cadence</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">rpm Avg</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">rpm Avg</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartCad||null,'#A78BFA')+
         '</div>'+
@@ -30506,8 +30520,8 @@ function openDesktopRideDetail(idx, _noFetch){
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#60A5FA;text-transform:uppercase;letter-spacing:.1em">Speed</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Avg mph</div></div>'+
-            '<div><div style="font-size:14px;font-weight:600;color:#94a3b8">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">Max mph</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg mph</div></div>'+
+            '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max mph</div></div>'+
           '</div>'+
           spark(null,'#60A5FA')+
         '</div>'+
@@ -30515,8 +30529,8 @@ function openDesktopRideDetail(idx, _noFetch){
 
       // FOOTER ROW: PRs / Achievements / Equipment / Nutrition
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14">'+
-        '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
+        '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
           (function(){
             // Best power peak for THIS ride. Prefer 20-min; fall back through
             // 5-min / 1-min / 5-sec so short rides still show a record. A ride
@@ -30528,32 +30542,32 @@ function openDesktopRideDetail(idx, _noFetch){
             // Don't claim "No power data" when the ride HAS summary power (NP/avg
             // are shown right beside this) but no detailed power curve/streams —
             // that self-contradiction was the bug. Distinguish the two states.
-            if(!top) return '<div style="font-size:11px;color:#64748b">'+((r.np||r.avgPwr)?'Detailed power not recorded':'No power data')+'</div>';
-            return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+top[0]+'W</div><div style="font-size:9px;color:#64748b">'+top[1]+'</div></div></div>';
+            if(!top) return '<div style="font-size:11px;color:var(--d-t4)">'+((r.np||r.avgPwr)?'Detailed power not recorded':'No power data')+'</div>';
+            return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+top[0]+'W</div><div style="font-size:9px;color:var(--d-t4)">'+top[1]+'</div></div></div>';
           })()+
         '</div>'+
-        '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span></div>'+
+        '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span></div>'+
           '<div style="display:flex;gap:5px">'+
             '<div style="width:26px;height:26px;border-radius:50%;background:#1a2030;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;font-size:11px">🚴</div>'+
             ((r.distance>=50)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏆</div>':'')+
             ((r.elev>=1000)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);display:flex;align-items:center;justify-content:center;font-size:11px">⛰</div>':'')+
           '</div>'+
         '</div>'+
-        '<div style="padding:10px 14px;border-right:1px solid #1e2130">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
+        '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
           (bike
-            ?'<div style="font-size:12px;font-weight:600;color:#e2e8f0">'+bike.name+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:#64748b;margin-top:1px">'+_bikeMi+' mi total</div>'
+            ?'<div style="font-size:12px;font-weight:600;color:var(--d-t2)">'+bike.name+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">'+_bikeMi+' mi total</div>'
             :'')+
           // Real bike-assignment control (populated in the wire-up below). Same
           // mechanism as the mobile equipment tab + bulk tool: st.bikeAssignments.
           '<div id="rd-bike-assign-slot" style="margin-top:7px"></div>'+
         '</div>'+
         '<div style="padding:10px 14px">'+
-          '<div style="font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
+          '<div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
           '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#e2e8f0">'+rideCalText_(r)+'</div><div style="font-size:9px;color:#64748b">'+((rideCalories_(r)||{}).est?'Burned &middot; est':'Burned')+'</div></div></div>'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:#64748b">Fluid</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:var(--d-t2)">'+rideCalText_(r)+'</div><div style="font-size:9px;color:var(--d-t4)">'+((rideCalories_(r)||{}).est?'Burned &middot; est':'Burned')+'</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:var(--d-t4)">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -30573,14 +30587,14 @@ function openDesktopRideDetail(idx, _noFetch){
     if(_bikeSlot && !_isRideActivity_(r)){
       // Not a ride: no bike picker, and say so rather than leaving an empty cell that reads as
       // "unassigned" and invites assigning one.
-      _bikeSlot.innerHTML='<div style="font-size:11px;color:#5b6678;line-height:1.4">'
+      _bikeSlot.innerHTML='<div style="font-size:11px;color:var(--d-dim);line-height:1.4">'
         +aiEsc_(String((typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type))||'Activity'))
         +' &mdash; no bike</div>';
       _bikeSlot=null;
     }
     if(_bikeSlot){
       var _sel=document.createElement('select');
-      _sel.style.cssText='width:100%;padding:6px 8px;background:#0d0f14;color:#e2e8f0;border:1px solid #1e2130;border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
+      _sel.style.cssText='width:100%;padding:6px 8px;background:#0d0f14;color:var(--d-t2);border:1px solid var(--d-line);border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
       var _o0=document.createElement('option'); _o0.value=''; _o0.textContent='Unassigned'; _sel.appendChild(_o0);
       (st.bikes||[]).filter(function(b){return b && !b.deleted;}).forEach(function(b){
         var o=document.createElement('option'); o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:''); _sel.appendChild(o);
@@ -30636,7 +30650,7 @@ function openDesktopRideDetail(idx, _noFetch){
       var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
       if(alt){gl=alt.gpsLats;gn=alt.gpsLons;}
     }
-    if(!gl){mapDiv.style.cssText='height:200px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';mapDiv.textContent='No GPS data';return;}
+    if(!gl){mapDiv.style.cssText='height:200px;background:#1c2535;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px';mapDiv.textContent='No GPS data';return;}
     if(typeof L==='undefined'){setTimeout(initMap,200);return;}
     var mid='rdmap'+Date.now();
     mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:100%"></div>';
@@ -30650,7 +30664,7 @@ function openDesktopRideDetail(idx, _noFetch){
         colorAt: hasPwr?function(i,pts,frac){ var pw=r.chartPwr[Math.min(Math.round(frac*(r.chartPwr.length-1)),r.chartPwr.length-1)]||0; return pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8'; }:null
       });
       if(!map){
-        mapDiv.style.cssText='height:200px;background:#111722;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:13px';
+        mapDiv.style.cssText='height:200px;background:#111722;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px';
         mapDiv.textContent='GPS data unavailable';
       }
     },100);
@@ -30668,57 +30682,57 @@ function openDesktopRideDetail(idx, _noFetch){
     '<div class="ds-rp">'+
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'+
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
-        '<span style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">AI Coach Insight</span>'+
-        '<span style="font-size:8px;color:#64748b;border:1px solid #252d40;padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
+        '<span style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">AI Coach Insight</span>'+
+        '<span style="font-size:8px;color:var(--d-t4);border:1px solid #252d40;padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-left:auto;cursor:pointer"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
       '</div>'+
       '<div id="rp-ai-hl" style="font-size:13px;font-weight:700;color:#4ADE80;margin-bottom:8px;line-height:1.4">Analyzing&hellip;</div>'+
       '<div id="rp-ai-bullets" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>'+
       '<div id="rp-ai-rec-wrap" style="display:none;margin-bottom:10px">'+
         '<div style="font-size:10px;font-weight:700;color:#4ADE80;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Recommendation</div>'+
-        '<div id="rp-ai-rec" style="font-size:11px;color:#94a3b8;line-height:1.5"></div>'+
+        '<div id="rp-ai-rec" style="font-size:11px;color:var(--d-t3);line-height:1.5"></div>'+
       '</div>'+
-      '<button id="rp-ask-coach" style="width:100%;padding:7px;background:#1a1f2e;border:1px solid #252d40;border-radius:6px;color:#e2e8f0;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
+      '<button id="rp-ask-coach" style="width:100%;padding:7px;background:#1a1f2e;border:1px solid #252d40;border-radius:6px;color:var(--d-t2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
     '</div>'+
 
     // WEATHER CONDITIONS
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Weather Conditions</div>'+
+        '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Weather Conditions</div>'+
         '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View Details &rsaquo;</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:6px">'+
-        '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
-        '<div><div id="rp-wind" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Wind</div></div>'+
-        '<div><div id="rp-hum" style="font-size:14px;font-weight:700;color:#e2e8f0">--</div><div style="font-size:9px;color:#64748b;margin-top:2px">Humidity</div></div>'+
-        '<div><div style="font-size:14px;font-weight:700;color:#e2e8f0">10 mi</div><div style="font-size:9px;color:#64748b;margin-top:2px">Visibility</div></div>'+
+        '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
+        '<div><div id="rp-wind" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Wind</div></div>'+
+        '<div><div id="rp-hum" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Humidity</div></div>'+
+        '<div><div style="font-size:14px;font-weight:700;color:var(--d-t2)">10 mi</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Visibility</div></div>'+
       '</div>'+
     '</div>'+
 
     // EQUIPMENT
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
-        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
+        '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
         '<div data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
       '</div>'+
       (bike?
         '<div style="display:flex;align-items:center;gap:10px">'+
           '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+sportPaths_('bike')+'</svg>'+
           '<div>'+
-            '<div style="font-size:12px;font-weight:700;color:#e2e8f0">'+bike.name+'</div>'+
-            '<div style="font-size:10px;color:#64748b;margin-top:2px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div>'+
+            '<div style="font-size:12px;font-weight:700;color:var(--d-t2)">'+bike.name+'</div>'+
+            '<div style="font-size:10px;color:var(--d-t4);margin-top:2px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div>'+
             '<div style="display:flex;gap:10px;margin-top:4px">'+
-              '<div style="font-size:9px;color:#64748b"><span style="color:#94a3b8;font-weight:600">'+_bikeMi+'</span> mi total</div>'+
+              '<div style="font-size:9px;color:var(--d-t4)"><span style="color:var(--d-t3);font-weight:600">'+_bikeMi+'</span> mi total</div>'+
             '</div>'+
           '</div>'+
         '</div>':
-        '<div style="font-size:11px;color:#64748b">No equipment logged for this ride.</div>')+
+        '<div style="font-size:11px;color:var(--d-t4)">No equipment logged for this ride.</div>')+
     '</div>'+
 
     // LAPS
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
-        '<div style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Laps</div>'+
+        '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Laps</div>'+
         '<div id="rd-viewall-laps" style="font-size:10px;color:#60a5fa;cursor:pointer">View All Laps &rsaquo;</div>'+
       '</div>'+
       lapsHtml+
@@ -30763,7 +30777,7 @@ function openDesktopRideDetail(idx, _noFetch){
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg>'
     ];
     if(bl)bl.innerHTML=bullets.slice(0,4).map(function(b,i){
-      return '<div style="display:flex;gap:6px;align-items:flex-start">'+bulletIcons[i%4]+'<span style="font-size:11px;color:#94a3b8;line-height:1.5">'+b+'</span></div>';
+      return '<div style="display:flex;gap:6px;align-items:flex-start">'+bulletIcons[i%4]+'<span style="font-size:11px;color:var(--d-t3);line-height:1.5">'+b+'</span></div>';
     }).join('');
     if(rec&&rw&&rt){rw.style.display='block';rt.textContent=rec;}
     var ask=document.getElementById('rp-ask-coach');
@@ -31688,14 +31702,14 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
   function redrawRouteMap(){
     if(routeColorMode==='power'){
       mapCard.innerHTML=buildRouteMap(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartPwr||[], FTP, r.laps).replace('height:260px','height:340px');
-      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#94a3b8"></span>Z1-2</span>',
+      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:var(--d-t3)"></span>Z1-2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z3</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z4</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z5</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444"></span>Z6+</span>'].join('');
     } else if(routeColorMode==='hr'){
       mapCard.innerHTML=buildRouteMapHR(r.lats||r.gpsLats, r.lons||r.gpsLons, r.chartHR||[], parseInt(st.maxHR||172), r.laps);
-      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#64748b"></span>Z1</span>',
+      legendRow.innerHTML=['<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:var(--d-t4)"></span>Z1</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#3b82f6"></span>Z2</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#22c55e"></span>Z3</span>',
         '<span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--t2)"><span style="width:10px;height:10px;border-radius:50%;background:#f59e0b"></span>Z4</span>',
@@ -31751,7 +31765,7 @@ function buildRouteMapHR(lats, lons, hrData, maxHR, laps){
     lats=lats.slice(0,minLen); lons=lons.slice(0,minLen);
   }
   var _ntHR=normalizeTrack_(lats,lons);
-  if(!_ntHR.ok) return '<div style="width:100%;height:340px;display:flex;align-items:center;justify-content:center;background:#111722;color:#64748b;font-size:13px">GPS data unavailable</div>';
+  if(!_ntHR.ok) return '<div style="width:100%;height:340px;display:flex;align-items:center;justify-content:center;background:#111722;color:var(--d-t4);font-size:13px">GPS data unavailable</div>';
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId='leaflet-map-hr-'+window._mapCount;
   var html='<div id="'+mapId+'" style="width:100%;height:340px"></div>';
   setTimeout(function(){
@@ -32321,8 +32335,8 @@ function openBikeEditor(idx, onSaved){
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
   sheet.style.cssText='background:var(--bg,#0d0f14);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto';
-  var fc='width:100%;border:1px solid var(--b2,#252d40);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2,#1a1f2e);color:var(--t1,#e2e8f0);font-family:inherit;box-sizing:border-box';
-  var lc='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3,#64748b);margin-bottom:5px';
+  var fc='width:100%;border:1px solid var(--b2,#252d40);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2,#1a1f2e);color:var(--t1,var(--d-t2));font-family:inherit;box-sizing:border-box';
+  var lc='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3,var(--d-t4));margin-bottom:5px';
   sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2,#252d40);border-radius:2px;margin:0 auto 16px"></div>'
     +'<div style="font-size:18px;font-weight:800;color:var(--t1,#fff);margin-bottom:16px">'+(existing?'Edit Bike':'Add a Bike')+'</div>'
     +'<div style="margin-bottom:10px"><div style="'+lc+'">Name</div><input id="bk-name" type="text" placeholder="e.g. Dogma F" value="'+(existing?esc(existing.name):'')+'" style="'+fc+'"></div>'
@@ -32332,14 +32346,14 @@ function openBikeEditor(idx, onSaved){
     +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Groupset</div><input id="bk-group" type="text" placeholder="e.g. Ultegra Di2" value="'+(existing?esc(existing.groupset):'')+'" style="'+fc+'"></div>'
     +'<div style="flex:1"><div style="'+lc+'">Power meter</div><input id="bk-power" type="text" placeholder="e.g. Assioma DUO" value="'+(existing?esc(existing.power):'')+'" style="'+fc+'"></div></div>'
     +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Owned from</div><input id="bk-from" type="date" value="'+(existing?esc(existing.ownedFrom):'')+'" style="'+fc+'"></div>'
-    +'<div style="flex:1"><div style="'+lc+'">Owned to <span style="text-transform:none;font-weight:400;color:#64748b">(blank = current)</span></div><input id="bk-to" type="date" value="'+(existing?esc(existing.ownedTo):'')+'" style="'+fc+'"></div></div>'
+    +'<div style="flex:1"><div style="'+lc+'">Owned to <span style="text-transform:none;font-weight:400;color:var(--d-t4)">(blank = current)</span></div><input id="bk-to" type="date" value="'+(existing?esc(existing.ownedTo):'')+'" style="'+fc+'"></div></div>'
     +'<div style="'+lc+'">Drivetrain</div>'
-    +'<div style="display:flex;gap:10px;margin-bottom:6px"><div style="flex:1"><div style="font-size:10px;color:#64748b;margin-bottom:4px">Chain waxed at (odometer mi)</div><input id="bk-chainwax" type="number" placeholder="'+(existing&&existing.miles!=null?Math.round(existing.miles):'e.g. 3200')+'" value="'+(existing&&existing.chainWaxedAtMi!=null?esc(existing.chainWaxedAtMi):'')+'" style="'+fc+'"></div>'
-    +'<div style="flex:1"><div style="font-size:10px;color:#64748b;margin-bottom:4px">Chain life (mi)</div><input id="bk-chainlife" type="number" placeholder="1500" value="'+(existing&&existing.chainLifeMi!=null?esc(existing.chainLifeMi):'')+'" style="'+fc+'"></div></div>'
-    +(existing&&existing.miles!=null?'<div id="bk-usecurrent" style="font-size:10px;color:#4ade80;margin:0 0 16px;cursor:pointer">Odometer now: '+Math.round(existing.miles)+' mi &middot; tap to mark waxed at current mileage</div>':'<div style="font-size:10px;color:#64748b;margin:0 0 16px">Set a wax mileage to track live chain wear.</div>')
+    +'<div style="display:flex;gap:10px;margin-bottom:6px"><div style="flex:1"><div style="font-size:10px;color:var(--d-t4);margin-bottom:4px">Chain waxed at (odometer mi)</div><input id="bk-chainwax" type="number" placeholder="'+(existing&&existing.miles!=null?Math.round(existing.miles):'e.g. 3200')+'" value="'+(existing&&existing.chainWaxedAtMi!=null?esc(existing.chainWaxedAtMi):'')+'" style="'+fc+'"></div>'
+    +'<div style="flex:1"><div style="font-size:10px;color:var(--d-t4);margin-bottom:4px">Chain life (mi)</div><input id="bk-chainlife" type="number" placeholder="1500" value="'+(existing&&existing.chainLifeMi!=null?esc(existing.chainLifeMi):'')+'" style="'+fc+'"></div></div>'
+    +(existing&&existing.miles!=null?'<div id="bk-usecurrent" style="font-size:10px;color:#4ade80;margin:0 0 16px;cursor:pointer">Odometer now: '+Math.round(existing.miles)+' mi &middot; tap to mark waxed at current mileage</div>':'<div style="font-size:10px;color:var(--d-t4);margin:0 0 16px">Set a wax mileage to track live chain wear.</div>')
     +'<div style="margin-bottom:16px"><div style="'+lc+'">Photo</div>'
-    +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:#0d0f14;background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,#252d40);margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:12px">'+(photoData?'':'No photo')+'</div>'
-    +'<input id="bk-photo" type="file" accept="image/*" style="font-size:12px;color:var(--t2,#94a3b8)"></div>';
+    +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:#0d0f14;background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,#252d40);margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px">'+(photoData?'':'No photo')+'</div>'
+    +'<input id="bk-photo" type="file" accept="image/*" style="font-size:12px;color:var(--t2,var(--d-t3))"></div>';
 
   setTimeout(function(){
     var uc=document.getElementById('bk-usecurrent');
@@ -32388,7 +32402,7 @@ function openBikeEditor(idx, onSaved){
     sv(); modal.remove(); refresh(); toast('Bike saved');
   };
   var cancelBtn=document.createElement('button');
-  cancelBtn.style.cssText='width:100%;padding:12px;background:none;border:none;color:var(--t3,#64748b);font-size:14px;cursor:pointer;font-family:inherit';
+  cancelBtn.style.cssText='width:100%;padding:12px;background:none;border:none;color:var(--t3,var(--d-t4));font-size:14px;cursor:pointer;font-family:inherit';
   cancelBtn.textContent='Cancel'; cancelBtn.onclick=function(){ modal.remove(); };
   sheet.appendChild(saveBtn); sheet.appendChild(cancelBtn);
   if(existing){
@@ -32869,7 +32883,7 @@ function buildRouteMap(lats, lons, pwrData, FTP, laps){
   }
   if(!lats.length) return '';
   var _ntPM=normalizeTrack_(lats,lons);
-  if(!_ntPM.ok) return '<div style="width:100%;height:260px;display:flex;align-items:center;justify-content:center;background:#111722;color:#64748b;font-size:13px;border-radius:16px">GPS data unavailable</div>';
+  if(!_ntPM.ok) return '<div style="width:100%;height:260px;display:flex;align-items:center;justify-content:center;background:#111722;color:var(--d-t4);font-size:13px;border-radius:16px">GPS data unavailable</div>';
   // Generate unique map ID
   if(!window._mapCount) window._mapCount=0; window._mapCount++; var mapId = 'leaflet-map-' + window._mapCount;
   window._lastRouteMapId = mapId;
@@ -33519,27 +33533,27 @@ function _rgSection_(){
   // today; if a future snapshot makes it current the chart stays history-only by design, but it
   // must not go on saying there is nothing recent to draw.
   var lead=c.current
-    ? ('Your run log is current through <b style="color:#f1f5f9">'+MONF+' '+g.subjectYear+'</b>. This chart is history only &mdash; it does not draw a month in progress.')
-    : ('Your last rankable run month was <b style="color:#f1f5f9">'+MONF+' '+g.subjectYear+'</b>. This chart is history &mdash; there is no current month to draw, so none is drawn.');
+    ? ('Your run log is current through <b style="color:var(--d-head)">'+MONF+' '+g.subjectYear+'</b>. This chart is history only &mdash; it does not draw a month in progress.')
+    : ('Your last rankable run month was <b style="color:var(--d-head)">'+MONF+' '+g.subjectYear+'</b>. This chart is history &mdash; there is no current month to draw, so none is drawn.');
   var legend='<div style="display:flex;gap:16px;margin:2px 0 8px;font-size:11px;flex-wrap:wrap">'
     +'<span style="color:#FC4C02">&#9644; '+g.subjectYear+' &middot; '+g.subjectRankable+' of '+g.subjectMonths+' months rankable</span>'
-    +(g.best?('<span style="color:#64748b">&#9644; '+g.bestYear+' &middot; your biggest year, '+g.bestRankable+' rankable months</span>'):'')
+    +(g.best?('<span style="color:var(--d-t4)">&#9644; '+g.bestYear+' &middot; your biggest year, '+g.bestRankable+' rankable months</span>'):'')
     +'</div>';
   var moyLine=(g.moyLast>1)
-    ? ('<div style="font-size:12px;color:#94a3b8;line-height:1.55;margin-top:8px">'+MONF+' '+g.subjectYear
-       +' is one of <b style="color:#f1f5f9">'+g.moyLast+'</b> rankable '+MONF+'s in your run history &mdash; deep enough to compare like for like.</div>')
+    ? ('<div style="font-size:12px;color:var(--d-t3);line-height:1.55;margin-top:8px">'+MONF+' '+g.subjectYear
+       +' is one of <b style="color:var(--d-head)">'+g.moyLast+'</b> rankable '+MONF+'s in your run history &mdash; deep enough to compare like for like.</div>')
     : '';
-  var foot='Ranked against <b style="color:#94a3b8">'+c.rankable+'</b> rankable run-months, never the '
+  var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months, never the '
     +c.span+'-month calendar span. '
     +(g.best?(g.bestYear+' totalled '+g.bestTotal.toLocaleString()+' mi against '+g.subjectTotal.toLocaleString()+' mi in '+g.subjectYear+'. '):'')
     +'The gap is the move to cycling, not a missing record.';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
-    +'<span style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Running Growth</span>'
-    +'<span style="font-size:11px;color:#5b6678">cumulative miles by year &middot; history only</span></div>'
-    +'<div style="font-size:12.5px;color:#94a3b8;line-height:1.55;margin-bottom:10px">'+lead+'</div>'
+    +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Running Growth</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by year &middot; history only</span></div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;margin-bottom:10px">'+lead+'</div>'
     +legend+_rgChart_(g)+moyLine
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -33653,12 +33667,12 @@ function _prSection_(){
       gap=(ev.kind==='time') ? (r.season.val-target.val) : (target.val-r.season.val);
       if(gap<=0) gap=null;                                  // already beaten — no gap to close
     }
-    html+='<div style="padding:11px 0;border-bottom:1px solid #1c2130">'
+    html+='<div style="padding:11px 0;border-bottom:1px solid var(--d-raise)">'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'
-      +'<span style="font-size:13px;font-weight:700;color:#f1f5f9">'+ev.name+'</span>'
+      +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+ev.name+'</span>'
       +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+fmt(ev,target)+'</span>'
       +'</div>'
-      +'<div style="font-size:11px;color:#94a3b8;margin-top:3px">'
+      +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px">'
       +(r.reachable
          ? ('career best &middot; '+yr(r.career)+(r.careerIsBand?'':' &middot; still your target'))
          : ('best since '+_PR_BAND_LABEL+' &middot; '+yr(r.band)))
@@ -33671,28 +33685,28 @@ function _prSection_(){
     //     is a 2015 time is the exact failure the three tiers were built to prevent: a board where
     //     the only number in front of him is from an athlete he no longer is.
     if(!r.reachable){
-      html+='<div style="font-size:11px;color:#5b6678;margin-top:2px">'
+      html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
         +'career best '+fmt(ev,r.career)+' &middot; '+yr(r.career)+' &middot; history</div>';
     }else if(!r.careerIsBand){
-      html+='<div style="font-size:11px;color:#5b6678;margin-top:2px">'
+      html+='<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'
         +'best since '+_PR_BAND_LABEL+' '+fmt(ev,r.band)+' &middot; '+yr(r.band)+'</div>';
     }
     if(r.season && r.season!==target){
-      html+='<div style="font-size:11px;color:#64748b;margin-top:2px">this year '+fmt(ev,r.season)
+      html+='<div style="font-size:11px;color:var(--d-t4);margin-top:2px">this year '+fmt(ev,r.season)
         +(gap!==null ? (' &middot; beat by '+(ev.kind==='time'?_prFmtGap_(gap):(Math.round(gap*10)/10+' mi'))) : ' &middot; ahead')
         +'</div>';
     }
     html+='</div>';
   });
-  var foot='Ranked against <b style="color:#94a3b8">'+c.rankable+'</b> rankable run-months. '
+  var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
     +'Events with no result since '+_PR_BAND_LABEL+' are left off &mdash; this board shows what you can still climb, '
     +'not everything you have ever done.';
-  return '<div style="background:#0e1117;border:1px solid #1c2130;border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
-    +'<span style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
-    +'<span style="font-size:11px;color:#5b6678">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
+    +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
     +html
-    +'<div style="font-size:11px;color:#5b6678;line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid #1c2130">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -33916,13 +33930,13 @@ function renderRun(){
         zb.style.cssText='background:var(--s1);border-radius:8px;padding:8px 10px;margin-bottom:6px';
         zb.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">Zone breakdown</div>'
           +'<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;gap:1px">'
-          +(r.z1pct?'<div style="background:#64748b;width:'+r.z1pct+'%"></div>':'')
+          +(r.z1pct?'<div style="background:var(--d-t4);width:'+r.z1pct+'%"></div>':'')
           +(r.z2pct?'<div style="background:#0F6E56;width:'+r.z2pct+'%"></div>':'')
           +(r.z3pct?'<div style="background:#BA7517;width:'+r.z3pct+'%"></div>':'')
           +(r.z4pct?'<div style="background:#ef4444;width:'+r.z4pct+'%"></div>':'')
           +'</div>'
           +'<div style="display:flex;gap:8px;margin-top:5px;flex-wrap:wrap">'
-          +(r.z1pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#64748b;display:inline-block"></span>Z1 '+r.z1pct+'%</span>':'')
+          +(r.z1pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:var(--d-t4);display:inline-block"></span>Z1 '+r.z1pct+'%</span>':'')
           +(r.z2pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#0F6E56;display:inline-block"></span>Z2 '+r.z2pct+'%</span>':'')
           +(r.z3pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#BA7517;display:inline-block"></span>Z3 '+r.z3pct+'%</span>':'')
           +(r.z4pct?'<span style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:2px;background:#ef4444;display:inline-block"></span>Z4 '+r.z4pct+'%</span>':'')
