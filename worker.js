@@ -139,7 +139,14 @@ export default {
   --d-line:rgba(0,0,0,.10);--d-line2:rgba(0,0,0,.16);--d-chip:#EDEFF3;
   --d-head:#15181D;--d-t1:#15181D;--d-t2:#2C3138;--d-soft:#3A4149;
   --d-t3:#4E5866;--d-t4:#6B7280;--d-dim:#7C8595;
-  --d-hover:rgba(0,0,0,.045);--d-scroll:rgba(0,0,0,.20);--d-scroll2:rgba(0,0,0,.34)
+  --d-hover:rgba(0,0,0,.045);--d-scroll:rgba(0,0,0,.20);--d-scroll2:rgba(0,0,0,.34);
+  --d-deep:#FFFFFF;--d-well:#F7F8FA;--d-inset:#F1F3F7;
+  /* Semantic hues, TEXT only. The dark values are the app palette unchanged; the light values
+     are the same hue darkened to stay readable on white. Backgrounds, chart fills and SVG
+     strokes deliberately keep the original literals - a zone colour or a sport hue means the
+     same thing in both themes, and repainting those would change what the charts say. */
+  --c-green:#15803D;--c-amber:#B45309;--c-blue:#2563EB;--c-cyan:#0E7490;
+  --c-lime:#4D7C0F;--c-red:#DC2626;--c-purple:#7E22CE;--c-gold:#B4771A
 }
 body.dark{
   --bg:#111111;--s1:#1C1C1E;--s2:#2C2C2E;--s3:#3A3A3C;
@@ -149,7 +156,10 @@ body.dark{
   --d-line:#1e2130;--d-line2:#252d40;--d-chip:#1a1f2e;
   --d-head:#f1f5f9;--d-t1:#ffffff;--d-t2:#e2e8f0;--d-soft:#cbd5e1;
   --d-t3:#94a3b8;--d-t4:#64748b;--d-dim:#5b6678;
-  --d-hover:rgba(255,255,255,.03);--d-scroll:rgba(255,255,255,.18);--d-scroll2:rgba(255,255,255,.32)
+  --d-hover:rgba(255,255,255,.03);--d-scroll:rgba(255,255,255,.18);--d-scroll2:rgba(255,255,255,.32);
+  --d-deep:#0d0f14;--d-well:#0e1220;--d-inset:#171c2b;
+  --c-green:#4ade80;--c-amber:#f59e0b;--c-blue:#60a5fa;--c-cyan:#22d3ee;
+  --c-lime:#84cc16;--c-red:#ef4444;--c-purple:#a855f7;--c-gold:#FFB938
 }
 body.dark .hdr{background:#1C1C1E;box-shadow:0 1px 8px rgba(0,0,0,.4)}
 body.dark .wo-card{box-shadow:none}
@@ -221,7 +231,7 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-stat{padding:11px 6px 9px;text-align:center;border-right:1px solid var(--d-line)}
 .ds-stat:last-child{border-right:none}
 .ds-sv{font-size:16px;font-weight:700;color:var(--d-t1);line-height:1}
-.ds-sv.o{color:#FC4C02}.ds-sv.b{color:#60a5fa}.ds-sv.a{color:#f59e0b}
+.ds-sv.o{color:#FC4C02}.ds-sv.b{color:var(--c-blue)}.ds-sv.a{color:var(--c-amber)}
 .ds-sl{font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
 .ds-tabs{display:flex;background:var(--d-panel);border-bottom:1px solid var(--d-line);padding:0 14px;flex-shrink:0}
 .ds-tab{font-size:12px;padding:8px 12px;color:var(--d-t4);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
@@ -261,13 +271,13 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-rp{padding:13px 15px;border-bottom:1px solid var(--d-line)}
 .ds-rp-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
 .ds-rp-t{font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
-.ds-rp-link{font-size:10px;color:#60a5fa;cursor:pointer}
+.ds-rp-link{font-size:10px;color:var(--c-blue);cursor:pointer}
 .ds-conds{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;text-align:center}
 .ds-cd-icon{font-size:18px;margin-bottom:3px}
 .ds-cd-val{font-size:12px;font-weight:700;color:var(--d-t2)}
 .ds-cd-lbl{font-size:9px;color:var(--d-t4);margin-top:1px}
 .ds-ai-wrap{display:flex;align-items:flex-start;gap:10px}
-.ds-ai-label{font-size:13px;font-weight:700;color:#4ade80;margin-bottom:4px}
+.ds-ai-label{font-size:13px;font-weight:700;color:var(--c-green);margin-bottom:4px}
 .ds-ai-body{font-size:11px;color:var(--d-t3);line-height:1.5}
 .ds-view-full{width:100%;margin-top:9px;padding:6px;background:var(--d-chip);border:1px solid var(--d-line2);border-radius:7px;font-size:11px;color:var(--d-t3);cursor:pointer;text-align:center}
 .ds-ins-list{display:flex;flex-direction:column;gap:8px}
@@ -8203,7 +8213,7 @@ function anatNamesToEx_(names){ return (names||[]).map(function(n){ return {name
 function _exQ_(name){ return encodeURIComponent(String(name||'')).replace(/'/g,'%27'); }
 function watchChipHTML_(name){
   return '<span onclick="event.stopPropagation();watchExercise_(&#39;'+_exQ_(name)+'&#39;)" title="Watch a demo"'
-    +' style="flex-shrink:0;font-size:10px;font-weight:700;color:#4D9FFF;border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>';
+    +' style="flex-shrink:0;font-size:10px;font-weight:700;color:var(--c-blue);border:1px solid rgba(77,159,255,.35);border-radius:6px;padding:2px 6px;cursor:pointer">Watch</span>';
 }
 // The prescription text for one movement: "3×8 @ 155 lb (70%)". Returns '' when nothing is
 // prescribed, so a caller can render a dash rather than an empty "@".
@@ -8277,7 +8287,7 @@ function planCardHTML_(s, dateKey){
     // resets to the session. Off the shared mount, same as every other surface.
     if(typeof anatBlockHTML_==='function') lines.push(anatBlockHTML_(r.exercises));
   } else if(type==='rest'){
-    lines.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
+    lines.push('<div style="font-size:13px;font-weight:700;color:var(--c-green)">Rest day</div>');
   }
   if(r.note) lines.push('<div style="font-size:11.5px;color:var(--t3);margin-top:7px;line-height:1.45;font-style:italic">'+esc(r.note)+'</div>');
   var border=(type==='rest')?'#5DCAA5':'#FC4C02';
@@ -8798,7 +8808,7 @@ function doSwap(w,idx,btn){
   headerRow.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px';
 
   var lbl=document.createElement('span');
-  lbl.style.cssText='font-size:14px;font-weight:700;color:#ffffff';
+  lbl.style.cssText='font-size:14px;font-weight:700;color:var(--d-t1)';
   lbl.textContent='Swap With';
   headerRow.appendChild(lbl);
 
@@ -11248,7 +11258,7 @@ function renderNutr(){
   h+='  <div style="position:relative">';
   h+='    <button onclick="showHomeDash()" aria-label="Back to home" style="background:rgba(255,255,255,.2);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:600;padding:5px 10px 5px 8px;cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:4px;font-family:inherit">&#8592; Back</button>';
   h+='    <div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.08em">Fuel</div>';
-  h+='    <div style="font-size:24px;font-weight:800;color:#fff;letter-spacing:-.3px;margin-top:2px">Nutrition</div>';
+  h+='    <div style="font-size:24px;font-weight:800;color:var(--d-t1);letter-spacing:-.3px;margin-top:2px">Nutrition</div>';
   h+='    <div style="font-size:12px;color:rgba(255,255,255,.8);margin-top:3px">Dial in today&#39;s fueling to match your training.</div>';
   h+='  </div>';
   h+='</div>';
@@ -12524,7 +12534,7 @@ function showConstellation(){
   var hdr=document.createElement('div');
   hdr.style.cssText='flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 16px 10px 18px';
   var yrsSpan=N?(rides[N-1].d.getFullYear()-rides[0].d.getFullYear()+1):0;
-  hdr.innerHTML='<div><div style="font-size:19px;font-weight:800;letter-spacing:.02em;color:#fff">Constellation</div>'
+  hdr.innerHTML='<div><div style="font-size:19px;font-weight:800;letter-spacing:.02em;color:var(--d-t1)">Constellation</div>'
     +'<div style="font-size:11px;color:#7a8290;margin-top:2px">'+N.toLocaleString()+' rides &middot; '+yrsSpan+' years'+(omitted>0?(' &middot; '+omitted+' undated hidden'):'')+'</div></div>';
   var closeBtn=document.createElement('button');
   closeBtn.setAttribute('aria-label','Close'); closeBtn.innerHTML='&times;';
@@ -12563,7 +12573,7 @@ function showConstellation(){
   ctrlRow.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:11px';
   function navBtn(lbl){ var b=document.createElement('button'); b.innerHTML=lbl; b.style.cssText='background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#cfd4dd;width:34px;height:34px;border-radius:9px;font-size:16px;cursor:pointer;flex-shrink:0;line-height:1;font-family:inherit'; return b; }
   var prevB=navBtn('&lsaquo;'), nextB=navBtn('&rsaquo;');
-  var dateLbl=document.createElement('div'); dateLbl.style.cssText='flex:1;text-align:center;font-size:16px;font-weight:800;color:#fff';
+  var dateLbl=document.createElement('div'); dateLbl.style.cssText='flex:1;text-align:center;font-size:16px;font-weight:800;color:var(--d-t1)';
   var todayB=document.createElement('button'); todayB.textContent='Today';
   todayB.style.cssText='background:rgba(78,203,60,.1);border:1px solid rgba(78,203,60,.3);color:#7fe06a;font-size:11px;font-weight:700;padding:0 11px;height:34px;border-radius:9px;cursor:pointer;flex-shrink:0;font-family:inherit';
   ctrlRow.appendChild(prevB); ctrlRow.appendChild(dateLbl); ctrlRow.appendChild(nextB); ctrlRow.appendChild(todayB);
@@ -12627,7 +12637,7 @@ function showConstellation(){
       var tail=ni.isFallback ? '' : ((distStr?(sep+distStr):'')+sep+uiEsc_(sportLabel));
       var line=document.createElement('div'); line.style.cssText='font-size:12.5px;color:#d7dbe3;line-height:1.4';
       line.innerHTML='<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+constSportColor_(x.sport)+';margin-right:8px;vertical-align:middle"></span>'
-        +'<b style="color:#fff">'+yr+'</b>'+sep+uiEsc_(ni.text)+tail;
+        +'<b style="color:var(--d-t1)">'+yr+'</b>'+sep+uiEsc_(ni.text)+tail;
       card.appendChild(line);
       if(crowned){ var tag=document.createElement('div'); tag.style.cssText='font-size:10.5px;color:#F5C518;font-weight:700;margin-top:4px'; tag.innerHTML='&#9733; best '+crowned.year+' &middot; '+CONST_METRICS[curMetric].label; card.appendChild(tag); }
       otdList.appendChild(card);
@@ -12691,7 +12701,7 @@ function showConstellation(){
   function fillTip(idx){
     var x=rides[idx]; if(!x) return; var r=x.r, sportLabel=constSportLabel_(x.sport), ni=constNameInfo_(r,sportLabel);
     var dist=parseFloat(r.distance)||0, tss=constRideTSS_(r);
-    tip.innerHTML='<div style="font-weight:800;color:#fff;font-size:12.5px;margin-bottom:3px">'+uiEsc_(ni.text)+'</div>'
+    tip.innerHTML='<div style="font-weight:800;color:var(--d-t1);font-size:12.5px;margin-bottom:3px">'+uiEsc_(ni.text)+'</div>'
       +'<div style="font-size:11px;color:#aab0bd;line-height:1.55">'+MONTHS[x.d.getMonth()]+' '+x.d.getDate()+', '+x.d.getFullYear()+(dist?(' &middot; '+(Math.round(dist*10)/10)+' mi'):'')+'</div>'
       +'<div style="font-size:11px;line-height:1.55"><span style="color:'+constSportColor_(x.sport)+';font-weight:700">'+uiEsc_(sportLabel)+'</span><span style="color:#aab0bd"> &middot; '+(tss!=null?(tss+' TSS'):'&mdash;')+'</span></div>';
   }
@@ -13053,7 +13063,7 @@ function showHomeDash(){
         +'<div style="font-size:10px;font-weight:700;color:#378ADD">'+monthAbbr+'</div>'
         +'<div style="font-size:16px;font-weight:800;color:var(--t1)">'+raceDate.getDate()+'</div></div>'
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:700;color:var(--t1)'+(race.status==='cancelled'?';text-decoration:line-through;opacity:.6':'')+'">'+race.name+(race.status==='tentative'?' <span style="font-size:10px;font-weight:700;color:#f59e0b">(tentative)</span>':'')+'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:var(--t1)'+(race.status==='cancelled'?';text-decoration:line-through;opacity:.6':'')+'">'+race.name+(race.status==='tentative'?' <span style="font-size:10px;font-weight:700;color:var(--c-amber)">(tentative)</span>':'')+'</div>'
         +(race.location?'<div style="font-size:12px;color:var(--t3);margin-top:1px">'+race.location+'</div>':'')
         +'</div>'
         +'<div style="font-size:13px;font-weight:700;color:'+(race.status==='cancelled'?'#e24b4a':'#5DCAA5')+';flex-shrink:0">'+(race.status==='cancelled'?'Cancelled':daysOut+' days')+'</div>'
@@ -13543,7 +13553,7 @@ function openMetricTeach(metric){
   h+='<div style="padding:'+(desktop?'18px':'10px')+' 18px 18px">';
   h+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px">';
   h+='<div><div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7a8290">'+uiEsc_(t.aka)+'</div>';
-  h+='<div style="font-size:17px;font-weight:800;color:#fff;margin-top:2px">'+uiEsc_(t.name)+'</div></div>';
+  h+='<div style="font-size:17px;font-weight:800;color:var(--d-t1);margin-top:2px">'+uiEsc_(t.name)+'</div></div>';
   h+='<button id="mt-close" aria-label="Close" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#cfd4dd;width:32px;height:32px;border-radius:50%;font-size:19px;line-height:1;cursor:pointer;flex-shrink:0">&times;</button>';
   h+='</div>';
   h+='<div style="font-size:13.5px;color:#c7ccd6;line-height:1.5;margin-bottom:16px">'+uiEsc_(t.oneLiner)+'</div>';
@@ -13799,8 +13809,8 @@ function renderPerf(container){
     +'</div>'
     +'<div style="text-align:right">'
     +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Target</div>'
-    +'<div style="font-size:24px;font-weight:800;color:#FFB938;line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
-    +'<div style="font-size:11px;color:#FFB938;font-weight:700">Chase 1 &middot; '+targetFTP+'W &middot; '+targetBW+'lbs</div>'
+    +'<div style="font-size:24px;font-weight:800;color:var(--c-gold);line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
+    +'<div style="font-size:11px;color:var(--c-gold);font-weight:700">Chase 1 &middot; '+targetFTP+'W &middot; '+targetBW+'lbs</div>'
     +'</div>'
     +'</div>'
     // W/kg TRAJECTORY, not a progress bar. "68% of the way to Chase 1" is one ratio and reads the
@@ -13824,14 +13834,14 @@ function renderPerf(container){
       if(!spark){
         // No weigh-in history to draw. Say so rather than falling back to the bar this replaced.
         return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-          +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
+          +'<span>Progress to Chase 1</span><span style="color:var(--c-gold);font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
           +'<div style="font-size:10.5px;color:var(--t3);margin-top:3px">Log a few weigh-ins and this becomes a trend line toward '+targetWkg.toFixed(2)+'.</div>';
       }
       var rule=_onChart
         ? '<div style="position:absolute;left:0;right:0;top:'+((1-_tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
         : '';
       return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-        +'<span>Progress to Chase 1</span><span style="color:#FFB938;font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
+        +'<span>Progress to Chase 1</span><span style="color:var(--c-gold);font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
         +'<div style="position:relative">'+spark+rule+'</div>';
     })()
     +'</div>';
@@ -13947,7 +13957,7 @@ function renderPerf(container){
   var _iqM=(typeof athleteIQ_==='function')?athleteIQ_():null;
   var _iqMnull=(!_iqM||_iqM.score==null);
   var _iqMc=_iqMnull?'#4b5568':(_iqM.score>=80?'#4ade80':_iqM.score>=60?'#60a5fa':_iqM.score>=40?'#f59e0b':'#94a3b8');
-  html+='<div data-metric-teach="iq" role="button" tabindex="0" aria-label="Learn about the Athlete IQ Score" style="cursor:pointer;background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:16px;margin:0 16px 14px">'
+  html+='<div data-metric-teach="iq" role="button" tabindex="0" aria-label="Learn about the Athlete IQ Score" style="cursor:pointer;background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid var(--d-line2);border-radius:16px;padding:16px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ Score</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
     +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:40px;font-weight:800;color:'+_iqMc+';line-height:1">'+(_iqMnull?'—':_iqM.score)+'</div><div style="font-size:11px;color:#8b93a5;line-height:1.4">'+(_iqMnull?'Need ~4 weeks of ride history':'out of 100 · tap for the formula')+'</div></div>'
     +'</div>';
@@ -14153,7 +14163,7 @@ function renderPerf(container){
   html+='<div>';
   html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Weekly Load</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">TSS per week</div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:#ef4444">'+(highestTSS||'&mdash;')+'</span></div>';
+  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:var(--c-red)">'+(highestTSS||'&mdash;')+'</span></div>';
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">This week</span><span style="font-weight:700;color:var(--blue)">'+(wTSSData[wTSSData.length-1]||0)+'</span></div>';
   var avgTSS=wTSSData.length?Math.round(wTSSData.reduce(function(s,v){return s+v;},0)/wTSSData.filter(function(v){return v>0;}).length):0;
   html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">8-week avg</span><span style="font-weight:700">'+avgTSS+'</span></div>';
@@ -14166,7 +14176,7 @@ function renderPerf(container){
   html+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Fitness Projection &rarr; Race Day</div>';
   html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load &rarr; projected CTL by '+raceDateLabel+': <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
   html+='<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">'+daysToRace+' days out</div>';
-  html+='<div style="font-size:12px;font-weight:700;color:#ef4444">'+raceDateLabel+'</div></div></div>';
+  html+='<div style="font-size:12px;font-weight:700;color:var(--c-red)">'+raceDateLabel+'</div></div></div>';
   // Build CTL projection chart data
   var ctlActual=[],ctlProj=[],ctlLabels2=[];
   var ctlWeeks=Math.min(pmcData.length,8);
@@ -14966,7 +14976,7 @@ function bulkImportTCX(input){
   // Persistent progress indicator — updated per file, removed at completion.
   // (A transient toast would vanish mid-batch on a large ~1,750-file import.)
   var prog = document.createElement('div');
-  prog.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:var(--d-panel);border:1px solid #1a1f2e;color:var(--d-t2);padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  prog.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:var(--d-panel);border:1px solid var(--d-chip);color:var(--d-t2);padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.4)';
   prog.textContent='Importing 0 / '+total+'…';
   document.body.appendChild(prog);
 
@@ -17095,7 +17105,7 @@ function aiCardWatchlist_(){
   var items=d.items||[], pos=d.positives||[];
   var inner=aiLbl_("TODAY'S WATCHLIST");
   if(!items.length){
-    inner+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg><div style="font-size:19px;font-weight:800;color:#4ade80">Nothing to see here</div></div>';
+    inner+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg><div style="font-size:19px;font-weight:800;color:var(--c-green)">Nothing to see here</div></div>';
     pos.forEach(function(p){ inner+='<div style="display:flex;align-items:center;gap:9px;margin-top:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span style="font-size:13px;color:var(--d-soft)">'+aiEsc_(p)+'</span></div>'; });
   } else {
     items.forEach(function(it){ var col=it.sev>=2?'#e24b4a':'#f59e0b';
@@ -17129,10 +17139,10 @@ function aiCardStory_(ded){
   // Timeline: circles joined by a line through their centers; labels wrap; scrolls if wide.
   inner+='<div style="overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch">';
   inner+='<div style="display:flex;gap:8px;position:relative;min-width:min-content;padding-top:2px">';
-  inner+='<div style="position:absolute;top:28px;left:58px;right:58px;height:2px;background:#2a3550;z-index:0"></div>';
+  inner+='<div style="position:absolute;top:28px;left:58px;right:58px;height:2px;background:var(--d-line2);z-index:0"></div>';
   nodes.forEach(function(n){
     inner+='<div style="flex:0 0 116px;text-align:center;position:relative;z-index:1">'
-      +'<div style="width:52px;height:52px;border-radius:50%;background:#161b28;border:2px solid #2a3550;display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><span style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:-.01em">'+n[0]+'</span></div>'
+      +'<div style="width:52px;height:52px;border-radius:50%;background:var(--d-inset);border:2px solid var(--d-line2);display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><span style="font-size:14px;font-weight:800;color:var(--c-blue);letter-spacing:-.01em">'+n[0]+'</span></div>'
       +'<div style="font-size:11px;color:var(--d-t3);line-height:1.35;white-space:normal;word-break:break-word">'+aiEsc_(n[1])+'</div>'
     +'</div>';
   });
@@ -17160,7 +17170,7 @@ function aiCardWhatChanged_(ded){
   var inner=aiLbl_('WHAT CHANGED THIS MONTH');
   rows.forEach(function(r){ var dv=r[2], good=(r[0]==='Weight')?(dv<=0):(dv>=0); var col=dv===0?'#64748b':(good?'#4ade80':'#f59e0b');
     var ds=(dv>0?'+':'')+dv+(r[3]||'');
-    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #161b28"><span style="font-size:13px;color:var(--d-t3)">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:var(--d-head)">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
+    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--d-inset)"><span style="font-size:13px;color:var(--d-t3)">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:var(--d-head)">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
   return aiCard_(inner);
 }
 
@@ -17185,7 +17195,7 @@ function aiCardZones_(ded){
   var d; try{ d=dsPowerDist_(rides, ftp); }catch(e){ return ''; }
   if(!d || !d.hasData || !d.zones) return '';   // gate: no real zone data -> hide the card
   var inner=aiLbl_('POWER ZONE DISTRIBUTION','<span style="font-size:11px;color:var(--d-dim)">'+Number(d.nReal).toLocaleString()+' rides with real zone data</span>');
-  inner+='<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:14px;background:#161b28">';
+  inner+='<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-bottom:14px;background:var(--d-inset)">';
   d.zones.forEach(function(z){ if(z.pct>0) inner+='<div style="width:'+z.pct+'%;background:'+z.color+'"></div>'; });
   inner+='</div>';
   d.zones.forEach(function(z){
@@ -17285,8 +17295,8 @@ function _adhCardInner_(title, wk){
   var inner=aiLbl_(title,'<span style="font-size:11px;color:var(--d-dim)">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
   // Two headline numbers for the current week: Completion (show up) + Execution (quality).
   inner+='<div style="display:flex;gap:24px;margin-bottom:12px">';
-  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:#60a5fa;line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">this week</div></div>';
-  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:#f59e0b;line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
+  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:var(--c-blue);line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">this week</div></div>';
+  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:var(--c-amber);line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
   inner+='</div>';
   // Bars = completion rate/week (gap when planned==0); faint bar when planned>0 but scored==0.
   var W=280,H=70,n=wk.length,bw=W/n;
@@ -17370,7 +17380,7 @@ function aiCardStrengthProgress_(){
     var delta=(s.length>=2)?(last.weight-first.weight):null;
     var deltaHtml=(delta!=null&&delta!==0)?('<span style="font-size:10px;font-weight:700;color:'+(delta>0?'#4ade80':'#f59e0b')+'">'+(delta>0?'+':'')+delta+' lb</span>')
                  :(single?'<span style="font-size:10px;color:var(--d-dim)">start</span>':'<span style="font-size:10px;color:var(--d-dim)">&mdash;</span>');
-    inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #14181f">'
+    inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--d-well)">'
       +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+aiEsc_(nm)+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim)">'+setStr+'</div></div>'
       +'<div style="flex-shrink:0">'+spark+'</div>'
@@ -17734,7 +17744,7 @@ function _yvyPhysRow_(vm){
     notes.push(s);
   });
   var foot = notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid var(--d-raise)">'+notes.join(' ')+'</div>' : '';
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 18px 6px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+(vm.sport==='run'?'Pace &amp; Physiology':'Power &amp; Physiology')+'</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">this month, same-day vs last</span></div>'
@@ -18236,8 +18246,8 @@ function _gcScale_(pct, col, lo, mid, hi){
   return '<div style="margin-top:9px">'
     +'<div style="position:relative;height:12px">'
     +'<div style="position:absolute;left:0;right:0;top:5px;height:2px;border-radius:1px;background:var(--d-raise)"></div>'
-    +'<div style="position:absolute;left:50%;top:2px;width:1px;height:8px;background:#2a3341"></div>'
-    +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid #0e1117;box-sizing:content-box"></div>'
+    +'<div style="position:absolute;left:50%;top:2px;width:1px;height:8px;background:var(--d-chip)"></div>'
+    +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid var(--d-deep);box-sizing:content-box"></div>'
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;margin-top:1px">'
     +'<span style="font-size:9.5px;color:var(--d-dim)">'+(lo||'0%')+'</span>'
@@ -18721,7 +18731,7 @@ function _alSection_(){
     +'so a strong run month and a strong ride month are comparable even though the miles are not. '
     +'The 0-100 score is your percentile among scored months; the z-score on each card is the raw distance from your average.';
 
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +head
     +'<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+gauge+cards+'</div>'
     +eraBoard+timeline+factors
@@ -18923,7 +18933,7 @@ function _yvyHeatRow_(label, arr){
 }
 function _yvySumRow_(color, tag, metric, note){
   var ic=(tag==='Winning')?'&#9650;':(tag==='Even'?'&#61;':'&#9660;');
-  return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid #14181f"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
+  return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
     +'<div><div style="font-size:11px;font-weight:700;color:'+color+'">'+tag+'</div><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+metric+'</div><div style="font-size:11px;color:var(--d-t3)">'+note+'</div></div></div>';
 }
 function _yvyCard_(inner){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px">'+inner+'</div>'; }
@@ -19009,7 +19019,7 @@ function _pbSection_(vm){
   var foot=pb.droppedForCoverage
     ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
     : '';
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
@@ -19285,7 +19295,7 @@ function _gcLineChart_(spec, id){
     +'<line id="mrc-cross-'+id+'" x1="0" y1="'+g.PT+'" x2="0" y2="'+(g.PT+ih)+'" stroke="#94a3b8" stroke-width="1" opacity="0" style="pointer-events:none"/>'
     +lines+endLbl+dots
     +'</svg>'
-    +'<div id="mrc-tt-'+id+'" style="position:absolute;top:6px;left:0;opacity:0;transition:opacity .1s;pointer-events:none;background:#141922;border:1px solid #2a3341;border-radius:9px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.45)">'
+    +'<div id="mrc-tt-'+id+'" style="position:absolute;top:6px;left:0;opacity:0;transition:opacity .1s;pointer-events:none;background:var(--d-inset);border:1px solid var(--d-chip);border-radius:9px;padding:7px 10px;box-shadow:0 6px 18px rgba(0,0,0,.45)">'
     +'<div id="mrc-tth-'+id+'" style="font-size:10.5px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">&mdash;</div>'
     +rows+'</div></div>';
 }
@@ -19360,7 +19370,7 @@ function _mrSection_(vm){
     ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn dashed, as a target rather than a peer'+(drawn?'':', and why its curve is not drawn at all here &mdash; this snapshot carries its total but not its days')+'. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race, and both lines stop at today for that reason.')
     : 'No completed month clears the ride count needed to stand as a record yet, so there is no bar to beat.';
   return _MR_CSS
-    +'<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+    +'<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Month Race</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles, day by day &middot; hover or use the arrow keys to read any day</span></div>'
@@ -19391,7 +19401,7 @@ function _wcItems_(vm){
 }
 function _wcRow_(x){
   var win=(x.band==='win'), col=win?_YVY_GOOD:_YVY_BASE;
-  return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #14181f">'
+  return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--d-well)">'
     +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';margin-top:7px;flex-shrink:0"></span>'
     +'<div style="min-width:0;flex:1">'
     +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
@@ -19440,7 +19450,7 @@ function _wcSection_(vm){
       +_wcCol_('You are&hellip;','Chasing',_YVY_BASE,dn,dnEmpty)
       +'</div>';
   }
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">What&#8217;s Changed</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">vs last month through the '+_yvyOrdComment_(vm.domNow)+'</span></div>'
@@ -19531,7 +19541,7 @@ function _raSection_(vm){
   var foot;
   if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' '+vm.nP+', which is the same gate the rest of this page ranks on.';
   else foot=_yvyPartialTxt_(vm.domNow, vm.rank===1, 'riding');
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">every '+vm.monthN.slice(0,-1)+' you can be ranked on, tallest first</span></div>'
@@ -19621,7 +19631,7 @@ function _rsSection_(vm){
     sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
       +'. Ride Saturday and it finishes '+rk(rs.rideRank,_YVY_GOOD)+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
   }
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Regret Simulator</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">the weekend decision, ranked against your finished months</span></div>'
@@ -19740,7 +19750,7 @@ function _yoySection_(vm){
     +yo.cur.y+' stops at the dashed line because it is still running &mdash; '+yo.elapsed+' of '+yo.cur.days
     +' days against full years is not a comparison, which is why the figure quoted above is every year read at the SAME day of the year, not its finished total.';
   return _MR_CSS
-    +'<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Year over Year</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by day of year &middot; hover or use the arrow keys to read any date</span></div>'
@@ -19756,7 +19766,7 @@ function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
   // hero
-  var hero='<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
+  var hero='<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
     +'<div style="min-width:230px;flex:1;padding-right:12px">'
     +'<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1">You vs. You.</div>'
     +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
@@ -19792,7 +19802,7 @@ function _yvyRenderVM_(vm){
     return _yvySumRow_(col, tag, x.k, x.note);
   }).join(''));
 
-  var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #14181f">'
+  var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--d-well)">'
     +'<span style="font-size:13px;color:var(--d-soft)">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:var(--d-head)">'+b.mi+' mi</span>'
     +'<span style="font-size:12px;font-weight:700;color:'+(up?_YVY_GOOD:_YVY_DOWN)+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
   var best=_yvyCard_(_yvyHdr_('Best Days vs Last Month')+bestRows);
@@ -19804,7 +19814,7 @@ function _yvyRenderVM_(vm){
   var conf=vm.projTot>=vm.lastFull*1.05?'High':(vm.onTrack?'Medium':'Reachable');
   var confPct=Math.max(35, Math.min(95, Math.round(vm.projTot/vm.lastFull*82)));
   var chalCol=vm.onTrack?_YVY_GOOD:_YVY_BASE;
-  var challenge='<div style="background:#0e1117;border:1px solid '+(vm.onTrack?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
+  var challenge='<div style="background:var(--d-deep);border:1px solid '+(vm.onTrack?'#14351f':'#3a2f14')+';border-radius:16px;padding:18px;display:flex;flex-wrap:wrap;gap:20px;align-items:center">'
     +'<div style="flex:1;min-width:260px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="color:'+chalCol+'">'+ic.cal+'</span>'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">The Challenge &mdash; beat last month</span></div>'
     +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.25">'
@@ -19837,7 +19847,7 @@ function _yvyRenderVM_(vm){
       var _p=vm.lastAct.split('-');
       _lm=' Your last '+vm.nA+' was '+(_YVY_MON[(+_p[1]||1)-1]||'')+' '+(+_p[2]||0)+', '+_p[0]+'.';
     }
-    zeroLine='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;background:#0e1117;border:1px solid var(--d-raise);border-radius:12px;padding:12px 14px;margin:0 0 12px">'
+    zeroLine='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;background:var(--d-deep);border:1px solid var(--d-raise);border-radius:12px;padding:12px 14px;margin:0 0 12px">'
       +'<b style="color:var(--d-head)">No '+vm.nP+' logged in '+_YVY_MONF[vm.m]+'.</b> The month figures below are zero because the month is empty, not because the data is missing &mdash; '
       +vm.pop.toLocaleString()+' '+vm.nP+' are in scope for the ranked sections.'+_lm+'</div>';
   }
@@ -20165,7 +20175,7 @@ function aiRenderMilestones_(){
     strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:11px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:29px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+s.v+'</div><div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+s.k+'</div></div></div>'; });
     H+='</div></div>';
   } else {
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:var(--d-dim)">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid #2a3550;color:var(--d-t3);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:var(--d-dim)">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid var(--d-line2);color:var(--d-t3);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
   }
   // ---- RECENTLY UNLOCKED: hex badges (most recent by date) ----
   var unlocked=proj.filter(function(p){return p.unlocked && p.date;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date));}).slice(0,4);
@@ -20207,7 +20217,7 @@ function aiRenderMilestones_(){
     H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
     H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:var(--d-raise)"></div>';
     tl.forEach(function(p,i){ var c=_MS_COL[p.category], _yr=p.projectedDate.slice(0,4), mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" "+((+_yr>=2100)?_yr:("&#39;"+p.projectedDate.slice(2,4)));
-      var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:#fff;letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
+      var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:var(--d-t1);letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
       H+='<div style="flex:1;text-align:center;position:relative;z-index:1">'
         +'<div style="font-size:9px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">'+mo+'</div>'
         +'<div style="width:44px;height:44px;border-radius:50%;background:'+c+';display:flex;align-items:center;justify-content:center;margin:0 auto;box-shadow:0 0 0 4px '+c+'22">'+inner+'</div>'
@@ -20851,7 +20861,7 @@ function aiRenderRecords_(){
     +'.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
     +'.rec-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}'
     +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:15px 18px}'
-    +'.rec-sel{background:#0d0f14;border:1px solid var(--d-raise);color:var(--d-soft);font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
+    +'.rec-sel{background:var(--d-deep);border:1px solid var(--d-raise);color:var(--d-soft);font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
     +'</style>';
 
   // ---- hero summary
@@ -20891,7 +20901,7 @@ function aiRenderRecords_(){
         +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+TL.total+' dated efforts, cumulative</div>'
       +'</div>';
     if(S.latest){
-      heroR+='<div style="flex:0 0 150px;background:#0d0f14;border:1px solid var(--d-raise);border-radius:12px;padding:10px 12px">'
+      heroR+='<div style="flex:0 0 150px;background:var(--d-deep);border:1px solid var(--d-raise);border-radius:12px;padding:10px 12px">'
         +'<div style="font-size:10px;color:var(--d-dim);font-weight:700">Latest PR</div>'
         +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:1px">'+aiEsc_(_msFmtDate_(S.latest.prDate))+'</div>'
         +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:600;margin-top:7px;line-height:1.3">'+aiEsc_(S.latest.name)+'</div>'
@@ -20909,7 +20919,7 @@ function aiRenderRecords_(){
     +sorts.map(function(o){ return '<option value="'+o[0]+'"'+(_recSort===o[0]?' selected':'')+'>Sort: '+o[1]+'</option>'; }).join('')
     +'</select>'
     +'<div onclick="aiToggleRecStar_()" style="cursor:pointer;font-size:12px;font-weight:700;padding:7px 11px;border-radius:9px;border:1px solid '
-    +(_recStarOnly?'#FC4C02':'#1c2130')+';color:'+(_recStarOnly?'#FC4C02':'#8b97ab')+';background:#0d0f14">Starred only</div>'
+    +(_recStarOnly?'#FC4C02':'#1c2130')+';color:'+(_recStarOnly?'#FC4C02':'#8b97ab')+';background:var(--d-deep)">Starred only</div>'
     +'<div style="margin-left:auto;font-size:11px;color:var(--d-dim)">'+all.length+' segment'+(all.length===1?'':'s')+'</div>'
     +'</div>';
 
@@ -20942,7 +20952,7 @@ function aiRenderRecords_(){
     if(r.effortCount) meta.push(r.effortCount+' effort'+(r.effortCount===1?'':'s'));
     var gain=_recLastGain_(r), held=_recHeldDays_(r);
     var foot=[];
-    if(gain) foot.push('<span style="color:#22c55e;font-weight:700">&uarr; '+_segFmtT_(gain.sec)+'</span>'
+    if(gain) foot.push('<span style="color:var(--c-green);font-weight:700">&uarr; '+_segFmtT_(gain.sec)+'</span>'
       +'<span style="color:var(--d-dim)"> '+gain.pct.toFixed(1)+'% faster</span>');
     if(held!=null) foot.push('<span style="color:var(--d-dim)">Held '+held+' day'+(held===1?'':'s')+'</span>');
     H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
@@ -20952,7 +20962,7 @@ function aiRenderRecords_(){
         +(r.prDate?('<span style="font-size:11.5px;color:var(--d-dim)">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
       +(meta.length?('<div style="font-size:11.5px;color:var(--d-dim);margin-top:4px">'+meta.join(' &middot; ')+'</div>'):'')
       +spark
-      +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid #171b26">'+foot.join('')+'</div>'):'')
+      +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid var(--d-inset)">'+foot.join('')+'</div>'):'')
     +'</div>';
   });
   H+='</div>';
@@ -20968,20 +20978,20 @@ function aiRenderRecords_(){
     if(g && (!monthBest || g.pct>monthBest.pct)) monthBest={ pct:g.pct, sec:g.sec, name:r.name };
   });
   if(monthBest) foots.push('<div style="flex:1 1 240px;min-width:0">'
-    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#a855f7">BIGGEST WIN THIS MONTH</div>'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--c-purple)">BIGGEST WIN THIS MONTH</div>'
     +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(monthBest.name)+'</div>'
     +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">Took '+_segFmtT_(monthBest.sec)+' off your previous best, '
     +monthBest.pct.toFixed(1)+'% faster.</div></div>');
   var longest=null;
   all.forEach(function(r){ var h=_recHeldDays_(r); if(h!=null && (!longest || h>longest.days)) longest={days:h, name:r.name, sec:r.prSec}; });
   if(longest) foots.push('<div style="flex:1 1 240px;min-width:0">'
-    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#60a5fa">LONGEST STANDING</div>'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--c-blue)">LONGEST STANDING</div>'
     +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(longest.name)+'</div>'
     +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+_segFmtT_(longest.sec)+' has stood for '+longest.days+' days.</div></div>');
   var most=null;
   all.forEach(function(r){ if(+r.effortCount>0 && (!most || +r.effortCount>most.n)) most={n:+r.effortCount, name:r.name}; });
   if(most) foots.push('<div style="flex:1 1 240px;min-width:0">'
-    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:#f59e0b">MOST CONTESTED</div>'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--c-amber)">MOST CONTESTED</div>'
     +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:3px">'+aiEsc_(most.name)+'</div>'
     +'<div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+most.n+' recorded efforts.</div></div>');
   if(foots.length) H+='<div class="rec-foot">'+foots.join('')+'</div>';
@@ -21716,7 +21726,7 @@ function aiRenderDNA_(){
       H+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
         +'<span style="font-size:12.5px;font-weight:700;color:var(--d-soft)">'+aiEsc_(ax.label)+'</span>'
         +'<span style="font-size:12.5px;font-weight:800;color:'+(pos?'#4ade80':'#f59e0b')+'">'+(pos?'+':'')+ax.z.toFixed(2)+' z</span></div>'
-        +'<div style="height:7px;border-radius:4px;background:#141922;overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+';border-radius:4px"></div></div></div>';
+        +'<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+';border-radius:4px"></div></div></div>';
     });
     H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
     H+='</div>';
@@ -21743,7 +21753,7 @@ function aiRenderDNA_(){
       H+='<div style="background:#0e1015;border:1px dashed #2a3140;border-radius:14px;padding:15px 16px">'
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
         +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>'
-        +'<span style="font-size:14px;font-weight:800;color:#8592a6">'+aiEsc_(t.name)+'</span></div>'
+        +'<span style="font-size:14px;font-weight:800;color:var(--d-t3)">'+aiEsc_(t.name)+'</span></div>'
         +'<div style="font-size:12px;color:var(--d-t3);line-height:1.45">'+aiEsc_(t.unlock)+'.</div>'
         +'</div>';
     });
@@ -21976,12 +21986,12 @@ function _trjDestination_(){
   return out;
 }
 function _trjRowProj_(icon,label,fit,goal,dir,unit,digits){
-  if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
+  if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-inset)">'
     +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
     +'<div style="font-size:11.5px;color:var(--d-dim)">not enough logged data</div></div>';
   var evT=_trjTodayT_()+28;                          // a 4-week horizon, stated on the row
   var v=fit.at(evT), d=(digits==null?0:digits);
-  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #171b26">'
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-inset)">'
     +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
     +'<div style="text-align:right">'
       +'<div style="font-size:14px;font-weight:700;color:var(--d-head)">'+v.toFixed(d)+(unit||'')+'</div>'
@@ -22090,7 +22100,7 @@ function _trjSection2_(){
   M.rows.forEach(function(r, ix){
     var pc=_trjConf_(r.prob), first=(ix===0);
     var col=first?'#FC4C02':'#8b97ab';
-    body+='<div style="padding:9px 0;border-bottom:1px solid #171b26">'
+    body+='<div style="padding:9px 0;border-bottom:1px solid var(--d-inset)">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
         +'<div style="min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
@@ -22155,7 +22165,7 @@ function _trjCardFitness_(){
       +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">The last three weeks were not structurally '
       +'identical, so there is no repeated-week plateau pattern to flag.</div>';
   }
-  return aiCard_('<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">FITNESS</div>'+body);
+  return aiCard_('<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-green);margin-bottom:8px">FITNESS</div>'+body);
 }
 function _trjCardWeight_(){
   var fit=_trjFit_(_trjWeightPts_(), {minN:6});
@@ -22163,7 +22173,7 @@ function _trjCardWeight_(){
   var g=(typeof _goalTargets_==='function')?_goalTargets_():{};
   var horizon=_trjTodayT_()+28, proj=fit.at(horizon);
   var perWk=fit.slope*7;
-  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#60a5fa;margin-bottom:8px">WEIGHT</div>'
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-blue);margin-bottom:8px">WEIGHT</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em">CURRENT TREND</div>'
     +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:1px">'+fit.lastY.toFixed(1)+' lbs</div>'
     +'<div style="font-size:11px;color:var(--d-t3);margin-top:2px">'+(perWk>=0?'+':'')+perWk.toFixed(2)+' lbs/week</div>'
@@ -22193,7 +22203,7 @@ function _trjHeatCard_(){
     if(!sess || sess.isRest) continue;
     hot.push({key:key, t:tmax, name:sess.name});
   }
-  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#f59e0b;margin-bottom:8px">HEAT &amp; WEATHER</div>';
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-amber);margin-bottom:8px">HEAT &amp; WEATHER</div>';
   if(!hot.length){
     H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.4">No sessions above '+_TRJ_HOT+'&deg;F in the next 7 days.</div>'
       +_trjMethod_('Open-Meteo daily highs for the next 7 days, matched against the sessions actually on your plan.');
@@ -22205,7 +22215,7 @@ function _trjHeatCard_(){
   hot.slice(0,4).forEach(function(x){
     H+='<div style="display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0">'
       +'<span style="color:var(--d-t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(_trjFmt_(_trjDay_(x.key))||'')+' &middot; '+aiEsc_(x.name||'Session')+'</span>'
-      +'<span style="color:#f59e0b;font-weight:700;flex:none">'+Math.round(x.t)+'&deg;</span></div>';
+      +'<span style="color:var(--c-amber);font-weight:700;flex:none">'+Math.round(x.t)+'&deg;</span></div>';
   });
   H+='</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">PLAN AHEAD</div>'
@@ -22220,7 +22230,7 @@ function _trjCardRecovery_(){
   var fit=_trjFit_(_trjRecoveryPts_(), {minN:10, minSpan:28});
   if(!fit) return '';
   var horizon=_trjTodayT_()+14, proj=fit.at(horizon), perWk=fit.slope*7;
-  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">RECOVERY</div>'
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-purple);margin-bottom:8px">RECOVERY</div>'
     +'<div style="font-size:13px;color:var(--d-soft);line-height:1.4">HRV trend is '+(perWk>=0?'rising':'falling')+'.</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">PROJECTED</div>'
     +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:1px">'+proj.toFixed(0)+' ms</div>'
@@ -22249,7 +22259,7 @@ function _trjCardConsistency_(){
   if(typeof computeStreak_!=='function') return '';
   var cur=computeStreak_(), best=_trjLongestStreak_();
   if(best==null) return '';
-  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">CONSISTENCY</div>';
+  var H='<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-green);margin-bottom:8px">CONSISTENCY</div>';
   if(cur>=best){
     H+='<div style="font-size:13px;color:var(--d-soft);line-height:1.4">You are on your longest streak on record.</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim);letter-spacing:.05em;margin-top:9px">CURRENT STREAK</div>'
@@ -22347,7 +22357,7 @@ function _trjSection4_(){
   body+='<div style="margin-top:13px">';
   L.bands.forEach(function(b){
     var col=b.flat?'#64748b':(b.per>0?'#22c55e':'#e24b4a');
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid #171b26">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--d-inset)">'
       +'<span style="font-size:12px;color:var(--d-soft)">'+aiEsc_(b.label)+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-t3)">'+Math.round(b.avg)+' min/wk avg</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+col+';flex:none">'
@@ -22414,7 +22424,7 @@ function _trjSection5_(){
   S.weeks.forEach(function(w){
     if(!w.presc) return;
     var r=Math.round(w.done/w.presc*100);
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-inset)">'
       +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.done+'/'+w.presc+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=80?'#22c55e':(r>=55?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
@@ -22498,7 +22508,7 @@ function _trjSection7_(){
   Q.weeks.forEach(function(w){
     if(!w.n) return;
     var r=Math.round(w.hit/w.n*100);
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid #171b26">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-inset)">'
       +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.hit+'/'+w.n+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=70?'#22c55e':(r>=45?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
@@ -22573,7 +22583,7 @@ function _trjSection6_(){
   }
   if(mom){
     cards.push(aiCard_(
-      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#22c55e;margin-bottom:8px">MOMENTUM</div>'
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-green);margin-bottom:8px">MOMENTUM</div>'
       +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.15">'
       +(mom.weeks>0?(mom.weeks+' week'+(mom.weeks===1?'':'s')+' rising'):'No rising streak')+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">'
@@ -22585,7 +22595,7 @@ function _trjSection6_(){
   if(life && !life.done){
     var range=(life.early!=null && life.late!=null && Math.abs(life.late-life.early)>21);
     cards.push(aiCard_(
-      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#a855f7;margin-bottom:8px">LIFETIME MILES</div>'
+      '<div style="font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--c-purple);margin-bottom:8px">LIFETIME MILES</div>'
       +'<div style="font-size:13px;color:var(--d-soft);line-height:1.45">At your recent pace you pass '
       +TRJ_MILE_TARGET.toLocaleString()+' lifetime miles '
       +(range?('between '+aiEsc_(_trjFmt_(life.early)||'')+' and '+aiEsc_(_trjFmtY_(life.late)||''))
@@ -22846,14 +22856,14 @@ function _trjSection8_(){
   wks.forEach(function(w){
     var r=Math.round(w.actual/w.presc*100), tier=_trjRxTier_(r);
     var mp=Math.max(0, Math.min(100, r/_TRJ_RX_MAX*100));
-    tbl+='<div style="font-size:11.5px;color:var(--d-t3);padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
-      +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid #171b26">'
+    tbl+='<div style="font-size:11.5px;color:var(--d-t3);padding:5px 0;border-bottom:1px solid var(--d-inset);white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
+      +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid var(--d-inset)">'
         +'<div style="height:7px;border-radius:4px;background:var(--d-raise);overflow:hidden" title="'+r+'% of prescribed">'
         +'<div style="width:'+mp.toFixed(1)+'%;height:100%;border-radius:4px;background:'+tier.c+'"></div>'
         +'</div></div>'
-      +'<div style="font-size:11.5px;color:var(--d-soft);padding:5px 0;border-bottom:1px solid #171b26;white-space:nowrap;text-align:right">'
+      +'<div style="font-size:11.5px;color:var(--d-soft);padding:5px 0;border-bottom:1px solid var(--d-inset);white-space:nowrap;text-align:right">'
         +Math.round(w.actual)+' / '+Math.round(w.presc)+'</div>'
-      +'<div style="padding:5px 0;border-bottom:1px solid #171b26;text-align:right">'
+      +'<div style="padding:5px 0;border-bottom:1px solid var(--d-inset);text-align:right">'
         +'<span style="font-size:11px;font-weight:700;color:'+tier.c+';background:'+tier.c+'1a;border-radius:5px;padding:2px 6px;white-space:nowrap">'+r+'%</span>'
         +'<span class="trj-rx-tier" style="font-size:11px;color:var(--d-t3);margin-left:8px;white-space:nowrap">'+tier.t+'</span></div>';
   });
@@ -22873,14 +22883,14 @@ function _trjSection8_(){
   if(fit){
     var per=fit.slope*7*100;
     var word=(Math.abs(per)<1)?'flat':(per>0?'widening':'narrowing');
-    mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
+    mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-inset)">'
       +_trjChip_('&#128197;','#60a5fa')
       +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">THE GAP IS '+(word==='flat'?'FLAT':word.toUpperCase())+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-top:2px">'
       +(word==='flat'?('level across '+fit.n+' weeks'):(Math.abs(per).toFixed(0)+' point'+(Math.abs(per).toFixed(0)==='1'?'':'s')+' a week across '+fit.n+' weeks'))
       +'</div></div></div>';
   }
-  mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid #171b26">'
+  mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-inset)">'
     +_trjChip_('?','#8b97ab')
     +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">HOW THIS IS CALCULATED</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);line-height:1.5;margin-top:3px">'
@@ -22938,7 +22948,7 @@ function aiRenderTrajectory_(){
     // horizontal room; the table gets the wider half of the bottom row for the same reason.
     +'.trj-rx-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,.85fr);gap:14px;align-items:start}'
     +'.trj-rx-bot{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;align-items:start;'
-      +'margin-top:16px;padding-top:14px;border-top:1px solid #171b26}'
+      +'margin-top:16px;padding-top:14px;border-top:1px solid var(--d-inset)}'
     // The SCALE column takes the slack, so the numbers/badge/label cluster to the right the way the
     // reference layout has them. Capping it instead parked the numbers mid-row with a dead gap.
     +'.trj-rx-tbl{display:grid;grid-template-columns:auto minmax(60px,1fr) auto auto;gap:0 12px;align-items:center;margin-top:8px}'
@@ -23098,9 +23108,9 @@ function aiRenderSegAttack_(){
   var ftpNow=(typeof st!=='undefined'&&st)?(parseInt(st.ftp,10)||null):null;
   H+='<div style="'+CARD+'"><div style="'+LBL+'">Your form</div>'
     +'<div style="margin-top:9px">'
-    +(fit&&fit.ctl?('<div style="font-size:20px;font-weight:800;color:#22c55e;line-height:1.1">CTL '+fit.ctl+'</div>'
+    +(fit&&fit.ctl?('<div style="font-size:20px;font-weight:800;color:var(--c-green);line-height:1.1">CTL '+fit.ctl+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:5px">'+(ftpNow?('FTP '+ftpNow+'W &middot; '):'')+'ATL '+fit.atl+' &middot; TSB '+(fit.tsb>=0?'+':'')+fit.tsb+'</div>'
-      +(fit.stale?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">fitness data is not from today</div>':''))
+      +(fit.stale?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:4px">fitness data is not from today</div>':''))
      :'<div style="font-size:11.5px;color:var(--d-dim);line-height:1.5">No reliable fitness series &mdash; projections fall back to power history alone.</div>')
     +'</div></div>';
   H+='<div id="sa-potential" style="'+CARD+'"><div style="'+LBL+'">PR potential today</div><div style="margin-top:9px" id="sa-pot-body"></div></div>';
@@ -23152,7 +23162,7 @@ function aiRenderSegAttack_(){
       +'<div class="sa-id"><div style="display:flex;align-items:center;gap:9px">'
         +'<span style="flex:none;width:22px;height:22px;border-radius:6px;background:#f973161f;color:#f97316;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center">'+(i+1)+'</span>'
         +'<span style="font-size:15px;font-weight:700;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</span>'
-        +(e.starred?'<span style="color:#f59e0b;font-size:12px">&#9733;</span>':'')+'</div>'
+        +(e.starred?'<span style="color:var(--c-amber);font-size:12px">&#9733;</span>':'')+'</div>'
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'
         +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
         +(e.grade!=null?('   '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')+'</div>'
@@ -23171,17 +23181,17 @@ function aiRenderSegAttack_(){
         +(e.windMph!=null?('<div style="font-size:11px;color:var(--d-t3);margin-top:2px">'+Math.round(e.windMph)+' mph</div>'):'')
         +'</div>'+_saRose_(e.bearing, ctx.windFromDeg, 58)+'</div>'
         +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:7px">Segment bearing<br>'+Math.round(e.bearing)+'&deg; ('+_saCompassLbl_(e.bearing)+')</div>'
-        +(e.windNote?('<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">'+esc(e.windNote)+'</div>')
-          :(e.windApprox?'<div style="font-size:9.5px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':''))
+        +(e.windNote?('<div style="font-size:9.5px;color:var(--c-amber);margin-top:4px">'+esc(e.windNote)+'</div>')
+          :(e.windApprox?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:4px">road bends &mdash; wind call approximate</div>':''))
       +'</div>'
       // projection
       +'<div class="sa-proj"><div style="'+LBL+'">PR projection</div>'
         +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:7px">'
         +'<span style="font-size:21px;font-weight:800;color:var(--d-head);line-height:1">'+_saMMSS_(e.tPred)+'</span>'
-        +'<span style="font-size:11.5px;font-weight:800;color:#22c55e;background:#22c55e1a;border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
+        +'<span style="font-size:11.5px;font-weight:800;color:var(--c-green);background:#22c55e1a;border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
         +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
         +'<div style="font-size:10px;color:'+ev.col+';margin-top:5px;font-weight:700">'+esc(ev.label)+'</div>'
-        +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px">target is your best RECORDED pass, not a Strava PR</div>':'')
+        +(e.prFromHistory?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:3px">target is your best RECORDED pass, not a Strava PR</div>':'')
         +'<div style="font-size:10px;color:var(--d-dim);margin-top:3px;line-height:1.5">'
           +'&plusmn;'+Math.round(e.sigma)+'s model error'
           +(e.capW?(' &middot; '+e.capW+'W capability'+(e.capStale?' (older data)':'')):'')
@@ -23202,7 +23212,7 @@ function aiRenderSegAttack_(){
       +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">Your best recorded pass on these was well below the power you can hold now, so there is no PR here to contest &mdash; only a time that has never been tested. No probability is shown, because beating a cruise is not a prediction.</div>'
       +'<div style="margin-top:10px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:6px 16px">';
     untested.slice(0,8).forEach(function(e){
-      H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #171b26;flex-wrap:wrap">'
+      H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--d-inset);flex-wrap:wrap">'
         +'<span style="font-size:12.5px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</span>'
         +'<span style="font-size:11px;color:var(--d-t3);white-space:nowrap">best '+_saMMSS_(e.prSec)
         +(e.prWatts?(' at '+e.prWatts+'W'):'')+' &middot; you hold '+e.capW+'W now</span></div>';
@@ -23260,8 +23270,8 @@ function _saPaint_(){
   if(inp && document.activeElement!==inp) inp.value=_saQ;
 }
 function _saTierChip_(e){
-  if(e.tier==='full') return '<span style="font-size:9.5px;font-weight:700;color:#22c55e;background:#22c55e1a;border-radius:5px;padding:2px 6px">projectable</span>';
-  if(e.tier==='wind') return '<span style="font-size:9.5px;font-weight:700;color:#f59e0b;background:#f59e0b1a;border-radius:5px;padding:2px 6px">wind only</span>';
+  if(e.tier==='full') return '<span style="font-size:9.5px;font-weight:700;color:var(--c-green);background:#22c55e1a;border-radius:5px;padding:2px 6px">projectable</span>';
+  if(e.tier==='wind') return '<span style="font-size:9.5px;font-weight:700;color:var(--c-amber);background:#f59e0b1a;border-radius:5px;padding:2px 6px">wind only</span>';
   return '<span style="font-size:9.5px;font-weight:700;color:var(--d-t4);background:var(--d-t4)1a;border-radius:5px;padding:2px 6px">no data</span>';
 }
 function _saLibBody_(){
@@ -23294,7 +23304,7 @@ function _saLibBody_(){
   H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:2px 14px">';
   f.slice(0,150).forEach(function(e){
     var pc=(e.tier==='full')?_saProbCol_(e.prob):'#64748b';
-    H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #171b26;cursor:pointer;flex-wrap:wrap">'
+    H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--d-inset);cursor:pointer;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:150px"><div style="font-size:13px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
       +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
@@ -23330,7 +23340,7 @@ function _saDetail_(e, ctx){
   H+='<div><div style="'+LBL+'">'+(e.prFromHistory?'Best recorded':'Strava PR')+'</div>'
     +'<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1;margin-top:3px">'+_saMMSS_(e.prSec)+'</div>'
     +(e.prDate?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'+esc(e.prDate)+'</div>'):'')
-    +(e.prFromHistory?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px;line-height:1.4">derived from your synced efforts, not a Strava PR</div>':'')
+    +(e.prFromHistory?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:3px;line-height:1.4">derived from your synced efforts, not a Strava PR</div>':'')
     +'</div>';
   H+='<div><div style="'+LBL+'">Power that set it</div>'
     +'<div style="font-size:22px;font-weight:800;color:'+(e.prWatts?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.prWatts?(e.prWatts+'W'):'not recorded')+'</div>'
@@ -23338,7 +23348,7 @@ function _saDetail_(e, ctx){
     +'</div>';
   H+='<div><div style="'+LBL+'">Today&rsquo;s capability</div>'
     +'<div style="font-size:22px;font-weight:800;color:'+(e.capW?'#e8edf5':'#5b6678')+';line-height:1.1;margin-top:3px">'+(e.capW?(e.capW+'W'):'unknown')+'</div>'
-    +(e.capStale?'<div style="font-size:9.5px;color:#f59e0b;margin-top:3px">from older rides</div>':'')
+    +(e.capStale?'<div style="font-size:9.5px;color:var(--c-amber);margin-top:3px">from older rides</div>':'')
     +'</div>';
   H+='</div>';
 
@@ -23346,7 +23356,7 @@ function _saDetail_(e, ctx){
     H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise)">'
       +'<div style="font-size:12.5px;color:var(--d-soft);line-height:1.6">Not projectable yet &mdash; '+esc(e.why||'insufficient data')+'.</div>'
       +(e.wind?('<div style="font-size:11.5px;color:var(--d-t3);margin-top:8px">Today it is a <b style="color:var(--d-head)">'+esc(e.wind)+'</b> on this bearing'+(e.windMph!=null?(' at '+Math.round(e.windMph)+' mph'):'')+'. No probability is shown, because the model has nothing to measure its error against.</div>'):'')
-      +(e.windNote?('<div style="font-size:11px;color:#f59e0b;margin-top:6px">'+esc(e.windNote)+'</div>'):'')
+      +(e.windNote?('<div style="font-size:11px;color:var(--c-amber);margin-top:6px">'+esc(e.windNote)+'</div>'):'')
       +'</div></div>';
     return H;
   }
@@ -23358,7 +23368,7 @@ function _saDetail_(e, ctx){
     +'<span style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1">'+_saMMSS_(e.tPred)+'</span>'
     +'<span style="font-size:12px;font-weight:800;color:'+(e.delta<0?'#22c55e':'#ef4444')+';background:'+(e.delta<0?'#22c55e1a':'#ef44441a')+';border-radius:6px;padding:2px 7px">'+_saDelta_(e.delta)+'</span></div>'
     +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'+esc(e.wind||'no wind call')+(e.windMph!=null?(' '+Math.round(e.windMph)+' mph'):'')+' &middot; &plusmn;'+Math.round(e.sigma)+'s model error</div>'
-    +(e.windApprox?'<div style="font-size:10px;color:#f59e0b;margin-top:4px">road bends &mdash; wind call approximate</div>':'')
+    +(e.windApprox?'<div style="font-size:10px;color:var(--c-amber);margin-top:4px">road bends &mdash; wind call approximate</div>':'')
     +'</div>';
   H+='<div style="text-align:center">'+(e.contested
       ? ('<div style="'+LBL+'">Win probability</div><div style="display:flex;justify-content:center;margin-top:5px">'+_saRing_(e.prob,_saProbCol_(e.prob),86)+'</div>'
@@ -23373,12 +23383,12 @@ function _saDetail_(e, ctx){
     +'<div style="'+LBL+'">What it would take</div><div style="font-size:12.5px;color:var(--d-soft);margin-top:8px;line-height:1.7">';
   if(e.wattsNeeded!=null){
     H+='&bull; <b style="color:var(--d-head)">'+e.wattsNeeded+'W</b> to match '+_saMMSS_(e.prSec)+' in today&rsquo;s wind'
-      +(e.wattsGap!=null?(' &mdash; '+(e.wattsGap<=0?('<span style="color:#22c55e">'+Math.abs(e.wattsGap)+'W below what you hold</span>')
-                                                   :('<span style="color:#f59e0b">'+e.wattsGap+'W more than you hold</span>'))):'')+'<br>';
+      +(e.wattsGap!=null?(' &mdash; '+(e.wattsGap<=0?('<span style="color:var(--c-green)">'+Math.abs(e.wattsGap)+'W below what you hold</span>')
+                                                   :('<span style="color:var(--c-amber)">'+e.wattsGap+'W more than you hold</span>'))):'')+'<br>';
   }
   if(e.tailwindNeeded!=null){
     H+='&bull; '+(e.tailwindNeeded<=0
-      ? 'at today&rsquo;s capability the time falls <b style="color:#22c55e">regardless of wind</b>'
+      ? 'at today&rsquo;s capability the time falls <b style="color:var(--c-green)">regardless of wind</b>'
       : ('a <b style="color:var(--d-head)">'+e.tailwindNeeded.toFixed(1)+' mph tailwind</b> on this bearing would do it at today&rsquo;s capability'))+'<br>';
   }
   H+='</div><div style="font-size:10px;color:var(--d-dim);margin-top:7px;line-height:1.5">Both are the same fitted model solved backwards &mdash; the watts from the power equation directly, the wind by bisection. Neither introduces an assumption the projection above does not already make.</div></div>';
@@ -23391,7 +23401,7 @@ function aiRenderSegLibrary_(){
   H+='<div style="font-size:22px;font-weight:800;color:var(--d-head);margin-bottom:4px">Segment Library</div>'
     +'<div style="font-size:12.5px;color:var(--d-t3);margin-bottom:14px">Every segment in your history, whether or not today favours it.</div>';
   if(!A.list.length) return H+'<div style="padding:50px 20px;text-align:center;color:var(--d-dim);font-size:13px">No segment history yet.</div></div>';
-  if(!A.cur) H+='<div style="font-size:11px;color:#f59e0b;margin-bottom:10px">Today&rsquo;s weather has not loaded, so probabilities are unavailable until it does.</div>';
+  if(!A.cur) H+='<div style="font-size:11px;color:var(--c-amber);margin-bottom:10px">Today&rsquo;s weather has not loaded, so probabilities are unavailable until it does.</div>';
   H+='<input id="sa-lib-q" oninput="saSearch_(this.value)" placeholder="Search segments…" '
     +'style="width:100%;box-sizing:border-box;background:var(--d-panel);border:1px solid #232a38;border-radius:10px;color:var(--d-head);font-size:13px;padding:10px 12px;font-family:inherit;margin-bottom:10px">';
   var chips=[['all','All'],['contest','Real contests'],['untested','Never raced'],['thin','Thin data'],['strong','Well supported'],['nodata','Not projectable']];
@@ -23467,7 +23477,7 @@ function aiRenderOverview_(container){
   // header
   H+='<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">';
   H+='<div style="font-size:24px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Athlete Intelligence</div>';
-  H+='<span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:#0d0f14;background:#f59e0b;border-radius:6px;padding:3px 7px">BETA</span></div>';
+  H+='<span style="font-size:10px;font-weight:800;letter-spacing:.08em;color:var(--d-deep);background:#f59e0b;border-radius:6px;padding:3px 7px">BETA</span></div>';
   // Cross-sport note. Athletic Life scores rides AND runs, so counting only rides understated the
   // span by more than a decade — the run log opens in 2011, the ride log in 2017. Runs come from
   // the same primed source the scoring reads, and the year range spans whichever sports are there.
@@ -23494,7 +23504,7 @@ function aiRenderOverview_(container){
   H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid var(--d-raise)">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
   H+='</div>';
-  H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:#e24b4a;font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
+  H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:var(--c-red);font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
   H+='</div>';
   container.innerHTML=H;
   // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
@@ -23516,8 +23526,8 @@ function dsShowAthleteIntel(){
 function showAthleteIntel(){
   var old=document.getElementById('AIQ_PAGE'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='AIQ_PAGE';
-  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#0d0f14;overflow-y:auto;-webkit-overflow-scrolling:touch';
-  var close='<div onclick="var e=document.getElementById(&#39;AIQ_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:#161b28;border:1px solid #2a3550;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:var(--d-deep);overflow-y:auto;-webkit-overflow-scrolling:touch';
+  var close='<div onclick="var e=document.getElementById(&#39;AIQ_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:var(--d-inset);border:1px solid var(--d-line2);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
   var body=document.createElement('div');
   ov.appendChild(body);
   ov.insertAdjacentHTML('beforeend', close);
@@ -24537,7 +24547,7 @@ function _coachVPanel_(now){
   // Yesterday recap sits above the milestone voice — it is the most recent fact Coach V has, and it
   // only ever renders when today has nothing logged against it (coachV_ gates that).
   if(cv.yesterday && cv.yesterday.line){
-    H+='<div style="font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid #2a3341;overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
+    H+='<div style="font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:8px 0 2px;padding-left:9px;border-left:2px solid var(--d-chip);overflow-wrap:anywhere">'+cv.yesterday.line+'</div>';
   }
   if(cv.milestone){
     H+='<div style="font-size:12.5px;color:var(--d-t2);line-height:1.5;margin:8px 0 2px"><b style="color:'+A+'">'+cv.milestone.days+' day'+(cv.milestone.days===1?'':'s')+' to '+cv.milestone.label+'.</b> '+cv.milestone.urgency+'</div>';
@@ -24547,7 +24557,7 @@ function _coachVPanel_(now){
   // today's session coaching — POST-ride once a ride is logged (pre-ride tense is stale after import)
   if(cv.done){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:#22c55e">&#10003; logged</span></div>'
+      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+' <span style="color:var(--c-green)">&#10003; logged</span></div>'
       +'<div style="font-size:13px;color:var(--d-t2);line-height:1.6;margin-top:8px">'+(cv.doneNote||'Today&rsquo;s session is in the books. Open it from the calendar for the interval-by-interval debrief.')+'</div>'
       // Debrief row — its own block under the logged-session line. Only renders when there was
       // something computable to say; a missing prescription or missing numbers yield '' and the
@@ -24556,7 +24566,7 @@ function _coachVPanel_(now){
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
-      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:#22c55e">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:var(--d-dim)">'+cv.primary.struct+'</span>'):'')+'</div>';
+      +'<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Today &middot; '+sessName+(band?(' <span style="color:var(--c-green)">'+band+'</span>'):'')+(cv.primary.struct?(' <span style="font-weight:600;color:var(--d-dim)">'+cv.primary.struct+'</span>'):'')+'</div>';
     // Fuel check ABOVE the pre-session instructions: if the athlete is about to start a VO2 or
     // Threshold session under-fuelled, that changes the session, so it has to be read before the
     // watt targets are. Absent entirely on an adequately-fuelled day.
@@ -24619,11 +24629,11 @@ function _calMilestoneFlag_(dateKey, compact){
   var m=(typeof _tbMilestoneOn_==='function')?_tbMilestoneOn_(dateKey):null;
   if(!m) return '';
   if(compact){   // narrow mobile column — glyph only, full label on hover
-    return '<div data-cal="milestone" data-date="'+dateKey+'" title="'+m.label+'" style="margin:0 auto 3px;font-size:12px;color:#f59e0b;line-height:1">&#9873;</div>';
+    return '<div data-cal="milestone" data-date="'+dateKey+'" title="'+m.label+'" style="margin:0 auto 3px;font-size:12px;color:var(--c-amber);line-height:1">&#9873;</div>';
   }
   return '<div data-cal="milestone" data-date="'+dateKey+'" title="'+m.label+'" style="margin-top:4px;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:6px;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.4);cursor:pointer">'
     +'<span style="font-size:10px;line-height:1">&#9873;</span>'
-    +'<span style="font-size:9.5px;font-weight:800;color:#f59e0b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+m.label+'</span></div>';
+    +'<span style="font-size:9.5px;font-weight:800;color:var(--c-amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+m.label+'</span></div>';
 }
 
 function _blockCyc_(rides){
@@ -24991,7 +25001,7 @@ function _blockCheckRow_(c){
   var status=met ? ('met · '+c.val) : (missed ? ('logged, but '+c.val+' — '+(c.miss||'outside the prescription')) : 'not logged this week');
   var statusCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
   var countCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
-  return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
+  return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-well)">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+badgeBg+';display:flex;align-items:center;justify-content:center">'+badgeIcon+'</span>'
     +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(met?'#f1f5f9':'#cbd5e1')+'">'+c.label+'</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">'+c.cond+'</span></div>'
@@ -25012,7 +25022,7 @@ function _blockRoadmap_(now){
     // past = done (green), next = current focus (amber), future = muted (grey). Green is never spent
     // on a milestone that has not actually happened.
     var col=past?'#22c55e':(isNext?'#f59e0b':'#5b6678');
-    var ring=past?'border:2px solid #22c55e;background:transparent':(isNext?'border:2px solid #f59e0b;background:rgba(245,158,11,.12)':'border:2px solid #2a3341;background:transparent');
+    var ring=past?'border:2px solid #22c55e;background:transparent':(isNext?'border:2px solid #f59e0b;background:rgba(245,158,11,.12)':'border:2px solid var(--d-chip);background:transparent');
     // A connector is green only between two COMPLETED milestones; the leg into the next one and
     // everything ahead stays grey.
     var lineCol=(i<road.length-1 && _blockDay_(road[i+1].date) && _blockDay_(road[i+1].date).getTime()<today.getTime())?'#22c55e':'#1c2130';
@@ -25095,7 +25105,7 @@ function _blockTssGraph_(weeks){
   svg+='</svg>';
   return svg;
 }
-function _blockCard_(inner, extraStyle){ return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
+function _blockCard_(inner, extraStyle){ return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
 function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
 // The current week's PRESCRIBED sessions from st.trainingBlock, each priced to current FTP. This is
@@ -25124,14 +25134,14 @@ function _tbWeekStrip_(now){
         +(x.struct?('<span style="font-size:10.5px;color:var(--d-dim)">'+x.struct+'</span>'):'')
         +'<span style="font-size:10.5px;color:var(--d-t3)">'+w+'</span></span>';
     }).join('');
-    rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #14181f'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
+    rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--d-well)'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
       +'<div style="flex:0 0 46px"><div style="font-size:11px;font-weight:800;color:'+(isToday?'#FC4C02':'#94a3b8')+'">'+DOW[plan.weekday]+'</div>'
       +'<div style="font-size:10px;color:var(--d-dim)">'+(_YVY_MON[d.getMonth()]||'')+' '+d.getDate()+'</div></div>'
       +'<div style="flex:1;min-width:0">'+(cells||'<span style="font-size:12px;color:var(--d-dim)">&mdash;</span>')
-      +(ms?('<div style="font-size:10.5px;font-weight:700;color:#f59e0b;margin-top:3px">&#9873; '+ms.label+'</div>'):'')+'</div></div>';
+      +(ms?('<div style="font-size:10.5px;font-weight:700;color:var(--c-amber);margin-top:3px">&#9873; '+ms.label+'</div>'):'')+'</div></div>';
   }
   if(!any) return '';
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
@@ -25633,8 +25643,8 @@ function _zwoFallback_(z, url, hostId){
   var href=url||('data:application/octet-stream;base64,'+(function(){ try{ return btoa(z.xml); }catch(e){ return ''; } })());
   wrap.innerHTML='Saved <b style="color:var(--t2)">'+z.filename+'</b>. '
     +'Not in your Downloads folder? '
-    +'<a id="'+hostId+'-a" href="'+href+'" download="'+z.filename+'" style="color:#4D9FFF;font-weight:700">click here</a>'
-    +' or <span id="'+hostId+'-copy" style="color:#4D9FFF;font-weight:700;cursor:pointer">copy the XML</span>.';
+    +'<a id="'+hostId+'-a" href="'+href+'" download="'+z.filename+'" style="color:var(--c-blue);font-weight:700">click here</a>'
+    +' or <span id="'+hostId+'-copy" style="color:var(--c-blue);font-weight:700;cursor:pointer">copy the XML</span>.';
   host.parentNode.appendChild(wrap);
   var cp=document.getElementById(hostId+'-copy');
   if(cp) cp.onclick=function(){
@@ -25814,7 +25824,7 @@ function showSessionDetail_(dateKey, sid){
   H+='</div>';
   if(summ.length) H+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;font-weight:700;color:var(--t2)">'+summ.map(function(x){return '<span>'+esc(x)+'</span>';}).join('<span style="color:var(--b1)">|</span>')+'</div>';
   if(note) H+='<div style="margin-top:10px;padding:9px 12px;border-radius:10px;background:'+ACC+'12;border:1px solid '+ACC+'2e;font-size:12.5px;color:var(--t2);line-height:1.45">'+esc(note)+'</div>';
-  if(done) H+='<div style="margin-top:10px;font-size:12px;font-weight:800;color:#22c55e">Completed ✓</div>';
+  if(done) H+='<div style="margin-top:10px;font-size:12px;font-weight:800;color:var(--c-green)">Completed ✓</div>';
   // Zwift export — only when the session actually resolves to an ERG target (_zwoFor_ returns null
   // for a group ride, a session with no band, or one with no FTP to express power against), so the
   // button is never offered for a file that would be a guess.
@@ -25828,7 +25838,7 @@ function showSessionDetail_(dateKey, sid){
   H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px">';
   H+='<div style="display:flex;align-items:center;gap:12px;min-width:0">';
   H+='<span id="sd-prog" style="font-size:12px;font-weight:700;color:var(--t3)"></span>';
-  H+='<span id="sd-edit" style="font-size:12px;font-weight:700;color:#4D9FFF;cursor:pointer;white-space:nowrap">Edit</span>';
+  H+='<span id="sd-edit" style="font-size:12px;font-weight:700;color:var(--c-blue);cursor:pointer;white-space:nowrap">Edit</span>';
   H+='</div>';
   H+='<button id="sd-done" style="border:none;border-radius:12px;padding:12px 20px;font-size:14px;font-weight:800;font-family:inherit;color:#08210f;background:#22c55e">'+(done?'Completed ✓':'Mark session complete')+'</button>';
   H+='</div>';
@@ -25989,7 +25999,7 @@ function renderBlockPlan_(container){
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#22c55e;vertical-align:middle;margin-right:4px"></span>banked</span>'
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#f59e0b;vertical-align:middle;margin-right:4px"></span>this week</span>'
     +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#ef4444;vertical-align:middle;margin-right:4px"></span>missed</span>'
-    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#2a3341;vertical-align:middle;margin-right:4px"></span>to come</span></div>'
+    +'<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--d-chip);vertical-align:middle;margin-right:4px"></span>to come</span></div>'
     +'<div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;font-weight:700;color:'+prog.statusCol+'">'
     +(prog.onTrack?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+prog.statusCol+'" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v5" stroke-linecap="round"/></svg>')
     +'<span>'+prog.statusText+'</span></div>';
@@ -26015,7 +26025,7 @@ function renderBlockPlan_(container){
   var ddBg=ddMet?'#22c55e22':(ddMissed?'#ef444422':'#1a1f29');
   var ddIcon=ddMet?_blockMiIcon_('M20 6L9 17l-5-5','#22c55e',17):(ddMissed?_blockMiIcon_('M6 6l12 12M18 6L6 18','#ef4444',16):_blockMiIcon_('M3 12h4l2-5 4 10 2-5h6','#3a4150',16));
   var ddCol=ddMet?'#22c55e':(ddMissed?'#ef4444':'#5b6678');
-  twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
+  twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-well)">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+ddBg+';display:flex;align-items:center;justify-content:center">'+ddIcon+'</span>'
     +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(ddMet?'#f1f5f9':'#cbd5e1')+'">Three separate days</span><span style="font-size:11px;color:var(--d-dim)">no stacking, protects the rest cadence</span></div>'
     +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:1px">Space the efforts so each one adapts</div>'
@@ -26026,8 +26036,8 @@ function renderBlockPlan_(container){
   twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'
     +'<div><div style="font-size:12px;font-weight:800;color:var(--d-soft)">Weekly load <span style="font-size:10.5px;font-weight:600;color:var(--d-dim)">&middot; readout, not a pass rule</span></div>'
-    +'<div style="font-size:19px;font-weight:800;color:#22c55e;margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:var(--d-dim);font-weight:600"> TSS target</span></div></div>'
-    +'<div style="font-size:12px;color:var(--d-dim)"><span style="display:inline-block;width:14px;border-top:2px dashed #22c55e;opacity:.6;vertical-align:middle"></span> band &middot; <span style="color:#22c55e">&#9679;</span> TSS</div></div>';
+    +'<div style="font-size:19px;font-weight:800;color:var(--c-green);margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:var(--d-dim);font-weight:600"> TSS target</span></div></div>'
+    +'<div style="font-size:12px;color:var(--d-dim)"><span style="display:inline-block;width:14px;border-top:2px dashed #22c55e;opacity:.6;vertical-align:middle"></span> band &middot; <span style="color:var(--c-green)">&#9679;</span> TSS</div></div>';
   if(tssWeeks.length>=2){ twInner+='<div style="margin-top:8px">'+_blockTssGraph_(tssWeeks)+'</div>'; }
   else { twInner+='<div style="font-size:11.5px;color:var(--d-dim);margin-top:6px">This fills in as weeks complete — '+(tssWeeks.length?('week 1 sits at '+tssWeeks[0].tss+' TSS so far'):'no weeks yet')+'.</div>'; }
   twInner+='</div>';
@@ -26050,16 +26060,16 @@ function renderBlockPlan_(container){
   var succ=_blockHdr_('What success looks like');
   _BLOCK_MILESTONES.filter(function(m){ return m.road; }).forEach(function(m){
     var stt=_blockMiState_(m, _succNext, now), col=_BLOCK_STATE_COL[stt];
-    succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
+    succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(stt==='past'?'M20 6L9 17l-5-5':m.icon,col,16)+'</span>'
-      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:#f59e0b;letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+m.sSub+'</div></div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:var(--c-amber);letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+m.sSub+'</div></div>'
       +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:'+col+';text-align:right;max-width:110px">'+m.benefit+'</span></div>';
   });
   var riskInner=_blockHdr_('Risks &amp; mitigations');
   _BLOCK_RISKS.forEach(function(rk){
     var active=(rk.slug==='missed' && stk.reset);
     var col=active?'#ef4444':'#f59e0b';
-    riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid #14181f">'
+    riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(rk.icon,col,16)+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(active?'#ef4444':'#f1f5f9')+'">'+rk.title+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+rk.sub+'</div>'
       +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px"><b style="color:var(--d-t3)">Fix:</b> '+rk.sol+'</div></div></div>';
@@ -26071,7 +26081,7 @@ function renderBlockPlan_(container){
   var ins=_blockInsight_();
   H+='<div style="background:linear-gradient(90deg,rgba(168,85,247,.14),rgba(34,197,94,.08));border:1px solid #2a2340;border-radius:16px;padding:16px 18px;margin-top:14px;display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
     +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:#a855f722;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z','#a855f7',18)+'</span>'
-    +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:#a855f7;text-transform:uppercase;letter-spacing:.06em">AI Coach insight'+(ins.computed?' &middot; from your data':'')+'</div>'
+    +'<div style="flex:1;min-width:220px"><div style="font-size:10.5px;font-weight:800;color:var(--c-purple);text-transform:uppercase;letter-spacing:.06em">AI Coach insight'+(ins.computed?' &middot; from your data':'')+'</div>'
     +'<div style="font-size:13px;color:var(--d-t2);line-height:1.5;margin-top:3px">'+ins.text+'</div></div></div>';
 
   // ---- Current Form (only within 10 days of an attempt) ----
@@ -26095,8 +26105,8 @@ function renderBlockPlan_(container){
 function showBlockPlan(){
   var old=document.getElementById('BLOCK_PAGE'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='BLOCK_PAGE';
-  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#0d0f14;overflow-y:auto;-webkit-overflow-scrolling:touch';
-  var close='<div onclick="var e=document.getElementById(&#39;BLOCK_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:#161b28;border:1px solid #2a3550;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:var(--d-deep);overflow-y:auto;-webkit-overflow-scrolling:touch';
+  var close='<div onclick="var e=document.getElementById(&#39;BLOCK_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:var(--d-inset);border:1px solid var(--d-line2);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
   var body=document.createElement('div');
   ov.appendChild(body);
   ov.insertAdjacentHTML('beforeend', close);
@@ -26243,7 +26253,7 @@ function buildLayoutToggle_(){
   lbl.textContent='Display mode';
   wrap.appendChild(lbl);
   var seg=document.createElement('div');
-  seg.style.cssText='display:flex;gap:4px;background:var(--s2,#1a1f2e);border:1px solid var(--b1,#252d40);border-radius:10px;padding:3px';
+  seg.style.cssText='display:flex;gap:4px;background:var(--s2,var(--d-chip));border:1px solid var(--b1,var(--d-line2));border-radius:10px;padding:3px';
   [['auto','Auto'],['desktop','Desktop'],['mobile','Mobile']].forEach(function(o){
     var b=document.createElement('button');
     var on=(cur===o[0]);
@@ -26341,14 +26351,14 @@ function dsShowSettings(){
   var _tbCount=(typeof tempBackfillCandidates_==='function')?tempBackfillCandidates_().length:0;
   function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
-  wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:4px">Settings</div>'
+  wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Settings</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:8px">FTP</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:8px">FTP</div>'
     +'<div style="display:flex;gap:8px;align-items:center"><input id="ftp-input" type="number" value="'+(window.st&&window.st.ftp?window.st.ftp:186)+'" style="width:80px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px">'
     +'<button onclick="if(window.st){window.st.ftp=parseInt(document.getElementById(&#39;ftp-input&#39;).value)||186;if(window.ftpRecord_)window.ftpRecord_(window.st.ftp,null);sv();fbPush(true);toast(&#39;FTP saved&#39;);}" style="background:#FC4C02;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save</button></div>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Goals</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:10px">Goals</div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px">'
     +_gInput('gt-ftpW','FTP target (W)',_G.ftpW)
     +_gInput('gt-weightLb','Weight target (lb)',_G.weightLb)
@@ -26360,26 +26370,26 @@ function dsShowSettings(){
     +'<button onclick="saveGoalTargets_()" style="margin-top:12px;background:#22c55e;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save Goals</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Deploy worker.js</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Deploy worker.js</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Pick the worker.js file and push it straight to GitHub. Verifies the file before writing, then reads it back and compares build stamps &mdash; those two matching is what proves the deploy landed. Cloudflare serves it ~30s later.</div>'
     +'<div id="dep-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px;line-height:1.5">Ready.</div>'
     +'<button onclick="deployWorkerPick_()" style="background:#FC4C02;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Pick file &amp; deploy</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">FIT Stream Backfill</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">FIT Stream Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Patch a ride with elevation, HR, power streams parsed from a FIT file.</div>'
     +'<div id="backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Patch June 27 Ride</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Power-Zone Backfill</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Power-Zone Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches each Strava ride&#39;s power stream and stores real time-in-zone so Power Distribution fills with real data (not curve estimates). Rate-limited by Strava (~90 rides/run) and resumable — run again to continue. Rides Strava no longer has streams for are skipped honestly. '+_zbCount+' rides need it.</div>'
     +'<div id="zone-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
     +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Temperature Backfill</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Temperature Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Looks up each OUTDOOR ride&#39;s historical temperature from Open-Meteo&#39;s archive, using the ride&#39;s own GPS start location + hour, and stores r.temp (&deg;F) + a tempSource field. Indoor/Zwift rides are skipped. Rate-limited (~2/sec), resumable. <b>Scan</b> reports candidates and writes nothing; <b>Backfill</b> confirms the count first. '+_tbCount+' outdoor rides need it.</div>'
     +'<div id="temp-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="tempBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
@@ -26387,14 +26397,14 @@ function dsShowSettings(){
     +' <button onclick="stopTempBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Intervals.icu ID Backfill</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Intervals.icu ID Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Maps each ride to its Intervals.icu activity id (needed for post-ride interval debriefs — the intervals endpoint rejects a raw Strava id). Matches your rides against the Intervals activity list by strava_id and writes r.icuId. Rides already imported from Intervals keep their id directly. <b>Scan</b> reports the match count and writes nothing; <b>Backfill</b> confirms first. Rides not in Intervals.icu simply get no id.</div>'
     +'<div id="icuid-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="icuIdBackfillScan_()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="runIcuIdBackfill_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill icuIds</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">GPS Track Backfill</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">GPS Track Backfill</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Re-fetches each outdoor Strava ride&#39;s GPS track (latlng) and writes it to /gps so every ride map draws. Skips indoor + non-GPS sports, and rides that already have a track. Ignores the on-open retry flags. Rate-limited (~90 fetches/run), resumable. '+_gpsbCount+' outdoor rides to check.</div>'
     +'<div id="gps-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runGpsBackfill()" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill GPS Tracks</button>'
@@ -26402,7 +26412,7 @@ function dsShowSettings(){
     +' <button onclick="stopGpsBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill segment effort history</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Backfill segment effort history</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches the segment efforts from every ride, so the Records progression lines have history to draw. One Strava call per ride, paced to 90 per 15 minutes, so a full library takes a couple of hours. Resumable: stop any time and run it again to carry on.</div>'
     +'<div id="segbf-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runSegmentBackfill_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
@@ -26410,14 +26420,14 @@ function dsShowSettings(){
     +' <button onclick="stopSegmentBackfill_()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Backfill Jan 1-19 2026</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Backfill Jan 1-19 2026</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Two weeks (Jan 5 and Jan 12) carry no activity here, which breaks the activity streak. Pulls that window from Strava across EVERY sport - walks, hikes, gym, swims - because neither week contains a ride. Scans first and shows what it found; nothing is written until you confirm.</div>'
     +'<div id="jan26-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="backfillJan2026_(true)" style="background:#3b82f6;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan (no write)</button>'
     +' <button onclick="backfillJan2026_()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Scan &amp; Backfill</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
-    +'<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Clean Race Duplicates</div>'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Clean Race Duplicates</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Collapse races that share a name and calendar day (keeps one). Lists what it will remove before deleting.</div>'
     +'<button onclick="runRaceCleanup()" style="background:#a855f7;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Clean Race Dupes</button>'
     +'</div>';
@@ -26430,7 +26440,7 @@ function dsShowSettings(){
   // Help: Glossary (§3.8 second surface)
   var glCard=document.createElement('div');
   glCard.style.cssText='background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px;cursor:pointer';
-  glCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px">Glossary</div><div style="font-size:12px;color:var(--t3)">Every term the app uses, explained &#8250;</div>';
+  glCard.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:3px">Glossary</div><div style="font-size:12px;color:var(--t3)">Every term the app uses, explained &#8250;</div>';
   glCard.onclick=function(){ if(typeof showGlossary==='function') showGlossary(); };
   wrap.appendChild(glCard);
   mc.appendChild(wrap);
@@ -26495,7 +26505,7 @@ function dsShowAICoach(){
   var hdrRow=document.createElement('div');
   hdrRow.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:2px';
   var hdr=document.createElement('div');
-  hdr.style.cssText='font-size:20px;font-weight:700;color:#fff';
+  hdr.style.cssText='font-size:20px;font-weight:700;color:var(--d-t1)';
   hdr.textContent='AI Coach';
   var genBtn=document.createElement('button');
   genBtn.style.cssText='display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:8px 14px;border-radius:10px;cursor:pointer;font-family:inherit';
@@ -26675,8 +26685,8 @@ function dsShowAICoach(){
     others.forEach(function(s){
       var sec=document.createElement('div');
       sec.style.cssText='padding:4px 0 14px 0;border-bottom:1px solid var(--b1)';
-      sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#ffffff;margin-bottom:8px">'+s.label+'</div>'
-        +'<div style="font-size:15px;color:#ffffff;line-height:1.6">'+mdInline(s.lines.join(' '))+'</div>';
+      sec.innerHTML='<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--d-t1);margin-bottom:8px">'+s.label+'</div>'
+        +'<div style="font-size:15px;color:var(--d-t1);line-height:1.6">'+mdInline(s.lines.join(' '))+'</div>';
       body.appendChild(sec);
     });
 
@@ -26886,12 +26896,12 @@ function dsShowGear(){
   backBtn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span>Back</span>';
   backBtn.onclick=function(){ dsNav((_dsPrevView && _dsPrevView!=='gear')?_dsPrevView:'dashboard'); };
   var hTitle=document.createElement('div');
-  hTitle.style.cssText='font-size:20px;font-weight:700;color:#fff';
+  hTitle.style.cssText='font-size:20px;font-weight:700;color:var(--d-t1)';
   hTitle.textContent='My Gear';
   var leftGrp=document.createElement('div'); leftGrp.style.cssText='display:flex;align-items:center;gap:12px';
   leftGrp.appendChild(backBtn); leftGrp.appendChild(hTitle);
   var addBikeBtn=document.createElement('div');
-  addBikeBtn.style.cssText='padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:#0d0f14;background:#4ade80';
+  addBikeBtn.style.cssText='padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--d-deep);background:#4ade80';
   addBikeBtn.textContent='+ Add Bike';
   addBikeBtn.onclick=function(){ openBikeEditor(undefined, dsShowGear); };
   hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:4px';
@@ -26900,7 +26910,7 @@ function dsShowGear(){
 
   if(!bikes.length){
     var noB=document.createElement('div');
-    noB.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:22px;text-align:center;color:var(--d-t4);font-size:13px;flex-shrink:0';
+    noB.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:14px;padding:22px;text-align:center;color:var(--d-t4);font-size:13px;flex-shrink:0';
     noB.textContent='No bikes yet — tap "+ Add Bike" to add one.';
     wrap.appendChild(noB);
   }
@@ -26917,13 +26927,13 @@ function dsShowGear(){
       : 'No ownership dates — set them to attribute rides by era';
 
     var card=document.createElement('div');
-    card.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:16px;padding:18px 20px;flex-shrink:0';
+    card.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:16px;padding:18px 20px;flex-shrink:0';
 
     // Header
     var bHdr=document.createElement('div');
     bHdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px';
     var bInfo=document.createElement('div');
-    bInfo.innerHTML='<div style="font-size:16px;font-weight:700;color:#fff">'+dispName+'</div>'+
+    bInfo.innerHTML='<div style="font-size:16px;font-weight:700;color:var(--d-t1)">'+dispName+'</div>'+
       '<div style="font-size:11px;color:'+color+';font-weight:600;margin-top:3px;text-transform:uppercase;letter-spacing:.06em">'+(bike.type||'Bike')+'</div>';
     var bBadge=document.createElement('div');
     bBadge.style.cssText='background:'+color+'22;border:1px solid '+color+'44;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:700;color:'+color+';white-space:nowrap';
@@ -26934,7 +26944,7 @@ function dsShowGear(){
     // Photo (or default illustration)
     var bikeIllus=document.createElement('div');
     if(bike.photo){
-      bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;height:170px;background-color:#0d0f14;background-image:url('+bike.photo+');background-size:cover;background-position:center 40%';
+      bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;overflow:hidden;height:170px;background-color:var(--d-deep);background-image:url('+bike.photo+');background-size:cover;background-position:center 40%';
     } else {
       bikeIllus.style.cssText='margin-bottom:14px;border-radius:10px;height:130px;background:linear-gradient(160deg,#1c2030,#12151d);display:flex;align-items:center;justify-content:center';
       bikeIllus.innerHTML='<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="'+color+'" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7">'+sportPaths_('bike')+'</svg>';
@@ -26952,7 +26962,7 @@ function dsShowGear(){
     specs.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px';
     [['Wheels',bike.wheelset||bike.wheels||'—'],['Power Meter',bike.power||'—'],['Groupset',bike.groupset||'—'],['Rides logged',stats.count+'']].forEach(function(x){
       var spec=document.createElement('div');
-      spec.style.cssText='background:#0d0f14;border-radius:8px;padding:8px 10px';
+      spec.style.cssText='background:var(--d-deep);border-radius:8px;padding:8px 10px';
       spec.innerHTML='<div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+x[0]+'</div>'+
         '<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x[1]+'</div>';
       specs.appendChild(spec);
@@ -26961,7 +26971,7 @@ function dsShowGear(){
 
     // Mileage stats
     var statsRow=document.createElement('div');
-    statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid #1a1f2e;margin-bottom:12px';
+    statsRow.style.cssText='display:flex;gap:12px;padding-top:12px;border-top:1px solid var(--d-chip);margin-bottom:12px';
     // Total comes from Strava's odometer when we have it. "This Year" has no Strava equivalent
     // (the gear endpoint carries a lifetime total only), so it stays local -- and is shown as an
     // em dash rather than a confident 0 when the local matcher resolved no rides for this bike,
@@ -26970,7 +26980,7 @@ function dsShowGear(){
     var _yearTxt=(stats.count>0)?(stats.yearMi.toLocaleString()+' mi'):'—';
     [['Total Miles',_shown.mi.toLocaleString()+' mi'],['This Year',_yearTxt],['Last Ride',stats.lastDate?fmtRideDate_(stats.lastDate):'—']].forEach(function(x){
       var s=document.createElement('div');
-      s.style.cssText='flex:1;text-align:center;background:#0d0f14;border-radius:8px;padding:8px';
+      s.style.cssText='flex:1;text-align:center;background:var(--d-deep);border-radius:8px;padding:8px';
       s.innerHTML='<div style="font-size:15px;font-weight:700;color:'+color+'">'+x[1]+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">'+x[0]+'</div>';
       statsRow.appendChild(s);
     });
@@ -26991,7 +27001,7 @@ function dsShowGear(){
     editB.textContent='Edit';
     editB.onclick=(function(ix){return function(){ openBikeEditor(ix, dsShowGear); };})(realIdx);
     var delB=document.createElement('button');
-    delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid var(--d-line);border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    delB.style.cssText='flex:1;padding:9px;background:none;border:1px solid var(--d-line);border-radius:8px;color:var(--c-red);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
     delB.textContent='Delete';
     delB.onclick=(function(ix,nm){return async function(){ if(!(await uiConfirm('Delete "'+nm+'"? Its mileage attribution will be removed.',{danger:true}))) return; deleteBike(ix); dsShowGear(); };})(realIdx, dispName);
     actRow.appendChild(editB); actRow.appendChild(delB);
@@ -27002,11 +27012,11 @@ function dsShowGear(){
 
   // Shoes & accessories
   var accCard=document.createElement('div');
-  accCard.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
-  accCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:10px">Accessories</div>';
+  accCard.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:14px;padding:14px 16px;flex-shrink:0';
+  accCard.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:10px">Accessories</div>';
   [['Lake CX301 Cycling Shoes','Footwear','#f59e0b'],['Garmin Edge 840','Computer','#4ade80'],['Garmin HR Strap','Heart Rate','#e24b4a']].forEach(function(x){
     var row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1a1f2e';
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--d-chip)';
     row.innerHTML='<div style="width:8px;height:8px;border-radius:50%;background:'+x[2]+';flex-shrink:0"></div>'+
       '<div style="flex:1;font-size:12px;color:var(--d-t2)">'+x[0]+'</div>'+
       '<div style="font-size:10px;color:var(--d-t4)">'+x[1]+'</div>';
@@ -27017,13 +27027,13 @@ function dsShowGear(){
   // -- Bulk assign: set a default bike for every ride with no resolvable bike.
   ensureBikes();
   var bulkCard=document.createElement('div');
-  bulkCard.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:14px;padding:14px 16px;flex-shrink:0';
-  bulkCard.innerHTML='<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:4px">Set default bike for all unassigned rides</div>'
+  bulkCard.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:14px;padding:14px 16px;flex-shrink:0';
+  bulkCard.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Set default bike for all unassigned rides</div>'
     +'<div style="font-size:11px;color:var(--d-t4);margin-bottom:12px">Assigns the chosen bike to every ride that has no bike from gear data or an existing manual assignment. Rides that already resolve a bike are left untouched.</div>';
   var bulkRow=document.createElement('div');
   bulkRow.style.cssText='display:flex;gap:8px;align-items:center;flex-wrap:wrap';
   var bulkSel=document.createElement('select');
-  bulkSel.style.cssText='flex:1;min-width:160px;padding:10px 12px;background:#0d0f14;color:var(--d-t2);border:1px solid #1a1f2e;border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
+  bulkSel.style.cssText='flex:1;min-width:160px;padding:10px 12px;background:var(--d-deep);color:var(--d-t2);border:1px solid var(--d-chip);border-radius:10px;font-size:14px;font-family:inherit;cursor:pointer';
   var bulkNone=document.createElement('option');
   bulkNone.value=''; bulkNone.textContent='Choose a bike…';
   bulkSel.appendChild(bulkNone);
@@ -27034,7 +27044,7 @@ function dsShowGear(){
   });
   var bulkBtn=document.createElement('button');
   bulkBtn.textContent='Apply';
-  bulkBtn.style.cssText='padding:10px 18px;background:#4ade80;color:#0d0f14;border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;flex-shrink:0';
+  bulkBtn.style.cssText='padding:10px 18px;background:#4ade80;color:var(--d-deep);border:none;border-radius:10px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;flex-shrink:0';
   bulkBtn.onclick=function(){
     var chosen=bulkSel.value;
     if(!chosen){ toast('Pick a bike first'); return; }
@@ -27101,7 +27111,7 @@ function dsShowWeather(){
   var mc=document.getElementById('ds-content'); if(!mc) return;
   mc.innerHTML='';
   var wrap=document.createElement('div');
-  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:var(--d-deep)';
   wrap.innerHTML='<div style="text-align:center;color:var(--d-t4);padding:60px;font-size:13px">Loading weather…</div>';
   mc.appendChild(wrap);
   Promise.all([ getWeather_(), getAQI_() ]).then(function(res){
@@ -27160,7 +27170,7 @@ function dsShowWeather(){
     H+='<div style="display:grid;grid-template-columns:1.5fr 1.3fr 1fr;gap:12px;flex-shrink:0">';
     // Current Conditions
     var cc=lbl('CURRENT CONDITIONS','<span style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:'+rideCol+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="'+rideCol+'"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>'+rideLabel+'</span>');
-    cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:#fff;line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:var(--d-t3);font-weight:600">°F</span></div><div style="font-size:13px;color:var(--d-t3);margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:var(--d-t3)">'+desc+'</div></div></div>';
+    cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:var(--d-t1);line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:var(--d-t3);font-weight:600">°F</span></div><div style="font-size:13px;color:var(--d-t3);margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:var(--d-t3)">'+desc+'</div></div></div>';
     cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid var(--d-raise)">';
     [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/></svg>',wind+' mph',windDir(c.winddirection_10m)+' Wind','#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',hum+'%','Humidity','#60a5fa'],
@@ -27174,7 +27184,7 @@ function dsShowWeather(){
     var _rc=2*Math.PI*46, _roff=_rc*(1-rideScore/100);
     var rs=lbl('RIDE CONDITIONS SCORE');
     rs+='<div style="display:flex;gap:18px;align-items:center">';
-    rs+='<div style="position:relative;width:118px;height:118px;flex-shrink:0"><svg width="118" height="118" viewBox="0 0 118 118" style="filter:drop-shadow(0 0 10px '+rideCol+'44)"><circle cx="59" cy="59" r="46" fill="none" stroke="#161b28" stroke-width="9"/><circle cx="59" cy="59" r="46" fill="none" stroke="'+rideCol+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+_rc.toFixed(1)+'" stroke-dashoffset="'+_roff.toFixed(1)+'" transform="rotate(-90 59 59)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:34px;font-weight:800;color:#fff;line-height:1">'+rideScore+'</div><div style="font-size:10px;color:var(--d-dim)">/100</div></div><div style="text-align:center;font-size:12px;font-weight:800;color:'+rideCol+';margin-top:6px">'+scoreBand+'</div></div>';
+    rs+='<div style="position:relative;width:118px;height:118px;flex-shrink:0"><svg width="118" height="118" viewBox="0 0 118 118" style="filter:drop-shadow(0 0 10px '+rideCol+'44)"><circle cx="59" cy="59" r="46" fill="none" stroke="#161b28" stroke-width="9"/><circle cx="59" cy="59" r="46" fill="none" stroke="'+rideCol+'" stroke-width="9" stroke-linecap="round" stroke-dasharray="'+_rc.toFixed(1)+'" stroke-dashoffset="'+_roff.toFixed(1)+'" transform="rotate(-90 59 59)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:34px;font-weight:800;color:var(--d-t1);line-height:1">'+rideScore+'</div><div style="font-size:10px;color:var(--d-dim)">/100</div></div><div style="text-align:center;font-size:12px;font-weight:800;color:'+rideCol+';margin-top:6px">'+scoreBand+'</div></div>';
     rs+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
     [['Temperature',rate(tempScore)],['Wind',rate(windScore)],['Humidity',rate(humScore)],['Precipitation',rate(rainScore)],['Air Quality',aqiScore==null?['—','#5b6678']:rate(aqiScore)],['UV Index',uvRate]].forEach(function(x){
       rs+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:var(--d-t3)">'+x[0]+'</span><span style="font-size:12px;font-weight:700;color:'+x[1][1]+'">'+x[1][0]+'</span></div>';
@@ -27195,7 +27205,7 @@ function dsShowWeather(){
       ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:var(--d-t3)">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
     });
     ag+='</div>';
-    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--d-raise);text-align:center;font-size:12px;font-weight:600;color:#60a5fa;cursor:pointer">Details &#8594;</div>';
+    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--d-raise);text-align:center;font-size:12px;font-weight:600;color:var(--c-blue);cursor:pointer">Details &#8594;</div>';
     H+=card(ag);
     H+='</div>';
 
@@ -27205,7 +27215,7 @@ function dsShowWeather(){
     var hf=lbl('HOURLY FORECAST');
     hf+='<div style="display:flex;gap:2px;overflow-x:auto;padding-bottom:4px">';
     hrs.forEach(function(k){ var d=new Date(hourly.time[k]); var h=d.getHours(); var ap=h>=12?'PM':'AM'; var h12=h%12||12;
-      hf+='<div style="flex:1;min-width:62px;text-align:center;padding:6px 2px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">'+h12+' '+ap+'</div><div style="display:flex;justify-content:center;margin-bottom:5px">'+wIcon(hourly.weathercode[k],30)+'</div><div style="font-size:16px;font-weight:800;color:var(--d-head)">'+Math.round(hourly.temperature_2m[k])+'°</div><div style="font-size:9px;color:var(--d-t4);margin-top:4px">'+Math.round(hourly.windspeed_10m[k])+' mph</div><div style="font-size:9px;color:#60a5fa">'+Math.round(hourly.precipitation_probability[k]||0)+'%</div></div>';
+      hf+='<div style="flex:1;min-width:62px;text-align:center;padding:6px 2px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">'+h12+' '+ap+'</div><div style="display:flex;justify-content:center;margin-bottom:5px">'+wIcon(hourly.weathercode[k],30)+'</div><div style="font-size:16px;font-weight:800;color:var(--d-head)">'+Math.round(hourly.temperature_2m[k])+'°</div><div style="font-size:9px;color:var(--d-t4);margin-top:4px">'+Math.round(hourly.windspeed_10m[k])+' mph</div><div style="font-size:9px;color:var(--c-blue)">'+Math.round(hourly.precipitation_probability[k]||0)+'%</div></div>';
     });
     hf+='</div>';
     // dual-axis chart temp + wind
@@ -27330,8 +27340,8 @@ function dsShowNutrition(){
     // ---- helpers ----
     function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
     function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
-    function pctBar(v,g,color){ var p=g>0?Math.min(100,Math.round(v/g*100)):0; return '<div style="height:7px;background:#1a2030;border-radius:4px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+color+';border-radius:4px"></div></div>'; }
-    function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:#fff;line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:var(--d-dim);margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
+    function pctBar(v,g,color){ var p=g>0?Math.min(100,Math.round(v/g*100)):0; return '<div style="height:7px;background:var(--d-chip);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+color+';border-radius:4px"></div></div>'; }
+    function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:var(--d-t1);line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:var(--d-dim);margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
     function lineChart(series, w, h){ // series: [{color, pts:[0..100]}]
       var out='<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block">';
       [25,50,75].forEach(function(g){ var y=h-(g/100)*(h-6)-3; out+='<line x1="0" y1="'+y.toFixed(1)+'" x2="'+w+'" y2="'+y.toFixed(1)+'" stroke="#171c2b" stroke-width="1"/>'; });
@@ -27346,7 +27356,7 @@ function dsShowNutrition(){
     H+='<div style="display:flex;align-items:center;gap:10px">';
     H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div></div>';
     H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
-    H+='<div data-act="add" style="display:flex;align-items:center;gap:6px;background:'+C.c+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:#fff;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Food</div>';
+    H+='<div data-act="add" style="display:flex;align-items:center;gap:6px;background:'+C.c+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:var(--d-t1);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Food</div>';
     H+='</div></div>';
 
     // ===== ROW 1: Macro Targets + Calorie Summary =====
@@ -27363,7 +27373,7 @@ function dsShowNutrition(){
       +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="#161b28" stroke-width="12"/>'
       +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="'+heroCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+_hc.toFixed(1)+'" stroke-dashoffset="'+_hoff.toFixed(1)+'" transform="rotate(-90 '+(_hs/2)+' '+(_hs/2)+')"/></svg>'
       +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
-      +'<div style="font-size:44px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.03em">'+cal+'</div>'
+      +'<div style="font-size:44px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.03em">'+cal+'</div>'
       +'<div style="font-size:11px;color:var(--d-t4);margin-top:3px">of '+goals.cal+' cal</div>'
       // Base + Burned = Total, always rendered. A bare total is a number you have to take on
       // faith; the parts are what make it checkable, and an absent line reads as broken.
@@ -27391,7 +27401,7 @@ function dsShowNutrition(){
     var maxMeal=Math.max.apply(null, mealsOrder.map(function(m){return mealCal[m[1]]||0;}).concat([1]));
     var cs=lbl('CALORIE SUMMARY','<span style="display:flex;gap:12px;font-size:10px;color:var(--d-t4)"><span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:2px;background:'+C.cal+'"></span>Consumed</span></span>');
     cs+='<div style="display:flex;gap:18px;align-items:flex-start">';
-    cs+='<div style="flex-shrink:0"><div style="font-size:30px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+calLeft+'</div><div style="font-size:11px;color:var(--d-t4);margin:2px 0 12px">Calories Left</div><div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+goals.cal+'</div><div style="font-size:11px;color:var(--d-t4);margin-top:2px">Daily Target</div></div>';
+    cs+='<div style="flex-shrink:0"><div style="font-size:30px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.02em">'+calLeft+'</div><div style="font-size:11px;color:var(--d-t4);margin:2px 0 12px">Calories Left</div><div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+goals.cal+'</div><div style="font-size:11px;color:var(--d-t4);margin-top:2px">Daily Target</div></div>';
     // bar chart by meal
     cs+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:flex-end;gap:5px;height:96px">';
     mealsOrder.forEach(function(m){ var v=mealCal[m[1]]||0; var hp=Math.max(2,Math.round(v/maxMeal*90)); cs+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px"><div style="width:100%;height:'+hp+'px;background:linear-gradient(180deg,'+C.cal+',#b45309);border-radius:3px 3px 0 0" title="'+v+' cal"></div></div>'; });
@@ -27399,7 +27409,7 @@ function dsShowNutrition(){
     mealsOrder.forEach(function(m){ cs+='<div style="flex:1;text-align:center;font-size:8px;color:var(--d-dim)">'+m[0]+'</div>'; });
     cs+='</div></div>';
     // side stats
-    cs+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:16px"><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.cal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+cal+'</div><div style="font-size:10px;color:var(--d-t4)">Consumed</div></div></div><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+Math.max(0,wTgt-wOz)+' oz</div><div style="font-size:10px;color:var(--d-t4)">Water Left</div></div></div></div>';
+    cs+='<div style="flex-shrink:0;display:flex;flex-direction:column;gap:16px"><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.cal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><div><div style="font-size:18px;font-weight:800;color:var(--d-t1);line-height:1">'+cal+'</div><div style="font-size:10px;color:var(--d-t4)">Consumed</div></div></div><div style="display:flex;align-items:center;gap:8px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><div><div style="font-size:18px;font-weight:800;color:var(--d-t1);line-height:1">'+Math.max(0,wTgt-wOz)+' oz</div><div style="font-size:10px;color:var(--d-t4)">Water Left</div></div></div></div>';
     cs+='</div>';
     H+=card(cs);
     H+='</div>';
@@ -27410,7 +27420,7 @@ function dsShowNutrition(){
     var kn=lbl('KEY NUTRIENTS','<span data-act="nutdetails" style="font-size:11px;font-weight:600;color:'+C.c+';cursor:pointer">View Details</span>');
     kn+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">';
     [['Fiber',fiber,goals.fiber,'g'],['Sodium',sodium,goals.sodium,'mg']].forEach(function(x){
-      kn+='<div style="background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:4px">'+x[0]+'</div><div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1">'+x[1]+'<span style="font-size:11px;color:var(--d-t4);font-weight:600">'+x[3]+'</span></div><div style="font-size:10px;color:var(--d-dim);margin-top:3px">of '+x[2]+x[3]+' target</div></div>';
+      kn+='<div style="background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;padding:11px 12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:4px">'+x[0]+'</div><div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1">'+x[1]+'<span style="font-size:11px;color:var(--d-t4);font-weight:600">'+x[3]+'</span></div><div style="font-size:10px;color:var(--d-dim);margin-top:3px">of '+x[2]+x[3]+' target</div></div>';
     });
     kn+='</div>';
     kn+='<div style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Micronutrient Status</div>';
@@ -27474,7 +27484,7 @@ function dsShowNutrition(){
       items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:var(--d-t4);flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
       fl+='</div>';
     });
-    fl+='<div style="display:flex;gap:8px;margin-top:12px"><div data-act="add" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:#fff;background:'+C.c+';border-radius:9px;padding:9px;cursor:pointer">+ Add Food</div></div>';
+    fl+='<div style="display:flex;gap:8px;margin-top:12px"><div data-act="add" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--d-t1);background:'+C.c+';border-radius:9px;padding:9px;cursor:pointer">+ Add Food</div></div>';
     H+=card(fl);
     // Meal status (adapted: no timestamps -> logged/empty status + cal, not clock times)
     var ml=lbl('MEALS','<span style="font-size:11px;color:var(--d-t4)">Today</span>');
@@ -27490,7 +27500,7 @@ function dsShowNutrition(){
     var hyPct=wTgt>0?Math.round(wOz/wTgt*100):0;
     var maxW=Math.max.apply(null, hist.map(function(d){return d.water;}).concat([wTgt,1]));
     var hy=lbl('HYDRATION','<span style="font-size:11px;color:var(--d-t4)">7 Days</span>');
-    hy+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">'+ringHtml(hyPct,C.w,hyPct+'%','',72)+'<div><div style="font-size:24px;font-weight:800;color:#fff;line-height:1">'+wOz+'<span style="font-size:12px;color:var(--d-t4);font-weight:600"> oz</span></div><div style="font-size:11px;color:var(--d-t4)">of '+wTgt+' oz goal</div><div style="display:flex;gap:8px;margin-top:8px"><div data-act="waterminus" style="width:28px;height:28px;border-radius:8px;background:#1a2030;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">−</div><div data-act="waterplus" style="width:28px;height:28px;border-radius:8px;background:'+C.w+'22;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">+</div></div></div></div>';
+    hy+='<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">'+ringHtml(hyPct,C.w,hyPct+'%','',72)+'<div><div style="font-size:24px;font-weight:800;color:var(--d-t1);line-height:1">'+wOz+'<span style="font-size:12px;color:var(--d-t4);font-weight:600"> oz</span></div><div style="font-size:11px;color:var(--d-t4)">of '+wTgt+' oz goal</div><div style="display:flex;gap:8px;margin-top:8px"><div data-act="waterminus" style="width:28px;height:28px;border-radius:8px;background:var(--d-chip);color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">−</div><div data-act="waterplus" style="width:28px;height:28px;border-radius:8px;background:'+C.w+'22;color:'+C.w+';display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer">+</div></div></div></div>';
     hy+='<div style="flex:1;min-height:0;display:flex;align-items:flex-end;gap:5px;height:60px">';
     hist.forEach(function(d){ var hp=Math.max(2,Math.round(d.water/maxW*54)); var isToday=d.key===viewKey; hy+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:100%;height:'+hp+'px;background:'+(isToday?C.w:'#1e3a44')+';border-radius:3px 3px 0 0"></div><span style="font-size:8px;color:var(--d-dim)">'+['S','M','T','W','T','F','S'][new Date(d.key).getDay()]+'</span></div>'; });
     hy+='</div>';
@@ -27543,7 +27553,7 @@ function dsShowNutrition(){
     H+=card(sc,'flex-shrink:0');
 
     var wrap=document.createElement('div');
-    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:#0d0f14';
+    wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:16px 20px 24px;box-sizing:border-box;gap:12px;background:var(--d-deep)';
     wrap.innerHTML=H;
     mc.appendChild(wrap);
 
@@ -27955,7 +27965,7 @@ function dsShowAnalytics(){
   toolbar.innerHTML='<div style="font-size:12px;color:var(--d-t3);font-weight:600">'+RLABEL+'</div>'
     +'<div style="display:flex;align-items:center;gap:10px">'
     +'<button onclick="st.anCompare=!st.anCompare;sv();dsShowAnalytics()" title="Show change over the selected window" style="display:flex;align-items:center;gap:5px;background:'+(CMP?'#f97316':'transparent')+';color:'+(CMP?'#fff':'#94a3b8')+';border:1px solid '+(CMP?'#f97316':'#2a3550')+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'
-    +'<div style="display:flex;gap:2px;background:#0d0f14;border:1px solid #1a1f2e;border-radius:9px;padding:2px">'+_rbtns+'</div>'
+    +'<div style="display:flex;gap:2px;background:var(--d-deep);border:1px solid var(--d-chip);border-radius:9px;padding:2px">'+_rbtns+'</div>'
     +'</div>';
   wrap.appendChild(toolbar);
 
@@ -27985,7 +27995,7 @@ function dsShowAnalytics(){
   var _iqNull=(!_iq || _iq.score==null);
   var _iqColor=_iqNull?'#4b5568':(_iq.score>=80?'#4ade80':_iq.score>=60?'#60a5fa':_iq.score>=40?'#f59e0b':'#94a3b8');
   var iqCard=document.createElement('div');
-  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid #2a3550;border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
+  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid var(--d-line2);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
   iqCard.setAttribute('data-metric-teach','iq');
   iqCard.setAttribute('role','button'); iqCard.setAttribute('tabindex','0'); iqCard.setAttribute('aria-label','Learn about the Athlete IQ Score');
   iqCard.onmouseenter=function(){ iqCard.style.borderColor='#3a4a70'; };
@@ -28044,9 +28054,9 @@ function dsShowAnalytics(){
     // reading — that the line ends at the number above it — is wrong. Measured 2.54 against a
     // line ending at 2.84. The chart's own caption already names its series; this names the
     // headline's, so the two are legible as two measurements rather than one that disagrees.
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:var(--d-t4)">W/kg</div>'
+    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:var(--d-t4)">W/kg</div>'
       +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4)">Target</div>'
-      +'<div style="font-size:15px;font-weight:800;color:#FFB938;line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--c-gold);line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">FTP &divide; bodyweight'+((wkgNow!=null&&_wt&&_wt.pts&&_wt.pts.length>1)?(' &middot; the line below plots '+_wt.source+', a different measure'):'')+'</div>'
     +_wkgChart
     +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
@@ -28064,7 +28074,7 @@ function dsShowAnalytics(){
     {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e'}
   ].forEach(function(m){
     var mini=document.createElement('div');
-    mini.style.cssText='background:var(--d-panel);border:1px solid #1a1f2e;border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
+    mini.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
     mini.setAttribute('data-metric-teach',m.key);
     mini.setAttribute('role','button'); mini.setAttribute('tabindex','0'); mini.setAttribute('aria-label','Learn about '+m.label);
     mini.onmouseenter=function(){ mini.style.background='#161a24'; mini.style.borderColor='#2a3550'; };
@@ -28162,7 +28172,7 @@ function dsShowAnalytics(){
       var _zp=z.label.split(' ');
       return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
         +'<span style="font-size:11px;width:96px;flex-shrink:0"><span style="color:'+z.color+';font-weight:700">'+_zp[0]+'</span> <span style="color:#8b97a8">'+_zp.slice(1).join(' ')+'</span></span>'
-        +'<div style="flex:1;height:7px;background:#0d0f14;border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
+        +'<div style="flex:1;height:7px;background:var(--d-deep);border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
         +'<span style="font-size:11px;font-weight:700;color:var(--d-t2);width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
     }).join('');
     pdCard.innerHTML=pdHead+pdBars;
@@ -28451,7 +28461,7 @@ function dsShowCalendar(){
       +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
   function statCard(icon,iconCol,big,label,right,rightCol){
-    return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:14px">'
+    return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:14px">'
       +'<div style="width:44px;height:44px;flex-shrink:0;border-radius:11px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:baseline;gap:7px">'
@@ -28513,15 +28523,15 @@ function dsShowCalendar(){
     // ---- top bar ----
     H+='<div style="display:flex;align-items:center;gap:14px;flex-shrink:0">';
     H+='<div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:var(--d-head)">Calendar</div>';
-    H+='<div style="display:flex;align-items:center;background:#0e1220;border:1px solid #1a2030;border-radius:10px;overflow:hidden">';
+    H+='<div style="display:flex;align-items:center;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;overflow:hidden">';
     H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div>';
     H+='<div style="padding:8px 6px;font-size:14px;font-weight:700;color:var(--d-head);min-width:118px;text-align:center">'+monthNames[viewMonth]+' '+viewYear+'</div>';
     H+='<div data-cal="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div>';
     H+='</div>';
-    H+='<div data-cal="today" style="padding:8px 15px;background:#0e1220;border:1px solid #1a2030;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--d-soft)">Today</div>';
+    H+='<div data-cal="today" style="padding:8px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:var(--d-soft)">Today</div>';
     H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
     H+='  <div data-cal="gen" style="padding:8px 15px;background:#2FA8E0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#fff">Generate</div>';
-    H+='  <div style="display:inline-flex;background:#0e1220;border:1px solid #1a2030;border-radius:10px;padding:3px">';
+    H+='  <div style="display:inline-flex;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;padding:3px">';
     ['week','month','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
       H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
     });
@@ -28531,7 +28541,7 @@ function dsShowCalendar(){
     H+='  <div style="position:relative">';
     H+='    <div data-cal="filter" style="width:38px;height:38px;border-radius:10px;background:'+(_fa?'rgba(249,115,22,.14)':'#0e1220')+';border:1px solid '+(_fa?'#F97316':'#1a2030')+';display:flex;align-items:center;justify-content:center;color:'+(_fa?'#F97316':'#94a3b8')+';cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></div>';
     if(calFilterOpen){
-      H+='<div style="position:absolute;right:0;top:44px;z-index:50;width:210px;background:#0e1220;border:1px solid #232b3d;border-radius:12px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.5)">';
+      H+='<div style="position:absolute;right:0;top:44px;z-index:50;width:210px;background:var(--d-well);border:1px solid #232b3d;border-radius:12px;padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.5)">';
       function _frow(key,label,dot){ var on=calFilter[key]!==false;
         return '<div data-cal="filt" data-key="'+key+'" style="display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer">'
           +'<div style="width:16px;height:16px;border-radius:5px;border:1.5px solid '+(on?'#F97316':'#39424f')+';background:'+(on?'#F97316':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(on?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'')+'</div>'
@@ -28541,7 +28551,7 @@ function dsShowCalendar(){
       H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim);padding:2px 4px 4px">SHOW</div>';
       H+=_frow('completed','Completed',null);
       H+=_frow('planned','Planned',null);
-      H+='<div style="height:1px;background:#1a2030;margin:6px 2px"></div>';
+      H+='<div style="height:1px;background:var(--d-chip);margin:6px 2px"></div>';
       H+='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim);padding:2px 4px 4px">TYPES</div>';
       H+=_frow('ride','Rides',sportColor_('Ride'));
       H+=_frow('run','Runs',sportColor_('Run'));
@@ -28601,7 +28611,7 @@ function dsShowCalendar(){
       H+='</div>';
       // ---- month grid body + week rail ----
       H+='<div style="display:flex;gap:12px;flex:1 0 auto">';
-      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid #171c2b;border-radius:12px;overflow:hidden">';
+      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid var(--d-inset);border-radius:12px;overflow:hidden">';
       weeks.forEach(function(wk){
         wk.forEach(function(c){
           var isToday=!!c.date && c.date===todayStr;
@@ -28625,7 +28635,7 @@ function dsShowCalendar(){
           // one activity opens it, several open a picker, none opens the day editor.
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
           var attrs=' data-cal="cell"'+(c.date?(' data-date="'+c.date+'"'):'');
-          H+='<div'+attrs+' style="position:relative;border-right:1px solid #171c2b;border-bottom:1px solid #171c2b;padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
+          H+='<div'+attrs+' style="position:relative;border-right:1px solid var(--d-inset);border-bottom:1px solid var(--d-inset);padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
           if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
           var complete=!!c.date && typeof isDayComplete==='function' && isDayComplete(c.date);
           if((isRest||complete) && c.date){
@@ -28635,7 +28645,7 @@ function dsShowCalendar(){
           }
           if(c.date && typeof _calMilestoneFlag_==='function'){ H+=_calMilestoneFlag_(c.date); }
           if(isRest){
-            H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:#7ee29a">Rest Day</div></div>';
+            H+='<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:calc(100% - 26px)">'+MOON+'<div style="font-size:12px;font-weight:700;color:var(--c-green)">Rest Day</div></div>';
           } else {
             dl.slice(0,2).forEach(function(r){
               var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
@@ -28661,11 +28671,11 @@ function dsShowCalendar(){
             if(_psAll.length){
               if(dl.length){
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:var(--d-dim);flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(_sessSport_(ps),11)+'<span style="font-size:10px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="margin-top:5px;display:flex;align-items:center;gap:5px;padding:3px 7px;border-radius:7px;border:1px dashed #313c52;overflow:hidden;cursor:pointer"><span style="font-size:8px;font-weight:800;letter-spacing:.04em;color:var(--d-dim);flex-shrink:0">PLAN</span>'+((ps.block&&ps.block.phase)?('<span onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:var(--c-purple);cursor:pointer;flex-shrink:0">'+ps.block.phase+'</span>'):'')+activityIcon_(_sessSport_(ps),11)+'<span style="font-size:10px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ps.name+'</span></div>';
                 });
               } else {
                 _psAll.forEach(function(ps){
-                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(_sessSport_(ps),18)+'<div style="font-size:9px;color:#8592a6;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div>'+((ps.block&&ps.block.phase)?('<div onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:#a855f7;cursor:pointer">'+ps.block.phase+' &middot; wk '+(ps.block.week||1)+'</div>'):'')+'</div>';
+                  H+='<div data-cal="planchip" data-date="'+c.date+'" data-sid="'+(ps.id||'')+'" style="display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:8px;opacity:.8;cursor:pointer">'+activityIcon_(_sessSport_(ps),18)+'<div style="font-size:9px;color:var(--d-t3);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">'+ps.name+'</div>'+((ps.block&&ps.block.phase)?('<div onclick="event.stopPropagation();if(window.navToPlan_)navToPlan_()" title="Open the block plan" style="font-size:8px;font-weight:800;color:var(--c-purple);cursor:pointer">'+ps.block.phase+' &middot; wk '+(ps.block.week||1)+'</div>'):'')+'</div>';
                 });
               }
             }
@@ -28684,7 +28694,7 @@ function dsShowCalendar(){
         // Per-sport lines are the point of this card; the combined total sits under them as a
         // footer so the week still reads at a glance and nothing the total counts is invisible.
         var rows=calSportRows_(roll);
-        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border-radius:12px;background:#0e1220;border:1px solid #1a2030">'
+        H+='<div style="display:flex;flex-direction:column;justify-content:center;gap:5px;padding:10px 13px;border-radius:12px;background:var(--d-well);border:1px solid var(--d-chip)">'
           +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--d-dim)">WEEK '+(wi+1)+'</div>';
         rows.forEach(function(row){
           var col=sportColor_(row.sport);
@@ -28694,12 +28704,12 @@ function dsShowCalendar(){
               +'<span style="font-size:9.5px;font-weight:800;letter-spacing:.05em;color:'+col+'">'+row.label.toUpperCase()+'</span>'
               +'<span style="font-size:13px;font-weight:800;color:var(--d-head);margin-left:auto">'+row.main+'</span>'
             +'</div>'
-            +(row.sub?('<div style="font-size:9.5px;font-weight:600;color:#8592a6;line-height:1;margin-top:2px;text-align:right">'+row.sub+'</div>'):'')
+            +(row.sub?('<div style="font-size:9.5px;font-weight:600;color:var(--d-t3);line-height:1;margin-top:2px;text-align:right">'+row.sub+'</div>'):'')
           +'</div>';
         });
-        H+='<div style="display:flex;align-items:baseline;gap:5px;border-top:1px solid #1a2030;padding-top:5px;margin-top:1px">'
+        H+='<div style="display:flex;align-items:baseline;gap:5px;border-top:1px solid var(--d-chip);padding-top:5px;margin-top:1px">'
             +'<span style="font-size:8.5px;font-weight:700;letter-spacing:.06em;color:#4a5468">TOTAL</span>'
-            +'<span style="font-size:11px;font-weight:800;color:#8592a6;margin-left:auto">'+roll.miles+' mi</span>'
+            +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);margin-left:auto">'+roll.miles+' mi</span>'
             +'<span style="font-size:11px;font-weight:800;color:'+bc+'">'+roll.tss+' TSS</span>'
           +'</div>'
           +'</div>';
@@ -28721,20 +28731,20 @@ function dsShowCalendar(){
     }
 
     // ---- month summary footer (compact, left-packed, no sparklines) ----
-    H+='<div style="flex-shrink:0;background:#0b0e17;border:1px solid #171c2b;border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
+    H+='<div style="flex-shrink:0;background:var(--d-deep);border:1px solid var(--d-inset);border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
     H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;font-weight:700;letter-spacing:.1em;color:#4a5468">MONTH SUMMARY</div>';
     H+='<div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:var(--d-head);line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:#8592a6">Distance</span></div>';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.tss+';line-height:1">'+totTSS+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">TSS</span></span><span style="font-size:10px;color:#8592a6">Training Load</span></div>';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.time+';line-height:1">'+fmtHM(totSecs)+'</span><span style="font-size:10px;color:#8592a6">Total Time</span></div>';
-    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.act+';line-height:1">'+totAct+'</span><span style="font-size:10px;color:#8592a6">Activities</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:var(--d-head);line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:var(--d-t3)">Distance</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.tss+';line-height:1">'+totTSS+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">TSS</span></span><span style="font-size:10px;color:var(--d-t3)">Training Load</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.time+';line-height:1">'+fmtHM(totSecs)+'</span><span style="font-size:10px;color:var(--d-t3)">Total Time</span></div>';
+    H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:'+CAL.act+';line-height:1">'+totAct+'</span><span style="font-size:10px;color:var(--d-t3)">Activities</span></div>';
     H+='</div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:#8592a6">Longest Ride</span>'+calIcon('Ride',12,C_RIDE)+'<span style="font-size:12px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:#8592a6">Longest Run</span>'+calIcon('Run',12,C_RUN)+'<span style="font-size:12px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:var(--d-t3)">Longest Ride</span>'+calIcon('Ride',12,C_RIDE)+'<span style="font-size:12px;font-weight:800;color:'+C_RIDE+'">'+(Math.round(longRide*10)/10)+' mi</span></div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;flex-shrink:0"><span style="font-size:9px;color:var(--d-t3)">Longest Run</span>'+calIcon('Run',12,C_RUN)+'<span style="font-size:12px;font-weight:800;color:'+C_RUN+'">'+(Math.round(longRun*10)/10)+' mi</span></div>';
     var _R=13,_C=2*Math.PI*_R,_off=_C*(1-consist10/10);
     H+='<div style="flex-shrink:0;display:flex;align-items:center;gap:6px">';
     H+='  <svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="'+_R+'" fill="none" stroke="#1a2030" stroke-width="4"/><circle cx="17" cy="17" r="'+_R+'" fill="none" stroke="'+CAL.act+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+_C.toFixed(1)+'" stroke-dashoffset="'+_off.toFixed(1)+'" transform="rotate(-90 17 17)"/><text x="17" y="20.5" text-anchor="middle" font-size="9" font-weight="800" fill="#e8edf5">'+consist10+'/10</text></svg>';
-    H+='  <div style="font-size:9px;color:#8592a6">Consistency</div>';
+    H+='  <div style="font-size:9px;color:var(--d-t3)">Consistency</div>';
     H+='</div>';
     H+='</div>';
 
@@ -28770,7 +28780,7 @@ function dsShowCalendar(){
 
   function sumBlock(big,label,color,spark){
     return '<div style="flex:1;min-width:0">'
-      +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</span><span style="font-size:9px;color:#8592a6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
+      +'<div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:15px;font-weight:800;color:'+(color||'#e8edf5')+';line-height:1">'+big+'</span><span style="font-size:9px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span></div>'
       +'<div style="height:12px;margin-top:3px">'+spark+'</div></div>';
   }
 
@@ -28785,7 +28795,7 @@ function dsShowCalendar(){
       var ov=document.createElement('div');
       ov.style.cssText='position:fixed;inset:0;background:rgba(3,6,14,.72);z-index:400;display:flex;align-items:center;justify-content:center';
       var box=document.createElement('div');
-      box.style.cssText='background:#0e1220;border:1px solid #232b3d;border-radius:16px;padding:16px;width:330px;max-height:76vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)';
+      box.style.cssText='background:var(--d-well);border:1px solid #232b3d;border-radius:16px;padding:16px;width:330px;max-height:76vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)';
       var H='<div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--d-dim)">'+list.length+' ACTIVITIES</div>'
         +'<div style="font-size:14px;font-weight:800;color:var(--d-head);margin:2px 0 12px">'+dstr+'</div>';
       list.forEach(function(r,i){
@@ -28795,10 +28805,10 @@ function dsShowCalendar(){
           +'<div style="width:32px;height:32px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+calIcon(rideSport_(r)||'Ride',18,col)+'</div>'
           +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
-          +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div>'
+          +'<div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div>'
           +'</div></div>';
       });
-      H+='<div data-pick="cancel" style="text-align:center;padding:9px;margin-top:2px;font-size:13px;color:#8592a6;cursor:pointer">Cancel</div>';
+      H+='<div data-pick="cancel" style="text-align:center;padding:9px;margin-top:2px;font-size:13px;color:var(--d-t3);cursor:pointer">Cancel</div>';
       box.innerHTML=H;
       box.addEventListener('click',function(e){
         var b=e.target.closest('[data-pick]'); if(!b) return;
@@ -28816,7 +28826,7 @@ function dsShowCalendar(){
   // Agenda view — chronological list of the month's activities.
   function calAgenda(monthRides){
     var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
-    var H='<div style="flex:1;min-height:0;overflow-y:auto;background:#0b0e17;border:1px solid #171c2b;border-radius:14px;padding:6px 4px">';
+    var H='<div style="flex:1;min-height:0;overflow-y:auto;background:var(--d-deep);border:1px solid var(--d-inset);border-radius:14px;padding:6px 4px">';
     if(!list.length){ H+='<div style="padding:44px;text-align:center;color:var(--d-dim);font-size:13px">No activities this month.</div>'; }
     list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       var idx=rideRefOf_(r);
@@ -28824,10 +28834,10 @@ function dsShowCalendar(){
       var dObj=new Date(normDate(r.date)+'T00:00:00');
       var dstr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dObj.getDay()]+' '+(dObj.getMonth()+1)+'/'+dObj.getDate();
       H+='<div'+(rideRefOk_(idx)?(' data-cal="act" data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
-        +'<div style="width:54px;font-size:11px;color:#8592a6;font-weight:600">'+dstr+'</div>'
+        +'<div style="width:54px;font-size:11px;color:var(--d-t3);font-weight:600">'+dstr+'</div>'
         +'<div style="width:36px;height:36px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center">'+calIcon(rideSport_(r)||'Ride',20,col)+'</div>'
         +'<div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div>'
-        +'<div style="font-size:11px;color:#8592a6;margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div></div>';
+        +'<div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+(dist>0?((Math.round(dist*10)/10)+' mi · '):'')+fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'')+'</div></div></div>';
     });
     H+='</div>';
     return H;
@@ -28842,8 +28852,8 @@ function dsShowCalendar(){
       var dl=ridesByDate[nd]||[]; var isToday=nd===today;
       // Same single-hit-target bug as the month grid: the column carried one handle for the whole
       // day, so every card in it opened dl[0]. Handles live on the cards now.
-      H+='<div data-cal="cell" data-date="'+nd+'" style="min-height:240px;padding:10px;border-radius:12px;background:#0e1220;border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
-      H+='<div style="font-size:11px;color:#8592a6;font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
+      H+='<div data-cal="cell" data-date="'+nd+'" style="min-height:240px;padding:10px;border-radius:12px;background:var(--d-well);border:1px solid '+(isToday?'#4ade80':'#1a2030')+';cursor:pointer">';
+      H+='<div style="font-size:11px;color:var(--d-t3);font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
       H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
       dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
         var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
@@ -29072,7 +29082,7 @@ function dsRenderAttention_(el, d){
     H+='<div style="width:34px;height:34px;border-radius:50%;background:rgba(74,222,128,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>';
     var _gm=['Nothing To See Here!','All Clear — Go Ride!','You are Good — Let us Go!','Green Light — Send It!'];
     var _gh=_gm[Math.floor(Date.now()/86400000)%_gm.length];
-    H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:#4ade80;line-height:1.15">'+_gh+'</div>';
+    H+='<div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:800;color:var(--c-green);line-height:1.15">'+_gh+'</div>';
     H+='<div style="font-size:12.5px;color:var(--d-t3);margin:3px 0 10px">Everything looks great.</div>';
     (d.positives||[]).slice(0,4).forEach(function(p){ H+='<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--d-soft);margin-bottom:7px">'+CK+'<span>'+p+'</span></div>'; });
     H+='<div style="font-size:12px;color:var(--d-t4);margin-top:8px">Enjoy the ride.</div></div></div>';
@@ -29080,7 +29090,7 @@ function dsRenderAttention_(el, d){
     var red=d.state==='red', accent=red?'#ef4444':'#f59e0b';
     var narr=(d.narrated && d.narrated.bullets && d.narrated.bullets.length)?d.narrated.bullets:null;
     H+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:17px">'+(red?'🚨':'⚠️')+'</span><span style="font-size:16px;font-weight:800;color:'+accent+'">'+(red?'Action Recommended':'Worth Watching')+'</span>'
-      +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--d-t4);border:1px solid #2a3550;border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
+      +(narr?'<span style="margin-left:auto;font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--d-t4);border:1px solid var(--d-line2);border-radius:5px;padding:2px 5px">AI</span>':'')+'</div>';
     if(narr){
       // AI-narrated: dot color follows the day state (per-item severity is not
       // preserved through narration, so we do not fake it).
@@ -29094,7 +29104,7 @@ function dsRenderAttention_(el, d){
     if(red){
       var top=items[0]||{cat:''};
       var rec=(d.narrated && d.narrated.rec) || d.rec || (top.cat==='env'?'Move the ride earlier, shorten it, or take it indoors — then reassess.':'Swap today for an easy Zone 1 spin or full rest, and let form recover before the next hard day.');
-      H+='<div style="margin-top:8px;padding:9px 11px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:9px;font-size:11.5px;color:#fca5a5;line-height:1.45"><b style="color:#ef4444">Recommendation:</b> '+rec+'</div>';
+      H+='<div style="margin-top:8px;padding:9px 11px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:9px;font-size:11.5px;color:#fca5a5;line-height:1.45"><b style="color:var(--c-red)">Recommendation:</b> '+rec+'</div>';
     }
   }
   el.innerHTML=H;
@@ -29160,7 +29170,7 @@ function openRecoveryEditor_(){
   var m=document.createElement('div'); m.id='recov-editor';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center';
   m.onclick=function(e){ if(e.target===m) m.remove(); };
-  var fc='width:100%;padding:11px 12px;background:#1a1f2e;border:1px solid #252d40;border-radius:10px;color:var(--d-head);font-size:15px;font-family:inherit;box-sizing:border-box';
+  var fc='width:100%;padding:11px 12px;background:var(--d-chip);border:1px solid var(--d-line2);border-radius:10px;color:var(--d-head);font-size:15px;font-family:inherit;box-sizing:border-box';
   var s=document.createElement('div');
   s.style.cssText='background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:20px;width:100%;max-width:340px';
   s.innerHTML='<div style="font-size:16px;font-weight:800;color:var(--d-head);margin-bottom:4px">Recovery metrics</div>'
@@ -29168,7 +29178,7 @@ function openRecoveryEditor_(){
     +'<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">HRV (ms)</div><input id="rec-hrv" type="number" inputmode="numeric" placeholder="e.g. 47" value="'+(st.hrv!=null?st.hrv:'')+'" style="'+fc+'"></div>'
     +'<div style="margin-bottom:18px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">Resting HR (bpm)</div><input id="rec-rhr" type="number" inputmode="numeric" placeholder="e.g. 58" value="'+(st.restingHR!=null?st.restingHR:'')+'" style="'+fc+'"></div>';
   var save=document.createElement('button'); save.textContent='Save';
-  save.style.cssText='width:100%;padding:12px;background:#4ade80;border:none;border-radius:11px;color:#0d0f14;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
+  save.style.cssText='width:100%;padding:12px;background:#4ade80;border:none;border-radius:11px;color:var(--d-deep);font-size:14px;font-weight:800;cursor:pointer;font-family:inherit';
   save.onclick=function(){ var h=parseFloat(document.getElementById('rec-hrv').value), r=parseFloat(document.getElementById('rec-rhr').value);
     st.hrv=isNaN(h)?null:h; st.restingHR=isNaN(r)?null:r;
     // Log today's entry so the Recovery score can build a personal baseline
@@ -29620,7 +29630,7 @@ function dsShowDashboard(){
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
   function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
   function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
-  function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">'+t+'</span>'; }
+  function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
   var durStr=mins>=60?(Math.floor(mins/60)+'h'+(mins%60?' '+(mins%60)+'m':'')):(mins+' min');
 
@@ -29653,7 +29663,7 @@ function dsShowDashboard(){
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
   var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
-  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:var(--d-dim);margin-top:2px">/100</div></div></div>';
+  iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:var(--d-dim);margin-top:2px">/100</div></div></div>';
   var trendC=(iq.score==null)?ACC.green:verdict.color;
   // Arrow points up for building/peaking/fresh, flat-ish (right) for easing/detraining.
   var trendArrow=(verdict.phase==='detraining'||verdict.phase==='overreaching')
@@ -29682,7 +29692,7 @@ function dsShowDashboard(){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-raise)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:#fff;cursor:pointer">View Workout Details</div></div>';
+  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:var(--d-t1);cursor:pointer">View Workout Details</div></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
@@ -29795,7 +29805,7 @@ function dsShowDashboard(){
   var nC=2*Math.PI*26, nOff=nC*(1-calPct);
   var nu=lbl('NUTRITION',link('View','nutrition'));
   nu+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">Today</div>';
-  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:#fff;line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:var(--d-dim)">kcal</div></div></div>';
+  nu+='<div style="display:flex;gap:12px;align-items:center"><div style="position:relative;width:76px;height:76px;flex-shrink:0"><svg width="76" height="76" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+ACC.orange+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+nC.toFixed(1)+'" stroke-dashoffset="'+nOff.toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:18px;font-weight:800;color:var(--d-t1);line-height:1">'+(nf.consumed.cal||0)+'</div><div style="font-size:8px;color:var(--d-dim)">kcal</div></div></div>';
   nu+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:9px">';
   [[ACC.blue,'Carbs',nf.consumed.carb,nf.goals.carb],[ACC.orange,'Protein',nf.consumed.pro,nf.goals.pro],[ACC.amber,'Fat',nf.consumed.fat,nf.goals.fat]].forEach(function(m){
     // Three flex siblings: dot (fixed) · label (flex:1, truncates with ellipsis if space is
@@ -29809,7 +29819,7 @@ function dsShowDashboard(){
   // Weather
   var wea=lbl('WEATHER',link('View Forecast','weather'));
   wea+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">Grand Rapids, MI</div>';
-  wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:var(--d-t4);margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
+  wea+='<div style="display:flex;align-items:center;gap:11px;margin-bottom:14px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="'+ACC.amber+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg><div><div style="font-size:28px;font-weight:800;color:var(--d-t1);line-height:1" id="ds-wx-temp">—°F</div><div style="font-size:12px;color:var(--d-t4);margin-top:2px" id="ds-wx-feels">Feels like —°</div></div></div>';
   wea+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 8px;margin-top:auto">';
   wea+='<div><div style="font-size:10px;color:var(--d-t4)">Humidity</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-hum">—</div></div>';
   wea+='<div><div style="font-size:10px;color:var(--d-t4)">Wind</div><div style="font-size:14px;font-weight:700;color:var(--d-head);margin-top:1px" id="ds-wx-wind">—</div></div>';
@@ -29847,12 +29857,12 @@ function dsShowDashboard(){
   var optY=optTarget>0?(1-Math.min(1,optTarget/niceMax))*100:-1;
   var tl=lbl('TRAINING LOAD');
   tl+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">This Week</div>';
-  tl+='<div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:27px;font-weight:800;color:#fff;letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:var(--d-t4)">TSS</span></div>';
+  tl+='<div style="display:flex;align-items:baseline;gap:7px"><span style="font-size:27px;font-weight:800;color:var(--d-t1);letter-spacing:-.02em">'+weekTSS+'</span><span style="font-size:12px;color:var(--d-t4)">TSS</span></div>';
   tl+='<div style="margin:4px 0 2px">'+(tlPct!=null?'<span style="font-size:14px;font-weight:800;color:'+(tlPct>=0?ACC.green:ACC.red)+'">'+(tlPct>=0?'+':'')+tlPct+'%</span> <span style="font-size:11px;color:var(--d-t4)">vs last 7 days</span>':'<span style="font-size:11px;color:var(--d-t4)">no prior week to compare</span>')+'</div>';
   tl+='<div style="flex:1;min-height:0;display:flex;gap:7px;margin-top:8px">';
   tl+='<div style="flex:1;position:relative;min-height:98px">';
-  [0,0.25,0.5,0.75,1].forEach(function(fr){ tl+='<div style="position:absolute;left:0;right:0;top:'+((1-fr)*100)+'%;height:1px;background:#171c2b"></div>'; });
-  if(optY>=0){ tl+='<div style="position:absolute;left:0;right:0;top:'+optY.toFixed(1)+'%;border-top:1.5px dashed rgba(74,222,128,.6)"></div><div style="position:absolute;right:2px;top:'+Math.max(0,optY-15).toFixed(1)+'%;font-size:8.5px;font-weight:600;color:#7ee29a">Optimal Range</div>'; }
+  [0,0.25,0.5,0.75,1].forEach(function(fr){ tl+='<div style="position:absolute;left:0;right:0;top:'+((1-fr)*100)+'%;height:1px;background:var(--d-inset)"></div>'; });
+  if(optY>=0){ tl+='<div style="position:absolute;left:0;right:0;top:'+optY.toFixed(1)+'%;border-top:1.5px dashed rgba(74,222,128,.6)"></div><div style="position:absolute;right:2px;top:'+Math.max(0,optY-15).toFixed(1)+'%;font-size:8.5px;font-weight:600;color:var(--c-green)">Optimal Range</div>'; }
   tl+='<div style="position:absolute;inset:0;display:flex;align-items:flex-end">';
   days7.forEach(function(k,di){ var v=tssByDay[k]; var hp=Math.max(2,Math.min(100,v/niceMax*100)); var isToday=di===6;
     tl+='<div style="flex:1;display:flex;justify-content:center;align-items:flex-end;height:100%"><div style="width:11px;height:'+hp.toFixed(1)+'%;background:linear-gradient(180deg,'+(isToday?'#60a5fa':'#3b82f6')+',#1e3a8a);border-radius:3px 3px 0 0"></div></div>';
@@ -29898,12 +29908,12 @@ function dsShowDashboard(){
     recTitle='FORM READINESS';
     recSub=verdict.readyNote;
   }
-  var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:#4ade80;cursor:pointer">Edit</span>');
+  var rd=lbl(recTitle,'<span data-act="recovery" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">Edit</span>');
   rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
-  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:#fff;line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
+  rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:#171c2b;border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
   rd+='</div>';
   H+=card(rd);
   // Consistency
@@ -29911,7 +29921,7 @@ function dsShowDashboard(){
   var monS=new Date(now); monS.setDate(now.getDate()-((now.getDay()===0)?6:now.getDay()-1));
   var cs=lbl('CONSISTENCY');
   cs+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 8px">This Month</div>';
-  cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:#fff">'+activeDays+'</span><span style="font-size:12px;color:var(--d-t3)">of '+elapsed+' days active</span></div>';
+  cs+='<div style="display:flex;align-items:baseline;gap:5px;margin-bottom:10px"><span style="font-size:22px;font-weight:800;color:var(--d-t1)">'+activeDays+'</span><span style="font-size:12px;color:var(--d-t3)">of '+elapsed+' days active</span></div>';
   cs+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px">';
   for(var wk=0;wk<2;wk++){ for(var dd2=0;dd2<7;dd2++){ var cd=new Date(monS); cd.setDate(monS.getDate()+(wk*7)+dd2); var ck=normDate(cd.getFullYear()+'-'+(cd.getMonth()+1)+'-'+cd.getDate()); var on=!!activeSet[ck]; var fut=cd>now;
     cs+='<div style="display:flex;flex-direction:column;align-items:center;gap:3px">'+(wk===0?'<span style="font-size:8px;color:var(--d-dim)">'+wd[dd2]+'</span>':'')+'<span style="width:11px;height:11px;border-radius:50%;background:'+(on?'#facc15':fut?'#171c2b':'#2a3550')+'"></span></div>';
@@ -29926,8 +29936,8 @@ function dsShowDashboard(){
   upRaces.slice(0,2).forEach(function(rr,ri){
     var sIcon=rr.sport==='run'?ACC.red:rr.sport==='bike'?ACC.green:ACC.amber;
     ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
-    ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:var(--d-t4)">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1">'+rr.dateObj.getDate()+'</div></div>';
-    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--d-head);'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:#f59e0b">(tentative)</span>':'')+'</div><div style="font-size:10px;color:var(--d-t4)">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
+    ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:var(--d-t4)">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:var(--d-t1);line-height:1">'+rr.dateObj.getDate()+'</div></div>';
+    ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--d-head);'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:var(--c-amber)">(tentative)</span>':'')+'</div><div style="font-size:10px;color:var(--d-t4)">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
     ue+='<div style="font-size:11px;font-weight:700;color:'+(rr.status==='cancelled'?ACC.red:ACC.green)+';flex-shrink:0">'+(rr.status==='cancelled'?'Cancelled':(rr.daysOut+' day'+(rr.daysOut===1?'':'s')))+'</div></div>';
   });
   ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:var(--d-t3);border:1px solid var(--d-raise);border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
@@ -29945,7 +29955,7 @@ function dsShowDashboard(){
 
   mc.innerHTML='';
   var shell=document.createElement('div');
-  shell.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14;box-sizing:border-box';
+  shell.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--d-deep);box-sizing:border-box';
   shell.innerHTML=H;
   mc.appendChild(shell);
 
@@ -29981,8 +29991,8 @@ function dsShowDashboard(){
   //      a hardcoded "Up to date", and a failed AQI fetch shows last-known, not "—".
   getWeather_().then(function(wres){
     var data=wres.data, sEl=document.getElementById('ds-wx-sync');
-    if(sEl) sEl.innerHTML = !data ? '<span style="color:#f59e0b">Weather unavailable</span>'
-      : (wres.ok ? 'Weather '+wxAsOf_(wres.fetchedAt) : '<span style="color:#f59e0b">Weather stale ('+wxClock_(wres.fetchedAt)+')</span>');
+    if(sEl) sEl.innerHTML = !data ? '<span style="color:var(--c-amber)">Weather unavailable</span>'
+      : (wres.ok ? 'Weather '+wxAsOf_(wres.fetchedAt) : '<span style="color:var(--c-amber)">Weather stale ('+wxClock_(wres.fetchedAt)+')</span>');
     if(data&&data.current){ var c=data.current; var dirs=['N','NE','E','SE','S','SW','W','NW']; var wdir=dirs[Math.round((c.winddirection_10m||0)/45)%8];
       if(c.temperature_2m!=null) st.wxTempF=Math.round(c.temperature_2m);
       var g=function(id){return document.getElementById(id);};
@@ -30042,12 +30052,12 @@ function dsShowRidesList(){
   var allRides=Object.values(_byId).sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
 
   var wrap=document.createElement('div');
-  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:#0d0f14';
+  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow:hidden;background:var(--d-deep)';
 
   var titleBar=document.createElement('div');
   titleBar.style.cssText='padding:14px 18px 10px;border-bottom:1px solid var(--d-line);flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
   var tbTitle=document.createElement('div');
-  tbTitle.style.cssText='font-size:18px;font-weight:700;color:#fff';
+  tbTitle.style.cssText='font-size:18px;font-weight:700;color:var(--d-t1)';
   titleBar.appendChild(tbTitle);
 
   var tbFilters=document.createElement('div');
@@ -30092,7 +30102,7 @@ function dsShowRidesList(){
           })();
 
       var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid #1a1f2e;cursor:pointer';
+      row.style.cssText='display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--d-chip);cursor:pointer';
       row.onmouseover=function(){this.style.background='#111318';};
       row.onmouseout=function(){this.style.background='';};
       row.onclick=(function(i){return function(){ console.log('CLICK',i); try{ if(typeof isDesktop==='function'&&isDesktop()){var rp=document.getElementById('ds-right-panel');if(rp)rp.style.display='flex';openDesktopRideDetail(i);}else{openRideDetail(i);} }catch(e){console.error(e);} };})(ridx);
@@ -30134,7 +30144,7 @@ function dsShowRidesList(){
 
     if(visCount<getFiltered().length){
       var mb=document.createElement('div');
-      mb.style.cssText='padding:14px;text-align:center;color:var(--d-t4);cursor:pointer;font-size:13px;border-top:1px solid #1a1f2e';
+      mb.style.cssText='padding:14px;text-align:center;color:var(--d-t4);cursor:pointer;font-size:13px;border-top:1px solid var(--d-chip)';
       mb.textContent='Load more ('+(getFiltered().length-visCount)+' remaining)';
       mb.onclick=function(){visCount+=20;renderList();};
       list.appendChild(mb);
@@ -30308,7 +30318,7 @@ function openDesktopRideDetail(idx, _noFetch){
       var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
       var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
       listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
-        +'<div style="width:28px;height:28px;border-radius:8px;background:#1a2030;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:#4ade80">'+sportIcon+'</div>'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:var(--c-green)">'+sportIcon+'</div>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-size:11px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lname+'</div>'
           +'<div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+ldStr+(lr.distance?' &middot; '+parseFloat(lr.distance).toFixed(1)+' mi':'')+'</div>'
@@ -30321,7 +30331,7 @@ function openDesktopRideDetail(idx, _noFetch){
   // Inject two-column layout
   main.innerHTML='<div style="display:flex;height:100%;overflow:hidden;width:100%">'
     +'<div id="act-list-panel" style="width:260px;flex-shrink:0;border-right:1px solid var(--d-line);display:flex;flex-direction:column;overflow:hidden">'
-      +'<div style="padding:10px 14px 8px;border-bottom:1px solid var(--d-line);font-size:15px;font-weight:700;color:#fff;flex-shrink:0">Activities</div>'
+      +'<div style="padding:10px 14px 8px;border-bottom:1px solid var(--d-line);font-size:15px;font-weight:700;color:var(--d-t1);flex-shrink:0">Activities</div>'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--d-line);font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0"><span>Activity</span><span>W/kg</span></div>'
       +'<div style="overflow-y:auto;flex:1;scrollbar-width:none;-ms-overflow-style:none">'+listHtml2+'</div>'
     +'</div>'
@@ -30356,7 +30366,7 @@ function openDesktopRideDetail(idx, _noFetch){
   }
   function miniStat(val,lbl,border){
     return '<div style="padding:10px 16px;'+(border?'border-right:1px solid var(--d-line)':'')+'">'
-      +'<div style="font-size:16px;font-weight:700;color:#fff">'+val+'</div>'
+      +'<div style="font-size:16px;font-weight:700;color:var(--d-t1)">'+val+'</div>'
       +'<div style="font-size:10px;color:var(--d-t4);margin-top:2px">'+lbl+'</div></div>';
   }
 
@@ -30424,7 +30434,7 @@ function openDesktopRideDetail(idx, _noFetch){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></div>'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
-            '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:#fff">'+(r.name||'Activity')+'</span>'+
+            '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:var(--d-t1)">'+(r.name||'Activity')+'</span>'+
             '<span data-view="renameRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="Rename" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
           '<div style="font-size:11px;color:var(--d-t4);margin-top:2px">'+dtStr+'</div>'+
@@ -30434,7 +30444,7 @@ function openDesktopRideDetail(idx, _noFetch){
         // Share + Export removed — neither had a real implementation (a dead button on a primary
         // surface is the same failure as fake data). Export returns as a GPX/FIT download of the
         // ride's GPS track once specced; Share is a separate, undecided call.
-        '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:var(--d-t3);background:#1a1f2e;border:1px solid #252d40;padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
+        '<div data-view="rideMore" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="More actions" style="font-size:13px;color:var(--d-t3);background:var(--d-chip);border:1px solid var(--d-line2);padding:4px 9px;border-radius:6px;cursor:pointer">&#8943;</div>'+
       '</div>'+
     '</div>'+
 
@@ -30466,7 +30476,7 @@ function openDesktopRideDetail(idx, _noFetch){
       '<div id="rd-map" style="width:100%;max-width:520px;aspect-ratio:4/3;margin:0 auto;background:#1c2535;position:relative;flex-shrink:0;overflow:hidden"></div>'+
 
       // 4-col stats below map
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14;border-bottom:1px solid var(--d-line);flex-shrink:0">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:var(--d-deep);border-bottom:1px solid var(--d-line);flex-shrink:0">'+
         miniStat(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance',true)+
         miniStat(r.elev?Math.round(r.elev)+' ft':'--','Elevation Gain',true)+
         miniStat(r.maxElev?Math.round(r.maxElev)+' ft':'—','Max Elevation',true)+
@@ -30474,19 +30484,19 @@ function openDesktopRideDetail(idx, _noFetch){
       '</div>'+
 
       // ELEVATION PROFILE
-      '<div style="background:#0d0f14;padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
+      '<div style="background:var(--d-deep);padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
         elevProfile(r.chartEle,r.distance)+
       '</div>'+
 
       // 4 METRIC CARDS
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--d-line);background:#0d0f14">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--d-line);background:var(--d-deep)">'+
 
         '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#FC4C02;text-transform:uppercase;letter-spacing:.1em">Power</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">NP</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.np||r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">NP</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.avgPwr||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg</div></div>'+
           '</div>'+
@@ -30496,9 +30506,9 @@ function openDesktopRideDetail(idx, _noFetch){
         '<div style="padding:12px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" stroke-width="2"><path d="M19.5 12.572l-7.5 7.428-7.5-7.428a5 5 0 1 1 7.5-6.566 5 5 0 1 1 7.5 6.566"/></svg>'+
-            '<span style="font-size:9px;font-weight:700;color:#E24B4A;text-transform:uppercase;letter-spacing:.1em">Heart Rate</span></div>'+
+            '<span style="font-size:9px;font-weight:700;color:var(--c-red);text-transform:uppercase;letter-spacing:.1em">Heart Rate</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">bpm Avg</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.avgHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">bpm Avg</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxHR||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartHR,'#E24B4A')+
@@ -30509,7 +30519,7 @@ function openDesktopRideDetail(idx, _noFetch){
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>'+
             '<span style="font-size:9px;font-weight:700;color:#A78BFA;text-transform:uppercase;letter-spacing:.1em">Cadence</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">rpm Avg</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(r.cadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">rpm Avg</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(r.maxCadence||'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max</div></div>'+
           '</div>'+
           spark(r.chartCad||null,'#A78BFA')+
@@ -30518,9 +30528,9 @@ function openDesktopRideDetail(idx, _noFetch){
         '<div style="padding:12px 14px">'+
           '<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">'+
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'+
-            '<span style="font-size:9px;font-weight:700;color:#60A5FA;text-transform:uppercase;letter-spacing:.1em">Speed</span></div>'+
+            '<span style="font-size:9px;font-weight:700;color:var(--c-blue);text-transform:uppercase;letter-spacing:.1em">Speed</span></div>'+
           '<div style="display:flex;gap:16px;align-items:baseline;margin-bottom:6px">'+
-            '<div><div style="font-size:20px;font-weight:700;color:#fff">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg mph</div></div>'+
+            '<div><div style="font-size:20px;font-weight:700;color:var(--d-t1)">'+(avgSpd!=='--'?avgSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Avg mph</div></div>'+
             '<div><div style="font-size:14px;font-weight:600;color:var(--d-t3)">'+(maxSpd!=='--'?maxSpd:'--')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">Max mph</div></div>'+
           '</div>'+
           spark(null,'#60A5FA')+
@@ -30528,9 +30538,9 @@ function openDesktopRideDetail(idx, _noFetch){
       '</div>'+
 
       // FOOTER ROW: PRs / Achievements / Equipment / Nutrition
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:#0d0f14">'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;background:var(--d-deep)">'+
         '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:#60a5fa;cursor:pointer">View All</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">PRs</span><span id="rd-viewall-prs" style="font-size:10px;color:var(--c-blue);cursor:pointer">View All</span></div>'+
           (function(){
             // Best power peak for THIS ride. Prefer 20-min; fall back through
             // 5-min / 1-min / 5-sec so short rides still show a record. A ride
@@ -30543,19 +30553,19 @@ function openDesktopRideDetail(idx, _noFetch){
             // are shown right beside this) but no detailed power curve/streams —
             // that self-contradiction was the bug. Distinguish the two states.
             if(!top) return '<div style="font-size:11px;color:var(--d-t4)">'+((r.np||r.avgPwr)?'Detailed power not recorded':'No power data')+'</div>';
-            return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:#fff">'+top[0]+'W</div><div style="font-size:9px;color:var(--d-t4)">'+top[1]+'</div></div></div>';
+            return '<div style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:var(--d-t1)">'+top[0]+'W</div><div style="font-size:9px;color:var(--d-t4)">'+top[1]+'</div></div></div>';
           })()+
         '</div>'+
         '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
           '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Achievements</span></div>'+
           '<div style="display:flex;gap:5px">'+
-            '<div style="width:26px;height:26px;border-radius:50%;background:#1a2030;border:1px solid #252d40;display:flex;align-items:center;justify-content:center;font-size:11px">🚴</div>'+
+            '<div style="width:26px;height:26px;border-radius:50%;background:var(--d-chip);border:1px solid var(--d-line2);display:flex;align-items:center;justify-content:center;font-size:11px">🚴</div>'+
             ((r.distance>=50)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,215,0,.15);border:1px solid rgba(255,215,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px">🏆</div>':'')+
             ((r.elev>=1000)?'<div style="width:26px;height:26px;border-radius:50%;background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.4);display:flex;align-items:center;justify-content:center;font-size:11px">⛰</div>':'')+
           '</div>'+
         '</div>'+
         '<div style="padding:10px 14px;border-right:1px solid var(--d-line)">'+
-          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear</span></div>'+
+          '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700">Equipment</span><span data-view="gear" style="font-size:10px;color:var(--c-blue);cursor:pointer">View in Gear</span></div>'+
           (bike
             ?'<div style="font-size:12px;font-weight:600;color:var(--d-t2)">'+bike.name+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">'+(bike.wheelset||bike.wheels||'')+(bike.groupset?' / '+bike.groupset:'')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:1px">'+_bikeMi+' mi total</div>'
             :'')+
@@ -30567,7 +30577,7 @@ function openDesktopRideDetail(idx, _noFetch){
           '<div style="font-size:9px;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-bottom:6px">Nutrition &amp; Hydration</div>'+
           '<div style="display:flex;gap:12px;flex-wrap:wrap">'+
             '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg><div><div style="font-size:12px;font-weight:700;color:var(--d-t2)">'+rideCalText_(r)+'</div><div style="font-size:9px;color:var(--d-t4)">'+((rideCalories_(r)||{}).est?'Burned &middot; est':'Burned')+'</div></div></div>'+
-            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:#22D3EE">—</div><div style="font-size:9px;color:var(--d-t4)">Fluid</div></div></div>'+
+            '<div style="display:flex;align-items:center;gap:4px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#22D3EE" stroke-width="2"><path d="M12 2C6 10 4 14 4 17a8 8 0 0 0 16 0c0-3-2-7-8-15z"/></svg><div><div style="font-size:12px;font-weight:700;color:var(--c-cyan)">—</div><div style="font-size:9px;color:var(--d-t4)">Fluid</div></div></div>'+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -30594,7 +30604,7 @@ function openDesktopRideDetail(idx, _noFetch){
     }
     if(_bikeSlot){
       var _sel=document.createElement('select');
-      _sel.style.cssText='width:100%;padding:6px 8px;background:#0d0f14;color:var(--d-t2);border:1px solid var(--d-line);border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
+      _sel.style.cssText='width:100%;padding:6px 8px;background:var(--d-deep);color:var(--d-t2);border:1px solid var(--d-line);border-radius:8px;font-size:11px;font-family:inherit;cursor:pointer';
       var _o0=document.createElement('option'); _o0.value=''; _o0.textContent='Unassigned'; _sel.appendChild(_o0);
       (st.bikes||[]).filter(function(b){return b && !b.deleted;}).forEach(function(b){
         var o=document.createElement('option'); o.value=b.id; o.textContent=b.name+(b.type?' — '+b.type:''); _sel.appendChild(o);
@@ -30636,7 +30646,7 @@ function openDesktopRideDetail(idx, _noFetch){
           else if(tab==='laps') renderRideLapsTab(dyn,r,idx);
           else if(tab==='analytics') renderRideAnalysisTab(dyn,r,idx,FTP,BWT);
           else if(tab==='segments') renderRideSegmentsTab(dyn,r,idx);
-        }catch(e){ dyn.innerHTML='<div style="padding:40px 20px;color:#ef4444;font-size:13px">Tab error: '+(e&&e.message)+'</div>'; }
+        }catch(e){ dyn.innerHTML='<div style="padding:40px 20px;color:var(--c-red);font-size:13px">Tab error: '+(e&&e.message)+'</div>'; }
       };
     });
   },50);
@@ -30683,23 +30693,23 @@ function openDesktopRideDetail(idx, _noFetch){
       '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">'+
         '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'+
         '<span style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">AI Coach Insight</span>'+
-        '<span style="font-size:8px;color:var(--d-t4);border:1px solid #252d40;padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
+        '<span style="font-size:8px;color:var(--d-t4);border:1px solid var(--d-line2);padding:1px 5px;border-radius:3px;font-weight:600">Beta</span>'+
         '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" style="margin-left:auto;cursor:pointer"><path d="M18 6L6 18M6 6l12 12"/></svg>'+
       '</div>'+
-      '<div id="rp-ai-hl" style="font-size:13px;font-weight:700;color:#4ADE80;margin-bottom:8px;line-height:1.4">Analyzing&hellip;</div>'+
+      '<div id="rp-ai-hl" style="font-size:13px;font-weight:700;color:var(--c-green);margin-bottom:8px;line-height:1.4">Analyzing&hellip;</div>'+
       '<div id="rp-ai-bullets" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>'+
       '<div id="rp-ai-rec-wrap" style="display:none;margin-bottom:10px">'+
-        '<div style="font-size:10px;font-weight:700;color:#4ADE80;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Recommendation</div>'+
+        '<div style="font-size:10px;font-weight:700;color:var(--c-green);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Recommendation</div>'+
         '<div id="rp-ai-rec" style="font-size:11px;color:var(--d-t3);line-height:1.5"></div>'+
       '</div>'+
-      '<button id="rp-ask-coach" style="width:100%;padding:7px;background:#1a1f2e;border:1px solid #252d40;border-radius:6px;color:var(--d-t2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
+      '<button id="rp-ask-coach" style="width:100%;padding:7px;background:var(--d-chip);border:1px solid var(--d-line2);border-radius:6px;color:var(--d-t2);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Ask Coach</button>'+
     '</div>'+
 
     // WEATHER CONDITIONS
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Weather Conditions</div>'+
-        '<div style="font-size:10px;color:#60a5fa;cursor:pointer">View Details &rsaquo;</div>'+
+        '<div style="font-size:10px;color:var(--c-blue);cursor:pointer">View Details &rsaquo;</div>'+
       '</div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:6px">'+
         '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
@@ -30713,7 +30723,7 @@ function openDesktopRideDetail(idx, _noFetch){
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
         '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Equipment</div>'+
-        '<div data-view="gear" style="font-size:10px;color:#60a5fa;cursor:pointer">View in Gear &rsaquo;</div>'+
+        '<div data-view="gear" style="font-size:10px;color:var(--c-blue);cursor:pointer">View in Gear &rsaquo;</div>'+
       '</div>'+
       (bike?
         '<div style="display:flex;align-items:center;gap:10px">'+
@@ -30733,7 +30743,7 @@ function openDesktopRideDetail(idx, _noFetch){
     '<div class="ds-rp">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
         '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Laps</div>'+
-        '<div id="rd-viewall-laps" style="font-size:10px;color:#60a5fa;cursor:pointer">View All Laps &rsaquo;</div>'+
+        '<div id="rd-viewall-laps" style="font-size:10px;color:var(--c-blue);cursor:pointer">View All Laps &rsaquo;</div>'+
       '</div>'+
       lapsHtml+
     '</div>';
@@ -31693,7 +31703,7 @@ function renderRideRouteTab(body, r, idx, FTP, BWT){
         var ov=document.createElement('div');
         ov.style.cssText='position:absolute;top:10px;left:52px;z-index:500;background:rgba(20,20,22,.82);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(4px)';
         ov.innerHTML='<div style="transform:rotate('+blowTo+'deg);display:flex"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="5"/><polyline points="6 11 12 5 18 11"/></svg></div>'
-          +'<div style="line-height:1.1"><div style="font-size:12px;font-weight:800;color:#fff">'+fromLabel+' wind</div><div style="font-size:10px;color:rgba(255,255,255,.65)">from '+Math.round(windDeg)+'&deg;</div></div>';
+          +'<div style="line-height:1.1"><div style="font-size:12px;font-weight:800;color:var(--d-t1)">'+fromLabel+' wind</div><div style="font-size:10px;color:rgba(255,255,255,.65)">from '+Math.round(windDeg)+'&deg;</div></div>';
         if(mapEl) mapEl.appendChild(ov);
       }
     },100);
@@ -32144,7 +32154,7 @@ function renderRideWeatherContent(wrap, r, hourly){
     +'</div>'
     +'<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--t2)">'
     +'<span><span style="color:#1D9E75;font-weight:700">'+windPct.tail+'%</span> tailwind</span>'
-    +'<span><span style="color:#E24B4A;font-weight:700">'+windPct.head+'%</span> headwind</span>'
+    +'<span><span style="color:var(--c-red);font-weight:700">'+windPct.head+'%</span> headwind</span>'
     +'<span><span style="color:#BA7517;font-weight:700">'+windPct.cross+'%</span> crosswind</span>'
     +'</div>'
     +'<div style="font-size:11px;color:var(--t3);margin-top:10px;line-height:1.5">Based on overall route direction vs. average wind during the ride window. Strongest gust: '+maxGust+'mph around '+formatHour12(hourly.time[startHour+maxGustIdx]?new Date(hourly.time[startHour+maxGustIdx]).getHours():startHour)+'.</div>';
@@ -32334,10 +32344,10 @@ function openBikeEditor(idx, onSaved){
   var modal=document.createElement('div');
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:flex-end;justify-content:center';
   var sheet=document.createElement('div');
-  sheet.style.cssText='background:var(--bg,#0d0f14);border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto';
-  var fc='width:100%;border:1px solid var(--b2,#252d40);border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2,#1a1f2e);color:var(--t1,var(--d-t2));font-family:inherit;box-sizing:border-box';
+  sheet.style.cssText='background:var(--bg,var(--d-deep));border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-width:560px;max-height:92vh;overflow-y:auto';
+  var fc='width:100%;border:1px solid var(--b2,var(--d-line2));border-radius:10px;padding:10px 12px;font-size:14px;background:var(--s2,var(--d-chip));color:var(--t1,var(--d-t2));font-family:inherit;box-sizing:border-box';
   var lc='font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3,var(--d-t4));margin-bottom:5px';
-  sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2,#252d40);border-radius:2px;margin:0 auto 16px"></div>'
+  sheet.innerHTML='<div style="width:36px;height:4px;background:var(--b2,var(--d-line2));border-radius:2px;margin:0 auto 16px"></div>'
     +'<div style="font-size:18px;font-weight:800;color:var(--t1,#fff);margin-bottom:16px">'+(existing?'Edit Bike':'Add a Bike')+'</div>'
     +'<div style="margin-bottom:10px"><div style="'+lc+'">Name</div><input id="bk-name" type="text" placeholder="e.g. Dogma F" value="'+(existing?esc(existing.name):'')+'" style="'+fc+'"></div>'
     +'<div style="display:flex;gap:10px;margin-bottom:10px"><div style="flex:1"><div style="'+lc+'">Brand</div><input id="bk-brand" type="text" placeholder="e.g. Pinarello" value="'+(existing?esc(existing.brand):'')+'" style="'+fc+'"></div>'
@@ -32350,9 +32360,9 @@ function openBikeEditor(idx, onSaved){
     +'<div style="'+lc+'">Drivetrain</div>'
     +'<div style="display:flex;gap:10px;margin-bottom:6px"><div style="flex:1"><div style="font-size:10px;color:var(--d-t4);margin-bottom:4px">Chain waxed at (odometer mi)</div><input id="bk-chainwax" type="number" placeholder="'+(existing&&existing.miles!=null?Math.round(existing.miles):'e.g. 3200')+'" value="'+(existing&&existing.chainWaxedAtMi!=null?esc(existing.chainWaxedAtMi):'')+'" style="'+fc+'"></div>'
     +'<div style="flex:1"><div style="font-size:10px;color:var(--d-t4);margin-bottom:4px">Chain life (mi)</div><input id="bk-chainlife" type="number" placeholder="1500" value="'+(existing&&existing.chainLifeMi!=null?esc(existing.chainLifeMi):'')+'" style="'+fc+'"></div></div>'
-    +(existing&&existing.miles!=null?'<div id="bk-usecurrent" style="font-size:10px;color:#4ade80;margin:0 0 16px;cursor:pointer">Odometer now: '+Math.round(existing.miles)+' mi &middot; tap to mark waxed at current mileage</div>':'<div style="font-size:10px;color:var(--d-t4);margin:0 0 16px">Set a wax mileage to track live chain wear.</div>')
+    +(existing&&existing.miles!=null?'<div id="bk-usecurrent" style="font-size:10px;color:var(--c-green);margin:0 0 16px;cursor:pointer">Odometer now: '+Math.round(existing.miles)+' mi &middot; tap to mark waxed at current mileage</div>':'<div style="font-size:10px;color:var(--d-t4);margin:0 0 16px">Set a wax mileage to track live chain wear.</div>')
     +'<div style="margin-bottom:16px"><div style="'+lc+'">Photo</div>'
-    +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:#0d0f14;background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,#252d40);margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px">'+(photoData?'':'No photo')+'</div>'
+    +'<div id="bk-photo-prev" style="width:100%;height:120px;border-radius:10px;background-color:var(--d-deep);background-position:center;background-size:cover;background-repeat:no-repeat;'+(photoData?'background-image:url('+photoData+');':'')+'border:1px solid var(--b2,var(--d-line2));margin-bottom:8px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px">'+(photoData?'':'No photo')+'</div>'
     +'<input id="bk-photo" type="file" accept="image/*" style="font-size:12px;color:var(--t2,var(--d-t3))"></div>';
 
   setTimeout(function(){
@@ -32371,7 +32381,7 @@ function openBikeEditor(idx, onSaved){
   },0);
 
   var saveBtn=document.createElement('button');
-  saveBtn.style.cssText='width:100%;padding:14px;background:#4ade80;border:none;border-radius:12px;color:#0d0f14;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px';
+  saveBtn.style.cssText='width:100%;padding:14px;background:#4ade80;border:none;border-radius:12px;color:var(--d-deep);font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;margin-bottom:8px';
   saveBtn.textContent='Save Bike';
   saveBtn.onclick=function(){
     ensureBikes();
@@ -32407,7 +32417,7 @@ function openBikeEditor(idx, onSaved){
   sheet.appendChild(saveBtn); sheet.appendChild(cancelBtn);
   if(existing){
     var delBtn=document.createElement('button');
-    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
+    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:var(--c-red);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
     delBtn.textContent='Delete bike';
     delBtn.onclick=async function(){ if(!(await uiConfirm('Delete "'+(existing.name||'this bike')+'"? Its mileage attribution will be removed.',{danger:true}))) return; deleteBike(idx); modal.remove(); refresh(); };
     sheet.appendChild(delBtn);
@@ -32522,7 +32532,7 @@ function renderRideEquipmentTab(body, r, idx){
 
       var shoeCard=document.createElement('div');
       shoeCard.style.cssText='border-radius:16px;overflow:hidden;position:relative;padding:16px;margin-bottom:14px;background:linear-gradient(160deg,#2a2a2e,#1c1c1f)';
-      shoeCard.innerHTML='<div style="font-size:17px;font-weight:800;color:#fff">'+shoe.name+'</div>'
+      shoeCard.innerHTML='<div style="font-size:17px;font-weight:800;color:var(--d-t1)">'+shoe.name+'</div>'
         +'<div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:2px">'+mi+' mi total &middot; Running shoes</div>';
       wrap.appendChild(shoeCard);
 
@@ -32583,7 +32593,7 @@ function renderRideEquipmentTab(body, r, idx){
   var card=document.createElement('div');
   card.style.cssText='border-radius:16px;overflow:hidden;position:relative;height:160px;margin-bottom:14px;'+photoStyle;
   card.innerHTML='<div style="position:absolute;bottom:0;left:0;right:0;padding:14px 16px">'
-    +'<div style="font-size:17px;font-weight:800;color:#fff">'+bike.name+'</div>'
+    +'<div style="font-size:17px;font-weight:800;color:var(--d-t1)">'+bike.name+'</div>'
     +'<div style="font-size:12px;color:rgba(255,255,255,.85);margin-top:2px">'+(bike.miles||0)+' mi total &middot; '+bike.type+'</div>'
     +'</div>';
   wrap.appendChild(card);
@@ -33547,7 +33557,7 @@ function _rgSection_(){
     +c.span+'-month calendar span. '
     +(g.best?(g.bestYear+' totalled '+g.bestTotal.toLocaleString()+' mi against '+g.subjectTotal.toLocaleString()+' mi in '+g.subjectYear+'. '):'')
     +'The gap is the move to cycling, not a missing record.';
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Running Growth</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by year &middot; history only</span></div>'
@@ -33701,7 +33711,7 @@ function _prSection_(){
   var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
     +'Events with no result since '+_PR_BAND_LABEL+' are left off &mdash; this board shows what you can still climb, '
     +'not everything you have ever done.';
-  return '<div style="background:#0e1117;border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
@@ -33955,7 +33965,7 @@ function renderRun(){
           : st.rides.findIndex(function(x){return x.stravaId===r.stravaId;});
         if(rideRefOk_(rideIdx)){
           var loadMapBtn=document.createElement('button');
-          loadMapBtn.style.cssText='margin-bottom:8px;font-size:11px;color:#4D9FFF;background:none;border:1px solid #4D9FFF;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit';
+          loadMapBtn.style.cssText='margin-bottom:8px;font-size:11px;color:var(--c-blue);background:none;border:1px solid #4D9FFF;border-radius:8px;padding:4px 12px;cursor:pointer;font-family:inherit';
           loadMapBtn.textContent='Load GPS Map';
           (function(sid,ri){loadMapBtn.onclick=function(){fetchStravaGPS(sid,ri);};})(r.stravaId,rideIdx);
           rcard.appendChild(loadMapBtn);
@@ -34001,7 +34011,7 @@ function renderRun(){
 
       // Delete button
       var delBtn=document.createElement('button');
-      delBtn.style.cssText='margin-top:8px;font-size:11px;color:#ef4444;background:none;border:none;cursor:pointer;font-family:inherit;padding:0';
+      delBtn.style.cssText='margin-top:8px;font-size:11px;color:var(--c-red);background:none;border:none;cursor:pointer;font-family:inherit;padding:0';
       delBtn.textContent='Delete run';
       (function(rRef){delBtn.onclick=async function(){
         if(!(await uiConfirm('Delete this run?',{danger:true}))) return;
@@ -34074,7 +34084,7 @@ function renderRun(){
     rc.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
       +'<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+race.name+'</div>'
       +'<div style="font-size:11px;color:var(--t3);margin-top:2px">'+sportLbl+' · '+race.date+' · '+(race.goal||'Finish Strong')+(race.location?' · '+race.location:'')+(race.target?' · target '+race.target:'')+'</div></div>'
-      +'<div style="text-align:right"><div style="font-size:36px;font-weight:900;color:#ef4444;line-height:1">'+days+'</div>'
+      +'<div style="text-align:right"><div style="font-size:36px;font-weight:900;color:var(--c-red);line-height:1">'+days+'</div>'
       +'<div style="font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">days</div></div></div>'
       +'<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 1fr;gap:8px;margin-bottom:10px">'
       +'<div style="text-align:center;background:var(--s1);border-radius:8px;padding:9px"><div style="font-size:16px;font-weight:800">'+weeks+'</div><div style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-top:2px">weeks out</div></div>'
@@ -34083,7 +34093,7 @@ function renderRun(){
       +'</div>'
       +'<div style="display:flex;gap:6px">'
       +'<button onclick="openRaceEditor('+ri+')" style="flex:1;padding:8px;background:none;border:0.5px solid var(--b1);border-radius:8px;color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Edit</button>'
-      +'<button onclick="deleteRace('+ri+')" style="flex:1;padding:8px;background:none;border:0.5px solid var(--b1);border-radius:8px;color:#ef4444;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>'
+      +'<button onclick="deleteRace('+ri+')" style="flex:1;padding:8px;background:none;border:0.5px solid var(--b1);border-radius:8px;color:var(--c-red);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">Remove</button>'
       +'</div>';
     racePanel.appendChild(rc);
   });
@@ -34215,7 +34225,7 @@ function openRaceEditor(idx,onSaved){
   // survives the Firebase merge; confirm before removing the sheet.
   if(existing){
     var delBtn=document.createElement('button');
-    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:#ef4444;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
+    delBtn.style.cssText='width:100%;padding:11px;background:none;border:1px solid #ef4444;border-radius:12px;color:var(--c-red);font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px';
     delBtn.textContent='Delete race';
     delBtn.onclick=async function(){
       if(!(await uiConfirm('Delete "'+(existing.name||'this race')+'"?',{danger:true}))) return;
@@ -34432,7 +34442,7 @@ function injectRideStats(w){
     statsBtn.style.cssText = 'border-top:1px solid var(--b1);padding:8px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;background:rgba(77,159,255,.04)';
     statsBtn.innerHTML = '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
       +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
-      +'<span style="font-size:12px;font-weight:700;color:#4D9FFF">'+summaryParts[0]+'</span>'
+      +'<span style="font-size:12px;font-weight:700;color:var(--c-blue)">'+summaryParts[0]+'</span>'
       +(summaryParts.length>1?'<span style="font-size:11px;color:var(--t3)">+'+( summaryParts.length-1)+' more</span>':'')
       +'</div>'
       +'<span style="font-size:14px;color:var(--t3)" id="ride-chevron-'+w+'_'+d+'">▾</span>';
@@ -34455,7 +34465,7 @@ function injectRideStats(w){
         var rideIdx = (STORE_V2_HANDLES && typeof rideHandle_==='function') ? rideHandle_(a.data) : st.rides.indexOf(a.data);
         aDiv.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+(r.name||'Activity')+'</div>'
-          +'<button onclick="deleteRideFromCard('+rideRefAttr_(rideIdx)+')" style="font-size:11px;color:#ef4444;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
+          +'<button onclick="deleteRideFromCard('+rideRefAttr_(rideIdx)+')" style="font-size:11px;color:var(--c-red);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
           +'</div>';
         var statsGrid=document.createElement('div');
         statsGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
@@ -36454,7 +36464,7 @@ function openPlanDetail(planId){
 
   var deleteBtn = document.createElement('button');
   deleteBtn.textContent = 'Delete Plan';
-  deleteBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:#E24B4A;font-size:14px;font-weight:700;cursor:pointer';
+  deleteBtn.style.cssText = 'flex:1;padding:11px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--c-red);font-size:14px;font-weight:700;cursor:pointer';
   deleteBtn.onclick = function(){
     if(planCount<=1){ toast('Cannot delete your only plan'); return; }
     if(isActive){ toast('Switch to another plan before deleting this one'); return; }
@@ -36998,7 +37008,7 @@ function renderGarage(){
       +'style="margin:0 16px 12px;border-radius:16px;overflow:hidden;position:relative;height:190px;cursor:pointer;'+photoStyle+'">'
       +'<div style="position:absolute;bottom:0;left:0;right:0;padding:14px 16px">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-end">'
-      +'<div><div style="color:#fff;font-size:16px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+bike.name+'</div>'
+      +'<div><div style="color:var(--d-t1);font-size:16px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+bike.name+'</div>'
       +'<div style="color:#d8d8dc;font-size:12px;margin-top:2px;text-shadow:0 1px 4px rgba(0,0,0,.5)">'+subtitle+'</div></div>'
       +'<div style="background:'+badge.color+';color:'+badge.textColor+';font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px;white-space:nowrap;flex-shrink:0;margin-left:8px">'+badge.label+'</div>'
       +'</div></div></div>';
@@ -37627,7 +37637,7 @@ function showAICoach(){
   hdr.style.cssText='padding:14px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--s1)';
   var backBtn=document.createElement('button');
   backBtn.textContent='← Back';
-  backBtn.style.cssText='background:none;border:none;color:#a855f7;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit';
+  backBtn.style.cssText='background:none;border:none;color:var(--c-purple);font-size:15px;font-weight:700;cursor:pointer;font-family:inherit';
   backBtn.onclick=function(){overlay.remove();};
   var title=document.createElement('div');
   title.style.cssText='font-size:18px;font-weight:800;color:var(--t1)';
@@ -37780,7 +37790,7 @@ function showAICoach(){
       var heading=headingMatch?headingMatch[1]:lines[0].replace(/^\\d+\\.\\s*/,'').replace(/[:\\s]*$/,'');
       var firstLineRemainder=lines[0].replace(/^\\d+\\.\\s*[A-Z ]+[:\\s]*/,'').trim();
       var bodyText=lines.slice(1).join(' ').trim()||firstLineRemainder||lines[0];
-      card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#a855f7;margin-bottom:6px">'+heading+'</div>'
+      card.innerHTML='<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--c-purple);margin-bottom:6px">'+heading+'</div>'
         +'<div style="font-size:14px;color:var(--t1);line-height:1.5">'+bodyText+'</div>';
       body.appendChild(card);
     });
@@ -37788,7 +37798,7 @@ function showAICoach(){
     // Refresh button
     var refresh=document.createElement('button');
     refresh.textContent='↻ Refresh Briefing';
-    refresh.style.cssText='margin-top:4px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:#a855f7;font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
+    refresh.style.cssText='margin-top:4px;background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);color:var(--c-purple);font-size:13px;font-weight:700;padding:10px;border-radius:12px;cursor:pointer;width:100%;font-family:inherit';
     refresh.onclick=function(){overlay.remove();showAICoach();};
     body.appendChild(refresh);
     
@@ -38593,7 +38603,7 @@ function renderRideSegmentsTab(body, r, idx){
         +'</div>'
         +'<div style="text-align:right;flex-shrink:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+fmtT(sg.time)+(medal(sg.prRank)?' '+medal(sg.prRank):'')+'</div>'
-          +(sg.komRank?'<div style="font-size:10px;color:#f59e0b">KOM #'+sg.komRank+'</div>':'')
+          +(sg.komRank?'<div style="font-size:10px;color:var(--c-amber)">KOM #'+sg.komRank+'</div>':'')
         +'</div></div>';
     });
     wrap.innerHTML=html;
@@ -39539,7 +39549,7 @@ function renderMapContent(body, ride, wind, forTime){
       var comp=document.createElement('div');
       comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(20,20,22,.85);border:1px solid rgba(255,255,255,.15);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;align-items:center;gap:2px;backdrop-filter:blur(4px)';
       comp.innerHTML='<div style="transform:rotate('+blowTo+'deg);display:flex"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="21" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
-        +'<div style="font-size:12px;font-weight:800;color:#fff;margin-top:2px">'+fromLabel+' wind &middot; '+Math.round(wind.windspeed_10m)+'mph</div>'
+        +'<div style="font-size:12px;font-weight:800;color:var(--d-t1);margin-top:2px">'+fromLabel+' wind &middot; '+Math.round(wind.windspeed_10m)+'mph</div>'
         +(isGusty?'<div style="font-size:10px;color:#C79BFF;font-weight:700;margin-top:2px">gusts '+Math.round(wind.windgusts_10m)+'mph</div>':'');
       mapCard.appendChild(comp);
     }
@@ -39610,7 +39620,7 @@ function drawWindMap(containerEl, ride, wind){
         var comp=document.createElement('div');
         comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(16,18,22,.88);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none';
         comp.innerHTML='<div style="transform:rotate('+blowTo+'deg)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
-          +'<div style="font-size:11px;font-weight:800;color:#fff">'+fromLbl+' wind</div>'
+          +'<div style="font-size:11px;font-weight:800;color:var(--d-t1)">'+fromLbl+' wind</div>'
           +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wind.windspeed_10m)+'mph</div>';
         containerEl.style.position='relative';
         containerEl.appendChild(comp);
@@ -40020,7 +40030,7 @@ function showWeatherHistory(){
             var comp=document.createElement('div');
             comp.style.cssText='position:absolute;top:10px;right:10px;z-index:500;background:rgba(16,18,22,.88);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none';
             comp.innerHTML='<div style="transform:rotate('+blowTo+'deg)"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4D9FFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="4"/><polyline points="6 10 12 4 18 10"/></svg></div>'
-              +'<div style="font-size:11px;font-weight:800;color:#fff">'+fromLbl+' wind</div>'
+              +'<div style="font-size:11px;font-weight:800;color:var(--d-t1)">'+fromLbl+' wind</div>'
               +'<div style="font-size:10px;color:rgba(255,255,255,.65)">'+Math.round(wspd)+'mph</div>';
             mapWrap.appendChild(comp);
           }, 600);
@@ -40221,7 +40231,7 @@ function showWeatherHistory(){
           +buildGauge(wc.emoji,'Wind',wc.pct,wc.color)
           +'</div>'
           +'<div style="display:flex;justify-content:space-around;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--b1)">'
-          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#E24B4A">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
+          +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--c-red)">'+Math.round(maxTemp)+'°F</div><div style="font-size:10px;color:var(--t3)">peak temp</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#378ADD">'+Math.round(maxPrecip)+'%</div><div style="font-size:10px;color:var(--t3)">max rain</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#1D9E75">'+Math.round(maxGust)+'mph</div><div style="font-size:10px;color:var(--t3)">max gust '+getDirStr(midDir)+'</div></div>'
           +'<div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#185FA5">'+Math.round(wind.length?Math.max.apply(null,wind):0)+'mph</div><div style="font-size:10px;color:var(--t3)">max sustained</div></div>'
@@ -41099,7 +41109,7 @@ function openDayEditor(dateKey, targetId){
         // Body map for the prescription, same block every other surface gets.
         if(typeof anatBlockHTML_==='function') rows.push(anatBlockHTML_(ex));
       } else if(type==='rest'){
-        rows.push('<div style="font-size:13px;font-weight:700;color:#7ee29a">Rest day</div>');
+        rows.push('<div style="font-size:13px;font-weight:700;color:var(--c-green)">Rest day</div>');
       }
       if(note) rows.push('<div style="font-size:11.5px;color:var(--t3);margin-top:'+(rows.length?'7px':'0')+';line-height:1.45;font-style:italic">'+_esc_(note)+'</div>');
       if(!rows.length) return;
@@ -41302,7 +41312,7 @@ function openDayEditor(dateKey, targetId){
   if(sess && sess.id){
     var delBtn=document.createElement('button');
     delBtn.textContent='Delete session';
-    delBtn.style.cssText='width:100%;padding:11px;margin-top:8px;background:transparent;border:1px solid #E24B4A;border-radius:12px;color:#E24B4A;font-size:13px;font-weight:700;cursor:pointer';
+    delBtn.style.cssText='width:100%;padding:11px;margin-top:8px;background:transparent;border:1px solid #E24B4A;border-radius:12px;color:var(--c-red);font-size:13px;font-weight:700;cursor:pointer';
     delBtn.onclick=function(){
       var _nm=sess.name||sess.type||'this session';
       var go=function(){
@@ -41450,7 +41460,7 @@ function showCal(){
         var tile=document.createElement('div');
         tile.style.cssText='background:'+c+';border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
         var nm=document.createElement('div');
-        nm.style.cssText='font-size:9px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
+        nm.style.cssText='font-size:9px;color:var(--d-t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
         nm.textContent=r.name||sport;
         tile.appendChild(nm);
         if(r.distance){var dist=document.createElement('div');dist.style.cssText='font-size:8px;color:rgba(255,255,255,0.8)';dist.textContent=r.distance+'mi'+(r.duration?' · '+r.duration:'');tile.appendChild(dist);}
