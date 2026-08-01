@@ -23755,8 +23755,15 @@ function blockPlanFor_(dateKey){
   try{
     if(typeof planSessionsForDate_==='function' && typeof SESSION_DEFS!=='undefined'){
       var _isRide=function(intent){ var d2=SESSION_DEFS[intent]; return !!d2 && (d2.type==='ride'||d2.type==='attempt'); };
+      // OWNERSHIP IS THE EDIT MASK, NOT source. The source field is metadata and is NOT in the
+      // _edited mask, so a cross-device merge lets the remote 'gen' copy win and a swapped session
+      // comes back stamped source:'gen' with its _edited:{intent,name,status,type} intact. Gating on
+      // source alone silently reverted the Aug 1 swap: st.plan still said 'fuhgeddaboudit' while
+      // _ridePrescriptionFor_ went back to the group ride, and the coach graded the wrong session.
+      // See [manual edit survives sync] — the mask is the durable signal.
+      var _claimed=function(s){ return !!s && (s.source==='user' || !!(s._edited && s._edited.intent)); };
       (planSessionsForDate_(dateKey)||[]).forEach(function(s){
-        if(!s || s.source!=='user' || !s.intent || !_isRide(s.intent)) return;
+        if(!s || !_claimed(s) || !s.intent || !_isRide(s.intent)) return;
         var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase):null;
         var repl={ intent:s.intent, struct:(s.block&&s.block.struct)||'', rx:rx2 };
         var at=-1;
@@ -31495,6 +31502,30 @@ function fetchRideCoachInsight(r, callback){
       +'Then a final line exactly: "Recommendation: No prescription on file for this '+noun+' — logged as recorded."';
   }
 
+  // ONE SETTLED VERDICT PER RIDE. Every render used to fire a fresh LLM call, so the same ride
+  // produced different — and contradictory — text on each load, and the card visibly jumped as
+  // successive responses landed. A verdict is a judgement about a completed ride: it should change
+  // when the RIDE or its PRESCRIPTION changes, and never merely because the page was reloaded.
+  //
+  // The cache key is a hash of the PROMPT, which is the honest key: the prompt already encodes every
+  // input that can move the verdict (the ride's numbers, the prescription, the band, the measured
+  // work intervals). Change any of them — swap the session, repair the TSS — and the key changes and
+  // the insight is regenerated. Nothing else can invalidate it, and nothing else should.
+  var _ciKey=_ciHash_(prompt);
+  var _hit=_ciGet_(_ciKey);
+  if(_hit!=null){ callback(null, _insightSuppressDeficit_(_hit, suppress, rx, noun)); return; }
+  // Collapse concurrent renders onto ONE request. Several surfaces can mount the same insight in a
+  // single load; without this each mounts its own fetch and they race to overwrite each other.
+  if(_CI_INFLIGHT[_ciKey]){ _CI_INFLIGHT[_ciKey].push({cb:callback, suppress:suppress, rx:rx, noun:noun}); return; }
+  _CI_INFLIGHT[_ciKey]=[{cb:callback, suppress:suppress, rx:rx, noun:noun}];
+  var _settle=function(err, raw){
+    var waiting=_CI_INFLIGHT[_ciKey]||[]; delete _CI_INFLIGHT[_ciKey];
+    if(!err && raw) _ciPut_(_ciKey, raw);
+    waiting.forEach(function(w){
+      try{ w.cb(err, err?null:_insightSuppressDeficit_(raw, w.suppress, w.rx, w.noun)); }catch(e){}
+    });
+  };
+
   // Time-box the coach call so the insight card can never hang on "Analyzing…"
   // forever when the proxy stalls (it has no server-side timeout of its own).
   var _ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
@@ -31509,11 +31540,53 @@ function fetchRideCoachInsight(r, callback){
   .then(function(d){
     clearTimeout(_to);
     var text = d.content && d.content[0] && d.content[0].text;
-    text = _insightSuppressDeficit_((text||'').trim(), suppress, rx, noun);   // output filter — deficit framing veto
-    callback(null, text);
+    text=(text||'').trim();
+    // The RAW model text is what gets cached. _insightSuppressDeficit_ is applied per caller on the
+    // way out, so a cached verdict still passes the deficit veto with that caller's own intent —
+    // caching the filtered text would bake one caller's suppress flag into every later read.
+    if(!text){ _settle('Coach insight unavailable.', null); return; }
+    _settle(null, text);
   })
-  .catch(function(){ clearTimeout(_to); callback('Could not reach the coach right now.', null); });
+  .catch(function(){ clearTimeout(_to); _settle('Could not reach the coach right now.', null); });
 }
+// Insight cache. localStorage, not st: these are derived text, they would bloat every Firebase sync,
+// and st is already at the 5MB quota ceiling (see slimForStorage_). Bounded and LRU-evicted so it
+// cannot become the next quota problem.
+var _CI_MAX=80, _CI_LS='aiq_coachInsights', _CI_INFLIGHT={};
+function _ciHash_(s){
+  var h=5381; s=String(s||'');
+  for(var i=0;i<s.length;i++){ h=((h*33) ^ s.charCodeAt(i))>>>0; }
+  return 'ci'+h.toString(36)+'-'+(s.length%100000).toString(36);
+}
+function _ciMap_(){
+  try{ var raw=localStorage.getItem(_CI_LS); return raw?(JSON.parse(raw)||{}):{}; }catch(e){ return {}; }
+}
+function _ciGet_(k){
+  try{
+    var m=_ciMap_(), e=m[k];
+    if(!e) return null;
+    e.at=Date.now();                                   // touch for LRU
+    try{ localStorage.setItem(_CI_LS, JSON.stringify(m)); }catch(_e){}
+    return e.t||null;
+  }catch(e){ return null; }
+}
+function _ciPut_(k, text){
+  try{
+    var m=_ciMap_();
+    m[k]={ t:text, at:Date.now() };
+    var keys=Object.keys(m);
+    if(keys.length>_CI_MAX){
+      keys.sort(function(a,b){ return (m[a].at||0)-(m[b].at||0); });
+      keys.slice(0, keys.length-_CI_MAX).forEach(function(x){ delete m[x]; });
+    }
+    localStorage.setItem(_CI_LS, JSON.stringify(m));
+  }catch(e){}
+}
+// Escape hatch for a deliberate re-read of one ride, or all of them.
+function coachInsightForget_(){
+  try{ localStorage.removeItem(_CI_LS); if(typeof toast==='function') toast('Coach insights cleared'); return true; }catch(e){ return false; }
+}
+try{ if(typeof window!=='undefined'){ window.coachInsightForget_=coachInsightForget_; } }catch(e){}
 
 // -------------------------------------------------------------------------
 // SHARED RIDE-DETAIL MAP RENDERER

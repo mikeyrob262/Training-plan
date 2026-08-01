@@ -28,9 +28,14 @@ function extractVar(name){
   return src.slice(idx, end)+'\n';
 }
 
-const CLOSURE = ['rideSport_','_actElevGain_','_actProfile_','_ridePrescriptionFor_','_insightSuppressDeficit_','fetchRideCoachInsight'];
+// The cache helpers are new dependencies of fetchRideCoachInsight: the insight is now keyed on a
+// hash of the PROMPT so a ride settles on ONE verdict instead of regenerating on every render.
+// Without them here the function throws ReferenceError before it ever builds a prompt — a missing
+// extraction, not a behaviour change (the same way the .zwo harness failed).
+const CLOSURE = ['rideSport_','_actElevGain_','_actProfile_','_ridePrescriptionFor_','_insightSuppressDeficit_','_ciHash_','_ciMap_','_ciGet_','_ciPut_','fetchRideCoachInsight'];
 let code='';
-for(const v of ['_CV_BASE_INTENTS','_CV_DEFICIT_RE','_CV_STEADY_RE']) code+=extractVar(v);
+// _CI_MAX/_CI_LS/_CI_INFLIGHT share one var statement, so extracting the first takes all three.
+for(const v of ['_CV_BASE_INTENTS','_CV_DEFICIT_RE','_CV_STEADY_RE','_CI_MAX']) code+=extractVar(v);
 for(const f of CLOSURE) code+=extract(f);
 
 // ---- harness: capture the prompt instead of calling the proxy ----
@@ -44,10 +49,20 @@ const sandbox = {
   AbortController:function(){ this.signal={}; this.abort=()=>{}; },
   setTimeout:()=>0, clearTimeout:()=>{},
 };
-const fn = new Function(...Object.keys(sandbox), code + '\n;return {_actElevGain_,_actProfile_,_insightSuppressDeficit_,fetchRideCoachInsight};');
+const fn = new Function(...Object.keys(sandbox), code + '\n;return {_actElevGain_,_actProfile_,_insightSuppressDeficit_,fetchRideCoachInsight,_ciHash_,_CI_INFLIGHT};');
 const M = fn(...Object.values(sandbox));
 
-const promptFor = (r) => { lastPrompt=null; M.fetchRideCoachInsight(r, ()=>{}); if(lastPrompt==null) throw new Error('no prompt captured'); return lastPrompt; };
+// Concurrent renders of the same prompt now collapse onto one request, and a settled verdict is
+// cached. Both are keyed on the prompt hash, so a test that asks for the SAME prompt twice would
+// otherwise get no second call. Clear the in-flight map per capture; the cache itself is already
+// inert here because localStorage does not exist in this sandbox.
+const promptFor = (r) => {
+  lastPrompt=null;
+  Object.keys(M._CI_INFLIGHT).forEach(k=>{ delete M._CI_INFLIGHT[k]; });
+  M.fetchRideCoachInsight(r, ()=>{});
+  if(lastPrompt==null) throw new Error('no prompt captured');
+  return lastPrompt;
+};
 
 let fails=0;
 const R='\x1b[31m', G='\x1b[32m', X='\x1b[0m';

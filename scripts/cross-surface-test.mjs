@@ -256,7 +256,13 @@ check('the row states the reason the check computed', /\(c\.miss\|\|'outside the
 // INVARIANT: a session the athlete CLAIMED overrides the block template. blockPlanFor_ read the
 // template only — p.dates[] is written nowhere but the block definition — so every user swap was
 // invisible to _ridePrescriptionFor_ and the coach graded the ride that was replaced.
-check('blockPlanFor_ honours a user-owned session', /s\.source!=='user'/.test(src), true);
+check('blockPlanFor_ honours a user-owned session', /_claimed\(s\)/.test(src), true);
+// INVARIANT: ownership is read from the EDIT MASK, not from `source`. source is metadata and is not
+// a masked field, so a cross-device merge lets the remote 'gen' copy win — the Aug 1 swap came back
+// stamped source:'gen' with _edited:{intent,...} intact, and gating on source alone silently
+// reverted it: st.plan said 'fuhgeddaboudit' while the coach graded the group ride.
+check('...via the edit mask, which survives a merge',
+  /s\.source==='user' \|\| !!\(s\._edited && s\._edited\.intent\)/.test(src), true);
 check('...and the override is scoped to ride/attempt intents',
   /d2\.type==='ride'\|\|d2\.type==='attempt'/.test(src), true);
 check('...and reports that it came from the athlete, not the template', /via='user'/.test(src), true);
