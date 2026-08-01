@@ -17219,12 +17219,36 @@ function aiCardStory_(ded){
 }
 
 // ---- What Changed This Month (real deltas + transparent grade) ----
+// ONE definition of "too early in this month to compare it with a full one". The Calendar Year
+// view's chapter labels and the What Changed card both ask it, and writing the formula twice is
+// precisely how two surfaces come to disagree about the same question.
+//
+// The threshold: at least 10 elapsed days, or 40% of the month, whichever is larger.
+function _monthTooEarly_(now, dim){
+  try{
+    var n=now||new Date();
+    var d=dim||new Date(n.getFullYear(), n.getMonth()+1, 0).getDate();
+    return n.getDate() < Math.max(10, Math.round(d*0.4));
+  }catch(e){ return false; }
+}
 function aiCardWhatChanged_(ded){
   var rides=ded||allRidesDeduped_();
   function inMonth(r,back){ var d=new Date(); d.setMonth(d.getMonth()-back); var y=d.getFullYear(), m=d.getMonth();
     var rd=r&&r.date?new Date(r.date):null; return rd && rd.getFullYear()===y && rd.getMonth()===m; }
   var thisR=rides.filter(function(r){return inMonth(r,0);}), lastR=rides.filter(function(r){return inMonth(r,1);});
   if(thisR.length+lastR.length<4) return '';
+  // Too early in the month for a fair comparison. Without this, Aug 1 read "Rides 0, -19 /
+  // Distance 0 mi, -569 mi" — technically true, but a false steep-decline reading taken off one
+  // day of data. Same partial-period trap the Year view's chapter labels hit before they were
+  // fixed to say "In progress", and now the same predicate answers both.
+  var _now=new Date();
+  if(_monthTooEarly_(_now)){
+    var _el=_now.getDate();
+    var _inner=aiLbl_('WHAT CHANGED THIS MONTH');
+    _inner+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5">'+_el+' day'+(_el===1?'':'s')
+      +' into the month so far &mdash; too early to compare against a full month.</div>';
+    return aiCard_(_inner);
+  }
   function miles(a){ return Math.round(a.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0)); }
   var rows=[];
   rows.push(['Rides', thisR.length, thisR.length-lastR.length, '']);
@@ -29471,7 +29495,7 @@ function _chapterLabel_(agg, m, y, now){
     // the month has elapsed to be comparable, state the fact instead of passing a verdict.
     if(y===todayY && m===todayM){
       var elapsed=now.getDate(), dimNow=e.daily.length;
-      if(elapsed < Math.max(10, Math.round(dimNow*0.4))){
+      if(_monthTooEarly_(now, dimNow)){
         return { text:'In progress', planned:false,
                  why:elapsed+' day'+(elapsed===1?'':'s')+' into the month so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full month.' };
       }

@@ -183,6 +183,12 @@ const dispatches = [...src.matchAll(/if\(tab==='([a-z]+)'\)\s*return\s+([A-Za-z_
 // INVARIANT: no tab in AI_TABS may fall through to "coming soon" when its card already exists.
 // 'changed' did exactly that - aiCardWhatChanged_ was built and rendering inside Overview while the
 // tab told the athlete the feature had not shipped.
+// INVARIANT: ONE definition of "too early in this month to compare". Both the Year view's chapter
+// labels and the What Changed card ask it; two copies of the formula is how they come to disagree.
+check('there is exactly one too-early predicate', countCode(/function _monthTooEarly_/g), 1);
+check('no surface re-derives the threshold inline', countCode(/Math\.max\(10, Math\.round\([A-Za-z_]+\*0\.4\)\)/g), 1);
+check('the chapter label asks it', /if\(_monthTooEarly_\(now, dimNow\)\)/.test(src), true);
+check('the What Changed card asks it too', /if\(_monthTooEarly_\(_now\)\)/.test(src), true);
 check('the What Changed tab is wired to its card', /if\(tab===.changed.\) return _aiSafe_\(.WhatChanged./.test(src), true);
 check('...and its empty state says WHY, not a blank page', /Not enough activity in the last two months/.test(src), true);
 check('every AI tab dispatch exists', dispatches.length>0, true);
