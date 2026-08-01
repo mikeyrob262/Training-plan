@@ -368,6 +368,12 @@ check('PR count degrades to an em-dash', /prCount=null/.test(src) && /dash\(prCo
 check('one favourite key builder', countCode(/function _favKey_/g), 1);
 check('...used by both the ride and run paths via one toggle', countCode(/function _favToggle_/g), 1);
 check('un-starring writes false rather than deleting (merge-safe)', /m\[k\]=\(m\[k\]===true\)\?false:true/.test(src), true);
+// INVARIANT: an estimated ride hour is LABELLED. Falling back to hour 0 read cold for an afternoon
+// ride and was indistinguishable from a real reading; midday is a better guess but still a guess.
+check('the archive hour defaults to midday, not midnight', /var sh=13, estHour=true/.test(src), true);
+check('...and a real start time clears the estimate flag', /sh=sd\.getHours\(\); estHour=false/.test(src), true);
+check('...and the estimate says so on screen', /Ride time not recorded /.test(src), true);
+check('the note is hidden when the hour is real', /note\.style\.display=estHour\?.block.:.none./.test(src), true);
 check('an indoor ride is not given outdoor conditions', /_wxIndoor=\(typeof rideIsIndoor==='function'\)&&rideIsIndoor\(r\)/.test(src), true);
 check('a past ride reads the ARCHIVE, not the forecast', /archive-api\.open-meteo\.com\/v1\/archive\?latitude/.test(src), true);
 check('...for the ride date, not today', /start_date='\+_wxRideDate/.test(src), true);

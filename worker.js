@@ -32003,6 +32003,7 @@ function openDesktopRideDetail(idx, _noFetch){
         '<div style="font-size:10px;color:var(--d-t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Weather Conditions</div>'+
         '<div style="font-size:10px;color:var(--c-blue);cursor:pointer">View Details &rsaquo;</div>'+
       '</div>'+
+      '<div id="rp-wx-note" style="font-size:9.5px;color:var(--d-t4);margin:-6px 0 8px;display:none"></div>'+
       '<div style="display:grid;grid-template-columns:repeat(4,1fr);text-align:center;gap:6px">'+
         '<div><div id="rp-temp" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Feels like <span id="rp-feels">--</span></div></div>'+
         '<div><div id="rp-wind" style="font-size:14px;font-weight:700;color:var(--d-t2)">--</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Wind</div></div>'+
@@ -32084,9 +32085,16 @@ function openDesktopRideDetail(idx, _noFetch){
         .then(function(wx){
           var h=wx&&wx.hourly;
           if(!h || !h.temperature_2m || !h.temperature_2m.length) return;
-          var sh=0;
-          if(r.startTime){ var sd=new Date(r.startTime); if(!isNaN(sd.getTime())) sh=sd.getHours(); }
+          // When the ride carries no start time (both importers leave many rides with a date only,
+          // no clock time), midnight is a worse guess than midday — most rides happen in daylight —
+          // but either way it is a GUESS, so it is labelled rather than left indistinguishable from
+          // a real reading. Same principle as _rideWeatherFact_'s "not recorded": an honest
+          // approximation, never a silent one.
+          var sh=13, estHour=true;   // midday default
+          if(r.startTime){ var sd=new Date(r.startTime); if(!isNaN(sd.getTime())){ sh=sd.getHours(); estHour=false; } }
           sh=Math.min(sh, h.temperature_2m.length-1);
+          var note=document.getElementById('rp-wx-note');
+          if(note){ note.style.display=estHour?'block':'none'; note.textContent=estHour?('Ride time not recorded '+String.fromCharCode(8212)+' midday estimate'):''; }
           _wxRender(h.temperature_2m[sh], h.apparent_temperature?h.apparent_temperature[sh]:null,
             {dir:h.winddirection_10m?h.winddirection_10m[sh]:0, spd:h.windspeed_10m?h.windspeed_10m[sh]:0},
             h.relativehumidity_2m?h.relativehumidity_2m[sh]:null);
