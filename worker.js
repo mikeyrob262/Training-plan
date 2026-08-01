@@ -29056,6 +29056,9 @@ function _yearHighlights_(y, agg, byDate, now){
     : { icon:'mtn', label:'Most Elevation', val:'&mdash;', sub:'No elevation recorded for '+y, ym:null });
   return out;
 }
+// _BLOCK_MILESTONES entries carry .label, not .name — reading .name rendered the literal
+// placeholder "Next milestone" over a milestone that has a perfectly good name.
+function _msName_(ms){ return (ms && (ms.label || ms.name || ms.slug)) || 'Next milestone'; }
 function _yrDateShort_(d){ var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return M[d.getMonth()]+' '+d.getDate(); }
 function _yrWkRange_(start){ var e=new Date(start.getTime()+6*86400000); return _yrDateShort_(start)+' &ndash; '+_yrDateShort_(e); }
 function _yrHlIcon_(kind, col){
@@ -29171,10 +29174,10 @@ function calYearFooterHTML_(y, byDate, now){
     var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var lbl=md?(MN[md.getMonth()]+' '+md.getDate()+', '+md.getFullYear()):ms.date;
     H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">'
-      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((typeof _cvEsc_==='function')?_cvEsc_(ms.name||'Next milestone'):(ms.name||'Next milestone'))+'</div>'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((typeof _cvEsc_==='function')?_cvEsc_(_msName_(ms)):_msName_(ms))+'</div>'
       +(pct!=null?('<div style="font-size:17px;font-weight:800;color:var(--c-purple);flex-shrink:0">'+pct+'%</div>'):'')
       +'</div>'
-      +'<div style="font-size:11.5px;color:var(--d-t4);margin-top:3px">'+lbl+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t4);margin-top:3px">'+lbl+(ms.note?(' &middot; '+((typeof _cvEsc_==='function')?_cvEsc_(ms.note):ms.note)):'')+'</div>'
       +(pct!=null?('<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden;margin-top:10px"><div style="height:100%;width:'+pct+'%;background:var(--c-purple)"></div></div>'):'')
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:7px">'+(days!=null?(days+' day'+(days===1?'':'s')+' to go'):'&mdash;')+'</div>';
   } else {
