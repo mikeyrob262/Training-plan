@@ -25392,8 +25392,14 @@ function _zwoWireDest_(dk, hostId, sid){
     var lab=document.getElementById(hostId+'-label'), note=document.getElementById(hostId+'-dest'),
         alt=document.getElementById(hostId+'-alt');
     if(!lab||!note) return;
+    // No showDirectoryPicker here — Firefox, Safari, and every mobile browser including mobile
+    // Chrome. This branch REPLACES the set-up link, which means the explanation living inside
+    // zwiftPickFolder_ can never be reached: the only way to read it was to click a link that is
+    // no longer on the page. So say why here, and name the browsers that do work, rather than
+    // leaving a bare filesystem path and an unexplained missing feature.
     if(!zwiftSupported_()){
-      note.outerHTML='<span style="color:#5b6678">Drop it in '+_zwiftPathHint_()+' and it appears under Custom Workouts.</span>';
+      note.outerHTML='<span style="color:#5b6678">One-click send needs Chrome or Edge on the desktop &mdash; this browser cannot write to a folder. '
+        +'Download it and drop it in '+_zwiftPathHint_()+', and it appears under Custom Workouts.</span>';
       return;
     }
     note.onclick=function(ev){ try{ ev.stopPropagation(); }catch(e){} zwiftPickFolder_(); };
@@ -30201,10 +30207,14 @@ function openDesktopRideDetail(idx, _noFetch){
   if(!main2) return;
   var main=main2;
 
-  var ifVal=r.ifPct?r.ifPct/100:(npVal&&FTP?npVal/FTP:0);
-  var rideScore=Math.min(99,Math.max(50,Math.round(70+(ifVal-0.75)*40+((constRideTSS_(r)||0)-80)*0.1)));
-  var scoreColor=rideScore>=80?'#4ADE80':rideScore>=65?'#F59E0B':'#E24B4A';
-  var scoreArc=Math.round(rideScore/100*163);
+  // A flat 0-99 ride grade used to be computed here from whole-ride IF and TSS —
+  //   70 + (IF-0.75)*40 + (TSS-80)*0.1
+  // — which grades a recovery spin, a group ride and a 4x4 VO2 session on one curve and never
+  // consults the prescription. It is deleted rather than made intent-aware because nothing
+  // renders it: rideScore, scoreColor and scoreArc were consumed by no markup in this function
+  // or anywhere else (they are function-scoped, and the score ring they were built for does not
+  // exist). Judging execution belongs to computeExecutionScore_, which grades against the
+  // session's own targets. Do not reintroduce a whole-ride-average grade here.
 
   ensureBikes();
   // Resolve THIS ride's bike via the shared resolver (was defaulting to the

@@ -176,6 +176,16 @@ check('every AI tab dispatch exists', dispatches.length>0, true);
 check('every AI tab dispatch returns _aiSafe_ FIRST',
       dispatches.filter(d => d.callee !== '_aiSafe_').map(d => d.tab+' -> '+d.callee), []);
 // INVARIANT (F7c): each surface names the library it counted, because the two legitimately differ.
+// INVARIANT: no surface grades a ride on one flat curve off whole-ride IF/TSS. That formula ignores
+// what the session was FOR — a recovery spin and a 4x4 VO2 came off the same curve. Execution is
+// graded against the session's own targets by computeExecutionScore_, or not at all.
+check('no flat whole-ride grade anywhere', countCode(/\(ifVal-0\.75\)\*40/g), 0);
+check('execution is still graded against the session targets', /function computeExecutionScore_/.test(src), true);
+// BEHAVIOUR: when one-click send is unavailable the athlete is told WHY, not just handed a path.
+// The unsupported branch REPLACES the set-up link, so the explanation inside zwiftPickFolder_ is
+// unreachable — it has to be stated here or nowhere.
+check('the unsupported-browser note names the browsers that work', /One-click send needs Chrome or Edge on the desktop/.test(src), true);
+check('...and still gives the manual path', /Download it and drop it in '\+_zwiftPathHint_\(\)/.test(src), true);
 check('the calendar names its data source', /dataSourceNote_\('legacy'\)/.test(src), true);
 check('Athlete Intelligence names its data source', /dataSourceNote_\('deduped'\)/.test(src), true);
 check('and the note distinguishes the two libraries', /Rides only, from the uploaded snapshot/.test(src) && /All activity types, from your device library/.test(src), true);
