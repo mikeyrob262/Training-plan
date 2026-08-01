@@ -370,6 +370,22 @@ check('...used by both the ride and run paths via one toggle', countCode(/functi
 check('un-starring writes false rather than deleting (merge-safe)', /m\[k\]=\(m\[k\]===true\)\?false:true/.test(src), true);
 // INVARIANT: an estimated ride hour is LABELLED. Falling back to hour 0 read cold for an afternoon
 // ride and was indistinguishable from a real reading; midday is a better guess but still a guess.
+// BEHAVIOUR: the Strava importer keeps the clock time. It read start_date_local and immediately
+// split('T')[0], so 478 outdoor rides carried a date and no hour and every historical weather
+// lookup fell back to midnight. The date must STILL be the local day (deriving it from UTC stamped
+// every evening ride a day ahead), so both have to come out of the same field.
+const RM = new Function('st', asServed(ex('reimportMap_')) + ';return reimportMap_;')({ftp:183});
+const _act = { name:'Evening Ride', start_date_local:'2026-06-20T18:42:11Z', start_date:'2026-06-20T22:42:11Z',
+               distance:32186.9, moving_time:3600, average_watts:150, weighted_average_watts:160 };
+const _m = RM(_act, 183);
+check('the ride date is still the LOCAL day only', _m.date, '2026-06-20');
+check('...and the full local timestamp is kept', _m.startTime, '2026-06-20T18:42:11Z');
+check('...taken from start_date_local, not the UTC start_date', _m.startTime.indexOf('18:42') > 0, true);
+check('a payload with no timestamp yields null, not a fabricated hour',
+  RM({ name:'x' }, 183).startTime, null);
+// INVARIANT: the OTHER importer keeps it too, or the two disagree about the same ride.
+check('the page-sync importer keeps it as well',
+  /date: dateStr, startTime: \(a\.start_date_local\|\|a\.start_date\|\|null\)/.test(src), true);
 check('the archive hour defaults to midday, not midnight', /var sh=13, estHour=true/.test(src), true);
 check('...and a real start time clears the estimate flag', /sh=sd\.getHours\(\); estHour=false/.test(src), true);
 check('...and the estimate says so on screen', /Ride time not recorded /.test(src), true);

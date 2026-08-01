@@ -43241,6 +43241,10 @@ function mergeCrossSourceDupes_(){
 function reimportMap_(a, ftp){
   ftp = ftp || (parseInt((typeof st!=='undefined'&&st.ftp)||186)||186);
   var dateStr=(a.start_date_local||a.start_date||'').split('T')[0];
+  // The full timestamp, kept alongside the date-only split above. It was in the sync payload the
+  // whole time and both importers discarded it, which is why 478 outdoor rides had no start time
+  // and every historical weather lookup fell back to midnight.
+  var startTimeStr=a.start_date_local||a.start_date||null;
   var distMi=a.distance?parseFloat((a.distance/1609.344).toFixed(1)):0;
   var dur=a.moving_time||a.elapsed_time||0;
   var np=a.weighted_average_watts||null, avgPwr=a.average_watts||null;
@@ -43250,7 +43254,7 @@ function reimportMap_(a, ftp){
   var fmtDur=(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(dur);
   var gpsLats=null,gpsLons=null;
   if(a.map&&a.map.summary_polyline&&typeof decodePolyline==='function'){ try{ var d=decodePolyline(a.map.summary_polyline); if(d.lats.length>5){ gpsLats=d.lats; gpsLons=d.lons; } }catch(e){} }
-  return { name:a.name||'Strava Activity', date:dateStr, duration:fmtDur, movingSecs:dur, distance:distMi,
+  return { name:a.name||'Strava Activity', date:dateStr, startTime:startTimeStr, duration:fmtDur, movingSecs:dur, distance:distMi,
     avgPwr:avgPwr, np:np, avgHR:a.average_heartrate?Math.round(a.average_heartrate):null, maxHR:a.max_heartrate?Math.round(a.max_heartrate):null,
     cadence:a.average_cadence?Math.round(a.average_cadence):null, tss:tss, elev:elev, calories:a.calories||null,
     workKj:a.kilojoules?Math.round(a.kilojoules):null, relEffort:a.suffer_score||null, ifPct:IF2?Math.round(IF2*100):null,
@@ -43675,7 +43679,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var fmtDur = (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(movDur);
       var newRideData = {
         name: a.name||'Strava Activity',
-        date: dateStr, duration: fmtDur, movingSecs: movDur, distance: distMi,
+        date: dateStr, startTime: (a.start_date_local||a.start_date||null), duration: fmtDur, movingSecs: movDur, distance: distMi,
         avgPwr: avgPwr, np: np,
         avgHR: a.average_heartrate ? Math.round(a.average_heartrate) : null,
         maxHR: a.max_heartrate ? Math.round(a.max_heartrate) : null,
