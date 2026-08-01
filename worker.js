@@ -37800,6 +37800,20 @@ function fetchTodaysDecision(weatherStr, callback){
     }).join('; ')
     +'. Respond with ONE single punchy sentence, max 20 words, stating the one clear call for today - name a specific bike by name if weather or maintenance status favors one, or tell them to rest, or name the key workout. Be maximally direct, no preamble, just the sentence.'+COACH_GONOGO;
 
+  // Collapse concurrent identical requests onto ONE call. Three surfaces call this and a plain page
+  // load was measured issuing FIVE — five separate model answers to the same question, each
+  // rendering as it landed, which is visible as the card changing its mind.
+  //
+  // Deliberately in-flight ONLY, with no persistent cache: today's decision is meant to move as the
+  // day, the weather and the fitness numbers move, and a settled answer here would go stale. Keyed
+  // on the prompt, so the weather-unavailable fallback variant stays a separate request.
+  var _tdKey=_ciHash_(prompt);
+  if(_TD_INFLIGHT[_tdKey]){ _TD_INFLIGHT[_tdKey].push(callback); return; }
+  _TD_INFLIGHT[_tdKey]=[callback];
+  var _tdDone=function(err, text){
+    var waiting=_TD_INFLIGHT[_tdKey]||[]; delete _TD_INFLIGHT[_tdKey];
+    waiting.forEach(function(cb){ try{ cb(err, text); }catch(e){} });
+  };
   fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -37808,10 +37822,11 @@ function fetchTodaysDecision(weatherStr, callback){
   .then(function(r){ return r.json(); })
   .then(function(d){
     var text = d.content && d.content[0] && d.content[0].text;
-    callback(null, (text||'').trim());
+    _tdDone(null, (text||'').trim());
   })
-  .catch(function(){ callback('Could not reach the coach right now.', null); });
+  .catch(function(){ _tdDone('Could not reach the coach right now.', null); });
 }
+var _TD_INFLIGHT={};
 
 function showAICoach(){
   var old=document.getElementById('more-sheet');if(old)old.remove();
