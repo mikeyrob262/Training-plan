@@ -24651,6 +24651,10 @@ function _coachVPanel_(now){
       // something computable to say; a missing prescription or missing numbers yield '' and the
       // row is simply absent rather than showing an empty verdict.
       +(cv.debrief?('<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(168,85,247,.10);border:1px solid #2a2340;font-size:12.5px;color:var(--d-soft);line-height:1.6;overflow-wrap:anywhere"><b style="color:'+P+'">Debrief &mdash; </b>'+cv.debrief+'</div>'):'')
+      // THE FULL DEBRIEF. Filled in after paint by _smurkelMount_ so the panel never waits on the
+      // model. The short rule-based line above stays: it is computed locally and is there even when
+      // the coach cannot be reached.
+      +'<div id="sm-debrief" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"></div>'
       +'</div>';
   } else if(cv.primary && cv.intent!=='rest'){
     H+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)">'
@@ -24707,6 +24711,9 @@ function _coachVPanel_(now){
     H+='<div style="font-size:11.5px;color:var(--d-soft);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)"><b style="color:'+A+'">FTP &mdash;</b> '+cv.ftp+'</div>';
   }
   H+='</div>';
+  // Fill the debrief in after this HTML is in the DOM. Both surfaces mount this panel from
+  // their own renderer, so scheduling it here means neither has to remember to.
+  try{ setTimeout(function(){ if(typeof _smurkelMount_==='function') _smurkelMount_(dk); }, 0); }catch(e){}
   return H;
 }
 
@@ -24920,8 +24927,23 @@ function _blockWeekAssess_(rides, ftp, now){
   var withPwr=cyc.filter(function(r){ return _blockPwr_(r)!=null; }).length;
   var sess={ threshold:[], vo2:[], z2:[] };
   cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp, String(r.date||'').slice(0,10)); if(t) sess[t].push(r); });
-  function pick(list){ return (list&&list.length)?list[0]:null; }
-  var thrRide=pick(sess.threshold), vo2Ride=pick(sess.vo2), z2Ride=pick(sess.z2);
+  // Several rides in one week can classify to the same intent — a hard solo route attempt lands in
+  // the threshold band on ratio alone — and taking list[0] credited Saturday's Fuhgeddaboudit ride
+  // (NP 147W) as the week's Threshold session while Friday's actual 2x20 at 167/166W went unnamed.
+  // Prefer the ride the block actually PRESCRIBED that intent for; fall back to the first otherwise.
+  function pick(list, intent){
+    if(!list || !list.length) return null;
+    for(var i=0;i<list.length;i++){
+      try{
+        var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(String(list[i].date||'').slice(0,10)):null;
+        if(bp && bp.sessions){
+          for(var j=0;j<bp.sessions.length;j++){ if(bp.sessions[j] && bp.sessions[j].intent===intent) return list[i]; }
+        }
+      }catch(e){}
+    }
+    return list[0];
+  }
+  var thrRide=pick(sess.threshold,'threshold'), vo2Ride=pick(sess.vo2,'vo2'), z2Ride=pick(sess.z2,'z2');
   function meas(ride, intent){ return ride?_blockWorkMeasure_(ride, String(ride.date||'').slice(0,10), intent):null; }
   var thrM=meas(thrRide,'threshold'), vo2M=meas(vo2Ride,'vo2'), z2M=meas(z2Ride,'z2');
   function ivVal(m){ return m.vals.join('/')+'W ('+m.vals.length+' interval'+(m.vals.length===1?'':'s')+', '+m.source+')'; }
@@ -25867,15 +25889,36 @@ function _smurkelContext_(dateKey, ride){
     // The week this session sits in: TSS per day, named, plus the total.
     try{
       var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
-      try{ if(typeof getRuns==='function') all=all.concat(getRuns()); }catch(e){}
+      // st.rides ALREADY mixes every sport including runs, and getRuns() is a separate library that
+      // overlaps it — a plain concat listed Wednesday as "Gaines - PHT Trail Run; Afternoon Weight
+      // Training; Gaines - PHT Trail; Gaines - PHT Trail Run" and doubled that day's TSS. Dedupe on
+      // date + name + distance before anything sums it.
+      try{
+        if(typeof getRuns==='function'){
+          var seen={}, merged=[];
+          all.concat(getRuns()||[]).forEach(function(r){
+            if(!r || r.deleted) return;
+            var k=((typeof normDate==='function')?normDate(r.date):String(r.date||'').slice(0,10))
+              +'|'+String(r.name||'').trim().toLowerCase()
+              +'|'+(Math.round((parseFloat(r.distance)||0)*10)/10);
+            if(seen[k]) return; seen[k]=1; merged.push(r);
+          });
+          all=merged;
+        }
+      }catch(e){}
       var d=(typeof _blockDay_==='function')?_blockDay_(dateKey):new Date(dateKey+'T00:00:00');
       var wl=(typeof weekLoadMonSun_==='function')?weekLoadMonSun_(all, d):null;
       if(wl){
         var DN=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        // A day that has not happened yet is NOT a day with nothing logged. Reporting Sunday as
+        // "0 TSS, nothing logged" on a Saturday made the model write "you logged nothing Sunday for
+        // a reason" about a day still in the future — the elevation-gain-zero mistake again.
+        var _todayK=(typeof dayKey_==='function')?dayKey_(new Date()):null;
         C.week={ total:wl.tss, acts:wl.acts, days:wl.days.map(function(k,i){
           var names=(all||[]).filter(function(r){ return r && !r.deleted && (typeof normDate==='function'?normDate(r.date):String(r.date).slice(0,10))===k; })
             .map(function(r){ return r.name||'activity'; });
-          return { day:DN[i], date:k, tss:Math.round(wl.tssByDay[k]||0), activities:names };
+          return { day:DN[i], date:k, tss:Math.round(wl.tssByDay[k]||0), activities:names,
+                   future:(_todayK!=null && k>_todayK) };
         }) };
       }
       // Which of the block's three required sessions happened this week.
@@ -25937,8 +25980,11 @@ function _smurkelFacts_(C){
   if(C.blockWeek) L.push('BLOCK: week '+C.blockWeek+(C.phase?(' of the '+C.phase+' phase'):'')+'.');
   if(C.week){
     L.push('THIS WEEK (Mon-Sun), TSS by day:');
-    C.week.days.forEach(function(d){ L.push('  '+d.day+': '+d.tss+' TSS'+(d.activities.length?(' — '+d.activities.join('; ')):' — nothing logged')); });
-    L.push('  week total: '+C.week.total+' TSS across '+C.week.acts+' activities.');
+    C.week.days.forEach(function(d){
+      if(d.future){ L.push('  '+d.day+': STILL TO COME — this day has not happened yet, do not describe it as empty or as a rest taken.'); return; }
+      L.push('  '+d.day+': '+d.tss+' TSS'+(d.activities.length?(' — '+d.activities.join('; ')):' — nothing logged'));
+    });
+    L.push('  week total so far: '+C.week.total+' TSS across '+C.week.acts+' activities.');
   }
   if(C.weekCheck){
     L.push('THE BLOCK REQUIRES three quality sessions a week, on three separate days. This week:');
@@ -26010,6 +26056,61 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
   .catch(function(){ clearTimeout(to); settle('Could not reach Dr. Smurkel right now.', null); });
 }
 try{ if(typeof window!=='undefined'){ window.fetchSmurkelDebrief_=fetchSmurkelDebrief_; window._smurkelContext_=_smurkelContext_; window._smurkelFacts_=_smurkelFacts_; } }catch(e){}
+
+// Render the debrief's plain text. Deliberately tolerant: the model is asked for headings, bullets
+// and short paragraphs, and this styles whatever of that actually arrives rather than failing on a
+// format it did not expect. Escapes first — this is model output going into innerHTML.
+function _smurkelHTML_(text){
+  var NL=String.fromCharCode(10);
+  var lines=String(text||'').split(NL);
+  var esc=(typeof _cvEsc_==='function')?_cvEsc_:function(s){ return String(s); };
+  var out=[], P='#a855f7';
+  lines.forEach(function(raw){
+    var ln=String(raw||'').replace(/^[*# ]+|[*]+$/g,'').trim();
+    if(!ln){ return; }
+    var isBullet=(ln.charAt(0)==='-' || ln.charAt(0)==='•');
+    if(isBullet) ln=ln.replace(/^[-•]+ ?/,'');
+    var body=esc(ln)
+      .replace(/&amp;#10003;|✓|✅/g,'<span style="color:var(--c-green)">&#10003;</span>')
+      .replace(/❌|✗/g,'<span style="color:var(--c-red)">&#10007;</span>');
+    // A short line with no sentence-ending punctuation, in caps or title case, is a section heading.
+    var isHeading=!isBullet && ln.length<52 && ln.indexOf('.')<0 && (ln===ln.toUpperCase()) && /[A-Z]/.test(ln);
+    if(isHeading){
+      out.push('<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:13px 0 5px">'+body+'</div>');
+    } else if(isBullet){
+      out.push('<div style="display:flex;gap:7px;font-size:12.5px;color:var(--d-soft);line-height:1.55;margin:3px 0">'
+        +'<span style="color:'+P+';flex-shrink:0">&middot;</span><span style="min-width:0;overflow-wrap:anywhere">'+body+'</span></div>');
+    } else {
+      out.push('<div style="font-size:12.5px;color:var(--d-t2);line-height:1.6;margin:6px 0;overflow-wrap:anywhere">'+body+'</div>');
+    }
+  });
+  return out.join('');
+}
+// Mounted after the panel paints (same pattern as the .zwo export row), so the card is never held
+// waiting on the model. The activity debriefed is the one carrying the most load that day — on a
+// day with a ride AND a strength session, the ride is what the week turns on.
+function _smurkelMount_(dk){
+  try{
+    var host=document.getElementById('sm-debrief'); if(!host) return;
+    var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+    var todays=(all||[]).filter(function(r){
+      return r && !r.deleted && ((typeof normDate==='function')?normDate(r.date):String(r.date||'').slice(0,10))===dk;
+    });
+    if(!todays.length){ host.innerHTML=''; return; }
+    todays.sort(function(a,b){
+      var ta=(typeof constRideTSS_==='function')?(constRideTSS_(a)||0):0;
+      var tb=(typeof constRideTSS_==='function')?(constRideTSS_(b)||0):0;
+      return tb-ta;
+    });
+    host.innerHTML='<div style="font-size:12px;color:var(--d-dim)">Dr. Smurkel is reading your week&hellip;</div>';
+    fetchSmurkelDebrief_(dk, todays[0], function(err, text){
+      var h=document.getElementById('sm-debrief'); if(!h) return;
+      if(err || !text){ h.innerHTML='<div style="font-size:12px;color:var(--d-dim)">'+((typeof _cvEsc_==='function')?_cvEsc_(err||'Debrief unavailable.'):'Debrief unavailable.')+'</div>'; return; }
+      h.innerHTML=_smurkelHTML_(text);
+    });
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._smurkelMount_=_smurkelMount_; window._smurkelHTML_=_smurkelHTML_; } }catch(e){}
 
 // ==================== Dr. Smurkel — post-ride interval debrief (piece 3) ====================
 // Lines a completed ride's Intervals.icu interval data up against the prescribed _sessionSteps_. The
@@ -31731,15 +31832,16 @@ function fetchRideCoachInsight(r, callback){
     prompt='You are a cycling coach reviewing a completed ride AGAINST its prescription. '
       +'Prescription: '+rx.name+', target power '+bandTxt+(rx.zone?(' ('+rx.zone+')'):'')+'. '
       +(rx.rules?('Execution rules: '+rx.rules+' '):'')+baseNote+' '+tele+FACTS
+      // BRIEF by design. This card sits on the activity page; the full debrief — weekly context,
+      // zone breakdown, scorecard, what to do next — is Dr. Smurkel's on the Plan page. Two places
+      // saying the same thing at different lengths is how they end up contradicting each other.
       +'Respond in this exact format, no markdown, no preamble: first line one short punchy headline (max 8 words) reflecting whether the ride matched its prescription. '
-      +'Then 2-3 short "- " bullets on execution versus the prescription. '
-      +'Then a final line "Recommendation: " with one concrete next-session suggestion CONSISTENT with this prescription and intent.';
+      +'Then EXACTLY 2 short "- " bullets on execution versus the prescription. Nothing else — no recommendation line, no next-session advice.';
   } else {
     prompt='You are a '+prof.persona+' describing a completed '+noun+' that has NO prescription on file. '+tele+FACTS
       +'There is no target to compare against. Describe it factually ONLY: do NOT judge it good or bad, do NOT suggest what to do differently, do NOT frame anything as a shortfall, missed opportunity, or power left on the table. '
       +'Respond in this exact format, no markdown, no preamble: first line one short NEUTRAL headline (max 8 words) describing the '+noun+'. '
-      +'Then 2-3 short "- " bullets of neutral facts (duration, effort, and terrain ONLY if elevation gain was given as a number). '
-      +'Then a final line exactly: "Recommendation: No prescription on file for this '+noun+' — logged as recorded."';
+      +'Then EXACTLY 2 short "- " bullets of neutral facts (duration, effort, and terrain ONLY if elevation gain was given as a number). Nothing else.';
   }
 
   // ONE SETTLED VERDICT PER RIDE. Every render used to fire a fresh LLM call, so the same ride

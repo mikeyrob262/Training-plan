@@ -122,7 +122,13 @@ check('does not hand the model an FTP band to judge against', has(pRun,'FTP: 190
 check('passes pace, the metric that matters for a run', has(pRun,'Pace: 11:03'), true);
 check('forbids terrain adjectives without a number', has(pRun,'Do not call the terrain flat'), true);
 check('a cycling power prescription never grades a run', has(pRun,'Prescription:'), false);
-check('the no-prescription closing line says run, not ride', has(pRun,'for this run'), true);
+// The activity card is now a BRIEF summary — the "Recommendation: No prescription on file for this
+// run" closing line moved to Dr. Smurkel's full debrief on the Plan page, so this can no longer
+// anchor on it. The intent it guarded is unchanged: the no-prescription branch must call a run a
+// run. Anchor on the instruction that still carries the noun.
+check('the no-prescription branch says run, not ride', has(pRun,'completed run'), true);
+check('the activity card asks for a SHORT summary, not the full treatment', has(pRun,'EXACTLY 2 short'), true);
+check('...and does not ask for next-session advice here', has(pRun,'Recommendation: '), false);
 
 console.log('\n=== elevation genuinely unrecorded ===');
 const pNoElev = promptFor({sportType:'Run', distance:5, duration:'0:40:00'});
