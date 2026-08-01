@@ -261,8 +261,14 @@ check('blockPlanFor_ honours a user-owned session', /_claimed\(s\)/.test(src), t
 // a masked field, so a cross-device merge lets the remote 'gen' copy win — the Aug 1 swap came back
 // stamped source:'gen' with _edited:{intent,...} intact, and gating on source alone silently
 // reverted it: st.plan said 'fuhgeddaboudit' while the coach graded the group ride.
-check('...via the edit mask, which survives a merge',
-  /s\.source==='user' \|\| !!\(s\._edited && s\._edited\.intent\)/.test(src), true);
+// Two weaker gates were tried and both were wrong: source is metadata that a merge overwrites, and
+// the _edited mask is residue on most sessions — it overrode 24 of 41 block days and turned Jul 31's
+// prescribed Threshold into a Z2. Only an explicit, purpose-built flag can mean "the athlete chose
+// this", and it must be in the edited-field list so a merge cannot drop it.
+check('...via an explicit swap flag, not inferred metadata', /s\.swap===true/.test(src), true);
+check('the swap writes that flag', /intent:defKey, name:def\.name, swap:true/.test(src), true);
+check('...and protects it through a merge', /\['type','intent','name','status','swap'\]/.test(src), true);
+check('ownership is NOT inferred from the edit mask', countCode(/s\._edited && s\._edited\.intent/g), 0);
 check('...and the override is scoped to ride/attempt intents',
   /d2\.type==='ride'\|\|d2\.type==='attempt'/.test(src), true);
 check('...and reports that it came from the athlete, not the template', /via='user'/.test(src), true);

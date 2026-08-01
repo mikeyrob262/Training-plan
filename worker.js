@@ -8365,9 +8365,12 @@ function swapRideTo_(dateKey, defKey, sessId){
     if(!sess) sess=list.filter(function(x){ return x && (x.type==='ride'||x.type==='attempt'); })[0]||null;
     if(!sess){ console.warn('[swap] no ride or attempt session on '+dateKey); return false; }
     var was=sess.name||sess.intent||'the planned session';
-    var patch={ id:sess.id, type:def.type, intent:defKey, name:def.name,
+    // swap:true is the DURABLE record that the athlete chose this session, and it is in the edited
+    // field list so mergeItemFast_ protects it. blockPlanFor_ overrides the block template on this
+    // flag alone — see the comment there for why source and the _edited mask both failed.
+    var patch={ id:sess.id, type:def.type, intent:defKey, name:def.name, swap:true,
                 status:(sess.status==='completed'?sess.status:'planned') };
-    planUpsertSession_(dateKey, patch, ['type','intent','name','status'], 'user');
+    planUpsertSession_(dateKey, patch, ['type','intent','name','status','swap'], 'user');
     try{ sv(); }catch(e){}
     try{ console.log('[swap] '+dateKey+': '+was+' -> '+def.name+'  (intent '+defKey+')'); }catch(e){}
     try{ if(typeof _cvRepaint_==='function') _cvRepaint_(); }catch(e){}
@@ -23755,13 +23758,16 @@ function blockPlanFor_(dateKey){
   try{
     if(typeof planSessionsForDate_==='function' && typeof SESSION_DEFS!=='undefined'){
       var _isRide=function(intent){ var d2=SESSION_DEFS[intent]; return !!d2 && (d2.type==='ride'||d2.type==='attempt'); };
-      // OWNERSHIP IS THE EDIT MASK, NOT source. The source field is metadata and is NOT in the
-      // _edited mask, so a cross-device merge lets the remote 'gen' copy win and a swapped session
-      // comes back stamped source:'gen' with its _edited:{intent,name,status,type} intact. Gating on
-      // source alone silently reverted the Aug 1 swap: st.plan still said 'fuhgeddaboudit' while
-      // _ridePrescriptionFor_ went back to the group ride, and the coach graded the wrong session.
-      // See [manual edit survives sync] — the mask is the durable signal.
-      var _claimed=function(s){ return !!s && (s.source==='user' || !!(s._edited && s._edited.intent)); };
+      // A DELIBERATE SWAP CARRIES AN EXPLICIT FLAG. Two weaker gates were tried and both were wrong:
+      //   source==='user'      — source is metadata, not a masked field, so a cross-device merge
+      //                          lets the remote 'gen' copy win and the swap silently reverts.
+      //   s._edited.intent     — that mask is residue on most sessions from the migration and the
+      //                          generator, and it overrode 24 of 41 block days, including turning
+      //                          Jul 31's prescribed Threshold into a Z2.
+      // Inferring intent from generic metadata cannot distinguish "the athlete chose this" from
+      // "something wrote this field once". swapRideTo_ now stamps swap:true and carries it in the
+      // edited-field list so it survives a merge, and only that flag overrides the block.
+      var _claimed=function(s){ return !!s && s.swap===true; };
       (planSessionsForDate_(dateKey)||[]).forEach(function(s){
         if(!s || !_claimed(s) || !s.intent || !_isRide(s.intent)) return;
         var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase):null;
