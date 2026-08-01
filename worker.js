@@ -23741,6 +23741,31 @@ function blockPlanFor_(dateKey){
     var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(sl.i, weekInPhase):null;
     return { intent:sl.i, struct:sl.s||'', rx:rx };
   });
+  // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
+  // template for that date.
+  //
+  // This function used to read the block template ONLY: p.dates[] is written nowhere but the block
+  // definition itself (the P3/P5/P7 taper weeks), and st.plan was never consulted. So every user
+  // swap was invisible to _ridePrescriptionFor_, and the coach kept grading the ride against the
+  // session that had been replaced — swap a group ride for a solo route attempt and the model is
+  // still told "Sit in for the first 20 mi. Do not chase if dropped."
+  //
+  // Scoped to ride/attempt intents: those are what _ridePrescriptionFor_ resolves and what the
+  // coach grades. Strength and mobility swaps already have their own readers off st.plan directly.
+  try{
+    if(typeof planSessionsForDate_==='function' && typeof SESSION_DEFS!=='undefined'){
+      var _isRide=function(intent){ var d2=SESSION_DEFS[intent]; return !!d2 && (d2.type==='ride'||d2.type==='attempt'); };
+      (planSessionsForDate_(dateKey)||[]).forEach(function(s){
+        if(!s || s.source!=='user' || !s.intent || !_isRide(s.intent)) return;
+        var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase):null;
+        var repl={ intent:s.intent, struct:(s.block&&s.block.struct)||'', rx:rx2 };
+        var at=-1;
+        for(var i2=0;i2<sessions.length;i2++){ if(_isRide(sessions[i2].intent)){ at=i2; break; } }
+        if(at>=0) sessions[at]=repl; else sessions.push(repl);
+        via='user';
+      });
+    }
+  }catch(e){}
   return { phase:p.id, phaseLabel:p.label, weekInPhase:weekInPhase, via:via, dateKey:dateKey,
            weekday:mon, sessions:sessions };
 }

@@ -253,6 +253,13 @@ check('the row states the reason the check computed', /\(c\.miss\|\|'outside the
 // receive only the whole-ride average, so a 2x20 whose work laps ran 167/166W inside a 156-174W band
 // was reported to the model as 140.8W and came back "Threshold Target Missed". Same dilution,
 // different path.
+// INVARIANT: a session the athlete CLAIMED overrides the block template. blockPlanFor_ read the
+// template only — p.dates[] is written nowhere but the block definition — so every user swap was
+// invisible to _ridePrescriptionFor_ and the coach graded the ride that was replaced.
+check('blockPlanFor_ honours a user-owned session', /s\.source!=='user'/.test(src), true);
+check('...and the override is scoped to ride/attempt intents',
+  /d2\.type==='ride'\|\|d2\.type==='attempt'/.test(src), true);
+check('...and reports that it came from the athlete, not the template', /via='user'/.test(src), true);
 check('the coach prompt measures the work intervals', /_blockWorkMeasure_\(r, _dk, _wi\[_i\]\)/.test(src), true);
 check('...and tells the model the whole-ride average is not the prescribed effort',
   /The whole-ride average above INCLUDES warm-up, recoveries and cool-down/.test(src), true);
