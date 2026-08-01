@@ -29007,7 +29007,14 @@ function _coachGrade_(y, m, byDate, now){
           if(day.getTime()>now.getTime()) break;
           var ws=_blockWeekStart_(day); if(!ws) continue;
           var key=ws.getTime(); if(seen[key]) continue; seen[key]=1;
-          var a=_blockWeekAssess_(all, ftp, new Date(ws.getTime()+3*86400000));
+          var mid=new Date(ws.getTime()+3*86400000);
+          // You cannot fail to execute a plan that did not exist. _blockWeekAssess_ will happily
+          // grade any week — it classifies rides by ratio when no prescription is on file — so
+          // March 2026 scored exec 0%% against a block that did not open until Jul 24 and the month
+          // graded F. Weeks the block does not cover are not counted at all.
+          var _cov=(typeof blockPlanFor_==='function' && typeof _tbDK_==='function')?blockPlanFor_(_tbDK_(mid)):null;
+          if(!_cov) continue;
+          var a=_blockWeekAssess_(all, ftp, mid);
           if(!a || !a.checks) continue;
           a.checks.forEach(function(c){ if(c.done){ done++; if(c.ok) met++; } });
         }

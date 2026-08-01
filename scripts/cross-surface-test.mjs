@@ -308,7 +308,11 @@ check('the breakdown is tappable', src.indexOf('data-cal="cgrade"') > 0, true);
 check('a component with no data is dropped, not zeroed', /partial:\(wSum</.test(src), true);
 check('...and a partial grade says so', /Weighted over the components that had data/.test(src), true);
 check('moving AWAY from a goal scores below neutral', /if\(moved<=0\) return Math\.max\(0, 0\.5\+moved\*2\)/.test(src), true);
-check('execution-adherence grades via _blockWeekAssess_', /_blockWeekAssess_\(all, ftp, new Date\(ws\.getTime\(\)\+3\*86400000\)\)/.test(src), true);
+check('execution-adherence grades via _blockWeekAssess_', /var a=_blockWeekAssess_\(all, ftp, mid\)/.test(src), true);
+// INVARIANT: you cannot fail to execute a plan that did not exist. _blockWeekAssess_ grades ANY
+// week (it classifies by ratio with no prescription on file), so March 2026 scored exec 0% against
+// a block that did not open until Jul 24 and the month graded F.
+check('weeks the block does not cover are not graded', /if\(!_cov\) continue;/.test(src), true);
 check('there is exactly one momentum verdict', countCode(/function _momentumVerdict_/g), 1);
 check('the AI card reads it rather than recomputing', countCode(/ramp>=2\?\[.Improving./g), 0);
 // INVARIANT: every highlight is computed or explicitly absent, and an absent one is not clickable.
