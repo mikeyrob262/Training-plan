@@ -221,7 +221,7 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-brand-logo svg{width:14px;height:14px;fill:#fff}
 .ds-brand-name{font-size:13px;font-weight:700;color:var(--d-t1);letter-spacing:-.01em}
 .ds-profile{display:flex;align-items:center;gap:9px;padding:10px 0 14px;border-bottom:1px solid var(--d-line);margin-bottom:6px}
-.ds-avatar{width:34px;height:34px;border-radius:50%;background:var(--d-chip);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--d-t3)}
+.ds-avatar{width:48px;height:48px;border-radius:50%;background:var(--d-chip);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--d-t3)}
 .ds-pname{font-size:12px;font-weight:600;color:var(--d-t2)}
 .ds-pwt{font-size:10px;color:var(--d-t4);margin-top:1px}
 .ds-pbadge{font-size:9px;background:var(--d-chip);color:var(--d-t4);padding:1px 6px;border-radius:3px;display:inline-block;margin-top:3px}
@@ -684,7 +684,7 @@ window.AIQ_DESKTOP_MIN=1024;
         <div class="ds-brand-name">Athlete IQ</div>
       </div>
       <div class="ds-profile">
-        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="M" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">M</div>
+        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="M" data-fallback-fontsize="16px" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">M</div>
         <div>
           <div class="ds-pname" id="ds-profile-name">Mikey</div>
           <div class="ds-pwt" id="ds-profile-wt">--</div>
