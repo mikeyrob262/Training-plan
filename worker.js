@@ -31241,7 +31241,7 @@ function openDesktopRideDetail(idx, _noFetch){
     }).join('');
     if(rec&&rw&&rt){rw.style.display='block';rt.textContent=rec;}
     var ask=document.getElementById('rp-ask-coach');
-    if(ask)ask.onclick=function(){toast('Ask Coach coming soon');};
+    if(ask)ask.onclick=function(){openRideAskCoach_(r);};
   });
 }
 
@@ -31652,7 +31652,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     var el=document.getElementById('ride-coach-body');
     if(!el) return;
     if(err || !text){ el.textContent='Coach insight unavailable right now.'; return; }
-    renderCoachInsightContent(el, text);
+    renderCoachInsightContent(el, text, r);
   });
 }
 
@@ -31660,7 +31660,72 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
 // "Recommendation: " line) into styled HTML matching the reference:
 // green bold headline, checkmark/lightning/heart-style icon bullets,
 // a distinct Recommendation block, and an Ask Coach button.
-function renderCoachInsightContent(el, text){
+// ASK COACH — a free-text follow-up question about THIS ride, answered by Dr. Smurkel using the
+// same telemetry facts fetchRideCoachInsight judged the ride against (via _rideTelemetryFacts_),
+// so the two can never disagree about what happened in the ride. Not cached like the verdict —
+// each question is different by definition — but still time-boxed so it cannot hang forever.
+function openRideAskCoach_(r){
+  var old=document.getElementById('ride-ask-coach-modal');
+  if(old) old.remove();
+  var overlay=document.createElement('div');
+  overlay.id='ride-ask-coach-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--s1,#15181f);border-radius:16px;padding:20px;width:100%;max-width:420px;max-height:80vh;display:flex;flex-direction:column;gap:12px';
+  box.innerHTML=
+    '<div style="display:flex;align-items:center;gap:6px">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FC4C02" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+      +'<span style="font-size:13px;font-weight:700;color:var(--t1,#fff)">Ask Dr. Smurkel about this ride</span>'
+    +'</div>'
+    +'<textarea id="rac-q" rows="2" placeholder="e.g. why was my HR higher than usual?" style="width:100%;box-sizing:border-box;resize:vertical;padding:10px;border-radius:10px;border:1px solid var(--b1,#2a2f3a);background:var(--s2,#1c2028);color:var(--t1,#fff);font-size:13px;font-family:inherit"></textarea>'
+    +'<div id="rac-answer" style="display:none;font-size:13px;color:var(--t2,#c7cad1);line-height:1.5;background:var(--s2,#1c2028);border-radius:10px;padding:12px"></div>'
+    +'<div style="display:flex;gap:8px;justify-content:flex-end">'
+      +'<button id="rac-cancel" style="padding:9px 16px;border-radius:10px;border:1px solid var(--b1,#2a2f3a);background:transparent;color:var(--t2,#c7cad1);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Close</button>'
+      +'<button id="rac-ask" style="padding:9px 16px;border-radius:10px;border:none;background:#FC4C02;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">Ask</button>'
+    +'</div>';
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  overlay.onclick=function(e){ if(e.target===overlay) overlay.remove(); };
+  document.getElementById('rac-cancel').onclick=function(){ overlay.remove(); };
+  var askBtn=document.getElementById('rac-ask');
+  askBtn.onclick=function(){
+    var q=(document.getElementById('rac-q').value||'').trim();
+    if(!q) return;
+    var ans=document.getElementById('rac-answer');
+    ans.style.display='block';
+    ans.textContent='Thinking...';
+    askBtn.disabled=true;
+    var NL=String.fromCharCode(10);
+    var T=_rideTelemetryFacts_(r);
+    var prompt=_SM_PERSONA+NL+NL
+      +T.tele+T.FACTS+NL
+      +'You just answer questions — you are not re-issuing a verdict on the ride here, that already '
+      +'happened elsewhere. The athlete asks: "'+q.replace(/"/g,String.fromCharCode(39))+'" '
+      +'Answer directly, speaking to them as "you", in 2-4 sentences, using ONLY the facts above. '
+      +'If the facts above cannot answer it, say so plainly rather than inventing detail.';
+    var ac=(typeof AbortController!=='undefined')?new AbortController():null;
+    var to=setTimeout(function(){ if(ac) ac.abort(); }, 20000);
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:250, messages:[{role:'user',content:prompt}] }),
+      signal:ac?ac.signal:undefined
+    })
+    .then(function(res){ return res.json(); })
+    .then(function(d){
+      clearTimeout(to);
+      var text=(d.content && d.content[0] && d.content[0].text)||'';
+      ans.textContent=text.trim()||'No answer came back — try rephrasing the question.';
+      askBtn.disabled=false;
+    })
+    .catch(function(){
+      clearTimeout(to);
+      ans.textContent='Could not reach the coach right now.';
+      askBtn.disabled=false;
+    });
+  };
+}
+function renderCoachInsightContent(el, text, r){
   var lines=text.split(String.fromCharCode(10)).map(function(l){ return l.trim(); }).filter(Boolean);
   var headline='', bullets=[], recommendation='';
   lines.forEach(function(line){
@@ -31687,7 +31752,7 @@ function renderCoachInsightContent(el, text){
   html+='<button id="ride-ask-coach-btn" style="background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;color:var(--t1);cursor:pointer">Ask Coach</button>';
   el.innerHTML=html;
   var askBtn=document.getElementById('ride-ask-coach-btn');
-  if(askBtn) askBtn.onclick=function(){ toast('Ask Coach is coming soon'); };
+  if(askBtn) askBtn.onclick=function(){ openRideAskCoach_(r); };
 }
 
 // Builds a ride-specific prompt (distinct from fetchTodaysDecision, which
@@ -31790,7 +31855,10 @@ function _actProfile_(r){
   if(k==='rowing'||k==='virtualrow'||k==='kayaking'||k==='canoeing') return P('row','endurance coach',false,false);
   return P(s?String(s).toLowerCase():'activity','endurance coach',false,false);
 }
-function fetchRideCoachInsight(r, callback){
+// Shared telemetry+facts builder — the SAME inputs fetchRideCoachInsight judges the ride
+// against are what Ask Coach must answer questions against, or the two could disagree about
+// the same ride (recurring bug pattern #1: extract one shared function, never build it twice).
+function _rideTelemetryFacts_(r){
   var FTP=parseInt(st.ftp||186);
   var maxHR=parseInt(st.maxHR||172);
   var zonePct = r.avgHR ? Math.round((r.avgHR/maxHR)*100) : null;
@@ -31840,6 +31908,11 @@ function fetchRideCoachInsight(r, callback){
     +'"unknown", say it was not recorded — never substitute zero, and never infer it from another number. '
     +'Do not call the terrain flat, rolling, or hilly unless elevation gain is given to you as a number. '
     +'This activity is a '+noun+': call it a '+noun+' and nothing else. ';
+  return {FTP:FTP, maxHR:maxHR, zonePct:zonePct, prof:prof, noun:noun, Noun:Noun, rx:rx, suppress:suppress, gain:gain, tele:tele, FACTS:FACTS};
+}
+function fetchRideCoachInsight(r, callback){
+  var T=_rideTelemetryFacts_(r);
+  var noun=T.noun, rx=T.rx, suppress=T.suppress, tele=T.tele, FACTS=T.FACTS, prof=T.prof;
   var prompt;
   if(rx){
     var bandTxt=(rx.lo!=null&&rx.hi!=null)?(rx.lo+'-'+rx.hi+'W'):'no specific power band';

@@ -32,7 +32,7 @@ function extractVar(name){
 // hash of the PROMPT so a ride settles on ONE verdict instead of regenerating on every render.
 // Without them here the function throws ReferenceError before it ever builds a prompt — a missing
 // extraction, not a behaviour change (the same way the .zwo harness failed).
-const CLOSURE = ['rideSport_','_actElevGain_','_actProfile_','_ridePrescriptionFor_','_insightSuppressDeficit_','_ciHash_','_ciMap_','_ciGet_','_ciPut_','fetchRideCoachInsight'];
+const CLOSURE = ['rideSport_','_actElevGain_','_actProfile_','_ridePrescriptionFor_','_insightSuppressDeficit_','_ciHash_','_ciMap_','_ciGet_','_ciPut_','_rideTelemetryFacts_','fetchRideCoachInsight'];
 let code='';
 // _CI_MAX/_CI_LS/_CI_INFLIGHT share one var statement, so extracting the first takes all three.
 for(const v of ['_CV_BASE_INTENTS','_CV_DEFICIT_RE','_CV_STEADY_RE','_CI_MAX']) code+=extractVar(v);
