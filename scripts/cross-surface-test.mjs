@@ -302,6 +302,11 @@ const calStart = lineOf('function dsShowCalendar(');
 // INVARIANT: ONE initials computation. The sidebar derived them live from st.profile.name while
 // the Settings card shipped a static "MR" that nothing recomputed, so "Mikey" rendered as M in one
 // slot and MR in the other — the same fact with two answers.
+// INVARIANT: the sidebar avatar sizes its initials in ONE place. The .ds-avatar rule already sets
+// the font-size; a per-slot data-fallback-fontsize on the same element is a second declaration of
+// the same fact. The Settings card keeps its own because it is not a .ds-avatar.
+check('the sidebar does not re-declare its own initial size',
+  codeLines.filter(L => L.indexOf('id=\"ds-avatar-initials\"') >= 0 && L.indexOf('data-fallback-fontsize') >= 0).length, 0);
 check('there is exactly one initials helper', countCode(/function _profileInitials_/g), 1);
 check('no static MR default is left to disagree',
   codeLines.filter(L => L.indexOf('data-fallback-initials="MR"') >= 0).length, 0);

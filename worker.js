@@ -684,7 +684,7 @@ window.AIQ_DESKTOP_MIN=1024;
         <div class="ds-brand-name">Athlete IQ</div>
       </div>
       <div class="ds-profile">
-        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="M" data-fallback-fontsize="16px" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">M</div>
+        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="M" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">M</div>
         <div>
           <div class="ds-pname" id="ds-profile-name">Mikey</div>
           <div class="ds-pwt" id="ds-profile-wt">--</div>
