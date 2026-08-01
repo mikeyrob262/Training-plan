@@ -24565,7 +24565,7 @@ function _coachVPanel_(now){
           +_cvz.blocks+' block'+(_cvz.blocks===1?'':'s')+' &middot; '+_cvz.lo+'&ndash;'+_cvz.hi+'W at FTP '+_cvz.ftp
           +'. <span id="cv-zwo-dest" style="cursor:pointer;text-decoration:underline">Set up one-click send to Zwift</span></div>'
         +'</div>';
-      try{ setTimeout(function(){ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dk); }, 0); }catch(e){}
+      try{ setTimeout(function(){ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dk,'cv-zwo'); }, 0); }catch(e){}
     }
     H+='</div>';
   } else if(cv.primary){
@@ -25308,19 +25308,49 @@ function zwiftPickFolder_(){
 // Upgrade the Coach V export row once the stored handle is known. Runs after render because reading
 // IDB is async and the panel must not wait on it. Re-verifies rather than trusting that a handle
 // exists: a folder that no longer checks out should read as "needs re-picking", not as ready.
-function _zwoWireDest_(dk){
+// hostId lets EVERY export host share this: the Coach V card (today), the session-detail sheet, and
+// the day editor the calendar opens for any other day. Loading NEXT Tuesday's VO2 into Zwift is the
+// actual use case, and it was unreachable while this only existed on today's card.
+// ONE export block, built from _zwoFor_ and rendered by every host. Returns '' when the session has
+// no honest ERG target (a group ride has no ceiling, a run has no band), so the control is simply
+// absent rather than offering a file that would be a guess.
+// Call _zwoWireDest_(dateKey, hostId, sid) after inserting this, to upgrade it to Send-to-Zwift.
+function _zwoBlockHTML_(s, dateKey, hostId, accent){
   try{
-    var lab=document.getElementById('cv-zwo-label'), note=document.getElementById('cv-zwo-dest'),
-        alt=document.getElementById('cv-zwo-alt');
+    if(typeof _zwoFor_!=='function') return '';
+    var z=_zwoFor_(s, dateKey); if(!z) return '';
+    var A=accent||'#a855f7';
+    return '<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:'+A+'10;border:1px solid '+A+'2e">'
+      +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+      +'<div id="'+hostId+'" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+A+';cursor:pointer">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+A+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>'
+      +'<span id="'+hostId+'-label">Download for Zwift (.zwo)</span></div>'
+      +'<div id="'+hostId+'-alt" style="display:none;font-size:11.5px;color:var(--t3);cursor:pointer;text-decoration:underline">Download instead</div>'
+      +'</div>'
+      +'<div id="'+hostId+'-dest-wrap" style="font-size:11px;color:var(--t3);line-height:1.5;margin-top:6px">'
+      +'ERG will hold '+z.lo+'&ndash;'+z.hi+'W (built off FTP '+z.ftp+'). '
+      +'<span id="'+hostId+'-dest" style="cursor:pointer;text-decoration:underline">Set up one-click send to Zwift</span></div>'
+      +'</div>';
+  }catch(e){ return ''; }
+}
+function _zwoWireDest_(dk, hostId, sid){
+  try{
+    hostId=hostId||'cv-zwo';
+    var lab=document.getElementById(hostId+'-label'), note=document.getElementById(hostId+'-dest'),
+        alt=document.getElementById(hostId+'-alt');
     if(!lab||!note) return;
     if(!zwiftSupported_()){
       note.outerHTML='<span style="color:#5b6678">Drop it in '+_zwiftPathHint_()+' and it appears under Custom Workouts.</span>';
       return;
     }
     note.onclick=function(ev){ try{ ev.stopPropagation(); }catch(e){} zwiftPickFolder_(); };
+    // The fallback resolves its session the same way the host's main button does, so the two can
+    // never disagree about WHICH session is being exported.
     if(alt) alt.onclick=function(ev){ try{ ev.stopPropagation(); }catch(e){}
-      var s=null; try{ var cv=coachV_(dk,new Date()); s=cv&&cv.primary; }catch(e){}
-      _zwoDownloadFile_(_zwoFor_(s,dk), dk, 'cv'); };
+      var s=null;
+      if(hostId==='cv-zwo'){ try{ var cv=coachV_(dk,new Date()); s=cv&&cv.primary; }catch(e){} }
+      else { try{ s=_sessionForDetail_(dk, sid||''); }catch(e){} }
+      _zwoDownloadFile_(_zwoFor_(s,dk), dk, (hostId==='cv-zwo'?'cv':(sid||''))); };
     zwiftGetHandle_().then(function(h){
       if(!h) return;                                  // stays "Download" + the set-up link
       return zwiftVerify_(h).then(function(v){
@@ -25604,19 +25634,9 @@ function showSessionDetail_(dateKey, sid){
   // Zwift export — only when the session actually resolves to an ERG target (_zwoFor_ returns null
   // for a group ride, a session with no band, or one with no FTP to express power against), so the
   // button is never offered for a file that would be a guess.
-  var _zw=(isRide && typeof _zwoFor_==='function')?_zwoFor_(s, dateKey):null;
-  if(_zw){
-    var BS='&#92;';   // literal backslashes are stripped by the served template literal
-    H+='<div style="margin-top:12px;padding:11px 13px;border-radius:11px;background:'+ACC+'10;border:1px solid '+ACC+'2e">'
-      +'<div id="sd-zwo" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:800;color:'+ACC+';cursor:pointer">'
-      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+ACC+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>'
-      +'Download for Zwift (.zwo)</div>'
-      +'<div style="font-size:11px;color:var(--t3);line-height:1.5;margin-top:6px">'
-      +'ERG will hold '+_zw.lo+'&ndash;'+_zw.hi+'W (built off FTP '+_zw.ftp+'). Put the file in '
-      +'<b style="color:var(--t2)">Documents'+BS+'Zwift'+BS+'Workouts'+BS+'&lt;YourZwiftID&gt;'+BS+'</b> '
-      +'and restart Zwift &mdash; it appears under Custom Workouts.</div>'
-      +'</div>';
-  }
+  // Shared block. The old copy here hardcoded a Documents\Zwift\Workouts path that is wrong on this
+  // machine (Zwift moved to LOCALAPPDATA) and offered download only.
+  if(isRide) H+=_zwoBlockHTML_(s, dateKey, 'sd-zwo', ACC);
   H+='<div id="sd-steps" style="margin-top:12px"></div>';
   // ONE mark-complete button per session — the only one in this sheet, gated on every step being
   // ticked. Edit sits beside it as a plain link so the day editor stays reachable now that the
@@ -25633,7 +25653,8 @@ function showSessionDetail_(dateKey, sid){
   (function(){ var ed=document.getElementById('sd-edit'); if(!ed) return;
     ed.onclick=function(){ ov.remove(); if(typeof openDayEditor==='function') openDayEditor(dateKey, s.id||undefined); }; })();
   (function(){ var zb=document.getElementById('sd-zwo'); if(!zb) return;
-    zb.onclick=function(){ if(typeof _zwoDownload_==='function') _zwoDownload_(dateKey, s.id||''); }; })();
+    zb.onclick=function(){ if(typeof _zwoDownload_==='function') _zwoDownload_(dateKey, s.id||''); };
+    try{ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dateKey,'sd-zwo', s.id||''); }catch(e){} })();
 
   var wrap=document.getElementById('sd-steps');
   var checks=steps.map(function(){ return done; });
@@ -41054,6 +41075,26 @@ function openDayEditor(dateKey, targetId){
   mc.style.cssText='width:100%;padding:12px;background:transparent;border:1.5px solid '+(done?'#5DCAA5':'var(--b1)')+';border-radius:12px;color:'+(done?'#5DCAA5':'var(--t2)')+';font-size:14px;font-weight:700;cursor:pointer;margin-top:10px';
   mc.onclick=function(){ toggleDayComplete(dateKey); modal.remove(); };
   sheet.appendChild(mc);
+
+  // Zwift export for ANY day, not just today. Clicking a calendar day opens THIS editor (only the
+  // plan chip routes to the session-detail sheet), so without this the feature was reachable only
+  // from today's Coach V card — while the real use case is loading next Tuesday's VO2 in advance.
+  // Same _zwoFor_/_zwoDownload_ path as the other two hosts; no duplicated build logic.
+  try{
+    var _dz=(typeof _sessionForDetail_==='function')?_sessionForDetail_(dateKey, targetId||''):null;
+    var _dzHtml=(_dz && _dz.type==='ride' && typeof _zwoBlockHTML_==='function')
+      ? _zwoBlockHTML_(_dz, dateKey, 'de-zwo', '#FC4C02') : '';
+    if(_dzHtml){
+      var _zwrap=document.createElement('div');
+      _zwrap.innerHTML=_dzHtml;
+      sheet.appendChild(_zwrap);
+      setTimeout(function(){
+        var zb=document.getElementById('de-zwo');
+        if(zb) zb.onclick=function(){ if(typeof _zwoDownload_==='function') _zwoDownload_(dateKey, (_dz&&_dz.id)||''); };
+        try{ if(typeof _zwoWireDest_==='function') _zwoWireDest_(dateKey,'de-zwo',(_dz&&_dz.id)||''); }catch(e){}
+      },0);
+    }
+  }catch(e){ try{ console.error('[day-editor zwo] '+((e&&e.message)||e)); }catch(_e){} }
 
   modal.appendChild(sheet);
   (document.getElementById('app-shell')||document.body).appendChild(modal);
