@@ -29572,10 +29572,11 @@ function calYearHTML_(y, byDate, now){
   // every cell in it has to stay clickable; the snapshot holds rides that exist only there.
   var _snap=_yearSnapshotTotal_(y);
   var _short=(_snap && _snap.mi>(Math.round(tMi*10)/10)+50)?(Math.round((_snap.mi-tMi)*10)/10):null;
-  H+='<div style="font-size:10.5px;color:var(--d-t4);margin:-8px 2px 12px;line-height:1.5">'
-    +((typeof dataSourceNote_==='function')?dataSourceNote_('legacy'):'From your device library.')
-    +(_short!=null?(' <span style="color:var(--c-amber)">The full activity snapshot holds '+_snap.mi.toLocaleString()+' mi for '+y+' &mdash; about '+_short.toLocaleString()+' mi sits in rides that exist only there and cannot be opened from the calendar.</span>'):'')
-    +'</div>';
+  // The page already names the library once above this strip; repeating it here just doubled the
+  // sentence on screen. Only the SHORTFALL is new information.
+  H+=(_short==null?'':'<div style="font-size:10.5px;color:var(--c-amber);margin:-8px 2px 12px;line-height:1.5">'
+    +('The full activity snapshot holds '+_snap.mi.toLocaleString()+' mi for '+y+' &mdash; about '+_short.toLocaleString()+' mi sits in rides that exist only there and cannot be opened from the calendar.')
+    +'</div>');
   H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">';
   for(var m=0;m<12;m++){
     var e=agg[m];
