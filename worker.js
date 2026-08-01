@@ -684,7 +684,7 @@ window.AIQ_DESKTOP_MIN=1024;
         <div class="ds-brand-name">Athlete IQ</div>
       </div>
       <div class="ds-profile">
-        <div class="ds-avatar" id="ds-avatar-initials">MR</div>
+        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="MR" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">MR</div>
         <div>
           <div class="ds-pname" id="ds-profile-name">Mikey</div>
           <div class="ds-pwt" id="ds-profile-wt">--</div>
@@ -10683,14 +10683,21 @@ function uploadAvatar(){
   };
   inp.click();
 }
-// Update every avatar slot currently on screen without a full re-render.
+// Update every avatar slot currently on screen without a full re-render. Each
+// slot can carry its own data-fallback-initials (e.g. the sidebar's "MR") so a
+// slot with no photo shows something meaningful rather than every avatar
+// everywhere collapsing to the same generic silhouette.
 function renderAllAvatars(){
   var av=getAvatar();
-  var inner = av
-    ? '<img src="'+av+'" style="width:100%;height:100%;object-fit:cover">'
-    : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>';
   var slots=document.querySelectorAll('.aiq-avatar');
-  for(var i=0;i<slots.length;i++){ slots[i].innerHTML=inner; }
+  for(var i=0;i<slots.length;i++){
+    var s=slots[i];
+    var fb=s.getAttribute('data-fallback-initials');
+    var fallback = fb
+      ? '<span style="font-size:'+(s.getAttribute('data-fallback-fontsize')||'11px')+';font-weight:600;color:var(--d-t3)">'+fb+'</span>'
+      : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>';
+    s.innerHTML = av ? '<img src="'+av+'" style="width:100%;height:100%;object-fit:cover">' : fallback;
+  }
 }
 
 
@@ -26802,6 +26809,12 @@ function dsShowSettings(){
   function _gInput(id,label,val,step){ return '<label style="display:block"><span style="font-size:11px;color:var(--t3)">'+label+'</span>'
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Settings</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:20px;display:flex;align-items:center;gap:18px">'
+    +'<div class="aiq-avatar" data-fallback-initials="MR" data-fallback-fontsize="30px" onclick="uploadAvatar()" title="Change photo" style="width:110px;height:110px;border-radius:50%;background:var(--s3);border:2px solid var(--b1);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex-shrink:0"></div>'
+    +'<div><div style="font-size:15px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Profile Photo</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px;max-width:320px">Click your photo to change it. Stored on this device only &mdash; not synced across devices.</div>'
+    +'<button onclick="uploadAvatar()" style="background:#FC4C02;border:none;color:#fff;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Upload Photo</button></div>'
+    +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:8px">FTP</div>'
     +'<div style="display:flex;gap:8px;align-items:center"><input id="ftp-input" type="number" value="'+(window.st&&window.st.ftp?window.st.ftp:186)+'" style="width:80px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px">'
@@ -26894,6 +26907,7 @@ function dsShowSettings(){
   glCard.onclick=function(){ if(typeof showGlossary==='function') showGlossary(); };
   wrap.appendChild(glCard);
   mc.appendChild(wrap);
+  try{ if(typeof renderAllAvatars==='function') renderAllAvatars(); }catch(e){}
 }
 
 // Read the goal inputs (id prefix gt-) into st.goalTargets, mirror annualMi back
@@ -31390,7 +31404,11 @@ function dsInitProfile(){
   var name=(st.profile&&st.profile.name)||'Mikey';
   var wt=st.weight?st.weight+'lbs':'';
   var initials=name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-  var el=document.getElementById('ds-avatar-initials'); if(el) el.textContent=initials;
+  var el=document.getElementById('ds-avatar-initials');
+  // Sets the FALLBACK, not the displayed content directly — renderAllAvatars() is the one place
+  // that decides photo-vs-fallback, so this can never race with it and clobber a set photo.
+  if(el){ el.setAttribute('data-fallback-initials', initials); }
+  try{ if(typeof renderAllAvatars==='function') renderAllAvatars(); }catch(e){}
   var pn=document.getElementById('ds-profile-name'); if(pn) pn.textContent=name;
   var pw=document.getElementById('ds-profile-wt'); if(pw) pw.textContent=wt;
   // The badge said just "Week 8", which reads as whatever the viewer assumes — block week, streak,
