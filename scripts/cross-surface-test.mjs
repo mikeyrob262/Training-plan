@@ -299,6 +299,14 @@ const lineOf = (needle) => srcLines.findIndex(L => L.startsWith(needle));
 const calStart = lineOf('function dsShowCalendar(');
 // INVARIANT: ONE momentum computation. Two that can disagree is the taperVerdict_-class bug.
 // INVARIANT: ONE consistency number. The Coach Grade and the month stats ring must not disagree.
+// INVARIANT: ONE initials computation. The sidebar derived them live from st.profile.name while
+// the Settings card shipped a static "MR" that nothing recomputed, so "Mikey" rendered as M in one
+// slot and MR in the other — the same fact with two answers.
+check('there is exactly one initials helper', countCode(/function _profileInitials_/g), 1);
+check('no static MR default is left to disagree',
+  codeLines.filter(L => L.indexOf('data-fallback-initials="MR"') >= 0).length, 0);
+check('Settings derives its fallback from the shared helper',
+  src.indexOf('data-fallback-initials="' + "'+((typeof _profileInitials_") > 0, true);
 check('there is exactly one consistency helper', countCode(/function _monthConsistency_/g), 1);
 check('the month stats strip reads it', /var _mc=_monthConsistency_\(viewYear, viewMonth/.test(src), true);
 // INVARIANT: the Coach Grade formula is STATED and its weights live in one place.

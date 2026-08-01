@@ -684,7 +684,7 @@ window.AIQ_DESKTOP_MIN=1024;
         <div class="ds-brand-name">Athlete IQ</div>
       </div>
       <div class="ds-profile">
-        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="MR" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">MR</div>
+        <div class="ds-avatar aiq-avatar" id="ds-avatar-initials" data-fallback-initials="M" onclick="uploadAvatar()" title="Change photo" style="cursor:pointer">M</div>
         <div>
           <div class="ds-pname" id="ds-profile-name">Mikey</div>
           <div class="ds-pwt" id="ds-profile-wt">--</div>
@@ -26810,7 +26810,7 @@ function dsShowSettings(){
     +'<input id="'+id+'" type="number" step="'+(step||'1')+'" value="'+val+'" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--s3);border:1px solid var(--b1);color:#fff;border-radius:8px;padding:6px 10px;font-size:14px"></label>'; }
   wrap.innerHTML='<div style="font-size:20px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Settings</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:20px;display:flex;align-items:center;gap:18px">'
-    +'<div class="aiq-avatar" data-fallback-initials="MR" data-fallback-fontsize="30px" onclick="uploadAvatar()" title="Change photo" style="width:110px;height:110px;border-radius:50%;background:var(--s3);border:2px solid var(--b1);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex-shrink:0"></div>'
+    +'<div class="aiq-avatar" data-fallback-initials="'+((typeof _profileInitials_==='function')?_profileInitials_():'M')+'" data-fallback-fontsize="30px" onclick="uploadAvatar()" title="Change photo" style="width:110px;height:110px;border-radius:50%;background:var(--s3);border:2px solid var(--b1);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:pointer;flex-shrink:0"></div>'
     +'<div><div style="font-size:15px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Profile Photo</div>'
     +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px;max-width:320px">Click your photo to change it. Stored on this device only &mdash; not synced across devices.</div>'
     +'<button onclick="uploadAvatar()" style="background:#FC4C02;border:none;color:#fff;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">Upload Photo</button></div>'
@@ -31400,10 +31400,18 @@ function dsShowRidesList(){
   mc.appendChild(wrap);
 }
 
+// ONE place that turns the profile name into fallback initials — the sidebar and the Settings
+// avatar card were computing this two different ways (one live off st.profile.name, one a static
+// "MR" default that nothing recomputed), so a one-word name like "Mikey" produced "M" in one slot
+// and "MR" in the other. Same fact, two answers — same shape this app keeps catching elsewhere.
+function _profileInitials_(){
+  var name=(st.profile&&st.profile.name)||'Mikey';
+  return name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+}
 function dsInitProfile(){
   var name=(st.profile&&st.profile.name)||'Mikey';
   var wt=st.weight?st.weight+'lbs':'';
-  var initials=name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+  var initials=_profileInitials_();
   var el=document.getElementById('ds-avatar-initials');
   // Sets the FALLBACK, not the displayed content directly — renderAllAvatars() is the one place
   // that decides photo-vs-fallback, so this can never race with it and clobber a set photo.
