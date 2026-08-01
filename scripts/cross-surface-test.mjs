@@ -222,6 +222,43 @@ check('a continuous Z2 still exports one steady block', kinds(z2), ['SteadyState
   check('   '+i+' ('+(s||'no struct')+') is never a single flat block', !(k && k.length===1 && k[0]==='SteadyState'), true);
 });
 
+// ── 7. A SESSION IS GRADED ON THE WORK IT PRESCRIBED ──────────────────────────────────────────
+console.log('\n'+C+'=== 7. the weekly checks grade work intervals, not whole-ride averages ==='+X);
+// INVARIANT: identity ("was this the session?") and grading ("was it executed?") read the SAME
+// laps. Two matchers would eventually disagree about one ride and nothing would surface it.
+check('one lap matcher, shared', /function _blockLapPowers_/.test(src)
+  && /function _blockLapsHit_\(r, struct, targets\)\{\s*var lp=_blockLapPowers_/.test(src.replace(/\n/g,'')), true);
+check('the weekly checks consult the interval measurement', countCode(/_blockWorkMeasure_\(/g) >= 1, true);
+check('VO2 no longer grades on route elevation as its primary test',
+  /cond:vo2M\?\('work intervals reaching '\+vo2M\.lo\+'W'\)/.test(src), true);
+check('threshold grades the intervals against the band', /cond:thrM\?\('work intervals in the '/.test(src), true);
+// INVARIANT: the degrade is LABELLED. Falling back to a whole-ride average is allowed; passing it
+// off as an interval measurement is not.
+check('the whole-ride fallback names itself in the UI string', countCode(/whole ride - (no interval data|continuous prescription)/g), 2);
+check('the elevation fallback names itself too', /elevation proxy - no interval data/.test(src), true);
+// INVARIANT: the miss copy is computed, not asserted. Interval grading fails BELOW a floor; the
+// old row said "over the cap" unconditionally.
+check('no hardcoded "over the cap" verdict', countCode(/— over the cap/g), 0);
+check('the row states the reason the check computed', /\(c\.miss\|\|'outside the prescription'\)/.test(src), true);
+
+// BEHAVIOUR: the grading rule itself.
+const BLK = new Function(asServed(ex('_blockWorkHit_')+ex('_blockWorkMean_'))
+  +';return {_blockWorkHit_,_blockWorkMean_};')();
+const m = (vals, lo, hi) => ({ vals, lo, hi, n: vals.length });
+// The real Jul 23 2026 VO2 ride: 185/214/169/206W against a 174-192W band. Only ONE interval is
+// strictly inside the band, but three reach the floor — that is the session, executed.
+check('a VO2 set that reaches the floor 3 of 4 times passes', BLK._blockWorkHit_(m([185,214,169,206],174,192)) >= 0.5, true);
+check('   ...and going OVER the top is not counted as a miss', BLK._blockWorkHit_(m([214,206,199,205],174,192)), 1);
+check('a set that never reaches the floor fails', BLK._blockWorkHit_(m([140,151,138,144],174,192)) >= 0.5, false);
+check('exactly half reaching the floor is a pass', BLK._blockWorkHit_(m([180,120,190,130],174,192)), 0.5);
+// Threshold keeps the "without overreaching" half: the intervals must not AVERAGE above the top.
+check('threshold intervals ridden at VO2 watts average over the ceiling',
+  BLK._blockWorkMean_(m([200,207,200],162,181)) > 181, true);
+check('threshold intervals inside the band do not', BLK._blockWorkMean_(m([168,175,171],162,181)) <= 181, true);
+check('an empty measurement is 0, never a pass', BLK._blockWorkHit_(m([],174,192)), 0);
+check('a null measurement is 0, never a pass', BLK._blockWorkHit_(null), 0);
+check('mean of nothing is null, not 0', BLK._blockWorkMean_(m([],174,192)), null);
+
 console.log('');
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);

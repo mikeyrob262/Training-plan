@@ -24632,26 +24632,37 @@ var _BLOCK_IV_MIN_HIT=0.5;
 //
 // Needs >=3 laps: a ride whose whole duration is one lap (Strava's default when no workout was
 // loaded) carries no structure, and its single lap average is just the ride average again.
-function _blockLapsHit_(r, struct, targets){
+// The WATTS of every device lap whose duration matches a prescribed work interval, or null when the
+// laps cannot be read that way. Split out of _blockLapsHit_ so identity ("was this the session?")
+// and grading ("was it executed?") measure from the SAME numbers — two matchers would eventually
+// disagree about one ride, and the disagreement would be invisible.
+function _blockLapPowers_(r, struct, targets){
   try{
     var laps=(r && r.laps);
-    if(!Array.isArray(laps) || laps.length<3) return false;
-    if(!targets || targets.powerLo==null) return false;
+    if(!Array.isArray(laps) || laps.length<3) return null;
+    if(!targets || targets.powerLo==null) return null;
     var si=(typeof _structIntervals_==='function')?_structIntervals_(struct):null;
-    if(!si || !(si.n>=2) || !(si.workMin>=1)) return false;
+    if(!si || !(si.n>=2) || !(si.workMin>=1)) return null;
     var workSec=si.workMin*60;
     var tol=Math.max(45, Math.round(workSec*0.35));   // same tolerance the debrief matcher uses
-    var hits=0;
+    var vals=[];
     for(var i=0;i<laps.length;i++){
       var lp=laps[i]; if(!lp) continue;
       var t=(lp.time!=null)?+lp.time:((lp.elapsed!=null)?+lp.elapsed:0);
       var w=(lp.avgPwr!=null)?+lp.avgPwr:NaN;
       if(!(t>0) || !(w>0)) continue;
       if(Math.abs(t-workSec)>tol) continue;
-      if(w>=targets.powerLo) hits++;
+      vals.push(Math.round(w));
     }
-    return hits>=Math.max(2, Math.ceil(si.n/2));
-  }catch(e){ return false; }
+    return { vals:vals, n:si.n, need:Math.max(2, Math.ceil(si.n/2)) };
+  }catch(e){ return null; }
+}
+function _blockLapsHit_(r, struct, targets){
+  var lp=_blockLapPowers_(r, struct, targets);
+  if(!lp || !lp.vals.length) return false;
+  var hits=0;
+  lp.vals.forEach(function(w){ if(w>=targets.powerLo) hits++; });
+  return hits>=lp.need;
 }
 // The intent a ride's own WORK INTERVALS confirm, or null. It only ever confirms the session the
 // block PRESCRIBED for that date, so this can never promote a hard group ride into a VO2 session it
@@ -24715,9 +24726,60 @@ function _blockSessionOf_(r, ftp, dateKey){
   return 'z2';
 }
 
+// What the prescribed session actually ASKED FOR, measured — the per-interval watts, not a number
+// the whole ride was averaged into. Device laps first (when a structured session is ridden as a
+// workout the laps ARE the intervals), then the decimated stream. Null when neither can see the
+// efforts, or when the prescription is CONTINUOUS and therefore has no work intervals to find:
+// a Z2 endurance ride is not a diluted interval session, it is a session whose work is the whole
+// ride, and inventing intervals for it would be fabrication.
+function _blockWorkMeasure_(r, dateKey, intent){
+  try{
+    if(!r || !dateKey || !intent) return null;
+    if(typeof blockPlanFor_!=='function') return null;
+    var bp=blockPlanFor_(dateKey); if(!bp || !bp.sessions || !bp.sessions.length) return null;
+    for(var i=0;i<bp.sessions.length;i++){
+      var s=bp.sessions[i];
+      if(!s || s.intent!==intent || !s.struct) continue;
+      var t=(s.rx && s.rx.targets)?s.rx.targets:null;
+      if(!t || t.powerLo==null || t.powerHi==null) continue;
+      // Unlike the identity check, grading takes the measurement whether or not it passes — being
+      // able to FAIL a session is the entire point of measuring it.
+      var lp=_blockLapPowers_(r, s.struct, t);
+      if(lp && lp.vals.length) return { vals:lp.vals, lo:t.powerLo, hi:t.powerHi, n:lp.n, source:'laps' };
+      var out=(typeof _cvStreamIntervals_==='function')?_cvStreamIntervals_(r, intent, t, s.struct, true):null;
+      if(out && out.vals && out.vals.length) return { vals:out.vals, lo:out.lo, hi:out.hi, n:out.vals.length, source:'stream' };
+    }
+    return null;
+  }catch(e){ return null; }
+}
+// Reaching the FLOOR is the test, not sitting inside the band — an interval over the top is a
+// harder effort, not a different session. Same rule the identity matcher uses.
+function _blockWorkHit_(m){
+  if(!m || !m.vals || !m.vals.length) return 0;
+  var h=0; m.vals.forEach(function(v){ if(v>=m.lo) h++; });
+  return h/m.vals.length;
+}
+function _blockWorkMean_(m){
+  if(!m || !m.vals || !m.vals.length) return null;
+  var s=0; m.vals.forEach(function(v){ s+=v; });
+  return s/m.vals.length;
+}
+
 // PURE. Assesses the CURRENT Monday-start week. PASS is (all three sessions present) AND (each
 // condition met) AND (three separate days) — TSS is computed and returned but NEVER in the pass
 // boolean. Each check carries a one-line description for the UI.
+//
+// The conditions grade the WORK INTERVALS where the session prescribes intervals. They used to
+// grade whole-ride averages, which measure something other than what was asked for: a correctly
+// executed 4x4 averages its warm-up, three recoveries and cool-down into the number, so
+// "avg power under 181W" on a threshold day passed on arithmetic that had nothing to do with
+// whether the threshold work happened, and VO2 was graded on ROUTE ELEVATION — a proxy for
+// "you could hold the intervals" that we can now replace with the intervals themselves.
+//
+// Where no interval measurement is available (no laps, stream too coarse, or a continuous
+// prescription like Z2 that has no intervals by design) the old whole-ride check remains, and the
+// UI condition string SAYS so. That is a labelled degrade, not a silent one — the same posture
+// _blockSessionOf_ takes about its ratio fallback.
 function _blockWeekAssess_(rides, ftp, now){
   var ws=_blockWeekStart_(now), we=new Date(ws.getTime()+7*86400000);
   var cyc=_blockCyc_(rides).filter(function(r){ var d=_blockDay_(r.date); return d && d>=ws && d<we; });
@@ -24726,19 +24788,43 @@ function _blockWeekAssess_(rides, ftp, now){
   cyc.forEach(function(r){ var t=_blockSessionOf_(r, ftp, String(r.date||'').slice(0,10)); if(t) sess[t].push(r); });
   function pick(list){ return (list&&list.length)?list[0]:null; }
   var thrRide=pick(sess.threshold), vo2Ride=pick(sess.vo2), z2Ride=pick(sess.z2);
+  function meas(ride, intent){ return ride?_blockWorkMeasure_(ride, String(ride.date||'').slice(0,10), intent):null; }
+  var thrM=meas(thrRide,'threshold'), vo2M=meas(vo2Ride,'vo2'), z2M=meas(z2Ride,'z2');
+  function ivVal(m){ return m.vals.join('/')+'W ('+m.vals.length+' interval'+(m.vals.length===1?'':'s')+', '+m.source+')'; }
   var checks=[
+    // Threshold keeps BOTH halves of its intent: the work has to reach the floor (which the old
+    // whole-ride average never tested) and must not average above the band top ("without
+    // overreaching", which is what the 181W ceiling was reaching for).
     { key:'threshold', label:'Threshold', desc:'Build sustainable power without overreaching', ride:thrRide, done:!!thrRide,
-      cond:'avg power under '+_BLOCK_THR_W+'W',
-      ok:!!(thrRide && _blockPwr_(thrRide)!=null && _blockPwr_(thrRide)<_BLOCK_THR_W),
-      val:thrRide?(_blockPwr_(thrRide)!=null?(_blockPwr_(thrRide)+'W'):'no power recorded'):'' },
+      src:thrM?thrM.source:'ride',
+      cond:thrM?('work intervals in the '+thrM.lo+'-'+thrM.hi+'W band')
+               :('avg power under '+_BLOCK_THR_W+'W (whole ride - no interval data)'),
+      ok:thrM?(_blockWorkHit_(thrM)>=_BLOCK_IV_MIN_HIT && _blockWorkMean_(thrM)<=thrM.hi)
+             :!!(thrRide && _blockPwr_(thrRide)!=null && _blockPwr_(thrRide)<_BLOCK_THR_W),
+      miss:thrM?((_blockWorkHit_(thrM)<_BLOCK_IV_MIN_HIT)?('short of the '+thrM.lo+'W floor'):('above the '+thrM.hi+'W ceiling'))
+               :('over the '+_BLOCK_THR_W+'W cap'),
+      val:thrM?ivVal(thrM):(thrRide?(_blockPwr_(thrRide)!=null?(_blockPwr_(thrRide)+'W'):'no power recorded'):'') },
+    // VO2 drops the elevation proxy entirely when the efforts can be read: route profile was only
+    // ever standing in for "the intervals were holdable", and now the intervals are the evidence.
     { key:'vo2', label:'VO2', desc:'Lift the aerobic ceiling and efficiency', ride:vo2Ride, done:!!vo2Ride,
-      cond:'flat route, under '+_BLOCK_VO2_FLAT_FT+' ft (elevation proxy)',
-      ok:!!(vo2Ride && _blockElev_(vo2Ride)<_BLOCK_VO2_FLAT_FT),
-      val:vo2Ride?(_blockElev_(vo2Ride).toLocaleString()+' ft'):'' },
+      src:vo2M?vo2M.source:'ride',
+      cond:vo2M?('work intervals reaching '+vo2M.lo+'W')
+               :('flat route, under '+_BLOCK_VO2_FLAT_FT+' ft (elevation proxy - no interval data)'),
+      ok:vo2M?(_blockWorkHit_(vo2M)>=_BLOCK_IV_MIN_HIT)
+             :!!(vo2Ride && _blockElev_(vo2Ride)<_BLOCK_VO2_FLAT_FT),
+      miss:vo2M?('short of the '+vo2M.lo+'W floor'):('over the '+_BLOCK_VO2_FLAT_FT+' ft cap'),
+      val:vo2M?ivVal(vo2M):(vo2Ride?(_blockElev_(vo2Ride).toLocaleString()+' ft'):'') },
+    // Z2 is prescribed as a continuous ride, so it normally HAS no work intervals and the whole
+    // ride genuinely is the effort — avg HR is the right measure there, not a diluted one. It is
+    // graded on intervals only when the block actually prescribes a structured Z2 session.
     { key:'z2', label:'Zone 2', desc:'Build the aerobic base and recovery capacity', ride:z2Ride, done:!!z2Ride,
-      cond:'avg HR under '+_BLOCK_Z2_HR,
-      ok:!!(z2Ride && _blockHr_(z2Ride)!=null && _blockHr_(z2Ride)<_BLOCK_Z2_HR),
-      val:z2Ride?(_blockHr_(z2Ride)!=null?(_blockHr_(z2Ride)+' bpm'):'no HR recorded'):'' }
+      src:z2M?z2M.source:'ride',
+      cond:z2M?('work intervals in the '+z2M.lo+'-'+z2M.hi+'W band')
+              :('avg HR under '+_BLOCK_Z2_HR+' (whole ride - continuous prescription)'),
+      ok:z2M?(_blockWorkHit_(z2M)>=_BLOCK_IV_MIN_HIT)
+            :!!(z2Ride && _blockHr_(z2Ride)!=null && _blockHr_(z2Ride)<_BLOCK_Z2_HR),
+      miss:z2M?('short of the '+z2M.lo+'W floor'):('over the '+_BLOCK_Z2_HR+' bpm cap'),
+      val:z2M?ivVal(z2M):(z2Ride?(_blockHr_(z2Ride)!=null?(_blockHr_(z2Ride)+' bpm'):'no HR recorded'):'') }
   ];
   var days={}; [thrRide,vo2Ride,z2Ride].forEach(function(r){ if(r) days[String(r.date).slice(0,10)]=1; });
   var allThree=checks.every(function(c){ return c.done; });
@@ -24863,7 +24949,10 @@ function _blockCheckRow_(c){
   if(met){ badgeBg='#22c55e22'; badgeIcon=_blockMiIcon_('M20 6L9 17l-5-5','#22c55e',17); }
   else if(missed){ badgeBg='#ef444422'; badgeIcon=_blockMiIcon_('M6 6l12 12M18 6L6 18','#ef4444',16); }
   else { badgeBg='#1a1f29'; badgeIcon=_blockMiIcon_(catPath,'#3a4150',16); }
-  var status=met ? ('met · '+c.val) : (missed ? ('logged, but '+c.val+' — over the cap') : 'not logged this week');
+  // "over the cap" was true only while every check was a ceiling on a whole-ride average. Interval
+  // grading fails mostly the OTHER way — work short of the prescribed floor — so the row states the
+  // reason the check itself computed rather than asserting a direction it may not have.
+  var status=met ? ('met · '+c.val) : (missed ? ('logged, but '+c.val+' — '+(c.miss||'outside the prescription')) : 'not logged this week');
   var statusCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
   var countCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
   return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid #14181f">'
