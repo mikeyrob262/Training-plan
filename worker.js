@@ -29711,7 +29711,10 @@ function dsShowCalendar(){
       // gets cut.
       +'<div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap">'
       +'<span style="font-size:23px;font-weight:800;color:var(--d-head);line-height:1">'+big+'</span>'
-      +'<span style="font-size:12.5px;color:var(--d-t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</span>'
+      // flex-shrink:0 is what actually stops the clipping. Wrapping the row is not enough on its
+      // own: a flex item shrinks before the container wraps, so the label ellipsised while the
+      // right-hand value kept its place. Now the label holds its width and the value wraps instead.
+      +'<span style="font-size:12.5px;color:var(--d-t3);white-space:nowrap;flex-shrink:0">'+label+'</span>'
       +(right?'<span style="margin-left:auto;font-size:12.5px;font-weight:700;color:'+(rightCol||'#94a3b8')+';white-space:nowrap">'+right+'</span>':'')
       +'</div></div></div>';
   }
