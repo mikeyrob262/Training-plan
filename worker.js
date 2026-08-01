@@ -29701,10 +29701,8 @@ function dsShowCalendar(){
       +'<path d="'+area+'" fill="'+color+'" opacity="0.10"/>'
       +'<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
-  // grow: the five cards were all flex:1, so the one carrying the longest label truncated
-  // ("1 Total Activ...") while its neighbours had spare room. It takes a slightly bigger share.
-  function statCard(icon,iconCol,big,label,right,rightCol,grow){
-    return '<div style="flex:'+(grow||1)+';min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:14px">'
+  function statCard(icon,iconCol,big,label,right,rightCol){
+    return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--d-well);border:1px solid var(--d-chip);border-radius:14px">'
       +'<div style="width:44px;height:44px;flex-shrink:0;border-radius:11px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
       +'<div style="display:flex;align-items:baseline;gap:7px">'
@@ -29824,9 +29822,10 @@ function dsShowCalendar(){
     H+=statCard(calIcon('Strength',24,C_WORK),C_WORK,nWk,'Workouts',fmtFull(wkSecs),C_WORK);
     // The sub-label names the excluded rides rather than letting a short total pass as complete.
     H+=statCard(FLAME,CAL.tss,totTSS,'TSS',(totTssUnknown?(totTssUnknown+' unscored'):'This Month'),CAL.tss);
-    // "Activities" not "Total Activities": the Year strip below already uses the shorter form, so the
-    // two strips now agree as well as fitting.
-    H+=statCard(PULSE,CAL.time,totAct,'Activities','This Month','#64748b',1.25);
+    // "Activities" not "Total Activities" (matching the Year strip below), and no right-hand text:
+    // "This Month" was printed twice across this strip, and dropping the duplicate frees the room
+    // this card needed rather than taking it from the TSS card next door.
+    H+=statCard(PULSE,CAL.time,totAct,'Activities','','#64748b');
     H+='</div>';
     // Name the library these totals came from — see dataSourceNote_.
     H+='<div style="font-size:10.5px;color:var(--d-dim);margin:-2px 2px 0;flex-shrink:0">'+dataSourceNote_('legacy')+'</div>';
