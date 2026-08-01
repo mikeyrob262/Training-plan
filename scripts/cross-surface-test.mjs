@@ -286,6 +286,21 @@ check('...and reports that it came from the athlete, not the template', /via='us
 // ── CALENDAR YEAR VIEW ────────────────────────────────────────────────────────────────────────
 // INVARIANT: the year aggregate is built off the SAME ridesByDate map every other Calendar view
 // reads, so a month chapter can never disagree with the week/month totals for the same days.
+// INVARIANT: the year/favourite helpers are TOP-LEVEL. They were first inserted against an anchor
+// that turned out to be indented INSIDE dsShowCalendar, so calYearHTML_ worked from within that one
+// function while openDesktopRideDetail could not see favStarHTML_ and the mobile year panel could
+// not see calYearHTML_ — a scoping bug that renders as a silently missing control, not an error.
+// Column 0 does NOT mean top-level: the original bug had every one of these written at column 0
+// while lexically inside dsShowCalendar, which is invisible to a grep and to an indentation check.
+// What actually distinguishes them is POSITION — a helper that other surfaces call has to be
+// defined before dsShowCalendar opens, not somewhere within it.
+const srcLines = src.split(String.fromCharCode(10));
+const lineOf = (needle) => srcLines.findIndex(L => L.startsWith(needle));
+const calStart = lineOf('function dsShowCalendar(');
+check('dsShowCalendar is found', calStart > 0, true);
+check('the shared calendar helpers are defined OUTSIDE dsShowCalendar',
+  ['calYearHTML_','_favKey_','favStarHTML_','_calByDate_','_yearMonthAgg_','_chapterLabel_']
+    .filter(n => { const at = lineOf('function ' + n + '('); return at < 0 || at > calStart; }), []);
 check('ONE date-bucket builder for both calendar surfaces', countCode(/function _calByDate_/g), 1);
 check('mobile mounts the SAME year renderer as desktop', /yearPanel\.innerHTML=calYearHTML_\(calYear/.test(src), true);
 check('the old independent mobile year aggregator is gone', countCode(/var maxMi=Math\.max\.apply\(null,moMiles\)/g), 0);
