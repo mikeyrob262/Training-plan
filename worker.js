@@ -29416,6 +29416,16 @@ function _chapterLabel_(agg, m, y, now){
       return { text:(lbl||'Planned'), planned:true, why:(lbl?'From the training block phase for this month.':'This month has not started yet.') };
     }
     if(!e.acts) return null;                        // nothing logged — the card shows 0 hrs, no story
+    // THE CURRENT MONTH IS PARTIAL. Comparing 1 elapsed day against complete months always reads
+    // as a shortfall — Aug 1 2026 was labelled Recovery Focus off a single day. Until enough of
+    // the month has elapsed to be comparable, state the fact instead of passing a verdict.
+    if(y===todayY && m===todayM){
+      var elapsed=now.getDate(), dimNow=e.daily.length;
+      if(elapsed < Math.max(10, Math.round(dimNow*0.4))){
+        return { text:'In progress', planned:false,
+                 why:elapsed+' day'+(elapsed===1?'':'s')+' into the month so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full month.' };
+      }
+    }
     // Compare against the months of this year that actually have activity, excluding this one.
     var others=[];
     for(var i=0;i<12;i++){
@@ -29451,7 +29461,12 @@ function calYearHTML_(y, byDate, now){
   // ---- year totals, summed from the SAME per-month aggregate the cards render ----
   var tSecs=0, tMi=0, tActs=0;
   agg.forEach(function(e){ tSecs+=e.secs; tMi+=e.mi; tActs+=e.acts; });
-  var peakDay=0; agg.forEach(function(e){ e.daily.forEach(function(d){ if(d.tss>peakDay) peakDay=d.tss; }); });
+  // Bar scale: the 90th percentile of days that actually carried load, NOT the single biggest day
+  // of the year. One outlier ride (Jun 2026 has one) flattens all twelve months into invisible
+  // stubs, which is a chart that hides the thing it exists to show.
+  var _allDays=[]; agg.forEach(function(e){ e.daily.forEach(function(d){ if(d.tss>0) _allDays.push(d.tss); }); });
+  _allDays.sort(function(x,z){ return x-z; });
+  var peakDay=_allDays.length?_allDays[Math.min(_allDays.length-1, Math.floor(_allDays.length*0.9))]:0;
   // PRs for the year, from the records store if it is populated. Null when the store is empty —
   // an em-dash, never a plausible count (recurring bug pattern #2).
   var prCount=null;
@@ -29511,7 +29526,7 @@ function calYearHTML_(y, byDate, now){
       H+='<div style="display:flex;align-items:flex-end;gap:1.5px;height:42px">';
       e.daily.forEach(function(d){
         var ix=_yrRampIdx_(d.tss, peakDay);
-        var hpx=(d.tss>0)?Math.max(4,Math.round((d.tss/(peakDay||1))*40)):3;
+        var hpx=(d.tss>0)?Math.max(4,Math.min(40,Math.round((d.tss/(peakDay||1))*40))):3;
         H+='<div style="flex:1;min-width:0;height:'+hpx+'px;border-radius:1.5px;background:'+_YR_RAMP[ix]+'"></div>';
       });
       H+='</div>';
