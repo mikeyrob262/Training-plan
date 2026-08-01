@@ -28978,7 +28978,7 @@ function dsShowCalendar(){
     H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
     H+='  <div data-cal="gen" style="padding:8px 15px;background:#2FA8E0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#fff">Generate</div>';
     H+='  <div style="display:inline-flex;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;padding:3px">';
-    ['week','month','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
+    ['year','month','week','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
       H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
     });
     H+='  </div>';
@@ -29043,7 +29043,10 @@ function dsShowCalendar(){
     var weekRoll=weeks.map(function(wk){ var wr=[]; wk.forEach(function(c){ if(c.date){ (ridesByDate[c.date]||[]).forEach(function(r){ wr.push(r); }); } }); return calRollup_(wr); });
     var maxWkTSS=Math.max(1,Math.max.apply(null,weekRoll.map(function(x){return x.tss;}).concat([0])));
 
-    if(calView==='agenda'){
+    if(calView==='year'){
+      // The Year view spans the whole year, so the month/week padding above does not apply to it.
+      H+=calYearHTML_(viewYear, ridesByDate, now);
+    } else if(calView==='agenda'){
       H+=calAgenda(monthRides);
     } else if(calView==='week'){
       H+=calWeekView(ridesByDate);
@@ -29202,6 +29205,9 @@ function dsShowCalendar(){
       else if(a==='next'){ calFilterOpen=false; viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} renderCalendar(); }
       else if(a==='today'){ calFilterOpen=false; viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
+      // A chapter card opens its month — the same drill-down the month tiles already had.
+      else if(a==='ymonth'){ var _ym=String(t.getAttribute('data-ym')||'').split('-');
+        if(_ym.length===2){ viewYear=parseInt(_ym[0],10); viewMonth=parseInt(_ym[1],10)-1; calView='month'; calFilterOpen=false; renderCalendar(); } }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
       else if(a==='filt'){ var k=t.getAttribute('data-key'); calFilter[k]=(calFilter[k]===false); saveCalFilter(); renderCalendar(); }
       else if(a==='gen'){ calFilterOpen=false; if(typeof openPlanGenerator_==='function') openPlanGenerator_(); }
@@ -29269,7 +29275,275 @@ function dsShowCalendar(){
     }catch(e){}
   }
 
-  // Agenda view — chronological list of the month's activities.
+  // ==================== Favourites — ONE flag for rides AND runs ====================
+//
+// Deliberately one mechanism, not one per sport. The key is CONTENT-derived (date + name +
+// distance) rather than an id, because rides and runs come from different libraries with different
+// id schemes, and st.rides mixes sports while getRuns() overlaps it — an id-based flag would need
+// two implementations and they would drift.
+//
+// Un-starring writes false rather than deleting the key: a deleted key is indistinguishable from
+// "never set" to the cross-device merge, and the remote copy would resurrect the star.
+function _favKey_(a){
+  if(!a || !a.date) return null;
+  var d=(typeof normDate==='function')?normDate(a.date):String(a.date||'').slice(0,10);
+  if(!d) return null;
+  return d+'|'+String(a.name||'').trim().toLowerCase()+'|'+(Math.round((parseFloat(a.distance)||0)*10)/10);
+}
+function _favMap_(){
+  if(typeof st==='undefined' || !st) return {};
+  if(!st.favorites || typeof st.favorites!=='object') st.favorites={};
+  return st.favorites;
+}
+function _isFavorite_(a){ var k=_favKey_(a); return !!(k && _favMap_()[k]===true); }
+function _favToggle_(a){
+  var k=_favKey_(a); if(!k) return false;
+  var m=_favMap_();
+  m[k]=(m[k]===true)?false:true;
+  try{ if(typeof sv==='function') sv(); }catch(e){}
+  try{ if(typeof toast==='function') toast(m[k]?'Starred':'Star removed'); }catch(e){}
+  return m[k];
+}
+// Any starred activity in a given month? Used by the Year view's month chapters.
+function _favAny_(y,m){
+  try{
+    var mm=_favMap_(), keys=Object.keys(mm);
+    if(!keys.length) return false;
+    var pre=y+'-'+(String(m+1).length<2?('0'+(m+1)):(m+1))+'-';
+    for(var i=0;i<keys.length;i++){ if(mm[keys[i]]===true && keys[i].indexOf(pre)===0) return true; }
+    return false;
+  }catch(e){ return false; }
+}
+// The starred activities themselves, newest first — for the Calendar's "Favourite" highlight. When
+// nothing is starred this returns an empty list and the caller must SAY so rather than pick one.
+function _favActivities_(){
+  try{
+    var mm=_favMap_(), out=[];
+    var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+    try{ if(typeof getRuns==='function') all=all.concat(getRuns()||[]); }catch(e){}
+    var seen={};
+    all.forEach(function(a){
+      if(!a || a.deleted) return;
+      var k=_favKey_(a);
+      if(!k || mm[k]!==true || seen[k]) return;
+      seen[k]=1; out.push(a);
+    });
+    out.sort(function(x,z){ return String(z.date||'').localeCompare(String(x.date||'')); });
+    return out;
+  }catch(e){ return []; }
+}
+// A star control for any activity detail view. Same markup on every surface.
+function favStarHTML_(a, id){
+  var on=_isFavorite_(a);
+  return '<span id="'+(id||'fav-star')+'" data-fav="1" title="'+(on?'Starred — click to remove':'Star this activity')+'" '
+    +'style="cursor:pointer;font-size:17px;line-height:1;color:'+(on?'var(--c-amber)':'var(--d-t4)')+'">'+(on?'&#9733;':'&#9734;')+'</span>';
+}
+function favStarWire_(a, id){
+  try{
+    var el=document.getElementById(id||'fav-star'); if(!el) return;
+    el.onclick=function(ev){
+      try{ ev.stopPropagation(); }catch(e){}
+      var on=_favToggle_(a);
+      el.innerHTML=on?'&#9733;':'&#9734;';
+      el.style.color=on?'var(--c-amber)':'var(--d-t4)';
+      el.title=on?'Starred — click to remove':'Star this activity';
+    };
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._favToggle_=_favToggle_; window._isFavorite_=_isFavorite_; window._favActivities_=_favActivities_; } }catch(e){}
+
+// ==================== Calendar — YEAR view ====================
+//
+// The Calendar's other views answer "what did I do?". This one answers "what does this year mean?".
+// It is built on the SAME ridesByDate map every other Calendar view reads, so a month chapter can
+// never disagree with the week/month totals for the same days.
+//
+// 12 entries, one per month: {secs, mi, tss, acts, hours, daily[]} where daily[] is one entry per
+// calendar day of that month.
+function _yearMonthAgg_(y, byDate){
+  var out=[];
+  for(var m=0;m<12;m++){
+    var dim=new Date(y,m+1,0).getDate();
+    var e={secs:0, mi:0, tss:0, acts:0, daily:[]};
+    for(var d=1;d<=dim;d++){
+      var k=(typeof normDate==='function')?normDate(y+'-'+(m+1)+'-'+d):null;
+      var list=(k&&byDate&&byDate[k])||[];
+      var ds=0, dt=0;
+      for(var i=0;i<list.length;i++){
+        var r=list[i];
+        ds+=((typeof actSecs_==='function')?(actSecs_(r)||0):0);
+        e.mi+=(parseFloat(r.distance)||0);
+        dt+=((typeof constRideTSS_==='function')?(constRideTSS_(r)||0):0);
+        e.acts++;
+      }
+      e.secs+=ds; e.tss+=dt;
+      e.daily.push({secs:ds, tss:dt, acts:list.length});
+    }
+    e.mi=Math.round(e.mi*10)/10; e.tss=Math.round(e.tss); e.hours=Math.round(e.secs/3600);
+    out.push(e);
+  }
+  return out;
+}
+// Intensity ramp for the day bars and the month accent — the "Less .. More" legend under the grid.
+// Index 0 is a day with nothing logged, and it is a MUTED SURFACE, not a colour: an empty day must
+// not read as a small amount of training.
+var _YR_RAMP=['#1a2030','#3b82f6','#14b8a6','#22c55e','#eab308','#f97316','#ef4444'];
+function _yrRampIdx_(tss, peak){
+  if(!(tss>0)) return 0;
+  if(!(peak>0)) return 1;
+  var f=tss/peak;
+  return f>=0.85?6:f>=0.65?5:f>=0.45?4:f>=0.28?3:f>=0.14?2:1;
+}
+// THE CHAPTER LABEL — derived, or absent. Never a canned rotation of adjectives.
+//
+// Every label below is a statement about THIS month measured against the athlete's own other
+// months. When the year has too little history to compare against, or the month has no activity,
+// there is no label and the card falls back to the plain fact already on it (the hours). That is
+// the same rule as every other honest-degrade in this app: a plausible-sounding word is worse than
+// no word, because it cannot be checked.
+function _chapterLabel_(agg, m, y, now){
+  try{
+    var e=agg[m]; if(!e) return null;
+    var todayY=now.getFullYear(), todayM=now.getMonth();
+    // A month that has not started yet is PLANNED — label it from the block phase if there is one.
+    if(y>todayY || (y===todayY && m>todayM)){
+      var lbl=null;
+      try{
+        var dk=(typeof _tbDK_==='function')?_tbDK_(new Date(y,m,15)):null;
+        var bp=dk&&(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+        if(bp && bp.phaseLabel) lbl=bp.phaseLabel;
+      }catch(_e){}
+      return { text:(lbl||'Planned'), planned:true, why:(lbl?'From the training block phase for this month.':'This month has not started yet.') };
+    }
+    if(!e.acts) return null;                        // nothing logged — the card shows 0 hrs, no story
+    // Compare against the months of this year that actually have activity, excluding this one.
+    var others=[];
+    for(var i=0;i<12;i++){
+      if(i===m) continue;
+      if(y===todayY && i>todayM) continue;          // future months are not evidence
+      if(agg[i] && agg[i].acts) others.push(agg[i].tss);
+    }
+    if(others.length<2) return { text:'Getting started', planned:false, why:'Not enough months logged this year to compare against yet.' };
+    var sum=0; others.forEach(function(v){ sum+=v; });
+    var avg=sum/others.length;
+    var peak=Math.max.apply(null, others.concat([e.tss]));
+    if(!(avg>0)) return null;
+    var f=e.tss/avg;
+    // Active days, for the consistency reading — the same "did you show up" question the month
+    // stats strip answers, asked over a month instead of a week.
+    var activeDays=0; e.daily.forEach(function(d){ if(d.acts) activeDays++; });
+    var dim=e.daily.length, activeFrac=dim?(activeDays/dim):0;
+    if(e.tss>=peak && f>=1.12) return { text:'Peak Week', planned:false, why:'Highest training load of the year so far — '+e.tss+' TSS against a '+Math.round(avg)+' TSS monthly average.' };
+    if(f>=1.15) return { text:'High Load', planned:false, why:e.tss+' TSS is '+Math.round((f-1)*100)+'% above your '+Math.round(avg)+' TSS monthly average.' };
+    if(f<=0.6) return { text:'Recovery Focus', planned:false, why:e.tss+' TSS is '+Math.round((1-f)*100)+'% below your '+Math.round(avg)+' TSS monthly average.' };
+    if(f>=1.02) return { text:'Building', planned:false, why:e.tss+' TSS, tracking above your '+Math.round(avg)+' TSS monthly average.' };
+    if(activeFrac>=0.6) return { text:'Consistent', planned:false, why:activeDays+' active days of '+dim+', at a load close to your monthly average.' };
+    return { text:'Steady', planned:false, why:e.tss+' TSS against a '+Math.round(avg)+' TSS monthly average.' };
+  }catch(e2){ return null; }
+}
+
+// The Year view. Returns HTML; BOTH calendar surfaces mount this same string, so desktop and
+// mobile cannot drift (recurring bug pattern #1).
+function calYearHTML_(y, byDate, now){
+  var agg=_yearMonthAgg_(y, byDate);
+  var MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  var todayY=now.getFullYear(), todayM=now.getMonth();
+  // ---- year totals, summed from the SAME per-month aggregate the cards render ----
+  var tSecs=0, tMi=0, tActs=0;
+  agg.forEach(function(e){ tSecs+=e.secs; tMi+=e.mi; tActs+=e.acts; });
+  var peakDay=0; agg.forEach(function(e){ e.daily.forEach(function(d){ if(d.tss>peakDay) peakDay=d.tss; }); });
+  // PRs for the year, from the records store if it is populated. Null when the store is empty —
+  // an em-dash, never a plausible count (recurring bug pattern #2).
+  var prCount=null;
+  try{
+    if(typeof st!=='undefined' && st.segments && typeof st.segments==='object'){
+      var segKeys=Object.keys(st.segments);
+      if(segKeys.length){
+        var n=0;
+        segKeys.forEach(function(k){ var sg=st.segments[k]; if(sg && sg.prDate && String(sg.prDate).slice(0,4)===String(y)) n++; });
+        prCount=n;
+      }
+    }
+  }catch(e){ prCount=null; }
+  var dash=function(v){ return (v==null)?'&mdash;':v; };
+  var H='<div style="flex:1;min-height:0;overflow-y:auto;padding-right:2px">';
+  var IC={
+    hours:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    miles:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round"><path d="M4 19 9 5M15 5l5 14M12 6v2M12 11v2M12 16v2"/></svg>',
+    prs:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg>',
+    acts:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2" stroke-linecap="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>'
+  };
+  var cell=function(icon,val,lbl){
+    return '<div style="flex:1;display:flex;align-items:center;gap:11px;padding:14px 16px">'
+      +'<div style="width:38px;height:38px;border-radius:11px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
+      +'<div style="min-width:0"><div style="font-size:23px;font-weight:800;color:var(--d-head);line-height:1">'+val+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t4);margin-top:3px">'+lbl+'</div></div></div>';
+  };
+  H+='<div style="display:flex;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;overflow:hidden;margin-bottom:14px">'
+    +cell(IC.hours, Math.round(tSecs/3600), 'Hours')
+    +cell(IC.miles, (Math.round(tMi*10)/10).toLocaleString(), 'Miles')
+    +cell(IC.prs, dash(prCount), 'Personal Records')
+    +cell(IC.acts, tActs, 'Activities')
+    +'</div>';
+  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">';
+  for(var m=0;m<12;m++){
+    var e=agg[m];
+    var future=(y>todayY || (y===todayY && m>todayM));
+    var lab=_chapterLabel_(agg, m, y, now);
+    var isCur=(y===todayY && m===todayM);
+    var maxIdx=0;
+    e.daily.forEach(function(d){ var ix=_yrRampIdx_(d.tss, peakDay); if(ix>maxIdx) maxIdx=ix; });
+    var accent=_YR_RAMP[Math.max(1,maxIdx)];
+    var fav=_yrMonthStarred_(y,m);
+    H+='<div data-cal="ymonth" data-ym="'+y+'-'+(m+1)+'" title="Open '+MON[m]+' '+y+'" style="background:var(--d-panel);border:1px solid '+(isCur?accent:'var(--d-edge)')+';border-radius:14px;padding:13px 14px 11px;cursor:pointer;position:relative">';
+    H+='<div style="display:flex;align-items:center;justify-content:space-between">'
+      +'<span style="font-size:11.5px;font-weight:800;letter-spacing:.08em;color:'+(isCur?accent:'var(--d-t3)')+'">'+MON[m]+'</span>'
+      +(fav?('<span style="color:var(--c-amber);font-size:13px" title="Has a starred activity">&#9733;</span>'):'')
+      +'</div>';
+    if(future){
+      H+='<div style="height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--d-chip);display:flex;align-items:center;justify-content:center">'
+        +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>'
+        +'<div style="font-size:12px;font-weight:700;color:var(--d-t3)">Planned</div></div>';
+    } else {
+      H+='<div style="font-size:27px;font-weight:800;color:var(--d-head);line-height:1.05;margin-top:5px">'+e.hours+'</div>'
+        +'<div style="font-size:9.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-bottom:7px">HOURS</div>';
+      H+='<div style="display:flex;align-items:flex-end;gap:1.5px;height:42px">';
+      e.daily.forEach(function(d){
+        var ix=_yrRampIdx_(d.tss, peakDay);
+        var hpx=(d.tss>0)?Math.max(4,Math.round((d.tss/(peakDay||1))*40)):3;
+        H+='<div style="flex:1;min-width:0;height:'+hpx+'px;border-radius:1.5px;background:'+_YR_RAMP[ix]+'"></div>';
+      });
+      H+='</div>';
+    }
+    if(lab){
+      H+='<div style="display:flex;align-items:center;gap:6px;margin-top:9px" title="'+((typeof _cvEsc_==='function')?_cvEsc_(lab.why):'')+'">'
+        +'<span style="width:7px;height:7px;border-radius:50%;background:'+(lab.planned?'#a855f7':accent)+';flex-shrink:0"></span>'
+        +'<span style="font-size:11.5px;font-weight:600;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lab.text+'</span></div>';
+    } else {
+      H+='<div style="margin-top:9px;font-size:11.5px;color:var(--d-t4)">'+(e.acts?'':'Nothing logged')+'</div>';
+    }
+    H+='</div>';
+  }
+  H+='</div>';
+  H+='<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:13px 0 4px">'
+    +'<span style="font-size:10.5px;color:var(--d-t4)">Less</span>';
+  _YR_RAMP.forEach(function(c){ H+='<span style="width:11px;height:11px;border-radius:3px;background:'+c+'"></span>'; });
+  H+='<span style="font-size:10.5px;color:var(--d-t4)">More</span>'
+    +'<span style="font-size:10.5px;color:#7C8595;margin-left:8px">daily training load</span></div>';
+  H+='</div>';
+  return H;
+}
+// A month is starred when any activity in it is. ONE shared favourite flag across rides AND runs —
+// there is deliberately not a second mechanism per sport (recurring bug pattern #1).
+function _yrMonthStarred_(y,m){
+  try{
+    if(typeof _favAny_!=='function') return false;
+    return _favAny_(y,m);
+  }catch(e){ return false; }
+}
+
+// Agenda view — chronological list of the month's activities.
   function calAgenda(monthRides){
     var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
     var H='<div style="flex:1;min-height:0;overflow-y:auto;background:var(--d-deep);border:1px solid var(--d-edge2);border-radius:14px;padding:6px 4px">';

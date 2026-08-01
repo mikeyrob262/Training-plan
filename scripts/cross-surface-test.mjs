@@ -283,6 +283,23 @@ check('...and reports that it came from the athlete, not the template', /via='us
 // conditions at the ride's coordinates for EVERY ride — right only by accident for today's, and
 // wrong two ways otherwise: an indoor ride has no real coordinates, and a past ride got today's
 // weather at its own location.
+// ── CALENDAR YEAR VIEW ────────────────────────────────────────────────────────────────────────
+// INVARIANT: the year aggregate is built off the SAME ridesByDate map every other Calendar view
+// reads, so a month chapter can never disagree with the week/month totals for the same days.
+check('the year view reads the shared ridesByDate map', /calYearHTML_\(viewYear, ridesByDate, now\)/.test(src), true);
+check('there is exactly ONE month aggregator', countCode(/function _yearMonthAgg_/g), 1);
+check('year totals are summed from that same aggregate', /agg\.forEach\(function\(e\)\{ tSecs\+=e\.secs/.test(src), true);
+// INVARIANT: the chapter label is DERIVED or absent — never a canned rotation of adjectives, and
+// never a plausible word the data cannot support.
+check('every chapter label carries the evidence for itself', countCode(/text:'[A-Za-z ]+', planned:(false|true), why:/g) >= 6, true);
+check('a month with nothing logged gets no label', /if\(!e\.acts\) return null;/.test(src), true);
+check('too little history to compare -> says so, not a label', /Not enough months logged this year to compare against yet/.test(src), true);
+// INVARIANT: an uncomputable stat is an em-dash, never a plausible number.
+check('PR count degrades to an em-dash', /prCount=null/.test(src) && /dash\(prCount\)/.test(src), true);
+// INVARIANT: ONE favourite mechanism for rides AND runs.
+check('one favourite key builder', countCode(/function _favKey_/g), 1);
+check('...used by both the ride and run paths via one toggle', countCode(/function _favToggle_/g), 1);
+check('un-starring writes false rather than deleting (merge-safe)', /m\[k\]=\(m\[k\]===true\)\?false:true/.test(src), true);
 check('an indoor ride is not given outdoor conditions', /_wxIndoor=\(typeof rideIsIndoor==='function'\)&&rideIsIndoor\(r\)/.test(src), true);
 check('a past ride reads the ARCHIVE, not the forecast', /archive-api\.open-meteo\.com\/v1\/archive\?latitude/.test(src), true);
 check('...for the ride date, not today', /start_date='\+_wxRideDate/.test(src), true);
