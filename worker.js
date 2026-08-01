@@ -31198,21 +31198,59 @@ function openDesktopRideDetail(idx, _noFetch){
       lapsHtml+
     '</div>';
 
-  // Weather fetch
+  // Weather fetch. Three real states, previously collapsed into one wrong one: this call used to
+  // fetch LIVE "current" conditions at the ride's coordinates regardless of what ride was open —
+  // right only by accident for today's ride, and wrong two other ways: (1) an indoor/virtual ride's
+  // lats/lons are a simulated route (or the 42.9634/-85.6681 home fallback), so "live weather there"
+  // was never real to begin with; (2) a past outdoor ride showed TODAY's weather at its real
+  // coordinates, not weather from the day it was actually ridden.
   var lat=lats&&lats[0]?lats[0]:42.9634,lon=lons&&lons[0]?lons[0]:-85.6681;
-  fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
-    .then(function(res){return res.json();})
-    .then(function(wx){
-      if(wx&&wx.current){
-        var c=wx.current;
-        var dirs=['N','NE','E','SE','S','SW','W','NW'];
-        var wd=dirs[Math.round((c.winddirection_10m||0)/45)%8];
-        var t=document.getElementById('rp-temp');if(t)t.textContent=Math.round(c.temperature_2m)+'°F';
-        var f=document.getElementById('rp-feels');if(f)f.textContent=Math.round(c.apparent_temperature)+'°';
-        var w=document.getElementById('rp-wind');if(w)w.textContent=wd+' '+Math.round(c.windspeed_10m)+' mph';
-        var h=document.getElementById('rp-hum');if(h)h.textContent=Math.round(c.relativehumidity_2m)+'%';
-      }
-    }).catch(function(){});
+  var _wxIndoor=(typeof rideIsIndoor==='function')&&rideIsIndoor(r);
+  if(_wxIndoor){
+    var _wt=document.getElementById('rp-temp'); if(_wt) _wt.textContent='Indoor';
+    var _wf=document.getElementById('rp-feels'); if(_wf) _wf.textContent='n/a';
+    var _ww=document.getElementById('rp-wind'); if(_ww) _ww.textContent='n/a';
+    var _wh=document.getElementById('rp-hum'); if(_wh) _wh.textContent='n/a';
+  } else {
+    var _wxToday=(typeof getTodayKey==='function')?getTodayKey():null;
+    var _wxRideDate=String(r.date||'').slice(0,10);
+    var _wxIsToday=(_wxToday && _wxRideDate===_wxToday);
+    var _wxRender=function(t,feels,wind,hum){
+      var t1=document.getElementById('rp-temp'); if(t1) t1.textContent=(t!=null)?(Math.round(t)+String.fromCharCode(176)+'F'):'--';
+      var f1=document.getElementById('rp-feels'); if(f1) f1.textContent=(feels!=null)?(Math.round(feels)+String.fromCharCode(176)):'--';
+      var dirs=['N','NE','E','SE','S','SW','W','NW'];
+      var w1=document.getElementById('rp-wind'); if(w1) w1.textContent=(wind!=null)?(dirs[Math.round((wind.dir||0)/45)%8]+' '+Math.round(wind.spd)+' mph'):'--';
+      var h1=document.getElementById('rp-hum'); if(h1) h1.textContent=(hum!=null)?(Math.round(hum)+'%'):'--';
+    };
+    if(_wxIsToday){
+      fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FChicago')
+        .then(function(res){return res.json();})
+        .then(function(wx){
+          if(wx&&wx.current){
+            var c=wx.current;
+            _wxRender(c.temperature_2m, c.apparent_temperature, {dir:c.winddirection_10m,spd:c.windspeed_10m}, c.relativehumidity_2m);
+          }
+        }).catch(function(){});
+    } else {
+      // HISTORICAL — same archive endpoint the temp-backfill feature already uses, narrowed to the
+      // ride's own start hour so this reads as "weather during the ride," not a whole-day average.
+      fetch('https://archive-api.open-meteo.com/v1/archive?latitude='+lat+'&longitude='+lon
+        +'&start_date='+_wxRideDate+'&end_date='+_wxRideDate
+        +'&hourly=temperature_2m,apparent_temperature,windspeed_10m,winddirection_10m,relativehumidity_2m'
+        +'&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto')
+        .then(function(res){return res.json();})
+        .then(function(wx){
+          var h=wx&&wx.hourly;
+          if(!h || !h.temperature_2m || !h.temperature_2m.length) return;
+          var sh=0;
+          if(r.startTime){ var sd=new Date(r.startTime); if(!isNaN(sd.getTime())) sh=sd.getHours(); }
+          sh=Math.min(sh, h.temperature_2m.length-1);
+          _wxRender(h.temperature_2m[sh], h.apparent_temperature?h.apparent_temperature[sh]:null,
+            {dir:h.winddirection_10m?h.winddirection_10m[sh]:0, spd:h.windspeed_10m?h.windspeed_10m[sh]:0},
+            h.relativehumidity_2m?h.relativehumidity_2m[sh]:null);
+        }).catch(function(){});
+    }
+  }
 
   // AI insight
   fetchRideCoachInsight(r,function(err,text){
@@ -31677,6 +31715,15 @@ function _rideHistoryComparisons_(r){
     return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm'+(sr.tss?(', TSS '+sr.tss):'');
   }).join('; ')+'. ';
 }
+// Weather fact for a ride, honestly scoped. r.temp only exists when the archive backfill has run
+// for that specific outdoor ride (tempBackfillCandidates_ deliberately excludes indoor/virtual rides
+// entirely) — there is no live "current conditions" fallback here, because that is the exact bug the
+// ride-detail Weather panel had: showing TODAY's weather mislabeled as this ride's weather.
+function _rideWeatherFact_(r){
+  if(typeof rideIsIndoor==='function' && rideIsIndoor(r)) return 'This was an INDOOR/virtual ride — there is no outdoor weather or heat factor to consider. ';
+  if(r.temp!=null) return 'Temperature during this ride: '+Math.round(r.temp)+String.fromCharCode(176)+'F (recorded'+(r.tempSource?(', source: '+r.tempSource):'')+'). ';
+  return 'Temperature during this ride: not recorded. ';
+}
 function openRideAskCoach_(r){
   var old=document.getElementById('ride-ask-coach-modal');
   if(old) old.remove();
@@ -31723,12 +31770,14 @@ function openRideAskCoach_(r){
     var T=_rideTelemetryFacts_(r);   // fallback if the context assembler isn't available for some reason
     var facts=weekFacts||(T.tele+T.FACTS);
     var histFacts=_rideHistoryComparisons_(r);
+    var wxFact=_rideWeatherFact_(r);
     // T.FACTS carries the anti-fabrication rules (never substitute zero for a missing value, no
     // terrain adjective without a number, name the sport correctly). _smurkelFacts_ is FACTS ONLY —
     // it has no rules in it — so swapping to it would have dropped exactly the instructions that
     // produced the honest "the data here cannot tell me why" answer. Always append them.
     var prompt=_SM_PERSONA+NL+NL
       +facts+NL+NL
+      +wxFact+NL
       +histFacts+NL
       +T.FACTS+NL
       +'You just answer questions — you are not re-issuing a verdict on the ride here, that already '

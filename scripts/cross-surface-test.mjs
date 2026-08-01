@@ -279,6 +279,17 @@ check('...and reports that it came from the athlete, not the template', /via='us
 // only — it contains no rules — so swapping the telemetry block for it would silently drop "never
 // substitute zero", the terrain rule and the sport-naming rule, which are exactly what produced the
 // honest "the data here cannot tell me why" answer instead of an invented comparison.
+// INVARIANT: the ride-detail Weather panel does not fabricate. It used to fetch LIVE current
+// conditions at the ride's coordinates for EVERY ride — right only by accident for today's, and
+// wrong two ways otherwise: an indoor ride has no real coordinates, and a past ride got today's
+// weather at its own location.
+check('an indoor ride is not given outdoor conditions', /_wxIndoor=\(typeof rideIsIndoor==='function'\)&&rideIsIndoor\(r\)/.test(src), true);
+check('a past ride reads the ARCHIVE, not the forecast', /archive-api\.open-meteo\.com\/v1\/archive\?latitude/.test(src), true);
+check('...for the ride date, not today', /start_date='\+_wxRideDate/.test(src), true);
+check('...at the ride start hour, not a day average', /sh=Math\.min\(sh, h\.temperature_2m\.length-1\)/.test(src), true);
+check('the live forecast is used ONLY for today', /if\(_wxIsToday\)\{/.test(src), true);
+check('Ask Coach gets an honest weather fact', /var wxFact=_rideWeatherFact_\(r\)/.test(src), true);
+check('...with no live-weather fallback for a past ride', countCode(/_rideWeatherFact_[\s\S]{0,400}api\.open-meteo/g), 0);
 check('Ask Coach is given week/fitness context', /weekFacts=_smurkelFacts_\(_smurkelContext_\(dk, r\)\)/.test(src), true);
 check('...and similar past rides to compare against', /var histFacts=_rideHistoryComparisons_\(r\)/.test(src), true);
 check('...and STILL carries the anti-fabrication rules', /\+histFacts\+NL\s*\+T\.FACTS\+NL/.test(src), true);
