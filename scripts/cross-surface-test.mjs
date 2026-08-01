@@ -341,6 +341,14 @@ check('mobile mounts the SAME year renderer as desktop', /yearPanel\.innerHTML=c
 check('the old independent mobile year aggregator is gone', countCode(/var maxMi=Math\.max\.apply\(null,moMiles\)/g), 0);
 check('the star renders on BOTH detail surfaces', countCode(/favStarHTML_\(r,'(ds|mb)-fav-star'\)/g), 2);
 check('...and is wired on both', countCode(/favStarWire_\(r,'(ds|mb)-fav-star'\)/g), 2);
+// INVARIANT: the Year view keeps reading the DEVICE library. Two dry runs established that
+// swapping to the snapshot breaks TSS coverage (48 of 130 records) so chapter labels and day bars
+// would be computed from nothing, and that unioning the two inflates 16% over Strava. The page
+// states the shortfall instead of silently under-reporting OR silently over-reporting.
+check('the year aggregate still reads the device library', /calYearHTML_\(viewYear, ridesByDate, now\)/.test(src), true);
+check('the snapshot total is comparison-only', countCode(/_yearSnapshotTotal_\(/g) >= 1, true);
+check('...and is never fed to the aggregate', countCode(/_yearMonthAgg_\([^)]*_yearSnapshotTotal_/g), 0);
+check('the shortfall is stated on the page', /sits in rides that exist only there/.test(src), true);
 check('the year view reads the shared ridesByDate map', /calYearHTML_\(viewYear, ridesByDate, now\)/.test(src), true);
 check('there is exactly ONE month aggregator', countCode(/function _yearMonthAgg_/g), 1);
 check('year totals are summed from that same aggregate', /agg\.forEach\(function\(e\)\{ tSecs\+=e\.secs/.test(src), true);

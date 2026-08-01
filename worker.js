@@ -29491,6 +29491,33 @@ function _chapterLabel_(agg, m, y, now){
   }catch(e2){ return null; }
 }
 
+// The same year totalled from the SNAPSHOT library, for comparison only. The Year view does NOT
+// render from this — two dry runs on Aug 1 2026 established why:
+//   swap to it   -> miles land at 3,432 against Strava 3,436, but only 48 of 130 records carry TSS,
+//                   so Jan and Feb would show 0 TSS on 548 and 488 miles and their chapter labels
+//                   and day bars would be computed from nothing. Activity count also drops 165->130
+//                   because the snapshot is ride-typed, moving AWAY from Strava's 171.
+//   union both   -> 3,979 mi, +16% OVER Strava, because the same ride carries slightly different
+//                   distances in the two libraries. That is the inflation dedupeRides_ exists to
+//                   prevent.
+// So the calendar keeps reading the device library, which is the one that can be clicked, and says
+// out loud what that costs instead of quietly under-reporting.
+function _yearSnapshotTotal_(y){
+  try{
+    var mi=function(r){ return parseFloat(r&&r.distance)||0; };
+    var key=function(r){ return String(r.date||'').slice(0,10)+'|'+(Math.round(mi(r)*10)/10); };
+    var ded=(typeof allRidesDeduped_==='function')?(allRidesDeduped_()||[]):[];
+    var runs=[]; try{ if(typeof getRuns==='function') runs=getRuns()||[]; }catch(e){}
+    var seen={}, n=0, m=0;
+    ded.concat(runs).forEach(function(r){
+      if(!r || r.deleted || String(r.date||'').slice(0,4)!==String(y)) return;
+      var k=key(r); if(seen[k]) return; seen[k]=1;
+      n++; m+=mi(r);
+    });
+    if(!n) return null;
+    return { n:n, mi:Math.round(m*10)/10 };
+  }catch(e){ return null; }
+}
 // The Year view. Returns HTML; BOTH calendar surfaces mount this same string, so desktop and
 // mobile cannot drift (recurring bug pattern #1).
 function calYearHTML_(y, byDate, now){
@@ -29540,6 +29567,14 @@ function calYearHTML_(y, byDate, now){
     +cell(IC.miles, (Math.round(tMi*10)/10).toLocaleString(), 'Miles')
     +cell(IC.prs, dash(prCount), 'Personal Records')
     +cell(IC.acts, tActs, 'Activities')
+    +'</div>';
+  // Name the library, and name what it is missing. The calendar reads the DEVICE library because
+  // every cell in it has to stay clickable; the snapshot holds rides that exist only there.
+  var _snap=_yearSnapshotTotal_(y);
+  var _short=(_snap && _snap.mi>(Math.round(tMi*10)/10)+50)?(Math.round((_snap.mi-tMi)*10)/10):null;
+  H+='<div style="font-size:10.5px;color:var(--d-t4);margin:-8px 2px 12px;line-height:1.5">'
+    +((typeof dataSourceNote_==='function')?dataSourceNote_('legacy'):'From your device library.')
+    +(_short!=null?(' <span style="color:var(--c-amber)">The full activity snapshot holds '+_snap.mi.toLocaleString()+' mi for '+y+' &mdash; about '+_short.toLocaleString()+' mi sits in rides that exist only there and cannot be opened from the calendar.</span>'):'')
     +'</div>';
   H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">';
   for(var m=0;m<12;m++){
