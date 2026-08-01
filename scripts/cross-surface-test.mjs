@@ -297,6 +297,18 @@ check('...and reports that it came from the athlete, not the template', /via='us
 const srcLines = src.split(String.fromCharCode(10));
 const lineOf = (needle) => srcLines.findIndex(L => L.startsWith(needle));
 const calStart = lineOf('function dsShowCalendar(');
+// INVARIANT: ONE momentum computation. Two that can disagree is the taperVerdict_-class bug.
+check('there is exactly one momentum verdict', countCode(/function _momentumVerdict_/g), 1);
+check('the AI card reads it rather than recomputing', countCode(/ramp>=2\?\[.Improving./g), 0);
+// INVARIANT: every highlight is computed or explicitly absent, and an absent one is not clickable.
+check('highlights fall back to an em-dash', countCode(/val:'&mdash;'/g) >= 4, true);
+check('an absent highlight has no month to open', /clickable=!!h\.ym/.test(src), true);
+// INVARIANT: the year insight reuses the shared persona and prompt-hash cache.
+check('the year insight speaks as Dr. Smurkel', /var prompt=_SM_PERSONA\+NL\+NL[\s\S]{0,400}athlete year to date/.test(src), true);
+check('...and is cached like the others', /var key=_ciHash_\(prompt\), hit=_ciGet_\(key\)/.test(src), true);
+check('...and is told a future month is not an empty month', /never treat a month that has not started/.test(src), true);
+// INVARIANT: This Week reuses weekLoadMonSun_, not a second week sum.
+check('This Week reads weekLoadMonSun_', /wl=\(typeof weekLoadMonSun_==='function'\)/.test(src), true);
 check('dsShowCalendar is found', calStart > 0, true);
 check('the shared calendar helpers are defined OUTSIDE dsShowCalendar',
   ['calYearHTML_','_favKey_','favStarHTML_','_calByDate_','_yearMonthAgg_','_chapterLabel_']

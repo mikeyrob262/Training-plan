@@ -17141,8 +17141,12 @@ function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 function aiCardMomentum_(ded){
   var f=aiFatigue_(ded);
   if(!f.ok) return '';
-  var ramp=(f.ramp&&f.ramp.ctl!=null)?f.ramp.ctl:0;
-  var trend=ramp>=2?['Improving','#4ade80']:ramp<=-2?['Easing','#f59e0b']:['Steady','#60a5fa'];
+  // THE momentum verdict, shared with the Calendar year panel. This card used to derive the word
+  // and colour inline; the year panel would then have been a second momentum computation that could
+  // disagree with it. One function, both readers.
+  var mv=_momentumVerdict_(ded);
+  var ramp=mv?mv.ramp:0;
+  var trend=mv?[mv.word,mv.hex]:['Steady','#60a5fa'];
   var arrow=ramp>=2?'M3 17l6-6 4 4 8-8M14 7h6v6':(ramp<=-2?'M3 7l6 6 4-4 8 8M14 17h6v-6':'M3 12h18');
   var inner=aiLbl_('PERFORMANCE MOMENTUM');
   inner+='<div style="display:flex;align-items:center;gap:10px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="'+trend[1]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="'+arrow+'"/></svg><span style="font-size:28px;font-weight:800;color:'+trend[1]+';letter-spacing:-.01em">'+trend[0]+'</span></div>';
@@ -28959,6 +28963,268 @@ function _calByDate_(list){
   });
   return by;
 }
+// THE momentum verdict — one computation, read by both the Athlete Intelligence card and the
+// Calendar's year panel. Two momentum numbers that can disagree is the taperVerdict_-class bug this
+// app has already been bitten by; this exists so there is only ever one.
+function _momentumVerdict_(ded){
+  try{
+    var f=(typeof aiFatigue_==='function')?aiFatigue_(ded):null;
+    if(!f || !f.ok) return null;
+    var ramp=(f.ramp && f.ramp.ctl!=null)?f.ramp.ctl:0;
+    return {
+      word: ramp>=2?'Improving':(ramp<=-2?'Easing':'Steady'),
+      colour: ramp>=2?'var(--c-green)':(ramp<=-2?'var(--c-amber)':'var(--c-blue)'),
+      hex: ramp>=2?'#4ade80':(ramp<=-2?'#f59e0b':'#60a5fa'),
+      ramp: ramp, drivers: f.drivers||[]
+    };
+  }catch(e){ return null; }
+}
+// Mon-Sun weeks of a year, each with its TSS and whether anything was logged. Built off the same
+// byDate map as everything else on this page.
+function _yearWeeks_(y, byDate){
+  var out=[];
+  var d=new Date(y,0,1);
+  d.setDate(d.getDate()-((d.getDay()+6)%7));          // back up to the Monday on/before Jan 1
+  while(d.getFullYear()<=y){
+    var wk={ start:new Date(d.getTime()), tss:0, acts:0, secs:0 };
+    for(var i=0;i<7;i++){
+      var dd=new Date(d.getTime()+i*86400000);
+      var k=(typeof normDate==='function')?normDate(dd.getFullYear()+'-'+(dd.getMonth()+1)+'-'+dd.getDate()):null;
+      var list=(k&&byDate&&byDate[k])||[];
+      list.forEach(function(r){
+        wk.tss+=((typeof constRideTSS_==='function')?(constRideTSS_(r)||0):0);
+        wk.secs+=((typeof actSecs_==='function')?(actSecs_(r)||0):0);
+        wk.acts++;
+      });
+    }
+    if(wk.start.getFullYear()===y || (wk.start.getFullYear()===y-1 && wk.start.getMonth()===11)) out.push(wk);
+    d=new Date(d.getTime()+7*86400000);
+    if(out.length>54) break;
+  }
+  return out;
+}
+// KEY HIGHLIGHTS. Every entry is computed or absent — an entry with no data says so and is not
+// clickable, rather than showing a plausible figure.
+function _yearHighlights_(y, agg, byDate, now){
+  var out=[];
+  var MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var weeks=_yearWeeks_(y, byDate);
+  // 1. Most PRs in a month — only when the segments store has been populated.
+  var pr=null;
+  try{
+    if(typeof st!=='undefined' && st.segments && Object.keys(st.segments).length){
+      var byMo={};
+      Object.keys(st.segments).forEach(function(k){
+        var sg=st.segments[k];
+        if(!sg || !sg.prDate) return;
+        var ds=String(sg.prDate);
+        if(ds.slice(0,4)!==String(y)) return;
+        var mi=parseInt(ds.slice(5,7),10)-1;
+        if(!(mi>=0&&mi<12)) return;
+        byMo[mi]=(byMo[mi]||0)+1;
+      });
+      var best=-1, bestN=0;
+      Object.keys(byMo).forEach(function(mi){ if(byMo[mi]>bestN){ bestN=byMo[mi]; best=parseInt(mi,10); } });
+      if(best>=0) pr={ n:bestN, m:best };
+    }
+  }catch(e){ pr=null; }
+  out.push(pr
+    ? { icon:'trophy', label:'Most PRs in a Month', val:pr.n+' PR'+(pr.n===1?'':'s'), sub:MONF[pr.m]+' '+y, ym:(y+'-'+(pr.m+1)) }
+    : { icon:'trophy', label:'Most PRs in a Month', val:'&mdash;', sub:'No segment PRs recorded for '+y, ym:null });
+  // 2. Hardest week — by TSS.
+  var hw=null; weeks.forEach(function(w){ if(w.tss>0 && (!hw || w.tss>hw.tss)) hw=w; });
+  out.push(hw
+    ? { icon:'bolt', label:'Hardest Week', val:Math.round(hw.tss)+' TSS',
+        sub:_yrWkRange_(hw.start), ym:(hw.start.getFullYear()+'-'+(hw.start.getMonth()+1)) }
+    : { icon:'bolt', label:'Hardest Week', val:'&mdash;', sub:'Nothing logged in '+y, ym:null });
+  // 3. Longest streak — consecutive weeks with at least one activity.
+  var run=0, bestRun=0, runStart=null, bestStart=null, bestEnd=null;
+  weeks.forEach(function(w){
+    if(w.acts>0){ if(!run) runStart=w.start; run++; if(run>bestRun){ bestRun=run; bestStart=runStart; bestEnd=w.start; } }
+    else run=0;
+  });
+  out.push(bestRun
+    ? { icon:'heart', label:'Longest Streak', val:bestRun+' week'+(bestRun===1?'':'s'),
+        sub:_yrDateShort_(bestStart)+' &ndash; '+_yrDateShort_(new Date(bestEnd.getTime()+6*86400000)),
+        ym:(bestStart.getFullYear()+'-'+(bestStart.getMonth()+1)) }
+    : { icon:'heart', label:'Longest Streak', val:'&mdash;', sub:'Nothing logged in '+y, ym:null });
+  // 4. Most climbing in a month.
+  var em=-1, ev=0;
+  for(var i=0;i<12;i++){ if(agg[i] && agg[i].elev>ev){ ev=agg[i].elev; em=i; } }
+  out.push(em>=0
+    ? { icon:'mtn', label:'Most Elevation', val:Math.round(ev).toLocaleString()+' ft', sub:MONF[em]+' '+y, ym:(y+'-'+(em+1)) }
+    : { icon:'mtn', label:'Most Elevation', val:'&mdash;', sub:'No elevation recorded for '+y, ym:null });
+  return out;
+}
+function _yrDateShort_(d){ var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return M[d.getMonth()]+' '+d.getDate(); }
+function _yrWkRange_(start){ var e=new Date(start.getTime()+6*86400000); return _yrDateShort_(start)+' &ndash; '+_yrDateShort_(e); }
+function _yrHlIcon_(kind, col){
+  var P={ trophy:'M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0zM17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3',
+          bolt:'M13 2 3 14h9l-1 8 10-12h-9l1-8z',
+          heart:'M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z',
+          mtn:'M3 20h18L14 4l-4 8-2-3z' };
+  return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+(P[kind]||P.bolt)+'"/></svg>';
+}
+// ---- the right column ----
+function calYearSideHTML_(y, agg, byDate, now){
+  var H='<div style="width:290px;flex-shrink:0;display:flex;flex-direction:column;gap:12px">';
+  // 1. Momentum
+  var mv=_momentumVerdict_();
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="font-size:12.5px;font-weight:800;color:var(--d-head);margin-bottom:9px">Your Momentum</div>';
+  if(mv){
+    H+='<div style="font-size:25px;font-weight:800;color:'+mv.colour+';line-height:1">'+mv.word+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:7px;line-height:1.5">Fitness (CTL) '
+      +(mv.ramp>=0?'+':'')+mv.ramp+' over the last 7 days.</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">Same reading as Athlete Intelligence.</div>';
+  } else {
+    H+='<div style="font-size:13px;color:var(--d-t4);line-height:1.5">Not enough training-load history loaded to read momentum yet.</div>';
+  }
+  H+='</div>';
+  // 2. Dr. Smurkel year insight — filled after paint
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">'
+    +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-purple)" stroke-width="2" stroke-linecap="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/></svg>'
+    +'<span style="font-size:12.5px;font-weight:800;color:var(--d-head)">Dr. Smurkel</span></div>'
+    +'<div id="yr-smurkel" style="font-size:12.5px;color:var(--d-t2);line-height:1.55">Reading your year&hellip;</div>'
+    +'</div>';
+  // 3. Key highlights
+  var hl=_yearHighlights_(y, agg, byDate, now);
+  var COLS=['var(--c-amber)','var(--c-blue)','var(--c-red)','var(--c-green)'];
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="font-size:12.5px;font-weight:800;color:var(--d-head);margin-bottom:4px">Key Highlights</div>';
+  hl.forEach(function(h,i){
+    var clickable=!!h.ym;
+    H+='<div'+(clickable?(' data-cal="ymonth" data-ym="'+h.ym+'"'):'')+' style="display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--d-edge3)'+(clickable?';cursor:pointer':'')+'">'
+      +'<div style="width:32px;height:32px;border-radius:9px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_yrHlIcon_(h.icon,COLS[i%4])+'</div>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:700;color:var(--d-soft)">'+h.label+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t4);margin-top:1px">'+h.val+' &middot; '+h.sub+'</div></div>'
+      +(clickable?'<span style="color:var(--d-t4);font-size:14px;flex-shrink:0">&rsaquo;</span>':'')
+      +'</div>';
+  });
+  H+='</div>';
+  H+='</div>';
+  return H;
+}
+// ---- the bottom strip ----
+function calYearFooterHTML_(y, byDate, now){
+  var H='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px">';
+  // 1. Upcoming focus — the block phase, read not restated
+  var phase=null, phaseNote=null;
+  try{
+    var dk=(typeof dayKey_==='function')?dayKey_(now):null;
+    var bp=dk&&(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+    if(bp){ phase=bp.phaseLabel||bp.phase||null; phaseNote='Week '+bp.weekInPhase+' of this phase.'; }
+  }catch(e){}
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4);margin-bottom:8px">Upcoming Focus</div>'
+    +(phase
+      ? ('<div style="font-size:17px;font-weight:800;color:var(--d-head)">'+phase+'</div>'
+         +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">'+phaseNote+'</div>'
+         +'<div data-cal="toplan" style="display:inline-block;margin-top:11px;font-size:11.5px;font-weight:700;color:var(--c-blue);cursor:pointer">View Plan &rarr;</div>')
+      : '<div style="font-size:13px;color:var(--d-t4)">No training block covers today.</div>')
+    +'</div>';
+  // 2. This week — the SAME weekLoadMonSun_ the rest of the app uses
+  var wl=null;
+  try{
+    var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+    wl=(typeof weekLoadMonSun_==='function')?weekLoadMonSun_(all, now):null;
+  }catch(e){ wl=null; }
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4);margin-bottom:8px">This Week</div>';
+  if(wl){
+    var hrs=Math.floor(wl.secs/3600), mins=Math.round((wl.secs%3600)/60);
+    var mx=Math.max.apply(null,(wl.tssSeries||[0]).concat([1]));
+    H+='<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1">'+hrs+'h '+(mins<10?'0':'')+mins+'m</div>'
+      +'<div style="font-size:11px;color:var(--d-t4);margin-top:2px">'+wl.tss+' TSS &middot; '+wl.acts+' activities</div>'
+      +'<div style="display:flex;align-items:flex-end;gap:5px;height:36px;margin-top:10px">';
+    var DN=['M','T','W','T','F','S','S'];
+    (wl.tssSeries||[]).forEach(function(t,i){
+      var h=(t>0)?Math.max(4,Math.round(t/mx*32)):3;
+      H+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">'
+        +'<div style="width:100%;height:'+h+'px;border-radius:2px;background:'+(t>0?'var(--c-purple)':'var(--d-inset)')+'"></div>'
+        +'<span style="font-size:9px;color:var(--d-t4)">'+DN[i]+'</span></div>';
+    });
+    H+='</div>';
+  } else { H+='<div style="font-size:13px;color:var(--d-t4)">Week load unavailable.</div>'; }
+  H+='</div>';
+  // 3. Progress to next goal — the next milestone the block actually holds
+  var ms=null;
+  try{
+    var list=(typeof _blockMilestonesEffective_==='function')?_blockMilestonesEffective_(now):null;
+    if(list && list.length){
+      var todayK=(typeof dayKey_==='function')?dayKey_(now):null;
+      for(var i=0;i<list.length;i++){ if(!todayK || list[i].date>=todayK){ ms=list[i]; break; } }
+    }
+  }catch(e){ ms=null; }
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4);margin-bottom:8px">Progress to Next Goal</div>';
+  if(ms){
+    var md=(typeof _blockDay_==='function')?_blockDay_(ms.date):new Date(ms.date+'T00:00:00');
+    var days=md?Math.max(0,Math.round((md.getTime()-new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime())/86400000)):null;
+    var startD=(typeof _blockDay_==='function' && typeof _BLOCK_START!=='undefined')?_blockDay_(_BLOCK_START):null;
+    var pct=null;
+    if(startD && md && md.getTime()>startD.getTime()){
+      var tot=md.getTime()-startD.getTime(), done=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime()-startD.getTime();
+      pct=Math.max(0,Math.min(100,Math.round(done/tot*100)));
+    }
+    var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var lbl=md?(MN[md.getMonth()]+' '+md.getDate()+', '+md.getFullYear()):ms.date;
+    H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">'
+      +'<div style="font-size:17px;font-weight:800;color:var(--d-head);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((typeof _cvEsc_==='function')?_cvEsc_(ms.name||'Next milestone'):(ms.name||'Next milestone'))+'</div>'
+      +(pct!=null?('<div style="font-size:17px;font-weight:800;color:var(--c-purple);flex-shrink:0">'+pct+'%</div>'):'')
+      +'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t4);margin-top:3px">'+lbl+'</div>'
+      +(pct!=null?('<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden;margin-top:10px"><div style="height:100%;width:'+pct+'%;background:var(--c-purple)"></div></div>'):'')
+      +'<div style="font-size:11px;color:var(--d-t3);margin-top:7px">'+(days!=null?(days+' day'+(days===1?'':'s')+' to go'):'&mdash;')+'</div>';
+  } else {
+    H+='<div style="font-size:13px;color:var(--d-t4)">No upcoming milestone on the block.</div>';
+  }
+  H+='</div>';
+  H+='</div>';
+  return H;
+}
+// Fills the year insight after paint, so the page never waits on the model. Same persona and the
+// same prompt-hash cache as every other Dr. Smurkel surface.
+function _yrSmurkelMount_(y, agg, byDate, now){
+  try{
+    var host=document.getElementById('yr-smurkel'); if(!host) return;
+    if(typeof _ciHash_!=='function' || typeof _SM_PERSONA==='undefined'){ host.textContent='Insight unavailable.'; return; }
+    var NL=String.fromCharCode(10);
+    var MONF=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var L=[];
+    var tS=0,tMi=0,tA=0,tEl=0;
+    agg.forEach(function(e){ tS+=e.secs; tMi+=e.mi; tA+=e.acts; tEl+=e.elev; });
+    L.push('YEAR '+y+' SO FAR: '+Math.round(tS/3600)+' hours, '+(Math.round(tMi*10)/10)+' miles, '+tA+' activities, '+Math.round(tEl).toLocaleString()+' ft climbed.');
+    L.push('BY MONTH (hours / TSS / activities):');
+    var todayM=(y===now.getFullYear())?now.getMonth():11;
+    for(var m=0;m<12;m++){
+      if(y===now.getFullYear() && m>todayM){ L.push('  '+MONF[m]+': not started yet.'); continue; }
+      L.push('  '+MONF[m]+': '+agg[m].hours+' h, '+agg[m].tss+' TSS, '+agg[m].acts+' activities'+(m===todayM&&y===now.getFullYear()?' (still in progress)':''));
+    }
+    var mv=_momentumVerdict_();
+    L.push(mv?('MOMENTUM: '+mv.word+', Fitness (CTL) change '+(mv.ramp>=0?'+':'')+mv.ramp+' over the last 7 days.'):'MOMENTUM: not enough load history to read.');
+    var f=(typeof getFitness_==='function')?getFitness_():null;
+    L.push((f&&f.loaded)?('FITNESS NOW: CTL '+f.ctl+', ATL '+f.atl+', Form (TSB) '+(f.tsb>0?'+':'')+f.tsb+'.'):'FITNESS NOW: not loaded — do not state CTL, ATL or Form.');
+    var prompt=_SM_PERSONA+NL+NL
+      +'Here is the athlete year to date.'+NL+L.join(NL)+NL+NL
+      +'In 2-3 sentences, say what the SHAPE of this year has been and what it is building toward. '
+      +'Use ONLY the figures above. Never invent one, never treat a month that has not started as a '
+      +'month with no training, and never round a missing value to zero. No headings, no bullets.';
+    var key=_ciHash_(prompt), hit=_ciGet_(key);
+    var paint=function(t){ var h=document.getElementById('yr-smurkel'); if(h) h.textContent=t; };
+    if(hit!=null){ paint(hit); return; }
+    fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:220, messages:[{role:'user',content:prompt}] })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      var t=(d.content&&d.content[0]&&d.content[0].text)||'';
+      t=t.trim(); if(!t){ paint('Insight unavailable.'); return; }
+      _ciPut_(key,t); paint(t);
+    }).catch(function(){ paint('Could not reach Dr. Smurkel right now.'); });
+  }catch(e){}
+}
+
 // ==================== Calendar — YEAR view ====================
 //
 // The Calendar's other views answer "what did I do?". This one answers "what does this year mean?".
@@ -28971,7 +29237,7 @@ function _yearMonthAgg_(y, byDate){
   var out=[];
   for(var m=0;m<12;m++){
     var dim=new Date(y,m+1,0).getDate();
-    var e={secs:0, mi:0, tss:0, acts:0, daily:[]};
+    var e={secs:0, mi:0, tss:0, acts:0, elev:0, daily:[]};
     for(var d=1;d<=dim;d++){
       var k=(typeof normDate==='function')?normDate(y+'-'+(m+1)+'-'+d):null;
       var list=(k&&byDate&&byDate[k])||[];
@@ -28981,6 +29247,7 @@ function _yearMonthAgg_(y, byDate){
         ds+=((typeof actSecs_==='function')?(actSecs_(r)||0):0);
         e.mi+=(parseFloat(r.distance)||0);
         dt+=((typeof constRideTSS_==='function')?(constRideTSS_(r)||0):0);
+        e.elev+=(((typeof _actElevGain_==='function')?_actElevGain_(r):null)||0);
         e.acts++;
       }
       e.secs+=ds; e.tss+=dt;
@@ -29088,7 +29355,9 @@ function calYearHTML_(y, byDate, now){
     }
   }catch(e){ prCount=null; }
   var dash=function(v){ return (v==null)?'&mdash;':v; };
-  var H='<div style="flex:1;min-height:0;overflow-y:auto;padding-right:2px">';
+  var H='<div style="flex:1;min-height:0;overflow-y:auto;padding-right:2px">'
+    +'<div style="display:flex;gap:12px;align-items:flex-start">'
+    +'<div style="flex:1;min-width:0">';
   var IC={
     hours:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
     miles:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round"><path d="M4 19 9 5M15 5l5 14M12 6v2M12 11v2M12 16v2"/></svg>',
@@ -29153,7 +29422,12 @@ function calYearHTML_(y, byDate, now){
   _YR_RAMP.forEach(function(c){ H+='<span style="width:11px;height:11px;border-radius:3px;background:'+c+'"></span>'; });
   H+='<span style="font-size:10.5px;color:var(--d-t4)">More</span>'
     +'<span style="font-size:10.5px;color:#7C8595;margin-left:8px">daily training load</span></div>';
+  H+='</div>';                                    // end main column
+  H+=calYearSideHTML_(y, agg, byDate, now);
+  H+='</div>';                                    // end main+side row
+  H+=calYearFooterHTML_(y, byDate, now);
   H+='</div>';
+  try{ setTimeout(function(){ _yrSmurkelMount_(y, agg, byDate, now); }, 0); }catch(e){}
   return H;
 }
 // A month is starred when any activity in it is. ONE shared favourite flag across rides AND runs —
@@ -29519,6 +29793,7 @@ function dsShowCalendar(){
       else if(a==='today'){ calFilterOpen=false; viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
       // A chapter card opens its month — the same drill-down the month tiles already had.
+      else if(a==='toplan'){ calFilterOpen=false; if(typeof navToPlan_==='function') navToPlan_(); }
       else if(a==='ymonth'){ var _ym=String(t.getAttribute('data-ym')||'').split('-');
         if(_ym.length===2){ viewYear=parseInt(_ym[0],10); viewMonth=parseInt(_ym[1],10)-1; calView='month'; calFilterOpen=false; renderCalendar(); } }
       else if(a==='filter'){ calFilterOpen=!calFilterOpen; renderCalendar(); }
