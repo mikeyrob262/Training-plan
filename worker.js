@@ -12863,9 +12863,9 @@ function showHomeDash(){
 
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
   var pmcData=fitnessSeries_();
-  var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
   // Single source of truth for the headline numbers (the live pull still
   // overwrites these in place when it resolves — same source getFitness_ reads).
+  // The series tail is deliberately NOT read here: it is a day behind the live poll.
   var _fitHome=getFitness_();
   var tsb=_fitHome.tsb, ctl=_fitHome.ctl, atl=_fitHome.atl;
 
@@ -14048,9 +14048,15 @@ function renderPerf(container){
     npWLabels.push('W'+(8-ni));
   }
 
-  // CTL projection
-  var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0,d:''};
-  var curCTL=last.ctl||0;
+  // CTL projection. The SEED is the canonical CTL, not the tail of pmcData — the tail is the cached
+  // Intervals series, while getFitness_ prefers today's live poll of the same endpoint, so the two
+  // drift apart by a day. They happen to agree on CTL right now (both 58) but already disagree on
+  // ATL/TSB (tail 59/-1 vs live 58/0), which is the same one-day gap that made Analytics and
+  // Athlete Intelligence print different TSB from the same data on the same screen-refresh. A
+  // number the athlete reads as "Current CTL" must come from the one source.
+  var _fitProj=(typeof getFitness_==='function')?getFitness_():null;
+  var curCTL=(_fitProj&&_fitProj.loaded)?_fitProj.ctl
+            :(pmcData.length?(pmcData[pmcData.length-1].ctl||0):0);
   // Real next race drives the season projection (falls back to an 8-week
   // horizon when nothing is scheduled, so the charts still render).
   var _seasonRace=getNextRace_();
@@ -40320,10 +40326,14 @@ function showCalendarTab(){
   // ---- Real data pulls -----------------------------------------------------
   var rides=(st.rides||[]).filter(function(r){return !r.deleted;});
   var pmcData=fitnessSeries_();
-  var last=pmcData.length?pmcData[pmcData.length-1]:{ctl:0,atl:0,tsb:0};
-  var ctl=Math.round(last.ctl||0);
-  var atl=Math.round(last.atl||0);
-  var tsb=Math.round(last.tsb||0);
+  // These drive a rendered readiness RING on this screen, so they are the canonical numbers, not
+  // the tail of the cached series. The tail is a day behind getFitness_'s live poll of the same
+  // endpoint — today it reads ATL 59 / TSB -1 against the canonical 58 / 0 — and every other
+  // surface had already been repointed, leaving this screen as the last one able to disagree.
+  var _fitCal=getFitness_();
+  var ctl=Math.round(_fitCal.ctl||0);
+  var atl=Math.round(_fitCal.atl||0);
+  var tsb=Math.round(_fitCal.tsb||0);
 
   // Readiness % — derive from TSB the same way Home does (fresher = higher).
   // Maps TSB roughly onto a 0-100 readiness feel.

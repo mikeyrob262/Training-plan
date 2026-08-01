@@ -62,6 +62,14 @@ check('dayKey_ handles a year boundary', D1(new Date(2025,11,31,23,59)), '2025-1
 // daily series does not. This is the Jul-18 single-source rule; it has now regressed once.
 const headlineFit = codeLines.filter(L => /\b(lastCTL|lastATL|lastTSB)\s*=/.test(L));
 check('headline CTL/ATL/TSB are assigned somewhere', headlineFit.length>0, true);
+// INVARIANT: a displayed "Current CTL" is the canonical one too. The projection seeded itself off
+// the tail of the cached series while the headline above it came from getFitness_ (which prefers
+// today's live poll) — the same one-day gap that had Analytics and Athlete Intelligence printing
+// different TSB from the same data on the same screen-refresh.
+check('the CTL projection seeds off getFitness_, not the series tail',
+  /var curCTL=\(_fitProj&&_fitProj\.loaded\)\?_fitProj\.ctl/.test(src), true);
+check('no projection reads the pmcData tail as current fitness',
+  countCode(/var last=pmcData\.length\?pmcData\[pmcData\.length-1\]/g), 0);
 check('every headline CTL/ATL/TSB assignment consults getFitness_',
       headlineFit.filter(L => !/getFitness_|_fitAn/.test(L)).map(L=>L.trim().slice(0,60)), []);
 // INVARIANT: ONE block-week implementation. A second inline copy had no end bound and would have
