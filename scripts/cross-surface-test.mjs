@@ -275,6 +275,14 @@ check('...and reports that it came from the athlete, not the template', /via='us
 // INVARIANT: every coach surface speaks as Dr. Smurkel, in second person, and none of them asserts
 // a missing elevation as zero. (r.elev||0) is the construct that made the model report "flat
 // terrain, zero elevation gain" on a trail run that climbed 37ft.
+// INVARIANT: Ask Coach gets history AND keeps the anti-fabrication rules. _smurkelFacts_ is facts
+// only — it contains no rules — so swapping the telemetry block for it would silently drop "never
+// substitute zero", the terrain rule and the sport-naming rule, which are exactly what produced the
+// honest "the data here cannot tell me why" answer instead of an invented comparison.
+check('Ask Coach is given week/fitness context', /weekFacts=_smurkelFacts_\(_smurkelContext_\(dk, r\)\)/.test(src), true);
+check('...and similar past rides to compare against', /var histFacts=_rideHistoryComparisons_\(r\)/.test(src), true);
+check('...and STILL carries the anti-fabrication rules', /\+histFacts\+NL\s*\+T\.FACTS\+NL/.test(src), true);
+check('the history helper excludes the current ride by reference', /ride!==r && !ride\.deleted/.test(src), true);
 check('no coach prompt claims a separate analyst voice', countCode(/You are a cycling data analyst/g), 0);
 check('the Analytics tab speaks as Dr. Smurkel', /var prompt = _SM_PERSONA/.test(src), true);
 check('...in second person', /never third person/.test(src), true);

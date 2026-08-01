@@ -31664,6 +31664,19 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
 // same telemetry facts fetchRideCoachInsight judged the ride against (via _rideTelemetryFacts_),
 // so the two can never disagree about what happened in the ride. Not cached like the verdict —
 // each question is different by definition — but still time-boxed so it cannot hang forever.
+// Past rides of similar distance, for direct numeric comparison ("higher than usual" etc). Same
+// filter shape as the Analytics tab's similarRides, but excludes the current ride by REFERENCE
+// (ride!==r) rather than by index — Ask Coach doesn't always have an idx in scope, and reference
+// equality is the more honest test anyway (works even if the ride's position in st.rides shifts).
+function _rideHistoryComparisons_(r){
+  var similar=(st.rides||[]).filter(function(ride){
+    return ride!==r && !ride.deleted && ride.distance && r.distance && Math.abs(ride.distance-r.distance)<5 && ride.avgPwr;
+  }).slice(0,5);
+  if(!similar.length) return 'No past rides of similar distance were found to compare against. ';
+  return 'YOUR PAST RIDES OF SIMILAR DISTANCE, for comparison: '+similar.map(function(sr){
+    return sr.date+': '+sr.distance+'mi, avg power '+(sr.avgPwr||'?')+'W, avg HR '+(sr.avgHR||'?')+'bpm'+(sr.tss?(', TSS '+sr.tss):'');
+  }).join('; ')+'. ';
+}
 function openRideAskCoach_(r){
   var old=document.getElementById('ride-ask-coach-modal');
   if(old) old.remove();
@@ -31696,9 +31709,28 @@ function openRideAskCoach_(r){
     ans.textContent='Thinking...';
     askBtn.disabled=true;
     var NL=String.fromCharCode(10);
-    var T=_rideTelemetryFacts_(r);
+    // Give Ask Coach the SAME rich context the full Plan-page debrief has — fitness (CTL/ATL/TSB),
+    // this week's TSS by day, the scorecard — not just this one ride's numbers. Without this, any
+    // "higher than usual" / "compared to last time" question could only be honestly declined (as
+    // confirmed live Aug 1: "I don't have your previous rides in front of me").
+    var dk=String(r.date||'').slice(0,10);
+    var weekFacts=null;
+    try{
+      if(typeof _smurkelContext_==='function' && typeof _smurkelFacts_==='function'){
+        weekFacts=_smurkelFacts_(_smurkelContext_(dk, r));
+      }
+    }catch(e){ weekFacts=null; }
+    var T=_rideTelemetryFacts_(r);   // fallback if the context assembler isn't available for some reason
+    var facts=weekFacts||(T.tele+T.FACTS);
+    var histFacts=_rideHistoryComparisons_(r);
+    // T.FACTS carries the anti-fabrication rules (never substitute zero for a missing value, no
+    // terrain adjective without a number, name the sport correctly). _smurkelFacts_ is FACTS ONLY —
+    // it has no rules in it — so swapping to it would have dropped exactly the instructions that
+    // produced the honest "the data here cannot tell me why" answer. Always append them.
     var prompt=_SM_PERSONA+NL+NL
-      +T.tele+T.FACTS+NL
+      +facts+NL+NL
+      +histFacts+NL
+      +T.FACTS+NL
       +'You just answer questions — you are not re-issuing a verdict on the ride here, that already '
       +'happened elsewhere. The athlete asks: "'+q.replace(/"/g,String.fromCharCode(39))+'" '
       +'Answer directly, speaking to them as "you", in 2-4 sentences, using ONLY the facts above. '
