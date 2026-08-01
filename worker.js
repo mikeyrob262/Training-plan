@@ -143,7 +143,15 @@ export default {
   --d-head:#15181D;--d-t1:#15181D;--d-t2:#2C3138;--d-soft:#3A4149;
   --d-t3:#4E5866;--d-t4:#6B7280;--d-dim:#7C8595;
   --d-hover:rgba(0,0,0,.045);--d-scroll:rgba(0,0,0,.20);--d-scroll2:rgba(0,0,0,.34);
-  --d-deep:#FFFFFF;--d-well:#F7F8FA;--d-inset:#F1F3F7;
+  /* --d-deep's DARK value is #0d0f14, which is exactly --d-shell's. So every inline background it
+     replaced was a shell-toned SECTION, not a card — giving it #FFFFFF in light painted the whole
+     1348x1200 content area white and left the cards with nothing to sit on. It tracks the shell. */
+  --d-deep:#EBEEF2;--d-well:#F3F5F8;--d-inset:#F1F3F7;
+  /* BORDER twins. The same dark hex did double duty as a panel fill AND as a border - #1c2130
+     on #0d0f14 reads as an edge in dark - so mapping purely by hex value made every card
+     border #FFFFFF on a #FFFFFF card in light: white on white, cards invisible. A border is a
+     ROLE, not a colour. Dark values here are exactly the surface values they split from. */
+  --d-edge:rgba(0,0,0,.13);--d-edge2:rgba(0,0,0,.10);--d-edge3:rgba(0,0,0,.08);
   /* Semantic hues, TEXT only. The dark values are the app palette unchanged; the light values
      are the same hue darkened to stay readable on white. Backgrounds, chart fills and SVG
      strokes deliberately keep the original literals - a zone colour or a sport hue means the
@@ -161,6 +169,7 @@ body.dark{
   --d-t3:#94a3b8;--d-t4:#64748b;--d-dim:#5b6678;
   --d-hover:rgba(255,255,255,.03);--d-scroll:rgba(255,255,255,.18);--d-scroll2:rgba(255,255,255,.32);
   --d-deep:#0d0f14;--d-well:#0e1220;--d-inset:#171c2b;
+  --d-edge:#1c2130;--d-edge2:#171c2b;--d-edge3:#0e1220;
   --c-green:#4ade80;--c-amber:#f59e0b;--c-blue:#60a5fa;--c-cyan:#22d3ee;
   --c-lime:#84cc16;--c-red:#ef4444;--c-purple:#a855f7;--c-gold:#FFB938
 }
@@ -17080,7 +17089,7 @@ function aiReviveNulls_(execute){
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
 var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
-function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -17173,7 +17182,7 @@ function aiCardWhatChanged_(ded){
   var inner=aiLbl_('WHAT CHANGED THIS MONTH');
   rows.forEach(function(r){ var dv=r[2], good=(r[0]==='Weight')?(dv<=0):(dv>=0); var col=dv===0?'#64748b':(good?'#4ade80':'#f59e0b');
     var ds=(dv>0?'+':'')+dv+(r[3]||'');
-    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--d-inset)"><span style="font-size:13px;color:var(--d-t3)">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:var(--d-head)">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
+    inner+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--d-edge2)"><span style="font-size:13px;color:var(--d-t3)">'+r[0]+'</span><span style="display:flex;gap:10px;align-items:baseline"><span style="font-size:14px;font-weight:700;color:var(--d-head)">'+r[1]+'</span><span style="font-size:12px;font-weight:700;color:'+col+';min-width:52px;text-align:right">'+ds+'</span></span></div>'; });
   return aiCard_(inner);
 }
 
@@ -17241,7 +17250,7 @@ function aiCardWeight_(){
   }
   if(goal){
     var toGo=Math.round((cur-goal)*10)/10;
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);display:flex;justify-content:space-between;font-size:12px;color:var(--d-t3)"><span>Goal '+goal+' lb</span><span style="color:var(--d-head);font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);display:flex;justify-content:space-between;font-size:12px;color:var(--d-t3)"><span>Goal '+goal+' lb</span><span style="color:var(--d-head);font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
   }
   return aiCard_(inner);
 }
@@ -17332,7 +17341,7 @@ function _adhCardInner_(title, wk){
   inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--d-dim)"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
   inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
   if(lowN){
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);font-size:11.5px;color:var(--d-t3);line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);font-size:11.5px;color:var(--d-t3);line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
   }
   return aiCard_(inner);
 }
@@ -17383,7 +17392,7 @@ function aiCardStrengthProgress_(){
     var delta=(s.length>=2)?(last.weight-first.weight):null;
     var deltaHtml=(delta!=null&&delta!==0)?('<span style="font-size:10px;font-weight:700;color:'+(delta>0?'#4ade80':'#f59e0b')+'">'+(delta>0?'+':'')+delta+' lb</span>')
                  :(single?'<span style="font-size:10px;color:var(--d-dim)">start</span>':'<span style="font-size:10px;color:var(--d-dim)">&mdash;</span>');
-    inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--d-well)">'
+    inner+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--d-edge3)">'
       +'<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:600;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+aiEsc_(nm)+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim)">'+setStr+'</div></div>'
       +'<div style="flex-shrink:0">'+spark+'</div>'
@@ -17465,7 +17474,7 @@ function _racingChart_(title, acts){
   if(pySame.total>0){
     var pct=Math.round((curTotal-pySame.total)/pySame.total*100);
     var ml=pct>=0?'more':'less', pcol=pct>=0?'#22c55e':'#ff5c5c';
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise);font-size:12.5px;color:var(--d-t3);line-height:1.5">You&#8217;ve logged <b style="color:var(--d-head)">'+_ryMi_(curTotal)+' mi</b> this month, <b style="color:'+pcol+'">'+Math.abs(pct)+'% '+ml+'</b> than '+_ryMi_(pySame.total)+' mi by this point in '+_RY_MON[M]+' '+(Y-1)+'.</div>';
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);font-size:12.5px;color:var(--d-t3);line-height:1.5">You&#8217;ve logged <b style="color:var(--d-head)">'+_ryMi_(curTotal)+' mi</b> this month, <b style="color:'+pcol+'">'+Math.abs(pct)+'% '+ml+'</b> than '+_ryMi_(pySame.total)+' mi by this point in '+_RY_MON[M]+' '+(Y-1)+'.</div>';
   }
   return aiCard_(inner);
 }
@@ -17746,8 +17755,8 @@ function _yvyPhysRow_(vm){
     }
     notes.push(s);
   });
-  var foot = notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid var(--d-raise)">'+notes.join(' ')+'</div>' : '';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
+  var foot = notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin:12px 18px 0;padding-top:12px;border-top:1px solid var(--d-edge)">'+notes.join(' ')+'</div>' : '';
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px 0 16px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 18px 6px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+(vm.sport==='run'?'Pace &amp; Physiology':'Power &amp; Physiology')+'</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">this month, same-day vs last</span></div>'
@@ -18250,7 +18259,7 @@ function _gcScale_(pct, col, lo, mid, hi){
     +'<div style="position:relative;height:12px">'
     +'<div style="position:absolute;left:0;right:0;top:5px;height:2px;border-radius:1px;background:var(--d-raise)"></div>'
     +'<div style="position:absolute;left:50%;top:2px;width:1px;height:8px;background:var(--d-chip)"></div>'
-    +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid var(--d-deep);box-sizing:content-box"></div>'
+    +'<div style="position:absolute;left:'+p+'%;top:0;transform:translateX(-50%);width:10px;height:10px;border-radius:50%;background:'+col+';border:2px solid var(--d-edge3);box-sizing:content-box"></div>'
     +'</div>'
     +'<div style="display:flex;justify-content:space-between;margin-top:1px">'
     +'<span style="font-size:9.5px;color:var(--d-dim)">'+(lo||'0%')+'</span>'
@@ -18696,7 +18705,7 @@ function _alSection_(){
       eraRankLine='<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:10px">'
         +(pos?'This month':_alFmtYM_(subject.ym))+' sits <b style="color:var(--d-head)">#'+(subjEraIdx+1)+' of '+eraRows.length+'</b> in your current era.</div>';
     }
-    eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--d-raise)">'
+    eraBoard='<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--d-edge)">'
       +'<div style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Best months &middot; since '+_alFmtYM_(_AL_ERA_START_YM)+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:10px">The board above is your all-time peak and does not move. This is your current era &mdash; it climbs as you train, and it is where a month you can actually still beat lives.</div>'
       +eraRankLine
@@ -18705,7 +18714,7 @@ function _alSection_(){
       +'</div></div>';
   }
 
-  var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-raise)">'
+  var timeline='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-edge)">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em">Timeline</span>'
     +'<span style="font-size:10.5px;color:var(--d-dim)">every scored month &middot; taller is a stronger month for you</span>'
@@ -18724,7 +18733,7 @@ function _alSection_(){
   var resetLink=selYM
     ? ' <span onclick="alSelectMonth_(&#39;'+selYM+'&#39;)" style="color:'+_AL_G+';cursor:pointer;font-weight:700">&middot; show your best</span>'
     : '';
-  var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-raise)">'
+  var factors='<div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--d-edge)">'
     +'<div style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What made this month great?</div>'
     +'<div style="font-size:11.5px;color:var(--d-t3);margin-bottom:11px">'+panelHdr+resetLink+'</div>'
     +_alFactors_(panelRow, mx, asc)
@@ -18734,11 +18743,11 @@ function _alSection_(){
     +'so a strong run month and a strong ride month are comparable even though the miles are not. '
     +'The 0-100 score is your percentile among scored months; the z-score on each card is the raw distance from your average.';
 
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-bottom:14px">'
     +head
     +'<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">'+gauge+cards+'</div>'
     +eraBoard+timeline+factors
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:16px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -18913,7 +18922,7 @@ function _yvyFmtHD_(sec){ var s=Math.abs(Math.round(sec)), h=Math.floor(s/3600),
 function _yvyScoreCol_(score){ return score>=80?_YVY_TOP:(score>=65?_YVY_GOOD:_YVY_BASE); }
 function _yvyPct_(p, up){ var c=up?_YVY_GOOD:_YVY_DOWN, ar=up?'&#9650;':'&#9660;'; return '<span style="color:'+c+';font-size:12px;font-weight:700">'+ar+' '+Math.abs(p)+'%</span>'; }
 function _yvyKpi_(ic, label, big, unit, pct, up, sub){
-  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid var(--d-raise)">'
+  return '<div style="flex:1;min-width:150px;padding:0 18px;border-left:1px solid var(--d-edge)">'
     +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px"><span style="color:var(--d-dim)">'+ic+'</span>'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">'+label+'</span></div>'
     +'<div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:26px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">'+big+'</span>'
@@ -18936,10 +18945,10 @@ function _yvyHeatRow_(label, arr){
 }
 function _yvySumRow_(color, tag, metric, note){
   var ic=(tag==='Winning')?'&#9650;':(tag==='Even'?'&#61;':'&#9660;');
-  return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
+  return '<div style="display:flex;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-edge3)"><span style="width:22px;height:22px;border-radius:6px;background:'+color+'22;color:'+color+';display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">'+ic+'</span>'
     +'<div><div style="font-size:11px;font-weight:700;color:'+color+'">'+tag+'</div><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+metric+'</div><div style="font-size:11px;color:var(--d-t3)">'+note+'</div></div></div>';
 }
-function _yvyCard_(inner){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px">'+inner+'</div>'; }
+function _yvyCard_(inner){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px">'+inner+'</div>'; }
 function _yvyHdr_(t){ return '<div style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
 // ---- Personal Bests render. Flat, restrained, stroke icons — no badges, no neon. ----
@@ -18988,20 +18997,20 @@ function _pbCardHtml_(p, formDays, nA){
   if(p.held){
     // The record sits inside the form window: there is no gap to quote, so state the margin
     // over your own next-best instead of inventing a target.
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-edge)">'
       +_pbSpark_(p)
       +'<div style="font-size:12px;font-weight:700;color:'+_YVY_TOP+'">This is current form</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:2px">'
       +(p.lead!=null?('You lead your next-best by '+p.leadStr+' &mdash; set '+_pbFmtDate_(p.runnerDate)+'.'):('Your only '+nA+' at this mark.'))
       +'</div></div>';
   } else if(!p.hasForm){
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-edge)">'
       +'<div style="font-size:12px;font-weight:700;color:var(--d-t3)">No qualifying '+nA+' in '+formDays+' days</div>'
       +'<div style="font-size:11.5px;color:var(--d-dim);margin-top:2px">Nothing in your recent window to measure against this yet.</div></div>';
   } else {
     // The progress bar that used to sit here said "recent best is N% of the record" — one ratio,
     // identical on a card that has been climbing all year and one that peaked two years ago.
-    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+    foot='<div style="margin-top:11px;padding-top:10px;border-top:1px solid var(--d-edge)">'
       +_pbSpark_(p)
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">'
       +'<span style="font-size:11.5px;color:var(--d-t3);white-space:nowrap">Recent best '+p.formStr+'</span>'
@@ -19009,7 +19018,7 @@ function _pbCardHtml_(p, formDays, nA){
       +(p.cost?('<div style="font-size:11px;color:var(--d-dim);line-height:1.5;margin-top:7px">'+p.cost+'</div>'):'')
       +'</div>';
   }
-  return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px;min-width:0">'+head+big+foot+'</div>';
 }
 function _pbSection_(vm){
   var pb=vm.pb;
@@ -19020,9 +19029,9 @@ function _pbSection_(vm){
     ? ('<b style="color:var(--d-head)">'+closable+'</b> of these are a gap you can close from current form.')
     : ('You are holding every one of these at current form.');
   var foot=pb.droppedForCoverage
-    ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
+    ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">Power records are hidden here &mdash; too few '+vm.nP+' in this window carry power for a best to mean anything.</div>'
     : '';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">your last '+pb.eraYears+' years &middot; '+pb.nRides.toLocaleString()+' '+vm.nP+' since '+pb.sinceYear+'</span></div>'
@@ -19373,15 +19382,15 @@ function _mrSection_(vm){
     ? ('Best Month is the highest of your '+mr.completedRankable+' completed rankable '+vm.monthN+recon+' &mdash; months carrying at least '+_YVY_RANK_MIN+' '+vm.nP+'. It is a full '+mr.bestDays+' days against your '+mr.domNow+' so far, which is why it is drawn dashed, as a target rather than a peer'+(drawn?'':', and why its curve is not drawn at all here &mdash; this snapshot carries its total but not its days')+'. Only You and '+_yvyMonLabel_(vm.lastYM)+' are a like-for-like race, and both lines stop at today for that reason.')
     : 'No completed month clears the ride count needed to stand as a record yet, so there is no bar to beat.';
   return _MR_CSS
-    +'<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+    +'<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Month Race</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles, day by day &middot; hover or use the arrow keys to read any day</span></div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
     +_mrChart_(mr, id)
-    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'+ann+'</div>'):'')
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge)">'+ann+'</div>'):'')
     +_mrTable_(mr)
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19404,7 +19413,7 @@ function _wcItems_(vm){
 }
 function _wcRow_(x){
   var win=(x.band==='win'), col=win?_YVY_GOOD:_YVY_BASE;
-  return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--d-well)">'
+  return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--d-edge3)">'
     +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';margin-top:7px;flex-shrink:0"></span>'
     +'<div style="min-width:0;flex:1">'
     +'<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'
@@ -19437,7 +19446,7 @@ function _wcSection_(vm){
   if(thin) notes.push('Power and training load are left out &mdash; the compared months do not carry them densely enough to state a change.');
   var hr=null; (vm.phys||[]).forEach(function(p){ if(p.key==='hr') hr=p; });
   if(hr && hr.band) notes.push('Average heart rate is left out on purpose: on its own a higher average is not a worse month, so it has no side to be listed on.');
-  var foot=notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)">'+notes.join(' ')+'</div>' : '';
+  var foot=notes.length ? '<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-edge)">'+notes.join(' ')+'</div>' : '';
 
   var body;
   if(allEven){
@@ -19453,7 +19462,7 @@ function _wcSection_(vm){
       +_wcCol_('You are&hellip;','Chasing',_YVY_BASE,dn,dnEmpty)
       +'</div>';
   }
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">What&#8217;s Changed</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">vs last month through the '+_yvyOrdComment_(vm.domNow)+'</span></div>'
@@ -19544,14 +19553,14 @@ function _raSection_(vm){
   var foot;
   if(ra.idx<0) foot='Months qualify for the ranking at '+_YVY_RANK_MIN+' '+vm.nP+', which is the same gate the rest of this page ranks on.';
   else foot=_yvyPartialTxt_(vm.domNow, vm.rank===1, 'riding');
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Rank Against Yourself</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">every '+vm.monthN.slice(0,-1)+' you can be ranked on, tallest first</span></div>'
     +head
     +'<div style="margin-top:14px">'+_raStrip_(ra,vm)+'</div>'
     +(lines.length?('<div style="font-size:12.5px;color:var(--d-t3);line-height:1.6;margin-top:12px">'+lines.join('<br>')+'</div>'):'')
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19634,7 +19643,7 @@ function _rsSection_(vm){
     sentence='Skip this weekend and '+MON+' finishes '+rk(rs.skipRank,_MR_BEST)+' of '+rs.tot
       +'. Ride Saturday and it finishes '+rk(rs.rideRank,_YVY_GOOD)+' &mdash; on a typical '+_mrMi_(rs.med)+' mi ride.';
   }
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-bottom:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Regret Simulator</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">the weekend decision, ranked against your finished months</span></div>'
@@ -19753,15 +19762,15 @@ function _yoySection_(vm){
     +yo.cur.y+' stops at the dashed line because it is still running &mdash; '+yo.elapsed+' of '+yo.cur.days
     +' days against full years is not a comparison, which is why the figure quoted above is every year read at the SAME day of the year, not its finished total.';
   return _MR_CSS
-    +'<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+    +'<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Year over Year</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by day of year &middot; hover or use the arrow keys to read any date</span></div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">'+legend+'</div>'
     +_gcLineChart_(spec, id)
-    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'+ann+'</div>'):'')
+    +(ann?('<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge)">'+ann+'</div>'):'')
     +_gcTable_(spec, 'Date')
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -19769,7 +19778,7 @@ function _yvyRenderVM_(vm){
   var ic={ride:'&#128692;', clock:'&#128337;', mtn:'&#9968;', act:'&#128200;', bulb:'&#128161;', cal:'&#128197;'};
   var aheadN=[vm.kDist,vm.kElev,vm.kTime,vm.kActs].filter(function(k){return k.up;}).length;
   // hero
-  var hero='<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
+  var hero='<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:20px;margin-bottom:14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
     +'<div style="min-width:230px;flex:1;padding-right:12px">'
     +'<div style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1.1">You vs. You.</div>'
     +'<div style="font-size:18px;font-weight:800;color:#FC4C02;margin:2px 0 8px">Keep raising the bar.</div>'
@@ -19805,7 +19814,7 @@ function _yvyRenderVM_(vm){
     return _yvySumRow_(col, tag, x.k, x.note);
   }).join(''));
 
-  var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--d-well)">'
+  var bestRows=vm.best.map(function(b){ var up=b.delta>=0; return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--d-edge3)">'
     +'<span style="font-size:13px;color:var(--d-soft)">'+_YVY_MON[vm.m]+' '+b.dom+'</span><span style="font-size:13px;font-weight:700;color:var(--d-head)">'+b.mi+' mi</span>'
     +'<span style="font-size:12px;font-weight:700;color:'+(up?_YVY_GOOD:_YVY_DOWN)+'">'+(up?'&#9650; +':'&#9660; ')+b.delta+' mi</span></div>'; }).join('');
   var best=_yvyCard_(_yvyHdr_('Best Days vs Last Month')+bestRows);
@@ -19850,7 +19859,7 @@ function _yvyRenderVM_(vm){
       var _p=vm.lastAct.split('-');
       _lm=' Your last '+vm.nA+' was '+(_YVY_MON[(+_p[1]||1)-1]||'')+' '+(+_p[2]||0)+', '+_p[0]+'.';
     }
-    zeroLine='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;background:var(--d-deep);border:1px solid var(--d-raise);border-radius:12px;padding:12px 14px;margin:0 0 12px">'
+    zeroLine='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;background:var(--d-deep);border:1px solid var(--d-edge);border-radius:12px;padding:12px 14px;margin:0 0 12px">'
       +'<b style="color:var(--d-head)">No '+vm.nP+' logged in '+_YVY_MONF[vm.m]+'.</b> The month figures below are zero because the month is empty, not because the data is missing &mdash; '
       +vm.pop.toLocaleString()+' '+vm.nP+' are in scope for the ranked sections.'+_lm+'</div>';
   }
@@ -19982,7 +19991,7 @@ function _msFmtDate_(s){ var p=String(s).split('-'); if(p.length<3) return Strin
 function _msTs_(ts){ var d=new Date(ts); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function _msDur_(sec){ sec=+sec||0; var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h?(h+'h '+m+'m'):(m+'m'); }
 function _msCard_(color,icon,big,label,sub){
-  return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:7px;min-width:0">'
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px;display:flex;flex-direction:column;gap:7px;min-width:0">'
     +'<div style="display:flex;align-items:center;gap:8px"><span style="width:28px;height:28px;border-radius:8px;background:'+color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</span>'
     +'<div style="font-size:10.5px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;line-height:1.25">'+label+'</div></div>'
     +'<div style="font-size:25px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+big+'</div>'
@@ -20137,7 +20146,7 @@ function aiRenderMilestones_(){
   // ---- HERO: sunset-road bg (CSS gradient stand-in; swap a hosted photo URL for background-image) + next 3 ----
   var next=nextMilestones_(proj,3).filter(function(p){return p.projectedDate;});
   var HEROBG='linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.94) 34%,rgba(11,14,20,.62) 60%,rgba(150,74,30,.28) 100%),radial-gradient(120% 150% at 93% 16%,rgba(255,184,74,.6) 0%,rgba(255,120,40,.18) 30%,transparent 56%),linear-gradient(160deg,#14203a,#0b0e14)';
-  H+='<div style="background:'+HEROBG+';border:1px solid var(--d-raise);border-radius:18px;padding:26px 26px 24px;margin-bottom:14px;overflow:hidden">';
+  H+='<div style="background:'+HEROBG+';border:1px solid var(--d-edge);border-radius:18px;padding:26px 26px 24px;margin-bottom:14px;overflow:hidden">';
   H+='<div style="display:flex;flex-wrap:wrap;gap:28px;align-items:center">';
   H+='<div style="flex:1 1 240px;min-width:210px"><div style="font-size:33px;font-weight:800;color:var(--d-head);line-height:1.08">Your Journey<br><span style="color:#FC4C02">Continues.</span></div><div style="font-size:13.5px;color:var(--d-soft);margin-top:12px;line-height:1.55;max-width:280px">You have come a long way. Here are your next big milestones on the horizon.</div></div>';
   H+='<div style="flex:2 1 520px"><div style="font-size:10.5px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.08em;margin:0 2px 10px">Next Milestones (Projected)</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px">';
@@ -20172,13 +20181,13 @@ function aiRenderMilestones_(){
   if(strip){
     var SICO={ 'Rides':'<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h3l2.5 6.5M5.5 17.5l4-9h5l3.5 9"/>', 'Miles':_MS_ICON.Distance, 'ft Climbed':_MS_ICON.Climbing, 'Hours':'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>' };
     var SCOL={ 'Rides':'#60a5fa','Miles':'#3b82f6','ft Climbed':'#22c55e','Hours':'#f59e0b' };
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 20px;margin-bottom:14px">';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 20px;margin-bottom:14px">';
     H+='<div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Lifetime at a Glance</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:20px 40px">';
     strip.forEach(function(s){ H+='<div style="display:flex;align-items:center;gap:11px">'+_msIcon_(SICO[s.k]||_MS_ICON.Distance, SCOL[s.k]||'#94a3b8')+'<div><div style="font-size:29px;font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.01em">'+s.v+'</div><div style="font-size:11px;color:var(--d-dim);margin-top:2px">'+s.k+'</div></div></div>'; });
     H+='</div></div>';
   } else {
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:var(--d-dim)">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid var(--d-line2);color:var(--d-t3);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="font-size:12.5px;color:var(--d-dim)">Lifetime at a glance &mdash; pull your true all-time totals from Strava (unaffected by the local library gap).</div><button onclick="aiSyncStats_()" style="background:transparent;border:1px solid var(--d-line2);color:var(--d-t3);border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto">Sync Lifetime Stats</button></div>';
   }
   // ---- RECENTLY UNLOCKED: hex badges (most recent by date) ----
   var unlocked=proj.filter(function(p){return p.unlocked && p.date;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date));}).slice(0,4);
@@ -20188,7 +20197,7 @@ function aiRenderMilestones_(){
     unlocked.forEach(function(p,bi){ var c=_MS_COL[p.category],
         big=(p.metric==='centuries')?('#'+p.target):(p.metric==='rides'?p.target.toLocaleString():p.metric==='miles'?(p.target>=1000?(p.target/1000)+'K':p.target):p.metric==='ft'?(p.target>=1000?Math.round(p.target/1000)+'K':p.target):p.target),
         sub=(p.metric==='centuries'?'CENTURY':p.metric==='rides'?'RIDES':p.metric==='miles'?'MILES':p.metric==='ft'?'CLIMB':p.metric==='power'?'FTP':p.metric==='events'?'EVENTS':String(p.category).toUpperCase());
-      H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:18px 16px 16px;text-align:center">'
+      H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:18px 16px 16px;text-align:center">'
         +_msBadge_(bi,c,big,sub)
         +'<div style="font-size:13.5px;font-weight:700;color:var(--d-head);margin-top:6px">'+aiEsc_(p.name)+'</div>'
         +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+_msFmtDate_(p.date)+'</div>'
@@ -20205,7 +20214,7 @@ function aiRenderMilestones_(){
     H+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:22px">';
     prog.forEach(function(p){ var c=_MS_COL[p.category], R=32, CIRC=2*Math.PI*R, off=CIRC*(1-Math.min(100,p.pct)/100);
       var rem=(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go';
-      H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px;text-align:center">'
+      H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px;text-align:center">'
         +'<svg width="82" height="82" viewBox="0 0 82 82" style="display:block;margin:0 auto 10px"><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="41" cy="41" r="'+R+'" fill="none" stroke="'+c+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+CIRC.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 41 41)"/><text x="41" y="46" text-anchor="middle" font-size="17" font-weight="800" fill="#f1f5f9">'+Math.round(p.pct)+'%</text></svg>'
         +'<div style="font-size:13px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div>'
         +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px">'+(p.current>=1000?Math.round(p.current).toLocaleString():Math.round(p.current))+' of '+(p.target>=1000?p.target.toLocaleString():p.target)+'</div>'
@@ -20217,7 +20226,7 @@ function aiRenderMilestones_(){
   var tl=nextMilestones_(proj,8).filter(function(p){return p.projectedDate;});
   if(tl.length){
     H+='<div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin:6px 2px 11px">Next 12 Months (Projected)</div>';
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:22px 12px 18px;margin-bottom:22px;overflow-x:auto"><div style="display:flex;gap:6px;min-width:'+(tl.length*112)+'px;position:relative">';
     H+='<div style="position:absolute;left:'+(100/tl.length/2)+'%;right:'+(100/tl.length/2)+'%;top:29px;height:2px;background:var(--d-raise)"></div>';
     tl.forEach(function(p,i){ var c=_MS_COL[p.category], _yr=p.projectedDate.slice(0,4), mo=_RY_MON[(+p.projectedDate.split("-")[1]-1)].slice(0,3)+" "+((+_yr>=2100)?_yr:("&#39;"+p.projectedDate.slice(2,4)));
       var inner=(p.metric==='power')?'<span style="font-size:13px;font-weight:800;color:var(--d-t1);letter-spacing:.5px">PR</span>':_msIcon_(_MS_ICON[p.category]||_MS_ICON.Distance,'#fff');
@@ -20233,9 +20242,9 @@ function aiRenderMilestones_(){
   var soon=proj.filter(function(p){return !p.unlocked && p.pct>0 && p.pct<100;}).sort(function(a,b){return b.pct-a.pct;}).slice(0,5);
   H+='<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:12px;align-items:start">';
   if(soon.length){
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Almost There</div>';
     soon.forEach(function(p,i){ var c=_MS_COL[p.category], eta=(p.etaWeeks!=null)?(p.etaWeeks<=8?(Math.ceil(p.etaWeeks*7)+' days'):(Math.round(p.etaWeeks/4.345)+' mo')):null;
-      H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid var(--d-raise)':'')+'">'
+      H+='<div style="display:flex;align-items:center;gap:11px;padding:8px 0'+(i<soon.length-1?';border-bottom:1px solid var(--d-edge)':'')+'">'
         +'<span style="width:28px;height:28px;border-radius:8px;background:'+c+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+ic(p.category,c)+'</span>'
         +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:var(--d-dim)">'+(p.remaining>=1000?Math.round(p.remaining).toLocaleString():Math.round(p.remaining))+(p.unit?(' '+p.unit):'')+' to go</div></div>'
         +'<div style="text-align:right"><div style="font-size:14px;font-weight:800;color:'+c+'">'+Math.round(p.pct)+'%</div>'+(eta?'<div style="font-size:10px;color:var(--d-dim)">'+eta+'</div>':'')+'</div>'
@@ -20243,7 +20252,7 @@ function aiRenderMilestones_(){
     H+='</div>';
   } else { H+='<div></div>'; }
   // ---- MILESTONE CATEGORIES ----
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px"><div style="font-size:12px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Milestone Categories</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 22px">';
   Object.keys(C.cats).forEach(function(k){ var cat=C.cats[k], c=_MS_COL[k]||'#94a3b8', pc=cat.total?Math.round(cat.done/cat.total*100):0;
     H+='<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="flex-shrink:0">'+ic(k,c)+'</span><span style="font-size:13px;font-weight:700;color:var(--d-head)">'+k+'</span><span style="margin-left:auto;font-size:12px;font-weight:800;color:'+c+'">'+pc+'%</span></div>'
       +'<div style="font-size:11px;color:var(--d-dim);margin-bottom:5px">'+cat.done+' / '+cat.total+'</div>'
@@ -20255,7 +20264,7 @@ function aiRenderMilestones_(){
   if(rate10>=80){ head='You are building something incredible.'; sub='Your recent volume is strong — the big milestones are closing fast.'; }
   else if(rate10>=25){ head='Momentum is on your side.'; sub='Keep showing up — every ride moves the next milestone closer.'; }
   else { head='Every mile counts.'; sub='Small consistent efforts compound into the milestones ahead.'; }
-  H+='<div style="background:linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.92) 42%,rgba(150,74,30,.26) 100%),radial-gradient(120% 160% at 96% 30%,rgba(255,184,74,.5) 0%,rgba(255,120,40,.14) 32%,transparent 58%),linear-gradient(160deg,#14203a,#0b0e14);border:1px solid var(--d-raise);border-radius:16px;padding:24px 26px;margin-top:14px;display:flex;align-items:center;gap:20px">'
+  H+='<div style="background:linear-gradient(90deg,#0b0e14 0%,rgba(11,14,20,.92) 42%,rgba(150,74,30,.26) 100%),radial-gradient(120% 160% at 96% 30%,rgba(255,184,74,.5) 0%,rgba(255,120,40,.14) 32%,transparent 58%),linear-gradient(160deg,#14203a,#0b0e14);border:1px solid var(--d-edge);border-radius:16px;padding:24px 26px;margin-top:14px;display:flex;align-items:center;gap:20px">'
     +'<span style="width:54px;height:54px;border-radius:50%;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.5);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 4H4v2a3 3 0 003 3M17 4h3v2a3 3 0 01-3 3"/></svg></span>'
     +'<div><div style="font-size:12px;color:var(--d-soft);margin-bottom:3px">Every mile. Every effort. Every day.</div><div style="font-size:21px;font-weight:800;color:#f8fafc">'+head+'</div><div style="font-size:13px;color:#fb923c;margin-top:3px">'+sub+'</div></div>'
   +'</div>';
@@ -20845,7 +20854,7 @@ function aiSetRecSort_(v){ _recSort=v; try{ if(_aiMount) aiRenderOverview_(_aiMo
 var _recStarOnly=false;
 function aiToggleRecStar_(){ _recStarOnly=!_recStarOnly; try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
 function _recStatBlock_(label, value, sub, col){
-  return '<div style="flex:1 1 118px;min-width:0;padding:0 10px;border-left:1px solid var(--d-raise)">'
+  return '<div style="flex:1 1 118px;min-width:0;padding:0 10px;border-left:1px solid var(--d-edge)">'
     +'<div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--d-dim)">'+aiEsc_(label)+'</div>'
     +'<div style="font-size:23px;font-weight:800;color:'+(col||'#f1f5f9')+';line-height:1.15;margin-top:3px">'+value+'</div>'
     +(sub?('<div style="font-size:10.5px;color:var(--d-dim);line-height:1.4;margin-top:3px">'+sub+'</div>'):'')
@@ -20859,12 +20868,12 @@ function aiRenderRecords_(){
   }
   var S=_recStats_(all), TL=_recTimeline_(all);
   var H='<style>'
-    +'.rec-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:16px 18px;margin-bottom:14px}'
+    +'.rec-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px;margin-bottom:14px}'
     +'.rec-stats{display:flex;flex:1 1 540px;flex-wrap:wrap;gap:6px;align-items:flex-start;min-width:0}'
     +'.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
     +'.rec-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}'
-    +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:15px 18px}'
-    +'.rec-sel{background:var(--d-deep);border:1px solid var(--d-raise);color:var(--d-soft);font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
+    +'.rec-foot{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:15px 18px}'
+    +'.rec-sel{background:var(--d-deep);border:1px solid var(--d-edge);color:var(--d-soft);font-size:12px;font-weight:600;border-radius:9px;padding:7px 10px;font-family:inherit;cursor:pointer}'
     +'</style>';
 
   // ---- hero summary
@@ -20904,7 +20913,7 @@ function aiRenderRecords_(){
         +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+TL.total+' dated efforts, cumulative</div>'
       +'</div>';
     if(S.latest){
-      heroR+='<div style="flex:0 0 150px;background:var(--d-deep);border:1px solid var(--d-raise);border-radius:12px;padding:10px 12px">'
+      heroR+='<div style="flex:0 0 150px;background:var(--d-deep);border:1px solid var(--d-edge);border-radius:12px;padding:10px 12px">'
         +'<div style="font-size:10px;color:var(--d-dim);font-weight:700">Latest PR</div>'
         +'<div style="font-size:10.5px;color:var(--d-t3);margin-top:1px">'+aiEsc_(_msFmtDate_(S.latest.prDate))+'</div>'
         +'<div style="font-size:11.5px;color:var(--d-t2);font-weight:600;margin-top:7px;line-height:1.3">'+aiEsc_(S.latest.name)+'</div>'
@@ -20958,14 +20967,14 @@ function aiRenderRecords_(){
     if(gain) foot.push('<span style="color:var(--c-green);font-weight:700">&uarr; '+_segFmtT_(gain.sec)+'</span>'
       +'<span style="color:var(--d-dim)"> '+gain.pct.toFixed(1)+'% faster</span>');
     if(held!=null) foot.push('<span style="color:var(--d-dim)">Held '+held+' day'+(held===1?'':'s')+'</span>');
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column">'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">'+(r.starred?STAR:'')
         +'<div style="font-size:13.5px;font-weight:700;color:var(--d-head);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(r.name)+'</div></div>'
       +'<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:#FC4C02;line-height:1">'+_segFmtT_(r.prSec)+'</span>'
         +(r.prDate?('<span style="font-size:11.5px;color:var(--d-dim)">PR '+_msFmtDate_(r.prDate)+'</span>'):'')+'</div>'
       +(meta.length?('<div style="font-size:11.5px;color:var(--d-dim);margin-top:4px">'+meta.join(' &middot; ')+'</div>'):'')
       +spark
-      +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid var(--d-inset)">'+foot.join('')+'</div>'):'')
+      +(foot.length?('<div style="display:flex;flex-wrap:wrap;gap:12px;font-size:11px;margin-top:9px;padding-top:9px;border-top:1px solid var(--d-edge2)">'+foot.join('')+'</div>'):'')
     +'</div>';
   });
   H+='</div>';
@@ -21289,7 +21298,7 @@ function _trDelta_(pct, invert){ if(pct==null) return ''; var good=invert?(pct<0
 // line is the card's single visualization; confidence is a caveat and belongs in footnote voice.
 function _trConfWord_(conf){ conf=+conf||0; return conf>=85?'high confidence':(conf>=60?'moderate confidence':(conf>=35?'low confidence':'very low confidence')); }
 function _trConfNote_(n, nounP, conf){
-  return '<div style="font-size:10.5px;color:var(--d-dim);margin-top:7px;border-top:1px solid var(--d-raise);padding-top:7px">'
+  return '<div style="font-size:10.5px;color:var(--d-dim);margin-top:7px;border-top:1px solid var(--d-edge);padding-top:7px">'
     +'Based on '+(+n||0).toLocaleString()+' '+nounP+' &middot; '+_trConfWord_(conf)+'</div>';
 }
 // One labelled trend statement, replacing a bare signed percentage whose comparison was unstated.
@@ -21310,7 +21319,7 @@ function _trValueLine_(val, unit, gloss){
 }
 function _trSpark_(vals, color){ if(!vals||vals.length<2) return ''; var W=300,H=54; return '<svg width="100%" height="'+H+'" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="display:block;margin-top:8px"><path d="'+_aiLinePath_(vals,W,H)+'" fill="none" stroke="'+(color||'#22c55e')+'" stroke-width="1.7" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>'; }
 // Question card: coaching question is the headline; the metric is secondary.
-function _trQCard_(q, bodyHtml){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:var(--d-head);line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
+function _trQCard_(q, bodyHtml){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:var(--d-head);line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
 
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
@@ -21332,7 +21341,7 @@ function aiRenderTrends_(ded){
   if(story && story.peak) heads.push({t:'At your highest fitness'+(cov.complete?(' in '+cov.years+' years'):' on record'), up:true});
   if(heads.length){
     H+='<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px">';
-    heads.forEach(function(h){ var c=h.up?GOOD:'#f59e0b'; H+='<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-left:3px solid '+c+';border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--d-soft)"><span style="color:'+c+';font-weight:800">'+(h.up?'&#9650;':'&#9679;')+'</span>'+aiEsc_(h.t)+'</div>'; });
+    heads.forEach(function(h){ var c=h.up?GOOD:'#f59e0b'; H+='<div style="flex:0 0 auto;display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-edge);border-left:3px solid '+c+';border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;color:var(--d-soft)"><span style="color:'+c+';font-weight:800">'+(h.up?'&#9650;':'&#9679;')+'</span>'+aiEsc_(h.t)+'</div>'; });
     H+='</div>';
   }
 
@@ -21340,7 +21349,7 @@ function aiRenderTrends_(ded){
   if(story){
     var watchDay=_aiSafe_('TrWatch', function(){return _trWatchDay_();});
     function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:18px 20px;margin-bottom:14px">';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:18px 20px;margin-bottom:14px">';
     H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last 90 Days</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:26px 30px;align-items:flex-start">';
     H+=statBlock('Fitness (CTL)', (story.fitness.pct!=null?((story.fitness.pct>=0?'+':'')+story.fitness.pct+'%'):story.fitness.now), story.fitness.then+' &rarr; '+story.fitness.now, story.fitness.pct>=0?GRN:BAD);
@@ -21356,7 +21365,7 @@ function aiRenderTrends_(ded){
   // ===== BODY RESPONSE (PMC) + WHAT'S DRIVING =====
   H+='<div style="display:grid;grid-template-columns:1.9fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
   // -- PMC with context bands + spike explanation --
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
   H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">How is your body responding?</span><span style="font-size:11px;color:var(--d-dim)">Fitness / Fatigue / Form</span></div>';
   var pmcHtml=_aiSafe_('TrPMC', function(){
     var s=series.slice(-85); if(s.length<4) return '<div style="color:var(--d-dim);font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
@@ -21387,7 +21396,7 @@ function aiRenderTrends_(ded){
   H+='<div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+GRN+'"></span>Fitness</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+ORG+'"></span>Fatigue</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:'+BLU+'"></span>Form</span></div>';
   H+='</div>';
   // -- WHAT'S DRIVING YOUR FITNESS --
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
   H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">What is driving your fitness?</span><span style="font-size:11px;color:var(--d-dim)">60 vs prior 60 days</span></div>';
   if(drv.length){ var mxd=Math.max.apply(null, drv.map(function(x){return Math.abs(x.delta)||1;}))||1;
     drv.forEach(function(x,di){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
@@ -21402,7 +21411,7 @@ function aiRenderTrends_(ded){
           ||'<div style="font-size:10.5px;color:var(--d-dim);margin-top:4px">Not enough monthly history to draw a trend.</div>')
         +'</div>'; });
   } else { H+='<div style="color:var(--d-dim);font-size:12.5px">Not enough windowed data yet.</div>'; }
-  H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:6px;line-height:1.5;border-top:1px solid var(--d-raise);padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
+  H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:6px;line-height:1.5;border-top:1px solid var(--d-edge);padding-top:10px">Recovery (sleep/HRV) and per-ride heat are not shown &mdash; that data is not logged yet. Connect a sleep/HRV source to add them.</div>';
   H+='</div></div>';
 
   // ===== FOUR QUESTION CARDS =====
@@ -21459,9 +21468,9 @@ function aiRenderTrends_(ded){
   // ===== WHAT'S NEXT + WHY IMPROVING =====
   H+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
   // What's next (predictions)
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
   H+='<div style="font-size:13px;font-weight:700;color:var(--d-head);margin-bottom:14px">What is next? <span style="font-weight:600;color:var(--d-dim);font-size:11px">(projected)</span></div>';
-  if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid var(--d-raise)':'')+'">'
+  if(preds.length){ preds.forEach(function(p,i){ H+='<div style="display:flex;align-items:center;gap:12px;padding:10px 0'+(i<preds.length-1?';border-bottom:1px solid var(--d-edge)':'')+'">'
       +'<span style="width:30px;height:30px;border-radius:8px;background:'+p.color+'22;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+((typeof _msIcon_==='function'&&typeof _MS_ICON!=='undefined')?_msIcon_(_MS_ICON[p.cat]||_MS_ICON.Distance,p.color):'')+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700;color:var(--d-head)">'+aiEsc_(p.name)+'</div><div style="font-size:11px;color:var(--d-dim)">Projected '+_msFmtDate_(p.date)+'</div></div>'
       +'<div style="width:132px;flex:0 0 auto">'+_gcScale_(p.conf, p.color, 'unlikely', 'even', 'near certain')
@@ -21471,7 +21480,7 @@ function aiRenderTrends_(ded){
   } else { H+='<div style="color:var(--d-dim);font-size:12.5px">No projectable milestones yet &mdash; a training rate builds from recent rides.</div>'; }
   H+='</div>';
   // Why is fitness improving/changing
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;min-width:0">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
   var improving = story && story.fitness.pct!=null && story.fitness.pct>=0;
   H+='<div style="font-size:13px;font-weight:700;color:var(--d-head);margin-bottom:6px">Why is your fitness '+(improving?'improving':'changing')+'?</div>';
   var pos=drv.filter(function(x){ return x.invert?(x.delta<0):(x.delta>0); });
@@ -21722,7 +21731,7 @@ function aiRenderDNA_(){
   H+='</div>';
   // SIGNATURE — reads off _zsCompute_ z. Floored at 0 for display; the z is printed as the honest value.
   if(sig){
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:16px 18px;margin-bottom:18px">';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;margin-bottom:18px">';
     H+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:var(--d-dim)">z vs your own average month</span>');
     sig.axes.forEach(function(ax){
       var w=Math.max(3,Math.round(ax.mag*100)), pos=ax.z>=0;
@@ -21738,13 +21747,13 @@ function aiRenderDNA_(){
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';
   unlocked.forEach(function(t){
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px">'
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:8px;height:8px;border-radius:50%;background:'+t.col+';flex:0 0 auto"></span>'
       +'<span style="font-size:14px;font-weight:800;color:var(--d-head)">'+aiEsc_(t.name)+'</span></div>'
       +'<div style="font-size:19px;font-weight:800;color:'+t.col+';letter-spacing:-.01em;margin-bottom:5px">'+aiEsc_(t.headline)+'</div>'
       +'<div style="font-size:12px;color:var(--d-t3);line-height:1.45;margin-bottom:7px">'+aiEsc_(t.detail)+'</div>'
       +(t.spark ? (_gcTrend_(t.spark, t.col, {aria:t.name+' over time', H:34, fill:false, note:t.sparkNote})||'') : '')
-      +'<div style="font-size:10px;color:var(--d-dim);border-top:1px solid var(--d-raise);padding-top:7px;margin-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
+      +'<div style="font-size:10px;color:var(--d-dim);border-top:1px solid var(--d-edge);padding-top:7px;margin-top:7px">Derived from: '+aiEsc_(t.deriv)+'</div>'
       +'</div>';
   });
   H+='</div>';
@@ -21935,7 +21944,7 @@ function _trjSec_(n,label,sub){
     +'</div>';
 }
 function _trjMethod_(txt){
-  return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--d-raise);font-size:10.5px;'
+  return '<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--d-edge);font-size:10.5px;'
     +'line-height:1.45;color:var(--d-dim)">'+aiEsc_(txt)+'</div>';
 }
 function _trjNote_(txt){
@@ -21989,12 +21998,12 @@ function _trjDestination_(){
   return out;
 }
 function _trjRowProj_(icon,label,fit,goal,dir,unit,digits){
-  if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-inset)">'
+  if(!fit) return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-edge2)">'
     +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
     +'<div style="font-size:11.5px;color:var(--d-dim)">not enough logged data</div></div>';
   var evT=_trjTodayT_()+28;                          // a 4-week horizon, stated on the row
   var v=fit.at(evT), d=(digits==null?0:digits);
-  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-inset)">'
+  return '<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--d-edge2)">'
     +'<div style="font-size:12.5px;color:var(--d-t3)">'+aiEsc_(label)+'</div>'
     +'<div style="text-align:right">'
       +'<div style="font-size:14px;font-weight:700;color:var(--d-head)">'+v.toFixed(d)+(unit||'')+'</div>'
@@ -22103,7 +22112,7 @@ function _trjSection2_(){
   M.rows.forEach(function(r, ix){
     var pc=_trjConf_(r.prob), first=(ix===0);
     var col=first?'#FC4C02':'#8b97ab';
-    body+='<div style="padding:9px 0;border-bottom:1px solid var(--d-inset)">'
+    body+='<div style="padding:9px 0;border-bottom:1px solid var(--d-edge2)">'
       +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">'
         +'<div style="min-width:0">'
           +'<div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'
@@ -22360,7 +22369,7 @@ function _trjSection4_(){
   body+='<div style="margin-top:13px">';
   L.bands.forEach(function(b){
     var col=b.flat?'#64748b':(b.per>0?'#22c55e':'#e24b4a');
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--d-inset)">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--d-edge2)">'
       +'<span style="font-size:12px;color:var(--d-soft)">'+aiEsc_(b.label)+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-t3)">'+Math.round(b.avg)+' min/wk avg</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+col+';flex:none">'
@@ -22427,7 +22436,7 @@ function _trjSection5_(){
   S.weeks.forEach(function(w){
     if(!w.presc) return;
     var r=Math.round(w.done/w.presc*100);
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-inset)">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-edge2)">'
       +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.done+'/'+w.presc+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=80?'#22c55e':(r>=55?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
@@ -22511,7 +22520,7 @@ function _trjSection7_(){
   Q.weeks.forEach(function(w){
     if(!w.n) return;
     var r=Math.round(w.hit/w.n*100);
-    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-inset)">'
+    body+='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:4px 0;border-bottom:1px solid var(--d-edge2)">'
       +'<span style="font-size:11.5px;color:var(--d-t3)">week of '+aiEsc_(_trjFmt_(w.t)||'')+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-soft)">'+w.hit+'/'+w.n+'</span>'
       +'<span style="font-size:12px;font-weight:700;color:'+(r>=70?'#22c55e':(r>=45?'#f59e0b':'#e24b4a'))+';flex:none">'+r+'%</span></div>';
@@ -22850,7 +22859,7 @@ function _trjSection8_(){
   // uses, clamped at the ceiling, and the caption says so - so the bar is a reading of one ratio,
   // not an accumulation toward a target. Fill colour is _trjRxCol_, the card's existing 115/85
   // band, so the bar, the badge and the over/under counts can never disagree.
-  var TH='font-size:9.5px;color:var(--d-dim);letter-spacing:.05em;padding-bottom:6px;border-bottom:1px solid var(--d-raise)';
+  var TH='font-size:9.5px;color:var(--d-dim);letter-spacing:.05em;padding-bottom:6px;border-bottom:1px solid var(--d-edge)';
   var tbl='<div style="'+LBL+'">WEEK-BY-WEEK BREAKDOWN</div>'
     +'<div class="trj-rx-tbl">'
     +'<div style="'+TH+'">WEEK OF</div><div class="trj-rx-mk" style="'+TH+'"></div>'
@@ -22859,14 +22868,14 @@ function _trjSection8_(){
   wks.forEach(function(w){
     var r=Math.round(w.actual/w.presc*100), tier=_trjRxTier_(r);
     var mp=Math.max(0, Math.min(100, r/_TRJ_RX_MAX*100));
-    tbl+='<div style="font-size:11.5px;color:var(--d-t3);padding:5px 0;border-bottom:1px solid var(--d-inset);white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
-      +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid var(--d-inset)">'
+    tbl+='<div style="font-size:11.5px;color:var(--d-t3);padding:5px 0;border-bottom:1px solid var(--d-edge2);white-space:nowrap">'+aiEsc_(_trjFmt_(w.t)||'')+'</div>'
+      +'<div class="trj-rx-mk" style="padding:5px 0;border-bottom:1px solid var(--d-edge2)">'
         +'<div style="height:7px;border-radius:4px;background:var(--d-raise);overflow:hidden" title="'+r+'% of prescribed">'
         +'<div style="width:'+mp.toFixed(1)+'%;height:100%;border-radius:4px;background:'+tier.c+'"></div>'
         +'</div></div>'
-      +'<div style="font-size:11.5px;color:var(--d-soft);padding:5px 0;border-bottom:1px solid var(--d-inset);white-space:nowrap;text-align:right">'
+      +'<div style="font-size:11.5px;color:var(--d-soft);padding:5px 0;border-bottom:1px solid var(--d-edge2);white-space:nowrap;text-align:right">'
         +Math.round(w.actual)+' / '+Math.round(w.presc)+'</div>'
-      +'<div style="padding:5px 0;border-bottom:1px solid var(--d-inset);text-align:right">'
+      +'<div style="padding:5px 0;border-bottom:1px solid var(--d-edge2);text-align:right">'
         +'<span style="font-size:11px;font-weight:700;color:'+tier.c+';background:'+tier.c+'1a;border-radius:5px;padding:2px 6px;white-space:nowrap">'+r+'%</span>'
         +'<span class="trj-rx-tier" style="font-size:11px;color:var(--d-t3);margin-left:8px;white-space:nowrap">'+tier.t+'</span></div>';
   });
@@ -22886,14 +22895,14 @@ function _trjSection8_(){
   if(fit){
     var per=fit.slope*7*100;
     var word=(Math.abs(per)<1)?'flat':(per>0?'widening':'narrowing');
-    mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-inset)">'
+    mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-edge2)">'
       +_trjChip_('&#128197;','#60a5fa')
       +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">THE GAP IS '+(word==='flat'?'FLAT':word.toUpperCase())+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-top:2px">'
       +(word==='flat'?('level across '+fit.n+' weeks'):(Math.abs(per).toFixed(0)+' point'+(Math.abs(per).toFixed(0)==='1'?'':'s')+' a week across '+fit.n+' weeks'))
       +'</div></div></div>';
   }
-  mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-inset)">'
+  mean+='<div style="display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding-top:11px;border-top:1px solid var(--d-edge2)">'
     +_trjChip_('?','#8b97ab')
     +'<div><div style="font-size:11.5px;font-weight:700;color:var(--d-soft);letter-spacing:.03em">HOW THIS IS CALCULATED</div>'
     +'<div style="font-size:10.5px;color:var(--d-dim);line-height:1.5;margin-top:3px">'
@@ -22951,7 +22960,7 @@ function aiRenderTrajectory_(){
     // horizontal room; the table gets the wider half of the bottom row for the same reason.
     +'.trj-rx-top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,.85fr);gap:14px;align-items:start}'
     +'.trj-rx-bot{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:14px;align-items:start;'
-      +'margin-top:16px;padding-top:14px;border-top:1px solid var(--d-inset)}'
+      +'margin-top:16px;padding-top:14px;border-top:1px solid var(--d-edge2)}'
     // The SCALE column takes the slack, so the numbers/badge/label cluster to the right the way the
     // reference layout has them. Capping it instead parked the numbers mid-row with a dead gap.
     +'.trj-rx-tbl{display:grid;grid-template-columns:auto minmax(60px,1fr) auto auto;gap:0 12px;align-items:center;margin-top:8px}'
@@ -22976,7 +22985,7 @@ function aiRenderTrajectory_(){
       +'Trajectory needs several weeks of weight, CTL or FTP entries before it will show a trend.</div>';
   }
   return css+parts.join('')
-    +'<div style="margin:20px 0 4px;padding-top:11px;border-top:1px solid var(--d-raise);font-size:10.5px;color:var(--d-dim);line-height:1.55">'
+    +'<div style="margin:20px 0 4px;padding-top:11px;border-top:1px solid var(--d-edge);font-size:10.5px;color:var(--d-dim);line-height:1.55">'
     +'Every figure here is a straight-line fit over your own logged data, with its sample size shown. '
     +'Scenario comparisons and race-time predictions are deliberately absent: they need a dose-response '
     +'relationship between training and adaptation that cannot be derived from one athlete&rsquo;s history.</div>';
@@ -23024,13 +23033,13 @@ function _saRose_(bearing, windFromDeg, size){
 // another call per segment; drawing an invented curve here would be a lie about the road.
 function _saSketch_(ev){
   var W=170, H=96, pad=16;
-  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid var(--d-raise);display:flex;align-items:center;justify-content:center;font-size:9.5px;color:var(--d-dim);text-align:center;padding:8px">no route data</div>';
+  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge);display:flex;align-items:center;justify-content:center;font-size:9.5px;color:var(--d-dim);text-align:center;padding:8px">no route data</div>';
   var a=(ev.bearing-90)*Math.PI/180;
   var cx=W/2, cy=H/2, L=Math.min(W,H)/2-pad;
   var x1=cx-L*Math.cos(a), y1=cy-L*Math.sin(a), x2=cx+L*Math.cos(a), y2=cy+L*Math.sin(a);
   var wig=(ev.windApprox||(ev.sinuosity!=null&&ev.sinuosity>=_SA_SINUOUS))
     ? '<text x="'+(W-6)+'" y="'+(H-6)+'" text-anchor="end" font-size="8" fill="#f59e0b">bends</text>' : '';
-  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid var(--d-raise)">'
+  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge)">'
     +'<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round"/>'
     +'<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#22c55e" stroke="#0d1016" stroke-width="1.5"/>'
     +'<circle cx="'+x2.toFixed(1)+'" cy="'+y2.toFixed(1)+'" r="4" fill="#e8edf5" stroke="#0d1016" stroke-width="1.5"/>'
@@ -23066,7 +23075,7 @@ function aiRenderSegAttack_(){
   var H='<style>'
     +'.sa-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'
     +'.sa-row{display:grid;grid-template-columns:minmax(0,1.35fr) auto minmax(0,1fr) minmax(0,1.1fr) minmax(0,.8fr);'
-      +'gap:16px;align-items:start;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:16px 18px;margin-top:12px}'
+      +'gap:16px;align-items:start;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px;margin-top:12px}'
     +'@media(max-width:1180px){.sa-strip{grid-template-columns:repeat(2,minmax(0,1fr))}'
       +'.sa-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr)}.sa-map{display:none}}'
     +'@media(max-width:820px){.sa-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}'
@@ -23098,7 +23107,7 @@ function aiRenderSegAttack_(){
 
   // ---- conditions / form / potential / analyzed ----
   var windLbl=cur?(_saCompassLbl_(cur.winddirection_10m)+' '+Math.round(cur.windspeed_10m)+' mph'):'—';
-  var CARD='background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 16px;min-width:0';
+  var CARD='background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px;min-width:0';
   var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   H+='<div class="sa-strip">';
   H+='<div style="'+CARD+'"><div style="'+LBL+'">Today&rsquo;s conditions</div>'
@@ -23213,9 +23222,9 @@ function aiRenderSegAttack_(){
     H+='<div style="margin-top:22px"><div style="font-size:13px;font-weight:800;color:var(--d-soft)">'
       +untested.length+' MORE YOU HAVE NEVER GONE HARD ON</div>'
       +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">Your best recorded pass on these was well below the power you can hold now, so there is no PR here to contest &mdash; only a time that has never been tested. No probability is shown, because beating a cruise is not a prediction.</div>'
-      +'<div style="margin-top:10px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:6px 16px">';
+      +'<div style="margin-top:10px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:6px 16px">';
     untested.slice(0,8).forEach(function(e){
-      H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--d-inset);flex-wrap:wrap">'
+      H+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--d-edge2);flex-wrap:wrap">'
         +'<span style="font-size:12.5px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</span>'
         +'<span style="font-size:11px;color:var(--d-t3);white-space:nowrap">best '+_saMMSS_(e.prSec)
         +(e.prWatts?(' at '+e.prWatts+'W'):'')+' &middot; you hold '+e.capW+'W now</span></div>';
@@ -23224,7 +23233,7 @@ function aiRenderSegAttack_(){
   }
 
   // ---- what could not be projected, and why ----
-  H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 16px">'
+  H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px">'
     +'<div style="'+LBL+'">What is not in the list</div>'
     +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:8px;line-height:1.6">'
     +'<b style="color:var(--d-soft)">'+full.length+'</b> segment'+(full.length===1?'':'s')+' had enough powered efforts to project: '
@@ -23304,10 +23313,10 @@ function _saLibBody_(){
   });
   var H='<div style="font-size:11.5px;color:var(--d-t3);margin-bottom:10px">'+f.length+' of '+list.length+' segments</div>';
   if(!f.length) return H+'<div style="padding:34px 12px;text-align:center;color:var(--d-dim);font-size:12.5px">Nothing matches that.</div>';
-  H+='<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:2px 14px">';
+  H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:2px 14px">';
   f.slice(0,150).forEach(function(e){
     var pc=(e.tier==='full')?_saProbCol_(e.prob):'#64748b';
-    H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--d-inset);cursor:pointer;flex-wrap:wrap">'
+    H+='<div onclick="saOpen_(&#39;'+esc(e.id)+'&#39;)" style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--d-edge2);cursor:pointer;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:150px"><div style="font-size:13px;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">'
       +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
@@ -23331,7 +23340,7 @@ function _saLibBody_(){
 function _saDetail_(e, ctx){
   var esc=aiEsc_, LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<div><button onclick="saClose_()" style="background:none;border:1px solid #232a38;color:var(--d-t3);font-size:11.5px;border-radius:8px;padding:6px 11px;cursor:pointer;font-family:inherit">&lsaquo; All segments</button></div>';
-  H+='<div style="margin-top:14px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:18px 20px">';
+  H+='<div style="margin-top:14px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:18px 20px">';
   H+='<div style="font-size:19px;font-weight:800;color:var(--d-head);overflow-wrap:anywhere">'+esc(e.name)+'</div>';
   H+='<div style="font-size:11.5px;color:var(--d-t3);margin-top:5px">'
     +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
@@ -23356,7 +23365,7 @@ function _saDetail_(e, ctx){
   H+='</div>';
 
   if(e.tier!=='full'){
-    H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise)">'
+    H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-edge)">'
       +'<div style="font-size:12.5px;color:var(--d-soft);line-height:1.6">Not projectable yet &mdash; '+esc(e.why||'insufficient data')+'.</div>'
       +(e.wind?('<div style="font-size:11.5px;color:var(--d-t3);margin-top:8px">Today it is a <b style="color:var(--d-head)">'+esc(e.wind)+'</b> on this bearing'+(e.windMph!=null?(' at '+Math.round(e.windMph)+' mph'):'')+'. No probability is shown, because the model has nothing to measure its error against.</div>'):'')
       +(e.windNote?('<div style="font-size:11px;color:var(--c-amber);margin-top:6px">'+esc(e.windNote)+'</div>'):'')
@@ -23365,7 +23374,7 @@ function _saDetail_(e, ctx){
   }
 
   // projection today
-  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;align-items:start">';
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-edge);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;align-items:start">';
   H+='<div><div style="'+LBL+'">Projected today</div>'
     +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
     +'<span style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1">'+_saMMSS_(e.tPred)+'</span>'
@@ -23382,7 +23391,7 @@ function _saDetail_(e, ctx){
   H+='</div>';
 
   // WHAT WOULD IT TAKE — both figures are inversions of the same fitted model.
-  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-raise)">'
+  H+='<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--d-edge)">'
     +'<div style="'+LBL+'">What it would take</div><div style="font-size:12.5px;color:var(--d-soft);margin-top:8px;line-height:1.7">';
   if(e.wattsNeeded!=null){
     H+='&bull; <b style="color:var(--d-head)">'+e.wattsNeeded+'W</b> to match '+_saMMSS_(e.prSec)+' in today&rsquo;s wind'
@@ -23504,7 +23513,7 @@ function aiRenderOverview_(container){
   // therefore disagree for the same month — see dataSourceNote_.
   H+='<div style="font-size:11px;color:var(--d-dim);margin-top:4px">'+dataSourceNote_('deduped')+'</div>';
   // tabs
-  H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid var(--d-raise)">';
+  H+='<div style="display:flex;gap:4px;overflow-x:auto;margin:16px 0 18px;border-bottom:1px solid var(--d-edge)">';
   AI_TABS.forEach(function(t){ var on=(t[0]===_aiTab); H+='<div onclick="aiSetTab_(&#39;'+t[0]+'&#39;)" style="flex:0 0 auto;padding:9px 13px;font-size:13px;font-weight:'+(on?'700':'600')+';color:'+(on?'#FC4C02':'#94a3b8')+';border-bottom:2px solid '+(on?'#FC4C02':'transparent')+';cursor:pointer;margin-bottom:-1px">'+aiEsc_(t[1])+'</div>'; });
   H+='</div>';
   H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:var(--c-red);font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
@@ -25004,7 +25013,7 @@ function _blockCheckRow_(c){
   var status=met ? ('met · '+c.val) : (missed ? ('logged, but '+c.val+' — '+(c.miss||'outside the prescription')) : 'not logged this week');
   var statusCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
   var countCol=met?'#22c55e':(missed?'#ef4444':'#5b6678');
-  return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-well)">'
+  return '<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-edge3)">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+badgeBg+';display:flex;align-items:center;justify-content:center">'+badgeIcon+'</span>'
     +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(met?'#f1f5f9':'#cbd5e1')+'">'+c.label+'</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">'+c.cond+'</span></div>'
@@ -25108,7 +25117,7 @@ function _blockTssGraph_(weeks){
   svg+='</svg>';
   return svg;
 }
-function _blockCard_(inner, extraStyle){ return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
+function _blockCard_(inner, extraStyle){ return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;'+(extraStyle||'')+'">'+inner+'</div>'; }
 function _blockHdr_(t){ return '<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">'+t+'</div>'; }
 
 // The current week's PRESCRIBED sessions from st.trainingBlock, each priced to current FTP. This is
@@ -25137,14 +25146,14 @@ function _tbWeekStrip_(now){
         +(x.struct?('<span style="font-size:10.5px;color:var(--d-dim)">'+x.struct+'</span>'):'')
         +'<span style="font-size:10.5px;color:var(--d-t3)">'+w+'</span></span>';
     }).join('');
-    rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--d-well)'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
+    rows+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--d-edge3)'+(isToday?';background:rgba(252,76,2,.05)':'')+'">'
       +'<div style="flex:0 0 46px"><div style="font-size:11px;font-weight:800;color:'+(isToday?'#FC4C02':'#94a3b8')+'">'+DOW[plan.weekday]+'</div>'
       +'<div style="font-size:10px;color:var(--d-dim)">'+(_YVY_MON[d.getMonth()]||'')+' '+d.getDate()+'</div></div>'
       +'<div style="flex:1;min-width:0">'+(cells||'<span style="font-size:12px;color:var(--d-dim)">&mdash;</span>')
       +(ms?('<div style="font-size:10.5px;font-weight:700;color:var(--c-amber);margin-top:3px">&#9873; '+ms.label+'</div>'):'')+'</div></div>';
   }
   if(!any) return '';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin-top:14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin-top:14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">This week &middot; prescribed</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">'+phaseId+' &middot; '+phaseLabel+' &middot; week '+wkInP+' &middot; watts live off your FTP</span>'
@@ -26028,7 +26037,7 @@ function renderBlockPlan_(container){
   var ddBg=ddMet?'#22c55e22':(ddMissed?'#ef444422':'#1a1f29');
   var ddIcon=ddMet?_blockMiIcon_('M20 6L9 17l-5-5','#22c55e',17):(ddMissed?_blockMiIcon_('M6 6l12 12M18 6L6 18','#ef4444',16):_blockMiIcon_('M3 12h4l2-5 4 10 2-5h6','#3a4150',16));
   var ddCol=ddMet?'#22c55e':(ddMissed?'#ef4444':'#5b6678');
-  twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-well)">'
+  twInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--d-edge3)">'
     +'<span style="flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:'+ddBg+';display:flex;align-items:center;justify-content:center">'+ddIcon+'</span>'
     +'<div style="min-width:0;flex:1"><div style="display:flex;align-items:baseline;gap:7px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800;color:'+(ddMet?'#f1f5f9':'#cbd5e1')+'">Three separate days</span><span style="font-size:11px;color:var(--d-dim)">no stacking, protects the rest cadence</span></div>'
     +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:1px">Space the efforts so each one adapts</div>'
@@ -26036,7 +26045,7 @@ function renderBlockPlan_(container){
     +'<span style="flex:0 0 auto;font-size:12px;font-weight:800;color:'+ddCol+'">'+Math.min(3,wk.distinctCount)+' / 3</span></div>';
   // weekly load + graph
   var tssWeeks=_blockWeeklyTss_(rides, ftp, now);
-  twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)">'
+  twInner+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--d-edge)">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">'
     +'<div><div style="font-size:12px;font-weight:800;color:var(--d-soft)">Weekly load <span style="font-size:10.5px;font-weight:600;color:var(--d-dim)">&middot; readout, not a pass rule</span></div>'
     +'<div style="font-size:19px;font-weight:800;color:var(--c-green);margin-top:2px">'+_BLOCK_TSS_LO+'&ndash;'+_BLOCK_TSS_HI+'<span style="font-size:11px;color:var(--d-dim);font-weight:600"> TSS target</span></div></div>'
@@ -26046,7 +26055,7 @@ function renderBlockPlan_(container){
   twInner+='</div>';
   // clean weeks banked
   var stk=_blockStreak_(rides, ftp, now);
-  twInner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise);display:flex;align-items:flex-start;gap:12px">'
+  twInner+='<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge);display:flex;align-items:flex-start;gap:12px">'
     +'<span style="flex:0 0 auto;width:40px;height:40px;border-radius:11px;background:#22c55e18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_('M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z','#22c55e',20)+'</span>'
     +'<div style="flex:1"><div style="font-size:10.5px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Clean weeks banked</div>'
     +'<div style="font-size:24px;font-weight:800;color:var(--d-head);line-height:1.1">'+stk.streak+' of '+stk.target+'</div>'
@@ -26063,7 +26072,7 @@ function renderBlockPlan_(container){
   var succ=_blockHdr_('What success looks like');
   _BLOCK_MILESTONES.filter(function(m){ return m.road; }).forEach(function(m){
     var stt=_blockMiState_(m, _succNext, now), col=_BLOCK_STATE_COL[stt];
-    succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)">'
+    succ+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-edge3)">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'14;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(stt==='past'?'M20 6L9 17l-5-5':m.icon,col,16)+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(stt==='future'?'#cbd5e1':'#f1f5f9')+'">'+m.sTitle+(stt==='next'?' <span style="font-size:9px;font-weight:800;color:var(--c-amber);letter-spacing:.04em">&middot; IN FOCUS</span>':'')+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+m.sSub+'</div></div>'
       +'<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:'+col+';text-align:right;max-width:110px">'+m.benefit+'</span></div>';
@@ -26072,7 +26081,7 @@ function renderBlockPlan_(container){
   _BLOCK_RISKS.forEach(function(rk){
     var active=(rk.slug==='missed' && stk.reset);
     var col=active?'#ef4444':'#f59e0b';
-    riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-well)">'
+    riskInner+='<div style="display:flex;align-items:flex-start;gap:11px;padding:9px 0;border-bottom:1px solid var(--d-edge3)">'
       +'<span style="flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:'+col+'18;display:flex;align-items:center;justify-content:center">'+_blockMiIcon_(rk.icon,col,16)+'</span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800;color:'+(active?'#ef4444':'#f1f5f9')+'">'+rk.title+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+rk.sub+'</div>'
       +'<div style="font-size:11px;color:var(--d-dim);margin-top:3px"><b style="color:var(--d-t3)">Fix:</b> '+rk.sol+'</div></div></div>';
@@ -27137,7 +27146,7 @@ function dsShowWeather(){
     function windDir(deg){ return ['N','NE','E','SE','S','SW','W','NW'][Math.round((deg||0)/45)%8]; }
     function rate(pct){ return pct>=88?['Excellent','#4ade80']:pct>=72?['Very Good','#4ade80']:pct>=58?['Good','#84cc16']:pct>=40?['Fair','#f59e0b']:['Poor','#e24b4a']; }
     function fmtClock(iso){ if(!iso) return '—'; var d=new Date(iso); var h=d.getHours(), m=d.getMinutes(); var ap=h>=12?'PM':'AM'; var h12=h%12||12; return h12+':'+(m<10?'0':'')+m+' '+ap; }
-    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 17px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 17px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
     function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 
     var temp=Math.round(c.temperature_2m), feels=Math.round(c.apparent_temperature), hum=Math.round(c.relativehumidity_2m), wind=Math.round(c.windspeed_10m), precip=Math.round(c.precipitation_probability||0), uv=(c.uv_index!=null?Math.round(c.uv_index):null);
@@ -27164,9 +27173,9 @@ function dsShowWeather(){
     H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0">';
     H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:'+(wxOk?'#64748b':'#f59e0b')+';margin-top:1px">'+(wxOk?'Updated '+wxClock_(wxTs)+' ET':'Live weather unavailable &middot; showing last seen '+wxClock_(wxTs))+'</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
-    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
-    H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
-    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
+    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
+    H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
     H+='</div></div>';
 
     // ===== ROW 1 =====
@@ -27174,7 +27183,7 @@ function dsShowWeather(){
     // Current Conditions
     var cc=lbl('CURRENT CONDITIONS','<span style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:'+rideCol+'"><svg width="13" height="13" viewBox="0 0 24 24" fill="'+rideCol+'"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/></svg>'+rideLabel+'</span>');
     cc+='<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">'+wIcon(c.weathercode,74)+'<div><div style="font-size:52px;font-weight:800;color:var(--d-t1);line-height:.9;letter-spacing:-.04em">'+temp+'<span style="font-size:26px;color:var(--d-t3);font-weight:600">°F</span></div><div style="font-size:13px;color:var(--d-t3);margin-top:6px">Feels like '+feels+'°</div><div style="font-size:13px;color:var(--d-t3)">'+desc+'</div></div></div>';
-    cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid var(--d-raise)">';
+    cc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:auto;padding-top:12px;border-top:1px solid var(--d-edge)">';
     [['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/></svg>',wind+' mph',windDir(c.winddirection_10m)+' Wind','#e8edf5'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',hum+'%','Humidity','#60a5fa'],
      ['<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>',precip+'%','Precip','#4ade80'],
@@ -27208,7 +27217,7 @@ function dsShowWeather(){
       ag+='<div style="display:flex;align-items:center;gap:11px"><span style="flex-shrink:0">'+x[0]+'</span><span style="flex:1;font-size:12px;color:var(--d-t3)">'+x[1]+'</span><span style="font-size:13px;font-weight:700;color:'+x[3]+'">'+x[2]+'</span></div>';
     });
     ag+='</div>';
-    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--d-raise);text-align:center;font-size:12px;font-weight:600;color:var(--c-blue);cursor:pointer">Details &#8594;</div>';
+    ag+='<div data-act="details" style="margin-top:12px;padding-top:10px;border-top:1px solid var(--d-edge);text-align:center;font-size:12px;font-weight:600;color:var(--c-blue);cursor:pointer">Details &#8594;</div>';
     H+=card(ag);
     H+='</div>';
 
@@ -27238,7 +27247,7 @@ function dsShowWeather(){
     var dayNames2=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     var fc=lbl('7-DAY FORECAST');
     (daily.time||[]).forEach(function(date,i){ var d=new Date(date+'T12:00:00'); var pp=daily.precipitation_probability_max[i]||0;
-      fc+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i>0?'border-top:1px solid var(--d-raise)':'')+'"><div style="font-size:12px;font-weight:700;color:var(--d-t2);width:34px">'+dayNames2[d.getDay()]+'</div><div style="width:30px;display:flex;justify-content:center">'+wIcon(daily.weathercode[i],26)+'</div><div style="font-size:12px;color:var(--d-t3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+wDesc(daily.weathercode[i])+'</div><div style="font-size:12px;font-weight:600;color:'+(pp>=40?'#60a5fa':'#64748b')+';width:38px;text-align:right">'+pp+'%</div><div style="font-size:11px;color:var(--d-t4);width:96px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'-'+Math.round(daily.windgusts_10m_max[i])+' mph</div><div style="font-size:12px;font-weight:700;color:var(--d-head);width:66px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div></div>';
+      fc+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i>0?'border-top:1px solid var(--d-edge)':'')+'"><div style="font-size:12px;font-weight:700;color:var(--d-t2);width:34px">'+dayNames2[d.getDay()]+'</div><div style="width:30px;display:flex;justify-content:center">'+wIcon(daily.weathercode[i],26)+'</div><div style="font-size:12px;color:var(--d-t3);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+wDesc(daily.weathercode[i])+'</div><div style="font-size:12px;font-weight:600;color:'+(pp>=40?'#60a5fa':'#64748b')+';width:38px;text-align:right">'+pp+'%</div><div style="font-size:11px;color:var(--d-t4);width:96px;text-align:right;white-space:nowrap">'+windDir(daily.winddirection_10m_dominant[i])+' '+Math.round(daily.windspeed_10m_max[i])+'-'+Math.round(daily.windgusts_10m_max[i])+' mph</div><div style="font-size:12px;font-weight:700;color:var(--d-head);width:66px;text-align:right">'+Math.round(daily.temperature_2m_max[i])+'° / '+Math.round(daily.temperature_2m_min[i])+'°</div></div>';
     });
     H+=card(fc);
     // Weather Insight (rule-based from real data — NOT AI; the app's AI is untouched)
@@ -27286,7 +27295,7 @@ function dsShowWeather(){
     if(stormDay>=0){ var sd=new Date(daily.time[stormDay]+'T12:00:00'); alerts.push(['#a855f7','warn','Thunderstorms '+dayNames2[sd.getDay()],'Plan ahead for possible storms.']); }
     var al=lbl('ALERTS');
     if(!alerts.length){ al+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--d-t4)"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><div style="font-size:12px">No active alerts — conditions look clear.</div></div>'; }
-    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid var(--d-raise)':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+x[2]+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+x[3]+'</div></div></div>'; });
+    alerts.forEach(function(x,i){ al+='<div style="display:flex;gap:11px;align-items:flex-start;padding:9px 0;'+(i>0?'border-top:1px solid var(--d-edge)':'')+'"><div style="width:36px;height:36px;border-radius:10px;background:'+x[0]+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+x[0]+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(x[1]==='uv'?'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>':x[1]==='wind'?'<path d="M5 8h9a2.5 2.5 0 1 0-2.5-2.5M3 12h13a2.5 2.5 0 1 1-2.5 2.5"/>':x[1]==='aqi'?'<path d="M3 8h13a3 3 0 1 0-3-3M3 16h9a3 3 0 1 1-3 3M3 12h18"/>':'<path d="M12 2 1 21h22L12 2z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17.4" x2="12.01" y2="17.4"/>')+'</svg></div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+x[2]+'</div><div style="font-size:11px;color:var(--d-t3);margin-top:1px">'+x[3]+'</div></div></div>'; });
     H+=card(al);
     H+='</div>';
 
@@ -27341,7 +27350,7 @@ function dsShowNutrition(){
     var dateLabel=(viewKey===todayKey?'Today — ':'')+months[vd.getMonth()]+' '+vd.getDate()+', '+vd.getFullYear();
 
     // ---- helpers ----
-    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+    function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
     function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
     function pctBar(v,g,color){ var p=g>0?Math.min(100,Math.round(v/g*100)):0; return '<div style="height:7px;background:var(--d-chip);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:'+color+';border-radius:4px"></div></div>'; }
     function ringHtml(pct,color,center,sub,size){ size=size||96; var r=(size/2)-8; var c=2*Math.PI*r; var off=c*(1-Math.min(1,pct/100)); return '<div style="position:relative;width:'+size+'px;height:'+size+'px;flex-shrink:0"><svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#1a2030" stroke-width="7"/><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+(size/2)+' '+(size/2)+')"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:'+(size>80?'22':'15')+'px;font-weight:800;color:var(--d-t1);line-height:1">'+center+'</div>'+(sub?'<div style="font-size:9px;color:var(--d-dim);margin-top:1px">'+sub+'</div>':'')+'</div></div>'; }
@@ -27357,8 +27366,8 @@ function dsShowNutrition(){
     H+='<div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:2px">';
     H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Nutrition</div><div style="font-size:12px;color:var(--d-t4);margin-top:1px">Fuel your performance. Recover smarter. Train stronger.</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
-    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div></div>';
-    H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
+    H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;overflow:hidden"><div data-act="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div data-act="next" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8250;</div></div>';
+    H+='<div data-act="insights" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+C.purple+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>Insights</div>';
     H+='<div data-act="add" style="display:flex;align-items:center;gap:6px;background:'+C.c+';border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;color:var(--d-t1);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add Food</div>';
     H+='</div></div>';
 
@@ -27395,7 +27404,7 @@ function dsShowNutrition(){
     var wpc=wTgt>0?Math.round(wOz/wTgt*100):0;
     mt+='<div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px"><span style="font-size:12px;font-weight:600;color:var(--d-t2);display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="'+C.w+'" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>Water</span><span style="font-size:11px;color:var(--d-t3)">'+wOz+' / '+wTgt+' oz <span style="color:var(--d-head);font-weight:700;margin-left:4px">'+wpc+'%</span></span></div>'+pctBar(wOz,wTgt,C.w)+'</div>';
     mt+='</div></div>';
-    mt+='<div style="display:flex;gap:8px;margin-top:13px"><div data-act="targets" style="font-size:11px;font-weight:700;color:var(--d-t3);border:1px solid var(--d-raise);border-radius:8px;padding:6px 12px;cursor:pointer">Edit Targets</div><div data-act="waterminus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-raise);border-radius:8px;padding:6px 11px;cursor:pointer">− Water</div><div data-act="waterplus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-raise);border-radius:8px;padding:6px 11px;cursor:pointer">+ Water</div></div>';
+    mt+='<div style="display:flex;gap:8px;margin-top:13px"><div data-act="targets" style="font-size:11px;font-weight:700;color:var(--d-t3);border:1px solid var(--d-edge);border-radius:8px;padding:6px 12px;cursor:pointer">Edit Targets</div><div data-act="waterminus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-edge);border-radius:8px;padding:6px 11px;cursor:pointer">− Water</div><div data-act="waterplus" style="font-size:12px;font-weight:700;color:'+C.w+';border:1px solid var(--d-edge);border-radius:8px;padding:6px 11px;cursor:pointer">+ Water</div></div>';
     H+=card(mt);
     // Calorie Summary — calories LEFT + daily target + calories-by-meal chart (honest:
     // no per-food timestamps exist, so this is by meal, not by hour).
@@ -27482,7 +27491,7 @@ function dsShowNutrition(){
     ['breakfast','lunch','dinner','snacks'].forEach(function(m){
       var items=(nd.meals[m]||[]).filter(function(i){return !i.deleted;});
       var mc2=items.reduce(function(s,i){return s+(i.cal||0);},0);
-      fl+='<div style="padding:8px 0;border-top:1px solid var(--d-raise)">';
+      fl+='<div style="padding:8px 0;border-top:1px solid var(--d-edge)">';
       fl+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:'+mealMeta[m][1]+'">'+mealMeta[m][0]+'</span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--d-t4)">'+(mc2?Math.round(mc2)+' cal':'—')+'</span><span data-act="mealadd" data-meal="'+m+'" style="font-size:11px;font-weight:700;color:'+C.c+';cursor:pointer">+ Add</span></span></div>';
       items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:var(--d-t4);flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
       fl+='</div>';
@@ -27494,10 +27503,10 @@ function dsShowNutrition(){
     ml+='<div style="flex:1;display:flex;flex-direction:column;gap:2px">';
     [['Breakfast','breakfast'],['Lunch','lunch'],['Dinner','dinner'],['Snacks','snacks']].forEach(function(m){
       var v=mealCal[m[1]]||0; var done=v>0; var col=mealMeta[m[1]]?mealMeta[m[1]][1]:C.grey;
-      ml+='<div data-act="mealadd" data-meal="'+m[1]+'" style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;'+(m[0]!=='Breakfast'?'border-top:1px solid var(--d-raise)':'')+'"><div style="width:34px;height:34px;border-radius:50%;background:'+(done?col+'22':'#1a2030')+';border:1.5px solid '+(done?col:'#232b3d')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(done?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<span style="color:var(--d-dim);font-size:16px;font-weight:300">+</span>')+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--d-head)">'+m[0]+'</div><div style="font-size:10px;color:var(--d-t4)">'+(done?Math.round(v)+' cal logged':'Not logged yet')+'</div></div></div>';
+      ml+='<div data-act="mealadd" data-meal="'+m[1]+'" style="display:flex;align-items:center;gap:12px;padding:10px 0;cursor:pointer;'+(m[0]!=='Breakfast'?'border-top:1px solid var(--d-edge)':'')+'"><div style="width:34px;height:34px;border-radius:50%;background:'+(done?col+'22':'#1a2030')+';border:1.5px solid '+(done?col:'#232b3d')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+(done?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>':'<span style="color:var(--d-dim);font-size:16px;font-weight:300">+</span>')+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--d-head)">'+m[0]+'</div><div style="font-size:10px;color:var(--d-t4)">'+(done?Math.round(v)+' cal logged':'Not logged yet')+'</div></div></div>';
     });
     ml+='</div>';
-    ml+='<div style="font-size:10px;color:var(--d-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--d-raise);line-height:1.4">Tip: spread protein across meals for better recovery. (Meal times need per-food timestamps we do not record yet.)</div>';
+    ml+='<div style="font-size:10px;color:var(--d-dim);margin-top:8px;padding-top:8px;border-top:1px solid var(--d-edge);line-height:1.4">Tip: spread protein across meals for better recovery. (Meal times need per-food timestamps we do not record yet.)</div>';
     H+=card(ml);
     // Hydration
     var hyPct=wTgt>0?Math.round(wOz/wTgt*100):0;
@@ -28614,7 +28623,7 @@ function dsShowCalendar(){
       H+='</div>';
       // ---- month grid body + week rail ----
       H+='<div style="display:flex;gap:12px;flex:1 0 auto">';
-      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid var(--d-inset);border-radius:12px;overflow:hidden">';
+      H+='<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-template-rows:repeat('+N+',minmax(160px,1fr));border:1px solid var(--d-edge2);border-radius:12px;overflow:hidden">';
       weeks.forEach(function(wk){
         wk.forEach(function(c){
           var isToday=!!c.date && c.date===todayStr;
@@ -28638,7 +28647,7 @@ function dsShowCalendar(){
           // one activity opens it, several open a picker, none opens the day editor.
           var bg=isRest?'rgba(74,222,128,.06)':(isToday?'rgba(74,222,128,.035)':'transparent');
           var attrs=' data-cal="cell"'+(c.date?(' data-date="'+c.date+'"'):'');
-          H+='<div'+attrs+' style="position:relative;border-right:1px solid var(--d-inset);border-bottom:1px solid var(--d-inset);padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
+          H+='<div'+attrs+' style="position:relative;border-right:1px solid var(--d-edge2);border-bottom:1px solid var(--d-edge2);padding:7px 8px;overflow:hidden;cursor:pointer;background:'+bg+'">';
           if(isToday){ H+='<div style="position:absolute;inset:3px;border:1.5px solid #4ade80;border-radius:9px;pointer-events:none"></div>'; }
           var complete=!!c.date && typeof isDayComplete==='function' && isDayComplete(c.date);
           if((isRest||complete) && c.date){
@@ -28727,14 +28736,14 @@ function dsShowCalendar(){
       (function(){
         var wp=weekRoll.map(function(r,i){ return { v:(r && r.acts>0)?r.tss:null, lab:'wk '+(i+1) }; });
         var sp=_gcTrend_(wp, _GC_LOAD, { aria:'Weekly training load across the month', H:34, from:'week 1', to:'week '+wp.length });
-        if(sp) H+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-raise)">'
+        if(sp) H+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge)">'
           +'<div style="font-size:10px;font-weight:700;letter-spacing:.07em;color:var(--d-dim);margin-bottom:2px">WEEKLY LOAD &middot; TSS</div>'
           +sp+'</div>';
       })();
     }
 
     // ---- month summary footer (compact, left-packed, no sparklines) ----
-    H+='<div style="flex-shrink:0;background:var(--d-deep);border:1px solid var(--d-inset);border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
+    H+='<div style="flex-shrink:0;background:var(--d-deep);border:1px solid var(--d-edge2);border-radius:12px;padding:7px 14px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">';
     H+='<div style="flex-shrink:0;writing-mode:vertical-rl;transform:rotate(180deg);font-size:8px;font-weight:700;letter-spacing:.1em;color:#4a5468">MONTH SUMMARY</div>';
     H+='<div style="display:flex;align-items:baseline;gap:18px;flex-wrap:wrap">';
     H+='  <div style="display:flex;align-items:baseline;gap:5px"><span style="font-size:17px;font-weight:800;color:var(--d-head);line-height:1">'+Math.round(mTot)+'<span style="font-size:10px;color:var(--d-dim);font-weight:600;margin-left:2px">mi</span></span><span style="font-size:10px;color:var(--d-t3)">Distance</span></div>';
@@ -28829,7 +28838,7 @@ function dsShowCalendar(){
   // Agenda view — chronological list of the month's activities.
   function calAgenda(monthRides){
     var list=monthRides.slice().sort(function(a,b){ return normDate(a.date)>normDate(b.date)?1:-1; });
-    var H='<div style="flex:1;min-height:0;overflow-y:auto;background:var(--d-deep);border:1px solid var(--d-inset);border-radius:14px;padding:6px 4px">';
+    var H='<div style="flex:1;min-height:0;overflow-y:auto;background:var(--d-deep);border:1px solid var(--d-edge2);border-radius:14px;padding:6px 4px">';
     if(!list.length){ H+='<div style="padding:44px;text-align:center;color:var(--d-dim);font-size:13px">No activities this month.</div>'; }
     list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       var idx=rideRefOf_(r);
@@ -29175,7 +29184,7 @@ function openRecoveryEditor_(){
   m.onclick=function(e){ if(e.target===m) m.remove(); };
   var fc='width:100%;padding:11px 12px;background:var(--d-chip);border:1px solid var(--d-line2);border-radius:10px;color:var(--d-head);font-size:15px;font-family:inherit;box-sizing:border-box';
   var s=document.createElement('div');
-  s.style.cssText='background:var(--d-panel);border:1px solid var(--d-raise);border-radius:16px;padding:20px;width:100%;max-width:340px';
+  s.style.cssText='background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:20px;width:100%;max-width:340px';
   s.innerHTML='<div style="font-size:16px;font-weight:800;color:var(--d-head);margin-bottom:4px">Recovery metrics</div>'
     +'<div style="font-size:11px;color:var(--d-t4);margin-bottom:16px">Enter todays morning readings.</div>'
     +'<div style="margin-bottom:12px"><div style="font-size:11px;color:var(--d-t3);margin-bottom:5px">HRV (ms)</div><input id="rec-hrv" type="number" inputmode="numeric" placeholder="e.g. 47" value="'+(st.hrv!=null?st.hrv:'')+'" style="'+fc+'"></div>'
@@ -29631,7 +29640,7 @@ function dsShowDashboard(){
     var line='M'+pts.join(' L'), area=line+' L'+w+' '+h+' L0 '+h+' Z';
     return '<svg width="100%" height="'+h+'" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" style="display:block;shape-rendering:geometricPrecision"><path d="'+area+'" fill="'+color+'" opacity="0.10"/><path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
   function dlum(v){ if(v==null) return ''; return '<span style="font-size:11px;font-weight:700;color:'+(v>0?ACC.green:v<0?ACC.red:ACC.grey)+'">'+(v>0?'+':'')+v+'</span>'; }
-  function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
+  function card(inner,extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:13px 15px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
   function lbl(t,right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:10px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.09em">'+t+'</span>'+(right||'')+'</div>'; }
   function link(t,act){ return '<span data-act="'+act+'" style="font-size:10px;font-weight:600;color:var(--c-green);cursor:pointer">'+t+'</span>'; }
   var mins=twk&&!twk.isRest?Math.round(twk.minutes||0):0;
@@ -29645,8 +29654,8 @@ function dsShowDashboard(){
   H+='<div><div style="font-size:20px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">'+greeting+', Mikey</div><div style="font-size:12px;color:var(--d-t4);margin-top:1px">Here is your athlete overview.</div></div>';
   H+='</div>';
   H+='<div style="display:flex;align-items:center;gap:9px">';
-  H+='<div style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:9px;padding:7px 12px;font-size:12px;color:var(--d-soft);font-weight:500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>'+dateStr+'</div>';
-  H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-raise);border-radius:9px;padding:7px 13px;font-size:12px;color:var(--d-soft);font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
+  H+='<div style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:9px;padding:7px 12px;font-size:12px;color:var(--d-soft);font-weight:500"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>'+dateStr+'</div>';
+  H+='<div data-act="sync" style="display:flex;align-items:center;gap:7px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:9px;padding:7px 13px;font-size:12px;color:var(--d-soft);font-weight:600;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Sync</div>';
   H+='</div></div>';
 
   H+='<div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:0 20px 20px;display:flex;flex-direction:column;gap:10px;min-width:0">';
@@ -29681,7 +29690,7 @@ function dsShowDashboard(){
   iqInner+='</div></div></div>';
   function _hx2rgb(h){ h=h.replace('#',''); return parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16); }
   var _pillRGB=_hx2rgb(verdict.color);
-  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-raise)"><span style="font-size:11px;font-weight:700;color:'+verdict.color+';background:rgba('+_pillRGB+',.12);border:1px solid rgba('+_pillRGB+',.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:var(--d-t4)">'+verdict.loadNote+'</span></div>';
+  iqInner+='<div style="display:flex;align-items:center;gap:11px;margin-top:14px;padding-top:12px;border-top:1px solid var(--d-edge)"><span style="font-size:11px;font-weight:700;color:'+verdict.color+';background:rgba('+_pillRGB+',.12);border:1px solid rgba('+_pillRGB+',.25);border-radius:7px;padding:4px 11px">Training Load: '+loadState+'</span><span style="font-size:12px;color:var(--d-t4)">'+verdict.loadNote+'</span></div>';
   H+=card(iqInner);
 
   // -- Today's Plan --
@@ -29692,7 +29701,7 @@ function dsShowDashboard(){
   pInner+='<div style="display:flex;align-items:center;gap:13px;margin-bottom:14px"><div style="width:50px;height:50px;border-radius:12px;background:rgba(74,222,128,.08);display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_((twk&&twk.name)||'Ride',38)+'</div><div style="min-width:0"><div style="font-size:18px;font-weight:800;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+planName+'</div><div style="font-size:12px;color:var(--d-t3);margin-top:2px">'+(twk&&!twk.isRest?(twk.isHard?'Structured intensity':twk.isRide?'Zone 2 endurance':'Session'):(twk&&twk.isRest?'Keep it easy':'Open day'))+'</div></div></div>';
   if(twk && !twk.isRest){
     [['Duration',durStr,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3'],['Focus',focus,'M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7a5 5 0 1 0 0 10A5 5 0 0 0 12 7M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2']].forEach(function(rw){
-      pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-raise)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
+      pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-edge)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
     });
   }
   pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:var(--d-t1);cursor:pointer">View Workout Details</div></div>';
@@ -29702,14 +29711,14 @@ function dsShowDashboard(){
   var rc='<div style="display:flex;flex-direction:column;gap:10px;min-width:0">';
   rc+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">';
   function tile(icon,iconCol,val,label,sub,sparkHtml){
-    return '<div style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:var(--d-t2);font-weight:700">'+label+'</div><div style="font-size:9px;color:var(--d-t4);margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
+    return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:11px 12px;min-width:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px"><div style="width:30px;height:30px;border-radius:8px;background:'+iconCol+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div><div style="flex:1;min-width:0;text-align:right;font-size:'+(String(val).length>5?'13px':(String(val).length>4?'14.5px':'16px'))+';font-weight:800;color:var(--d-head);line-height:1;letter-spacing:-.02em;white-space:nowrap;overflow:hidden">'+val+'</div></div><div style="font-size:12px;color:var(--d-t2);font-weight:700">'+label+'</div><div style="font-size:9px;color:var(--d-t4);margin-bottom:5px">'+sub+'</div><div style="height:22px">'+sparkHtml+'</div></div>';
   }
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.orange+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>',ACC.orange,weekTSS,'TSS','This Week',spark(tssSeries,ACC.orange,100,22,true));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.blue+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L6 12h6l-1 9 7-9h-6z"/></svg>',ACC.blue,wkgStr_(wkg),'W/kg',(wkg==null?'needs a weight':'FTP + weight'),spark(wkgSeries.length>1?wkgSeries:(wkg==null?[]:[wkg,wkg]),ACC.blue,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.teal+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3M12 7v5l3 3"/></svg>',ACC.teal,weekHM,'Total Time','This Week',spark(timeSeries,ACC.teal,100,22));
   rc+=tile('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+ACC.green+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M14 7h6v6"/></svg>',ACC.green,weekActs,'Activities','This Week',spark(actSeries,ACC.green,100,22));
   rc+='</div>';
-  rc+='<div id="ds-attention-card" style="background:var(--d-panel);border:1px solid var(--d-raise);border-radius:14px;padding:14px 15px;flex:1;min-height:0"></div>';
+  rc+='<div id="ds-attention-card" style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 15px;flex:1;min-height:0"></div>';
   rc+='</div>';
   H+=rc;
   H+='</div>';
@@ -29725,7 +29734,7 @@ function dsShowDashboard(){
     var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=(constRideTSS_(r)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
-    ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
+    ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid var(--d-edge);':'')+'cursor:pointer">';
     ra+='<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+activityIcon_(stype,30)+'</div>';
     ra+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nm+'</div><div style="font-size:10px;color:var(--d-t4);margin-top:1px">'+dstr+'</div></div>';
     ra+='<div style="display:flex;gap:13px;flex-shrink:0;text-align:right">';
@@ -29837,8 +29846,8 @@ function dsShowDashboard(){
   bikes.forEach(function(b,bi){
     var ch=(typeof bikeChain_==='function')?bikeChain_(b):null;
     var sub=b.wheelset||b.groupset||(b.miles!=null?Math.round(b.miles)+' mi':'');
-    bk+='<div data-act="gear" style="display:flex;gap:11px;align-items:center;padding:7px 0;'+(bi>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
-    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--d-raise);filter:brightness(1.06)">';
+    bk+='<div data-act="gear" style="display:flex;gap:11px;align-items:center;padding:7px 0;'+(bi>0?'border-top:1px solid var(--d-edge);':'')+'cursor:pointer">';
+    if(b.photo) bk+='<img src="'+b.photo+'" style="width:74px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;border:1px solid var(--d-edge);filter:brightness(1.06)">';
     bk+='<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+b.name+'</div><div style="font-size:10px;color:var(--d-t4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+sub+'</div>'+(ch?'<div style="font-size:10px;margin-top:2px;color:'+(ch.pct>=0.8?ACC.red:ACC.green)+'">Chain '+Math.round(ch.pct*100)+'%</div>':'')+'</div>';
     bk+='</div>';
   });
@@ -29915,8 +29924,8 @@ function dsShowDashboard(){
   rd+='<div style="font-size:10px;color:var(--d-t4);margin:-6px 0 6px">'+recSub+'</div>';
   rd+='<div style="display:flex;justify-content:center;padding:2px 0"><div style="position:relative;width:98px;height:98px"><svg width="98" height="98" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="#1c2130" stroke-width="7"/><circle cx="32" cy="32" r="26" fill="none" stroke="'+recColor+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(2*Math.PI*26).toFixed(1)+'" stroke-dashoffset="'+((2*Math.PI*26)*(1-recScore/100)).toFixed(1)+'" transform="rotate(-90 32 32)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:25px;font-weight:800;color:var(--d-t1);line-height:1">'+recScore+'%</div><div style="font-size:11px;font-weight:700;color:'+recColor+';margin-top:2px">'+recLabel+'</div></div></div></div>';
   rd+='<div style="display:flex;gap:8px;margin-top:auto;padding-top:12px">';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
-  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-raise);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(hrv!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(hrv!=null?hrv:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">HRV ms</div></div>';
+  rd+='<div data-act="recovery" style="flex:1;text-align:center;background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:8px 4px;cursor:pointer"><div style="font-size:16px;font-weight:800;color:'+(rhr!=null?'#e8edf5':'#5b6678')+';line-height:1">'+(rhr!=null?rhr:'—')+'</div><div style="font-size:9px;color:var(--d-t4);margin-top:2px">Rest HR bpm</div></div>';
   rd+='</div>';
   H+=card(rd);
   // Consistency
@@ -29938,12 +29947,12 @@ function dsShowDashboard(){
   if(!upRaces.length){ ue+='<div data-act="addrace" style="font-size:12px;color:var(--d-t4);padding:10px 0;text-align:center;cursor:pointer">No races scheduled — add one</div>'; }
   upRaces.slice(0,2).forEach(function(rr,ri){
     var sIcon=rr.sport==='run'?ACC.red:rr.sport==='bike'?ACC.green:ACC.amber;
-    ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid var(--d-raise);':'')+'cursor:pointer">';
+    ue+='<div data-race="'+rr._i+'" style="display:flex;gap:11px;align-items:center;padding:8px 0;'+(ri>0?'border-top:1px solid var(--d-edge);':'')+'cursor:pointer">';
     ue+='<div style="text-align:center;flex-shrink:0;width:34px"><div style="font-size:9px;color:var(--d-t4)">'+_mon[rr.dateObj.getMonth()]+'</div><div style="font-size:17px;font-weight:800;color:var(--d-t1);line-height:1">'+rr.dateObj.getDate()+'</div></div>';
     ue+='<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;color:var(--d-head);'+(rr.status==='cancelled'?'text-decoration:line-through;opacity:.6;':'')+'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rr.name+(rr.status==='tentative'?' <span style="color:var(--c-amber)">(tentative)</span>':'')+'</div><div style="font-size:10px;color:var(--d-t4)">'+(rr.distance!=null?rr.distance+' mi':(rr.location||rr.goal||''))+'</div></div>';
     ue+='<div style="font-size:11px;font-weight:700;color:'+(rr.status==='cancelled'?ACC.red:ACC.green)+';flex-shrink:0">'+(rr.status==='cancelled'?'Cancelled':(rr.daysOut+' day'+(rr.daysOut===1?'':'s')))+'</div></div>';
   });
-  ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:var(--d-t3);border:1px solid var(--d-raise);border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
+  ue+='<div data-act="events" style="margin-top:9px;text-align:center;font-size:11px;font-weight:600;color:var(--d-t3);border:1px solid var(--d-edge);border-radius:9px;padding:8px;cursor:pointer">View All Events</div>';
   H+=card(ue);
   H+='</div>';
 
@@ -33560,13 +33569,13 @@ function _rgSection_(){
     +c.span+'-month calendar span. '
     +(g.best?(g.bestYear+' totalled '+g.bestTotal.toLocaleString()+' mi against '+g.subjectTotal.toLocaleString()+' mi in '+g.subjectYear+'. '):'')
     +'The gap is the move to cycling, not a missing record.';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Running Growth</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">cumulative miles by year &middot; history only</span></div>'
     +'<div style="font-size:12.5px;color:var(--d-t3);line-height:1.55;margin-bottom:10px">'+lead+'</div>'
     +legend+_rgChart_(g)+moyLine
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
@@ -33680,7 +33689,7 @@ function _prSection_(){
       gap=(ev.kind==='time') ? (r.season.val-target.val) : (target.val-r.season.val);
       if(gap<=0) gap=null;                                  // already beaten — no gap to close
     }
-    html+='<div style="padding:11px 0;border-bottom:1px solid var(--d-raise)">'
+    html+='<div style="padding:11px 0;border-bottom:1px solid var(--d-edge)">'
       +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">'
       +'<span style="font-size:13px;font-weight:700;color:var(--d-head)">'+ev.name+'</span>'
       +'<span style="font-size:15px;font-weight:800;color:#FC4C02">'+fmt(ev,target)+'</span>'
@@ -33714,12 +33723,12 @@ function _prSection_(){
   var foot='Ranked against <b style="color:var(--d-t3)">'+c.rankable+'</b> rankable run-months. '
     +'Events with no result since '+_PR_BAND_LABEL+' are left off &mdash; this board shows what you can still climb, '
     +'not everything you have ever done.';
-  return '<div style="background:var(--d-deep);border:1px solid var(--d-raise);border-radius:16px;padding:18px;margin:0 16px 14px">'
+  return '<div style="background:var(--d-deep);border:1px solid var(--d-edge);border-radius:16px;padding:18px;margin:0 16px 14px">'
     +'<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px">'
     +'<span style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.05em">Personal Bests</span>'
     +'<span style="font-size:11px;color:var(--d-dim)">running &middot; career, since '+_PR_BAND_LABEL+', this year</span></div>'
     +html
-    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-raise)">'+foot+'</div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.55;margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge)">'+foot+'</div>'
     +'</div>';
 }
 
