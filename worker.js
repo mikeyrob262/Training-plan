@@ -135,7 +135,10 @@ export default {
      dark values below, which is why the Dark Mode switch flipped body.dark and nothing moved:
      the variables repointed correctly, but almost nothing on desktop read them. Dark values
      are byte-identical to the literals they replaced, so dark mode is unchanged. */
-  --d-back:#EEEFF2;--d-shell:#F7F8FA;--d-panel:#FFFFFF;--d-raise:#FFFFFF;
+  /* The shell has to sit CLEARLY below the cards. Dark mode gets its card separation from panel
+     contrast (#111318 on #0d0f14) rather than from borders, so a light shell only 3% off white
+     erased the grouping entirely — every card melted into one field. */
+  --d-back:#E3E6EB;--d-shell:#EBEEF2;--d-panel:#FFFFFF;--d-raise:#FFFFFF;
   --d-line:rgba(0,0,0,.10);--d-line2:rgba(0,0,0,.16);--d-chip:#EDEFF3;
   --d-head:#15181D;--d-t1:#15181D;--d-t2:#2C3138;--d-soft:#3A4149;
   --d-t3:#4E5866;--d-t4:#6B7280;--d-dim:#7C8595;
