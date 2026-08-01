@@ -286,6 +286,11 @@ check('...and reports that it came from the athlete, not the template', /via='us
 // ── CALENDAR YEAR VIEW ────────────────────────────────────────────────────────────────────────
 // INVARIANT: the year aggregate is built off the SAME ridesByDate map every other Calendar view
 // reads, so a month chapter can never disagree with the week/month totals for the same days.
+check('ONE date-bucket builder for both calendar surfaces', countCode(/function _calByDate_/g), 1);
+check('mobile mounts the SAME year renderer as desktop', /yearPanel\.innerHTML=calYearHTML_\(calYear/.test(src), true);
+check('the old independent mobile year aggregator is gone', countCode(/var maxMi=Math\.max\.apply\(null,moMiles\)/g), 0);
+check('the star renders on BOTH detail surfaces', countCode(/favStarHTML_\(r,'(ds|mb)-fav-star'\)/g), 2);
+check('...and is wired on both', countCode(/favStarWire_\(r,'(ds|mb)-fav-star'\)/g), 2);
 check('the year view reads the shared ridesByDate map', /calYearHTML_\(viewYear, ridesByDate, now\)/.test(src), true);
 check('there is exactly ONE month aggregator', countCode(/function _yearMonthAgg_/g), 1);
 check('year totals are summed from that same aggregate', /agg\.forEach\(function\(e\)\{ tSecs\+=e\.secs/.test(src), true);

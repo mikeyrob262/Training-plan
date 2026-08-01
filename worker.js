@@ -28928,7 +28928,7 @@ function dsShowCalendar(){
     if(calFilter.completed){
       // PINNED to legacy — calendar is its own migration pass, and it must move on the
       // desktop and mobile renderers together. See allRidesLegacy_.
-      allRidesLegacy_().forEach(function(r){ if(!r||!r.date||!passType(r)) return; var nd=normDate(r.date); if(!ridesByDate[nd]) ridesByDate[nd]=[]; ridesByDate[nd].push(r); });
+      ridesByDate=_calByDate_(allRidesLegacy_().filter(function(r){ return r && r.date && passType(r); }));
     }
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
     var firstDow=new Date(viewYear,viewMonth,1).getDay();
@@ -29352,6 +29352,18 @@ function favStarWire_(a, id){
 }
 try{ if(typeof window!=='undefined'){ window._favToggle_=_favToggle_; window._isFavorite_=_isFavorite_; window._favActivities_=_favActivities_; } }catch(e){}
 
+// ONE date-bucket builder for the calendar. Both surfaces call it, so a month total on one can
+// never disagree with the same month on the other.
+function _calByDate_(list){
+  var by={};
+  (list||[]).forEach(function(r){
+    if(!r || !r.date) return;
+    var nd=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    if(!by[nd]) by[nd]=[];
+    by[nd].push(r);
+  });
+  return by;
+}
 // ==================== Calendar — YEAR view ====================
 //
 // The Calendar's other views answer "what did I do?". This one answers "what does this year mean?".
@@ -31176,6 +31188,9 @@ function openDesktopRideDetail(idx, _noFetch){
         '</div>'+
       '</div>'+
       '<div style="display:flex;align-items:center;gap:6px">'+
+        // Star this activity. ONE favourite flag shared by rides AND runs (_favKey_) — the same
+        // control renders on the mobile detail view, never a second per-surface mechanism.
+        ((typeof favStarHTML_==='function')?favStarHTML_(r,'ds-fav-star'):'')+
         // Share + Export removed — neither had a real implementation (a dead button on a primary
         // surface is the same failure as fake data). Export returns as a GPX/FIT download of the
         // ride's GPS track once specced; Share is a separate, undecided call.
@@ -31569,6 +31584,7 @@ function openDesktopRideDetail(idx, _noFetch){
     if(rec&&rw&&rt){rw.style.display='block';rt.textContent=rec;}
     var ask=document.getElementById('rp-ask-coach');
     if(ask)ask.onclick=function(){openRideAskCoach_(r);};
+    try{ if(typeof favStarWire_==='function') favStarWire_(r,'ds-fav-star'); }catch(e){}
   });
 }
 
@@ -31656,11 +31672,12 @@ function openRideDetail(idx, _noFetch){
   topRow.appendChild(moreBtn);
 
   var titleWrap=document.createElement('div');
-  titleWrap.innerHTML='<div id="ride-detail-name" style="font-size:19px;font-weight:600;color:var(--t1)">'+(r.name||'Activity')+'</div>'
+  titleWrap.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div id="ride-detail-name" style="font-size:19px;font-weight:600;color:var(--t1);min-width:0;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'+((typeof favStarHTML_==='function')?favStarHTML_(r,'mb-fav-star'):'')+'</div>'
     +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+dtStr+'</div>';
 
   hdr.appendChild(topRow);
   hdr.appendChild(titleWrap);
+  try{ if(typeof favStarWire_==='function') favStarWire_(r,'mb-fav-star'); }catch(e){}
 
   // Hero stat row - generous 2x3 grid (matching the reference's Time/
   // Distance/Intensity/HR/Power/TSS layout) plus a full-width Calories
@@ -42524,47 +42541,24 @@ function showCal(){
   }
 
   function renderYear(){
-    yearPanel.innerHTML='';
-    var yTitle=document.createElement('div');
-    yTitle.style.cssText='font-size:16px;font-weight:700;color:var(--t1);text-align:center;margin-bottom:14px';
-    yTitle.textContent=calYear;
-    yearPanel.appendChild(yTitle);
-    var moMiles=[];
-    for(var m=0;m<12;m++){
-      var total=(st.rides||[]).filter(function(r){if(!r.date)return false;var rd=new Date(r.date);return rd.getFullYear()===calYear&&rd.getMonth()===m;}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
-      moMiles.push(Math.round(total));
+    // THE SAME renderer the desktop Year view mounts. This used to be a second, independent month
+    // aggregator built off raw st.rides with its own per-sport regex filters — two numbers for one
+    // fact, and the exact shape this app keeps getting bitten by. One renderer, one aggregate.
+    try{
+      var _by=_calByDate_((typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]));
+      yearPanel.innerHTML=calYearHTML_(calYear, _by, new Date());
+      // A chapter card opens its month, same drill-down as desktop.
+      yearPanel.onclick=function(ev){
+        var t=ev.target&&ev.target.closest?ev.target.closest('[data-cal="ymonth"]'):null;
+        if(!t) return;
+        var ym=String(t.getAttribute('data-ym')||'').split('-');
+        if(ym.length!==2) return;
+        calYear=parseInt(ym[0],10); calMonth=parseInt(ym[1],10)-1;
+        mbtn.onclick(); renderMonth();
+      };
+    }catch(e){
+      yearPanel.innerHTML='<div style="padding:30px 16px;text-align:center;color:var(--t3);font-size:13px">Year view unavailable.</div>';
     }
-    var maxMi=Math.max.apply(null,moMiles)||1;
-    months.forEach(function(mo,m){
-      var mi=moMiles[m];
-      var pct=Math.round((mi/maxMi)*100);
-      var isCurrentMo=m===calMonth&&calYear===now.getFullYear();
-      var moActs=(st.rides||[]).filter(function(r){if(!r.date)return false;var rd=new Date(r.date);return rd.getFullYear()===calYear&&rd.getMonth()===m;});
-      var dots=moActs.slice(0,25).map(function(r){var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';var c=colors[sport]||'#FC4C02';return '<div style="width:12px;height:12px;border-radius:50%;background:'+c+'"></div>';}).join('');
-      var row=document.createElement('div');
-      row.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;cursor:'+(mi?'pointer':'default');
-      row.innerHTML='<div style="font-size:13px;color:'+(isCurrentMo?'var(--t1)':'var(--t3)')+';font-weight:'+(isCurrentMo?700:400)+';width:30px;flex-shrink:0">'+mo+'</div>'
-        +'<div style="flex:1;display:flex;flex-direction:column;gap:4px">'
-        +(function(){
-        var rideMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /ride/i.test(s)&&!/virtual/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
-        var virtMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /virtualride|ebikeride/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
-        var runMi=moActs.filter(function(r){var s=r.sportType||r.type||'';return /run/i.test(s);}).reduce(function(a,r){return a+(parseFloat(r.distance)||0);},0);
-        var total=rideMi+virtMi+runMi||1;
-        var ridePct=Math.round((rideMi/total)*pct);
-        var virtPct=Math.round((virtMi/total)*pct);
-        var runPct=Math.round((runMi/total)*pct);
-        return '<div style="height:12px;background:var(--s3);border-radius:4px;overflow:hidden;display:flex">'
-          +(ridePct?'<div style="height:100%;width:'+ridePct+'%;background:#FC4C02"></div>':'')
-          +(virtPct?'<div style="height:100%;width:'+virtPct+'%;background:#1D9E75"></div>':'')
-          +(runPct?'<div style="height:100%;width:'+runPct+'%;background:#185FA5"></div>':'')
-          +'</div>';
-      })()
-        +(dots?'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:3px">'+dots+'</div>':'')
-        +'</div>'
-        +'<div style="font-size:12px;color:var(--t2);width:42px;text-align:right;flex-shrink:0;font-weight:600">'+(mi?mi+'mi':'')+'</div>';
-      if(mi){(function(mo2){row.onclick=function(){calMonth=mo2;ybtn.onclick=null;mbtn.onclick();renderMonth();};})(m);}
-      yearPanel.appendChild(row);
-    });
   }
 
   renderMonth();
