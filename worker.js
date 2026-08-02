@@ -20975,11 +20975,231 @@ function _recStatBlock_(label, value, sub, col){
     +(sub?('<div style="font-size:10.5px;color:var(--d-dim);line-height:1.4;margin-top:3px">'+sub+'</div>'):'')
     +'</div>';
 }
+// ==================== RECORDS ENGINE ====================
+// ONE record shape, four providers. Before this, "a record" was computed four different ways in
+// four places — segmentRecordsCompute_ for segments, computePowerCurve for power, _pbSection_
+// inside You vs. You, and the Milestones board — each with its own population, its own idea of
+// what counts, and no way to state a shared denominator. This is the single layer they read.
+//
+// THE UNIFORM SHAPE. Every provider returns records of exactly this form:
+//   kind      'distance' | 'power' | 'elevation' | 'segment'
+//   key       stable id within the kind (so a record can be tracked across recomputes)
+//   label     what it is, in words
+//   value     the number in its native unit; unit + better say how to read it
+//   better    'lower' (a time) or 'higher' (watts, feet) — so ranking never has to be guessed
+//   display   preformatted, because a time and a wattage do not format the same way
+//   date/rideKey  provenance: WHEN it was set and WHICH activity set it
+//   n         how many activities were eligible for this record — the honest denominator
+//   why       one sentence stating the definition, shown on the card
+//   estimated true when the value is derived rather than measured (never counted as a record)
+//
+// WHAT THIS LAYER DELIBERATELY DOES NOT DO: invent an in-ride split. See _recDistance_.
+function _recCycPop_(){
+  var live=(typeof st!=='undefined'&&st.rides)?st.rides.filter(function(r){return r&&!r.deleted;}):[];
+  var isCyc=function(r){ var s=String((typeof rideSport_==='function'?rideSport_(r):'')||'').toLowerCase();
+    return /ride|cycl|ebike|gravel|mountain|handcycle|velomobile/.test(s); };
+  var cyc=live.filter(isCyc);
+  var timed=cyc.filter(function(r){ return (parseFloat(r.distance)||0)>0 && (+r.movingSecs)>0; });
+  return { live:live, liveN:live.length, cyc:cyc, cycN:cyc.length, timed:timed, timedN:timed.length };
+}
+function _recSecs_(r){ var v=+r.movingSecs; return (isFinite(v)&&v>0)?v:0; }
+function _recDate_(r){ var d=String((r&&r.date)||'').slice(0,10); return d||null; }
+function _recKeyOf_(r){ try{ return (typeof rideKey==='function')?rideKey(r):null; }catch(e){ return null; } }
+// ---- provider: DISTANCE -----------------------------------------------------------------
+// A "40 mile record" here is the fastest RIDE of 40.0-42.4 miles. It is NOT the fastest 40 miles
+// inside a longer ride, and the card says so.
+//
+// The split version is not computable from anything this library stores. A true rolling split
+// needs a distance stream paired with a time stream; gpsPayload_ persists lats, lons, chartPwr,
+// chartHR, chartEle, chartCad and laps — there is no distance or time array in /gps, and no ride
+// in state carries a streams object at all. Presenting a whole-ride time as a split would be a
+// fabricated number of exactly the kind this app refuses, so the band is stated instead.
+//
+// Band is +6%: measured across the library it is the narrowest width that leaves every target
+// non-empty (6/22/19/19/15/5/7 rides at 10/20/25/40/50/100km/100mi). Narrower empties the 100mi
+// target; wider starts calling a 46-mile ride a 40-mile record.
+var _REC_DIST_BAND=0.06;
+var _REC_DIST_TARGETS=[
+  {mi:10,   label:'10 miles'},
+  {mi:20,   label:'20 miles'},
+  {mi:25,   label:'25 miles'},
+  {mi:40,   label:'40 miles'},
+  {mi:50,   label:'50 miles'},
+  {mi:62.14,label:'100 km'},
+  {mi:100,  label:'100 miles'}
+];
+function distancePRs_(pop){
+  pop=pop||_recCycPop_();
+  var fmt=(typeof _segFmtT_==='function')?_segFmtT_:function(s){ return Math.round(s)+'s'; };
+  return _REC_DIST_TARGETS.map(function(t){
+    var lo=t.mi, hi=t.mi*(1+_REC_DIST_BAND);
+    var elig=pop.timed.filter(function(r){ var d=parseFloat(r.distance)||0; return d>=lo && d<=hi; });
+    var best=null;
+    elig.forEach(function(r){ if(!best || _recSecs_(r)<_recSecs_(best)) best=r; });
+    var band=(Math.round(lo*10)/10)+'-'+(Math.round(hi*10)/10)+' mi';
+    return {
+      kind:'distance', key:'d'+t.mi, label:t.label,
+      value:best?_recSecs_(best):null, unit:'sec', better:'lower',
+      display:best?fmt(_recSecs_(best)):null,
+      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+      rideName:best?String(best.name||''):null,
+      actualMi:best?(Math.round((parseFloat(best.distance)||0)*100)/100):null,
+      n:elig.length, estimated:false,
+      why:'Fastest single ride of '+band+' (moving time). Not a split inside a longer ride — this library stores no distance or time streams, so an in-ride split cannot be computed.'
+    };
+  });
+}
+// ---- provider: POWER --------------------------------------------------------------------
+// MEASURED peaks only. computePowerCurve also synthesises a 20-minute peak as np*1.05 and a
+// 60-minute as np*0.95 for Intervals-sourced rides; those are estimates wearing the same shape as
+// a measurement, and a record board is the one place that distinction cannot be blurred. Only 7
+// rides in the library are estimate-only, so excluding them costs almost nothing and buys a board
+// where every number was actually recorded.
+var _REC_PWR_DURS=[{s:5,l:'5 sec'},{s:15,l:'15 sec'},{s:30,l:'30 sec'},{s:60,l:'1 min'},
+                   {s:300,l:'5 min'},{s:600,l:'10 min'},{s:1200,l:'20 min'},{s:3600,l:'60 min'}];
+function _recPower_(pop){
+  pop=pop||_recCycPop_();
+  return _REC_PWR_DURS.map(function(d){
+    var best=null, bestW=0, n=0;
+    pop.cyc.forEach(function(r){
+      var w=0;
+      if(r.powerCurve && r.powerCurve[d.s]>0) w=+r.powerCurve[d.s];
+      else if(d.s===1200 && r.max20>0) w=+r.max20;         // max20 IS a measured 20-minute peak
+      if(!(w>0)) return;
+      n++;
+      if(w>bestW){ bestW=w; best=r; }
+    });
+    return {
+      kind:'power', key:'p'+d.s, label:d.l+' power',
+      value:bestW>0?Math.round(bestW):null, unit:'w', better:'higher',
+      display:bestW>0?(Math.round(bestW)+'W'):null,
+      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+      rideName:best?String(best.name||''):null, actualMi:null,
+      n:n, estimated:false,
+      why:'Highest recorded '+d.l+' power across '+n+' ride'+(n===1?'':'s')+' carrying a measured power curve. Estimated peaks (derived from NP on Intervals rides) are excluded.'
+    };
+  });
+}
+// ---- provider: ELEVATION ----------------------------------------------------------------
+// Routed through _actElevGain_, never a bare r.elev — rides store gain in .elev, the runs library
+// uses .elevation, and some imports carry only the stream.
+function _recElev_(pop){
+  pop=pop||_recCycPop_();
+  var best=null, bestV=0, n=0;
+  pop.cyc.forEach(function(r){
+    var e=(typeof _actElevGain_==='function')?_actElevGain_(r):null;
+    if(e==null || !(e>0)) return;
+    n++;
+    if(e>bestV){ bestV=e; best=r; }
+  });
+  return [{
+    kind:'elevation', key:'e1', label:'Most climbing in a ride',
+    value:bestV>0?Math.round(bestV):null, unit:'ft', better:'higher',
+    display:bestV>0?(Math.round(bestV).toLocaleString()+' ft'):null,
+    date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+    rideName:best?String(best.name||''):null, actualMi:best?(Math.round((parseFloat(best.distance)||0)*10)/10):null,
+    n:n, estimated:false,
+    why:'Largest elevation gain on a single ride, across '+n+' ride'+(n===1?'':'s')+' that record climbing. Indoor rides are included when the platform reports gain.'
+  }];
+}
+// ---- provider: SEGMENT ------------------------------------------------------------------
+// Wraps segmentRecordsCompute_ into the uniform shape rather than replacing it: that function is
+// the Strava-server-side truth and is already correct. Course means SEGMENT here, deliberately —
+// there is no route/loop identity anywhere in this app to hang a broader course on.
+function _recSegment_(store){
+  var recs=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(store||((typeof st!=='undefined')?st.segments:null)):[];
+  var fmt=(typeof _segFmtT_==='function')?_segFmtT_:function(s){ return Math.round(s)+'s'; };
+  return recs.map(function(s){
+    return {
+      kind:'segment', key:s.id, label:s.name,
+      value:s.prSec, unit:'sec', better:'lower', display:fmt(s.prSec),
+      date:s.prDate, rideKey:null, rideName:null,
+      actualMi:s.distMi!=null?s.distMi:null,
+      n:s.effortCount||null, estimated:false, progression:s.progression||null,
+      why:'Personal record on this Strava segment, from '+(s.effortCount||0)+' recorded effort'+((s.effortCount===1)?'':'s')+'.'
+    };
+  });
+}
+// ---- the layer ---------------------------------------------------------------------------
+// opts.kinds limits which providers run. Returns the records PLUS the scope they were measured
+// over, because a record board with no stated denominator is the thing this codebase keeps
+// having to go back and fix.
+function recordsCompute_(opts){
+  opts=opts||{};
+  var want=opts.kinds||['distance','power','elevation','segment'];
+  var pop=_recCycPop_();
+  var out=[];
+  if(want.indexOf('distance')>=0)  out=out.concat(distancePRs_(pop));
+  if(want.indexOf('power')>=0)     out=out.concat(_recPower_(pop));
+  if(want.indexOf('elevation')>=0) out=out.concat(_recElev_(pop));
+  if(want.indexOf('segment')>=0)   out=out.concat(_recSegment_(opts.segStore));
+  return {
+    records: out,
+    scope: {
+      liveActivities: pop.liveN, cyclingRides: pop.cycN, timedCyclingRides: pop.timedN,
+      // Named so no surface can print a coverage claim this layer cannot support.
+      note:'Measured over '+pop.cycN.toLocaleString()+' cycling rides in the device library ('
+        +pop.timedN.toLocaleString()+' with both distance and moving time). This is the stored library, not the full riding history.'
+    }
+  };
+}
+// The engine's own section on the Records tab. Renders whatever recordsCompute_ returns for the
+// three ride-library kinds; an unset record is an em-dash with its reason, never a zero.
+function _recEngineCard_(rec){
+  var esc=(typeof aiEsc_==='function')?aiEsc_:function(s){ return String(s==null?'':s); };
+  var COL={distance:'#60a5fa', power:'#f59e0b', elevation:'#22c55e'};
+  var col=COL[rec.kind]||'#94a3b8';
+  var has=(rec.value!=null);
+  var sub;
+  if(has){
+    var bits=[];
+    if(rec.date) bits.push((typeof _msFmtDate_==='function')?_msFmtDate_(rec.date):rec.date);
+    if(rec.kind==='distance' && rec.actualMi!=null) bits.push(rec.actualMi+' mi');
+    if(rec.kind==='elevation' && rec.actualMi!=null) bits.push(rec.actualMi+' mi');
+    if(rec.rideName) bits.push(esc(String(rec.rideName).slice(0,28)));
+    sub=bits.join(' &middot; ');
+  } else {
+    sub='<span style="color:var(--d-t4)">No qualifying ride</span>';
+  }
+  return '<div title="'+esc(rec.why)+'" style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:13px 14px">'
+    +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--d-dim)">'+esc(rec.label).toUpperCase()+'</div>'
+    +'<div style="font-size:22px;font-weight:800;line-height:1.15;margin-top:4px;color:'+(has?col:'var(--d-t4)')+'">'
+      +(has?rec.display:'&mdash;')+'</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim);line-height:1.4;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+sub+'</div>'
+    +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:5px">'+(rec.n||0)+' eligible</div>'
+    +'</div>';
+}
+function _recEngineSectionHTML_(){
+  var eng;
+  try{ eng=recordsCompute_({kinds:['distance','power','elevation']}); }
+  catch(e){ return '<div style="font-size:11.5px;color:var(--d-dim);margin-bottom:12px">Ride records unavailable: '+String((e&&e.message)||e)+'</div>'; }
+  var esc=(typeof aiEsc_==='function')?aiEsc_:function(s){ return String(s==null?'':s); };
+  var byKind=function(k){ return eng.records.filter(function(r){ return r.kind===k; }); };
+  var group=function(title, note, recs){
+    if(!recs.length) return '';
+    return '<div style="margin-bottom:14px">'
+      +'<div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px">'
+      +'<span style="font-size:12.5px;font-weight:800;color:var(--d-head)">'+esc(title)+'</span>'
+      +'<span style="font-size:10.5px;color:var(--d-dim)">'+esc(note)+'</span></div>'
+      +'<div class="rec-grid">'+recs.map(_recEngineCard_).join('')+'</div></div>';
+  };
+  var H='<div style="margin-bottom:16px">';
+  H+=group('Distance', 'fastest single ride in each band — not an in-ride split', byKind('distance'));
+  H+=group('Power', 'measured peaks only; NP-derived estimates excluded', byKind('power'));
+  H+=group('Climbing', '', byKind('elevation'));
+  H+='<div style="font-size:10.5px;color:var(--d-dim);line-height:1.5;border-top:1px solid var(--d-edge);padding-top:9px">'
+    +esc(eng.scope.note)+'</div>';
+  H+='</div>';
+  return H;
+}
 function aiRenderRecords_(){
   var all=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
   if(!all.length){
-    return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px;line-height:1.6">'
-      +'No segment records synced yet.<br>Use Sync Segment PRs to pull them from Strava.</div>';
+    // The ride-library records (distance / power / climbing) do not depend on the segment store,
+    // so an unsynced segment library must not blank them out — it only removes the segment half.
+    return '<div style="padding-bottom:16px">'+_recEngineSectionHTML_()
+      +'<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:14px;line-height:1.6">'
+      +'No segment records synced yet.<br>Use Sync Segment PRs to pull them from Strava.</div></div>';
   }
   var S=_recStats_(all), TL=_recTimeline_(all);
   var H='<style>'
@@ -21038,6 +21258,11 @@ function aiRenderRecords_(){
     heroR+='</div>';
   }
   H+='<div class="rec-hero">'+heroL+heroR+'</div>';
+
+  // ---- personal bests from the RIDE library (distance / power / elevation) ----------------
+  // These come from the records engine, not from this renderer, so You vs. You and Milestones can
+  // read the identical numbers instead of each deriving their own.
+  H+=_recEngineSectionHTML_();
 
   // ---- controls. No sport tabs: segments carry no activity type, so such a filter would be
   // decorative at best and wrong at worst.
@@ -44870,7 +45095,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-quarter-view-g2-cards-2';
+window.__BUILD__ = '2026-08-02-records-engine-distance-prs';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
