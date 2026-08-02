@@ -21043,17 +21043,65 @@ function _recRefUsable_(ref){
     return !!((st.rides||[])[i]);
   }catch(e){ return false; }
 }
+// ---- return path ------------------------------------------------------------------------
+// Where a record card sent the user, so the ride page can offer a way BACK. Opening a detail view
+// with no route home is an incomplete navigation, not a finished one — desktop replaces the whole
+// of ds-content, so without this the Records tab is simply gone and the only way back is
+// Athlete Intelligence -> Records -> scroll.
+//
+// Holds the ORIGIN and the SCROLL, because landing at the top of a 92-card board is not "back".
+var _recNavBack=null;
+function _recCaptureScroll_(){
+  var y=0, dsTop=0, aiTop=0;
+  try{ y=window.scrollY||window.pageYOffset||0; }catch(e){}
+  // Desktop scrolls a div inside ds-content; mobile scrolls the #AIQ_PAGE overlay itself. Neither
+  // is window scroll, so capturing only window.scrollY would restore nothing on either surface.
+  try{ var dc=document.getElementById('ds-content'); if(dc){ dsTop=dc.scrollTop||0;
+    if(!dsTop && dc.firstElementChild) dsTop=dc.firstElementChild.scrollTop||0; } }catch(e){}
+  try{ var ai=document.getElementById('AIQ_PAGE'); if(ai) aiTop=ai.scrollTop||0; }catch(e){}
+  return { y:y, dsTop:dsTop, aiTop:aiTop };
+}
+// Cleared on ANY deliberate navigation elsewhere, or a ride opened later from Activities would
+// still offer "Back to Records" and land the user somewhere they never were.
+function recClearBack_(){ _recNavBack=null; }
+function recHasBack_(){ return !!(_recNavBack && _recNavBack.tab); }
+// Restores the tab AND the scroll. The scroll is applied after the render, on the frame after —
+// setting scrollTop on a node that has not been laid out yet silently does nothing.
+function recGoBack_(){
+  var b=_recNavBack; if(!b){ return false; }
+  _recNavBack=null;
+  try{
+    // BOTH mount functions hard-reset _aiTab to 'overview' (24027 / 24040), so setting the tab
+    // beforehand is silently undone. Mount first, then aiSetTab_ — which is the app's own way to
+    // switch tab and re-render into the mount that was just established.
+    if(typeof isDesktop==='function' && isDesktop()){
+      if(typeof dsShowAthleteIntel==='function') dsShowAthleteIntel();
+    } else if(typeof showAthleteIntel==='function'){ showAthleteIntel(); }
+    if(typeof aiSetTab_==='function') aiSetTab_(b.tab); else if(typeof _aiTab!=='undefined') _aiTab=b.tab;
+    var apply=function(){
+      try{ var dc=document.getElementById('ds-content');
+        if(dc && b.scroll && b.scroll.dsTop){ dc.scrollTop=b.scroll.dsTop;
+          if(!dc.scrollTop && dc.firstElementChild) dc.firstElementChild.scrollTop=b.scroll.dsTop; } }catch(e){}
+      try{ var ai=document.getElementById('AIQ_PAGE'); if(ai && b.scroll && b.scroll.aiTop) ai.scrollTop=b.scroll.aiTop; }catch(e){}
+      try{ if(b.scroll && b.scroll.y) window.scrollTo(0, b.scroll.y); }catch(e){}
+    };
+    if(typeof requestAnimationFrame==='function') requestAnimationFrame(function(){ requestAnimationFrame(apply); });
+    else setTimeout(apply, 0);
+    return true;
+  }catch(e){ try{ console.warn('[records] back failed: '+((e&&e.message)||e)); }catch(_e){} return false; }
+}
 // Same open path the ride list and calendar already use, including showing the desktop right panel
 // first — not a second route. Surface choice goes through isDesktop(), so one handler serves both.
 function recOpenRide_(ref){
   try{
     var i=(typeof rideRefFromAttr_==='function')?rideRefFromAttr_(ref):ref;
     if(typeof rideRefOk_==='function' && !rideRefOk_(i)) return;
+    _recNavBack={ tab:(typeof _aiTab!=='undefined'?_aiTab:'records'), scroll:_recCaptureScroll_() };
     if(typeof isDesktop==='function' && isDesktop() && typeof openDesktopRideDetail==='function'){
       var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='flex';
       openDesktopRideDetail(i);
     } else if(typeof openRideDetail==='function'){ openRideDetail(i); }
-  }catch(e){ try{ console.warn('[records] could not open ride: '+((e&&e.message)||e)); }catch(_e){} }
+  }catch(e){ _recNavBack=null; try{ console.warn('[records] could not open ride: '+((e&&e.message)||e)); }catch(_e){} }
 }
 // ---- provider: DISTANCE -----------------------------------------------------------------
 // A "40 mile record" here is the fastest RIDE of 40.0-42.4 miles. It is NOT the fastest 40 miles
@@ -27158,6 +27206,10 @@ var _dsPrevView='dashboard', _dsCurView='dashboard';
 function dsNav(section){
   // Track previous desktop view so screens like Gear can offer a Back button.
   if(section!==_dsCurView){ _dsPrevView=_dsCurView; _dsCurView=section; }
+  // A record card's return route survives exactly one hop. Navigating anywhere else by hand drops
+  // it, or a ride opened later from Activities would offer "Back to Records" and land the user on
+  // a tab they never came from.
+  if(section!=='ai' && typeof recClearBack_==='function') recClearBack_();
   document.querySelectorAll('.ds-ni').forEach(function(n){n.classList.remove('on');});
   document.querySelectorAll('.ds-ni').forEach(function(n){
     var oc = n.getAttribute('onclick')||'';
@@ -32576,7 +32628,13 @@ function openDesktopRideDetail(idx, _noFetch){
   // Wire back + tabs
   setTimeout(function(){
     var bb=document.getElementById('rd-back');
-    if(bb) bb.onclick=function(){dsNav('activities');};
+    // Arrived from a Records card? Go back THERE, scroll included. Otherwise the long-standing
+    // Activities behaviour is untouched, so every other entry point behaves exactly as before.
+    if(bb) bb.onclick=function(){ if(typeof recHasBack_==='function' && recHasBack_()){ if(recGoBack_()) return; } dsNav('activities'); };
+    if(bb && typeof recHasBack_==='function' && recHasBack_()){
+      bb.setAttribute('title','Back to Records');
+      bb.innerHTML=bb.innerHTML+'<span style="font-size:11.5px;font-weight:700;color:var(--d-t3)">Records</span>';
+    }
     // Bike-assignment dropdown in the Equipment cell — assign/change the bike
     // right here. Writes st.bikeAssignments[rideKey] (the shared manual-
     // assignment mechanism), then re-renders so the cell reflects the choice.
@@ -32904,7 +32962,17 @@ function openRideDetail(idx, _noFetch){
   var backBtn=document.createElement('button');
   backBtn.innerHTML='<svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="#FC4C02" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>';
   backBtn.style.cssText='background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center';
-  backBtn.onclick=function(){ closeRideDetail(); };
+  backBtn.onclick=function(){
+    // The modal sits ON TOP of the page that opened it, so closing already reveals Records with
+    // its scroll intact — no re-render, nothing to restore. Only the origin needs clearing so a
+    // later ride opened from elsewhere does not inherit it.
+    closeRideDetail();
+    if(typeof recClearBack_==='function') recClearBack_();
+  };
+  if(typeof recHasBack_==='function' && recHasBack_()){
+    backBtn.setAttribute('title','Back to Records');
+    backBtn.innerHTML=backBtn.innerHTML+'<span style="font-size:12px;font-weight:700;color:#FC4C02;margin-left:4px">Records</span>';
+  }
   var moreBtn=document.createElement('button');
   moreBtn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--t1)" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>';
   moreBtn.style.cssText='background:none;border:none;cursor:pointer;padding:6px;display:flex;align-items:center';
@@ -45197,7 +45265,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-records-card-clickthrough';
+window.__BUILD__ = '2026-08-02-records-back-to-records';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
