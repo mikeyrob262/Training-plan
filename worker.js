@@ -17246,12 +17246,22 @@ function aiCardStory_(ded){
 // view's chapter labels and the What Changed card both ask it, and writing the formula twice is
 // precisely how two surfaces come to disagree about the same question.
 //
-// The threshold: at least 10 elapsed days, or 40% of the month, whichever is larger.
+// The threshold: at least 10 elapsed days, or 40% of the period, whichever is larger.
+//
+// Period-AGNOSTIC, because quarters ask the same question and the fraction must not be written
+// twice. _monthTooEarly_ keeps its name and signature (it is the greppable one-definition the
+// cross-surface test pins) and delegates; _quarterLabel_ passes elapsed-days-into-the-quarter
+// against the quarter's own length. Q3 2026 is why this generalized: 33 days into a 92-day
+// quarter, the old inline 28-day gate let it pass and the card called a third of a quarter
+// "Recovery Focus" — the identical mistake the month rule exists to prevent.
+function _periodTooEarly_(elapsed, total){
+  try{ return elapsed < Math.max(10, Math.round(total*0.4)); }catch(e){ return false; }
+}
 function _monthTooEarly_(now, dim){
   try{
     var n=now||new Date();
     var d=dim||new Date(n.getFullYear(), n.getMonth()+1, 0).getDate();
-    return n.getDate() < Math.max(10, Math.round(d*0.4));
+    return _periodTooEarly_(n.getDate(), d);
   }catch(e){ return false; }
 }
 function aiCardWhatChanged_(ded){
@@ -29610,7 +29620,7 @@ function _quarterLabel_(qagg, q, y, now){
     var tooEarly=false, teWhy='';
     if(!future && y===todayY && q===todayQ){
       var elapsedD=Math.round((new Date(y,now.getMonth(),now.getDate()) - new Date(y,q*3,1))/86400000)+1;
-      if(elapsedD < 28){
+      if(_periodTooEarly_(elapsedD, e.daily.length)){
         tooEarly=true;
         teWhy=elapsedD+' day'+(elapsedD===1?'':'s')+' into the quarter so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full quarter.';
       }
@@ -44860,7 +44870,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-quarter-view-g2-cards';
+window.__BUILD__ = '2026-08-02-quarter-view-g2-cards-2';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
