@@ -21025,6 +21025,36 @@ function _recScopeNote_(pop){
 function _recSecs_(r){ var v=+r.movingSecs; return (isFinite(v)&&v>0)?v:0; }
 function _recDate_(r){ var d=String((r&&r.date)||'').slice(0,10); return d||null; }
 function _recKeyOf_(r){ try{ return (typeof rideKey==='function')?rideKey(r):null; }catch(e){ return null; } }
+// The NAVIGATION reference, which is not the same concept as the storage key even though they are
+// the same string today: rideRefOf_ returns a durable handle while STORE_V2_HANDLES is on and a
+// positional index when it is off. Reading rideKey directly for navigation would work right now and
+// break silently the day that flag flips, so the record carries what the app's own openers accept.
+function _recRefOf_(r){ try{ return (typeof rideRefOf_==='function')?rideRefOf_(r):null; }catch(e){ return null; } }
+// Can this reference actually be turned into a ride? rideResolveIdx_ returns -1 for a handle that
+// no longer resolves, which is exactly the "detail page cannot be found" case — a card in that
+// state renders inert rather than as a link that does nothing when clicked.
+function _recRefUsable_(ref){
+  try{
+    if(ref==null || ref==='') return false;
+    if(typeof rideRefOk_==='function' && !rideRefOk_(ref)) return false;
+    if(typeof rideResolveIdx_!=='function') return false;
+    var i=rideResolveIdx_(ref);
+    if(!(i>=0)) return false;
+    return !!((st.rides||[])[i]);
+  }catch(e){ return false; }
+}
+// Same open path the ride list and calendar already use, including showing the desktop right panel
+// first — not a second route. Surface choice goes through isDesktop(), so one handler serves both.
+function recOpenRide_(ref){
+  try{
+    var i=(typeof rideRefFromAttr_==='function')?rideRefFromAttr_(ref):ref;
+    if(typeof rideRefOk_==='function' && !rideRefOk_(i)) return;
+    if(typeof isDesktop==='function' && isDesktop() && typeof openDesktopRideDetail==='function'){
+      var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='flex';
+      openDesktopRideDetail(i);
+    } else if(typeof openRideDetail==='function'){ openRideDetail(i); }
+  }catch(e){ try{ console.warn('[records] could not open ride: '+((e&&e.message)||e)); }catch(_e){} }
+}
 // ---- provider: DISTANCE -----------------------------------------------------------------
 // A "40 mile record" here is the fastest RIDE of 40.0-42.4 miles. It is NOT the fastest 40 miles
 // inside a longer ride, and the card says so.
@@ -21061,7 +21091,7 @@ function distancePRs_(pop){
       kind:'distance', key:'d'+t.mi, label:t.label,
       value:best?_recSecs_(best):null, unit:'sec', better:'lower',
       display:best?fmt(_recSecs_(best)):null,
-      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
       rideName:best?String(best.name||''):null,
       actualMi:best?(Math.round((parseFloat(best.distance)||0)*100)/100):null,
       n:elig.length, estimated:false,
@@ -21093,7 +21123,7 @@ function _recPower_(pop){
       kind:'power', key:'p'+d.s, label:d.l+' power',
       value:bestW>0?Math.round(bestW):null, unit:'w', better:'higher',
       display:bestW>0?(Math.round(bestW)+'W'):null,
-      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+      date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
       rideName:best?String(best.name||''):null, actualMi:null,
       n:n, estimated:false,
       why:'Highest recorded '+d.l+' power across '+n+' ride'+(n===1?'':'s')+' carrying a measured power curve. Estimated peaks (derived from NP on Intervals rides) are excluded.'
@@ -21116,7 +21146,7 @@ function _recElev_(pop){
     kind:'elevation', key:'e1', label:'Most climbing in a ride',
     value:bestV>0?Math.round(bestV):null, unit:'ft', better:'higher',
     display:bestV>0?(Math.round(bestV).toLocaleString()+' ft'):null,
-    date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null,
+    date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
     rideName:best?String(best.name||''):null, actualMi:best?(Math.round((parseFloat(best.distance)||0)*10)/10):null,
     n:n, estimated:false,
     why:'Largest elevation gain on a single ride, across '+n+' ride'+(n===1?'':'s')+' that record climbing. Indoor rides are included when the platform reports gain.'
@@ -21183,7 +21213,21 @@ function _recEngineCard_(rec){
   } else {
     sub='<span style="color:var(--d-t4)">No qualifying ride</span>';
   }
-  return '<div title="'+esc(rec.why)+'" style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:13px 14px">'
+  // CLICK-THROUGH. Three conditions, all required: the card holds a record at all, it names a ride,
+  // and that ride still RESOLVES to a live entry. An em-dash card has no ride, and a handle whose
+  // ride has since been tombstoned or re-keyed resolves to -1 — both render inert. A card that looks
+  // clickable and does nothing is worse than one that never offered, so the affordance (pointer,
+  // hover, title) is attached in the SAME branch as the handler and cannot drift from it.
+  var canOpen=has && _recRefUsable_(rec.rideRef);
+  var openAttr='', cls='', tip=rec.why;
+  if(canOpen){
+    var refAttr=(typeof rideRefAttr_==='function')?rideRefAttr_(rec.rideRef):("'"+String(rec.rideRef)+"'");
+    openAttr=' onclick="recOpenRide_('+refAttr+')" role="button" tabindex="0"'
+      +' onkeydown="if(event.key===\\'Enter\\'||event.key===\\' \\'){event.preventDefault();recOpenRide_('+refAttr+');}"';
+    cls=' class="rec-click"';
+    tip=rec.why+' — open this ride';
+  }
+  return '<div'+cls+openAttr+' title="'+esc(tip)+'" style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:13px;padding:13px 14px">'
     +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.08em;color:var(--d-dim)">'+esc(rec.label).toUpperCase()+'</div>'
     +'<div style="font-size:22px;font-weight:800;line-height:1.15;margin-top:4px;color:'+(has?col:'var(--d-t4)')+'">'
       +(has?rec.display:'&mdash;')+'</div>'
@@ -21233,8 +21277,19 @@ function _recEngineBoardHTML_(env, title, blurb){
   return H;
 }
 function _recEngineSectionHTML_(){
+  // Styles live HERE, not in aiRenderRecords_, because this section also renders on the
+  // no-segments early-return path where that function's <style> block never runs — .rec-grid was
+  // already unstyled there. .rec-grid is re-emitted identically; a duplicate rule is inert.
+  // Hover reuses --d-hover and the .12s background/border transition the shell already uses,
+  // rather than introducing a new interaction look.
+  var CSS='<style>'
+    +'.rec-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}'
+    +'.rec-click{cursor:pointer;transition:background .12s,border-color .12s}'
+    +'.rec-click:hover{background:var(--d-hover);border-color:var(--d-t4)}'
+    +'.rec-click:focus-visible{outline:2px solid var(--c-blue);outline-offset:2px}'
+    +'</style>';
   // Outdoor first: it is the real-world board. Each carries its OWN denominator.
-  return '<div style="margin-bottom:16px">'
+  return CSS+'<div style="margin-bottom:16px">'
     +_recEngineBoardHTML_('outdoor','Outdoor Records','road and gravel rides')
     +_recEngineBoardHTML_('indoor','Indoor Records','trainer and virtual rides')
     +'</div>';
@@ -45142,7 +45197,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-records-indoor-outdoor-split';
+window.__BUILD__ = '2026-08-02-records-card-clickthrough';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
