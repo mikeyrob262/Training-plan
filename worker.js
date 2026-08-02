@@ -24125,9 +24125,16 @@ function _blockNextMilestone_(now){
 // planResolve_/_planSessionFromDef_ off the CURRENT st.ftp, so an FTP change reprices the whole
 // block with no regenerate and there is never a second FTP. A phase is either a weekly pattern
 // (week[0..6], Mon..Sun) or a date-keyed window (dates{}) for the taper/attempt runs; the resolver
-// checks the date map first. Mon is always Rest and Sun is always Optional by construction — the
+// checks the date map first. In P2/P4/P6 Mon is Rest and Sun is Optional by construction — the
 // Sunday slot is 'optional', which is NEVER a makeup, in the data itself, not just the UI.
-var _TB_VERSION='ventop-2026-2';   // bumped: the retest day is now its own prescribed session
+//
+// P1 IS DELIBERATELY DIFFERENT (Aug 2 2026). Sunday is a TRUE rest day there, not 'optional', and
+// Monday carries mobility + an easy run instead of rest. The rest day moved from Monday to Sunday:
+// an 'optional' Sunday is a maybe-day, and a Monday marked 'rest' that also prescribes a run would
+// contradict itself on the card. Cycling load is untouched — _blockWeekAssess_ grades cycling only
+// (threshold/vo2/z2 via _blockCyc_), so neither edit moves the three-sessions/three-days gate or
+// the Four-weeks-consistent milestone.
+var _TB_VERSION='ventop-2026-3';   // bumped: P1 Sunday true rest, P1 Monday gains an easy run
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
   if(st.trainingBlock && st.trainingBlock.v===_TB_VERSION) return st.trainingBlock;
@@ -24135,9 +24142,10 @@ function _trainingBlock_(){
   st.trainingBlock={
     v:_TB_VERSION, start:'2026-07-24', end:'2026-11-11',
     phases:[
+      // Mon: mobility + easy run (was rest + mobility) · Sun: true rest (was optional).
       { id:'P1', label:'Base build', start:'2026-07-24', end:'2026-08-21', week:[
-        [S('rest'),S('mobility')], [S('vo2','4x4 min, 3 min recovery, flat')], [S('easyRun','20-25 min')],
-        [S('z2','60-90 min')], [S('threshold','2x20 min'),S('strengthA')], [S('group','120 min, no HR ceiling')], [S('optional')] ] },
+        [S('mobility'),S('easyRun','20-25 min')], [S('vo2','4x4 min, 3 min recovery, flat')], [S('easyRun','20-25 min')],
+        [S('z2','60-90 min')], [S('threshold','2x20 min'),S('strengthA')], [S('group','120 min, no HR ceiling')], [S('rest')] ] },
       // The retest date overrides whatever weekday slot it lands on (blockPlanFor_ reads p.dates
       // first). Keyed off _FTP_RETEST_DATE so the prescribed session, the milestone flag and the
       // repricing rules can never point at three different days.
@@ -45265,7 +45273,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-records-back-to-records';
+window.__BUILD__ = '2026-08-02-p1-sunday-rest-monday-run';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
