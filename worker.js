@@ -27890,22 +27890,34 @@ function dsShowNutrition(){
     // Hero calorie ring — the visual anchor of the screen.
     var heroCol=calPct>110?C.red:calPct>90?C.green:C.c;
     var _hs=158,_hr=66,_hc=2*Math.PI*_hr,_hoff=_hc*(1-Math.min(1,calPct/100));
-    mt+='<div style="position:relative;width:'+_hs+'px;height:'+_hs+'px;flex-shrink:0">'
-      +'<svg width="'+_hs+'" height="'+_hs+'" viewBox="0 0 '+_hs+' '+_hs+'" style="filter:drop-shadow(0 0 12px '+heroCol+'55)">'
-      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="#161b28" stroke-width="12"/>'
-      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="'+heroCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+_hc.toFixed(1)+'" stroke-dashoffset="'+_hoff.toFixed(1)+'" transform="rotate(-90 '+(_hs/2)+' '+(_hs/2)+')"/></svg>'
-      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
-      +'<div style="font-size:44px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.03em">'+cal+'</div>'
-      +'<div style="font-size:11px;color:var(--d-t4);margin-top:3px">of '+goals.cal+' cal</div>'
+    // The Base+Burned line CANNOT live inside the ring. Measured: the ring's inner hole is 120px
+    // across and that line renders 152-180px wide, so it crossed the stroke, wrapped, and pushed
+    // the calorie number up into the arc — one cause behind two of the three reported symptoms.
+    // It now sits below the ring where it has the full column width.
+    //
+    // The fill math is NOT changed: arc percentage equals the label exactly (measured). The arc
+    // only LOOKS over-filled because stroke-linecap:round adds a 6px cap at each end (~3% of the
+    // circumference) and the glow bled another few px. The glow is toned down; the number stays.
+    mt+='<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0">'
+      +'<div style="position:relative;width:'+_hs+'px;height:'+_hs+'px">'
+      +'<svg width="'+_hs+'" height="'+_hs+'" viewBox="0 0 '+_hs+' '+_hs+'" style="filter:drop-shadow(0 0 5px '+heroCol+'3d)">'
+      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="var(--d-inset)" stroke-width="12"/>'
+      +'<circle cx="'+(_hs/2)+'" cy="'+(_hs/2)+'" r="'+_hr+'" fill="none" stroke="'+heroCol+'" stroke-width="12" stroke-linecap="round" stroke-dasharray="'+_hc.toFixed(1)+'" stroke-dashoffset="'+_hoff.toFixed(1)+'" transform="rotate(-90 '+(_hs/2)+' '+(_hs/2)+')"/>'
+      +'</svg>'
+      // Constrained to the ring's INNER hole, so nothing here can cross the stroke again.
+      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px;box-sizing:border-box">'
+      +'<div style="font-size:42px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.03em">'+cal+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t4);margin-top:3px;white-space:nowrap">of '+goals.cal+' cal</div>'
+      +'<div style="font-size:12px;font-weight:800;color:'+heroCol+';margin-top:6px;background:'+heroCol+'1f;border-radius:20px;padding:2px 11px">'+calPct+'%</div>'
+      +'</div></div>'
       // Base + Burned = Total, always rendered. A bare total is a number you have to take on
       // faith; the parts are what make it checkable, and an absent line reads as broken.
-      +(_dfuel?('<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">'
+      +(_dfuel?('<div style="font-size:10.5px;color:var(--d-dim);text-align:center;line-height:1.45;max-width:200px">'
         +(_dfuel.burned>0
             ? ('Base '+_dfuel.base.toLocaleString()+' + Burned '+_dfuel.burned.toLocaleString()+' = '+_dfuel.total.toLocaleString())
             : ('Base '+_dfuel.base.toLocaleString()+' + nothing burned yet'))
         +'</div>'):'')
-      +'<div style="font-size:12px;font-weight:800;color:'+heroCol+';margin-top:6px;background:'+heroCol+'1f;border-radius:20px;padding:2px 11px">'+calPct+'%</div>'
-      +'</div></div>';
+      +'</div>';
     mt+='<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:11px">';
     [['Protein',pro,goals.p,C.p],['Carbs',carb,goals.c,C.c],['Fat',fat,goals.f,C.f]].forEach(function(x){
       var pc=x[2]>0?Math.round(x[1]/x[2]*100):0;
