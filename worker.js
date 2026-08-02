@@ -10655,10 +10655,25 @@ function getAvatar(){
 function uploadAvatar(){
   var inp=document.createElement('input');
   inp.type='file'; inp.accept='image/*';
+  // iOS Safari will not reliably fire a change event on a DETACHED input, and an input held in a
+  // local variable can be collected while the native picker is still open. Both produce exactly the
+  // reported iPad symptom: the picker opens, a photo is chosen, and then nothing happens with no
+  // error anywhere. Attach it, hold a reference, clean up when the flow ends.
+  inp.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+  try{ document.body.appendChild(inp); }catch(e){}
+  try{ if(typeof window!=='undefined') window.__aiqAvatarInput=inp; }catch(e){}
+  var done=function(){
+    try{ if(inp.parentNode) inp.parentNode.removeChild(inp); }catch(e){}
+    try{ if(typeof window!=='undefined') window.__aiqAvatarInput=null; }catch(e){}
+  };
+  var fail=function(msg){ try{ if(typeof uiAlert==='function') uiAlert(msg); }catch(e){} done(); };
   inp.onchange=function(){
     var file=inp.files && inp.files[0];
-    if(!file) return;
+    if(!file){ done(); return; }
     var reader=new FileReader();
+    // Was unhandled: a FileReader failure returned nothing and said nothing.
+    reader.onerror=function(){ fail('That photo could not be read from your device.'); };
+    reader.onabort=function(){ done(); };
     reader.onload=function(ev){
       var img=new Image();
       img.onload=function(){
@@ -10673,10 +10688,18 @@ function uploadAvatar(){
           ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
           var dataUrl=canvas.toDataURL('image/jpeg', 0.85);
           localStorage.setItem('aiq_avatar', dataUrl);
+          // PROVE it persisted rather than trusting the write. st already sits at the 5MB
+          // localStorage ceiling, and a storage failure that does not throw would otherwise look
+          // like success until the next reload wiped the photo — an optimistic UI lying about a
+          // write that never landed.
+          var back=null; try{ back=localStorage.getItem('aiq_avatar'); }catch(e2){}
+          if(back!==dataUrl){ fail('The photo did not save — device storage may be full.'); return; }
           renderAllAvatars();
-        }catch(e){ try{ uiAlert('Could not save photo: '+e.message); }catch(_){}}
+          try{ if(typeof toast==='function') toast('Photo updated'); }catch(e3){}
+        }catch(e){ fail('Could not save photo: '+(e&&e.message?e.message:e)); return; }
+        done();
       };
-      img.onerror=function(){ try{ uiAlert('That file could not be read as an image.'); }catch(_){}}
+      img.onerror=function(){ fail('That file could not be read as an image.'); };
       img.src=ev.target.result;
     };
     reader.readAsDataURL(file);

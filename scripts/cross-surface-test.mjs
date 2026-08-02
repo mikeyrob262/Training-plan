@@ -362,6 +362,15 @@ check('the shared calendar helpers are defined OUTSIDE dsShowCalendar',
 check('ONE date-bucket builder for both calendar surfaces', countCode(/function _calByDate_/g), 1);
 check('mobile mounts the SAME year renderer as desktop', /yearPanel\.innerHTML=calYearHTML_\(calYear/.test(src), true);
 check('the old independent mobile year aggregator is gone', countCode(/var maxMi=Math\.max\.apply\(null,moMiles\)/g), 0);
+// INVARIANT: the avatar upload cannot fail silently. iOS Safari does not reliably fire change on a
+// DETACHED file input, and an input held only in a local variable can be collected while the native
+// picker is open — both give exactly the reported iPad symptom (picker opens, photo chosen, nothing
+// happens, no error). Every terminal branch must either persist or say why.
+check('the file input is attached to the DOM', /document\.body\.appendChild\(inp\)/.test(src), true);
+check('...and held past the picker', /window\.__aiqAvatarInput=inp/.test(src), true);
+check('a FileReader failure is reported', /reader\.onerror=function\(\)\{ fail\(/.test(src), true);
+check('a decode failure is reported', /img\.onerror=function\(\)\{ fail\(/.test(src), true);
+check('the write is read back, not assumed', /if\(back!==dataUrl\)\{ fail\(/.test(src), true);
 check('the star renders on BOTH detail surfaces', countCode(/favStarHTML_\(r,'(ds|mb)-fav-star'\)/g), 2);
 check('...and is wired on both', countCode(/favStarWire_\(r,'(ds|mb)-fav-star'\)/g), 2);
 // INVARIANT: the Year view keeps reading the DEVICE library. Two dry runs established that
