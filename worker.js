@@ -20994,13 +20994,33 @@ function _recStatBlock_(label, value, sub, col){
 //   estimated true when the value is derived rather than measured (never counted as a record)
 //
 // WHAT THIS LAYER DELIBERATELY DOES NOT DO: invent an in-ride split. See _recDistance_.
-function _recCycPop_(){
+// env: 'indoor' | 'outdoor' | undefined (both). Indoor/outdoor is decided by rideIsIndoor(), the
+// classifier recomputeGearMileage() and the elevation split already use — NOT a second test. It is
+// called directly and unguarded on purpose: if it were ever unavailable, recordsCompute_ throws and
+// the section prints its error, which is the honest outcome. A local fallback copy would silently
+// produce a DIFFERENT split from the rest of the app, which is the failure this app keeps repeating.
+//
+// Measured coverage before wiring it in: over 433 cycling rides it disagrees with a name-based test
+// on 15, and in 12 of those it is the correct one (VirtualRide typed but generically named "Evening
+// Ride"). The 3 it misses are 2022 records literally named "Virtual"/"Virtual Ride" but stored as
+// sportType 'Ride' with trainer:false — the data does not say they were indoor, so they land on the
+// outdoor board. Pre-existing data quality, flagged not silently patched.
+function _recCycPop_(env){
   var live=(typeof st!=='undefined'&&st.rides)?st.rides.filter(function(r){return r&&!r.deleted;}):[];
   var isCyc=function(r){ var s=String((typeof rideSport_==='function'?rideSport_(r):'')||'').toLowerCase();
     return /ride|cycl|ebike|gravel|mountain|handcycle|velomobile/.test(s); };
   var cyc=live.filter(isCyc);
+  if(env==='indoor')       cyc=cyc.filter(function(r){ return rideIsIndoor(r); });
+  else if(env==='outdoor') cyc=cyc.filter(function(r){ return !rideIsIndoor(r); });
   var timed=cyc.filter(function(r){ return (parseFloat(r.distance)||0)>0 && (+r.movingSecs)>0; });
-  return { live:live, liveN:live.length, cyc:cyc, cycN:cyc.length, timed:timed, timedN:timed.length };
+  return { live:live, liveN:live.length, cyc:cyc, cycN:cyc.length, timed:timed, timedN:timed.length, env:env||'all' };
+}
+// The scope sentence for ONE board. Each board states its OWN eligible population — letting the
+// combined count sit under a split board would make each half look like it was drawn from the whole.
+function _recScopeNote_(pop){
+  var what=(pop.env==='indoor')?'indoor cycling rides':((pop.env==='outdoor')?'outdoor cycling rides':'cycling rides');
+  return 'Measured over '+pop.cycN.toLocaleString()+' '+what+' in the device library ('
+    +pop.timedN.toLocaleString()+' with both distance and moving time). This is the stored library, not the full riding history.';
 }
 function _recSecs_(r){ var v=+r.movingSecs; return (isFinite(v)&&v>0)?v:0; }
 function _recDate_(r){ var d=String((r&&r.date)||'').slice(0,10); return d||null; }
@@ -21045,7 +21065,7 @@ function distancePRs_(pop){
       rideName:best?String(best.name||''):null,
       actualMi:best?(Math.round((parseFloat(best.distance)||0)*100)/100):null,
       n:elig.length, estimated:false,
-      why:'Fastest single ride of '+band+' (moving time). Not a split inside a longer ride — this library stores no distance or time streams, so an in-ride split cannot be computed.'
+      why:'Fastest single '+(pop.env==='indoor'?'indoor':(pop.env==='outdoor'?'outdoor':''))+' ride of '+band+' (moving time). Not a split inside a longer ride — this library stores no distance or time streams, so an in-ride split cannot be computed.'
     };
   });
 }
@@ -21127,7 +21147,9 @@ function _recSegment_(store){
 function recordsCompute_(opts){
   opts=opts||{};
   var want=opts.kinds||['distance','power','elevation','segment'];
-  var pop=_recCycPop_();
+  // opts.env narrows the RIDE-library providers to one board. Segments ignore it by design:
+  // a Strava segment is a real-world GPS road, so there is no indoor half to split off.
+  var pop=_recCycPop_(opts.env);
   var out=[];
   if(want.indexOf('distance')>=0)  out=out.concat(distancePRs_(pop));
   if(want.indexOf('power')>=0)     out=out.concat(_recPower_(pop));
@@ -21136,10 +21158,10 @@ function recordsCompute_(opts){
   return {
     records: out,
     scope: {
+      env: pop.env,
       liveActivities: pop.liveN, cyclingRides: pop.cycN, timedCyclingRides: pop.timedN,
       // Named so no surface can print a coverage claim this layer cannot support.
-      note:'Measured over '+pop.cycN.toLocaleString()+' cycling rides in the device library ('
-        +pop.timedN.toLocaleString()+' with both distance and moving time). This is the stored library, not the full riding history.'
+      note:_recScopeNote_(pop)
     }
   };
 }
@@ -21169,21 +21191,39 @@ function _recEngineCard_(rec){
     +'<div style="font-size:9.5px;color:var(--d-t4);margin-top:5px">'+(rec.n||0)+' eligible</div>'
     +'</div>';
 }
-function _recEngineSectionHTML_(){
-  var eng;
-  try{ eng=recordsCompute_({kinds:['distance','power','elevation']}); }
-  catch(e){ return '<div style="font-size:11.5px;color:var(--d-dim);margin-bottom:12px">Ride records unavailable: '+String((e&&e.message)||e)+'</div>'; }
+// ONE board. Outdoor and indoor are rendered by the same function off the same engine, differing
+// only in the env passed in — so the two halves can never drift into different definitions.
+//
+// Climbing IS split rather than dropped from the indoor board. The assumption that indoor gain is
+// near-zero does not hold for this athlete: the largest single-ride climb in the whole library is
+// 5,089 ft on a Zwift climb portal. Excluding indoor would have hidden the biggest climbing day
+// behind an editorial judgement about whether simulated gain "counts"; splitting states both and
+// lets the reader decide, which is the same contract as every other card here.
+function _recEngineBoardHTML_(env, title, blurb){
   var esc=(typeof aiEsc_==='function')?aiEsc_:function(s){ return String(s==null?'':s); };
+  var eng;
+  try{ eng=recordsCompute_({kinds:['distance','power','elevation'], env:env}); }
+  catch(e){ return '<div style="font-size:11.5px;color:var(--d-dim);margin-bottom:12px">'
+    +esc(title)+' unavailable: '+esc(String((e&&e.message)||e))+'</div>'; }
   var byKind=function(k){ return eng.records.filter(function(r){ return r.kind===k; }); };
-  var group=function(title, note, recs){
+  var group=function(gt, note, recs){
     if(!recs.length) return '';
-    return '<div style="margin-bottom:14px">'
+    return '<div style="margin-bottom:13px">'
       +'<div style="display:flex;align-items:baseline;gap:9px;margin-bottom:8px">'
-      +'<span style="font-size:12.5px;font-weight:800;color:var(--d-head)">'+esc(title)+'</span>'
-      +'<span style="font-size:10.5px;color:var(--d-dim)">'+esc(note)+'</span></div>'
-      +'<div class="rec-grid">'+recs.map(_recEngineCard_).join('')+'</div></div>';
+      +'<span style="font-size:12px;font-weight:800;color:var(--d-soft)">'+esc(gt)+'</span>'
+      +(note?('<span style="font-size:10.5px;color:var(--d-dim)">'+esc(note)+'</span>'):'')
+      +'</div><div class="rec-grid">'+recs.map(_recEngineCard_).join('')+'</div></div>';
   };
-  var H='<div style="margin-bottom:16px">';
+  // A board with no eligible rides at all says so once, rather than printing sixteen em-dashes.
+  if(!eng.scope.cyclingRides){
+    return '<div style="margin-bottom:18px">'
+      +'<div style="font-size:14px;font-weight:800;color:var(--d-head);margin-bottom:3px">'+esc(title)+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-dim)">No '+esc(env)+' cycling rides in the library yet.</div></div>';
+  }
+  var H='<div style="margin-bottom:18px">';
+  H+='<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">'
+    +'<span style="font-size:14px;font-weight:800;color:var(--d-head)">'+esc(title)+'</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">'+esc(blurb)+'</span></div>';
   H+=group('Distance', 'fastest single ride in each band — not an in-ride split', byKind('distance'));
   H+=group('Power', 'measured peaks only; NP-derived estimates excluded', byKind('power'));
   H+=group('Climbing', '', byKind('elevation'));
@@ -21191,6 +21231,13 @@ function _recEngineSectionHTML_(){
     +esc(eng.scope.note)+'</div>';
   H+='</div>';
   return H;
+}
+function _recEngineSectionHTML_(){
+  // Outdoor first: it is the real-world board. Each carries its OWN denominator.
+  return '<div style="margin-bottom:16px">'
+    +_recEngineBoardHTML_('outdoor','Outdoor Records','road and gravel rides')
+    +_recEngineBoardHTML_('indoor','Indoor Records','trainer and virtual rides')
+    +'</div>';
 }
 function aiRenderRecords_(){
   var all=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
@@ -45095,7 +45142,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-records-engine-distance-prs';
+window.__BUILD__ = '2026-08-02-records-indoor-outdoor-split';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
