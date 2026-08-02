@@ -30963,7 +30963,15 @@ function dsShowDashboard(){
   // and (below) the Recovery card — so they can never read the same TSB three
   // different ways. dlt.ctl is the 7-day CTL delta (the ramp): a falling CTL
   // with rising TSB is a taper and must NOT read "Improving".
-  var verdict=taperVerdict_(fit, iq, dlt.ctl);
+  // THE ramp, not a second one. This passed dlt.ctl — the 7-day CTL delta computed off the CACHED
+  // series — while dsAttention_ passed fit.ramp, which getFitness_ takes from Intervals' own
+  // rampRate. Measured Aug 2 2026 they had OPPOSITE SIGNS: fit.ramp +1.57 against dlt.ctl -4, so
+  // this dashboard read "Training Load: Detraining — load has dropped off" on a week of 524 TSS
+  // (+44%) with Form -19, while the Momentum card two panels away read "Improving".
+  // getFitness_ already documents ramp as taken from the source rather than re-derived, and it
+  // already falls back to d7.ctl when Intervals sends none — so there is one answer here.
+  var _rampCanon=(fit&&fit.ramp!=null)?fit.ramp:dlt.ctl;
+  var verdict=taperVerdict_(fit, iq, _rampCanon);
   var trend=(iq.score==null)?'Building':verdict.trend;
   var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':verdict.trendNote;
   var loadState=verdict.load;
@@ -30980,7 +30988,11 @@ function dsShowDashboard(){
   iqInner+='<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:26px;font-weight:800;color:'+trendC+';letter-spacing:-.01em">'+trend+'</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+trendC+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'+trendArrow+'</svg></div>';
   iqInner+='<div style="font-size:13px;color:var(--d-t3);margin-top:4px">'+trendNote+'</div>';
   iqInner+='<div style="display:flex;gap:20px;margin-top:16px;flex-wrap:wrap">';
-  [['Fitness',fit.ctl,dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',(lastWt==null?String.fromCharCode(0x2014):Math.round(lastWt*10)/10),wtChange]].forEach(function(s){
+  // The Fitness delta shows the SAME ramp the verdict used. Showing dlt.ctl here would have put a
+  // "-4" immediately beside a "Productive" badge derived from +1.57 — the contradiction moved
+  // rather than fixed. Fatigue/Form keep the cached-series deltas; Intervals publishes no
+  // equivalent for those, and they are labelled as 7-day deltas either way.
+  [['Fitness',fit.ctl,(fit&&fit.ramp!=null)?(Math.round(fit.ramp*10)/10):dlt.ctl],['Fatigue',fit.atl,dlt.atl],['Form (TSB)',(fit.tsb>=0?'+':'')+fit.tsb,dlt.tsb],['FTP',ftp+'W',null],['Weight',(lastWt==null?String.fromCharCode(0x2014):Math.round(lastWt*10)/10),wtChange]].forEach(function(s){
     iqInner+='<div style="min-width:0"><div style="font-size:10px;color:var(--d-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-bottom:2px">'+s[0]+'</div><div style="font-size:21px;font-weight:800;color:var(--d-head);line-height:1">'+s[1]+'</div>'+(s[2]!=null?dlum(s[2]):'')+'</div>';
   });
   iqInner+='</div></div></div>';

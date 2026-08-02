@@ -337,6 +337,13 @@ check('execution-adherence grades via _blockWeekAssess_', /var a=_blockWeekAsses
 // week (it classifies by ratio with no prescription on file), so March 2026 scored exec 0% against
 // a block that did not open until Jul 24 and the month graded F.
 check('weeks the block does not cover are not graded', /if\(!_cov\) continue;/.test(src), true);
+// INVARIANT: ONE ramp decides the training-load verdict. dsShowDashboard passed dlt.ctl (a 7-day
+// delta off the CACHED series) while dsAttention_ passed fit.ramp (Intervals rampRate). Measured
+// Aug 2 2026 they had OPPOSITE SIGNS - +1.57 vs -4 - so the dashboard said "Detraining, load has
+// dropped off" on a 524 TSS week at Form -19 while the Momentum card said "Improving".
+check('no taperVerdict_ caller passes a 7-day delta as the ramp', countCode(/taperVerdict_\([^)]*dlt\.ctl\)/g), 0);
+check('the dashboard verdict reads the canonical ramp', /var _rampCanon=\(fit&&fit\.ramp!=null\)\?fit\.ramp:dlt\.ctl/.test(src), true);
+check('...and the displayed Fitness delta is that same number', /\[.Fitness.,fit\.ctl,\(fit&&fit\.ramp!=null\)/.test(src), true);
 check('there is exactly one momentum verdict', countCode(/function _momentumVerdict_/g), 1);
 check('the AI card reads it rather than recomputing', countCode(/ramp>=2\?\[.Improving./g), 0);
 // INVARIANT: every highlight is computed or explicitly absent, and an absent one is not clickable.
