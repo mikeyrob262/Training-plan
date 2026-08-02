@@ -29301,8 +29301,8 @@ function _yrHlIcon_(kind, col){
   return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+(P[kind]||P.bolt)+'"/></svg>';
 }
 // ---- the right column ----
-function calYearSideHTML_(y, agg, byDate, now){
-  var H='<div style="width:290px;flex-shrink:0;display:flex;flex-direction:column;gap:12px">';
+function calYearSideHTML_(y, agg, byDate, now, narrow){
+  var H='<div style="'+(narrow?'width:100%':'width:290px;flex-shrink:0')+';display:flex;flex-direction:column;gap:12px">';
   // 1. Momentum
   var mv=_momentumVerdict_();
   H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:15px 16px">'
@@ -29510,54 +29510,119 @@ function _yrRampIdx_(tss, peak){
 // there is no label and the card falls back to the plain fact already on it (the hours). That is
 // the same rule as every other honest-degrade in this app: a plausible-sounding word is worse than
 // no word, because it cannot be checked.
+// THE comparison core, shared by the month chapters and the quarter cards. Extracted rather than
+// copied: two period views judging load by two drifting rulesets is the same class of bug as two
+// aggregators for one fact (recurring bug pattern #1). The caller supplies only what is
+// period-SPECIFIC — is this bucket future / current / too early to judge, what the period is
+// called, and which buckets are not yet evidence. The verdict itself is computed once, here.
+// ctx.noun is singular ('month'/'quarter'); 'ly' and 's' are appended for the prose.
+function _periodLabelCore_(buckets, i, ctx){
+  var e=buckets[i]; if(!e) return null;
+  if(ctx.future) return { text:(ctx.futureLabel||'Planned'), planned:true, why:ctx.futureWhy };
+  if(!e.acts) return null;                          // nothing logged — the card shows 0 hrs, no story
+  if(ctx.tooEarly) return { text:'In progress', planned:false, why:ctx.tooEarlyWhy };
+  var others=[];
+  for(var k=0;k<buckets.length;k++){
+    if(k===i) continue;
+    if(ctx.notEvidence && ctx.notEvidence(k)) continue;   // future periods are not evidence
+    if(buckets[k] && buckets[k].acts) others.push(buckets[k].tss);
+  }
+  if(others.length<2) return { text:'Getting started', planned:false, why:ctx.thinWhy };
+  var sum=0; others.forEach(function(v){ sum+=v; });
+  var avg=sum/others.length;
+  var peak=Math.max.apply(null, others.concat([e.tss]));
+  if(!(avg>0)) return null;
+  var f=e.tss/avg, A=Math.round(avg), N=ctx.noun;
+  var activeDays=0; e.daily.forEach(function(d){ if(d.acts) activeDays++; });
+  var dim=e.daily.length, activeFrac=dim?(activeDays/dim):0;
+  if(e.tss>=peak && f>=1.12) return { text:ctx.peakText, planned:false, why:'Highest training load of the year so far — '+e.tss+' TSS against a '+A+' TSS '+N+'ly average.' };
+  if(f>=1.15) return { text:'High Load', planned:false, why:e.tss+' TSS is '+Math.round((f-1)*100)+'% above your '+A+' TSS '+N+'ly average.' };
+  if(f<=0.6) return { text:'Recovery Focus', planned:false, why:e.tss+' TSS is '+Math.round((1-f)*100)+'% below your '+A+' TSS '+N+'ly average.' };
+  if(f>=1.02) return { text:'Building', planned:false, why:e.tss+' TSS, tracking above your '+A+' TSS '+N+'ly average.' };
+  if(activeFrac>=0.6) return { text:'Consistent', planned:false, why:activeDays+' active days of '+dim+', at a load close to your '+N+'ly average.' };
+  return { text:'Steady', planned:false, why:e.tss+' TSS against a '+A+' TSS '+N+'ly average.' };
+}
 function _chapterLabel_(agg, m, y, now){
   try{
     var e=agg[m]; if(!e) return null;
     var todayY=now.getFullYear(), todayM=now.getMonth();
     // A month that has not started yet is PLANNED — label it from the block phase if there is one.
-    if(y>todayY || (y===todayY && m>todayM)){
-      var lbl=null;
+    var future=(y>todayY || (y===todayY && m>todayM)), fLbl=null;
+    if(future){
       try{
         var dk=(typeof _tbDK_==='function')?_tbDK_(new Date(y,m,15)):null;
         var bp=dk&&(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
-        if(bp && bp.phaseLabel) lbl=bp.phaseLabel;
+        if(bp && bp.phaseLabel) fLbl=bp.phaseLabel;
       }catch(_e){}
-      return { text:(lbl||'Planned'), planned:true, why:(lbl?'From the training block phase for this month.':'This month has not started yet.') };
     }
-    if(!e.acts) return null;                        // nothing logged — the card shows 0 hrs, no story
     // THE CURRENT MONTH IS PARTIAL. Comparing 1 elapsed day against complete months always reads
     // as a shortfall — Aug 1 2026 was labelled Recovery Focus off a single day. Until enough of
     // the month has elapsed to be comparable, state the fact instead of passing a verdict.
-    if(y===todayY && m===todayM){
+    var tooEarly=false, teWhy='';
+    if(!future && y===todayY && m===todayM){
       var elapsed=now.getDate(), dimNow=e.daily.length;
       if(_monthTooEarly_(now, dimNow)){
-        return { text:'In progress', planned:false,
-                 why:elapsed+' day'+(elapsed===1?'':'s')+' into the month so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full month.' };
+        tooEarly=true;
+        teWhy=elapsed+' day'+(elapsed===1?'':'s')+' into the month so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full month.';
       }
     }
-    // Compare against the months of this year that actually have activity, excluding this one.
-    var others=[];
-    for(var i=0;i<12;i++){
-      if(i===m) continue;
-      if(y===todayY && i>todayM) continue;          // future months are not evidence
-      if(agg[i] && agg[i].acts) others.push(agg[i].tss);
+    return _periodLabelCore_(agg, m, {
+      noun:'month', peakText:'Peak Week',
+      thinWhy:'Not enough months logged this year to compare against yet.',
+      future:future, futureLabel:(fLbl||'Planned'),
+      futureWhy:(fLbl?'From the training block phase for this month.':'This month has not started yet.'),
+      tooEarly:tooEarly, tooEarlyWhy:teWhy,
+      notEvidence:function(k){ return y===todayY && k>todayM; }
+    });
+  }catch(e2){ return null; }
+}
+// Quarter buckets, folded from the SAME per-month aggregate the Year view renders. Not a second
+// pass over the ride library — one aggregate, two groupings, so a quarter can never disagree with
+// the three months inside it.
+function _quarterAgg_(agg){
+  var out=[];
+  for(var q=0;q<4;q++){
+    var e={secs:0, mi:0, tss:0, acts:0, elev:0, daily:[], months:[]};
+    for(var m=q*3;m<q*3+3;m++){
+      var s=agg[m]; if(!s) continue;
+      e.secs+=s.secs; e.mi+=s.mi; e.tss+=s.tss; e.acts+=s.acts; e.elev+=s.elev;
+      e.daily=e.daily.concat(s.daily); e.months.push(m);
     }
-    if(others.length<2) return { text:'Getting started', planned:false, why:'Not enough months logged this year to compare against yet.' };
-    var sum=0; others.forEach(function(v){ sum+=v; });
-    var avg=sum/others.length;
-    var peak=Math.max.apply(null, others.concat([e.tss]));
-    if(!(avg>0)) return null;
-    var f=e.tss/avg;
-    // Active days, for the consistency reading — the same "did you show up" question the month
-    // stats strip answers, asked over a month instead of a week.
-    var activeDays=0; e.daily.forEach(function(d){ if(d.acts) activeDays++; });
-    var dim=e.daily.length, activeFrac=dim?(activeDays/dim):0;
-    if(e.tss>=peak && f>=1.12) return { text:'Peak Week', planned:false, why:'Highest training load of the year so far — '+e.tss+' TSS against a '+Math.round(avg)+' TSS monthly average.' };
-    if(f>=1.15) return { text:'High Load', planned:false, why:e.tss+' TSS is '+Math.round((f-1)*100)+'% above your '+Math.round(avg)+' TSS monthly average.' };
-    if(f<=0.6) return { text:'Recovery Focus', planned:false, why:e.tss+' TSS is '+Math.round((1-f)*100)+'% below your '+Math.round(avg)+' TSS monthly average.' };
-    if(f>=1.02) return { text:'Building', planned:false, why:e.tss+' TSS, tracking above your '+Math.round(avg)+' TSS monthly average.' };
-    if(activeFrac>=0.6) return { text:'Consistent', planned:false, why:activeDays+' active days of '+dim+', at a load close to your monthly average.' };
-    return { text:'Steady', planned:false, why:e.tss+' TSS against a '+Math.round(avg)+' TSS monthly average.' };
+    e.mi=Math.round(e.mi*10)/10; e.tss=Math.round(e.tss); e.hours=Math.round(e.secs/3600);
+    out.push(e);
+  }
+  return out;
+}
+function _quarterLabel_(qagg, q, y, now){
+  try{
+    var e=qagg[q]; if(!e) return null;
+    var todayY=now.getFullYear(), todayQ=Math.floor(now.getMonth()/3);
+    var future=(y>todayY || (y===todayY && q>todayQ)), fLbl=null;
+    if(future){
+      try{
+        var dk=(typeof _tbDK_==='function')?_tbDK_(new Date(y, q*3+1, 15)):null;
+        var bp=dk&&(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+        if(bp && bp.phaseLabel) fLbl=bp.phaseLabel;
+      }catch(_e){}
+    }
+    // Same partial-period honesty as the month chapters, measured in days elapsed INTO the quarter.
+    // A quarter judged on its first fortnight reads as a collapse for the same reason a month did.
+    var tooEarly=false, teWhy='';
+    if(!future && y===todayY && q===todayQ){
+      var elapsedD=Math.round((new Date(y,now.getMonth(),now.getDate()) - new Date(y,q*3,1))/86400000)+1;
+      if(elapsedD < 28){
+        tooEarly=true;
+        teWhy=elapsedD+' day'+(elapsedD===1?'':'s')+' into the quarter so far: '+e.tss+' TSS across '+e.acts+' activities. Too early to compare against a full quarter.';
+      }
+    }
+    return _periodLabelCore_(qagg, q, {
+      noun:'quarter', peakText:'Peak Quarter',
+      thinWhy:'Not enough quarters logged this year to compare against yet.',
+      future:future, futureLabel:(fLbl||'Planned'),
+      futureWhy:(fLbl?'From the training block phase for this quarter.':'This quarter has not started yet.'),
+      tooEarly:tooEarly, tooEarlyWhy:teWhy,
+      notEvidence:function(k){ return y===todayY && k>todayQ; }
+    });
   }catch(e2){ return null; }
 }
 
@@ -29588,9 +29653,121 @@ function _yearSnapshotTotal_(y){
     return { n:n, mi:Math.round(m*10)/10 };
   }catch(e){ return null; }
 }
+// ===== G2 — the living-card stat block on each month tile ==========================
+// Three readings per month, each ABSENT rather than guessed. The gates below are not defensive
+// boilerplate; each one is a real hole in this athlete's data that would otherwise render as a
+// confident number:
+//   CTL   — st.fitSeries begins 2026-02-19, so Jan has no points at all and Feb has no
+//           pre-month anchor to measure a delta FROM. Both are em-dash, not "0".
+//   FTP   — st.ftpHistory holds six entries, ALL inside 2026-07-25..07-31. ftpOn_ happily
+//           returns 190 for January, but that is the earliest KNOWN value projected backwards,
+//           not a measurement — using it would fabricate "no change" for eleven months. So this
+//           reads ftpHistory directly and requires an in-month entry.
+//   PRs   — counted from st.segments[].prDate, matching the year-total strip above, which
+//           already treats an empty store as unknown and a populated store's 0 as a real 0.
+function _g2Bounds_(y,m){
+  var p=function(n){ return (n<10?'0':'')+n; };
+  var start=y+'-'+p(m+1)+'-01';
+  var endD=new Date(y,m+1,0).getDate();
+  return { start:start, end:y+'-'+p(m+1)+'-'+p(endD) };
+}
+// CTL carried INTO the month vs where it finished. Needs both ends: a month whose series has no
+// point before it cannot report a delta, only a level.
+function _g2Ctl_(y,m){
+  try{
+    var src=(typeof st!=='undefined' && Array.isArray(st.fitSeries))?st.fitSeries:[];
+    if(!src.length) return null;
+    var b=_g2Bounds_(y,m), before=null, inMon=null;
+    for(var i=0;i<src.length;i++){
+      var pt=src[i]; if(!pt || !pt.date || pt.ctl==null) continue;
+      var d=String(pt.date).slice(0,10);
+      if(d < b.start){ if(!before || d >= before.d) before={d:d, v:pt.ctl}; }
+      else if(d <= b.end){ if(!inMon || d >= inMon.d) inMon={d:d, v:pt.ctl}; }
+    }
+    if(!before || !inMon) return null;
+    var delta=Math.round((inMon.v-before.v)*10)/10;
+    return { delta:delta, from:Math.round(before.v), to:Math.round(inMon.v),
+             dir:(delta>=1?'up':(delta<=-1?'down':'flat')) };
+  }catch(e){ return null; }
+}
+// FTP movement recorded WITHIN the month. No in-month entry means nothing was measured that
+// month — which is not the same as "it did not change", so it reads em-dash.
+function _g2Ftp_(y,m){
+  try{
+    var fh=(typeof st!=='undefined')?st.ftpHistory:null, list=[];
+    if(Array.isArray(fh)) list=fh.slice();
+    else if(fh && typeof fh==='object') list=Object.keys(fh).map(function(k){ return {date:k, ftp:fh[k]}; });
+    if(!list.length) return null;
+    var b=_g2Bounds_(y,m), before=null, inMon=[];
+    list.forEach(function(x){
+      if(!x) return;
+      var v=parseFloat(x.ftp!=null?x.ftp:x.v);
+      if(!isFinite(v) || v<=0) return;                       // the store carries null entries
+      var d=String(x.date||x.d||'').slice(0,10); if(!d) return;
+      if(d < b.start){ if(!before || d >= before.d) before={d:d, v:v}; }
+      else if(d <= b.end) inMon.push({d:d, v:v});
+    });
+    if(!inMon.length) return null;
+    // Same date can carry contradictory values (2026-07-29 holds both 183 and 230); last wins,
+    // matching how the rest of the app resolves a same-key collision.
+    inMon.sort(function(a,c){ return a.d<c.d?-1:(a.d>c.d?1:0); });
+    var start=before?before.v:inMon[0].v, end=inMon[inMon.length-1].v;
+    var delta=Math.round(end-start);
+    return { delta:delta, from:Math.round(start), to:Math.round(end) };
+  }catch(e){ return null; }
+}
+function _g2Prs_(y,m){
+  try{
+    if(typeof st==='undefined' || !st.segments || typeof st.segments!=='object') return null;
+    var keys=Object.keys(st.segments); if(!keys.length) return null;   // empty store = unknown
+    var b=_g2Bounds_(y,m), n=0;
+    keys.forEach(function(k){
+      var sg=st.segments[k]; if(!sg || !sg.prDate) return;
+      var d=String(sg.prDate).slice(0,10);
+      if(d>=b.start && d<=b.end) n++;
+    });
+    return n;
+  }catch(e){ return null; }
+}
+// The block itself. Restrained by design — this sits INSIDE an existing tile and must not
+// out-shout the hours figure that tile exists to show.
+function _g2BlockHTML_(y, m){
+  var esc=function(s){ return (typeof _cvEsc_==='function')?_cvEsc_(s):String(s||''); };
+  var DASH='<span style="color:var(--d-t4)">&mdash;</span>';
+  var c=_g2Ctl_(y,m), f=_g2Ftp_(y,m), pr=_g2Prs_(y,m);
+  var stat=function(lbl, val, why){
+    return '<div style="flex:1;min-width:0;text-align:center"'+(why?(' title="'+esc(why)+'"'):'')+'>'
+      +'<div style="font-size:11px;font-weight:800;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+val+'</div>'
+      +'<div style="font-size:8px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-top:2px">'+lbl+'</div></div>';
+  };
+  var cV=DASH, cWhy='No fitness series covering this month, so there is no starting CTL to measure from.';
+  if(c){
+    var arrow=(c.dir==='up')?'&#8599;':(c.dir==='down'?'&#8600;':'&#8594;');
+    var col=(c.dir==='up')?'var(--c-green)':(c.dir==='down'?'var(--c-red)':'var(--d-t3)');
+    var sign=(c.delta>0?'+':'');
+    cV='<span style="color:'+col+'">'+arrow+' '+sign+c.delta+'</span>';
+    cWhy='CTL '+c.from+' to '+c.to+' across the month ('+sign+c.delta+').';
+  }
+  var fV=DASH, fWhy='No FTP recorded in this month, so no change was measured. Not the same as no change.';
+  if(f){
+    var fcol=(f.delta>0)?'var(--c-green)':(f.delta<0?'var(--c-red)':'var(--d-t3)');
+    var fsign=(f.delta>0?'+':'');
+    fV='<span style="color:'+fcol+'">'+fsign+f.delta+'</span>';
+    fWhy='FTP '+f.from+'W to '+f.to+'W in this month ('+fsign+f.delta+'W).';
+  }
+  var pV=(pr==null)?DASH:('<span style="color:'+(pr>0?'var(--c-amber)':'var(--d-t3)')+'">'+pr+'</span>');
+  var pWhy=(pr==null)?'No segment records stored yet, so PRs cannot be counted.'
+                     :(pr+' segment PR'+(pr===1?'':'s')+' set in this month.');
+  return '<div style="display:flex;align-items:flex-start;gap:4px;margin-top:8px;padding-top:7px;border-top:1px solid var(--d-edge)">'
+    +stat('FITNESS', cV, cWhy)+stat('FTP', fV, fWhy)+stat('PRS', pV, pWhy)+'</div>';
+}
 // The Year view. Returns HTML; BOTH calendar surfaces mount this same string, so desktop and
 // mobile cannot drift (recurring bug pattern #1).
-function calYearHTML_(y, byDate, now){
+//
+// The narrow flag is a LAYOUT flag, never a content flag: phone stacks the side column under grid
+// and drops the month tiles to two-up. Nothing is hidden or computed differently — the moment a
+// surface starts choosing what to SHOW, the two have forked and the parity contract is dead.
+function calYearHTML_(y, byDate, now, narrow){
   var agg=_yearMonthAgg_(y, byDate);
   var MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
   var todayY=now.getFullYear(), todayM=now.getMonth();
@@ -29618,7 +29795,7 @@ function calYearHTML_(y, byDate, now){
   }catch(e){ prCount=null; }
   var dash=function(v){ return (v==null)?'&mdash;':v; };
   var H='<div style="flex:1;min-height:0;overflow-y:auto;padding-right:2px">'
-    +'<div style="display:flex;gap:12px;align-items:flex-start">'
+    +'<div style="display:flex;gap:12px;align-items:'+(narrow?'stretch':'flex-start')+(narrow?';flex-direction:column':'')+'">'
     +'<div style="flex:1;min-width:0">';
   var IC={
     hours:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
@@ -29647,7 +29824,7 @@ function calYearHTML_(y, byDate, now){
   H+=(_short==null?'':'<div style="font-size:10.5px;color:var(--c-amber);margin:-8px 2px 12px;line-height:1.5">'
     +('The full activity snapshot holds '+_snap.mi.toLocaleString()+' mi for '+y+' &mdash; about '+_short.toLocaleString()+' mi sits in rides that exist only there and cannot be opened from the calendar.')
     +'</div>');
-  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">';
+  H+='<div style="display:grid;grid-template-columns:repeat('+(narrow?'2':'4')+',minmax(0,1fr));gap:12px">';
   for(var m=0;m<12;m++){
     var e=agg[m];
     var future=(y>todayY || (y===todayY && m>todayM));
@@ -29692,6 +29869,9 @@ function calYearHTML_(y, byDate, now){
     } else {
       H+='<div style="margin-top:9px;font-size:11.5px;color:var(--d-t4)">'+(e.acts?'':'Nothing logged')+'</div>';
     }
+    // G2 living-card block. Not rendered on a future month: three em-dashes under a padlock is
+    // noise, not honesty — there is nothing to be honest ABOUT until the month starts.
+    if(!future) H+=_g2BlockHTML_(y, m);
     H+='</div>';
   }
   H+='</div>';
@@ -29701,11 +29881,103 @@ function calYearHTML_(y, byDate, now){
   H+='<span style="font-size:10.5px;color:var(--d-t4)">More</span>'
     +'<span style="font-size:10.5px;color:#7C8595;margin-left:8px">daily training load</span></div>';
   H+='</div>';                                    // end main column
-  H+=calYearSideHTML_(y, agg, byDate, now);
+  H+=calYearSideHTML_(y, agg, byDate, now, narrow);
   H+='</div>';                                    // end main+side row
   H+=calYearFooterHTML_(y, byDate, now);
   H+='</div>';
   try{ setTimeout(function(){ _yrSmurkelMount_(y, agg, byDate, now); }, 0); }catch(e){}
+  return H;
+}
+// The Quarter view. Same contract as calYearHTML_: returns a STRING, and both calendar surfaces
+// mount it, so the two can never drift. Built on _yearMonthAgg_ folded through _quarterAgg_ and
+// labelled by the same _periodLabelCore_ the month chapters use — one aggregate, one ruleset.
+function calQuarterHTML_(y, byDate, now, narrow){
+  var agg=_yearMonthAgg_(y, byDate);
+  var qagg=_quarterAgg_(agg);
+  var MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  var QN=['Q1','Q2','Q3','Q4'];
+  var todayY=now.getFullYear(), todayM=now.getMonth(), todayQ=Math.floor(todayM/3);
+  // Same bar scale as the Year view — the 90th percentile of loaded days, not the single peak,
+  // so one outlier ride cannot flatten every quarter into stubs.
+  var _allDays=[]; agg.forEach(function(e){ e.daily.forEach(function(d){ if(d.tss>0) _allDays.push(d.tss); }); });
+  _allDays.sort(function(x,z){ return x-z; });
+  var peakDay=_allDays.length?_allDays[Math.min(_allDays.length-1, Math.floor(_allDays.length*0.9))]:0;
+  var DASH='<span style="color:var(--d-t4)">&mdash;</span>';
+  var esc=function(s){ return (typeof _cvEsc_==='function')?_cvEsc_(s):String(s||''); };
+  var H='<div style="flex:1;min-height:0;overflow-y:auto;padding-right:2px">';
+  H+='<div style="display:grid;grid-template-columns:repeat('+(narrow?'1':'2')+',minmax(0,1fr));gap:12px">';
+  for(var q=0;q<4;q++){
+    var e=qagg[q];
+    var future=(y>todayY || (y===todayY && q>todayQ));
+    var isCur=(y===todayY && q===todayQ);
+    var lab=_quarterLabel_(qagg, q, y, now);
+    var maxIdx=0;
+    e.daily.forEach(function(d){ var ix=_yrRampIdx_(d.tss, peakDay); if(ix>maxIdx) maxIdx=ix; });
+    var accent=_YR_RAMP[Math.max(1,maxIdx)];
+    var starred=false;
+    for(var sm=q*3; sm<q*3+3; sm++){ if(_yrMonthStarred_(y,sm)) starred=true; }
+    H+='<div style="background:var(--d-panel);border:1px solid '+(isCur?accent:'var(--d-edge)')+';border-radius:14px;padding:14px 15px 12px;position:relative">';
+    H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">'
+      +'<div style="display:flex;align-items:baseline;gap:9px">'
+      +'<span style="font-size:14px;font-weight:800;letter-spacing:.04em;color:'+(isCur?accent:'var(--d-head)')+'">'+QN[q]+'</span>'
+      +'<span style="font-size:10.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4)">'+MON[q*3]+' &ndash; '+MON[q*3+2]+'</span>'
+      +'</div>'
+      +(starred?('<span style="color:var(--c-amber);font-size:13px" title="Has a starred activity">&#9733;</span>'):'')
+      +'</div>';
+    if(future){
+      H+='<div style="height:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">'
+        +'<div style="width:34px;height:34px;border-radius:50%;background:var(--d-chip);display:flex;align-items:center;justify-content:center">'
+        +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>'
+        +'<div style="font-size:12px;font-weight:700;color:var(--d-t3)">Planned</div></div>';
+    } else {
+      H+='<div style="display:flex;align-items:flex-end;gap:14px;margin-top:6px">'
+        +'<div><div style="font-size:30px;font-weight:800;color:var(--d-head);line-height:1">'+e.hours+'</div>'
+        +'<div style="font-size:9.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-top:2px">HOURS</div></div>'
+        +'<div style="display:flex;gap:16px;padding-bottom:3px">'
+        +'<div><div style="font-size:14px;font-weight:800;color:var(--d-soft);line-height:1">'+(e.acts?(Math.round(e.mi*10)/10).toLocaleString():DASH)+'</div>'
+        +'<div style="font-size:8.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-top:3px">MILES</div></div>'
+        +'<div><div style="font-size:14px;font-weight:800;color:var(--d-soft);line-height:1">'+(e.acts?e.acts:DASH)+'</div>'
+        +'<div style="font-size:8.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-top:3px">ACTS</div></div>'
+        +'<div><div style="font-size:14px;font-weight:800;color:var(--d-soft);line-height:1">'+(e.acts?e.tss.toLocaleString():DASH)+'</div>'
+        +'<div style="font-size:8.5px;font-weight:700;letter-spacing:.07em;color:var(--d-t4);margin-top:3px">TSS</div></div>'
+        +'</div></div>';
+      H+='<div style="display:flex;align-items:flex-end;gap:1px;height:38px;margin-top:10px">';
+      e.daily.forEach(function(d){
+        var ix=_yrRampIdx_(d.tss, peakDay);
+        var hpx=(d.tss>0)?Math.max(4,Math.min(36,Math.round((d.tss/(peakDay||1))*36))):3;
+        H+='<div style="flex:1;min-width:0;height:'+hpx+'px;border-radius:1.5px;background:'+_YR_RAMP[ix]+'"></div>';
+      });
+      H+='</div>';
+      // The three months inside, each a drill-down to that month — the same data-cal hook the
+      // Year view's tiles use, so one delegated handler serves both views.
+      H+='<div style="display:flex;gap:6px;margin-top:10px">';
+      for(var mm=q*3; mm<q*3+3; mm++){
+        var me=agg[mm];
+        var mFuture=(y>todayY || (y===todayY && mm>todayM));
+        H+='<div data-cal="ymonth" data-ym="'+y+'-'+(mm+1)+'" title="Open '+MON[mm]+' '+y+'" style="flex:1;min-width:0;background:var(--d-well);border:1px solid var(--d-chip);border-radius:9px;padding:7px 8px;cursor:pointer">'
+          +'<div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--d-t4)">'+MON[mm]+'</div>'
+          +'<div style="font-size:13px;font-weight:800;color:'+(mFuture?'var(--d-t4)':'var(--d-soft)')+';line-height:1.2;margin-top:2px">'
+          +(mFuture?'&mdash;':(me.hours+'<span style="font-size:9px;font-weight:700;color:var(--d-t4)">h</span>'))+'</div></div>';
+      }
+      H+='</div>';
+    }
+    if(lab){
+      H+='<div style="display:flex;align-items:center;gap:6px;margin-top:10px" title="'+esc(lab.why)+'">'
+        +'<span style="width:7px;height:7px;border-radius:50%;background:'+(lab.planned?'#a855f7':accent)+';flex-shrink:0"></span>'
+        +'<span style="font-size:11.5px;font-weight:600;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+lab.text+'</span></div>';
+    } else {
+      H+='<div style="margin-top:10px;font-size:11.5px;color:var(--d-t4)">'+(e.acts?'':'Nothing logged')+'</div>';
+    }
+    H+='</div>';
+  }
+  H+='</div>';
+  H+='<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:13px 0 4px">'
+    +'<span style="font-size:10.5px;color:var(--d-t4)">Less</span>';
+  _YR_RAMP.forEach(function(c){ H+='<span style="width:11px;height:11px;border-radius:3px;background:'+c+'"></span>'; });
+  H+='<span style="font-size:10.5px;color:var(--d-t4)">More</span>'
+    +'<span style="font-size:10.5px;color:#7C8595;margin-left:8px">daily training load</span></div>';
+  H+='<div style="font-size:10.5px;color:var(--d-dim);margin:2px 2px 0">'+dataSourceNote_('legacy')+'</div>';
+  H+='</div>';
   return H;
 }
 // A month is starred when any activity in it is. ONE shared favourite flag across rides AND runs —
@@ -29846,9 +30118,11 @@ function dsShowCalendar(){
     // The Year view is a different question, so it gets a different title, and the stepper moves
     // YEARS rather than months — a month arrow inside a year view is the same class of mismatch as
     // a control that looks live and is not.
-    var _isYr=(calView==='year');
+    // Quarter is a YEAR-SCALE view like Year: same title, same year stepper. A month arrow inside
+    // a four-quarter view is the same class of mismatch the Year view already avoids.
+    var _isYr=(calView==='year'||calView==='quarter');
     H+='<div><div style="font-size:26px;font-weight:800;letter-spacing:-.4px;color:var(--d-head)">'+(_isYr?'Training Calendar':'Calendar')+'</div>'
-      +(_isYr?'<div style="font-size:12px;color:var(--d-t4);margin-top:2px">Your year at a glance. Every day counts.</div>':'')
+      +(_isYr?('<div style="font-size:12px;color:var(--d-t4);margin-top:2px">'+(calView==='quarter'?'Four quarters, one year. Where the blocks landed.':'Your year at a glance. Every day counts.')+'</div>'):'')
       +'</div>';
     H+='<div style="display:flex;align-items:center;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;overflow:hidden">';
     H+='<div data-cal="prev" style="padding:8px 11px;cursor:pointer;color:var(--d-t3);font-size:15px">&#8249;</div>';
@@ -29859,7 +30133,7 @@ function dsShowCalendar(){
     H+='<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
     H+='  <div data-cal="gen" style="padding:8px 15px;background:#2FA8E0;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;color:#fff">Generate</div>';
     H+='  <div style="display:inline-flex;background:var(--d-well);border:1px solid var(--d-chip);border-radius:10px;padding:3px">';
-    ['year','month','week','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
+    ['year','quarter','month','week','agenda'].forEach(function(v){ var on=calView===v; var lbl=v.charAt(0).toUpperCase()+v.slice(1);
       H+='<div data-cal="view" data-view="'+v+'" style="padding:6px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;background:'+(on?'#F97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+'">'+lbl+'</div>';
     });
     H+='  </div>';
@@ -29930,6 +30204,8 @@ function dsShowCalendar(){
     if(calView==='year'){
       // The Year view spans the whole year, so the month/week padding above does not apply to it.
       H+=calYearHTML_(viewYear, ridesByDate, now);
+    } else if(calView==='quarter'){
+      H+=calQuarterHTML_(viewYear, ridesByDate, now);
     } else if(calView==='agenda'){
       H+=calAgenda(monthRides);
     } else if(calView==='week'){
@@ -30086,10 +30362,10 @@ function dsShowCalendar(){
       var t=e.target.closest('[data-cal]'); if(!t) return;
       var a=t.getAttribute('data-cal');
       if(a==='prev'){ calFilterOpen=false;
-        if(calView==='year'){ viewYear--; } else { viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} }
+        if(calView==='year'||calView==='quarter'){ viewYear--; } else { viewMonth--; if(viewMonth<0){viewMonth=11;viewYear--;} }
         renderCalendar(); }
       else if(a==='next'){ calFilterOpen=false;
-        if(calView==='year'){ viewYear++; } else { viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} }
+        if(calView==='year'||calView==='quarter'){ viewYear++; } else { viewMonth++; if(viewMonth>11){viewMonth=0;viewYear++;} }
         renderCalendar(); }
       else if(a==='today'){ calFilterOpen=false; viewMonth=now.getMonth(); viewYear=now.getFullYear(); renderCalendar(); }
       else if(a==='view'){ calView=t.getAttribute('data-view'); calFilterOpen=false; renderCalendar(); }
@@ -42089,8 +42365,13 @@ function showCalendarTab(){
   // Segmented control (Apple Health idiom), left-aligned under the header.
   h+='<div style="padding:4px 16px 0">';
   h+='  <div style="display:inline-flex;background:var(--s2);border-radius:9px;padding:2px">';
-  h+='    <button onclick="calSetView(\\'week\\')" style="border:none;border-radius:7px;padding:5px 16px;font-size:13px;font-weight:700;cursor:pointer;background:'+(calView==='week'?'var(--s1)':'transparent')+';color:'+(calView==='week'?'var(--t1)':'var(--t3)')+'">Week</button>';
-  h+='    <button onclick="calSetView(\\'month\\')" style="border:none;border-radius:7px;padding:5px 16px;font-size:13px;font-weight:700;cursor:pointer;background:'+(calView==='month'?'var(--s1)':'transparent')+';color:'+(calView==='month'?'var(--t1)':'var(--t3)')+'">Month</button>';
+  // Four views now, so padding tightens to keep the control on one line at 390px. Quarter and
+  // Year mount the SAME shared renderers desktop does (calQuarterHTML_/calYearHTML_) — mobile
+  // gets no second aggregator, which is the whole point of pattern #1.
+  ['week','month','quarter','year'].forEach(function(v){ var on=(calView===v);
+    var lbl=v.charAt(0).toUpperCase()+v.slice(1);
+    h+='    <button onclick="calSetView(\\''+v+'\\')" style="border:none;border-radius:7px;padding:5px 11px;font-size:12.5px;font-weight:700;cursor:pointer;background:'+(on?'var(--s1)':'transparent')+';color:'+(on?'var(--t1)':'var(--t3)')+'">'+lbl+'</button>';
+  });
   h+='  </div>';
   h+='</div>';
 
@@ -42131,6 +42412,24 @@ function showCalendarTab(){
     h+='</div>';
   }
   h+='</div>';
+  } else if(calView==='quarter' || calView==='year'){
+    // Year-scale views. The date-keyed map is built from allRidesLegacy_ — the SAME library the
+    // month view below pins to, so a quarter total can never disagree with the months in it.
+    var _qNow=new Date();
+    var _qy=calYScaleGetYear_();
+    var _qby={};
+    (typeof allRidesLegacy_==='function'?allRidesLegacy_():(st.rides||[]).filter(function(r){return r&&!r.deleted;})).forEach(function(r){
+      if(!r||!r.date) return; var nd=normDate(r.date); if(!_qby[nd]) _qby[nd]=[]; _qby[nd].push(r);
+    });
+    h+='<div style="padding:8px 14px 18px;display:flex;flex-direction:column">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+      +'<button onclick="calYScaleStep_(-1)" style="background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:4px 14px;font-size:15px;color:var(--t2);cursor:pointer;font-family:inherit">&#8249;</button>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--t1)">'+_qy+'</div>'
+      +'<button onclick="calYScaleStep_(1)" style="background:var(--s2);border:1px solid var(--b1);border-radius:9px;padding:4px 14px;font-size:15px;color:var(--t2);cursor:pointer;font-family:inherit">&#8250;</button>'
+      +'</div>';
+    // narrow:true is LAYOUT only — same renderer, same numbers as desktop.
+    h+=(calView==='quarter')?calQuarterHTML_(_qy,_qby,_qNow,true):calYearHTML_(_qy,_qby,_qNow,true);
+    h+='</div>';
   } else {
     // MONTH VIEW — color-coded dot grid (Mon-anchored) + a per-week Miles/TSS
     // summary column (col 8), reusing the SAME allRidesDeduped_/calRollup_ source
@@ -42406,6 +42705,27 @@ function showCalendarTab(){
   if(tbtn) tbtn.onclick=function(){ showCalendarTab(); };
   var gbtn=document.getElementById('cal-gen-btn');
   if(gbtn) gbtn.onclick=function(){ if(typeof openPlanGenerator_==='function') openPlanGenerator_(); };
+  // Year-scale drill-down. The shared renderers emit the SAME data-cal hooks desktop delegates on
+  // (ymonth tiles, cgrade letters), so mobile wires one delegated listener rather than a second
+  // set of per-tile handlers. Tapping a month jumps to that month in the Month view.
+  if(calView==='quarter' || calView==='year'){
+    scr.addEventListener('click', function(ev){
+      var t=ev.target && ev.target.closest ? ev.target.closest('[data-cal]') : null;
+      if(!t) return;
+      var a=t.getAttribute('data-cal');
+      if(a==='ymonth'){
+        var ym=String(t.getAttribute('data-ym')||'').split('-');
+        if(ym.length===2){
+          try{ _calFocusDate=new Date(parseInt(ym[0],10), parseInt(ym[1],10)-1, 1); }catch(e){}
+          try{ localStorage.setItem('aiq_cal_view','month'); }catch(e){}
+          showCalendarTab();
+        }
+      } else if(a==='cgrade'){
+        var g=String(t.getAttribute('data-ym')||'').split('-');
+        if(g.length===2 && typeof coachGradeExplain_==='function') coachGradeExplain_(parseInt(g[0],10), parseInt(g[1],10)-1);
+      }
+    });
+  }
 }
 
 
@@ -43022,6 +43342,20 @@ function calSetView(v){
 }
 function calGetView(){
   try{ return localStorage.getItem('aiq_cal_view')||'week'; }catch(e){ return 'week'; }
+}
+// Which YEAR the mobile year-scale views (Quarter / Year) are showing. Persisted like the view
+// itself so stepping back a year survives a tab switch, and clamped to a sane band so a corrupt
+// value cannot render twelve empty months and read as data loss.
+function calYScaleGetYear_(){
+  try{
+    var v=parseInt(localStorage.getItem('aiq_cal_yscale_year'),10);
+    if(isFinite(v) && v>=2000 && v<=2100) return v;
+  }catch(e){}
+  return new Date().getFullYear();
+}
+function calYScaleStep_(d){
+  try{ localStorage.setItem('aiq_cal_yscale_year', String(calYScaleGetYear_()+(d<0?-1:1))); }catch(e){}
+  try{ showCalendarTab(); }catch(e){}
 }
 
 function showCal(){
@@ -44526,7 +44860,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-07-28-activity-type-respect';
+window.__BUILD__ = '2026-08-02-quarter-view-g2-cards';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
