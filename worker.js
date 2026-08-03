@@ -7008,10 +7008,14 @@ function idbSet_(obj){
     rq.onerror=function(){ rej(rq.error); };
   }); });
 }
-// Called once at boot AFTER the synchronous localStorage paint. If IDB holds a fuller
-// state than what localStorage gave us (it will, once migrated — IDB keeps tombstones
-// and GPS that the slim localStorage copy drops), swap it in and re-render. Never blocks
-// first paint; the app is already usable from the localStorage cache when this resolves.
+// DEAD CODE — nothing calls this. Verified by reference count: the only other mention of
+// idbBootLoad_ in this file is a comment at the boot block that wrongly claims it runs. The
+// live boot path is an INLINE copy of this logic in the DOMContentLoaded handler (_idbReady),
+// which re-renders via showHomeDash() and never touches renderPerf. Kept rather than deleted
+// because the inline copy has since diverged (it merges plan/strength across the swap, this
+// does not) and that divergence is worth being able to see. Do not revive it without moving
+// the plan/strength preservation across, and note its renderPerf call below carries the same
+// unguarded shape that caused the 5s-rebuild bug — it is harmless only because it never runs.
 function idbBootLoad_(){
   try{
     if(!('indexedDB' in window)) return;
@@ -7171,10 +7175,20 @@ function applyFirebaseData(data){
   for(var w=1;w<=17;w++){try{restoreW(w);}catch(e){}}
   try{updDots();}catch(e){}
   try{restoreExtraSessions();}catch(e){}
-  // Re-render Performance if it's open and now has rides
+  // Re-render the Activities/Performance screen ONLY when it is genuinely on screen AND the
+  // data it renders has actually changed.
+  //
+  // This guard used to be "does #perf-body exist and are there any rides". Both are
+  // permanently true once the screen has been opened once, so the comment's "if it's open and
+  // now has rides" never held: renderPerf tore down and rebuilt the whole screen — all 211
+  // activity rows and their onclick closures — every 5 seconds, forever, including while the
+  // screen was hidden behind another tab. Measured on an iPad-portrait viewport: 4 rebuilds
+  // per 25 idle seconds with no user input. Two user-visible symptoms came out of it — a tap
+  // landing between rebuilds hit a row that no longer existed ("taps don't register"), and the
+  // 232px list snapped back to the top mid-scroll (the visible jump). Both are the same defect.
   try{
     var pb=document.getElementById('perf-body');
-    if(pb&&(st.rides||[]).length>0) renderPerf(pb);
+    if(pb && (st.rides||[]).length>0 && _elOnScreen_(pb) && _perfSig_()!==_perfLastSig_) renderPerf(pb);
   }catch(e){}
 }
 
@@ -13837,9 +13851,36 @@ function closePerf(){
   document.body.style.overflow='';
 }
 
+// Is the element actually being rendered? A display:none ancestor leaves offsetParent null.
+// position:fixed also leaves it null even when visible, so fall back to a box measurement
+// rather than reporting a visible fixed element as hidden.
+function _elOnScreen_(el){
+  if(!el) return false;
+  if(el.offsetParent) return true;
+  var r=el.getBoundingClientRect();
+  return !!(r.width || r.height);
+}
+// Cheap signature of what the Activities/Performance screen actually renders, compared
+// against the value stamped by the last completed renderPerf. A poll that brings no change
+// then does no work at all. Counts catch adds/deletes/tombstones; lastUpdate catches an
+// edit that leaves the counts alone. O(n) over a property read — microseconds against a
+// renderPerf that rebuilds 211 rows and every chart.
+var _perfLastSig_=null;
+function _perfSig_(){
+  var R=(st&&st.rides)||[], n=R.length, live=0;
+  for(var i=0;i<n;i++){ var r=R[i]; if(r&&!r.deleted) live++; }
+  var U=(st&&st.runs)||[];
+  return n+':'+live+':'+(U.length||0)+':'+((st&&st.lastUpdate)||0);
+}
+// Inner scroll of the Activities list, carried across a re-render. renderPerf replaces the
+// whole of #perf-body, so the 232px list — 4 visible rows out of 211 — came back at the top
+// every time and whatever the user had scrolled to was gone. Captured here (the last moment
+// the old node exists) and reapplied by renderRideList.
+var _rideListScrollTop_=0;
 function renderPerf(container){
   if(!container) container=document.getElementById('perf-body');
   if(!container) return;
+  try{ var _sc=container.querySelector('.aiq-vscroll'); if(_sc) _rideListScrollTop_=_sc.scrollTop||0; }catch(e){}
   if(!st.rides) st.rides=[];
   var rides=st.rides.filter(function(r){return !r.deleted;});
   var FTP=parseInt(st.ftp||186);
@@ -14420,6 +14461,10 @@ function renderPerf(container){
   // performance dashboard in the same screen instead of a separate tab.
   var rideListContainer=document.getElementById('analytics-ride-list');
   if(rideListContainer) renderRideList(rideListContainer, 4);
+  // Stamp AFTER the screen is actually built, not on entry: an early throw then leaves the
+  // signature unchanged and the next poll retries, rather than recording a render that
+  // never happened.
+  try{ _perfLastSig_=_perfSig_(); }catch(e){}
 
 
   // If no rides, auto-refresh after Firebase syncs
@@ -14493,7 +14538,9 @@ function renderPerf(container){
 }
 
 var activityYearFilter = activityYearFilter || new Date().getFullYear();
-function setActivityYearFilter(y){ activityYearFilter = y; var body=document.getElementById('analytics-ride-list'); renderRideList(body); }
+// A different year is a different list, so the carried scroll offset is meaningless — reset it
+// rather than landing the user partway down a set of rows they did not scroll through.
+function setActivityYearFilter(y){ activityYearFilter = y; _rideListScrollTop_=0; var body=document.getElementById('analytics-ride-list'); renderRideList(body); }
 function renderRideList(container, limit){
   if(!container) return;
   if(typeof activityYearFilter==='undefined') activityYearFilter = new Date().getFullYear();
@@ -14713,6 +14760,11 @@ function renderRideList(container, limit){
     listGroup.style.margin='0 12px';
     outer.appendChild(scrollWrap);
     container.appendChild(outer);
+    // Reapply the offset AFTER the node is in the document — a detached element has no
+    // scrollHeight, so an assignment before this point silently clamps to 0.
+    if(_rideListScrollTop_>0){
+      try{ scrollWrap.scrollTop=Math.min(_rideListScrollTop_, Math.max(0, scrollWrap.scrollHeight-scrollWrap.clientHeight)); }catch(e){}
+    }
   } else {
     container.appendChild(listGroup);
   }
@@ -45563,7 +45615,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-fit-duration-hms2';
+window.__BUILD__ = '2026-08-03-perf-rerender-guard';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -45612,8 +45664,9 @@ window.onload = function(){
   try{ renderAllAvatars(); }catch(e){}
   // Load the FULL state from IndexedDB (tombstones + GPS) over the slim localStorage
   // cache, THEN start Firebase — so remote merges into the complete local library
-  // instead of the ~1,187-ride slim subset. idbBootLoad_ swaps st in place; we run
-  // Firebase after it settles so a remote poll can't merge into a half-loaded state.
+  // instead of the ~1,187-ride slim subset. The swap happens INLINE below (idbBootLoad_ is
+  // the older, now-dead copy of this and is never called — do not read it as the live path);
+  // we run Firebase after it settles so a remote poll can't merge into a half-loaded state.
   var _idbReady = ('indexedDB' in window)
     ? idbGet_().then(function(full){
         if(full&&typeof full==='object'){
