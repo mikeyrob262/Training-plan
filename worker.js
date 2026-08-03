@@ -25237,6 +25237,24 @@ function coachV_(dateKey, now){
   var tsb=(fit&&typeof fit.tsb==='number')?fit.tsb:null;
   var primary=_cvPrimary_(plan.sessions);
   var t=primary&&primary.rx&&primary.rx.targets, intent=primary&&primary.intent;
+  // Reconcile with the day-level resolver so this panel and the post-session debrief cannot name
+  // different sessions. Only adopts when the resolver read the LIVE plan — a template-sourced answer
+  // is what _cvPrimary_ already gave us, so there is nothing to reconcile in that case.
+  try{
+    var _shared=(typeof _sessionRxFor_==='function')?_sessionRxFor_(dateKey):null;
+    if(_shared && _shared.via==='plan' && _shared.intent && _shared.intent!==intent){
+      intent=_shared.intent;
+      var _m={}; if(t) Object.keys(t).forEach(function(k){ _m[k]=t[k]; });
+      if(_shared.lo!=null) _m.powerLo=_shared.lo;
+      if(_shared.hi!=null) _m.powerHi=_shared.hi;
+      if(_shared.zone) _m.zone=_shared.zone;
+      if(_shared.hrLo!=null) _m.hrLo=_shared.hrLo;
+      if(_shared.hrHi!=null) _m.hrHi=_shared.hrHi;
+      if(_shared.hrCap!=null) _m.hrCap=_shared.hrCap;
+      if(_shared.durationMin!=null) _m.durationMin=_shared.durationMin;
+      t=_m;
+    }
+  }catch(e){}
   // Post-session state: once the day's work is logged, the pre-ride "what to expect" is stale.
   // Gated on BOTH sides, by SPORT rather than by which list the activity came from:
   //   session side — the day must prescribe something a ride or a run can answer. Strength/mobility/
@@ -26539,7 +26557,10 @@ function _smurkelContext_(dateKey, ride){
     // The prescription, and whether the athlete claimed the day themselves.
     try{
       var rx=(typeof _ridePrescriptionFor_==='function')?_ridePrescriptionFor_(ride):null;
-      C.rx=rx?{ name:rx.name, intent:rx.intent, lo:rx.lo, hi:rx.hi, zone:rx.zone, rules:rx.rules }:null;
+      C.rx=rx?{ name:rx.name, intent:rx.intent, lo:rx.lo, hi:rx.hi, zone:rx.zone, rules:rx.rules,
+                hrLo:rx.hrLo, hrHi:rx.hrHi, hrCap:rx.hrCap, durationMin:rx.durationMin, via:rx.via }:null;
+      // The last comparable session, so the debrief can say what MOVED rather than only what happened.
+      try{ C.prior=(typeof _smPriorComparable_==='function')?_smPriorComparable_(dateKey, ride):null; }catch(e){ C.prior=null; }
       var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dateKey):null;
       C.swapped=!!(bp && bp.via==='user');
       C.blockWeek=bp?bp.weekInPhase:null; C.phase=bp?bp.phaseLabel:null;
@@ -26614,6 +26635,58 @@ function _smurkelContext_(dateKey, ride){
 // Render the context as FACTS the model may quote, with unknowns named as unknown rather than
 // dropped — a missing line reads as "not applicable", a line that says "not recorded" cannot be
 // mistaken for zero.
+// Cadence, in the unit the SPORT actually uses. Strava reports RUNNING cadence per leg, so a run
+// logged at 82 is really ~164 spm — and the facts block hardcoded the cycling label, handing the
+// coach "cadence 82 rpm" for a run. Doubling is gated on a plausible per-leg value so a source that
+// already reports full spm is not doubled into nonsense.
+function _smCadence_(a, noun){
+  var c=(a&&a.cadence!=null)?+a.cadence:null;
+  if(c==null || !(c>0)) return null;
+  var isRun=/run|jog|walk|hike/i.test(String(noun||''));
+  if(!isRun) return { val:Math.round(c), unit:' rpm' };
+  return { val:Math.round(c<120?c*2:c), unit:' spm' };
+}
+// The most recent comparable session before this one: same sport, similar distance, inside three
+// weeks. This is what lets the debrief say "10:51 against 11:02 last week" instead of restating
+// today in isolation — the single largest gap between what shipped and the voice it is meant to have.
+// Deliberately NOT _cvdPriorWeek_: that one resolves through the block template and returns only
+// sport==='ride', so it is null for every run.
+function _smPriorComparable_(dateKey, ride){
+  try{
+    if(!ride) return null;
+    var dk=(typeof normDate==='function')?normDate(dateKey||ride.date):String(dateKey||ride.date).slice(0,10);
+    if(!dk) return null;
+    var sport=(typeof rideSport_==='function')?String(rideSport_(ride)).toLowerCase():'';
+    var isRun=/run|jog/.test(sport);
+    var dist=parseFloat(ride.distance)||0;
+    var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+    try{ if(typeof getRuns==='function') all=all.concat(getRuns()||[]); }catch(e){}
+    var best=null, bestKey='';
+    (all||[]).forEach(function(r){
+      if(!r || r.deleted || r===ride) return;
+      var rk=(typeof normDate==='function')?normDate(r.date):String(r.date||'').slice(0,10);
+      if(!rk || rk>=dk) return;                                   // strictly earlier
+      if(_smDaysBetween_(rk, dk)>21) return;                      // inside three weeks
+      var rs=(typeof rideSport_==='function')?String(rideSport_(r)).toLowerCase():'';
+      if(/run|jog/.test(rs)!==isRun) return;                      // same sport family
+      var rd=parseFloat(r.distance)||0;
+      if(dist>0 && rd>0 && Math.abs(rd-dist)/dist>0.25) return;    // comparable distance
+      if(rk>bestKey){ bestKey=rk; best=r; }
+    });
+    if(!best) return null;
+    var cad=_smCadence_({cadence:best.cadence}, isRun?'run':'ride');
+    return { date:bestKey, name:best.name||null, miles:_smNum_(best.distance),
+             pace:best.pace||null, avgHR:_smNum_(best.avgHR),
+             np:_smNum_(best.np), avg:_smNum_(best.avgPwr),
+             tss:(typeof constRideTSS_==='function')?constRideTSS_(best):_smNum_(best.tss),
+             cadence:cad?cad.val:null, cadenceUnit:cad?cad.unit:'',
+             daysAgo:_smDaysBetween_(bestKey, dk) };
+  }catch(e){ return null; }
+}
+function _smDaysBetween_(aKey, bKey){
+  try{ var a=new Date(aKey+'T00:00:00'), b=new Date(bKey+'T00:00:00');
+    return Math.round(Math.abs(b.getTime()-a.getTime())/86400000); }catch(e){ return 999; }
+}
 function _smurkelFacts_(C){
   var L=[], a=C.act||{}, NL=String.fromCharCode(10);
   var n=function(v,suf,dp){ if(v==null) return 'not recorded'; var x=(dp!=null)?(Math.round(v*Math.pow(10,dp))/Math.pow(10,dp)):Math.round(v); return x+(suf||''); };
@@ -26624,14 +26697,37 @@ function _smurkelFacts_(C){
       +', IF '+n(a.IF,'',2)+', variability index '+n(a.VI,'',2)+'.');
     if(a.np!=null && a.ftp>0) L.push('  NP is '+Math.round(a.np/a.ftp*100)+'% of FTP.');
   } else if(a.pace){ L.push('  pace '+a.pace+' per mile. Running power is NOT comparable to cycling FTP.'); }
-  L.push('  cadence '+n(a.cadence,' rpm')+', average HR '+n(a.avgHR,' bpm')
+  var _cad=(typeof _smCadence_==='function')?_smCadence_(a, C.noun):null;
+  L.push('  cadence '+(_cad?(_cad.val+_cad.unit):'not recorded')+', average HR '+n(a.avgHR,' bpm')
     +(a.pctMaxHR!=null?(' ('+a.pctMaxHR+'% of max HR)'):'')+', elevation gain '+n(a.elevGain,' ft')+'.');
   if(C.rx){
     L.push('PRESCRIPTION: '+C.rx.name+(C.rx.lo!=null&&C.rx.hi!=null?(', target band '+C.rx.lo+'-'+C.rx.hi+'W'):', no specific power band')
       +(C.rx.zone?(' ('+C.rx.zone+')'):'')+'.');
+    // The HR band is the whole prescription on a run, so it is stated as its own line rather than
+    // buried — and the ceiling is called a ceiling, because that is how it is meant to be judged.
+    if(C.rx.hrLo!=null && C.rx.hrHi!=null) L.push('  prescribed HR band: '+C.rx.hrLo+'-'+C.rx.hrHi+' bpm.');
+    if(C.rx.hrCap!=null){
+      L.push('  HR CEILING: '+C.rx.hrCap+' bpm. This is a hard ceiling, not a target.'
+        +(a.avgHR!=null?(' Average HR for this session was '+Math.round(a.avgHR)+' bpm — '
+          +(a.avgHR>C.rx.hrCap?('OVER the ceiling by '+Math.round(a.avgHR-C.rx.hrCap)+' bpm.')
+                              :('inside the ceiling by '+Math.round(C.rx.hrCap-a.avgHR)+' bpm.'))):''));
+    }
+    if(C.rx.durationMin!=null) L.push('  prescribed duration: about '+C.rx.durationMin+' min.');
     if(C.rx.rules) L.push('  execution rules: '+C.rx.rules);
     if(C.swapped) L.push('  NOTE: the athlete swapped this session themselves — it is what they chose to do, not a deviation from the plan.');
   } else { L.push('PRESCRIPTION: none on file for this date.'); }
+  if(C.prior){
+    var p=C.prior;
+    L.push('LAST COMPARABLE SESSION ('+p.date+', '+p.daysAgo+' days ago'+(p.name?(', "'+p.name+'"'):'')+'):');
+    L.push('  distance '+n(p.miles,' mi',1)+(p.pace?(', pace '+p.pace+' per mile'):'')
+      +(p.avgHR!=null?(', average HR '+Math.round(p.avgHR)+' bpm'):'')
+      +(p.np!=null?(', NP '+Math.round(p.np)+'W'):'')
+      +(p.cadence!=null?(', cadence '+p.cadence+p.cadenceUnit):'')
+      +(p.tss!=null?(', TSS '+Math.round(p.tss)):'')+'.');
+    L.push('  Compare today against THIS and say what moved. Do not compare against anything not listed here.');
+  } else {
+    L.push('LAST COMPARABLE SESSION: none found in the last three weeks — do not claim a trend.');
+  }
   if(C.workIntervals && C.workIntervals.vals && C.workIntervals.vals.length){
     L.push('WORK INTERVALS (measured from '+(C.workIntervals.source==='laps'?'device laps':'the power stream')+'): '
       +C.workIntervals.vals.map(function(v,i){ return '#'+(i+1)+' '+v+'W'; }).join(', ')
@@ -26672,10 +26768,23 @@ function _smurkelFacts_(C){
 }
 // No apostrophes in here: a backslash-escaped quote inside this template literal loses a backslash
 // level on the way out and terminates the string. Phrase around it.
-var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has been following this athlete all block: '
-  +'direct, warm and funny. You speak TO the athlete as "you" and never about them in the third person. '
-  +'You are blunt about fatigue and generous about real work. You use the occasional emoji and the '
-  +'occasional joke, never more than one per section. You never pad.';
+// VOICE: second person, present tense, imperative — the same spec the pre-ride builder follows (see
+// the VOICE note above _cvPre_). This string is the one that DRIFTED: the Coach V voice overhaul
+// specced direct, confrontational, Type-A-by-name, and the rename to Dr. Smurkel introduced a fresh
+// persona reading "warm and funny / generous about real work", which is what produced a hedged
+// clinical summary. Warmth is not the job here; the athlete already knows the numbers were fine.
+var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this athlete all block. '
+  +'You are direct and confrontational. You speak TO the athlete as "you", in the present tense, and '
+  +'you give instructions as instructions - imperative, not suggestions. You never refer to the athlete '
+  +'in the third person and you never talk about your own reasoning. '
+  +'This athlete is Type A: the tendency is to push when the prescription says hold back, to add one '
+  +'more interval, to read a ceiling as a target. Where the numbers show that tendency, name it as the '
+  +'Type A talking and tell them to ignore it. Where they held the line, say so plainly and briefly. '
+  +'BANNED, because every one of them is a way of not committing: "worth noting", "I am judging this on", '
+  +'"it is worth", "that said", "somewhat", "fairly", "arguably", "may be", "might be", "seems", '
+  +'"appears to", "one could". Say the thing. '
+  +'Lead with the verdict, then the evidence for it. Never open with a data recap. '
+  +'One emoji maximum in the whole debrief, and only if it earns its place.';
 // The full debrief. Cached on the prompt hash exactly like the ride insight, so a completed session
 // settles on ONE reading — the numbers behind it cannot change unless the ride or the week changes,
 // and if they do the hash changes and it regenerates.
@@ -26692,18 +26801,23 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
     +'- Do not describe terrain, weather or how it felt. You were not there and none of that is above.'+NL
     +'- If a prescription is on file, judge against THAT intent. If WORK INTERVALS are given, they are the '
       +'prescribed effort — never call the session short because the whole-ride average sits under the band.'+NL
-    +'- Be specific. "Solid effort" is worthless; "47 minutes at 135W is real aerobic base work" is the job.'+NL+NL
-    +'Structure it with short bold-style section headings on their own lines, in this order, skipping any '
-    +'section you have no data for:'+NL
-    +'1. A title line: the activity name and a one-line riff on it. One emoji allowed.'+NL
-    +'2. The Honest Assessment — what the effort actually was, with the key numbers, each marked with a tick '
-      +'when it is where it should be.'+NL
-    +'3. The Zone Breakdown — where the time went, and the notable efforts by name.'+NL
-    +'4. The Form Picture — Fitness/Fatigue/Form, the week TSS by day as a short list, and what that total means.'+NL
-    +'5. Week Scorecard — the three required sessions, each ticked or crossed. Name any that is missing and '
-      +'say when it should go next week.'+NL
-    +'6. Bottom Line — two sentences maximum, and the one thing to do next.'+NL+NL
-    +'Plain text, no markdown asterisks. Around 300-400 words.';
+    +'- Be specific. "Solid effort" is worthless; "47 minutes at 135W is real aerobic base work" is the job.'+NL
+    +'- If a HR CEILING is given, that is the line the session is judged on. Say whether it was held or '
+      +'blown, by how many bpm, and what that means. Do not soften it.'+NL
+    +'- If a LAST COMPARABLE SESSION is given, say what MOVED against it, with both numbers. That '
+      +'comparison is the point of the debrief; today in isolation is a receipt, not coaching.'+NL+NL
+    +'Structure, with short headings on their own lines. Skip any section you have no data for:'+NL
+    +'1. Title line: the activity name and one line of riff.'+NL
+    +'2. The Verdict — two or three sentences. What this session WAS, whether it was executed, and the '
+      +'one thing that decides that. This comes FIRST and is not a list.'+NL
+    +'3. What Moved — today against the last comparable session, both numbers on every claim, and what '
+      +'the change means. Say plainly if nothing moved.'+NL
+    +'4. The Numbers That Matter — only the figures that support or undercut the verdict. Not an inventory. '
+      +'If a number is unremarkable, leave it out.'+NL
+    +'5. The Week — Fitness/Fatigue/Form and where the week stands, in prose, two or three sentences.'+NL
+    +'6. Do This Next — imperative, specific, one or two instructions. Not advice, instructions.'+NL+NL
+    +'Plain text, no markdown asterisks. Up to 600 words - use them where the reasoning earns it and stop '
+    +'when it does not. Depth on the one thing that matters beats a paragraph on each of six.';
   var key=_ciHash_(prompt);
   var hit=_ciGet_(key);
   if(hit!=null){ callback(null, hit); return; }
@@ -33820,17 +33934,78 @@ function renderCoachInsightContent(el, text, r){
 var _CV_BASE_INTENTS={z2:1, recovery:1, group:1, long:1, easyRun:1, run10k:1};
 // The prescription for a ride, resolved from that date's planned session (the intent Dr. Smurkel holds).
 // Null when the date has no ride prescription — the caller must then NOT render an execution verdict.
+// A session a ride OR A RUN can answer. The old resolver accepted only ride/attempt, so a run day
+// could never carry a prescription at all — Aug 3 2026 prescribed a Z2 run, and the debrief told the
+// model "PRESCRIPTION: none on file" while the session card was printing the Z2 ceiling.
+function _rxTrainableIntent_(intent){
+  var d=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[intent]:null;
+  return !!d && (d.type==='ride' || d.type==='attempt' || d.type==='run');
+}
+// THE day-level prescription resolver. Every surface that needs "what was prescribed on this date"
+// resolves through here, so two of them can no longer name different sessions for the same day.
+//
+// PREFERENCE: the live st.plan entry, then the block template. That order is the fix. st.plan is what
+// the athlete sees, edits and taps into; the template is what the block generated. On 2026-08-03 they
+// disagreed — st.plan held a z2 Easy Run, the template held easyRun — and the two halves of one
+// feature each read a different one, which is how the app both prescribed "back off above 140 bpm"
+// and then reported no prescription on file for the same session.
+//
+// blockPlanFor_ is READ here and deliberately not modified: its swap===true gate is load-bearing and
+// two weaker gates were already tried and rolled back (source==='user' lost to cross-device merges;
+// _edited.intent overrode 24 of 41 block days).
+function _sessionRxFor_(dateKey, ride){
+  var dk=dateKey || (ride && ride.date) || '';
+  dk=(typeof normDate==='function')?normDate(dk):String(dk).slice(0,10);
+  if(!dk) return null;
+  var pick=null, via='';
+  try{
+    if(typeof planSessionsForDate_==='function'){
+      (planSessionsForDate_(dk)||[]).forEach(function(s){
+        if(pick || !s || s.deleted || !s.intent || !_rxTrainableIntent_(s.intent)) return;
+        pick={ intent:s.intent, struct:(s.block&&s.block.struct)||s.struct||'', targets:s.targets||null };
+        via='plan';
+      });
+    }
+  }catch(e){}
+  if(!pick){
+    try{
+      var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+      if(bp && bp.sessions) bp.sessions.forEach(function(s){
+        if(pick || !s || !s.intent || !_rxTrainableIntent_(s.intent)) return;
+        pick={ intent:s.intent, struct:s.struct||'', targets:(s.rx&&s.rx.targets)||null };
+        via='block';
+      });
+    }catch(e){}
+  }
+  if(!pick) return null;
+  var def=((typeof SESSION_DEFS!=='undefined')&&SESSION_DEFS[pick.intent])||{};
+  // Targets MERGE rather than either/or: an st.plan session commonly carries only durationMin, so
+  // taking its targets wholesale would drop the power and HR bands the def defines for that intent.
+  var derived={};
+  try{
+    var bp2=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+    var built=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(pick.intent, bp2?bp2.weekInPhase:1):null;
+    derived=(built&&built.targets)||{};
+  }catch(e){}
+  var t={}; Object.keys(derived).forEach(function(k){ t[k]=derived[k]; });
+  if(pick.targets) Object.keys(pick.targets).forEach(function(k){ if(pick.targets[k]!=null) t[k]=pick.targets[k]; });
+  return {
+    intent:pick.intent, name:def.name||pick.intent,
+    lo:t.powerLo, hi:t.powerHi, zone:t.zone||def.zone||'',
+    // The HR band, carried through for the first time. A run is judged on heart rate, and the old
+    // resolver returned power only — so the 140 bpm ceiling the whole session hinged on never
+    // reached the coach at all, even on the days it did resolve a prescription.
+    hrLo:(t.hrLo!=null?t.hrLo:(def.hr?def.hr[0]:null)),
+    hrHi:(t.hrHi!=null?t.hrHi:(def.hr?def.hr[1]:null)),
+    hrCap:(t.hrCap!=null?t.hrCap:(def.hrCap!=null?def.hrCap:null)),
+    durationMin:(t.durationMin!=null?t.durationMin:(def.durationMin!=null?def.durationMin:null)),
+    rules:def.note||'', struct:pick.struct||'', sportType:def.type||'', via:via
+  };
+}
+// Kept as the name every existing caller uses; the rule now lives in _sessionRxFor_.
 function _ridePrescriptionFor_(r){
-  if(!r || !r.date || typeof blockPlanFor_!=='function') return null;
-  var dk=(typeof normDate==='function')?normDate(r.date):r.date;
-  var bp; try{ bp=blockPlanFor_(dk); }catch(e){ bp=null; }
-  if(!bp || !bp.sessions || !bp.sessions.length) return null;
-  var defs=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS:{};
-  var rideSess=null;
-  bp.sessions.forEach(function(s){ var d=defs[s.intent]; if(!rideSess && d && (d.type==='ride'||d.type==='attempt')) rideSess=s; });
-  if(!rideSess) return null;
-  var t=(rideSess.rx && rideSess.rx.targets)||{}, def=defs[rideSess.intent]||{};
-  return { intent:rideSess.intent, name:def.name||rideSess.intent, lo:t.powerLo, hi:t.powerHi, zone:t.zone||'', rules:def.note||'', struct:rideSess.struct||'' };
+  if(!r || !r.date) return null;
+  return _sessionRxFor_(r.date, r);
 }
 // Deficit-framing phrases. Matched on the OUTPUT and removed for base intents / no-prescription rides —
 // a filter on the result, not a prompt request, same shape as the P3 hazard veto. Prompt-level asks
@@ -45625,7 +45800,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-perf-rerender-guard3';
+window.__BUILD__ = '2026-08-03-shared-rx-voice';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
