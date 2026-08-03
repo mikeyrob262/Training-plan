@@ -9658,7 +9658,10 @@ function showSet(){
     +'<div><div class="ci-lbl">Weight (lbs)</div><input class="ci-in" type="number" value="'+(st.weight||'')+'" placeholder="162" id="set-wt"></div>'
     +'<div><div class="ci-lbl">FTP (watts)</div><input class="ci-in" type="number" value="'+(st.ftp||'')+'" placeholder="185" id="set-ftp"></div>'
     +'<div><div class="ci-lbl">VO2 Max</div><input class="ci-in" type="number" step="0.1" value="'+(st.vo2max||'')+'" placeholder="e.g. 47" id="set-vo2"></div>'
-    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+(st.maxHR||172)+'" placeholder="172" id="set-maxhr"></div>'
+    +'<div><div class="ci-lbl">Max HR</div><input class="ci-in" type="number" value="'+(st.maxHR||180)+'" placeholder="180" id="set-maxhr"></div>'
+    // LTHR sits at the same tier as FTP because it does the same job: FTP scores rides, LTHR scores
+    // runs. Every run TSS in the app is computed off this field and nothing hardcodes it.
+    +'<div><div class="ci-lbl">LTHR (run, bpm)</div><input class="ci-in" type="number" value="'+(st.lthr||'')+'" placeholder="170" id="set-lthr"></div>'
     +'<div><div class="ci-lbl">Current Week</div><div style="font-size:22px;font-weight:800;color:var(--green);margin-top:4px">Week '+cw+'</div></div>'
     +'</div>'
     +(st.vo2maxHistory&&st.vo2maxHistory.length?'<div style="padding:0 16px 10px"><div class="ci-lbl" style="margin-bottom:6px">VO2 Max History</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+st.vo2maxHistory.slice(-8).map(function(e){return '<span style="font-size:11px;background:var(--s2);border-radius:8px;padding:3px 9px;color:var(--t2)">'+e.d+': <b>'+e.v+'</b></span>';}).join('')+'</div></div>':'')
@@ -9820,10 +9823,19 @@ function saveProfile(){
   var f=document.getElementById('set-ftp');
   var v=document.getElementById('set-vo2');
   var mh=document.getElementById('set-maxhr');
+  var lt=document.getElementById('set-lthr');
   if(n)st.profileName=n.value;
   if(w&&w.value)st.weight=w.value;
   if(f&&f.value){ st.ftp=parseInt(f.value); if(typeof ftpRecord_==='function') ftpRecord_(st.ftp,null); }
   if(mh&&mh.value)st.maxHR=parseInt(mh.value);
+  // A changed LTHR reprices every run's TSS, exactly as a changed FTP reprices ride targets, so the
+  // backfill is re-run rather than left until the next boot.
+  if(lt&&lt.value){
+    var _newLt=parseInt(lt.value);
+    if(_newLt>0 && _newLt!==st.lthr){ st.lthr=_newLt;
+      try{ if(typeof applyRunHrTss_==='function') applyRunHrTss_(); }catch(e){}
+    }
+  }
   if(v&&v.value){
     var newVo2=parseFloat(v.value);
     // Track VO2 max history if it changed
@@ -16510,6 +16522,53 @@ function _tssRepairTargets_(){
 // legitimate TSS with no power at all and are left completely alone (122 of them). np/avgPwr are NOT
 // zeroed either — running power is real telemetry, it is simply not comparable to a cycling FTP.
 var _TSS_HEAL_CYC=/^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i;
+var LTHR_DEFAULT=170;   // derived from four sustained 20-min plateaus; overridable in Settings, never hardcoded at a call site
+function stLthr_(){ var v=parseInt((typeof st!=='undefined'&&st&&st.lthr)||0,10); return (v>0&&v<230)?v:LTHR_DEFAULT; }
+// hrTSS — the run-side counterpart to power TSS, in the SAME structural shape:
+//   power:  IF = NP/FTP    TSS = hours * IF^2 * 100
+//   heart:  hrIF = avgHR/LTHR   hrTSS = hours * hrIF^2 * 100
+// One formula style, one field. Runs write into r.tss like rides do, tagged tssSource so provenance
+// is readable without a parallel field — a second TSS field is the two-computation-paths defect this
+// app has been bitten by repeatedly.
+// GATE: no avgHR, no number. Returns null rather than guessing, and the caller leaves tss at 0.
+function hrTssFor_(r, lthr){
+  if(!r) return null;
+  var hr=parseFloat(r.avgHR!=null?r.avgHR:r.hr); if(!(hr>0)) return null;
+  var secs=(typeof _durSec_==='function')?_durSec_(r):0; if(!(secs>0)) return null;
+  var L=lthr||stLthr_(); if(!(L>0)) return null;
+  var hrIF=hr/L;
+  return Math.round(((secs/3600)*hrIF*hrIF*100)*10)/10;
+}
+// Backfill + forward path in one. Runs at boot over the WHOLE library, so history is repriced too,
+// and again whenever LTHR changes. Idempotent: a record already carrying tssSource 'hr' at the same
+// value is left alone.
+//
+// It also OVERWRITES a stale power-derived value on a run rather than skipping it, which is what
+// makes it converge — ride numbers merge max-wins, so a device still holding the old tss=109 would
+// otherwise keep pushing it back over a correct 42.
+function applyRunHrTss_(silent){
+  try{
+    var R=(typeof st!=='undefined'&&st&&st.rides)||[], L=stLthr_(), n=0, skipped=0;
+    R.forEach(function(r){
+      if(!r || r.deleted===true) return;
+      var sp=String((typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type||'')).replace(/[ _-]/g,'');
+      if(!sp || _TSS_HEAL_CYC.test(sp)) return;                 // rides keep power TSS; unknown sport untouched
+      if(!/^(run|trailrun|virtualrun|treadmill)$/i.test(sp)) return;   // hrTSS is defined for RUNNING
+      var v=hrTssFor_(r, L);
+      if(v==null){ skipped++; return; }                          // gate: missing avgHR -> leave tss as-is
+      if(r.tssSource==='hr' && Math.abs((parseFloat(r.tss)||0)-v)<0.05) return;
+      r.tss=v; r.tssSource='hr'; r.ifPct=null; r.tssCleared=false;
+      if(typeof markRideEdited_==='function') markRideEdited_(r, ['tss','tssSource','ifPct','tssCleared']);
+      n++;
+    });
+    if(n){
+      try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
+      if(!silent) try{ console.log('[hrTSS] LTHR '+L+' — scored '+n+' run(s)'+(skipped?(', '+skipped+' skipped for no avgHR'):'')); }catch(e){}
+    }
+    return n;
+  }catch(e){ try{ console.warn('[hrTSS] '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
+try{ if(typeof window!=='undefined'){ window.applyRunHrTss_=applyRunHrTss_; window.hrTssFor_=hrTssFor_; } }catch(e){}
 function healPowerTssOnNonRides_(silent){
   try{
     var R=(typeof st!=='undefined'&&st&&st.rides)||[], n=0, log=[];
@@ -45282,6 +45341,14 @@ function fetchStravaPage(token, page, imported, forceAll) {
       // IF 135% for an easy 36-minute Z2 run.
       var _cyc = (typeof _isCyclingSport_==='function') ? _isCyclingSport_(a) : true;
       if(_cyc && np && dur && ftp) tss = Math.round((dur*np*(np/ftp))/(ftp*3600)*100);
+      // A run is scored on heart rate instead, through the SAME function the backfill uses so the
+      // two can never drift. Gated: no avgHR, no TSS.
+      var _tssSrc = (tss!=null) ? 'power' : null;
+      if(!_cyc && /^(run|trailrun|virtualrun|treadmill)$/i.test(String(a.sport_type||a.type||'').replace(/[ _-]/g,''))){
+        var _hv=(typeof hrTssFor_==='function')
+          ? hrTssFor_({avgHR:a.average_heartrate, movingSecs:dur}) : null;
+        if(_hv!=null){ tss=_hv; _tssSrc='hr'; }
+      }
       var elev = a.total_elevation_gain ? Math.round(a.total_elevation_gain*3.28084) : null;
       var gpsLats=null, gpsLons=null;
       if(a.map && a.map.summary_polyline) {
@@ -45306,7 +45373,7 @@ function fetchStravaPage(token, page, imported, forceAll) {
         avgHR: (a.average_heartrate!=null ? a.average_heartrate : null),
         maxHR: (a.max_heartrate!=null ? a.max_heartrate : null),
         cadence: (a.average_cadence!=null ? a.average_cadence : null),
-        tss: tss, elev: elev,
+        tss: tss, tssSource: _tssSrc, elev: elev,
         calories: a.calories||null,
         workKj: (a.kilojoules!=null ? a.kilojoules : null),
         relEffort: a.suffer_score||null,
@@ -46066,7 +46133,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-smurkel-twoway';
+window.__BUILD__ = '2026-08-03-hrtss';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -46159,9 +46226,12 @@ window.onload = function(){
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
         // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
         // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
-        try{ if(typeof healPowerTssOnNonRides_==='function' && healPowerTssOnNonRides_()>0){
-          if(typeof sv==='function') sv();
-        } }catch(e){}
+        // Order matters: clear the invalid power-derived values first, THEN score runs on heart rate.
+        try{
+          var _c=(typeof healPowerTssOnNonRides_==='function')?healPowerTssOnNonRides_():0;
+          var _h=(typeof applyRunHrTss_==='function')?applyRunHrTss_():0;
+          if((_c+_h)>0 && typeof sv==='function') sv();
+        }catch(e){}
         // Option C: fold st.trainingBlock into st.plan once per block version (after migration +
         // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
         // only gen sessions — so the version guard is an optimisation, not correctness.
