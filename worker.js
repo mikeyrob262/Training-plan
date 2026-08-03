@@ -15410,7 +15410,11 @@ function bulkImportTCX(input){
                 // (2026-06-20: a 110.3mi ride and a "33.6mi" ghost of it). The run path next to
                 // this one has always written it; this one now matches, so a future bad import is
                 // caught by time even when its distance is nonsense.
-                name:name2, date:data.date, duration:data.duration, distance:data.distance,
+                // duration is a DISPLAY string everywhere else in the library (h:mm:ss). This
+                // path stored the raw seconds count straight off the parser, so the ride detail
+                // printed a TIME of "23445" instead of "6:30:45". Seconds live in movingSecs,
+                // which is where every calculation reads them from.
+                name:name2, date:data.date, duration:_fmtHMS_(data.duration||0), distance:data.distance,
                 movingSecs:data.duration||0,
                 avgPwr:data.avgPwr, np:data.np, hr:data.hr, tss:data.tss, elev:data.elev,
                 calories:data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
@@ -16112,7 +16116,7 @@ function importRideFile(input){
             
             var ride2 = {
               name: name2, date: data.date,
-              duration: (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(data.duration||0),
+              duration: _fmtHMS_(data.duration||0),   // shared with the bulk path, so the two cannot drift
               movingSecs: data.duration||0, distance: data.distance,
               avgPwr: data.avgPwr, np: data.np, hr: data.hr, tss: data.tss, elev: data.elev,
               calories: data.calories,
@@ -16888,13 +16892,46 @@ function aiLossVerify_(){
 // reports how many have a LIVE local copy vs are MISSING. Read-only.
 // robust duration -> seconds. movingSecs is numeric; duration is a "H:MM:SS" STRING on
 // most sources, so movingSecs||duration would leak a string and NaN-out comparisons.
+// THE stored duration format. Every one of the 762 colon-durations in the library is
+// three-part h:mm:ss with a leading zero hour ("0:53:18"), from Strava and from Intervals
+// alike, so that is the convention an importer has to write — not a bare seconds count and
+// not a two-part m:ss. Note this is deliberately NOT fmtDurHMS, which drops the hour field
+// under an hour and would introduce a fourth shape nothing else in the library uses.
+// Both FIT import paths call this so they cannot drift apart again.
+function _fmtHMS_(sec){
+  var s=Math.max(0, Math.round(Number(sec)||0));
+  var h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sc=s%60;
+  return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;
+}
+// Reads the legacy "4h 45m 54s" / "58m 24s" shape carried by 48 older FIT imports. Those
+// records survive today only because they also carry movingSecs; strip that (slimForStorage_
+// is one path that could) and _durSec_ would fall through to 0 and every time-derived number
+// on them would silently read as unknown. Returns 0 for anything that is not this shape —
+// notably "0:00:00", which must stay 0. Char scan, not a regex: this file is served inside a
+// template literal that eats one backslash level.
+function _durTextSec_(str){
+  var s=String(str||'').toLowerCase(), tot=0, num=0, seen=false, any=false;
+  for(var i=0;i<s.length;i++){
+    var ch=s.charAt(i), c=s.charCodeAt(i);
+    if(c>=48&&c<=57){ num=num*10+(c-48); seen=true; continue; }
+    if(ch===' '){ if(seen) return 0; continue; }          // a bare number with no unit is not this shape
+    if(ch==='h'||ch==='m'||ch==='s'){
+      if(!seen) return 0;
+      tot+=num*(ch==='h'?3600:(ch==='m'?60:1)); num=0; seen=false; any=true; continue;
+    }
+    return 0;                                             // any other character (a colon, say) is not this shape
+  }
+  if(seen) return 0;                                      // trailing digits with no unit
+  return any?tot:0;
+}
 function _durSec_(r){
   var m=r.movingSecs; if(typeof m==='number'&&m>0) return m;
   var d=r.duration;
   if(typeof d==='number'&&d>0) return d;
   if(typeof d==='string'&&d){ var p=d.split(':'); var ok=p.length>0, s=0;
     for(var i=0;i<p.length;i++){ if(p[i]===''||isNaN(Number(p[i]))){ ok=false; break; } s=s*60+Number(p[i]); }
-    if(ok) return s; }
+    if(ok) return s;
+    var t=_durTextSec_(d); if(t>0) return t; }
   return 0;
 }
 // Stop-the-bleeding: pause the 5s Firebase poll so remote's stale tombstones can't be
@@ -45516,7 +45553,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-actname-accessor';
+window.__BUILD__ = '2026-08-03-fit-duration-hms';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
