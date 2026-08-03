@@ -16497,6 +16497,43 @@ function _tssRepairTargets_(){
   });
   return out;
 }
+// Clears the power-derived TSS/IF that the pre-gate importer wrote onto NON-CYCLING activities.
+//
+// This has to run LOCALLY ON EVERY DEVICE, at every boot, and that is not belt-and-braces. A
+// server-side clear does not hold: ride fields merge with Math.max for numbers, so a device still
+// holding tss=109 pushes it straight back over a cleared remote — which is exactly what happened
+// when this was fixed at the node alone. Healing on each boot means no device keeps a value to
+// re-infect the others with, and it converges instead of ping-ponging.
+//
+// SURGICAL, by design. Only records that are non-cycling AND carry power are touched: those are the
+// ones the cycling formula was applied to. Intervals-sourced strength sessions carry their own small
+// legitimate TSS with no power at all and are left completely alone (122 of them). np/avgPwr are NOT
+// zeroed either — running power is real telemetry, it is simply not comparable to a cycling FTP.
+var _TSS_HEAL_CYC=/^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i;
+function healPowerTssOnNonRides_(silent){
+  try{
+    var R=(typeof st!=='undefined'&&st&&st.rides)||[], n=0, log=[];
+    R.forEach(function(r){
+      if(!r || r.deleted===true) return;
+      var sp=String((typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type||'')).replace(/[ _-]/g,'');
+      if(!sp || _TSS_HEAL_CYC.test(sp)) return;                 // cycling keeps it; unknown sport is left alone
+      var np=parseFloat(r.np)||parseFloat(r.avgPwr)||0;
+      if(!(np>0)) return;                                        // no power -> TSS came from elsewhere
+      var tss=parseFloat(r.tss)||0, hasIf=(r.ifPct!=null && r.ifPct!=='');
+      if(!(tss>0) && !hasIf) return;                             // already clean
+      log.push((r.date||'?')+' '+sp+' tss='+r.tss+' np='+r.np);
+      r.tss=0; r.ifPct=null; r.tssCleared=true;
+      if(typeof markRideEdited_==='function') markRideEdited_(r, ['tss','ifPct','tssCleared']);
+      n++;
+    });
+    if(n){
+      try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
+      if(!silent) try{ console.log('[tss-heal] cleared power-derived TSS on '+n+' non-cycling activity(ies): '+log.join(' | ')); }catch(e){}
+    }
+    return n;
+  }catch(e){ try{ console.warn('[tss-heal] '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
+try{ if(typeof window!=='undefined') window.healPowerTssOnNonRides_=healPowerTssOnNonRides_; }catch(e){}
 function repairCorruptTss_(commit){
   try{
     var t=_tssRepairTargets_();
@@ -26828,6 +26865,13 @@ var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this 
   +'"it is worth", "that said", "somewhat", "fairly", "arguably", "may be", "might be", "seems", '
   +'"appears to", "one could". Say the thing. '
   +'Lead with the verdict, then the evidence for it. Never open with a data recap. '
+  +'DIRECT IS NOT HARSH. You are on this athlete side and it has to read that way. Confidence, not '
+  +'severity. Never scold, never write a bare condemning fragment such as "that is the problem", never '
+  +'imply a session was wasted or that they have set themselves back when the numbers do not say so. '
+  +'Scale the verdict to the SIZE of what actually happened: a 2 bpm overrun on an easy run is a small '
+  +'correction, and calling it a failure is simply inaccurate. Name what went WELL first when anything '
+  +'did, and when you correct something, give the reason and the fix in the same breath. If the athlete '
+  +'has a good reason for a choice you flagged, say so and update your read rather than repeating it. '
   +'One emoji maximum in the whole debrief, and only if it earns its place.';
 // The full debrief. Cached on the prompt hash exactly like the ride insight, so a completed session
 // settles on ONE reading — the numbers behind it cannot change unless the ride or the week changes,
@@ -26860,6 +26904,11 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
       +'If a number is unremarkable, leave it out.'+NL
     +'5. The Week — Fitness/Fatigue/Form and where the week stands, in prose, two or three sentences.'+NL
     +'6. Do This Next — imperative, specific, one or two instructions. Not advice, instructions.'+NL+NL
+    +'PROPORTION. Judge the cost of this session against the numbers actually given, not against how '
+    +'the deviation sounds. If TSS is low or not recorded, an easy session did not put the athlete in a '
+    +'hole and you must not imply tomorrow is compromised. Only say a following session is at risk when '
+    +'Form and the load figures above actually support it, and quote the figure you are reasoning from. '
+    +'A small overrun on an easy day is a correction to make, not a setback to recover from.'+NL+NL
     +'Plain text, no markdown asterisks. Up to 600 words - use them where the reasoning earns it and stop '
     +'when it does not. Depth on the one thing that matters beats a paragraph on each of six.';
   var key=_ciHash_(prompt);
@@ -26940,11 +26989,111 @@ function _smurkelMount_(dk){
     fetchSmurkelDebrief_(dk, todays[0], function(err, text){
       var h=document.getElementById('sm-debrief'); if(!h) return;
       if(err || !text){ h.innerHTML='<div style="font-size:12px;color:var(--d-dim)">'+((typeof _cvEsc_==='function')?_cvEsc_(err||'Debrief unavailable.'):'Debrief unavailable.')+'</div>'; return; }
-      h.innerHTML=_smurkelHTML_(text);
+      h.innerHTML=_smurkelHTML_(text)+_smurkelReplyUI_();
+      _SM_CONVO={ dk:dk, ride:todays[0], debrief:text, turns:[] };
+      _smurkelBindReply_();
     });
   }catch(e){}
 }
-try{ if(typeof window!=='undefined'){ window._smurkelMount_=_smurkelMount_; window._smurkelHTML_=_smurkelHTML_; } }catch(e){}
+// ---- two-way coaching -------------------------------------------------------------------
+// The debrief was a monologue. The single most useful thing in the reference exchange was the athlete
+// pushing back ("cadence is low because I want to hold Z2") and the coach ENGAGING with that reason
+// and updating its read. That cannot happen in a generated block, so the block gets a reply box and
+// the conversation carries the same facts the debrief was built from — the coach answers about THIS
+// session's real numbers, not from memory of what it wrote.
+var _SM_CONVO=null;
+function _smurkelReplyUI_(){
+  return '<div id="sm-convo" style="margin-top:14px"></div>'
+    +'<div style="margin-top:10px;display:flex;gap:8px;align-items:flex-end">'
+    +'<textarea id="sm-reply" rows="1" placeholder="Push back, add context, or ask a question…" '
+      +'style="flex:1;min-width:0;resize:none;background:var(--s2,#131829);color:var(--t1,#e8eefc);'
+      +'border:1px solid var(--b1,#243049);border-radius:10px;padding:9px 11px;font-size:13px;'
+      +'font-family:inherit;line-height:1.4;max-height:120px"></textarea>'
+    +'<button id="sm-send" style="flex-shrink:0;background:#FC4C02;color:#fff;border:none;border-radius:10px;'
+      +'padding:10px 14px;font-size:12.5px;font-weight:800;cursor:pointer">Reply</button></div>';
+}
+function _smurkelBindReply_(){
+  var ta=document.getElementById('sm-reply'), btn=document.getElementById('sm-send');
+  if(!ta||!btn) return;
+  ta.addEventListener('input', function(){ ta.style.height='auto'; ta.style.height=Math.min(120, ta.scrollHeight)+'px'; });
+  // Enter sends, Shift+Enter breaks the line — the shape every chat input has.
+  ta.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); _smurkelSend_(); } });
+  btn.addEventListener('click', _smurkelSend_);
+}
+function _smurkelPaint_(){
+  var box=document.getElementById('sm-convo'); if(!box||!_SM_CONVO) return;
+  var esc=(typeof _cvEsc_==='function')?_cvEsc_:function(s){ return String(s); };
+  var h='';
+  _SM_CONVO.turns.forEach(function(t){
+    if(t.who==='you'){
+      h+='<div style="margin:10px 0 0;display:flex;justify-content:flex-end">'
+        +'<div style="max-width:86%;background:var(--s2,#1b2336);border:1px solid var(--b1,#243049);'
+        +'border-radius:12px 12px 3px 12px;padding:8px 11px;font-size:13px;line-height:1.5;color:var(--t1,#e8eefc)">'
+        +esc(t.text)+'</div></div>';
+    } else {
+      h+='<div style="margin:10px 0 0">'
+        +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;color:var(--d-dim,#64748b);margin-bottom:3px">DR. SMURKEL</div>'
+        +'<div style="font-size:13px;line-height:1.55;color:var(--t2,#c7d2e8);white-space:pre-wrap">'+esc(t.text)+'</div></div>';
+    }
+  });
+  box.innerHTML=h;
+  box.scrollIntoView({block:'nearest'});
+}
+function _smurkelSend_(){
+  var ta=document.getElementById('sm-reply'), btn=document.getElementById('sm-send');
+  if(!ta||!_SM_CONVO) return;
+  var msg=String(ta.value||'').trim(); if(!msg) return;
+  ta.value=''; ta.style.height='auto';
+  _SM_CONVO.turns.push({who:'you', text:msg});
+  _SM_CONVO.turns.push({who:'coach', text:'…'});
+  _smurkelPaint_();
+  if(btn){ btn.disabled=true; btn.style.opacity='.5'; }
+  fetchSmurkelReply_(_SM_CONVO, function(err, text){
+    _SM_CONVO.turns[_SM_CONVO.turns.length-1]={who:'coach', text:(err||text||'Could not reach Dr. Smurkel right now.')};
+    _smurkelPaint_();
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; }
+  });
+}
+// The reply call. Deliberately rebuilds the FACTS rather than trusting the debrief text: the athlete
+// asks about numbers, and the coach has to answer from the same measured figures the debrief was
+// built on. Not cached — a conversation turn is not a settled reading of a session.
+function fetchSmurkelReply_(convo, cb){
+  var facts='';
+  try{ facts=_smurkelFacts_(_smurkelContext_(convo.dk, convo.ride)); }catch(e){}
+  var NL=String.fromCharCode(10);
+  var hist=convo.turns.filter(function(t){ return t.text && t.text!=='…'; })
+    .map(function(t){ return (t.who==='you'?'ATHLETE: ':'YOU: ')+t.text; }).join(NL);
+  var prompt=_SM_PERSONA+NL+NL
+    +'These are the measured facts for the session under discussion.'+NL+facts+NL+NL
+    +'This is the debrief you already gave:'+NL+convo.debrief+NL+NL
+    +'The athlete is now talking back to you. Conversation so far:'+NL+hist+NL+NL
+    +'Answer their latest message. Rules:'+NL
+    +'- Engage with their REASONING, do not restate the debrief. If they have given you a good reason '
+      +'for something you flagged, say so plainly and UPDATE your read — changing your mind on new '
+      +'information is the job, not a climbdown.'+NL
+    +'- If they are wrong, say why, with the number that makes it wrong.'+NL
+    +'- Use only the figures above. Never invent one.'+NL
+    +'- Answer the question actually asked. If they ask what to do, tell them, in order.'+NL
+    +'- Plain text, no markdown asterisks, no section headings. Two to six sentences unless they asked '
+      +'for something that genuinely needs more.';
+  var ac=(typeof AbortController!=='undefined')?new AbortController():null;
+  var to=setTimeout(function(){ if(ac) ac.abort(); }, 30000);
+  fetch('https://mikey-food-api2.mgrobinson07.workers.dev/claude',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:700, messages:[{role:'user',content:prompt}] }),
+    signal:ac?ac.signal:undefined
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){ clearTimeout(to);
+    var t=d.content && d.content[0] && d.content[0].text;
+    t=(t||'').trim();
+    if(!t){ cb('Dr. Smurkel had nothing to add.', null); return; }
+    cb(null, t);
+  })
+  .catch(function(){ clearTimeout(to); cb('Could not reach Dr. Smurkel right now.', null); });
+}
+try{ if(typeof window!=='undefined'){ window._smurkelMount_=_smurkelMount_; window._smurkelHTML_=_smurkelHTML_;
+  window.fetchSmurkelReply_=fetchSmurkelReply_; window._smurkelSend_=_smurkelSend_; } }catch(e){}
 
 // ==================== Dr. Smurkel — post-ride interval debrief (piece 3) ====================
 // Lines a completed ride's Intervals.icu interval data up against the prescribed _sessionSteps_. The
@@ -45917,7 +46066,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-run-telemetry-verbatim';
+window.__BUILD__ = '2026-08-03-smurkel-twoway';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
@@ -46008,6 +46157,11 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
+        // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
+        try{ if(typeof healPowerTssOnNonRides_==='function' && healPowerTssOnNonRides_()>0){
+          if(typeof sv==='function') sv();
+        } }catch(e){}
         // Option C: fold st.trainingBlock into st.plan once per block version (after migration +
         // remote pull, so synced user/completed sessions are respected). Idempotent — regenerates
         // only gen sessions — so the version guard is an optimisation, not correctness.
