@@ -10725,6 +10725,41 @@ function downsampleG(arr, n){
 }
 
 function getTodayKey(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+// Today's Plan resolves its date ONCE, at render time, and nothing re-rendered it when the date
+// changed. On a tablet left open overnight — which is how this app is actually used — the card kept
+// showing YESTERDAY's prescription while every fitness card beside it had moved on, so a hard
+// session sat next to a fatigue warning that belonged to the following day. The date is correct in
+// both stores and getTodayKey is timezone-safe; the bug is purely that nothing invalidated at
+// midnight.
+//
+// Cheap and deliberately quiet: it compares a day key, and only re-renders when the day ACTUALLY
+// rolls over. It must not become another periodic re-render — that is what broke tap handling on the
+// Activities list — so there is no timer-driven repaint here, only a rollover-triggered one.
+var _dayStamp_=null;
+function dayRolloverCheck_(){
+  try{
+    var k=getTodayKey();
+    if(_dayStamp_===null){ _dayStamp_=k; return false; }
+    if(k===_dayStamp_) return false;
+    _dayStamp_=k;
+    try{ if(typeof pmcInvalidate_==='function') pmcInvalidate_(); }catch(e){}
+    try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
+    try{
+      if(typeof renderActive_==='function') renderActive_();
+      else if(typeof showHomeDash==='function') showHomeDash();
+    }catch(e){}
+    try{ console.log('[day-rollover] date changed to '+k+' — active view re-rendered'); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+try{
+  if(typeof window!=='undefined'){
+    window.dayRolloverCheck_=dayRolloverCheck_;
+    setInterval(dayRolloverCheck_, 60000);
+    // The common case on a tablet: the page was asleep across midnight and wakes to a stale card.
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) dayRolloverCheck_(); });
+  }
+}catch(e){}
 
 // ── PROFILE AVATAR (local-only, not synced) ─────────────────────────────────
 // Photo is stored in localStorage as a downscaled 200x200 JPEG data URL so it
@@ -16599,6 +16634,49 @@ function hrTssFor_(r, lthr){
   var hrIF=hr/L;
   return Math.round(((secs/3600)*hrIF*hrIF*100)*10)/10;
 }
+// Strength / yoga / generic-workout load. Same structural shape again — hours * IF^2 * 100 — so the
+// app has ONE formula style across power, heart rate and strength.
+//
+// INPUT ORDER, best first:
+//   1. RPE from the athlete's own strength log for that day. RPE 1-10 maps to an intensity factor
+//      linearly across 0.30..0.85: a 10/10 session is hard but is still not a threshold time trial,
+//      and anchoring the top below 1.0 keeps a lifting hour from outscoring a threshold hour.
+//   2. avgHR, through the SAME hrTSS the runs use, so a session with a strap is scored on measurement
+//      rather than on a guess.
+//   3. nothing usable -> null. Duration alone is not intensity and a session-type baseline would be
+//      an invented number; the gate is deliberate.
+//
+// Strength HR runs low (73-96 bpm here) because the work is intermittent, so hrTSS lands around
+// 12-18 for a 45-60 min session. That is well above the 1-7 Intervals assigned these and well below
+// a hard ride, which is the right neighbourhood for real but non-aerobic load.
+function _strRpeFor_(r){
+  try{
+    var dk=(typeof normDate==='function')?normDate(r&&r.date):String((r&&r.date)||'').slice(0,10);
+    if(!dk || typeof planSessionsForDate_!=='function') return null;
+    var best=null;
+    (planSessionsForDate_(dk)||[]).forEach(function(s){
+      if(!s || s.deleted || s.type!=='strength') return;
+      var log=s.strengthLog;
+      if(!log || !log.sets || !log.sets.length) return;
+      var n=0, tot=0;
+      log.sets.forEach(function(x){ var e=parseFloat(x&&x.rpe); if(e>0){ tot+=e; n++; } });
+      if(n){ var m=tot/n; if(best==null || m>best) best=m; }
+    });
+    return best;
+  }catch(e){ return null; }
+}
+function strengthTssFor_(r){
+  if(!r) return null;
+  var secs=(typeof _durSec_==='function')?_durSec_(r):0;
+  if(!(secs>0)) return null;
+  var rpe=_strRpeFor_(r);
+  if(rpe>0){
+    var IF=0.30+(Math.max(1,Math.min(10,rpe))-1)*(0.55/9);
+    return Math.round(((secs/3600)*IF*IF*100)*10)/10;
+  }
+  var v=(typeof hrTssFor_==='function')?hrTssFor_(r):null;   // measured beats assumed
+  return (v!=null)?v:null;
+}
 // Backfill + forward path in one. Runs at boot over the WHOLE library, so history is repriced too,
 // and again whenever LTHR changes. Idempotent: a record already carrying tssSource 'hr' at the same
 // value is left alone.
@@ -16613,17 +16691,21 @@ function applyRunHrTss_(silent){
       if(!r || r.deleted===true) return;
       var sp=String((typeof rideSport_==='function')?rideSport_(r):(r.sportType||r.type||'')).replace(/[ _-]/g,'');
       if(!sp || _TSS_HEAL_CYC.test(sp)) return;                 // rides keep power TSS; unknown sport untouched
-      if(!/^(run|trailrun|virtualrun|treadmill)$/i.test(sp)) return;   // hrTSS is defined for RUNNING
-      var v=hrTssFor_(r, L);
-      if(v==null){ skipped++; return; }                          // gate: missing avgHR -> leave tss as-is
-      if(r.tssSource==='hr' && Math.abs((parseFloat(r.tss)||0)-v)<0.05) return;
-      r.tss=v; r.tssSource='hr'; r.ifPct=null; r.tssCleared=false;
+      var isRun=/^(run|trailrun|virtualrun|treadmill)$/i.test(sp);
+      var isStr=/^(weighttraining|workout|strength|yoga|crossfit|pilates|hiit|elliptical|stairstepper)$/i.test(sp);
+      if(!isRun && !isStr) return;
+      var v, src;
+      if(isRun){ v=hrTssFor_(r, L); src='hr'; }
+      else { v=strengthTssFor_(r); src='strength'; }
+      if(v==null){ skipped++; return; }                          // gate: no usable input -> leave tss as-is
+      if(r.tssSource===src && Math.abs((parseFloat(r.tss)||0)-v)<0.05) return;
+      r.tss=v; r.tssSource=src; r.ifPct=null; r.tssCleared=false;
       if(typeof markRideEdited_==='function') markRideEdited_(r, ['tss','tssSource','ifPct','tssCleared']);
       n++;
     });
     if(n){
       try{ if(typeof dedupeInvalidate_==='function') dedupeInvalidate_(); }catch(e){}
-      if(!silent) try{ console.log('[hrTSS] LTHR '+L+' — scored '+n+' run(s)'+(skipped?(', '+skipped+' skipped for no avgHR'):'')); }catch(e){}
+      if(!silent) try{ console.log('[derivedTSS] LTHR '+L+' — scored '+n+' run/strength session(s)'+(skipped?(', '+skipped+' skipped for no usable input'):'')); }catch(e){}
     }
     return n;
   }catch(e){ try{ console.warn('[hrTSS] '+((e&&e.message)||e)); }catch(_e){} return 0; }
@@ -46196,7 +46278,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-local-pmc';
+window.__BUILD__ = '2026-08-03-strength-tss-rollover';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
