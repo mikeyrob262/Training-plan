@@ -16924,6 +16924,16 @@ function _durTextSec_(str){
   if(seen) return 0;                                      // trailing digits with no unit
   return any?tot:0;
 }
+// The duration a surface should PRINT. Storage is fixed at the import now, but three
+// Strava-sourced records in the library still hold a bare seconds count, and every surface
+// that printed r.duration straight out showed them as digits ("14434"). injectRideStats had
+// already grown its own inline guard for exactly that; ride detail on desktop and mobile had
+// none. One accessor instead of three copies, so no surface has to carry the special case.
+function _durDisp_(r){
+  var d=r&&r.duration;
+  if(typeof d==='number') return _fmtHMS_(d);
+  return (d==null||d==='') ? '--' : String(d);
+}
 function _durSec_(r){
   var m=r.movingSecs; if(typeof m==='number'&&m>0) return m;
   var d=r.duration;
@@ -32764,7 +32774,7 @@ function openDesktopRideDetail(idx, _noFetch){
       // in the source and no hex->var sweep could see them. In light mode that left Time,
       // Distance, Avg Power and Calories rendering #fff on a #FFFFFF card - contrast 1.0, four
       // blank cells - while Avg HR and TSS survived only because they happened to be coloured.
-      statCell(r.duration||'--','Time','var(--d-t1)')+
+      statCell(_durDisp_(r),'Time','var(--d-t1)')+
       statCell(r.distance?parseFloat(r.distance).toFixed(1)+' mi':'--','Distance','var(--d-t1)')+
       statCell(wkg+(wkg!=='--'?' W/kg':''),'Intensity','#FC4C02')+
       statCell(r.avgHR?r.avgHR+' bpm':'--','Avg HR','#E24B4A')+
@@ -33291,7 +33301,7 @@ function openRideDetail(idx, _noFetch){
   // firing at once" look. Lighter weight and looser letter-spacing,
   // matching real Apple Health's quieter, more spacious feel.
   [
-    {v:r.duration||'-',l:'Time'},
+    {v:_durDisp_(r),l:'Time'},
     {v:(r.distance||'-')+(r.distance?' mi':''),l:'Distance'},
     {v:rwkg?rwkg+' W/kg':'-',l:'Intensity',c:'var(--orange)'},
     {v:r.avgHR?r.avgHR+' bpm':'-',l:'Avg HR'},
@@ -37074,7 +37084,7 @@ function injectRideStats(w){
         var statsGrid=document.createElement('div');
         statsGrid.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:6px';
         var stats=[];
-        if(r.duration) stats.push({v:(typeof r.duration==='number'?(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(r.duration):r.duration),l:'Time'});
+        if(r.duration) stats.push({v:_durDisp_(r),l:'Time'});
         if(r.distance) stats.push({v:r.distance+' mi',l:'Miles'});
         if(r.np) stats.push({v:r.np+'W',l:'NP',c:'#FFB938'});
         else if(r.avgPwr) stats.push({v:r.avgPwr+'W',l:'Avg Pwr',c:'#FFB938'});
@@ -45553,7 +45563,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-fit-duration-hms';
+window.__BUILD__ = '2026-08-03-fit-duration-hms2';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
