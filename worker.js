@@ -6364,7 +6364,9 @@ function _strSet_(weight, reps, rpe){
 // add / remove / array-replace all change one of those. Invalidate explicitly
 // via dedupeInvalidate_() after an in-place edit that could change clustering.
 var _dedupeCache={arr:null, len:-1, result:null};
-function dedupeInvalidate_(){ _dedupeCache.arr=null; _dedupeCache.len=-1; _dedupeCache.result=null; }
+function dedupeInvalidate_(){ _dedupeCache.arr=null; _dedupeCache.len=-1; _dedupeCache.result=null;
+  // The PMC is computed off the deduped library, so anything that changes clustering changes it too.
+  try{ if(typeof pmcInvalidate_==='function') pmcInvalidate_(); }catch(e){} }
 function dedupeRides_(rides){
   var isMain = !!(st && rides===st.rides);
   if(isMain && _dedupeCache.arr===rides && _dedupeCache.len===rides.length){
@@ -14860,11 +14862,77 @@ function ensureFitnessSeries_(cb){
     fetchIntervalsFitnessSeries_(function(out){ window.__fitSeriesInFlight=false; if(cb) cb(out||have); });
   }catch(e){ if(cb) cb(null); }
 }
-// The curve, for charts. Chart shape in the app's own {d,ctl,atl,tsb} vocabulary. Empty when
-// Intervals has not been read yet — an empty chart that says so beats a locally-invented one.
+// ---- THE PMC, computed here, from this library ---------------------------------------------
+// CTL/ATL/TSB used to be READ from Intervals.icu. That made Intervals a second, independent
+// computation of a number the app also had all the inputs for — and it scored only what Intervals
+// itself scored, so once runs carried a real hrTSS locally they still could not move fitness,
+// fatigue or form. Two computations of one fact is the defect this app keeps hitting; the Intervals
+// read is therefore GONE for these three numbers rather than kept and reconciled.
+//
+// Standard PMC, the same shape every tool uses:
+//   CTL = exponentially weighted 42-day mean of daily TSS
+//   ATL = exponentially weighted 7-day mean
+//   TSB = YESTERDAY's CTL minus YESTERDAY's ATL (the TrainingPeaks/Intervals convention, kept so
+//         the number means what it used to mean)
+// Sport-blind by design: it sums r.tss whatever tssSource says, because power TSS and hrTSS are the
+// same unit once computed. constRideTSS_ is the guard, so a corrupt import contributes nothing.
+var _PMC_CTL_D=42, _PMC_ATL_D=7;
+var _pmcCache={key:'', out:null};
+function pmcInvalidate_(){ _pmcCache.key=''; _pmcCache.out=null; }
+function _pmcDailyTss_(){
+  var all=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((typeof st!=='undefined'&&st&&st.rides)||[]);
+  // st.rides already mixes every sport and getRuns() overlaps it — the same double-count the coach
+  // context had to solve. Dedupe on date+name+distance before anything sums it.
+  try{
+    if(typeof getRuns==='function'){
+      var seen={}, merged=[];
+      all.concat(getRuns()||[]).forEach(function(r){
+        if(!r || r.deleted) return;
+        var k=((typeof normDate==='function')?normDate(r.date):String(r.date||'').slice(0,10))
+          +'|'+String(r.name||'').trim().toLowerCase()
+          +'|'+(Math.round((parseFloat(r.distance)||0)*10)/10);
+        if(seen[k]) return; seen[k]=1; merged.push(r);
+      });
+      all=merged;
+    }
+  }catch(e){}
+  var by={};
+  (all||[]).forEach(function(r){
+    if(!r || r.deleted || !r.date) return;
+    var k=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    if(t==null || !(t>0)) return;
+    by[k]=(by[k]||0)+t;
+  });
+  return by;
+}
+function pmcSeries_(){
+  var rides=(typeof st!=='undefined'&&st&&st.rides)||[];
+  var key=rides.length+':'+((st&&st.lthr)||0)+':'+((st&&st.ftp)||0)+':'+((st&&st.lastUpdate)||0);
+  if(_pmcCache.key===key && _pmcCache.out) return _pmcCache.out;
+  var by=_pmcDailyTss_(), days=Object.keys(by).sort();
+  if(!days.length){ _pmcCache={key:key, out:[]}; return []; }
+  var d=new Date(days[0]+'T00:00:00'), end=new Date(); end.setHours(0,0,0,0);
+  var kc=Math.exp(-1/_PMC_CTL_D), ka=Math.exp(-1/_PMC_ATL_D);
+  var ctl=0, atl=0, out=[], guard=0;
+  while(d<=end && guard++<20000){
+    var k=(typeof dayKey_==='function')?dayKey_(d)
+        :(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    var t=by[k]||0, pc=ctl, pa=atl;
+    ctl=ctl*kc + t*(1-kc);
+    atl=atl*ka + t*(1-ka);
+    out.push({ date:k, ctl:Math.round(ctl*10)/10, atl:Math.round(atl*10)/10,
+               tsb:Math.round((pc-pa)*10)/10 });
+    d.setDate(d.getDate()+1);
+  }
+  _pmcCache={key:key, out:out};
+  return out;
+}
+try{ if(typeof window!=='undefined'){ window.pmcSeries_=pmcSeries_; window.pmcInvalidate_=pmcInvalidate_; } }catch(e){}
+// The curve, for charts — the SAME array getFitness_ takes its headline from, so a sparkline and
+// the number above it cannot disagree.
 function fitnessSeries_(){
-  try{ ensureFitnessSeries_(); }catch(e){}
-  var src=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var src=pmcSeries_()||[];
   return src.map(function(p){
     var mm=p.date.slice(5,7), dd=p.date.slice(8,10);
     return { d:(+mm)+'/'+(+dd), date:p.date, ctl:p.ctl, atl:p.atl, tsb:p.tsb };
@@ -14872,37 +14940,29 @@ function fitnessSeries_(){
 }
 // THE numbers. Every surface reads this and no surface computes its own.
 //
-// Order of preference, and each step is a READ of Intervals, never a computation:
-//   1. today's live wellness poll (window.__liveWellness), which is the same endpoint;
-//   2. the cached Intervals series (st.fitSeries), newest point;
-//   3. nothing — zeros with source:'none' and stale:true, so a caller can say "not loaded"
-//      instead of rendering an invented number.
-// There is deliberately no local fallback. A wrong CTL/ATL is worse than an absent one: it drives
-// the attention panel, Dr. Smurkel and the readiness gauge, and it looked authoritative while being
-// wrong for weeks.
+// It is now COMPUTED here, from this library, via pmcSeries_ — not read from Intervals.icu.
+// Intervals was a second, independent computation of a number the app already had every input for,
+// and it scored only what Intervals itself scored: once runs carried a real hrTSS locally they still
+// could not move fitness, fatigue or form. The remote read is removed rather than reconciled.
+// Empty library -> zeros with source:'none', so a caller can still say "not loaded" instead of
+// rendering an invented number.
 function getFitness_(){
-  var series=[]; try{ series=fitnessSeries_()||[]; }catch(e){ series=[]; }
-  var raw=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var raw=[]; try{ raw=pmcSeries_()||[]; }catch(e){ raw=[]; }
   var last=raw.length?raw[raw.length-1]:null;
   var ctl=0, atl=0, tsb=0, ramp=null, source='none', asOf=null, stale=true;
   if(last){
     ctl=Math.round(last.ctl||0); atl=Math.round(last.atl||0); tsb=Math.round(last.tsb||0);
-    // Intervals reports rampRate as CTL change per WEEK, which is the same unit the app's
-    // peaking/detraining thresholds already use. Taken from the source rather than re-derived.
-    ramp=(last.ramp!=null)?last.ramp:null;
-    source='intervals'; asOf=(st&&st.fitSeriesAt)||null;
-    stale=(last.date!==_fitYMD_(new Date()));
+    // Ramp = CTL change per WEEK, the unit the peaking/detraining thresholds already use. Derived
+    // from the series rather than read from Intervals, because the series is now ours.
+    if(raw.length>=8) ramp=Math.round((last.ctl-raw[raw.length-8].ctl)*10)/10;
+    source='local'; asOf=Date.now();
+    // Computed from the library on demand, so it is never stale in the way a cached remote read was.
+    stale=false;
   }
-  // Today's poll wins when present: it is the freshest read of the same endpoint.
-  try{
-    var lw=window.__liveWellness;
-    if(lw && lw.fetchedAt){
-      ctl=Math.round(lw.ctl||0); atl=Math.round(lw.atl||0); tsb=Math.round(lw.tsb||0);
-      if(lw.ramp!=null) ramp=lw.ramp;
-      source='intervals-live'; asOf=lw.fetchedAt;
-      stale=((Date.now()-lw.fetchedAt)>=FIT_LIVE_GATE);
-    }
-  }catch(e){}
+  // window.__liveWellness deliberately NO LONGER overrides these three. It is an Intervals read of
+  // the same quantity, i.e. the second computation this consolidation exists to remove. It still
+  // carries HRV and resting HR, which are genuine Intervals-only wellness data, and those readers
+  // are untouched.
   // d7 stays available for consumers that want the 7-day move, read off the SAME series.
   var d7=null;
   if(raw.length>=8){ var n=raw.length-1, p=raw.length-8;
@@ -18701,7 +18761,7 @@ function _gcMonLab_(ymd){
   var p=String(ymd).split('-');
   return (_YVY_MON[(+p[1]||1)-1]||'')+' '+(p[0]||'').slice(2);
 }
-// Daily fitness series (CTL / ATL / TSB) off st.fitSeries, tail-limited. This is the SAME array
+// Daily fitness series (CTL / ATL / TSB) off pmcSeries_, tail-limited. This is the SAME array
 // getFitness_ reads its headline from, so a card's sparkline cannot disagree with the number
 // printed above it.
 // W/kg over time. The weigh-in log supplies the sampling (it is the denser of the two logs) and
@@ -18733,7 +18793,7 @@ function _gcWeekPts_(weeks, pick, lab){
   });
 }
 function _gcFitPts_(key, days){
-  var raw=(typeof st!=='undefined' && st && Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var raw=[]; try{ raw=pmcSeries_()||[]; }catch(e){ raw=[]; }   // same series as the headline
   var n=Math.max(0, raw.length-(days||90));
   var out=[];
   for(var i=n;i<raw.length;i++){
@@ -22663,7 +22723,7 @@ function _trjWeightPts_(){
   }).filter(function(x){return x&&x.t!=null;}));
 }
 function _trjCtlPts_(){
-  var fs2=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:[];
+  var fs2=[]; try{ fs2=pmcSeries_()||[]; }catch(e){ fs2=[]; }   // same series as the headline
   return _trjWindow_(fs2.map(function(p){
     return (p&&p.date&&p.ctl!=null&&isFinite(+p.ctl))?{t:_trjDay_(p.date), y:+p.ctl}:null;
   }).filter(function(x){return x&&x.t!=null;}));
@@ -30620,8 +30680,8 @@ function _yearSnapshotTotal_(y){
 // Three readings per month, each ABSENT rather than guessed. The gates below are not defensive
 // boilerplate; each one is a real hole in this athlete's data that would otherwise render as a
 // confident number:
-//   CTL   — st.fitSeries begins 2026-02-19, so Jan has no points at all and Feb has no
-//           pre-month anchor to measure a delta FROM. Both are em-dash, not "0".
+//   CTL   — the series now spans the whole library, so the old "begins 2026-02-19" hole is closed;
+//           a month genuinely earlier than any activity still has no anchor and stays an em-dash.
 //   FTP   — st.ftpHistory holds six entries, ALL inside 2026-07-25..07-31. ftpOn_ happily
 //           returns 190 for January, but that is the earliest KNOWN value projected backwards,
 //           not a measurement — using it would fabricate "no change" for eleven months. So this
@@ -30638,7 +30698,10 @@ function _g2Bounds_(y,m){
 // point before it cannot report a delta, only a level.
 function _g2Ctl_(y,m){
   try{
-    var src=(typeof st!=='undefined' && Array.isArray(st.fitSeries))?st.fitSeries:[];
+    // Same series as every other fitness surface. It is computed from the whole library rather than
+    // fetched, so the "January has no points" hole this function was written around is gone — the
+    // em-dash guards below stay anyway, because a month genuinely before any activity still has none.
+    var src=[]; try{ src=pmcSeries_()||[]; }catch(e){ src=[]; }
     if(!src.length) return null;
     var b=_g2Bounds_(y,m), before=null, inMon=null;
     for(var i=0;i<src.length;i++){
@@ -46133,7 +46196,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-hrtss';
+window.__BUILD__ = '2026-08-03-local-pmc';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
