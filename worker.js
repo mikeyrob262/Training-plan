@@ -33957,26 +33957,37 @@ function _sessionRxFor_(dateKey, ride){
   var dk=dateKey || (ride && ride.date) || '';
   dk=(typeof normDate==='function')?normDate(dk):String(dk).slice(0,10);
   if(!dk) return null;
-  var pick=null, via='';
+  // Gather both candidates, then decide. A blanket plan-first preference is WRONG and was measured
+  // to be wrong: it re-broke 2026-07-31, turning that day's prescribed Threshold into a Z2 — the
+  // exact regression the _edited.intent gate caused before it was rolled back. st.plan carries
+  // residue (sessions left at status 'swapped' by edits and migrations) that never happened.
+  var pln=null, plnDone=false, tpl=null;
   try{
     if(typeof planSessionsForDate_==='function'){
       (planSessionsForDate_(dk)||[]).forEach(function(s){
-        if(pick || !s || s.deleted || !s.intent || !_rxTrainableIntent_(s.intent)) return;
-        pick={ intent:s.intent, struct:(s.block&&s.block.struct)||s.struct||'', targets:s.targets||null };
-        via='plan';
+        if(pln || !s || s.deleted || !s.intent || !_rxTrainableIntent_(s.intent)) return;
+        pln={ intent:s.intent, struct:(s.block&&s.block.struct)||s.struct||'', targets:s.targets||null };
+        plnDone=(s.status==='completed') || !!s.completed;
       });
     }
   }catch(e){}
-  if(!pick){
-    try{
-      var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
-      if(bp && bp.sessions) bp.sessions.forEach(function(s){
-        if(pick || !s || !s.intent || !_rxTrainableIntent_(s.intent)) return;
-        pick={ intent:s.intent, struct:s.struct||'', targets:(s.rx&&s.rx.targets)||null };
-        via='block';
-      });
-    }catch(e){}
-  }
+  try{
+    var bp=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+    if(bp && bp.sessions) bp.sessions.forEach(function(s){
+      if(tpl || !s || !s.intent || !_rxTrainableIntent_(s.intent)) return;
+      tpl={ intent:s.intent, struct:s.struct||'', targets:(s.rx&&s.rx.targets)||null };
+    });
+  }catch(e){}
+  // The plan wins on exactly two grounds, both narrow:
+  //   COMPLETED — the athlete logged their work against that session, so it is the record of what
+  //     the session actually was. This is what fixes Aug 3 without asserting anything about intent.
+  //   the template has nothing trainable that day — then the plan is the only prescription there is.
+  // Everything else defers to the block, which is what stops uncompleted plan residue overriding a
+  // real prescription.
+  var pick=null, via='';
+  if(pln && (plnDone || !tpl)){ pick=pln; via='plan'; }
+  else if(tpl){ pick=tpl; via='block'; }
+  else if(pln){ pick=pln; via='plan'; }
   if(!pick) return null;
   var def=((typeof SESSION_DEFS!=='undefined')&&SESSION_DEFS[pick.intent])||{};
   // Targets MERGE rather than either/or: an st.plan session commonly carries only durationMin, so
@@ -45800,7 +45811,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-shared-rx-voice';
+window.__BUILD__ = '2026-08-03-shared-rx-voice2';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
