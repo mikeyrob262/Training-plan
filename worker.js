@@ -4785,6 +4785,7 @@ function gpsPayload_(r){
   // slimForStorage_ and come back on any device. Purely additive: no existing key is touched.
   if(r.chartSpd) p.chartSpd = r.chartSpd;
   if(r.chartTime) p.chartTime = r.chartTime;
+  if(r.chartDist) p.chartDist = r.chartDist;
   // lapSource/lapTimeBasis travel WITH the laps. Without them the cache hands back a lap array with
   // no provenance, so a stale elapsed-time set reads as already-corrected and is never rewritten.
   if(r.laps && r.laps.length){ p.laps = r.laps;
@@ -5023,6 +5024,7 @@ function ensureRideStreams(r){
       if(p.chartCad) r.chartCad=p.chartCad;
       if(p.chartSpd) r.chartSpd=p.chartSpd;
       if(p.chartTime) r.chartTime=p.chartTime;
+      if(p.chartDist) r.chartDist=p.chartDist;
       if(p.laps){ r.laps=p.laps;
         if(p.lapSource) r.lapSource=p.lapSource;
         if(p.lapTimeBasis) r.lapTimeBasis=p.lapTimeBasis; }
@@ -5034,7 +5036,13 @@ function ensureRideStreams(r){
     // that does the rewrite was never reached. Forcing one re-fetch repairs the ride and stamps
     // lapTimeBasis, after which this condition is false forever. Garmin laps are already
     // moving-based and are excluded.
-    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
+    // The gate is the TRIED FLAG, not the presence of chartSpd. Gating on the data would re-fetch
+    // forever on every ride Strava has no velocity stream for — the guard-on-attempt-vs-success
+    // mistake that has already cost this codebase twice via _gpsTried. _spdTried is stamped when the
+    // streams endpoint ANSWERS (whether or not it carried speed), so each ride re-fetches exactly
+    // once and then short-circuits permanently. It also covers chartDist: one fetch writes both, so
+    // distance needs no second condition.
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && r._spdTried && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
@@ -5058,7 +5066,7 @@ function fetchStravaStreams_(r, ds, maxOf){
       ]).then(function(arr){
         var s=arr[0]||{}, a=arr[1]||{};
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
-        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), tm=g('time'), ll=g('latlng');
+        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), tm=g('time'), dst=g('distance'), ll=g('latlng');
         // GPS track (decimal-degree [lat,lon] pairs) — recovers rides whose /gps
         // entry was never written. normalizeTrack_ leaves <90 floats as-is. The
         // fresh latlng IS authoritative — OVERWRITE r.lats/r.lons in place (both
@@ -5103,6 +5111,15 @@ function fetchStravaStreams_(r, ds, maxOf){
         if(vel){ var _sp=_bucket(vel, 200, function(v){ return v*2.23694; }, 1); if(_sp) r.chartSpd=_sp; }
         // Elapsed seconds from the activity start. Whole seconds; monotonic, so a bucket mean is safe.
         if(tm){ var _tt=_bucket(tm, 200, null, 0); if(_tt) r.chartTime=_tt; }
+        // Cumulative metres -> miles. Monotonic like time, so a bucket mean is safe here too. This
+        // stream was already being requested and discarded; storing it makes the scrubber's DISTANCE
+        // the RECORDED value rather than a fraction of the ride total.
+        if(dst){ var _dd=_bucket(dst, 200, function(m){ return m/1609.344; }, 2); if(_dd) r.chartDist=_dd; }
+        // Stamped because the streams endpoint ANSWERED — not because we called it. A network or auth
+        // failure leaves arr[0] null and the flag unset, so a transient error never permanently
+        // denies a ride its speed data. A 200 with no velocity stream DOES stamp: that is a real
+        // answer of "this ride has none", and re-asking would loop forever.
+        if(arr[0]) r._spdTried=true;
         // laps[] from the detailed activity (Strava field names, m & sec).
         // Strava laps are a FALLBACK only — written when the ride has NO laps AND none from Garmin.
         // Garmin auto-lap is authoritative; the merge prefers it, so Strava never mixes with or overrides
@@ -32379,7 +32396,10 @@ function _rdScrubMove_(frac, show){
   if(out){
     var DASH='<span style="color:var(--d-t4)">&mdash;</span>';
     var at=function(a){ return a?a[Math.round(frac*(a.length-1))]:null; };
-    var dv=(S.distMi>0)?((Math.round(frac*S.distMi*100)/100).toFixed(2)+' mi'):DASH;
+    var dRec=at(S.dist), dv, dWhy;
+    if(dRec!=null){ dv=(Math.round(dRec*100)/100).toFixed(2)+' mi'; dWhy='Recorded distance at this point.'; }
+    else if(S.distMi>0){ dv=(Math.round(frac*S.distMi*100)/100).toFixed(2)+' mi'; dWhy='Estimated — no recorded distance stream, so this is that fraction of the ride total.'; }
+    else { dv=DASH; dWhy='No distance recorded for this ride.'; }
     var ev=(S.ele[i]!=null)?(Math.round(S.ele[i]).toLocaleString()+' ft'):DASH;
     // Time prefers the RECORDED stream (exact) and falls back to the even-sampling estimate.
     var tRec=at(S.tm), tv, tWhy;
@@ -32394,7 +32414,7 @@ function _rdScrubMove_(frac, show){
       +'<div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--d-t4)">'+l+'</div>'
       +'<div style="font-size:13px;font-weight:800;color:var(--d-t1);line-height:1.2;margin-top:1px">'+v+'</div></div>'; };
     out.innerHTML=show
-      ? (cell('DISTANCE', dv, 'Read off the chart axis: this fraction of the ride total.')
+      ? (cell('DISTANCE', dv, dWhy)
         +cell('ELEVATION', ev, 'The elevation sample under the cursor.')
         +cell('TIME', tv, tWhy)
         +cell('SPEED', sv, sWhy))
@@ -32550,7 +32570,7 @@ function openDesktopRideDetail(idx, _noFetch){
   }
 
   // Elevation profile with ft axis + mileage axis
-  function elevProfile(ele,distMi,secs,_sc,_st){
+  function elevProfile(ele,distMi,secs,_sc,_st,_sd){
     // Fewer than two samples: the existing message stands and NO scrubber is registered, so there
     // is no interactive layer over a chart that does not exist.
     _rdScrubReset_();
@@ -32568,6 +32588,7 @@ function openDesktopRideDetail(idx, _noFetch){
                // they are read by FRACTION rather than by ele's index — a ride can legitimately have
                // 155 elevation buckets and 200 speed buckets if the raw streams differed in length.
                spd:(_sc && _sc.length>1)?_sc:null, tm:(_st && _st.length>1)?_st:null,
+               dist:(_sd && _sd.length>1)?_sd:null,
                map:null, pts:null, cum:null, marker:null };
     var pts=ele.map(function(v,i){return (padL+i/(ele.length-1)*iW).toFixed(1)+','+(iH-((v-mn)/rng*(iH-8)+4)).toFixed(1);}).join(' ');
     var fill=padL+','+iH+' '+pts+' '+W+','+iH;
@@ -32691,7 +32712,7 @@ function openDesktopRideDetail(idx, _noFetch){
 
       // ELEVATION PROFILE
       '<div style="background:var(--d-deep);padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
-        elevProfile(r.chartEle,r.distance,r.movingSecs,r.chartSpd,r.chartTime)+
+        elevProfile(r.chartEle,r.distance,r.movingSecs,r.chartSpd,r.chartTime,r.chartDist)+
       '</div>'+
 
       // 4 METRIC CARDS
@@ -45445,7 +45466,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-scrubber-real-speed';
+window.__BUILD__ = '2026-08-03-scrubber-selfheal-distance';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
