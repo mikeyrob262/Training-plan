@@ -4781,6 +4781,10 @@ function gpsPayload_(r){
   if(r.chartHR)  p.chartHR  = r.chartHR;
   if(r.chartEle) p.chartEle = r.chartEle;
   if(r.chartCad) p.chartCad = r.chartCad;
+  // Per-point speed/time — same storage treatment as the other chart* arrays, so they survive
+  // slimForStorage_ and come back on any device. Purely additive: no existing key is touched.
+  if(r.chartSpd) p.chartSpd = r.chartSpd;
+  if(r.chartTime) p.chartTime = r.chartTime;
   // lapSource/lapTimeBasis travel WITH the laps. Without them the cache hands back a lap array with
   // no provenance, so a stale elapsed-time set reads as already-corrected and is never rewritten.
   if(r.laps && r.laps.length){ p.laps = r.laps;
@@ -5017,6 +5021,8 @@ function ensureRideStreams(r){
       if(p.chartHR)  r.chartHR=p.chartHR;
       if(p.chartEle) r.chartEle=p.chartEle;
       if(p.chartCad) r.chartCad=p.chartCad;
+      if(p.chartSpd) r.chartSpd=p.chartSpd;
+      if(p.chartTime) r.chartTime=p.chartTime;
       if(p.laps){ r.laps=p.laps;
         if(p.lapSource) r.lapSource=p.lapSource;
         if(p.lapTimeBasis) r.lapTimeBasis=p.lapTimeBasis; }
@@ -5043,14 +5049,16 @@ function fetchStravaStreams_(r, ds, maxOf){
     var done=function(){ resolve(r); };
     var run=function(token){
       var base='https://www.strava.com/api/v3/activities/'+r.stravaId;
-      var sUrl=base+'/streams?keys=altitude,watts,heartrate,cadence,velocity_smooth,distance,latlng&key_by_type=true';
+      // 'time' is the only NEW key here — velocity_smooth was already being requested and its
+      // per-point array discarded after maxSpeed. Same endpoint, same single call, same rate limit.
+      var sUrl=base+'/streams?keys=altitude,watts,heartrate,cadence,velocity_smooth,distance,time,latlng&key_by_type=true';
       Promise.all([
         fetch(sUrl,{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;}),
         fetch(base+'?include_all_efforts=true',{headers:{'Authorization':'Bearer '+token}}).then(function(x){return x.ok?x.json():null;}).catch(function(){return null;})
       ]).then(function(arr){
         var s=arr[0]||{}, a=arr[1]||{};
         var g=function(k){ return (s[k]&&s[k].data&&s[k].data.length>1) ? s[k].data : null; };
-        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), ll=g('latlng');
+        var alt=g('altitude'), pwr=g('watts'), hr=g('heartrate'), cad=g('cadence'), vel=g('velocity_smooth'), tm=g('time'), ll=g('latlng');
         // GPS track (decimal-degree [lat,lon] pairs) — recovers rides whose /gps
         // entry was never written. normalizeTrack_ leaves <90 floats as-is. The
         // fresh latlng IS authoritative — OVERWRITE r.lats/r.lons in place (both
@@ -5075,6 +5083,26 @@ function fetchStravaStreams_(r, ds, maxOf){
         if(hr){ r.chartHR=ds(hr,200); if(!r.maxHR) r.maxHR=maxOf(hr,250); }
         if(cad){ r.chartCad=ds(cad,200); if(!r.maxCadence) r.maxCadence=maxOf(cad,255); }
         if(vel && !r.maxSpeed){ var mv=maxOf(vel,50); if(mv) r.maxSpeed=Math.round(mv*2.23694*10)/10; } // m/s -> mph (display expects mph when >10)
+        // PER-POINT speed and time, 200 buckets so the index lines up with chartEle/chartPwr/chartHR.
+        // Not reusing the ds helper: it strides (takes every Nth sample) and callers round to ints.
+        // Striding a noisy 1Hz speed trace samples spikes rather than describing the bucket, and
+        // integer mph throws away a fifth of the useful resolution. Bucket MEAN at 1dp instead.
+        var _bucket=function(arr, n, xf, dp){
+          if(!arr || arr.length<2) return null;
+          var out=[], step=arr.length/n, pw=Math.pow(10,dp||0);
+          for(var bi=0; bi<n; bi++){
+            var a=Math.floor(bi*step), z=Math.min(arr.length, Math.floor((bi+1)*step));
+            if(z<=a) z=a+1;
+            var sum=0, cnt=0;
+            for(var k=a; k<z && k<arr.length; k++){ var v=+arr[k]; if(isFinite(v)){ sum+=v; cnt++; } }
+            if(cnt) out.push(Math.round((xf?xf(sum/cnt):(sum/cnt))*pw)/pw);
+          }
+          return out.length>1 ? out : null;
+        };
+        // m/s -> mph, one decimal. Strava's velocity_smooth is already smoothed, so no extra filtering.
+        if(vel){ var _sp=_bucket(vel, 200, function(v){ return v*2.23694; }, 1); if(_sp) r.chartSpd=_sp; }
+        // Elapsed seconds from the activity start. Whole seconds; monotonic, so a bucket mean is safe.
+        if(tm){ var _tt=_bucket(tm, 200, null, 0); if(_tt) r.chartTime=_tt; }
         // laps[] from the detailed activity (Strava field names, m & sec).
         // Strava laps are a FALLBACK only — written when the ride has NO laps AND none from Garmin.
         // Garmin auto-lap is authoritative; the merge prefers it, so Strava never mixes with or overrides
@@ -32350,17 +32378,26 @@ function _rdScrubMove_(frac, show){
   var out=document.getElementById(S.outId);
   if(out){
     var DASH='<span style="color:var(--d-t4)">&mdash;</span>';
+    var at=function(a){ return a?a[Math.round(frac*(a.length-1))]:null; };
     var dv=(S.distMi>0)?((Math.round(frac*S.distMi*100)/100).toFixed(2)+' mi'):DASH;
     var ev=(S.ele[i]!=null)?(Math.round(S.ele[i]).toLocaleString()+' ft'):DASH;
-    var tv=(S.secs>0)?_rdFmtT_(frac*S.secs):DASH;
+    // Time prefers the RECORDED stream (exact) and falls back to the even-sampling estimate.
+    var tRec=at(S.tm), tv, tWhy;
+    if(tRec!=null){ tv=_rdFmtT_(tRec); tWhy='Recorded elapsed time at this point.'; }
+    else if(S.secs>0){ tv=_rdFmtT_(frac*S.secs); tWhy='Approximate — no recorded time stream, so this is that fraction of moving time.'; }
+    else { tv=DASH; tWhy='No moving time recorded for this ride.'; }
+    // Speed is REAL when the ride carries velocity_smooth, and an em-dash otherwise — never derived.
+    var sRec=at(S.spd), sv, sWhy;
+    if(sRec!=null){ sv=(Math.round(sRec*10)/10).toFixed(1)+' mph'; sWhy='Recorded speed at this point (Strava velocity_smooth).'; }
+    else { sv=DASH; sWhy='No per-point speed recorded for this ride, and it cannot be derived from what is stored.'; }
     var cell=function(l,v,t){ return '<div style="flex:1;min-width:0"'+(t?(' title="'+t+'"'):'')+'>'
       +'<div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--d-t4)">'+l+'</div>'
       +'<div style="font-size:13px;font-weight:800;color:var(--d-t1);line-height:1.2;margin-top:1px">'+v+'</div></div>'; };
     out.innerHTML=show
       ? (cell('DISTANCE', dv, 'Read off the chart axis: this fraction of the ride total.')
         +cell('ELEVATION', ev, 'The elevation sample under the cursor.')
-        +cell('TIME', tv, 'Approximate — the elevation trace is evenly sampled, so this is that fraction of moving time.')
-        +cell('SPEED', DASH, 'No per-point speed recorded for this ride, and it cannot be derived from what is stored.'))
+        +cell('TIME', tv, tWhy)
+        +cell('SPEED', sv, sWhy))
       : '<div style="font-size:10.5px;color:var(--d-dim)">Hover or drag across the profile to scrub.</div>';
   }
 }
@@ -32513,7 +32550,7 @@ function openDesktopRideDetail(idx, _noFetch){
   }
 
   // Elevation profile with ft axis + mileage axis
-  function elevProfile(ele,distMi,secs){
+  function elevProfile(ele,distMi,secs,_sc,_st){
     // Fewer than two samples: the existing message stands and NO scrubber is registered, so there
     // is no interactive layer over a chart that does not exist.
     _rdScrubReset_();
@@ -32527,6 +32564,10 @@ function openDesktopRideDetail(idx, _noFetch){
     _rdScrub={ svgId:_sid+'-svg', outId:_sid+'-out', ele:ele, mn:mn, rng:rng,
                W:W, padL:padL, iW:iW, iH:iH,
                distMi:parseFloat(distMi)||0, secs:(+secs>0?+secs:0),
+               // Per-point speed/time when the ride carries them. Both are 200-bucket like ele, so
+               // they are read by FRACTION rather than by ele's index — a ride can legitimately have
+               // 155 elevation buckets and 200 speed buckets if the raw streams differed in length.
+               spd:(_sc && _sc.length>1)?_sc:null, tm:(_st && _st.length>1)?_st:null,
                map:null, pts:null, cum:null, marker:null };
     var pts=ele.map(function(v,i){return (padL+i/(ele.length-1)*iW).toFixed(1)+','+(iH-((v-mn)/rng*(iH-8)+4)).toFixed(1);}).join(' ');
     var fill=padL+','+iH+' '+pts+' '+W+','+iH;
@@ -32650,7 +32691,7 @@ function openDesktopRideDetail(idx, _noFetch){
 
       // ELEVATION PROFILE
       '<div style="background:var(--d-deep);padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
-        elevProfile(r.chartEle,r.distance,r.movingSecs)+
+        elevProfile(r.chartEle,r.distance,r.movingSecs,r.chartSpd,r.chartTime)+
       '</div>'+
 
       // 4 METRIC CARDS
@@ -45404,7 +45445,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-elevation-scrubber-desktop';
+window.__BUILD__ = '2026-08-03-scrubber-real-speed';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
