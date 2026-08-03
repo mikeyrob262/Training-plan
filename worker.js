@@ -13880,7 +13880,10 @@ var _rideListScrollTop_=0;
 function renderPerf(container){
   if(!container) container=document.getElementById('perf-body');
   if(!container) return;
-  try{ var _sc=container.querySelector('.aiq-vscroll'); if(_sc) _rideListScrollTop_=_sc.scrollTop||0; }catch(e){}
+  // Scoped to the activity list on purpose: #perf-body holds TWO .aiq-vscroll elements and the
+  // activity list is the SECOND, so an unscoped querySelector captures the wrong scroller's
+  // (always 0) offset and silently defeats the whole restore.
+  try{ var _sc=container.querySelector('#analytics-ride-list .aiq-vscroll'); if(_sc) _rideListScrollTop_=_sc.scrollTop||0; }catch(e){}
   if(!st.rides) st.rides=[];
   var rides=st.rides.filter(function(r){return !r.deleted;});
   var FTP=parseInt(st.ftp||186);
@@ -45615,7 +45618,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-perf-rerender-guard';
+window.__BUILD__ = '2026-08-03-perf-rerender-guard2';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
