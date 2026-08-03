@@ -5010,7 +5010,13 @@ function ensureRideStreams(r){
   // second short-circuit below, so without the lap check a ride holding streams + GPS in memory
   // returned here and the lap mapper was never reached — confirmed on device: 14 laps, no
   // lapSource, no lapTimeBasis, needFix true, and no Strava request made at all.
-  if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && !lapsNeedMovingFix_(r)) return Promise.resolve(r);
+  // The speed clause belongs HERE TOO, not only on the post-/gps gate below. This one fires before
+  // the cache is even read, so a ride holding chartEle + lats in memory returned at this line and
+  // never reached either the /gps read-back or the second short-circuit — which is why the first
+  // two attempts at this fix changed nothing for the 388 rides that needed it.
+  if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)
+     && (r._spdTried || (r.chartSpd && r.chartSpd.length))
+     && !lapsNeedMovingFix_(r)) return Promise.resolve(r);
   // Downsample to n points for charts; compute maxes on the FULL-res stream.
   function ds(arr,n){ if(!arr||arr.length<2) return null; if(arr.length<=n) return arr.slice(); var s=Math.ceil(arr.length/n),o=[]; for(var i=0;i<arr.length;i+=s) o.push(arr[i]); return o; }
   function maxOf(arr,cap){ var m=0; for(var i=0;i<arr.length;i++){ var v=arr[i]; if(v!=null && v<cap && v>m) m=v; } return m||null; }
@@ -45475,7 +45481,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-selfheal-gate-fix';
+window.__BUILD__ = '2026-08-03-selfheal-gate1';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
