@@ -16926,14 +16926,11 @@ function aiFatigue_(ridesOpt){
   items.forEach(function(x){ x.load=unifiedLoad(x); });
   var withLoad=items.filter(function(x){ return x.load>0; });
   if(withLoad.length<8) return { ok:false, value:null, drivers:[], sampleSize:withLoad.length };
-  var pmc=fitnessSeries_();
   var _f=getFitness_();
   // No fitness loaded means no honest momentum: CTL/ATL would be zeros and the card would read
   // "Steady, +0" as though that were a measurement. Suppress instead.
   if(!_f || _f.source==='none') return { ok:false, value:null, drivers:[], sampleSize:withLoad.length };
   var ctl=_f.ctl, atl=_f.atl, tsb=_f.tsb;
-  // The point 7 days back, only when the series actually reaches that far.
-  var wk=(pmc.length>1)?pmc[Math.max(0, pmc.length-8)]:null;
   return {
     ok:true,
     value:tsb,
@@ -16942,15 +16939,16 @@ function aiFatigue_(ridesOpt){
       {label:'Fatigue (ATL)', value:atl, note:'7-day load'},
       {label:'Form (TSB)', value:tsb, note:'CTL minus ATL'}
     ],
-    // "now" was this function's local name for the current fitness values before 55a1f79 renamed it
-    // to _f; the rename missed this line, so aiFatigue_ threw ReferenceError on every call and
-    // _aiSafe_ swallowed it -- which is why Performance Momentum silently vanished from Overview.
-    // Intervals' own rampRate is preferred: same quantity, read from the source rather than
-    // re-derived, per the one-source rule.
-    ramp:(_f.ramp!=null)
-      ? { ctl:Math.round(_f.ramp), atl:null, tsb:null }
-      : (wk ? { ctl:Math.round(ctl-wk.ctl), atl:Math.round(atl-wk.atl), tsb:Math.round(tsb-wk.tsb) }
-            : { ctl:0, atl:null, tsb:null }),
+    // ONE ramp. This used to fall back to its own 7-day delta off fitnessSeries_ when getFitness_
+    // returned no ramp — a third independent computation of a number the app already publishes.
+    // It agreed with the consolidated value in practice, which is exactly how this defect survives:
+    // it is only visible once the two paths drift. getFitness_ carries both the weekly CTL ramp and
+    // the full 7-day delta triple (d7), so there is nothing left here to re-derive.
+    ramp:(_f.ramp!=null || _f.d7)
+      ? { ctl:Math.round((_f.ramp!=null)?_f.ramp:_f.d7.ctl),
+          atl:_f.d7?Math.round(_f.d7.atl):null,
+          tsb:_f.d7?Math.round(_f.d7.tsb):null }
+      : { ctl:0, atl:null, tsb:null },
     sampleSize:withLoad.length
   };
 }
@@ -31117,7 +31115,10 @@ function dsShowCalendar(){
   function passType(r){ var c=actClass(r); return calFilter[c]!==false; }
   function filterActive(){ return !(calFilter.ride&&calFilter.run&&calFilter.workout&&calFilter.swim&&calFilter.rest&&calFilter.planned&&calFilter.completed); }
   var monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var dayNamesFull=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  // MONDAY-ANCHORED, matching calWeekLabel_, weekLoadMonSun_ and the mobile calendar. This grid was
+  // the app's only Sunday-anchored week, which meant "week 1" covered a different seven days here
+  // than everywhere else and the two calendars could not be compared.
+  var dayNamesFull=['MON','TUE','WED','THU','FRI','SAT','SUN'];
 
   // ---- shared helpers (real data only) ----
   // Metric accents only. SPORT colors come STRAIGHT from activityIcon_ (below) so
@@ -31183,7 +31184,9 @@ function dsShowCalendar(){
       ridesByDate=_calByDate_(allRidesLegacy_().filter(function(r){ return r && r.date && passType(r); }));
     }
     var daysInMonth=new Date(viewYear,viewMonth+1,0).getDate();
-    var firstDow=new Date(viewYear,viewMonth,1).getDay();
+    // Monday-anchored: getDay() is 0=Sunday, so Sunday needs 6 leading pad cells, not 0.
+    var _fd0=new Date(viewYear,viewMonth,1).getDay();
+    var firstDow=(_fd0===0)?6:(_fd0-1);
     var prevDays=new Date(viewYear,viewMonth,0).getDate();
     var todayStr=normDate(now.getFullYear()+'-'+(now.getMonth()+1)+'-'+now.getDate());
     var isCurMonth=(viewYear===now.getFullYear()&&viewMonth===now.getMonth());
@@ -43826,11 +43829,23 @@ function showCalendarTab(){
       if(!r||!r.date) return; var nd=normDate(r.date); if(!mRidesByDate[nd]) mRidesByDate[nd]=[]; mRidesByDate[nd].push(r);
     });
     // Slots -> week rows (7 each): leading/trailing padding contributes nothing.
-    var mSlots=[]; for(var mp=0; mp<startPad; mp++) mSlots.push(null);
-    for(var mdi=1; mdi<=daysInMonth; mdi++) mSlots.push(mdi);
-    while(mSlots.length%7!==0) mSlots.push(null);
+    // EVERY slot carries a real date key, pad slots included — mirroring the desktop grid. Pad slots
+    // used to be null and the rollup skipped them, so the first and last rows of a month summed
+    // fewer than seven days and called the result a week: August 2026 read 2 days / 49 mi / 176 TSS
+    // against desktop's real 7 days / 136 mi / 521 TSS for the same week. The null is kept ONLY as a
+    // styling signal (inMonth), never as a reason to drop the day's activities.
+    var _mCellKey=function(y,m,dd){ var t=new Date(y,m,dd); return normDate(t.getFullYear()+'-'+(t.getMonth()+1)+'-'+t.getDate()); };
+    var mPrevDays=new Date(mYear, mMonth, 0).getDate();
+    var mSlots=[];
+    for(var mp=0; mp<startPad; mp++){ var _pd=mPrevDays-startPad+1+mp;
+      mSlots.push({d:_pd, inMonth:false, key:_mCellKey(mYear, mMonth-1, _pd)}); }
+    for(var mdi=1; mdi<=daysInMonth; mdi++) mSlots.push({d:mdi, inMonth:true, key:_mCellKey(mYear, mMonth, mdi)});
+    var _mnx=1; while(mSlots.length%7!==0){ mSlots.push({d:_mnx, inMonth:false, key:_mCellKey(mYear, mMonth+1, _mnx)}); _mnx++; }
     var mWeeks=[]; for(var msi=0; msi<mSlots.length; msi+=7) mWeeks.push(mSlots.slice(msi,msi+7));
-    var mWeekRoll=mWeeks.map(function(wk){ var wr=[]; wk.forEach(function(dn){ if(dn){ var nd=normDate(mYear+'-'+(mMonth+1)+'-'+dn); (mRidesByDate[nd]||[]).forEach(function(rr){ wr.push(rr); }); } }); return calRollup_(wr); });
+    // A row is a WEEK, so its rollup counts all seven days — pad days included, exactly as desktop
+    // does. The key comes off the slot rather than being rebuilt from mYear/mMonth, which is what
+    // made a pad day structurally unreachable: that expression could only ever name the CURRENT month.
+    var mWeekRoll=mWeeks.map(function(wk){ var wr=[]; wk.forEach(function(cell){ if(cell&&cell.key){ var nd=cell.key; (mRidesByDate[nd]||[]).forEach(function(rr){ wr.push(rr); }); } }); return calRollup_(wr); });
     var mMaxTSS=Math.max(1, Math.max.apply(null, mWeekRoll.map(function(x){return x.tss;}).concat([0])));
     h+='<div style="padding:12px 16px 4px">';
     h+='  <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:10px">'+monthNamesFull[mMonth]+' '+mYear+'</div>';
@@ -43840,19 +43855,24 @@ function showCalendarTab(){
     for(var wi=0; wi<7; wi++){ h+='<div style="text-align:center;font-size:10px;font-weight:600;color:var(--t3)">'+wd[wi]+'</div>'; }
     h+='<div style="text-align:center;font-size:9px;font-weight:700;letter-spacing:.05em;color:#FC4C02">WK</div>';
     mWeeks.forEach(function(wk, wkIdx){
-      wk.forEach(function(dn){
-        if(!dn){ h+='<div></div>'; return; }
-        var mKey=mYear+'-'+(mMonth+1)+'-'+dn;
+      wk.forEach(function(cell){
+        if(!cell){ h+='<div></div>'; return; }
+        // inMonth now controls STYLING only — a pad day still renders and is still tappable, the
+        // same rule desktop settled on. It used to gate content, so a real session on a pad day
+        // rendered as an empty box.
+        var dn=cell.d, mKey=cell.key;
         var mpw=(typeof getPlannedWorkoutForDate==='function')?getPlannedWorkoutForDate(mKey):null;
         var mRestSess=(!mpw && typeof planSessionsForDate_==='function')?(planSessionsForDate_(mKey).filter(function(x){ return x && x.type==='rest'; })[0]||null):null;
         var mLabel=mpw?mpw.name:(mRestSess?'Rest':'');
         var mType=mpw?(mpw.type||mpw.name):(mRestSess?'rest':'');
         var mRest=!mLabel||/rest|recovery/i.test(mLabel);
         var mCol=actColor(mType);
-        var mToday=(dn===todayD);
+        // inMonth guard: a pad day can share a day NUMBER with today (Jul 31 padding an Aug grid
+        // where today is the 31st) and would otherwise be highlighted as today.
+        var mToday=(cell.inMonth && dn===todayD && mMonth===mNow.getMonth() && mYear===mNow.getFullYear());
         var mDone=(typeof isDayComplete==='function')&&isDayComplete(mKey);
         h+='<div onclick="openDayEditor(\\''+mKey+'\\')" style="position:relative;aspect-ratio:1;align-self:start;border-radius:9px;background:'+(mToday?'rgba(252,76,2,.10)':'var(--s2)')+';border:'+(mToday?'1.5px solid #FC4C02':'1px solid var(--b1)')+';display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:2px">';
-        h+='  <div style="font-size:12px;font-weight:700;color:var(--t1)">'+dn+'</div>';
+        h+='  <div style="font-size:12px;font-weight:700;color:'+(cell.inMonth?'var(--t1)':'var(--t3)')+'">'+dn+'</div>';
         if(mpw && Array.isArray(mpw.sessions) && mpw.sessions.length){
           // A glyph PER live planned session (each from its own type), so a Strength +
           // Ride day shows both — not one glyph that may not match the day's sessions.
@@ -46278,7 +46298,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-strength-tss-rollover';
+window.__BUILD__ = '2026-08-03-cal-monday-oneramp';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
