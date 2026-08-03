@@ -13801,6 +13801,13 @@ function showAnalytics(){
   var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
   var scr=document.getElementById('ANALYTICS');
   if(!scr) return;
+  // Opening the screen is a FRESH entry, not a refresh of an already-open list, so it starts
+  // at the top. The carried offset exists to stop a background data refresh yanking the list
+  // out from under a finger; letting it survive a deliberate navigation away and back would
+  // silently land the user partway down a list they never scrolled.
+  // (showPerf below is a dead duplicate of this function — nothing calls it — so the reset
+  // lives here, on the path bnavGo actually takes.)
+  _rideListScrollTop_=0;
   scr.innerHTML='';
   var hdr=document.createElement('div');
   hdr.style.cssText='padding:12px 16px 16px;font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
@@ -45618,7 +45625,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-perf-rerender-guard2';
+window.__BUILD__ = '2026-08-03-perf-rerender-guard3';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
