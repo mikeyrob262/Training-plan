@@ -5042,7 +5042,9 @@ function ensureRideStreams(r){
     // streams endpoint ANSWERS (whether or not it carried speed), so each ride re-fetches exactly
     // once and then short-circuits permanently. It also covers chartDist: one fetch writes both, so
     // distance needs no second condition.
-    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length) && r._spdTried && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
+    if((r.chartEle && r.chartEle.length) && (r.lats && r.lats.length)
+       && (r._spdTried || (r.chartSpd && r.chartSpd.length))
+       && !lapsNeedMovingFix_(r)) return r; // cache hit — no API call
     return fetchStravaStreams_(r, ds, maxOf);
   });
 }
@@ -31558,6 +31560,8 @@ function _hdEnsureStreams_(r){
   var cache=(typeof gpsGetAny_==='function')?gpsGetAny_(r):Promise.resolve(null);
   return cache.then(function(p){
     if(p){ if(p.chartHR) r.chartHR=p.chartHR; if(p.chartPwr) r.chartPwr=p.chartPwr;
+      if(p.chartSpd) r.chartSpd=p.chartSpd; if(p.chartTime) r.chartTime=p.chartTime;
+      if(p.chartDist) r.chartDist=p.chartDist;
       if(p.lats&&!(r.lats&&r.lats.length)){ r.lats=p.lats; r.lons=p.lons; } }
     if(have()) return r;                                       // cache carried what we need
     if(typeof fetchStravaStreams_==='function') return fetchStravaStreams_(r, ds, maxOf);
@@ -32453,12 +32457,17 @@ function openDesktopRideDetail(idx, _noFetch){
   // render with whatever landed without a rapid loop; a fresh user open
   // re-attempts. Indoor rides are skipped (no GPS to fetch).
   var _wantStr=!(r.chartEle&&r.chartEle.length) && !r._streamsTried;
+  // Speed/time/distance: want them when the ride has NEITHER the data NOR a previous answer.
+  // This has to live HERE, not only inside ensureRideStreams — a ride with chartEle and lats
+  // already cached never reaches that function at all, which is 388 of 393 cycling rides.
+  // DESKTOP ONLY: openRideDetail is deliberately untouched, per the scrubber's scope.
+  var _wantSpd=!r._spdTried && !(r.chartSpd && r.chartSpd.length);
   var _wantGps=!(r.lats&&r.lats.length) && (typeof rideMayHaveGps_!=="function" || rideMayHaveGps_(r));
   // Elapsed-time laps are ALSO a reason to fetch. Without this the ride has streams and GPS, so
   // neither want fires, ensureRideStreams is never called, and the corrected mapper never runs.
   // Self-limiting: the fetch stamps lapTimeBasis='moving' and the predicate goes false for good.
   var _wantLaps=(typeof lapsNeedMovingFix_==='function') && lapsNeedMovingFix_(r);
-  if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps)){
+  if(!_noFetch && r.stravaId && (_wantStr || _wantGps || _wantLaps || _wantSpd)){
     if(_wantStr) r._streamsTried=true;
     ensureRideStreams(r).then(function(){ openDesktopRideDetail(idx, true); });
     return;
@@ -45466,7 +45475,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-scrubber-selfheal-distance';
+window.__BUILD__ = '2026-08-03-selfheal-gate-fix';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
