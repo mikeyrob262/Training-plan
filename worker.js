@@ -12619,19 +12619,45 @@ function constRideTSS_(r){
   if(v>ceil) return null;
   return Math.round(v);
 }
-// Clean display name. Raw FIT/GPX/TCX filenames and all-digit ids (e.g.
-// "16153052294.fit") are not names — fall back to "<Sport> · <dist> mi". No
-// backslash regexes (the template literal strips them). Returns {text,isFallback}
-// so callers can drop the redundant dist/sport columns when it fell back.
-function constNameInfo_(r, sportLabel){
+// How many leading characters of s are digits. Used to spot a name that is really a
+// source id ("20115424650", "23399594411 ACTIVITY"). Written as a scan, not a regex,
+// for the same reason as constAllDigits_: this file is served inside a template
+// literal, which eats one backslash level, so a backslash-d here would arrive as a
+// literal d and match nothing. A scan has no backslashes to lose.
+function actLeadingDigits_(s){ var i=0; while(i<s.length){ var c=s.charCodeAt(i); if(c<48||c>57) break; i++; } return i; }
+// ONE display-name rule for every surface that shows an activity.
+//
+// Raw FIT/GPX/TCX filenames and bare source ids are not names. Both FIT importers store
+// the source FILENAME as the activity name — Strava exports as "<id>.fit", Garmin as
+// "<id>_ACTIVITY.fit", and the newer path strips the extension — so the library carries
+// 50 live rides and all 1,290 st.runs records named like "16153052294.fit",
+// "20115424650" or "23399594411 ACTIVITY". Those all fall back to "<Sport> · <dist> mi".
+//
+// The leading-digit test is what the ORIGINAL constellation-only version missed: it tested
+// all-digits, so "20115424650" was caught but "23399594411 ACTIVITY" sailed through. Every
+// surface routes through here so the rule cannot drift between them again — openDesktopRideDetail
+// had grown its own partial copy of it ("indexOf(' ACTIVITY')"), which is exactly the drift
+// this accessor exists to prevent.
+//
+// sportLabel is optional; omitted, it is derived from rideSport_. Returns {text,isFallback}
+// so a caller that already prints sport/distance columns can drop the redundant ones.
+// actName_ is the string-only form, which is what most callers want.
+function actNameInfo_(r, sportLabel){
+  if(!r) return {text:'Activity', isFallback:true};
   var nm=String(r.name||'').trim(), low=nm.toLowerCase();
   var isFile=(low.indexOf('.fit')>=0 || low.indexOf('.gpx')>=0 || low.indexOf('.tcx')>=0);
   var base=nm, dot=nm.lastIndexOf('.'); if(dot>0) base=nm.slice(0,dot);
-  var bad=(!nm) || isFile || constAllDigits_(nm) || constAllDigits_(base);
+  var bad=(!nm) || isFile || constAllDigits_(nm) || constAllDigits_(base) || actLeadingDigits_(nm)>=6;
   if(!bad) return {text:nm, isFallback:false};
+  var lbl=sportLabel;
+  if(!lbl) lbl=constSportLabel_((typeof rideSport_==='function')?rideSport_(r):'');
   var dist=parseFloat(r.distance)||0, MID=String.fromCharCode(0xB7);
-  return {text: sportLabel + (dist?(' '+MID+' '+(Math.round(dist*10)/10)+' mi'):''), isFallback:true};
+  return {text: lbl + (dist?(' '+MID+' '+(Math.round(dist*10)/10)+' mi'):''), isFallback:true};
 }
+function actName_(r){ return actNameInfo_(r).text; }
+// Kept as the constellation screen's spelling of the same rule — it passes an already
+// resolved sport label and reads .isFallback. Delegates so there is only one rule.
+function constNameInfo_(r, sportLabel){ return actNameInfo_(r, sportLabel); }
 function constStarPath_(cx,cy,rO){
   var out=''; for(var k=0;k<10;k++){ var rr=(k%2===0)?rO:rO*0.46; var a=-Math.PI/2+k*Math.PI/5; out+=(k?'L':'M')+(cx+rr*Math.cos(a)).toFixed(1)+' '+(cy+rr*Math.sin(a)).toFixed(1); } return out+'Z';
 }
@@ -13174,7 +13200,7 @@ function showHomeDash(){
       html+='<div onclick="openRideDetail('+realIdx+')" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(idx>0?'border-top:1px solid var(--b1);':'')+'cursor:pointer">'
         +iconHTML
         +'<div style="flex:1;min-width:0">'
-        +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div></div>'
         +'<div style="text-align:right;flex-shrink:0">'
         +(r.distance?'<div style="font-size:13px;font-weight:700;color:var(--t1)">'+r.distance+' mi</div>':'')
@@ -14165,7 +14191,7 @@ function renderPerf(container){
     var hrs=r.movingSecs?(r.movingSecs/3600):0;
     var el=parseFloat(r.elev||r.elevation)||0;
     var cal=parseFloat(r.calories)||0;
-    if(mi>longestRide){longestRide=mi;longestRideName=r.name||'Activity';}
+    if(mi>longestRide){longestRide=mi;longestRideName=actName_(r);}
     if(r.np&&r.np>highestNP) highestNP=r.np;
     var _hts=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0); if(_hts&&_hts>highestTSS) highestTSS=_hts;
     if(r.avgSpeed&&r.avgSpeed>fastestSpeed) fastestSpeed=r.avgSpeed;
@@ -14661,7 +14687,7 @@ function renderRideList(container, limit){
     row.style.cssText='padding:11px 4px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
     row.innerHTML='<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+icon+'</div>'
       +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:14px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+r.name+'</div>'
+      +'<div style="font-size:14px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'
       +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+' mi &middot; ':'')+(r.date||'')+(r.duration?' &middot; '+r.duration:'')+'</div>'
       +'</div>'
       +(rwkg?'<div style="font-size:12px;font-weight:500;color:'+iconColor+';flex-shrink:0">'+rwkg+' W/kg</div>':'')
@@ -15376,7 +15402,16 @@ function bulkImportTCX(input){
             } else if(sport==='cycling'){
               // ---- RIDE -> st.rides (light summary; GPS to /gps) ----
               var lite={
+                // movingSecs is NOT decoration — it is the second half of dedupeRides_'s match
+                // rule (distance within 1mi OR movingSecs within 120s). This path stored only
+                // duration, so every FIT ride imported here had secs=0 and could be matched on
+                // distance ALONE. When the pre-fix metre/foot bug made a distance 3.28x too small,
+                // both branches failed and the ride survived as a visible duplicate of itself
+                // (2026-06-20: a 110.3mi ride and a "33.6mi" ghost of it). The run path next to
+                // this one has always written it; this one now matches, so a future bad import is
+                // caught by time even when its distance is nonsense.
                 name:name2, date:data.date, duration:data.duration, distance:data.distance,
+                movingSecs:data.duration||0,
                 avgPwr:data.avgPwr, np:data.np, hr:data.hr, tss:data.tss, elev:data.elev,
                 calories:data.calories, z1s:data.z1s, z2s:data.z2s, z3s:data.z3s,
                 z4s:data.z4s, z5s:data.z5s, z6s:data.z6s,
@@ -21193,7 +21228,7 @@ function distancePRs_(pop){
       value:best?_recSecs_(best):null, unit:'sec', better:'lower',
       display:best?fmt(_recSecs_(best)):null,
       date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
-      rideName:best?String(best.name||''):null,
+      rideName:best?actName_(best):null,
       actualMi:best?(Math.round((parseFloat(best.distance)||0)*100)/100):null,
       n:elig.length, estimated:false,
       why:'Fastest single '+(pop.env==='indoor'?'indoor':(pop.env==='outdoor'?'outdoor':''))+' ride of '+band+' (moving time). Not a split inside a longer ride — this library stores no distance or time streams, so an in-ride split cannot be computed.'
@@ -21225,7 +21260,7 @@ function _recPower_(pop){
       value:bestW>0?Math.round(bestW):null, unit:'w', better:'higher',
       display:bestW>0?(Math.round(bestW)+'W'):null,
       date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
-      rideName:best?String(best.name||''):null, actualMi:null,
+      rideName:best?actName_(best):null, actualMi:null,
       n:n, estimated:false,
       why:'Highest recorded '+d.l+' power across '+n+' ride'+(n===1?'':'s')+' carrying a measured power curve. Estimated peaks (derived from NP on Intervals rides) are excluded.'
     };
@@ -21248,7 +21283,7 @@ function _recElev_(pop){
     value:bestV>0?Math.round(bestV):null, unit:'ft', better:'higher',
     display:bestV>0?(Math.round(bestV).toLocaleString()+' ft'):null,
     date:best?_recDate_(best):null, rideKey:best?_recKeyOf_(best):null, rideRef:best?_recRefOf_(best):null,
-    rideName:best?String(best.name||''):null, actualMi:best?(Math.round((parseFloat(best.distance)||0)*10)/10):null,
+    rideName:best?actName_(best):null, actualMi:best?(Math.round((parseFloat(best.distance)||0)*10)/10):null,
     n:n, estimated:false,
     why:'Largest elevation gain on a single ride, across '+n+' ride'+(n===1?'':'s')+' that record climbing. Indoor rides are included when the platform reports gain.'
   }];
@@ -26473,7 +26508,7 @@ function _smurkelContext_(dateKey, ride){
 function _smurkelFacts_(C){
   var L=[], a=C.act||{}, NL=String.fromCharCode(10);
   var n=function(v,suf,dp){ if(v==null) return 'not recorded'; var x=(dp!=null)?(Math.round(v*Math.pow(10,dp))/Math.pow(10,dp)):Math.round(v); return x+(suf||''); };
-  L.push('ACTIVITY: '+(a.name||'unnamed')+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
+  L.push('ACTIVITY: '+actName_(a)+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
   L.push('  distance '+n(a.miles,' mi',1)+', time '+(a.duration||'not recorded')+', TSS '+n(a.tss)+'.');
   if(C.cyclingPower){
     L.push('  NP '+n(a.np,'W')+', average power '+n(a.avg,'W')+', FTP '+n(a.ftp,'W')
@@ -27517,7 +27552,7 @@ function dsShowAICoach(){
   var sevenAgo=new Date(today); sevenAgo.setDate(sevenAgo.getDate()-7);
   var recentRides=(st.rides||[]).filter(function(r){return r&&r.date&&new Date(r.date)>=sevenAgo;});
   var todayActual=(st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return actName_(r)+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   var upcoming=[];
   for(var di=todayIdx+1;di<7;di++){
@@ -30709,7 +30744,7 @@ function dsShowCalendar(){
             dl.slice(0,2).forEach(function(r){
               var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
               var main=dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec);
-              var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+              var nm=actName_(r);
               if(nm.length>20) nm=nm.slice(0,19)+'…';
               var sub=fmtHMS(sec)+(t>0?(' · '+t+' TSS'):'');
               var _ri=rideRefOf_(r);
@@ -30869,7 +30904,7 @@ function dsShowCalendar(){
         +'<div style="font-size:14px;font-weight:800;color:var(--d-head);margin:2px 0 12px">'+dstr+'</div>';
       list.forEach(function(r,i){
         var col=calColor(r), dist=parseFloat(r.distance)||0, sec=durSecs(r), t=(constRideTSS_(r)||0);
-        var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+        var nm=actName_(r);
         H+='<div data-pick="'+i+'" style="display:flex;align-items:center;gap:11px;padding:10px 11px;margin-bottom:6px;border-radius:11px;background:#131829;border:1px solid #1f2739;cursor:pointer">'
           +'<div style="width:32px;height:32px;border-radius:9px;background:'+col+'1f;display:flex;align-items:center;justify-content:center;flex-shrink:0">'+calIcon(rideSport_(r)||'Ride',18,col)+'</div>'
           +'<div style="flex:1;min-width:0">'
@@ -30899,7 +30934,7 @@ function dsShowCalendar(){
     if(!list.length){ H+='<div style="padding:44px;text-align:center;color:var(--d-dim);font-size:13px">No activities this month.</div>'; }
     list.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
       var idx=rideRefOf_(r);
-      var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+      var nm=actName_(r);
       var dObj=new Date(normDate(r.date)+'T00:00:00');
       var dstr=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dObj.getDay()]+' '+(dObj.getMonth()+1)+'/'+dObj.getDate();
       H+='<div'+(rideRefOk_(idx)?(' data-cal="act" data-idx="'+rideRefData_(idx)+'"'):'')+' style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:11px;cursor:pointer">'
@@ -30925,7 +30960,7 @@ function dsShowCalendar(){
       H+='<div style="font-size:11px;color:var(--d-t3);font-weight:700">'+['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getDay()]+'</div>';
       H+='<div style="font-size:20px;font-weight:800;color:'+(isToday?'#4ade80':'#e8edf5')+';margin-bottom:6px">'+dt.getDate()+'</div>';
       dl.forEach(function(r){ var col=calColor(r),dist=parseFloat(r.distance)||0,sec=durSecs(r),t=(constRideTSS_(r)||0);
-        var nm=(r.name&&String(r.name).trim())?String(r.name).trim():(rideSport_(r)||'Activity');
+        var nm=actName_(r);
         var _wi=rideRefOf_(r);
         H+='<div'+(rideRefOk_(_wi)?(' data-cal="act" data-idx="'+rideRefData_(_wi)+'"'):'')+' style="margin-top:5px;padding:6px 8px;border-radius:8px;cursor:pointer;background:'+col+'14;border:1px solid '+col+'33">'
           +'<div style="display:flex;align-items:center;gap:5px">'+calIcon(rideSport_(r)||'Ride',13,col)+'<span style="font-size:12px;font-weight:800;color:var(--d-head)">'+(dist>0?(Math.round(dist*10)/10)+' mi':fmtFull(sec))+'</span></div>'
@@ -31540,7 +31575,7 @@ function _hrdCandidates_(){
 // ride silently reads as a number off today's.
 function _hrdRideLabel_(r){
   if(!r) return '';
-  var nm=String(r.name||'').trim() || 'Ride';
+  var nm=actName_(r);
   if(nm.length>34) nm=nm.slice(0,33)+'…';
   var m=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(normDate(r.date||'')||'');
   var MO=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -31802,7 +31837,7 @@ function dsShowDashboard(){
   recent.forEach(function(r,ix){
     var stype=r.sportType||r.type||'Ride'; if((typeof rideIsIndoor==='function'&&rideIsIndoor(r))&&/run|jog/i.test(stype)) stype='Treadmill';
     var ridx=rideRefOf_(r); if(rideRefOk_(ridx)===false && r.stravaId) ridx=(st.rides||[]).findIndex(function(x){return x.stravaId&&x.stravaId===r.stravaId;});
-    var nm=r.name||stype; var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
+    var nm=actName_(r); var dstr=''; if(r.startTime){var d=new Date(r.startTime);var td=new Date();td.setHours(0,0,0,0);var rd=new Date(d);rd.setHours(0,0,0,0);var dd=Math.round((td-rd)/86400000);dstr=dd===0?'Today':dd===1?'Yesterday':(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear();}else if(r.date){dstr=r.date;}
     var dist=parseFloat(r.distance)||0, tss=(constRideTSS_(r)||0);
     var ifv=(r.ifPct!=null?(r.ifPct/100):((r.np||r.avgPwr)&&ftp?((r.np||r.avgPwr)/ftp):null));
     ra+='<div data-ride="'+rideRefData_(ridx)+'" style="display:flex;align-items:center;gap:10px;padding:10px 0;'+(ix>0?'border-top:1px solid var(--d-edge);':'')+'cursor:pointer">';
@@ -32201,7 +32236,7 @@ function dsShowRidesList(){
       // Name + date
       var info=document.createElement('div');
       info.style.cssText='flex:1;min-width:0';
-      var _rn=r.name||r.sportType||'Activity';
+      var _rn=actName_(r);
       info.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--d-t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_rn+'</div>'
         +'<div style="font-size:11px;color:var(--d-t4);margin-top:1px">'+(r.date||'')+(r.startTime?' &middot; '+(new Date(r.startTime).getHours()%12||12)+':'+(('0'+new Date(r.startTime).getMinutes()).slice(-2))+(new Date(r.startTime).getHours()>=12?' PM':' AM'):'')+'</div>';
       row.appendChild(info);
@@ -32529,7 +32564,7 @@ function openDesktopRideDetail(idx, _noFetch){
       var lcolor=lwkg>=4.0?'#ef4444':lwkg>=3.2?'#f59e0b':lwkg>=2.5?'#22c55e':'#60a5fa';
       var ldParts=lr.date?lr.date.split('-'):null;
       var ldStr=ldParts&&ldParts.length>=3?(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(ldParts[1],10)-1]+' '+parseInt(ldParts[2],10)):'';
-      var lname=lr.name||'Activity'; if(lname.indexOf(' ACTIVITY')>0&&parseInt(lname)>0) lname=lr.sportType||lr.type||'Activity';
+      var lname=actName_(lr);   // was a local partial copy of this rule; the accessor owns it now
       var sportIcon=(/run/i.test(lr.sportType||lr.type||''))?'&#xe58b;':(/swim/i.test(lr.sportType||lr.type||''))?'&#xe4f1;':(/strength/i.test(lr.sportType||lr.type||''))?'&#xe20c;':'&#xe08b;';
       listHtml2+='<div onclick="openDesktopRideDetail('+rideRefAttr_(lridx)+')" style="display:flex;align-items:center;gap:8px;padding:12px 14px;cursor:pointer;border-left:2px solid '+(isActive?'#FC4C02':'transparent')+';background:'+(isActive?'rgba(252,76,2,.08)':'transparent')+'">'
         +'<div style="width:28px;height:28px;border-radius:8px;background:var(--d-chip);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:tabler-icons;font-size:14px;color:var(--c-green)">'+sportIcon+'</div>'
@@ -32669,7 +32704,7 @@ function openDesktopRideDetail(idx, _noFetch){
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></div>'+
         '<div>'+
           '<div style="display:flex;align-items:center;gap:7px">'+
-            '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:var(--d-t1)">'+(r.name||'Activity')+'</span>'+
+            '<span id="ride-detail-name" style="font-size:19px;font-weight:700;color:var(--d-t1)">'+actName_(r)+'</span>'+
             '<span data-view="renameRide" data-arg="'+rideRefData_(rideRefOf_(r))+'" title="Rename" style="cursor:pointer;display:inline-flex"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>'+
           '</div>'+
           '<div style="font-size:11px;color:var(--d-t4);margin-top:2px">'+dtStr+'</div>'+
@@ -33197,7 +33232,7 @@ function openRideDetail(idx, _noFetch){
   topRow.appendChild(moreBtn);
 
   var titleWrap=document.createElement('div');
-  titleWrap.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div id="ride-detail-name" style="font-size:19px;font-weight:600;color:var(--t1);min-width:0;overflow:hidden;text-overflow:ellipsis">'+(r.name||'Activity')+'</div>'+((typeof favStarHTML_==='function')?favStarHTML_(r,'mb-fav-star'):'')+'</div>'
+  titleWrap.innerHTML='<div style="display:flex;align-items:center;gap:8px"><div id="ride-detail-name" style="font-size:19px;font-weight:600;color:var(--t1);min-width:0;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'+((typeof favStarHTML_==='function')?favStarHTML_(r,'mb-fav-star'):'')+'</div>'
     +'<div style="font-size:13px;color:var(--t3);margin-top:2px">'+dtStr+'</div>';
 
   hdr.appendChild(topRow);
@@ -36432,7 +36467,7 @@ function renderRun(){
       var hdr=document.createElement('div');
       hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px';
       var stravaLink=r.stravaId?'<a href="https://www.strava.com/activities/'+r.stravaId+'" target="_blank" style="font-size:10px;color:#FC4C02;text-decoration:none;font-weight:600">Open in Strava ↗</a>':'';
-      hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+(r.name||r.type||'Run')+'</div>'
+      hdr.innerHTML='<div><div style="font-size:14px;font-weight:800;color:var(--t1)">'+actName_(r)+'</div>'
         +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.date||'')+(r.weather?' · '+r.weather:'')+'</div>'
         +(stravaLink?'<div style="margin-top:3px">'+stravaLink+'</div>':'')
         +'</div>'
@@ -36961,7 +36996,7 @@ function injectRideStats(w){
     // Build summary label for button
     var summaryParts=[];
     activities.forEach(function(a){
-      if(a.type==='ride') summaryParts.push(a.data.name||(a.data.tss?'Activity (TSS '+a.data.tss+')':'Activity'));
+      if(a.type==='ride') summaryParts.push(a.data.name?actName_(a.data):(a.data.tss?'Activity (TSS '+a.data.tss+')':'Activity'));
       if(a.type==='strength') summaryParts.push('Strength '+a.letter+' ('+a.done+'/'+a.total+' sets)');
       if(a.type==='core') summaryParts.push('Core ('+a.done+'/'+a.total+' sets)');
       if(a.type==='cond') summaryParts.push('Conditioning ('+a.count+' exercises)');
@@ -36996,7 +37031,7 @@ function injectRideStats(w){
         // through rideRefAttr_ for quoting; a bare handle would be a ReferenceError on click.
         var rideIdx = (STORE_V2_HANDLES && typeof rideHandle_==='function') ? rideHandle_(a.data) : st.rides.indexOf(a.data);
         aDiv.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+(r.name||'Activity')+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1)">🚴 '+actName_(r)+'</div>'
           +'<button onclick="deleteRideFromCard('+rideRefAttr_(rideIdx)+')" style="font-size:11px;color:var(--c-red);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);border-radius:6px;padding:3px 8px;cursor:pointer;font-family:inherit">Delete</button>'
           +'</div>';
         var statsGrid=document.createElement('div');
@@ -40132,7 +40167,7 @@ function fetchTodaysDecision(weatherStr, callback){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
   var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return actName_(r)+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   ensureBikes();
   var bikeOptions = (st.bikes||[]).filter(function(b){ return !b.indoor; }).map(function(b){
@@ -40236,7 +40271,7 @@ function showAICoach(){
     return r && r.date && new Date(r.date) >= sevenDaysAgo;
   });
   var todayActual = (st.rides||[]).filter(function(r){return r&&!r.deleted&&normDate(r.date)===normDate(getTodayKey());})
-    .map(function(r){return (r.name||'Ride')+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
+    .map(function(r){return actName_(r)+' '+(r.distance||0)+'mi TSS:'+(constRideTSS_(r)||0)+' NP:'+(r.np||r.avgPwr||0)+'W';}).join('; ');
 
   // Get upcoming workouts this week
   var upcoming = [];
@@ -41928,7 +41963,7 @@ function renderMapSelectors(body, routes, hourlyData, seedRouteId){
   routes.forEach(function(r){
     var o=document.createElement('option');
     o.value=r._mapRouteId;
-    o.textContent=(r.name||'Ride')+' · '+(r.date||'');
+    o.textContent=actName_(r)+' · '+(r.date||'');
     o.selected = r._mapRouteId===weatherMapSelectedRouteId;
     routeSelect.appendChild(o);
   });
@@ -42017,7 +42052,7 @@ function renderMapContent(body, ride, wind, forTime){
   var noteCard=document.createElement('div');
   noteCard.style.cssText='margin:16px 16px 8px;background:var(--s2);border-radius:12px;padding:12px 14px;border:1px solid var(--b1);font-size:12px;color:var(--t3);line-height:1.5';
   var timeLabel = forTime ? (forTime.toDateString()===new Date().toDateString() ? 'today' : forTime.toLocaleDateString(undefined,{weekday:'long', month:'short', day:'numeric'}))+' at '+formatHour12(forTime.getHours()) : 'right now';
-  noteCard.innerHTML='<b style="color:var(--t1)">'+(ride.name||'Recent Ride')+'</b> route, shown with forecast wind conditions for <b style="color:var(--t1)">'+timeLabel+'</b>'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Tap anywhere on the route for conditions at that point.';
+  noteCard.innerHTML='<b style="color:var(--t1)">'+actName_(ride)+'</b> route, shown with forecast wind conditions for <b style="color:var(--t1)">'+timeLabel+'</b>'+(wind?' ('+Math.round(wind.windspeed_10m)+'mph from '+['N','NE','E','SE','S','SW','W','NW'][Math.round((wind.winddirection_10m||0)/45)%8]+')':'')+'. Tap anywhere on the route for conditions at that point.';
   body.appendChild(noteCard);
 
   var mapCard=document.createElement('div');
@@ -42385,7 +42420,7 @@ function showWeatherHistory(){
         row.style.cssText='padding:11px 14px;'+(idx>0?'border-top:1px solid var(--b1);':'')+'display:flex;align-items:center;gap:10px;cursor:pointer';
         row.innerHTML='<div style="width:36px;height:36px;border-radius:10px;background:'+iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid rgba(168,196,224,0.15)">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'
           +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+(r.distance?r.distance+'mi':'')+(r.duration?' &middot; '+r.duration:'')+(r.date?' &middot; '+r.date:'')+'</div>'
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">&rsaquo;</div>';
@@ -42486,7 +42521,7 @@ function showWeatherHistory(){
         card.style.cssText='background:var(--s2);border-radius:12px;border:0.5px solid var(--b1);padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;cursor:pointer';
         card.innerHTML='<div style="width:34px;height:34px;border-radius:8px;background:'+c+';display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white">'+icon+'</div>'
           +'<div style="flex:1;min-width:0">'
-          +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(r.name||sport)+'</div>'
+          +'<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+actName_(r)+'</div>'
           +'<div style="font-size:11px;color:var(--t3);margin-top:1px">'+r.date+(r.distance?' · '+r.distance+'mi':'')+(r.duration?' · '+r.duration:'')+'</div>'
           +'</div>'
           +'<div style="color:var(--t3);font-size:16px">›</div>';
@@ -45481,7 +45516,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-selfheal-gate1';
+window.__BUILD__ = '2026-08-03-actname-accessor';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
