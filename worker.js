@@ -32279,6 +32279,108 @@ function rideCalText_(r){
   if(!e) return '—';
   return (e.est?'~':'')+e.cal.toLocaleString()+' Cal';
 }
+// ==================== ride-detail elevation scrubber (DESKTOP ONLY) ====================
+// Deliberate deviation from the desktop/mobile parity rule: this is desktop-exclusive by request.
+// Do NOT backport to showRideDetail — its absence there is the design, not an oversight.
+//
+// ONE fraction (0..1) drives everything: the chart crosshair, the map marker, and the readout.
+// A fraction rather than an array index, because the two arrays DO NOT share an index —
+// chartEle is uniform bucket-averaged (200 buckets, uniform in TIME) while lats/lons are
+// Douglas-Peucker simplified (dense at corners, uniform in nothing). Measured over 381 rides the
+// lats-per-elevation-point ratio runs 0.30 to 42.78, median 2.56, so no fixed index relation
+// exists. The map point is therefore found by CUMULATIVE DISTANCE along the real track, which is
+// also what the chart's x-axis already claims to show.
+//
+// SPEED IS NOT COMPUTABLE and renders as an em-dash. No ride carries a per-point time or distance
+// stream (0 of 466). Deriving it would be circular: distance is mapped proportionally to the
+// fraction, so d(distance)/d(time) is constant BY CONSTRUCTION and would print the ride average at
+// every point — a number that looks like data and means nothing.
+var _rdScrub=null;
+function _rdScrubReset_(){ _rdScrub=null; }
+// Cumulative metres along the plotted track. Reuses _saHaversineM_ rather than adding a second
+// haversine to the file.
+function _rdCumDist_(pts){
+  var c=[0], t=0;
+  for(var i=1;i<pts.length;i++){
+    var d=(typeof _saHaversineM_==='function')?_saHaversineM_(pts[i-1][0],pts[i-1][1],pts[i][0],pts[i][1]):0;
+    t+=(d||0); c.push(t);
+  }
+  return c;
+}
+function _rdPtAtFrac_(pts, cum, frac){
+  if(!pts || pts.length<2) return null;
+  var total=cum[cum.length-1];
+  if(!(total>0)) return pts[Math.min(pts.length-1, Math.max(0, Math.round(frac*(pts.length-1))))];
+  var target=total*Math.max(0,Math.min(1,frac));
+  var lo=0, hi=cum.length-1;
+  while(lo<hi){ var m=(lo+hi)>>1; if(cum[m]<target) lo=m+1; else hi=m; }
+  return pts[lo];
+}
+// The map half arrives ~100ms after the chart (renderRideMap_ runs in a setTimeout), so the
+// scrubber works chart-only from the first frame and picks the marker up when it lands.
+function _rdScrubAttachMap_(map, pts){
+  if(!_rdScrub || !map || !pts || pts.length<2) return;
+  _rdScrub.map=map; _rdScrub.pts=pts; _rdScrub.cum=_rdCumDist_(pts);
+  try{
+    _rdScrub.marker=L.circleMarker(pts[0], {radius:6, color:'#ffffff', weight:2, fillColor:'#FC4C02',
+      fillOpacity:1, interactive:false, pane:'markerPane'});
+    _rdScrub.marker.addTo(map);
+    _rdScrub.marker.setStyle({opacity:0, fillOpacity:0});      // hidden until the first scrub
+  }catch(e){ _rdScrub.marker=null; }
+}
+function _rdFmtT_(s){ return (typeof _segFmtT_==='function')?_segFmtT_(s):(Math.round(s)+'s'); }
+function _rdScrubMove_(frac, show){
+  var S=_rdScrub; if(!S) return;
+  frac=Math.max(0, Math.min(1, frac));
+  var n=S.ele.length, i=Math.round(frac*(n-1));
+  var svg=document.getElementById(S.svgId);
+  if(svg){
+    var x=S.padL+frac*S.iW;
+    var ln=svg.querySelector('.rd-scrub-line'), dt=svg.querySelector('.rd-scrub-dot');
+    var mn=S.mn, rng=S.rng, y=(S.iH-((S.ele[i]-mn)/rng*(S.iH-8)+4));
+    if(ln){ ln.setAttribute('x1',x); ln.setAttribute('x2',x); ln.setAttribute('opacity', show?'1':'0'); }
+    if(dt){ dt.setAttribute('cx',x); dt.setAttribute('cy',y); dt.setAttribute('opacity', show?'1':'0'); }
+  }
+  if(S.marker){
+    try{
+      if(!show){ S.marker.setStyle({opacity:0, fillOpacity:0}); }
+      else { var p=_rdPtAtFrac_(S.pts,S.cum,frac); if(p){ S.marker.setLatLng(p); S.marker.setStyle({opacity:1, fillOpacity:1}); } }
+    }catch(e){}
+  }
+  var out=document.getElementById(S.outId);
+  if(out){
+    var DASH='<span style="color:var(--d-t4)">&mdash;</span>';
+    var dv=(S.distMi>0)?((Math.round(frac*S.distMi*100)/100).toFixed(2)+' mi'):DASH;
+    var ev=(S.ele[i]!=null)?(Math.round(S.ele[i]).toLocaleString()+' ft'):DASH;
+    var tv=(S.secs>0)?_rdFmtT_(frac*S.secs):DASH;
+    var cell=function(l,v,t){ return '<div style="flex:1;min-width:0"'+(t?(' title="'+t+'"'):'')+'>'
+      +'<div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--d-t4)">'+l+'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:var(--d-t1);line-height:1.2;margin-top:1px">'+v+'</div></div>'; };
+    out.innerHTML=show
+      ? (cell('DISTANCE', dv, 'Read off the chart axis: this fraction of the ride total.')
+        +cell('ELEVATION', ev, 'The elevation sample under the cursor.')
+        +cell('TIME', tv, 'Approximate — the elevation trace is evenly sampled, so this is that fraction of moving time.')
+        +cell('SPEED', DASH, 'No per-point speed recorded for this ride, and it cannot be derived from what is stored.'))
+      : '<div style="font-size:10.5px;color:var(--d-dim)">Hover or drag across the profile to scrub.</div>';
+  }
+}
+// Wires the pointer handlers. Called after the detail HTML is in the DOM.
+function _rdScrubInit_(){
+  var S=_rdScrub; if(!S) return;
+  var svg=document.getElementById(S.svgId); if(!svg) return;
+  var fracFromEvent=function(ev){
+    var rect=svg.getBoundingClientRect(); if(!rect.width) return 0;
+    var sx=(ev.clientX-rect.left)/rect.width*S.W;      // viewBox is 0 0 W H with preserveAspectRatio=none
+    return (sx-S.padL)/S.iW;
+  };
+  var dragging=false;
+  svg.addEventListener('mousemove', function(ev){ _rdScrubMove_(fracFromEvent(ev), true); });
+  svg.addEventListener('mouseleave', function(){ if(!dragging) _rdScrubMove_(0, false); });
+  svg.addEventListener('mousedown', function(ev){ dragging=true; _rdScrubMove_(fracFromEvent(ev), true); ev.preventDefault(); });
+  window.addEventListener('mouseup', function(){ dragging=false; });
+  svg.style.cursor='crosshair';
+  _rdScrubMove_(0, false);                              // paint the resting hint
+}
 function openDesktopRideDetail(idx, _noFetch){
   idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var rpEl=document.getElementById('ds-right-panel');
@@ -32411,11 +32513,21 @@ function openDesktopRideDetail(idx, _noFetch){
   }
 
   // Elevation profile with ft axis + mileage axis
-  function elevProfile(ele,distMi){
+  function elevProfile(ele,distMi,secs){
+    // Fewer than two samples: the existing message stands and NO scrubber is registered, so there
+    // is no interactive layer over a chart that does not exist.
+    _rdScrubReset_();
     if(!ele||ele.length<2) return '<div style="height:120px;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:11px">No elevation data</div>';
     var mn=Math.min.apply(null,ele),mx=Math.max.apply(null,ele),rng=mx-mn||1;
     var W=800,H=100,padL=36,padB=16;
     var iW=W-padL, iH=H-padB;
+    // Fresh ids per render: the detail pane re-renders on every navigation, and a stale id would
+    // let the scrubber drive a chart that is no longer on screen.
+    var _sid='rdscrub'+Date.now()+Math.floor(Math.random()*1000);
+    _rdScrub={ svgId:_sid+'-svg', outId:_sid+'-out', ele:ele, mn:mn, rng:rng,
+               W:W, padL:padL, iW:iW, iH:iH,
+               distMi:parseFloat(distMi)||0, secs:(+secs>0?+secs:0),
+               map:null, pts:null, cum:null, marker:null };
     var pts=ele.map(function(v,i){return (padL+i/(ele.length-1)*iW).toFixed(1)+','+(iH-((v-mn)/rng*(iH-8)+4)).toFixed(1);}).join(' ');
     var fill=padL+','+iH+' '+pts+' '+W+','+iH;
     // Y axis labels (ft)
@@ -32434,11 +32546,17 @@ function openDesktopRideDetail(idx, _noFetch){
       var mi=d?(xi/5*d).toFixed(0)+'':xi===0?'0':'';
       xLabels+='<text x="'+xPos+'" y="'+(H-2)+'" text-anchor="'+(xi===0?'start':xi===5?'end':'middle')+'" font-size="9" fill="#64748b" font-family="sans-serif">'+mi+(mi&&xi>0?' mi':'')+'</text>';
     }
-    return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px" preserveAspectRatio="none">'
+    return '<svg id="'+_sid+'-svg" viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px" preserveAspectRatio="none">'
       +'<defs><linearGradient id="elg4" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#FC4C02" stop-opacity=".6"/><stop offset="100%" stop-color="#FC4C02" stop-opacity=".02"/></linearGradient></defs>'
       +'<polygon points="'+fill+'" fill="url(#elg4)"/>'
       +'<polyline points="'+pts+'" fill="none" stroke="#FC4C02" stroke-width="2"/>'
-      +yLabels+xLabels+'</svg>';
+      +yLabels+xLabels
+      // Crosshair layer, painted last so it sits above the fill. Hidden until the first scrub;
+      // pointer-events:none so it can never swallow the pointer it is following.
+      +'<line class="rd-scrub-line" x1="'+padL+'" x2="'+padL+'" y1="0" y2="'+iH+'" stroke="#f1f5f9" stroke-width="1" opacity="0" style="pointer-events:none"/>'
+      +'<circle class="rd-scrub-dot" cx="'+padL+'" cy="'+iH+'" r="3.5" fill="#ffffff" stroke="#FC4C02" stroke-width="2" opacity="0" style="pointer-events:none"/>'
+      +'</svg>'
+      +'<div id="'+_sid+'-out" style="display:flex;gap:14px;align-items:flex-start;min-height:30px;padding:6px 4px 0"></div>';
   }
 
   // Real sparkline
@@ -32532,7 +32650,7 @@ function openDesktopRideDetail(idx, _noFetch){
 
       // ELEVATION PROFILE
       '<div style="background:var(--d-deep);padding:8px 10px 2px;border-bottom:1px solid var(--d-line)">'+
-        elevProfile(r.chartEle,r.distance)+
+        elevProfile(r.chartEle,r.distance,r.movingSecs)+
       '</div>'+
 
       // 4 METRIC CARDS
@@ -32635,6 +32753,9 @@ function openDesktopRideDetail(idx, _noFetch){
 
   // Wire back + tabs
   setTimeout(function(){
+    // Scrubber handlers, wired after the detail HTML is in the DOM. Safe no-op when elevProfile
+    // declined to register (fewer than two elevation samples).
+    try{ if(typeof _rdScrubInit_==='function') _rdScrubInit_(); }catch(e){}
     var bb=document.getElementById('rd-back');
     // Arrived from a Records card? Go back THERE, scroll included. Otherwise the long-standing
     // Activities behaviour is untouched, so every other entry point behaves exactly as before.
@@ -32726,6 +32847,16 @@ function openDesktopRideDetail(idx, _noFetch){
         color:'#FC4C02', laps:r.laps, maxZoom:14,
         colorAt: hasPwr?function(i,pts,frac){ var pw=r.chartPwr[Math.min(Math.round(frac*(r.chartPwr.length-1)),r.chartPwr.length-1)]||0; return pw>=FTP*1.06?'#ef4444':pw>=FTP*.91?'#f59e0b':pw>=FTP*.76?'#22c55e':pw>=FTP*.56?'#3b82f6':'#94a3b8'; }:null
       });
+      // Hand the track to the scrubber. normalizeTrack_ is re-run so the marker walks EXACTLY the
+      // polyline that was drawn, not the raw arrays — renderRideMap_ may have dropped corrupt pairs.
+      try{
+        if(map && typeof _rdScrubAttachMap_==='function' && typeof normalizeTrack_==='function'){
+          var _nt=normalizeTrack_(gl, gn);
+          if(_nt && _nt.ok && _nt.lats.length>1){
+            _rdScrubAttachMap_(map, _nt.lats.map(function(la,ix){ return [la,_nt.lons[ix]]; }));
+          }
+        }
+      }catch(e){}
       if(!map){
         mapDiv.style.cssText='height:200px;background:#111722;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px';
         mapDiv.textContent='GPS data unavailable';
@@ -45273,7 +45404,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-02-p1-sunday-rest-monday-run';
+window.__BUILD__ = '2026-08-02-elevation-scrubber-desktop';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
