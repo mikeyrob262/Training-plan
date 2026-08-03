@@ -401,18 +401,37 @@ check('un-starring writes false rather than deleting (merge-safe)', /m\[k\]=\(m\
 // split('T')[0], so 478 outdoor rides carried a date and no hour and every historical weather
 // lookup fell back to midnight. The date must STILL be the local day (deriving it from UTC stamped
 // every evening ride a day ahead), so both have to come out of the same field.
-const RM = new Function('st', asServed(ex('reimportMap_')) + ';return reimportMap_;')({ftp:183});
-const _act = { name:'Evening Ride', start_date_local:'2026-06-20T18:42:11Z', start_date:'2026-06-20T22:42:11Z',
+const RM = new Function('st', asServed(ex('_localStamp_')) + asServed(ex('_isCyclingSport_'))
+  + asServed(ex('reimportMap_')) + ';return reimportMap_;')({ftp:183});
+const _act = { name:'Evening Ride', sport_type:'Ride', start_date_local:'2026-06-20T18:42:11Z', start_date:'2026-06-20T22:42:11Z',
                distance:32186.9, moving_time:3600, average_watts:150, weighted_average_watts:160 };
 const _m = RM(_act, 183);
 check('the ride date is still the LOCAL day only', _m.date, '2026-06-20');
-check('...and the full local timestamp is kept', _m.startTime, '2026-06-20T18:42:11Z');
+// INVARIANT CHANGED DELIBERATELY: Strava tags start_date_local with a Z it does not mean. Kept
+// verbatim, every reader parsed it as UTC and rendered a 9:19am run as 5:19am. The clock reading is
+// preserved exactly; only the false zone marker is dropped so new Date() reads it as local.
+check('...and the local timestamp is kept as a NAIVE local stamp', _m.startTime, '2026-06-20T18:42:11');
 check('...taken from start_date_local, not the UTC start_date', _m.startTime.indexOf('18:42') > 0, true);
+check('...and it no longer carries a UTC marker', /Z$/.test(_m.startTime), false);
+check('...so it renders at the hour the source recorded', new Date(_m.startTime).getHours(), 18);
 check('a payload with no timestamp yields null, not a fabricated hour',
   RM({ name:'x' }, 183).startTime, null);
-// INVARIANT: the OTHER importer keeps it too, or the two disagree about the same ride.
-check('the page-sync importer keeps it as well',
-  /date: dateStr, startTime: \(a\.start_date_local\|\|a\.start_date\|\|null\)/.test(src), true);
+// INVARIANT: TSS from power is a CYCLING calculation and must not be applied to a run.
+check('a ride still gets a power-derived TSS', _m.tss > 0, true);
+const _run = RM({ name:'Morning Run', sport_type:'Run', start_date_local:'2026-08-03T09:19:06Z',
+  distance:5311, moving_time:2148, average_watts:246.4, weighted_average_watts:247 }, 186);
+check('a RUN gets no power-derived TSS', _run.tss, null);
+check('...and no power-derived intensity', _run.ifPct, null);
+check('...but its watts are still stored verbatim', _run.avgPwr, 246.4);
+// INVARIANT: telemetry is stored at source precision, not rounded on the way in.
+const _prec = RM({ name:'p', sport_type:'Ride', start_date_local:'2026-08-03T09:00:00Z', moving_time:60,
+  average_heartrate:142.3, average_cadence:81.5, kilojoules:537.3 }, 186);
+check('average HR keeps the source decimal', _prec.avgHR, 142.3);
+check('cadence keeps the source decimal', _prec.cadence, 81.5);
+check('kilojoules keep the source decimal', _prec.workKj, 537.3);
+// INVARIANT: the OTHER importer normalises it the same way, or the two disagree about the same ride.
+check('the page-sync importer normalises it as well',
+  /date: dateStr, startTime: _localStamp_\(a\.start_date_local\|\|a\.start_date\|\|null\)/.test(src), true);
 check('the archive hour defaults to midday, not midnight', /var sh=13, estHour=true/.test(src), true);
 check('...and a real start time clears the estimate flag', /sh=sd\.getHours\(\); estHour=false/.test(src), true);
 check('...and the estimate says so on screen', /Ride time not recorded /.test(src), true);

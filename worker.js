@@ -24561,9 +24561,32 @@ function _cvZwiftLine_(intent, struct, hi){
     ? ('In Zwift, find '+hit.name+'. If it is not there, look for '+shape+' and set ERG on.')
     : ('In Zwift, look for '+shape+' and set ERG on.');
 }
-function _cvPre_(intent, t, struct){
-  var lo=t&&t.powerLo, hi=t&&t.powerHi, cap=t&&t.hrCap, band=(lo&&hi)?(lo+'-'+hi+'W'):'';
+function _cvPre_(intent, t, struct, ctx){
+  ctx=ctx||{};
+  // SPORT AWARENESS. Without it this branches on intent alone, so a run stored against the cycling
+  // z2 intent got a watt band, a "riding" verb and a Zwift route instruction — on a trail run.
+  var isRun=!!ctx.isRun;
+  var lo=(isRun?null:(t&&t.powerLo)), hi=(isRun?null:(t&&t.powerHi));
+  var cap=t&&t.hrCap, band=(lo&&hi)?(lo+'-'+hi+'W'):'';
+  var hrLo=t&&t.hrLo, hrHi=t&&t.hrHi;
   var o=[];
+  // ANCHOR the card in this athlete's real numbers instead of opening with a template line. The
+  // prior comparable session and current Form are the two facts available BEFORE a session starts;
+  // quoting them is what separates coaching from a printed prescription.
+  if(ctx.prior){
+    var pr=ctx.prior, bits=[];
+    if(pr.pace) bits.push(pr.pace+'/mi');
+    if(pr.avgHR!=null) bits.push(Math.round(pr.avgHR)+' bpm');
+    if(!isRun && pr.np!=null) bits.push(Math.round(pr.np)+'W');
+    if(bits.length) o.push('Last comparable session was '+pr.daysAgo+' days ago: '+bits.join(', ')
+      +(cap!=null&&pr.avgHR!=null?(pr.avgHR>cap?(' — that was '+Math.round(pr.avgHR-cap)+' bpm over the ceiling. Do not repeat it.')
+                                              :(' — inside the ceiling. Hold that.')):'.'));
+  }
+  if(ctx.tsb!=null){
+    o.push('Form is '+(ctx.tsb>0?'+':'')+Math.round(ctx.tsb)+' today'
+      +(ctx.tsb>5?' — you are fresh, which is exactly when this session gets ridden too hard.'
+      :(ctx.tsb<-15?' — you are buried. Today is not the day to prove anything.':' — normal working fatigue.')));
+  }
   // VOICE: second person, present tense, imperative. Numbers are always the real prescribed ones —
   // never a placeholder, never rounded for effect. The Type A call-out appears ONLY on the sessions
   // with a ceiling to blow past, because that is where the tendency actually costs something.
@@ -24591,10 +24614,18 @@ function _cvPre_(intent, t, struct){
     o.push('New FTP = your 20-minute average x 0.95.'+(_ftpNow?(' You are on '+_ftpNow+'W now, so '+Math.round(_ftpNow/0.95)+'W for the 20 holds level — anything above that is real gain.'):''));
     o.push('Enter it in Settings as soon as you are off the bike. Every watt target in the block reprices off it, and until you enter it they all still point at the old number.');
   } else if(intent==='z2'){
-    o.push((band?(band+' is a ceiling, not a target. '):'This is a ceiling, not a target. ')+'HR stays under '+(cap||135)+'.');
-    o.push('At minute 40 the legs will feel good and you will want more — that is the Type A talking.');
-    o.push('Riding 10W over the ceiling does not make this session better, it makes tomorrow worse.');
-    var _zwZ=_cvZwiftLine_(intent, struct, hi); if(_zwZ) o.push(_zwZ);
+    if(isRun){
+      // HR IS the prescription on a run. No band, no watts, no Zwift route.
+      o.push('HR ceiling '+(cap||140)+'. That is the whole session'
+        +(hrLo&&hrHi?(' — sit at '+hrLo+'-'+hrHi+' and let the pace be whatever it needs to be.'):'.'));
+      o.push('Walk the hills if that is what keeps you under it. Slowing down to hold the ceiling is the session working, not you failing it.');
+      o.push('Twenty minutes in the legs will feel good and you will want to open up — that is the Type A talking.');
+    } else {
+      o.push((band?(band+' is a ceiling, not a target. '):'This is a ceiling, not a target. ')+'HR stays under '+(cap||135)+'.');
+      o.push('At minute 40 the legs will feel good and you will want more — that is the Type A talking.');
+      o.push('Riding 10W over the ceiling does not make this session better, it makes tomorrow worse.');
+      var _zwZ=_cvZwiftLine_(intent, struct, hi); if(_zwZ) o.push(_zwZ);
+    }
   } else if(intent==='group'){
     o.push('Sit in for the first 20 minutes. Race only the last 10 to 15.');
     o.push('If you get dropped you do not chase — this is base, not a result, and nobody is scoring it.');
@@ -25263,6 +25294,10 @@ function coachV_(dateKey, now){
   //     threshold day is not that session, and a ride on an easy-run day is not either.
   var _cvDef=(typeof SESSION_DEFS!=='undefined' && intent)?SESSION_DEFS[intent]:null;
   var wantSport=_cvWantSport_(intent, _cvDef);
+  // The def's type says what SPORT the intent was written for, which is wrong when a run is stored
+  // against a cycling intent: wantSport came out 'ride', no logged run could ever satisfy it, and the
+  // card stayed on its pre-session copy after the run was done. The resolver already knows better.
+  try{ if(_shared && _shared.isRun) wantSport='run'; }catch(e){}
   var done=false, doneAct=null;
   try{
     if(wantSport && typeof activitiesForDate_==='function'){
@@ -25284,7 +25319,16 @@ function coachV_(dateKey, now){
     // session being judged, never to something else that happened that day.
     debrief:(done && typeof _cvDebrief_==='function')
       ? _cvDebrief_(dateKey, (doneAct&&doneAct.obj)||null, (_cvDef&&_cvDef.type)||'') : '',
-    pre:primary?_cvPre_(intent, t, primary.struct):[],
+    // The card is given the same sport verdict the resolver reached, plus the two facts that exist
+    // before a session starts: the last comparable effort and today's Form.
+    pre:primary?_cvPre_(intent, t, primary.struct, {
+      isRun:!!(_shared && _shared.isRun),
+      prior:(function(){ try{ var a=(typeof activitiesForDate_==='function')?activitiesForDate_(dateKey):[];
+              var obj=(a&&a[0]&&a[0].obj)||null;
+              return (typeof _smPriorComparable_==='function')?_smPriorComparable_(dateKey, obj||{date:dateKey, distance:0, sportType:(_shared&&_shared.isRun)?'Run':'Ride'}):null;
+            }catch(e){ return null; } })(),
+      tsb:tsb
+    }):[],
     // Pre-ride fuel check. Empty array on every day that is not VO2/Threshold, on a session already
     // logged, and on any hard day that is adequately fuelled.
     fuel:(typeof _cvFuel_==='function')?_cvFuel_(dateKey, intent, done):[],
@@ -26998,7 +27042,10 @@ function showSessionDetail_(dateKey, sid){
   var DETAIL_TYPES={ride:1, strength:1, mobility:1};
   if(!s || !DETAIL_TYPES[s.type]){ if(typeof openDayEditor==='function') openDayEditor(dateKey, sid||undefined); return; }
   var esc=function(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-  var isRide=(s.type==='ride');
+  // "Step-based endurance session", not literally a bike. A run is stepped the same way; keying this
+  // on 'ride' alone meant correcting a mistyped run session to type 'run' would silently swap its
+  // step list for an empty movement list.
+  var isRide=(s.type==='ride' || s.type==='run');
   var struct=(s.block && s.block.struct) || '';
   // Reprice at read off CURRENT FTP — the watts shown are live, never the value frozen at generation.
   // Same derive-at-read for movements: planResolve_ rebuilds the exercise list from SESSION_DEFS for
@@ -33966,7 +34013,7 @@ function _sessionRxFor_(dateKey, ride){
     if(typeof planSessionsForDate_==='function'){
       (planSessionsForDate_(dk)||[]).forEach(function(s){
         if(pln || !s || s.deleted || !s.intent || !_rxTrainableIntent_(s.intent)) return;
-        pln={ intent:s.intent, struct:(s.block&&s.block.struct)||s.struct||'', targets:s.targets||null };
+        pln={ intent:s.intent, name:s.name||'', struct:(s.block&&s.block.struct)||s.struct||'', targets:s.targets||null };
         plnDone=(s.status==='completed') || !!s.completed;
       });
     }
@@ -33990,6 +34037,26 @@ function _sessionRxFor_(dateKey, ride){
   else if(pln){ pick=pln; via='plan'; }
   if(!pick) return null;
   var def=((typeof SESSION_DEFS!=='undefined')&&SESSION_DEFS[pick.intent])||{};
+  // What SPORT is this day actually? The intent alone cannot answer it: this athlete's Aug 3 session
+  // is stored as intent z2 — a CYCLING def carrying pctFtp — while the session is an Easy Run and the
+  // logged activity is a Run. Resolving sport separately is what stops a watt band being prescribed
+  // for a run. Order: the logged activity, then a run-typed session in the block template for that
+  // day, then the session name, then the def's own type.
+  var isRun=false;
+  try{
+    if(ride && typeof rideSport_==='function' && /run|jog/i.test(String(rideSport_(ride)))) isRun=true;
+    if(!isRun){
+      var bpS=(typeof blockPlanFor_==='function')?blockPlanFor_(dk):null;
+      if(bpS && bpS.sessions) bpS.sessions.forEach(function(s){
+        var d3=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[s&&s.intent]:null;
+        if(d3 && d3.type==='run') isRun=true;
+      });
+    }
+    // Substring scan, no regex: a backslash-b here is eaten by the served template literal and
+    // arrives as a raw control character (preflight step 2 catches it, and did).
+    if(!isRun){ var _nm=String(pick.name||def.name||'').toLowerCase(); if(_nm.indexOf('run')>=0) isRun=true; }
+    if(!isRun && def.type==='run') isRun=true;
+  }catch(e){}
   // Targets MERGE rather than either/or: an st.plan session commonly carries only durationMin, so
   // taking its targets wholesale would drop the power and HR bands the def defines for that intent.
   var derived={};
@@ -34002,7 +34069,12 @@ function _sessionRxFor_(dateKey, ride){
   if(pick.targets) Object.keys(pick.targets).forEach(function(k){ if(pick.targets[k]!=null) t[k]=pick.targets[k]; });
   return {
     intent:pick.intent, name:def.name||pick.intent,
-    lo:t.powerLo, hi:t.powerHi, zone:t.zone||def.zone||'',
+    // WATTS ARE DROPPED ENTIRELY ON A RUN. Running power is not comparable to cycling FTP, so a
+    // band derived from pctFtp is meaningless here — and suppressing it at the resolver rather than
+    // at each renderer means no surface, present or future, can print a watt figure for a run.
+    // The HR band below is the prescription that actually applies.
+    lo:(isRun?null:t.powerLo), hi:(isRun?null:t.powerHi), zone:t.zone||def.zone||'',
+    isRun:isRun,
     // The HR band, carried through for the first time. A run is judged on heart rate, and the old
     // resolver returned power only — so the 140 bpm ceiling the whole session hinged on never
     // reached the coach at all, even on the days it did resolve a prescription.
@@ -44605,26 +44677,53 @@ function mergeCrossSourceDupes_(){
 // survive sync via a force-PUT of the merged state. That force-PUT is guarded at RUNTIME: it re-reads
 // the remote and aborts unless local is a strict superset of every LIVE remote record. This is NOT
 // keep-richest/delete-rest — nothing is dropped; it only clears the remote tombstones that ARE the loss.
+// Strava's start_date_local is a LOCAL wall clock that the API tags with a trailing Z anyway. It is
+// not UTC and must not be parsed as UTC: start_date for this activity is 13:19:06Z, start_date_local
+// is 09:19:06Z, utc_offset is -14400. Stored verbatim with the Z, every reader does new Date(...)
+// and lands 4 hours early — a 9:19am run displayed as 5:19am. Strip the false zone marker so the
+// string is a naive local timestamp, which is what new Date() then parses it as. The clock reading
+// itself is untouched: this preserves the source's local time exactly, it does not shift it.
+function _localStamp_(s){
+  if(!s) return null;
+  var t=String(s);
+  if(t.charAt(t.length-1)==='Z') return t.slice(0,-1);
+  var p=t.length-6, c=t.charAt(p);                       // trailing +hh:mm / -hh:mm
+  if((c==='+'||c==='-') && t.charAt(t.length-3)===':') return t.slice(0,p);
+  return t;
+}
+// TSS from power is a CYCLING calculation: it scores normalized power against cycling FTP. Running
+// power is generated by a different mechanism and is not comparable to a cyclist's FTP — the app
+// says so in the coach prompt and then computed it anyway, scoring a 36-minute easy Z2 run at
+// IF 1.35 and TSS 109 off 247W running watts against a 186W bike FTP. Non-cycling sports get null,
+// which every reader already renders as "not recorded" rather than as zero.
+function _isCyclingSport_(a){
+  var s=String((a&&(a.sport_type||a.type||a.sportType))||'').replace(/[ _-]/g,'').toLowerCase();
+  return /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/.test(s);
+}
 function reimportMap_(a, ftp){
   ftp = ftp || (parseInt((typeof st!=='undefined'&&st.ftp)||186)||186);
   var dateStr=(a.start_date_local||a.start_date||'').split('T')[0];
   // The full timestamp, kept alongside the date-only split above. It was in the sync payload the
   // whole time and both importers discarded it, which is why 478 outdoor rides had no start time
   // and every historical weather lookup fell back to midnight.
-  var startTimeStr=a.start_date_local||a.start_date||null;
+  var startTimeStr=_localStamp_(a.start_date_local||a.start_date||null);
   var distMi=a.distance?parseFloat((a.distance/1609.344).toFixed(1)):0;
   var dur=a.moving_time||a.elapsed_time||0;
   var np=a.weighted_average_watts||null, avgPwr=a.average_watts||null;
-  var tss=(np&&dur&&ftp)?Math.round((dur*np*(np/ftp))/(ftp*3600)*100):null;
-  var elev=a.total_elevation_gain?Math.round(a.total_elevation_gain*3.28084):null;
-  var IF2=(np&&ftp)?np/ftp:null;
+  var _cyc=_isCyclingSport_(a);
+  var tss=(_cyc&&np&&dur&&ftp)?Math.round((dur*np*(np/ftp))/(ftp*3600)*100):null;
+  var elev=a.total_elevation_gain!=null?Math.round(a.total_elevation_gain*3.28084):null;
+  var IF2=(_cyc&&np&&ftp)?np/ftp:null;
   var fmtDur=(function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(dur);
   var gpsLats=null,gpsLons=null;
   if(a.map&&a.map.summary_polyline&&typeof decodePolyline==='function'){ try{ var d=decodePolyline(a.map.summary_polyline); if(d.lats.length>5){ gpsLats=d.lats; gpsLons=d.lons; } }catch(e){} }
   return { name:a.name||'Strava Activity', date:dateStr, startTime:startTimeStr, duration:fmtDur, movingSecs:dur, distance:distMi,
-    avgPwr:avgPwr, np:np, avgHR:a.average_heartrate?Math.round(a.average_heartrate):null, maxHR:a.max_heartrate?Math.round(a.max_heartrate):null,
-    cadence:a.average_cadence?Math.round(a.average_cadence):null, tss:tss, elev:elev, calories:a.calories||null,
-    workKj:a.kilojoules?Math.round(a.kilojoules):null, relEffort:a.suffer_score||null, ifPct:IF2?Math.round(IF2*100):null,
+    // TELEMETRY IS STORED AS THE SOURCE REPORTS IT. These were rounded on the way in, which threw
+    // away real precision the API had already given us (142.3 bpm -> 142, 81.5 rpm -> 82,
+    // 537.3 kJ -> 537). Rounding is a DISPLAY decision and belongs at the render site.
+    avgPwr:avgPwr, np:np, avgHR:(a.average_heartrate!=null?a.average_heartrate:null), maxHR:(a.max_heartrate!=null?a.max_heartrate:null),
+    cadence:(a.average_cadence!=null?a.average_cadence:null), tss:tss, elev:elev, calories:a.calories||null,
+    workKj:(a.kilojoules!=null?a.kilojoules:null), relEffort:a.suffer_score||null, ifPct:IF2?Math.round(IF2*100):null,
     gpsLats:gpsLats, gpsLons:gpsLons, gpsQuality:gpsLats?'summary':null, avgSpeed:a.average_speed||null,
     source:'strava', stravaId:a.id, sportType:a.sport_type||a.type||'Ride', gearId:a.gear_id||null, trainer:!!a.trainer };
 }
@@ -45030,7 +45129,10 @@ function fetchStravaPage(token, page, imported, forceAll) {
       var np = a.weighted_average_watts||null;
       var avgPwr = a.average_watts||null;
       var tss = null;
-      if(np && dur && ftp) tss = Math.round((dur*np*(np/ftp))/(ftp*3600)*100);
+      // Cycling only — see _isCyclingSport_. Running watts against a bike FTP produced TSS 109 and
+      // IF 135% for an easy 36-minute Z2 run.
+      var _cyc = (typeof _isCyclingSport_==='function') ? _isCyclingSport_(a) : true;
+      if(_cyc && np && dur && ftp) tss = Math.round((dur*np*(np/ftp))/(ftp*3600)*100);
       var elev = a.total_elevation_gain ? Math.round(a.total_elevation_gain*3.28084) : null;
       var gpsLats=null, gpsLons=null;
       if(a.map && a.map.summary_polyline) {
@@ -45040,20 +45142,24 @@ function fetchStravaPage(token, page, imported, forceAll) {
         } catch(e){}
       }
       var movDur = a.moving_time||a.elapsed_time||0;
-      var IF2 = (np && ftp) ? np/ftp : null;
+      var IF2 = (_cyc && np && ftp) ? np/ftp : null;
       var avgTempF = a.average_temp ? Math.round(a.average_temp*9/5+32) : null;
       var maxTempF = a.max_temp ? Math.round(a.max_temp*9/5+32) : null;
       var fmtDur = (function(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=Math.round(s%60);return h+':'+(m<10?'0':'')+m+':'+(sc<10?'0':'')+sc;})(movDur);
       var newRideData = {
         name: a.name||'Strava Activity',
-        date: dateStr, startTime: (a.start_date_local||a.start_date||null), duration: fmtDur, movingSecs: movDur, distance: distMi,
+        // startTime is normalised through _localStamp_, not stored raw: Strava tags start_date_local
+        // with a Z it does not mean, and every reader parses that as UTC.
+        date: dateStr, startTime: _localStamp_(a.start_date_local||a.start_date||null), duration: fmtDur, movingSecs: movDur, distance: distMi,
+        // TELEMETRY VERBATIM — the source's own precision, not a rounded copy of it. Rounding is a
+        // display decision and belongs at the render site.
         avgPwr: avgPwr, np: np,
-        avgHR: a.average_heartrate ? Math.round(a.average_heartrate) : null,
-        maxHR: a.max_heartrate ? Math.round(a.max_heartrate) : null,
-        cadence: a.average_cadence ? Math.round(a.average_cadence) : null,
+        avgHR: (a.average_heartrate!=null ? a.average_heartrate : null),
+        maxHR: (a.max_heartrate!=null ? a.max_heartrate : null),
+        cadence: (a.average_cadence!=null ? a.average_cadence : null),
         tss: tss, elev: elev,
         calories: a.calories||null,
-        workKj: a.kilojoules ? Math.round(a.kilojoules) : null,
+        workKj: (a.kilojoules!=null ? a.kilojoules : null),
         relEffort: a.suffer_score||null,
         ifPct: IF2 ? Math.round(IF2*100) : null,
         avgTemp: avgTempF, maxTemp: maxTempF,
@@ -45811,7 +45917,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-shared-rx-voice2';
+window.__BUILD__ = '2026-08-03-run-telemetry-verbatim';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
