@@ -24280,6 +24280,22 @@ function _saFogMount_(){
     homeBounds:home?L.latLngBounds([[home.south,home.west],[home.north,home.east]]):L.latLngBounds(all)
   });
   _saFogFit_(false);
+  // A Leaflet map initialised into a container the browser has not laid out yet computes a size of
+  // zero and then loads no tiles - it renders as an empty box and throws nothing. That is reachable
+  // here: aiRenderOverview_ re-renders itself asynchronously from aiEnsureFullLibrary_, so the node
+  // this mounted into can be replaced a tick later, and the mobile overlay lays out on a different
+  // frame from the desktop panel. Verified in headless Chrome: the desktop map came up 520px with
+  // 18 tiles and the mobile one came up 0px with none, from identical code. invalidateSize after a
+  // frame re-measures and refits, and is a no-op when the first measurement was already right.
+  setTimeout(function(){
+    try{
+      if(_saFogMap!==map) return;                       // a newer mount already replaced this one
+      if(!document.getElementById('sa-fog-canvas')) return;
+      var s=map.getSize();
+      map.invalidateSize(false);
+      if(!s || !s.y) _saFogFit_(false);                 // refit only if the first fit measured nothing
+    }catch(e){}
+  }, 150);
 }
 // The section. One renderer for both surfaces, same as the rest of this page - the map is a block
 // element sized in CSS, so the only thing that changes with width is its height.
@@ -46743,7 +46759,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-segment-fog-map';
+window.__BUILD__ = '2026-08-04-fog-map-invalidate';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
