@@ -7209,8 +7209,28 @@ function initFirebaseSync(){
 
 // Push local state to Firebase - merges with whatever is currently in the
 // cloud first, so a stale or empty local device can never erase real data.
+// SERIALISED. Two pushes must never be in flight together.
+//
+// The payload is ~12.6 MB and a single PUT takes 8-22 seconds, so overlap is not an edge case, it is
+// the normal state during any bulk operation. Each push snapshots st at the moment it reaches the
+// PUT, and whichever request LANDS LAST wins — so a push snapshotted before a batch of writes can
+// complete after them and silently restore the pre-write blob. That is what made the temperature
+// backfill look stuck: the writes were real and the in-memory pool did shrink, but a late-landing
+// stale PUT kept resetting the stored copy, so every run re-processed the same ~98 rides.
+//
+// The fix is coalescing, not queueing: while a push is in flight, later callers just mark the state
+// dirty, and one fresh push runs when it drains. That guarantees the LAST PUT is built from the
+// newest st, and collapses a storm of redundant 12.6 MB writes into one.
+var _fbPushBusy=false, _fbPushDirty=false;
 function fbPush(silent, forceOverwrite, confirmToken, tag){
   if(Array.isArray(st)) st=Object.assign({},st);
+  // A confirmed force overwrite is a deliberate, operator-driven act and is never coalesced away.
+  if(_fbPushBusy && !forceOverwrite){ _fbPushDirty=true; return; }
+  _fbPushBusy=true;
+  var _fbDone=function(){
+    _fbPushBusy=false;
+    if(_fbPushDirty){ _fbPushDirty=false; setTimeout(function(){ fbPush(true); }, 0); }
+  };
   // A blind full-state PUT from a degraded local state is what repeatedly re-buried the ride
   // library: every revive force-pushed its own result over a healthier remote, so each recovery
   // undid itself on the next boot. Force now requires an explicit token and can never fire
@@ -7254,8 +7274,9 @@ function fbPush(silent, forceOverwrite, confirmToken, tag){
     st.lastUpdate = fbWriteTs;
     saveLocal_();
     if(!silent) toast('Cloud Saved!');
+    _fbDone();
   })
-  .catch(function(e){ if(!silent) toast('! Save failed: '+e); });
+  .catch(function(e){ if(!silent) toast('! Save failed: '+e); _fbDone(); });
 }
 
 // Superset-guarded replacement for the old fbPush(_, true) blind force-PUT. Re-reads remote and
@@ -46298,7 +46319,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-cal-monday-oneramp';
+window.__BUILD__ = '2026-08-03-push-serialised';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
