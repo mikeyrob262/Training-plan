@@ -21102,6 +21102,18 @@ function _saHaversineM_(lat1,lon1,lat2,lon2){
        +Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dLon/2)*Math.sin(dLon/2);
   return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
+// Initial great-circle bearing, start point to end point, in degrees clockwise from north. This is
+// the number every wind call on this page resolves against, and until now NOTHING in the app
+// computed it - the 1,942 stored bearings came from a one-off script run outside the app, so a
+// segment first seen today had no bearing and fell straight into the 'excluded' tier forever.
+function _segBearingDeg_(lat1,lon1,lat2,lon2){
+  if(lat1==null||lon1==null||lat2==null||lon2==null) return null;
+  var p=Math.PI/180, y1=lat1*p, y2=lat2*p, dl=(lon2-lon1)*p;
+  var y=Math.sin(dl)*Math.cos(y2);
+  var x=Math.cos(y1)*Math.sin(y2)-Math.sin(y1)*Math.cos(y2)*Math.cos(dl);
+  var b=Math.atan2(y,x)/p;
+  return Math.round(((b%360)+360)%360*10)/10;
+}
 // SINUOSITY: recorded length divided by the straight line between the endpoints.
 //
 // Wind is resolved against ONE bearing - start point to end point - which is exact for a straight
@@ -24086,6 +24098,267 @@ function _saRing_(pct, col, size){
 }
 function _saProbWord_(p){ return (p>=80)?'Very High':((p>=65)?'High':((p>=45)?'Moderate':'Long shot')); }
 function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b'); }
+
+// ==================== FOG OF WAR: segment coverage map ====================
+// Every segment the athlete has ever attempted, drawn where it actually is. No GPS map-matching is
+// involved and none is needed: Strava matched these efforts to segments server-side and hands back
+// each segment's own start and end coordinates, so the position is Strava's, not ours.
+//
+// WHAT THE FOG ACTUALLY IS, and why it is not a fourth drawn state. The spec asks for a
+// "never attempted" tier. There is no data for one. st.segments holds segments this athlete has
+// ridden and nothing else; enumerating every segment that EXISTS on the roads around a route would
+// mean crawling /segments/explore over a bounding box, which is a different feature with its own
+// rate-limit budget. So "never attempted" is the undrawn basemap - the fog is the absence of a
+// mark, which is exactly what fog of war means, and the legend says so rather than implying the
+// map knows about roads it has never been told about.
+//
+// THE CHORD IS NOT THE ROAD. Only two points per segment are stored, so what is drawn is the
+// straight line between them. That is a true geometric fact about the segment and a false picture
+// of the road whenever the road bends. Rather than fake a curve or hide the problem, the existing
+// sinuosity measure decides the line style: a segment whose recorded length matches its straight
+// line is drawn SOLID (the chord is very nearly the road), and one that wanders is drawn DASHED.
+// The legend explains both. This is the same honest-degrade rule the wind call already uses.
+var _saFogMap=null, _saFogLayers=null, _saFogOff={};
+// Tier is decided by data that exists, in strict precedence. kom_rank is Strava's own leaderboard
+// placement and it is only ever returned when the athlete is in the top 10, so its mere presence IS
+// the top-N fact - no ranking is invented here. prRank is deliberately NOT used for tiering: it
+// ranks an effort against the athlete's OWN efforts, so treating it as placement would quietly
+// promote a personal second-best into a leaderboard tier.
+function _saFogTierOf_(seg){
+  if(!seg) return null;
+  if(+seg.komRank>0) return { t:3, key:'kom', label:'Top 10 placement', col:'#fc5200', weight:5, opacity:1 };
+  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',      col:'#22c55e', weight:3.4, opacity:.95 };
+  return               { t:1, key:'seen',label:'Attempted, no PR',  col:'#7c8aa0', weight:2, opacity:.5 };
+}
+// Map-ready records, plus the counts the page reports. Reads st.segments directly rather than
+// segmentRecordsCompute_ ON PURPOSE, and the reason matters: that function SKIPS every segment with
+// no PR time, which is 1,875 of 2,017 here. It is the right provider for the Records boards and the
+// wrong one for a coverage map, where a segment ridden once and never won is the whole point.
+// segmentRecordsCompute_ is still the provider for the drill-in progression - one lookup path per
+// question, not one per surface.
+function _saFogList_(store){
+  var keys=isPlainObj_(store)?Object.keys(store):[];
+  var segs=[], noGeom=0, byTier={1:0,2:0,3:0};
+  keys.forEach(function(k){
+    var s=store[k]; if(!s) return;
+    if(s.startLat==null || s.startLon==null){ noGeom++; return; }
+    var tier=_saFogTierOf_(s);
+    var distM=(+s.distMi>0)?(+s.distMi*1609.344):null;
+    var sin=_saSinuosity_(s, distM);
+    byTier[tier.t]++;
+    segs.push({ id:s.id, name:s.name||'Segment',
+      lat:+s.startLat, lon:+s.startLon,
+      endLat:(s.endLat!=null)?+s.endLat:null, endLon:(s.endLon!=null)?+s.endLon:null,
+      tier:tier, distMi:(+s.distMi>0)?+s.distMi:null, grade:(s.grade!=null)?+s.grade:null,
+      prSec:(+s.prSec>0)?+s.prSec:null, prDate:s.prDate||null,
+      komRank:(+s.komRank>0)?+s.komRank:null, komRankDate:s.komRankDate||null,
+      effortCount:(+s.effortCount>0)?+s.effortCount:((s.efforts&&s.efforts.length)||0),
+      starred:!!s.starred,
+      // straight = the chord is a fair picture of the road; bends = it is not
+      bends:(sin==null || sin>=_SA_SINUOUS) });
+  });
+  return { segs:segs, noGeom:noGeom, total:keys.length, byTier:byTier };
+}
+// Open where the riding is. Fitting all 1,942 at once spans Michigan to the South Pacific and
+// renders four unreadable specks, so the default view is the densest one-degree cell and everything
+// within a degree of it; the Fit all control is there for the whole picture.
+function _saFogHome_(segs){
+  if(!segs || !segs.length) return null;
+  var cell={}, best=null;
+  segs.forEach(function(s){
+    var k=Math.round(s.lat)+','+Math.round(s.lon);
+    cell[k]=(cell[k]||0)+1;
+    if(!best || cell[k]>cell[best]) best=k;
+  });
+  if(!best) return null;
+  var p=best.split(','), cLat=+p[0], cLon=+p[1];
+  var near=segs.filter(function(s){ return Math.abs(s.lat-cLat)<=1.2 && Math.abs(s.lon-cLon)<=1.2; });
+  if(!near.length) near=segs;
+  var lats=near.map(function(s){return s.lat;}), lons=near.map(function(s){return s.lon;});
+  return { south:Math.min.apply(null,lats), north:Math.max.apply(null,lats),
+           west:Math.min.apply(null,lons), east:Math.max.apply(null,lons), n:near.length };
+}
+function _saFogPopup_(s){
+  var esc=aiEsc_, url=_saSegUrl_(s.id);
+  var H='<div style="min-width:210px;font-family:inherit">'
+    +'<div style="font-size:13.5px;font-weight:800;color:#0d1016;line-height:1.3">'+esc(s.name)+'</div>'
+    +'<div style="font-size:10.5px;color:#5b6678;margin-top:3px">'
+      +(s.distMi!=null?(s.distMi.toFixed(2)+' mi'):'')
+      +(s.grade!=null?(' &middot; '+(s.grade>0?'+':'')+s.grade.toFixed(1)+'%'):'')
+      +(s.effortCount?(' &middot; '+s.effortCount+' effort'+(s.effortCount===1?'':'s')):'')
+    +'</div>'
+    +'<div style="margin-top:8px;padding-top:7px;border-top:1px solid #dde3ec">'
+    +'<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+s.tier.col+'">'+s.tier.label+'</span></div>';
+  if(s.prSec!=null){
+    H+='<div style="margin-top:6px;font-size:11px;color:#0d1016"><b style="font-size:15px">'+_saMMSS_(s.prSec)+'</b>'
+      +(s.prDate?('<span style="color:#5b6678"> &middot; '+esc(String(s.prDate).slice(0,10))+'</span>'):'')+'</div>';
+  } else {
+    H+='<div style="margin-top:6px;font-size:11px;color:#5b6678">No PR time recorded &mdash; ridden, never a best.</div>';
+  }
+  // Placement is always dated. A leaderboard position is a fact about a day, not a standing claim,
+  // and the whole reason this was never stored before was the fear of showing a stale rank as
+  // current. Naming the date is what makes storing it honest.
+  if(s.komRank!=null){
+    H+='<div style="margin-top:6px;font-size:11px;color:#0d1016">'
+      +'<b>'+_saOrdinal_(s.komRank)+'</b> on the leaderboard when ridden'
+      +(s.komRankDate?('<span style="color:#5b6678"> &middot; '+esc(String(s.komRankDate).slice(0,10))+'</span>'):'')
+      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">placement as of that effort, not today</div></div>';
+  }
+  if(s.bends) H+='<div style="margin-top:6px;font-size:9.5px;color:#8b95a6">drawn as a straight line &mdash; this road bends</div>';
+  if(url) H+='<a href="'+url+'" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:9px;font-size:11px;font-weight:700;color:#fc5200;text-decoration:none">View on Strava &#8599;</a>';
+  return H+'</div>';
+}
+function _saOrdinal_(n){
+  var v=+n; if(!(v>0)) return String(n);
+  var t=v%100; if(t>=11 && t<=13) return v+'th';
+  var r=v%10; return v+(r===1?'st':(r===2?'nd':(r===3?'rd':'th')));
+}
+function _saFogToggle_(key){
+  _saFogOff[key]=!_saFogOff[key];
+  var chip=document.getElementById('sa-fog-chip-'+key);
+  if(chip) chip.style.opacity=_saFogOff[key]?'.35':'1';
+  if(_saFogLayers && _saFogLayers[key] && _saFogMap){
+    if(_saFogOff[key]) _saFogMap.removeLayer(_saFogLayers[key]);
+    else _saFogLayers[key].addTo(_saFogMap);
+  }
+}
+function _saFogFit_(all){
+  if(!_saFogMap || !_saFogLayers) return;
+  var b=all?_saFogLayers.allBounds:_saFogLayers.homeBounds;
+  if(b && b.isValid && b.isValid()) _saFogMap.fitBounds(b, {padding:[30,30]});
+}
+// Leaflet mount. Deferred to a task so it runs AFTER the container's innerHTML is in the document -
+// aiRenderOverview_ builds one string and assigns it once, so there is no per-tab render hook to
+// hang this on. Guarded on the element still existing, because a fast tab switch can retire the
+// node before this fires.
+function _saFogMount_(){
+  var el=document.getElementById('sa-fog-map');
+  if(!el || typeof L==='undefined') return;
+  if(_saFogMap){ try{ _saFogMap.remove(); }catch(e){} _saFogMap=null; }
+  var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{});
+  if(!data.segs.length) return;
+  // Leaflet is mounted on a CHILD of the sized box, not the box itself. showScreen() removes every
+  // .leaflet-container in the document to clear stray weather maps, and Leaflet puts that class on
+  // whatever element it is handed - so mounting directly on #sa-fog-map meant a screen change could
+  // delete the styled container out from under the section. The child is disposable; the box is not.
+  var host=document.getElementById('sa-fog-canvas');
+  if(host) host.parentNode.removeChild(host);
+  host=document.createElement('div');
+  host.id='sa-fog-canvas';
+  host.style.cssText='width:100%;height:100%;border-radius:12px';
+  el.appendChild(host);
+  // preferCanvas: ~2,000 segments is ~4,000 vector layers, which is a slideshow in SVG mode and
+  // smooth on canvas. This is a rendering choice only; nothing about the data changes.
+  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,preferCanvas:true,tap:false});
+  _saFogMap=map;
+  // The fog IS the basemap. A dark carto layer held at reduced brightness reads as unexplored
+  // ground, so a revealed segment is the only bright thing on the tile. Deliberately dark in both
+  // app themes: this is a fog-of-war surface, and a light basemap has no fog to lift.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    {detectRetina:true,maxZoom:20,subdomains:'abcd'}).addTo(map);
+  var groups={ seen:L.layerGroup(), pr:L.layerGroup(), kom:L.layerGroup() };
+  var all=[];
+  data.segs.forEach(function(s){
+    var t=s.tier, pts=[[s.lat,s.lon]];
+    if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
+    all.push([s.lat,s.lon]);
+    if(pts.length>1) all.push([s.endLat,s.endLon]);
+    var g=groups[t.key];
+    if(pts.length>1){
+      L.polyline(pts,{color:t.col,weight:t.weight,opacity:t.opacity,lineCap:'round',
+        // A bending road gets a dashed chord: the line is a real fact about the endpoints and a
+        // poor picture of the tarmac, and dashes are how that reads without a paragraph.
+        dashArray:s.bends?'4 5':null}).addTo(g).bindPopup(_saFogPopup_(s));
+    }
+    L.circleMarker([s.lat,s.lon],{radius:t.t===3?5:(t.t===2?4:2.6),color:t.col,weight:t.t===3?2:1,
+      fillColor:t.col,fillOpacity:t.t===1?.55:.95,opacity:t.opacity}).addTo(g).bindPopup(_saFogPopup_(s));
+  });
+  ['seen','pr','kom'].forEach(function(k){ if(!_saFogOff[k]) groups[k].addTo(map); });
+  var home=_saFogHome_(data.segs);
+  _saFogLayers=Object.assign({}, groups, {
+    allBounds:L.latLngBounds(all),
+    homeBounds:home?L.latLngBounds([[home.south,home.west],[home.north,home.east]]):L.latLngBounds(all)
+  });
+  _saFogFit_(false);
+}
+// The section. One renderer for both surfaces, same as the rest of this page - the map is a block
+// element sized in CSS, so the only thing that changes with width is its height.
+function aiSegFogHtml_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var d=_saFogList_(store), esc=aiEsc_;
+  var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
+  var H='<style>'
+    +'#sa-fog-map{height:520px;border-radius:12px;background:#0b0e13}'
+    +'@media(max-width:820px){#sa-fog-map{height:400px}}'
+    +'@media(max-width:520px){#sa-fog-map{height:320px}}'
+    +'.sa-fogchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
+      +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none}'
+    +'.sa-fogbtn{background:none;border:1px solid var(--d-edge);color:var(--d-soft);font-size:11px;font-weight:700;'
+      +'border-radius:9px;padding:6px 12px;cursor:pointer;font-family:inherit}'
+    +'</style>';
+  H+='<div style="margin-top:26px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px 18px">';
+  H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">'
+    +'<div><div style="font-size:15px;font-weight:800;color:var(--d-head)">Segment coverage</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">Every segment you have attempted, where it actually is. Tap one for its record.</div></div>'
+    +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
+    +'<button class="sa-fogbtn" onclick="_saFogFit_(false)">Home</button>'
+    +'<button class="sa-fogbtn" onclick="_saFogFit_(true)">Fit all</button>'
+    +'</div></div>';
+
+  if(!d.segs.length){
+    return H+'<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:12.5px;line-height:1.6">'
+      +'No segment has stored coordinates yet.<br>Run the segment effort backfill in Settings and this map fills in.</div></div>';
+  }
+
+  // legend / filters. Counts are the real tier populations, so an empty tier reads as empty rather
+  // than as a colour with nothing behind it.
+  H+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">';
+  [['kom','#fc5200','Top 10 placement',d.byTier[3]],
+   ['pr','#22c55e','Personal PR',d.byTier[2]],
+   ['seen','#7c8aa0','Attempted, no PR',d.byTier[1]]].forEach(function(t){
+    H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'" onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)" style="color:'+t[1]+'">'
+      +'<span style="width:9px;height:9px;border-radius:50%;background:'+t[1]+';flex:none"></span>'
+      +esc(t[2])+' <span style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
+  });
+  H+='<span class="sa-fogchip" style="color:var(--d-dim);cursor:default;border-style:dashed">'
+    +'<span style="width:9px;height:9px;border-radius:50%;background:#1b2029;border:1px solid #2b3340;flex:none"></span>'
+    +'Never attempted &mdash; unlit ground</span>';
+  H+='</div>';
+
+  H+='<div id="sa-fog-map" style="margin-top:13px"></div>';
+
+  // ---- the limitation, stated where the map is, not in a footnote ----
+  // This is the one claim a coverage map invites and cannot support, so it is placed directly under
+  // the map rather than somewhere it can be scrolled past.
+  H+='<div style="margin-top:12px;background:#f9731612;border:1px solid #f9731633;border-radius:12px;padding:11px 13px">'
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#f97316">This is segment coverage, not road coverage</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.6">'
+    +'The unlit ground is not road you have never ridden &mdash; it is road with <b style="color:var(--d-soft)">no Strava segment on it</b>, '
+    +'or a segment you have never been matched to. A road you ride every week stays dark forever if nobody ever drew a segment there. '
+    +'This map can only ever show the '+d.total.toLocaleString()+' segment'+(d.total===1?'':'s')+' Strava has matched to your rides.'
+    +'</div></div>';
+
+  // ---- what is on the map and what is not ----
+  H+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--d-t3);line-height:1.6">'
+    +'<div><span style="'+LBL+'">Drawn</span><br>'+d.segs.length.toLocaleString()+' of '+d.total.toLocaleString()+' attempted segments</div>'
+    +(d.noGeom?('<div><span style="'+LBL+'">No coordinates</span><br>'+d.noGeom+' cannot be placed yet</div>'):'')
+    +'<div><span style="'+LBL+'">Line style</span><br>solid = the chord is close to the road<br>dashed = the road bends, the line does not</div>'
+    +'</div>';
+
+  // Placement honesty, once, next to the tier that uses it.
+  if(d.byTier[3]){
+    H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:10px;line-height:1.5">'
+      +'Placement is Strava&rsquo;s own leaderboard rank, recorded on the day of the effort that earned it &mdash; '
+      +'it is not re-checked, and is never shown as your rank today.</div>';
+  } else {
+    H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:10px;line-height:1.5">'
+      +'No leaderboard placement is recorded yet. Strava only returns a rank when you are in a segment&rsquo;s top 10, '
+      +'and it is captured as the effort backfill walks your library &mdash; so this tier fills in as that runs.</div>';
+  }
+  H+='</div>';
+  try{ setTimeout(_saFogMount_, 0); }catch(e){}
+  return H;
+}
 // Assemble the whole page. Reads st.segments (Phase 0 backfill), the weather cache and the power
 // curves; computes nothing that _saEvaluate_ does not.
 function aiRenderSegAttack_(){
@@ -24267,6 +24540,12 @@ function aiRenderSegAttack_(){
     });
     H+='</div></div>';
   }
+
+  // ---- coverage map ----
+  // Placed AFTER the ranked list on purpose: this page's job is "what should I hit today", and a
+  // 520px map above the answer would push the answer below the fold. Today's picks, then the whole
+  // territory they came from, then the caveats.
+  H+=_aiSafe_('SegFog', function(){ return aiSegFogHtml_(); }) || '';
 
   // ---- what could not be projected, and why ----
   H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px">'
@@ -41550,10 +41829,10 @@ function syncRidePRs_(days, silent, cb){
     return r && !r.deleted && r.stravaId && r.date && String(r.date).slice(0,10)>=cutKey;
   }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
   if(!isPlainObj_(st.segments)) st.segments={};
-  var found=0, improved=0, added=0, scanned=0, renamed=0, histAdded=0, i=0;
+  var found=0, improved=0, added=0, scanned=0, renamed=0, histAdded=0, enriched=0, i=0;
   var finish=function(){
     try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
-    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved, '+renamed+' name(s) refreshed, '+histAdded+' effort(s) logged'); }catch(e){}
+    try{ console.log('[segPR] '+scanned+' ride(s) scanned, '+found+' PR effort(s), '+added+' new segment(s), '+improved+' time(s) improved, '+renamed+' name(s) refreshed, '+histAdded+' effort(s) logged, '+enriched+' enriched with coords/placement'); }catch(e){}
     if(!silent){ try{ if(typeof toast==='function') toast(found?(added+' new, '+improved+' updated from '+scanned+' rides'):('No new PRs in '+scanned+' rides')); }catch(e){} }
     cb({scanned:scanned, found:found, added:added, improved:improved, renamed:renamed, histAdded:histAdded});
   };
@@ -41572,6 +41851,11 @@ function syncRidePRs_(days, silent, cb){
           if(_hs && _segEffortPush_(_hs, se.time, String(r.date||'').slice(0,10))){
             _segEffortTrim_(_hs); _hs.effortCount=_hs.efforts.length; histAdded++;
           }
+          // Coordinates and placement ride in on this same payload. Absorbed BEFORE the prRank
+          // gate below, because a segment we have never PR'd still needs its geometry to appear
+          // on the map at all - gating enrichment on a personal best would have left every
+          // attempted-but-never-won segment permanently unmappable.
+          if(_hs && _segAbsorb_(_hs, se, String(r.date||'').slice(0,10))) enriched++;
           if(+se.prRank!==1) return;                       // only the athlete's best counts
           var sec=+se.time; if(!(sec>0)) return;
           found++;
@@ -41581,6 +41865,9 @@ function syncRidePRs_(days, silent, cb){
             st.segments[key]={ id:key, name:se.name||'Segment', distMi:se.distance||null,
               grade:(se.grade!=null?se.grade:null), prSec:sec, prDate:date||null,
               effortCount:null, starred:!!se.starred, updatedAt:Date.now(), source:'ride' };
+            // A segment created here used to arrive with no coordinates at all, which is how a
+            // record could exist and still be invisible to both the map and the wind model.
+            _segAbsorb_(st.segments[key], se, date);
             added++; return;
           }
           // Faster wins. Equal times leave the record alone so the date is not churned.
@@ -41745,7 +42032,7 @@ function runSegmentBackfill_(scanOnly, cb){
     var r=list[i++];
     b.winCount++;
     _segBfStatus_('Fetching '+i+' of '+list.length+' ('+String(r.date||'').slice(0,10)+'). '
-      +b.added+' efforts added, '+b.created+' segments created.');
+      +b.added+' efforts added, '+b.created+' segments created, '+(b.enriched||0)+' mapped.');
     fetchRideSegments(r, function(segs){
       b.scanned++;
       if(segs===null){ b.errors++; }
@@ -41764,6 +42051,10 @@ function runSegmentBackfill_(scanOnly, cb){
               starred:!!se.starred, source:'history', updatedAt:Date.now() };
             b.created++;
           }
+          // This walk is the one pass that reaches the WHOLE library, so it is where the map's
+          // coverage actually comes from. Absorbing here costs nothing extra - the payload is
+          // already downloaded and was being discarded field by field.
+          if(_segAbsorb_(seg, se, date)) b.enriched=(b.enriched||0)+1;
           if(_segEffortPush_(seg, se.time, date)) b.added++;
           _segEffortTrim_(seg);
           seg.effortCount=seg.efforts.length;
@@ -41858,9 +42149,44 @@ function _segEffortTrim_(seg){
   seg.efforts.sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
   if(seg.efforts.length>SEG_EFFORT_CAP) seg.efforts=seg.efforts.slice(0,20).concat(seg.efforts.slice(-40));
 }
+// Absorb the fields fetchRideSegments ALREADY returns and every store writer was throwing away.
+// Costs no API call: these arrive on the same payload the effort time comes from.
+//
+// GEOMETRY. start/end coordinates and the bearing derived from them. The store had 1,942 of 2,017
+// populated by a one-off external script and no writer of its own, so any segment first seen after
+// that run was permanently unmappable and unprojectable. Written once and never overwritten - a
+// segment's endpoints do not move, and re-deriving them per effort would only add churn.
+//
+// PLACEMENT. syncSegmentPRs_ deliberately refused to persist rank, on the grounds that a stored
+// rank drifts silently. That concern is real but it is about PRESENTATION, not storage: what makes
+// a stale rank a lie is showing it as the rank NOW. So the rank is kept WITH the date of the effort
+// that earned it, and every surface renders it as a placement recorded on that date. Best-ever
+// wins (lower is better), so a later slower ride cannot erase a podium, and the date always names
+// the effort the number actually describes.
+function _segAbsorb_(seg, se, date){
+  if(!seg || !se) return false;
+  var changed=false;
+  if(seg.startLat==null && se.startLat!=null && se.startLon!=null){
+    seg.startLat=se.startLat; seg.startLon=se.startLon;
+    seg.endLat=(se.endLat!=null)?se.endLat:null; seg.endLon=(se.endLon!=null)?se.endLon:null;
+    var b=_segBearingDeg_(seg.startLat, seg.startLon, seg.endLat, seg.endLon);
+    if(b!=null && seg.bearing==null) seg.bearing=b;
+    changed=true;
+  }
+  var d=String(date||se.date||'').slice(0,10)||null;
+  var kr=(+se.komRank>0)?+se.komRank:null;
+  if(kr!=null && (!(+seg.komRank>0) || kr<+seg.komRank)){
+    seg.komRank=kr; seg.komRankDate=d; changed=true;
+  }
+  var pr=(+se.prRank>0)?+se.prRank:null;
+  if(pr!=null && (!(+seg.prRank>0) || pr<+seg.prRank)){
+    seg.prRank=pr; seg.prRankDate=d; changed=true;
+  }
+  return changed;
+}
 function harvestSegmentEfforts_(silent, cb){
   cb=cb||function(){};
-  var out={ rides:0, added:0, segments:0, skipped:0 };
+  var out={ rides:0, added:0, segments:0, skipped:0, enriched:0 };
   try{
     if(typeof st==='undefined' || !st) { cb(out); return out; }
     if(!isPlainObj_(st.segments)) st.segments={};
@@ -41875,6 +42201,9 @@ function harvestSegmentEfforts_(silent, cb){
         var key='s'+se.id, seg=st.segments[key];
         if(!seg){ out.skipped++; return; }
         if(_segEffortPush_(seg, se.time, date)){ out.added++; touched[key]=1; }
+        // Free enrichment: this cached payload already carries the coordinates and placement the
+        // store never kept. No API call, so it runs on every harvest rather than being deferred.
+        if(_segAbsorb_(seg, se, date)){ out.enriched++; touched[key]=1; }
       });
     });
     Object.keys(touched).forEach(function(k){
@@ -41883,9 +42212,12 @@ function harvestSegmentEfforts_(silent, cb){
       seg.effortCount=seg.efforts.length;
       out.segments++;
     });
-    if(out.added){ try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){} }
+    // Enrichment alone is worth persisting: a harvest that only filled in coordinates added no
+    // effort, and gating the save on out.added would have thrown that work away every time.
+    if(out.added || out.enriched){ try{ if(typeof saveLocal_==='function') saveLocal_(); if(typeof fbPush==='function') fbPush(true); }catch(e){} }
     try{ console.log('[segHist] '+out.rides+' cached ride(s), '+out.added+' effort(s) added across '
-      +out.segments+' segment(s), '+out.skipped+' effort(s) on untracked segments'); }catch(e){}
+      +out.segments+' segment(s), '+out.enriched+' enriched with coords/placement, '
+      +out.skipped+' effort(s) on untracked segments'); }catch(e){}
     if(!silent){ try{ if(typeof toast==='function') toast(out.added?(out.added+' efforts added to '+out.segments+' segments'):'No new effort history'); }catch(e){} }
   }catch(e){ try{ console.log('[segHist] error '+(e&&e.message)); }catch(_e){} }
   cb(out);
@@ -46411,7 +46743,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-segment-strava-link';
+window.__BUILD__ = '2026-08-04-segment-fog-map';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
