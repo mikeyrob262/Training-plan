@@ -24124,7 +24124,7 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // sinuosity measure decides the line style: a segment whose recorded length matches its straight
 // line is drawn SOLID (the chord is very nearly the road), and one that wanders is drawn DASHED.
 // The legend explains both. This is the same honest-degrade rule the wind call already uses.
-var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null;
+var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null, _saFogById={};
 // LIVE placement, held for this page session only and never written to st.segments. Keyed by
 // segment id -> {holds, prSec, komSec, qomSec, gap, at} or {err}. Cleared on reload by construction:
 // it is a plain var, so there is no cache to go stale between sessions.
@@ -24189,15 +24189,74 @@ function _saKomFetch_(segId, cb){
 // fetched LIVE rather than anything held locally. pr_rank is never used at any tier: it ranks an
 // effort against the athlete's OWN efforts, so treating it as placement would quietly promote a
 // personal second-best into a leaderboard tier.
+// THE VISUAL SPEC, in one place, because these numbers only make sense relative to each other and
+// to the suppressed basemap they sit on.
+//
+// The failure of the first pass was treating this as a colour-coding problem. Weight 2 at the
+// default view makes a 0.37-mile segment about two pixels of line, so the start dot was the only
+// thing visible and 1,825 segments read as bead-strings rather than roads. Every weight here is
+// therefore set so the LINE carries the shape and the dot only marks where it starts.
+//
+// Colours are picked against the filtered basemap, not the raw one: after the tile filter, Carto's
+// road casings and labels land near #333-#3a3a3a, so every tier below is a large step above the
+// brightest thing the map itself can draw.
+var SA_FOG_STYLE={
+  // 'Attempted, no PR' is 94% of the map, so it must be legible without becoming the loudest thing
+  // on it. Pale ice blue reads as lit-but-unremarkable and is unmistakably not a map label.
+  1:{ line:'#b9d4f2', glow:'#7fb0e8', dot:'#cfe4fb',
+      lw:3.4, lo:.95, gw:11, go:.16, dr:1.8, dop:.7, dash:'5 6' },
+  // 117 PRs should feel like a presence. Brighter green than the old #22c55e, a heavier line, and
+  // roughly double the glow so clusters of PRs merge into visibly hotter ground.
+  2:{ line:'#4ade80', glow:'#22c55e', dot:'#bbf7d0',
+      lw:5.4, lo:1, gw:18, go:.26, dr:3.4, dop:.95, dash:'7 6' },
+  // The top tier is rare by construction, so it is allowed to shout.
+  3:{ line:'#ff8a3d', glow:'#fc5200', dot:'#fff7ed',
+      lw:7, lo:1, gw:26, go:.34, dr:6, dop:1, dash:'9 7' }
+};
+function _saFogStyleOf_(t){ return SA_FOG_STYLE[(t&&t.t)||1]||SA_FOG_STYLE[1]; }
+// A circleMarker radius is in PIXELS, so it is constant at every zoom - which is wrong at both ends
+// here. Zoomed out, ~1,900 fixed-size start dots overlap along the dense corridors and string them
+// into bead-chains, which is precisely the "disconnected dots rather than roads" read this redesign
+// exists to kill. Zoomed in, the same radius is too small to mark anything. So the dot scales with
+// zoom: nearly absent when the lines are what matter, a real endpoint marker once you are close
+// enough for a single segment to be the subject.
+function _saDotScale_(z){
+  if(z==null) return 1;
+  if(z<9)  return .45;
+  if(z<11) return .7;
+  if(z<13) return 1;
+  return 1.45;
+}
+// Re-radius every start dot after a zoom. Bucketed, so a pan or a fractional zoom does not walk
+// ~1,900 layers for nothing - only a change of band pays the cost.
+var _saDotBand=null;
+function _saFogDotsForZoom_(){
+  if(!_saFogMap || !_saFogById) return;
+  var k=_saDotScale_(_saFogMap.getZoom());
+  if(k===_saDotBand) return;
+  _saDotBand=k;
+  Object.keys(_saFogById).forEach(function(id){
+    _saFogById[id].forEach(function(l){
+      if(!l || l._saRole!=='dot' || typeof l.setRadius!=='function') return;
+      try{ l.setRadius(_saFogStyleOf_(l._saTier).dr * k); }catch(e){}
+    });
+  });
+}
+function _saLineStyle_(t){ var v=_saFogStyleOf_(t); return {color:v.line, weight:v.lw, opacity:v.lo}; }
+function _saGlowStyle_(t){ var v=_saFogStyleOf_(t); return {color:v.glow, weight:v.gw, opacity:v.go}; }
+function _saGlowDotStyle_(t){ var v=_saFogStyleOf_(t);
+  return {radius:v.gw/2, color:v.glow, weight:0, fillColor:v.glow, fillOpacity:v.go}; }
+function _saDotStyle_(t){ var v=_saFogStyleOf_(t);
+  return {radius:v.dr, color:v.dot, weight:0, fillColor:v.dot, fillOpacity:v.dop}; }
 function _saFogTierOf_(seg, live){
   if(!seg) return null;
   // Tier 3 is only ever awarded by a LIVE check that came back holding. It cannot be reached from
   // stored state, which is the point: nothing in st.segments can promote a segment into it, so the
   // tier can never show a placement that has since drifted. Unchecked and not-holding both stay at
   // whatever the stored data supports.
-  if(live && live.holds===true) return { t:3, key:'kom', label:'You hold the KOM/QOM', col:'#fc5200', weight:5, opacity:1 };
-  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',     col:'#22c55e', weight:3.4, opacity:.95 };
-  return               { t:1, key:'seen',label:'Attempted, no PR', col:'#7c8aa0', weight:2, opacity:.5 };
+  if(live && live.holds===true) return { t:3, key:'kom', label:'You hold the KOM/QOM', col:'#ff8a3d' };
+  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',     col:'#4ade80' };
+  return               { t:1, key:'seen',label:'Attempted, no PR', col:'#b9d4f2' };
 }
 // Map-ready records, plus the counts the page reports. Reads st.segments directly rather than
 // segmentRecordsCompute_ ON PURPOSE, and the reason matters: that function SKIPS every segment with
@@ -24238,21 +24297,45 @@ function _saFogList_(store, live){
 // Open where the riding is. Fitting all 1,942 at once spans Michigan to the South Pacific and
 // renders four unreadable specks, so the default view is the densest one-degree cell and everything
 // within a degree of it; the Fit all control is there for the whole picture.
+// Density is measured in EFFORTS RIDDEN, not in segment count, and the difference is not academic
+// here - it picks a different city. Counting segments ranks the Chicago cell first with 692, but
+// every one of those efforts is dated 2026-07-02: it is a single day out, and it carries 2 of the
+// athlete's 117 PRs. The Grand Rapids cell has fewer segments (508) and far more riding - 1,907
+// efforts spread across weeks, holding 95 of the 117 PRs. "Where most of my history actually is" is
+// the second one, and a segment count cannot tell them apart because one big day on unfamiliar roads
+// racks up more distinct segments than months on home roads ever will.
 function _saFogHome_(segs){
   if(!segs || !segs.length) return null;
   var cell={}, best=null;
   segs.forEach(function(s){
     var k=Math.round(s.lat)+','+Math.round(s.lon);
-    cell[k]=(cell[k]||0)+1;
+    // A segment with no recorded efforts still counts once - it was ridden at least the time that
+    // put it in the store, and scoring it zero would make a freshly-synced area invisible.
+    cell[k]=(cell[k]||0)+Math.max(1, +s.effortCount||0);
     if(!best || cell[k]>cell[best]) best=k;
   });
   if(!best) return null;
   var p=best.split(','), cLat=+p[0], cLon=+p[1];
   var near=segs.filter(function(s){ return Math.abs(s.lat-cLat)<=1.2 && Math.abs(s.lon-cLon)<=1.2; });
   if(!near.length) near=segs;
-  var lats=near.map(function(s){return s.lat;}), lons=near.map(function(s){return s.lon;});
+  // Bounds are the FULL extent of the cluster, not a trimmed percentile of it. Trimming was the
+  // first fix tried and it was the wrong one: measured on this library the riding area is about 1:1
+  // however it is trimmed, so going from min/max to a 5/95 window moved the content from filling 39%
+  // of the panel width to 44% while pushing 91 segments outside the frame - including a whole spoke
+  // of the network, which reads as a rendering fault. The panel's own 2.57:1 shape was doing the
+  // damage, so that is what changed; see the max-width on #sa-fog-map. The cell radius above is
+  // already the outlier guard, so nothing here needs to clip.
+  // BOTH endpoints, not just the start. Bounding on start points alone left the drawn chord free to
+  // run past the frame - which is exactly what clipped the north-east spoke off the top edge twice,
+  // and looked like a fit bug rather than what it was: a segment whose start was inside the box and
+  // whose end was not.
+  var lats=[], lons=[];
+  near.forEach(function(s){
+    lats.push(s.lat); lons.push(s.lon);
+    if(s.endLat!=null && s.endLon!=null){ lats.push(s.endLat); lons.push(s.endLon); }
+  });
   return { south:Math.min.apply(null,lats), north:Math.max.apply(null,lats),
-           west:Math.min.apply(null,lons), east:Math.max.apply(null,lons), n:near.length };
+           west:Math.min.apply(null,lons), east:Math.max.apply(null,lons), n:near.length, trimmed:0 };
 }
 function _saFogPopup_(s){
   var esc=aiEsc_, url=_saSegUrl_(s.id);
@@ -24330,15 +24413,26 @@ function _saKomOnOpen_(s){
 // the athlete is reading.
 function _saFogPromote_(id){
   if(!_saFogLayers || !_saFogMap) return;
+  var layers=_saFogById[id]; if(!layers || !layers.length) return;
   var tier=_saFogTierOf_({prSec:1}, {holds:true});
-  ['seen','pr'].forEach(function(k){
-    var g=_saFogLayers[k]; if(!g) return;
-    g.getLayers().slice().forEach(function(l){
-      if(!l || l._saId!==id) return;
-      g.removeLayer(l);
-      try{ l.setStyle({color:tier.col, weight:l._saIsLine?tier.weight:2, fillColor:tier.col, opacity:1, fillOpacity:.95}); }catch(e){}
-      l.addTo(_saFogLayers.kom);
-    });
+  // Restyle by ROLE. A promotion that applied the line's weight to the glow (or the glow's opacity
+  // to the line) would leave the segment brighter but structurally wrong - a fat translucent smear
+  // with no crisp edge, or a hard line with no halo, neither of which reads as the top tier.
+  var restyle={ glow:_saGlowStyle_(tier), line:_saLineStyle_(tier), dot:_saDotStyle_(tier) };
+  layers.forEach(function(l){
+    ['seen','pr'].forEach(function(k){ if(_saFogLayers[k] && _saFogLayers[k].hasLayer(l)) _saFogLayers[k].removeLayer(l); });
+    var st2=restyle[l._saRole];
+    if(st2){
+      // A glow drawn on a point rather than a chord needs its radius set, not its weight.
+      if(l._saRole==='glow' && typeof l.setRadius==='function') { try{ l.setStyle(_saGlowDotStyle_(tier)); }catch(e){} }
+      else { try{ l.setStyle(st2); }catch(e){} }
+      // The promoted tier has a bigger base dot, but the CURRENT zoom band still applies - restyling
+      // to the raw radius would make one segment's dot ignore the zoom rule every other dot obeys.
+      if(l._saRole==='dot' && typeof l.setRadius==='function'){
+        l._saTier=tier; try{ l.setRadius(_saFogStyleOf_(tier).dr * (_saDotBand||1)); }catch(e){}
+      }
+    }
+    _saFogLayers.kom.addLayer(l);
   });
   if(!_saFogOff.kom && !_saFogMap.hasLayer(_saFogLayers.kom)) _saFogLayers.kom.addTo(_saFogMap);
   _saFogCounts_();
@@ -24440,36 +24534,63 @@ function _saFogMount_(){
   el.appendChild(host);
   // preferCanvas: ~2,000 segments is ~4,000 vector layers, which is a slideshow in SVG mode and
   // smooth on canvas. This is a rendering choice only; nothing about the data changes.
-  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,preferCanvas:true,tap:false});
+  // zoomSnap 0.25: Leaflet snaps fitBounds to INTEGER zoom by default, so a cluster that wants z9.6
+  // gets z9 and the map opens 1.5x further out than the bounds asked for. That is most of why the
+  // default view kept looking sparse - measured at 61% vertical fill on bounds that should have
+  // filled the frame. zoomDelta stays at 1 so the +/- buttons still step a whole level.
+  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,preferCanvas:true,tap:false,
+    zoomSnap:0.25, zoomDelta:1});
   _saFogMap=map;
-  // The fog IS the basemap. A dark carto layer held at reduced brightness reads as unexplored
-  // ground, so a revealed segment is the only bright thing on the tile. Deliberately dark in both
-  // app themes: this is a fog-of-war surface, and a light basemap has no fog to lift.
+  // THE FOG. A dark tile layer alone is not fog - it is just a dark map, and the first version read
+  // as faint scratches on one. Two things fix it, and both are needed.
+  //
+  // First, the basemap is actively suppressed rather than merely dark. Carto's dark_all still paints
+  // Lake Michigan as a large mid-grey mass and city labels in legible grey, and at the default view
+  // the LAKE was the brightest object on screen - unexplored water reading as lit ground. The CSS
+  // filter on the tile pane pushes all of it down and the colour out of it, so what remains is
+  // terrain you can orient by but never mistake for something revealed.
+  //
+  // Second, revealed segments are drawn in THREE passes - a wide soft glow, a crisp line, then the
+  // start point - each in its own pane so the glow can never paint over the line it belongs to.
+  // Overlapping glows merge into continuous lit territory, which is the actual fog-of-war read: not
+  // colour-coded hairlines, but ground that has been burned clear.
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    {detectRetina:true,maxZoom:20,subdomains:'abcd'}).addTo(map);
+    {detectRetina:true,maxZoom:20,subdomains:'abcd',className:'sa-fog-tiles',opacity:0.5}).addTo(map);
+  map.createPane('fogGlow').style.zIndex=410;
+  map.createPane('fogLine').style.zIndex=420;
+  map.createPane('fogDot').style.zIndex=430;
+  var rGlow=L.canvas({pane:'fogGlow'}), rLine=L.canvas({pane:'fogLine'}), rDot=L.canvas({pane:'fogDot'});
   var groups={ seen:L.layerGroup(), pr:L.layerGroup(), kom:L.layerGroup() };
   var all=[];
+  _saFogById={};
   data.segs.forEach(function(s){
     var t=s.tier, pts=[[s.lat,s.lon]];
     if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
     all.push([s.lat,s.lon]);
     if(pts.length>1) all.push([s.endLat,s.endLon]);
     var g=groups[t.key];
-    // Every layer carries its segment id and the coordinates the viewport sweep filters on, so a
-    // live placement result can restyle exactly this segment without a full remount.
-    var tag=function(l, isLine){ l._saId=s.id; l._saIsLine=!!isLine; l._saLat=s.lat; l._saLon=s.lon;
+    // Every layer carries its segment id, its ROLE in the three-pass draw, and the coordinates the
+    // viewport sweep filters on - so a live placement result can restyle exactly this segment,
+    // pass by pass, without a full remount.
+    var tag=function(l, role){ l._saId=s.id; l._saRole=role; l._saTier=t; l._saLat=s.lat; l._saLon=s.lon;
       l._saCand=s.candidate;
       l.bindPopup(_saFogPopup_(s));
       l.on('popupopen', function(){ _saKomOnOpen_(s); });
-      return l.addTo(g); };
+      l.addTo(g);
+      (_saFogById[s.id]=_saFogById[s.id]||[]).push(l);
+      return l; };
     if(pts.length>1){
-      tag(L.polyline(pts,{color:t.col,weight:t.weight,opacity:t.opacity,lineCap:'round',
+      tag(L.polyline(pts,Object.assign({renderer:rGlow,pane:'fogGlow',lineCap:'round'},_saGlowStyle_(t))), 'glow');
+      tag(L.polyline(pts,Object.assign({renderer:rLine,pane:'fogLine',lineCap:'round',
         // A bending road gets a dashed chord: the line is a real fact about the endpoints and a
         // poor picture of the tarmac, and dashes are how that reads without a paragraph.
-        dashArray:s.bends?'4 5':null}), true);
+        dashArray:s.bends?_saFogStyleOf_(t).dash:null},_saLineStyle_(t))), 'line');
+    } else {
+      // A segment with no end point has no chord to glow along, so the glow becomes a halo on the
+      // point itself - otherwise these would be the only unlit marks on a lit map.
+      tag(L.circleMarker([s.lat,s.lon],Object.assign({renderer:rGlow,pane:'fogGlow'},_saGlowDotStyle_(t))), 'glow');
     }
-    tag(L.circleMarker([s.lat,s.lon],{radius:t.t===3?5:(t.t===2?4:2.6),color:t.col,weight:t.t===3?2:1,
-      fillColor:t.col,fillOpacity:t.t===1?.55:.95,opacity:t.opacity}), false);
+    tag(L.circleMarker([s.lat,s.lon],Object.assign({renderer:rDot,pane:'fogDot'},_saDotStyle_(t))), 'dot');
   });
   ['seen','pr','kom'].forEach(function(k){ if(!_saFogOff[k]) groups[k].addTo(map); });
   var home=_saFogHome_(data.segs);
@@ -24484,6 +24605,8 @@ function _saFogMount_(){
   // they made it. Remembered per session only, so a fresh load still opens on Home.
   if(_saFogView && _saFogView.center) map.setView(_saFogView.center, _saFogView.zoom);
   else _saFogFit_(false);
+  _saDotBand=null; _saFogDotsForZoom_();
+  map.on('zoomend', _saFogDotsForZoom_);
   map.on('moveend zoomend', function(){
     try{
       // Only remember a view the map could actually measure. A fitBounds on a zero-sized container
@@ -24520,9 +24643,21 @@ function aiSegFogHtml_(){
   var d=_saFogList_(store, _saKomLive), esc=aiEsc_;
   var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<style>'
-    +'#sa-fog-map{height:520px;border-radius:12px;background:#0b0e13}'
-    +'@media(max-width:820px){#sa-fog-map{height:400px}}'
-    +'@media(max-width:520px){#sa-fog-map{height:320px}}'
+    +'#sa-fog-map{height:620px;max-width:1060px;margin-left:auto;margin-right:auto;border-radius:12px;background:#070c14}'
+    +'@media(max-width:820px){#sa-fog-map{height:460px;max-width:none}}'
+    +'@media(max-width:520px){#sa-fog-map{height:400px}}'
+    // The fog itself. Carto dark_all is not dark enough on its own: Lake Michigan renders as a large
+    // mid-grey mass that was the BRIGHTEST object in the default view - unexplored water reading as
+    // lit ground - and the city labels sat above several segment tiers in value. Pushing brightness
+    // and saturation down turns the whole basemap into terrain you can still orient by while making
+    // it incapable of competing with anything drawn on top.
+    +'#sa-fog-canvas{background:#070c14}'
+    +'#sa-fog-canvas .leaflet-tile-pane{filter:saturate(.35) contrast(1.05)}'
+    // A vignette over the tiles (under the segments) deepens the edges so the lit middle reads as a
+    // clearing rather than as a rectangle of map. Pointer-events off so it never eats a click.
+    +'#sa-fog-map{position:relative;overflow:hidden}'
+    +'#sa-fog-map:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:500;border-radius:12px;'
+      +'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,.5) 100%)}'
     +'.sa-fogchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
       +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none}'
     +'.sa-fogbtn{background:none;border:1px solid var(--d-edge);color:var(--d-soft);font-size:11px;font-weight:700;'
@@ -24546,9 +24681,9 @@ function aiSegFogHtml_(){
   // legend / filters. Counts are the real tier populations, so an empty tier reads as empty rather
   // than as a colour with nothing behind it.
   H+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">';
-  [['kom','#fc5200','KOM/QOM held (live-checked)',d.byTier[3]],
-   ['pr','#22c55e','Personal PR',d.byTier[2]],
-   ['seen','#7c8aa0','Attempted, no PR',d.byTier[1]]].forEach(function(t){
+  [['kom','#ff8a3d','KOM/QOM held (live-checked)',d.byTier[3]],
+   ['pr','#4ade80','Personal PR',d.byTier[2]],
+   ['seen','#b9d4f2','Attempted, no PR',d.byTier[1]]].forEach(function(t){
     H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'" onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)" style="color:'+t[1]+'">'
       +'<span style="width:9px;height:9px;border-radius:50%;background:'+t[1]+';flex:none"></span>'
       +esc(t[2])+' <span id="sa-fog-n-'+t[0]+'" style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
@@ -47000,7 +47135,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-fog-live-placement';
+window.__BUILD__ = '2026-08-04-fog-visual-pass';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".

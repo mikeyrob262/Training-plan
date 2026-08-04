@@ -101,14 +101,24 @@ check('a wandering segment draws dashed', F.list(windy,{}).segs[0].bends, true);
 check('unknown distance is treated as bending, not as straight',
   F.list({x:{id:'sx', startLat:42, startLon:-85, endLat:42.01, endLon:-85}},{}).segs[0].bends, true);
 
-console.log('\n'+C+'=== 4. the map opens where the riding is ==='+X);
-// Four real clusters exist in the live store; a global fit renders them as specks.
+console.log('\n'+C+'=== 4. the map opens where the RIDING is, not where the segments are ==='+X);
+// Measured on the live store: the Chicago cell has the most SEGMENTS (692) but every effort is
+// dated 2026-07-02 - one day out - and it holds 2 of 117 PRs. Grand Rapids has 508 segments,
+// 1,907 efforts and 95 PRs. Ranking by segment count opens the map on the wrong city.
+const oneBigDay=[]; for(let i=0;i<60;i++) oneBigDay.push({lat:41.9+i*0.001, lon:-87.8+i*0.001, effortCount:1});
+const homeRoads=[]; for(let i=0;i<25;i++) homeRoads.push({lat:42.9+i*0.001, lon:-85.6+i*0.001, effortCount:12});
+const picked=F.home(oneBigDay.concat(homeRoads));
+ok('the bigger SEGMENT COUNT does not win', !(picked.south>41.5 && picked.north<42.5));
+ok('the place actually ridden more does', picked.south>42.5 && picked.north<43.5, {south:picked.south, north:picked.north});
+ok('a segment with no effort count still counts once', F.home([{lat:10,lon:10},{lat:10.001,lon:10.001}])!==null);
+
 const spread=[];
-for(let i=0;i<40;i++) spread.push({lat:42.9+i*0.001, lon:-85.6+i*0.001});   // dense home cluster
-for(let i=0;i<3;i++)  spread.push({lat:-22.2+i*0.01, lon:166.4+i*0.01});    // South Pacific outlier
+for(let i=0;i<40;i++) spread.push({lat:42.9+i*0.001, lon:-85.6+i*0.001, effortCount:5});
+for(let i=0;i<3;i++)  spread.push({lat:-22.2+i*0.01, lon:166.4+i*0.01, effortCount:5});
 const home=F.home(spread);
 ok('home bounds sit on the dense cluster', home.south>42 && home.north<44 && home.west<-85 && home.east>-86);
 ok('the far outlier is excluded from the default view', home.n===40);
+ok('percentile bounds report what they trimmed', typeof home.trimmed==='number');
 check('no segments -> no home', F.home([]), null);
 
 console.log('\n'+C+'=== 5. bearing is computed, not assumed ==='+X);
