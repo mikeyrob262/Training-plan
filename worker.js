@@ -24024,23 +24024,54 @@ function _saRose_(bearing, windFromDeg, size){
   }
   return g+'</svg>';
 }
+// The store keys every segment as 's'+<Strava segment id>, so the id needed to reach Strava's own
+// segment page is already on every record - no lookup, no fetch. Returns null rather than a guessed
+// URL when the key is not that exact shape, because a /segments/ link with a junk id lands on a
+// generic page that LOOKS like it worked. Digits are checked without a regex on purpose: this file
+// is emitted inside a template literal that eats one backslash level, so a written /\d+/ would be
+// served as /d+/ and match the wrong thing silently (see scripts/served-escape-test.mjs).
+function _saSegUrl_(id){
+  var s=String(id==null?'':id);
+  if(s.charAt(0)!=='s') return null;
+  var num=s.slice(1);
+  if(!num.length) return null;
+  // Character-by-character, because a numeric round-trip is NOT a digit test: String(+'12.5') is
+  // '12.5' and String(+'-5') is '-5', so both would have sailed through and built a live-looking
+  // URL. A Strava segment id is a positive integer with no leading zero, and nothing else.
+  for(var i=0;i<num.length;i++){ var c=num.charCodeAt(i); if(c<48||c>57) return null; }
+  if(num.length>1 && num.charAt(0)==='0') return null;
+  return 'https://www.strava.com/segments/'+num;
+}
 // Route SKETCH, not a map. Only the two endpoints are stored, so the shape between them is unknown
 // and is drawn as a straight line - oriented to the real bearing so the direction is truthful even
 // though the path is not. A real trace needs the segment polyline, which is a separate endpoint and
 // another call per segment; drawing an invented curve here would be a lie about the road.
+//
+// The sketch links out to Strava's segment page, which HAS the real map this schematic cannot draw.
+// That is the honest resolution of the straight-line lie: the accurate shape is one tap away rather
+// than fabricated here. Wrapped even in the no-geometry case - a segment with no stored coordinates
+// is exactly the one whose real map is most worth reaching.
 function _saSketch_(ev){
   var W=170, H=96, pad=16;
-  if(ev.bearing==null) return '<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge);display:flex;align-items:center;justify-content:center;font-size:9.5px;color:var(--d-dim);text-align:center;padding:8px">no route data</div>';
+  var url=_saSegUrl_(ev&&ev.id);
+  var wrap=function(inner){
+    if(!url) return inner;
+    return '<a href="'+url+'" target="_blank" rel="noopener noreferrer" title="View this segment on Strava"'
+      +' style="display:block;text-decoration:none;width:'+W+'px;cursor:pointer">'+inner+'</a>';
+  };
+  var badge=url?('<text x="'+(W-6)+'" y="13" text-anchor="end" font-size="8" font-weight="700" fill="#fc5200">Strava &#8599;</text>'):'';
+  if(ev.bearing==null) return wrap('<div style="width:'+W+'px;height:'+H+'px;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:9.5px;color:var(--d-dim);text-align:center;padding:8px">no route data'
+    +(url?'<span style="font-size:9px;font-weight:700;color:#fc5200">Strava &#8599;</span>':'')+'</div>');
   var a=(ev.bearing-90)*Math.PI/180;
   var cx=W/2, cy=H/2, L=Math.min(W,H)/2-pad;
   var x1=cx-L*Math.cos(a), y1=cy-L*Math.sin(a), x2=cx+L*Math.cos(a), y2=cy+L*Math.sin(a);
   var wig=(ev.windApprox||(ev.sinuosity!=null&&ev.sinuosity>=_SA_SINUOUS))
     ? '<text x="'+(W-6)+'" y="'+(H-6)+'" text-anchor="end" font-size="8" fill="#f59e0b">bends</text>' : '';
-  return '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge)">'
+  return wrap('<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;border-radius:10px;background:#0d1016;border:1px solid var(--d-edge)">'
     +'<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#22c55e" stroke-width="2.6" stroke-linecap="round"/>'
     +'<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#22c55e" stroke="#0d1016" stroke-width="1.5"/>'
     +'<circle cx="'+x2.toFixed(1)+'" cy="'+y2.toFixed(1)+'" r="4" fill="#e8edf5" stroke="#0d1016" stroke-width="1.5"/>'
-    +'<text x="6" y="'+(H-6)+'" font-size="8" fill="#5b6678">start &rarr; end</text>'+wig+'</svg>';
+    +'<text x="6" y="'+(H-6)+'" font-size="8" fill="#5b6678">start &rarr; end</text>'+wig+badge+'</svg>');
 }
 // The win-probability ring. Stroke length IS the probability; the label under it is a word for the
 // same number, never a second, different claim.
@@ -24073,8 +24104,14 @@ function aiRenderSegAttack_(){
     +'.sa-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}'
     +'.sa-row{display:grid;grid-template-columns:minmax(0,1.35fr) auto minmax(0,1fr) minmax(0,1.1fr) minmax(0,.8fr);'
       +'gap:16px;align-items:start;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px;margin-top:12px}'
+    // The sketch carries the Strava link on desktop, but it is the first thing dropped when the row
+    // collapses - so below 1180px the link has to come back somewhere or the whole affordance is
+    // desktop-only. .sa-strava is that fallback: hidden while the sketch is visible, shown once it
+    // is not, so the link exists on exactly one surface at a time and is never duplicated.
+    +'.sa-strava{display:none}'
     +'@media(max-width:1180px){.sa-strip{grid-template-columns:repeat(2,minmax(0,1fr))}'
-      +'.sa-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr)}.sa-map{display:none}}'
+      +'.sa-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,.8fr)}.sa-map{display:none}'
+      +'.sa-strava{display:inline-flex;align-items:center;gap:4px}}'
     +'@media(max-width:820px){.sa-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}'
       +'.sa-ring{grid-column:1/-1;display:flex;flex-direction:column;align-items:center}}'
     +'@media(max-width:520px){.sa-strip{grid-template-columns:1fr}.sa-row{grid-template-columns:1fr}'
@@ -24175,6 +24212,8 @@ function aiRenderSegAttack_(){
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:6px">'
         +(e.distMi!=null?(e.distMi.toFixed(2)+' mi'):'')
         +(e.grade!=null?('   '+(e.grade>0?'+':'')+e.grade.toFixed(1)+'%'):'')+'</div>'
+      +(_saSegUrl_(e.id)?('<a class="sa-strava" href="'+_saSegUrl_(e.id)+'" target="_blank" rel="noopener noreferrer"'
+        +' style="margin-top:7px;font-size:10.5px;font-weight:700;color:#fc5200;text-decoration:none">View on Strava &#8599;</a>'):'')
       +'<div style="margin-top:9px"><div style="'+LBL+'">Your PR</div>'
         +'<div style="font-size:19px;font-weight:800;color:var(--d-head);line-height:1.1;margin-top:2px">'+_saMMSS_(e.prSec)+'</div>'
         +(e.prDate?('<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+esc(e.prDate)+'</div>'):'')
@@ -46372,7 +46411,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-temp-autocontinue';
+window.__BUILD__ = '2026-08-04-segment-strava-link';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
