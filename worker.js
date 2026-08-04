@@ -5334,7 +5334,7 @@ function runZoneBackfill(){
 // SCAN first (tempBackfillScan_ reports candidates, writes nothing); the write
 // (runTempBackfill) is a separate, count-confirmed action. Sequential, rate-limited,
 // resumable (candidates exclude rides already done).
-var _tempBackfill={running:false, stop:false};
+var _tempBackfill={running:false, stop:false, timer:null};
 function tempBackfillCandidates_(){
   return (st.rides||[]).filter(function(r){
     if(!r || r.deleted) return false;
@@ -5369,21 +5369,50 @@ function tempBackfillScan_(){
   if(el) el.textContent=list.length+' outdoor rides missing temp ('+withCoordNow+' with GPS start in memory). Sample in console. Nothing written yet — click Backfill to commit.';
   return {count:list.length, withCoordNow:withCoordNow, sample:list.slice(0,10)};
 }
-function stopTempBackfill(){ _tempBackfill.stop=true; }
-function runTempBackfill(){
+// Stop must also cancel a PENDING auto-continue, not just the in-flight pass — otherwise pressing
+// Stop between batches looks like it worked and the next batch starts anyway.
+function stopTempBackfill(){
+  _tempBackfill.stop=true;
+  if(_tempBackfill.timer){ clearTimeout(_tempBackfill.timer); _tempBackfill.timer=null; }
+  var el=document.getElementById('temp-backfill-status');
+  if(el && !_tempBackfill.running) el.textContent='Stopped — nothing further will run. Click Backfill Temps to resume.';
+}
+// The WRITABLE pool: candidates minus the ones already proven to have no obtainable coordinate.
+// A ride with no GPS start and nothing in /gps can never be filled, so counting it as outstanding
+// would make an auto-continuing loop run forever against a floor it can never reach. _tempNoCoord
+// is stamped the first time resolution fails, so the second pass does not pay for it again.
+function tempWritableCandidates_(){
+  return tempBackfillCandidates_().filter(function(r){ return !r._tempNoCoord; });
+}
+function runTempBackfill(auto){
   var el=document.getElementById('temp-backfill-status');
   function say(t){ if(el) el.textContent=t; }
-  if(_tempBackfill.running){ say('Already running…'); return; }
-  var list=tempBackfillCandidates_();
-  if(!list.length){ say('Every outdoor ride already has a temperature — nothing to backfill.'); return; }
+  if(_tempBackfill.running){ if(!auto) say('Already running…'); return; }
+  // Auto-continuation works the writable pool; a manual click still sweeps everything, so a ride
+  // whose /gps entry arrived since the last attempt gets another chance.
+  var list=auto?tempWritableCandidates_():tempBackfillCandidates_();
+  if(!list.length){ say('Every outdoor ride that can carry a temperature already does — nothing left to backfill.'); return; }
   var go=function(){
-    _tempBackfill.running=true; _tempBackfill.stop=false;
-    var i=0, got=0, noCoord=0, noWx=0, err=0, total=list.length;
+    _tempBackfill.running=true; if(!auto) _tempBackfill.stop=false;
+    var i=0, got=0, noCoord=0, noWx=0, err=0, total=list.length, rateLimited=false;
     say('Starting… '+total+' outdoor rides. Rate-limited (~2/sec) and resumable.');
     function finish(msg){
       _tempBackfill.running=false;
       try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
       var left=tempBackfillCandidates_().length;
+      var writable=tempWritableCandidates_().length;
+      // AUTO-CONTINUE. Three separate reasons to stop, and each one is a real terminating condition
+      // rather than a guess: the athlete pressed Stop; the writable pool is empty (the ~167 no-GPS
+      // rides remain and that is the expected floor); or a pass wrote nothing, which means nothing
+      // further is achievable and looping would just burn the API quota. A 429 is NOT a stop — it is
+      // the throttle doing its job, so it backs off and resumes rather than asking for another click.
+      if(!_tempBackfill.stop && writable>0 && (rateLimited || got>0)){
+        var wait=rateLimited?90000:1500;
+        say(msg+' — '+got+' written, '+writable+' still writable. '
+          +(rateLimited?'Rate limited; resuming in 90s…':'Continuing automatically…'));
+        _tempBackfill.timer=setTimeout(function(){ runTempBackfill(true); }, wait);
+        return;
+      }
       say(msg+' — '+got+' rides now carry a temperature'+(noCoord?(', '+noCoord+' had no GPS start'):'')+(noWx?(', '+noWx+' had no archive data'):'')+(err?(', '+err+' errors'):'')+(left?('. '+left+' still to do — run again to continue.'):'. All done!'));
     }
     function step(){
@@ -5392,12 +5421,18 @@ function runTempBackfill(){
       var r=list[i++];
       say('Backfilling '+i+'/'+total+'… '+got+' with temp'+(noCoord?(', '+noCoord+' no-GPS'):''));
       _tempStartCoord_(r).then(function(coord){
-        if(!coord || !isFinite(coord[0]) || !isFinite(coord[1])){ noCoord++; return setTimeout(step, 120); }
+        if(!coord || !isFinite(coord[0]) || !isFinite(coord[1])){
+          // Stamp it so the writable pool shrinks and the auto-continue can reach zero. Not a
+          // permanent verdict on the ride — a manual click re-tries everything, so a /gps entry
+          // that shows up later still gets picked up.
+          noCoord++; r._tempNoCoord=true;
+          return setTimeout(step, 120);
+        }
         var d=normDate(r.date);
         var url='https://archive-api.open-meteo.com/v1/archive?latitude='+coord[0].toFixed(4)+'&longitude='+coord[1].toFixed(4)
           +'&start_date='+d+'&end_date='+d+'&hourly=temperature_2m&temperature_unit=fahrenheit&timezone=auto';
         fetch(url).then(function(x){
-          if(x.status===429){ finish('Open-Meteo rate limit reached (run again later to continue)'); throw 'rl'; }
+          if(x.status===429){ rateLimited=true; finish('Open-Meteo rate limit reached'); throw 'rl'; }
           return x.ok?x.json():null;
         }).then(function(j){
           var temps=j&&j.hourly&&j.hourly.temperature_2m;
@@ -5419,7 +5454,10 @@ function runTempBackfill(){
     }
     step();
   };
-  // The commit gate: confirm the count before a single write.
+  // The commit gate: confirm the count before a single write. An auto-continuation is already
+  // covered by the confirmation that started the run — re-prompting every batch would defeat the
+  // whole point of auto-continuing.
+  if(auto) return go();
   if(typeof uiConfirm==='function'){
     uiConfirm('Backfill historical temperature for '+list.length+' outdoor rides? Writes r.temp + tempSource to the store, using each ride’s own GPS start location.',{title:'Temperature backfill', okText:'Backfill'}).then(function(ok){ if(ok) go(); else say('Cancelled — nothing written.'); });
   } else go();
@@ -46334,7 +46372,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-push-serialised2';
+window.__BUILD__ = '2026-08-03-temp-autocontinue';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
