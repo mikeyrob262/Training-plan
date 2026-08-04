@@ -24118,7 +24118,7 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // sinuosity measure decides the line style: a segment whose recorded length matches its straight
 // line is drawn SOLID (the chord is very nearly the road), and one that wanders is drawn DASHED.
 // The legend explains both. This is the same honest-degrade rule the wind call already uses.
-var _saFogMap=null, _saFogLayers=null, _saFogOff={};
+var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null;
 // Tier is decided by data that exists, in strict precedence. kom_rank is Strava's own leaderboard
 // placement and it is only ever returned when the athlete is in the top 10, so its mere presence IS
 // the top-N fact - no ranking is invented here. prRank is deliberately NOT used for tiering: it
@@ -24279,7 +24279,23 @@ function _saFogMount_(){
     allBounds:L.latLngBounds(all),
     homeBounds:home?L.latLngBounds([[home.south,home.west],[home.north,home.east]]):L.latLngBounds(all)
   });
-  _saFogFit_(false);
+  // Where the map was pointing survives a rebuild. Measured in headless Chrome: this mounts TWICE
+  // on mobile, 5.5s apart, because aiEnsureFullLibrary_ re-renders the whole overview once the full
+  // library loads from IndexedDB - which replaces the container and forces a fresh map. Refitting to
+  // Home there would silently throw away a pan the athlete had already made, several seconds after
+  // they made it. Remembered per session only, so a fresh load still opens on Home.
+  if(_saFogView && _saFogView.center) map.setView(_saFogView.center, _saFogView.zoom);
+  else _saFogFit_(false);
+  map.on('moveend zoomend', function(){
+    try{
+      // Only remember a view the map could actually measure. A fitBounds on a zero-sized container
+      // still fires moveend, with a center and zoom derived from no viewport at all - recording that
+      // would persist a junk view AND make the invalidateSize path below think there was a real one
+      // worth preserving, so the empty-box case would repair itself into a wrong position instead.
+      var sz=map.getSize(); if(!sz || !sz.x || !sz.y) return;
+      var c=map.getCenter(); _saFogView={center:[c.lat,c.lng], zoom:map.getZoom()};
+    }catch(e){}
+  });
   // A Leaflet map initialised into a container the browser has not laid out yet computes a size of
   // zero and then loads no tiles - it renders as an empty box and throws nothing. That is reachable
   // here: aiRenderOverview_ re-renders itself asynchronously from aiEnsureFullLibrary_, so the node
@@ -24293,7 +24309,9 @@ function _saFogMount_(){
       if(!document.getElementById('sa-fog-canvas')) return;
       var s=map.getSize();
       map.invalidateSize(false);
-      if(!s || !s.y) _saFogFit_(false);                 // refit only if the first fit measured nothing
+      // Refit only if the first fit measured nothing AND there is no view to preserve - a refit on
+      // top of a remembered pan is the same silent reset this is meant to prevent.
+      if((!s || !s.y) && !_saFogView) _saFogFit_(false);
     }catch(e){}
   }, 150);
 }
@@ -46759,7 +46777,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-fog-map-invalidate';
+window.__BUILD__ = '2026-08-04-fog-map-keepview';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
