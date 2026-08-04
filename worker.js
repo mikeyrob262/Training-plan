@@ -7227,10 +7227,22 @@ function fbPush(silent, forceOverwrite, confirmToken, tag){
   // A confirmed force overwrite is a deliberate, operator-driven act and is never coalesced away.
   if(_fbPushBusy && !forceOverwrite){ _fbPushDirty=true; return; }
   _fbPushBusy=true;
+  // WATCHDOG. A gate that is only opened by a promise settling is a deadlock waiting for the one
+  // time it does not: the first version of this shipped without one and _fbPushBusy stuck true
+  // after a 12.6 MB PUT returned 200, which swallowed every later push — strictly worse than the
+  // race it was fixing. Same lesson _withTimeout_ records for the auth chain: bound it, so silence
+  // becomes a release rather than a permanent stall. Idempotent, so a late settle is harmless.
+  var _fbGuard=null;
   var _fbDone=function(){
+    if(_fbGuard){ clearTimeout(_fbGuard); _fbGuard=null; }
+    if(!_fbPushBusy) return;
     _fbPushBusy=false;
     if(_fbPushDirty){ _fbPushDirty=false; setTimeout(function(){ fbPush(true); }, 0); }
   };
+  _fbGuard=setTimeout(function(){
+    try{ console.warn('[fbPush] watchdog: a push did not settle within 90s — releasing the gate'); }catch(e){}
+    _fbDone();
+  }, 90000);
   // A blind full-state PUT from a degraded local state is what repeatedly re-buried the ride
   // library: every revive force-pushed its own result over a healthier remote, so each recovery
   // undid itself on the next boot. Force now requires an explicit token and can never fire
@@ -7269,10 +7281,13 @@ function fbPush(silent, forceOverwrite, confirmToken, tag){
       body:JSON.stringify(saveData)
     });
   })
-  .then(function(r){ return r && r.ok ? r.json() : Promise.reject(r?r.status:'no response'); })
+  // The body is DELIBERATELY not parsed. Firebase echoes the whole written payload back, so this was
+  // a 12.6 MB JSON parse per push whose result was discarded — and it is the prime suspect for the
+  // chain that returned 200 and then never settled. The status is the only thing we need.
+  .then(function(r){ if(!(r && r.ok)) return Promise.reject(r?r.status:'no response'); return true; })
   .then(function(){
     st.lastUpdate = fbWriteTs;
-    saveLocal_();
+    try{ saveLocal_(); }catch(e){ try{ console.warn('[fbPush] PUT landed but the local save failed: '+((e&&e.message)||e)); }catch(_e){} }
     if(!silent) toast('Cloud Saved!');
     _fbDone();
   })
@@ -46319,7 +46334,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-03-push-serialised';
+window.__BUILD__ = '2026-08-03-push-serialised2';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
