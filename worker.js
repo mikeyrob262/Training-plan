@@ -24118,13 +24118,22 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // mark, which is exactly what fog of war means, and the legend says so rather than implying the
 // map knows about roads it has never been told about.
 //
-// THE CHORD IS NOT THE ROAD. Only two points per segment are stored, so what is drawn is the
-// straight line between them. That is a true geometric fact about the segment and a false picture
-// of the road whenever the road bends. Rather than fake a curve or hide the problem, the existing
-// sinuosity measure decides the line style: a segment whose recorded length matches its straight
-// line is drawn SOLID (the chord is very nearly the road), and one that wanders is drawn DASHED.
-// The legend explains both. This is the same honest-degrade rule the wind call already uses.
+// ROAD GEOMETRY. A segment's real path comes from GET /segments/{id} as map.polyline - the same
+// request that answers the live KOM check, so road shapes cost NOTHING extra against that budget.
+// The two halves of that response get opposite treatment on purpose: the polyline is immutable
+// geometry and is PERSISTED, while the leaderboard half drifts and is never stored (see
+// _segAbsorb_). Same response, different retention.
+//
+// Until a segment's shape has been fetched it still draws as the straight chord between its stored
+// endpoints, DASHED, because that is a true fact about the endpoints and a false picture of the
+// road. Real geometry draws solid. The count of each is reported on the page rather than blurred
+// together, so a half-fetched library never pretends to be a road map.
 var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null, _saFogById={};
+// Decoded segment paths, keyed 's'+id -> [[lat,lon],...]. Loaded once per session from /segpoly and
+// kept OUT of the main state blob: at ~150 bytes encoded per segment the whole library is ~330 KB,
+// which is 2.6% added to every 12.6 MB full-blob PUT for data that never changes. Same reasoning,
+// and the same separate-path pattern, as the per-ride GPS store.
+var _saPoly={}, _saPolyLoaded=false, _saPolyBusy=false;
 // LIVE placement, held for this page session only and never written to st.segments. Keyed by
 // segment id -> {holds, prSec, komSec, qomSec, gap, at} or {err}. Cleared on reload by construction:
 // it is a plain var, so there is no cache to go stale between sessions.
@@ -24148,6 +24157,80 @@ function _saXomSec_(t){
 // holding a KOM is least plausible - 1,825 of the 1,942 drawn. Narrowing to segments that carry a
 // PR takes the candidate set to 117, which is inside one rate-limit window.
 function _saKomCandidate_(seg){ return !!(seg && +seg.prSec>0); }
+// Google encoded-polyline decoder. Strava returns segment shapes in this format and already
+// simplifies them sensibly - a straight 0.89-mile road comes back as 5 points, a bending 0.6-mile
+// one as 37 - so nothing here re-simplifies. Median across this library is 86 characters.
+function _saPolyDecode_(enc){
+  if(!enc || typeof enc!=='string') return null;
+  var pts=[], i=0, lat=0, lon=0;
+  while(i<enc.length){
+    var b, shift=0, result=0;
+    do{ b=enc.charCodeAt(i++)-63; if(isNaN(b)) return null; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lat+=((result&1)?~(result>>1):(result>>1));
+    shift=0; result=0;
+    do{ b=enc.charCodeAt(i++)-63; if(isNaN(b)) return null; result|=(b&0x1f)<<shift; shift+=5; }while(b>=0x20);
+    lon+=((result&1)?~(result>>1):(result>>1));
+    pts.push([lat/1e5, lon/1e5]);
+  }
+  return pts.length>1 ? pts : null;
+}
+function _saPolyUrl_(key, token){
+  return FB_URL.replace('/data.json','') + '/segpoly' + (key?('/'+encodeURIComponent(key)):'') + '.json?auth=' + encodeURIComponent(token);
+}
+// One read for the whole shape store, once per session. ~330 KB at full coverage.
+function _saPolyLoad_(cb){
+  cb=cb||function(){};
+  if(_saPolyLoaded || _saPolyBusy){ cb(); return; }
+  _saPolyBusy=true;
+  ensureFbAuth_().then(function(tok){ return fetch(_saPolyUrl_('', tok)); })
+    .then(function(r){ return (r&&r.ok)?r.json():null; })
+    .then(function(j){
+      _saPoly={};
+      if(j && typeof j==='object'){
+        Object.keys(j).forEach(function(k){
+          var pts=_saPolyDecode_(j[k]);
+          if(pts) _saPoly[k]=pts;
+        });
+      }
+      _saPolyLoaded=true; _saPolyBusy=false;
+      try{ console.log('[fog] '+Object.keys(_saPoly).length+' segment road shapes loaded'); }catch(e){}
+      cb();
+    })
+    .catch(function(){ _saPolyLoaded=true; _saPolyBusy=false; cb(); });
+}
+// PATCH one shape in. Never a PUT over /segpoly - a concurrent writer must not lose entries.
+function _saPolyPut_(key, enc){
+  if(!key || !enc) return Promise.resolve(false);
+  return ensureFbAuth_().then(function(tok){
+    var body={}; body[key]=enc;
+    return fetch(_saPolyUrl_('', tok), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }).then(function(r){ return !!(r&&r.ok); }).catch(function(){ return false; });
+}
+// ONE request, BOTH answers. /segments/{id} carries the road shape and the leaderboard state
+// together, so this is the single place either is fetched - and calling it for one purpose warms
+// the other for free rather than spending a second request on it later.
+function _saSegDetail_(segId, cb){
+  withStravaToken_(function(token){
+    if(!token){ cb({err:'connect Strava'}); return; }
+    fetch('https://www.strava.com/api/v3/segments/'+segId,{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){ if(r.status===429) throw 'rl'; return r.ok?r.json():null; })
+      .then(function(d){
+        if(!d){ cb({err:'unavailable'}); return; }
+        var stats=d.athlete_segment_stats||{};
+        var pr=(+stats.pr_elapsed_time>0)?+stats.pr_elapsed_time:null;
+        var kom=_saXomSec_(d.xoms&&d.xoms.kom), qom=_saXomSec_(d.xoms&&d.xoms.qom);
+        var best=(kom!=null&&qom!=null)?Math.min(kom,qom):(kom!=null?kom:qom);
+        cb({
+          poly:(d.map&&(d.map.polyline||d.map.summary_polyline))||null,
+          live:{ prSec:pr, komSec:kom, qomSec:qom,
+                 holds:(pr!=null&&best!=null)?(pr<=best):null,
+                 gap:(pr!=null&&best!=null)?(pr-best):null,
+                 athletes:(+d.athlete_count>0)?+d.athlete_count:null, at:Date.now() }
+        });
+      })
+      .catch(function(e){ cb({err:(e==='rl')?'rate limit — try again in a few minutes':'unavailable'}); });
+  });
+}
 // ONE call per segment: /segments/{id} carries the athlete's PR and the CURRENT leaderboard times
 // together, so the comparison is made from a single consistent snapshot. Deliberately NOT
 // /segment_efforts - that returns kom_rank, which Strava stamps at upload time and which is
@@ -24160,30 +24243,89 @@ function _saKomFetch_(segId, cb){
   _saKomBusy[key]=true;
   var done=function(v){ delete _saKomBusy[key]; _saKomLive[key]=v; cb(v); };
   if(typeof withStravaToken_!=='function'){ done({err:'no strava'}); return; }
-  withStravaToken_(function(token){
-    if(!token){ done({err:'connect Strava'}); return; }
-    fetch('https://www.strava.com/api/v3/segments/'+segId,{headers:{'Authorization':'Bearer '+token}})
-      .then(function(r){
-        if(r.status===429){ throw 'rl'; }
-        return r.ok?r.json():null;
-      })
-      .then(function(d){
-        if(!d){ done({err:'unavailable'}); return; }
-        var stats=d.athlete_segment_stats||{};
-        var pr=(+stats.pr_elapsed_time>0)?+stats.pr_elapsed_time:null;
-        var kom=_saXomSec_(d.xoms&&d.xoms.kom), qom=_saXomSec_(d.xoms&&d.xoms.qom);
-        // "Holds it" is a comparison of times, not a rank: your PR is at or under the standing
-        // leaderboard time. Equal counts - a tie IS the time. If either number is missing the
-        // answer is unknown, never false.
-        var best=(kom!=null&&qom!=null)?Math.min(kom,qom):(kom!=null?kom:qom);
-        done({ prSec:pr, komSec:kom, qomSec:qom,
-               holds:(pr!=null&&best!=null)?(pr<=best):null,
-               gap:(pr!=null&&best!=null)?(pr-best):null,
-               athletes:(+d.athlete_count>0)?+d.athlete_count:null,
-               at:Date.now() });
-      })
-      .catch(function(e){ done({err:(e==='rl')?'rate limit — try again in a few minutes':'unavailable'}); });
+  // "Holds it" is a comparison of times, not a rank: the PR is at or under the standing leaderboard
+  // time, and a tie counts. Computed in _saSegDetail_ so the shape backfill gets the same answer
+  // from the same response rather than deriving it a second way.
+  _saSegDetail_(segId, function(res){
+    if(!res || res.err){ done({err:(res&&res.err)||'unavailable'}); return; }
+    // The shape arrived on this same response. Keeping it costs no request and means a click that
+    // was only asking about placement quietly upgrades that segment's geometry too.
+    if(res.poly && !_saPoly[key]){
+      var pts=_saPolyDecode_(res.poly);
+      if(pts){ _saPoly[key]=pts; _saPolyPut_(key, res.poly); _saFogRedrawOne_(key); }
+    }
+    done(res.live);
   });
+}
+// ---- road-shape backfill -------------------------------------------------------------------
+// THE BINDING LIMIT IS THE READ LIMIT, AND IT IS NOT THE ONE MOST CODE CHECKS. Strava sends two
+// pairs of headers: x-ratelimit-limit is 200 per 15 min / 2,000 per day, and x-readratelimit-limit
+// is 100 per 15 min / 1,000 per day. Segment detail is a READ, so 100/15min is the real ceiling -
+// measured by walking into a 429 at 102 requests while the 200-limit header still read as healthy.
+// A run therefore caps at 90, leaving headroom for the token refresh and anything else the page
+// does, and the athlete presses again next window.
+//
+// Budget, at that real limit: the 117 PR-bearing segments are two presses. The full 1,942 is about
+// twenty windows - roughly five hours of pressing, or two days against the 1,000/day read cap.
+// Shapes and placement checks come from the SAME read, so they share this budget rather than each
+// having their own; a click that checks placement also banks that segment's shape for free.
+//
+// Lit tiers are fetched FIRST because those are the ones the eye lands on, and the run is resumable:
+// anything already in _saPoly is skipped, so pressing again continues rather than restarts.
+var SA_POLY_PER_RUN=90, SA_POLY_GAP=340;
+var _saPolyRun={running:false, stop:false};
+function _saPolyPending_(litOnly){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var out=[];
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s || s.startLat==null) return;
+    if(_saPoly[k]) return;
+    if(litOnly && !(+s.prSec>0)) return;
+    var num=_saSegNum_(k); if(!num) return;
+    out.push({key:k, num:num, lit:(+s.prSec>0)});
+  });
+  // Lit first, so a partial run improves the part of the map that matters most.
+  out.sort(function(a,b){ return (b.lit?1:0)-(a.lit?1:0); });
+  return out;
+}
+function _saPolyStop_(){ _saPolyRun.stop=true; }
+function _saPolySweep_(litOnly){
+  var note=document.getElementById('sa-poly-note');
+  var say=function(t){ if(note) note.innerHTML=t; };
+  if(_saPolyRun.running){ say('Already fetching&hellip;'); return; }
+  var list=_saPolyPending_(litOnly);
+  if(!list.length){ say('Every segment in this set already has its road shape.'); return; }
+  var capped=list.length>SA_POLY_PER_RUN;
+  var run=list.slice(0, SA_POLY_PER_RUN);
+  _saPolyRun.running=true; _saPolyRun.stop=false;
+  var i=0, got=0, none=0, errs=0;
+  var finish=function(msg){
+    _saPolyRun.running=false;
+    say(msg+' &mdash; '+got+' road shape'+(got===1?'':'s')+' added'
+      +(none?(', '+none+' had no shape on Strava'):'')+(errs?(', '+errs+' failed'):'')
+      +(capped||i<list.length ? (' &middot; '+(list.length-i)+' still to fetch, press again to continue') : ' &middot; this set is complete')+'.');
+    try{ _saFogMount_(); }catch(e){}
+  };
+  var step=function(){
+    if(_saPolyRun.stop) return finish('Stopped');
+    if(i>=run.length) return finish('Done');
+    var it=run[i++];
+    say('Fetching road shapes&hellip; '+i+' of '+run.length+' ('+got+' added)');
+    _saSegDetail_(it.num, function(res){
+      if(!res || res.err){ errs++; if(res && res.err && res.err.indexOf('rate limit')>=0) return finish('Rate limit reached'); }
+      else if(res.poly){
+        var pts=_saPolyDecode_(res.poly);
+        if(pts){ _saPoly[it.key]=pts; _saPolyPut_(it.key, res.poly); got++; }
+        else none++;
+        // The leaderboard half of this response is live and free; keep it for the session so a
+        // later click on this segment needs no second request.
+        if(res.live) _saKomLive[it.key]=res.live;
+      } else none++;
+      setTimeout(step, SA_POLY_GAP);
+    });
+  };
+  say('Starting&hellip; '+run.length+' segment'+(run.length===1?'':'s')+' this run'+(capped?(' of '+list.length):'')+'.');
+  step();
 }
 // Tier is decided by data that exists, in strict precedence, and the top tier is decided by data
 // fetched LIVE rather than anything held locally. pr_rank is never used at any tier: it ranks an
@@ -24200,20 +24342,47 @@ function _saKomFetch_(segId, cb){
 // Colours are picked against the filtered basemap, not the raw one: after the tile filter, Carto's
 // road casings and labels land near #333-#3a3a3a, so every tier below is a large step above the
 // brightest thing the map itself can draw.
+// A WARM-TO-COOL RAMP IN FIVE STEPS, not four colour buckets. Heat encodes how hard-won a road is,
+// and the steps are placed where this library's data actually divides rather than at round numbers:
+// effort counts in the attempted tier run min 1, median 2, p90 5. A single threshold at 4 put 84%
+// of the map on one colour and the ramp said nothing, so the cool half is split at 1 / 2 / 3-plus,
+// which lands 755 / 653 / 417 segments - three visibly different populations. Personal bests and a
+// held leaderboard sit above them in pink and orange.
+//
+// The effect is that a home cluster warms toward its middle on its own, out of real effort counts,
+// instead of a decorative gradient painted over the top.
 var SA_FOG_STYLE={
-  // 'Attempted, no PR' is 94% of the map, so it must be legible without becoming the loudest thing
-  // on it. Pale ice blue reads as lit-but-unremarkable and is unmistakably not a map label.
-  1:{ line:'#b9d4f2', glow:'#7fb0e8', dot:'#cfe4fb',
-      lw:3.4, lo:.95, gw:11, go:.16, dr:1.8, dop:.7, dash:'5 6' },
-  // 117 PRs should feel like a presence. Brighter green than the old #22c55e, a heavier line, and
-  // roughly double the glow so clusters of PRs merge into visibly hotter ground.
-  2:{ line:'#4ade80', glow:'#22c55e', dot:'#bbf7d0',
-      lw:5.4, lo:1, gw:18, go:.26, dr:3.4, dop:.95, dash:'7 6' },
-  // The top tier is rare by construction, so it is allowed to shout.
-  3:{ line:'#ff8a3d', glow:'#fc5200', dot:'#fff7ed',
-      lw:7, lo:1, gw:26, go:.34, dr:6, dop:1, dash:'9 7' }
+  // ridden once - the cold fringe of the territory
+  0:{ line:'#a855f7', glow:'#7c3aed', dot:'#ddd6fe',
+      lw:2.9, lo:.85, gw:10, go:.13, dr:1.2, dop:.5, dash:'5 6' },
+  // ridden twice
+  1:{ line:'#7b8cff', glow:'#4f46e5', dot:'#e0e7ff',
+      lw:3.3, lo:.9, gw:12, go:.16, dr:1.3, dop:.55, dash:'5 6' },
+  // ridden three times or more - the warm end of the cool half
+  2:{ line:'#4da3ff', glow:'#2563eb', dot:'#dbeafe',
+      lw:3.9, lo:.95, gw:14, go:.19, dr:1.5, dop:.6, dash:'5 6' },
+  // a personal best lives here
+  3:{ line:'#ff5c8a', glow:'#ec4899', dot:'#ffe4ee',
+      lw:5.6, lo:1, gw:20, go:.28, dr:2.4, dop:.9, dash:'7 6' },
+  // the leaderboard, live-confirmed
+  4:{ line:'#ffa53d', glow:'#ff7a18', dot:'#fff7ed',
+      lw:7.2, lo:1, gw:28, go:.36, dr:4, dop:1, dash:'9 7' }
 };
-function _saFogStyleOf_(t){ return SA_FOG_STYLE[(t&&t.t)||1]||SA_FOG_STYLE[1]; }
+// The two cuts across the cool half, named rather than inlined so the legend and the tests read the
+// same numbers the renderer does.
+var SA_FOG_E2=2, SA_FOG_E3=3;
+// Ramp index is NOT tier. PR and KOM occupy the top two steps; only the attempted tier is spread
+// across the cool three by how often the road has actually been ridden.
+function _saFogRamp_(tier, effortCount){
+  if(!tier) return 0;
+  if(tier.t===3) return 4;
+  if(tier.t===2) return 3;
+  var n=+effortCount||0;
+  if(n>=SA_FOG_E3) return 2;
+  if(n>=SA_FOG_E2) return 1;
+  return 0;
+}
+function _saFogStyleOf_(t){ var i=(t&&t.ramp!=null)?t.ramp:((t&&t.t)||1); return SA_FOG_STYLE[i]||SA_FOG_STYLE[1]; }
 // A circleMarker radius is in PIXELS, so it is constant at every zoom - which is wrong at both ends
 // here. Zoomed out, ~1,900 fixed-size start dots overlap along the dense corridors and string them
 // into bead-chains, which is precisely the "disconnected dots rather than roads" read this redesign
@@ -24222,23 +24391,40 @@ function _saFogStyleOf_(t){ return SA_FOG_STYLE[(t&&t.t)||1]||SA_FOG_STYLE[1]; }
 // enough for a single segment to be the subject.
 function _saDotScale_(z){
   if(z==null) return 1;
-  if(z<9)  return .45;
-  if(z<11) return .7;
-  if(z<13) return 1;
-  return 1.45;
+  // ZERO below z12, i.e. the dot is not drawn at all while the whole territory is in frame. At that
+  // scale a start marker carries no information - you cannot tell which segment it belongs to - and
+  // ~1,900 of them speckle the dense clusters into exactly the scatter this redesign is meant to
+  // remove. They come back as real endpoint markers once a single segment is the subject.
+  if(z<12) return 0;
+  if(z<14) return 1;
+  return 1.5;
 }
 // Re-radius every start dot after a zoom. Bucketed, so a pan or a fractional zoom does not walk
 // ~1,900 layers for nothing - only a change of band pays the cost.
 var _saDotBand=null;
-function _saFogDotsForZoom_(){
+// force=true skips the band guard. That guard exists so a pan or a fractional zoom does not walk
+// ~1,900 layers for nothing, but _saDotBand is module-level and SURVIVES A REMOUNT - so on the
+// second mount (the one _saPolyLoad_ triggers) the band already matched, the walk was skipped, and
+// every freshly-built dot kept its full construction radius instead of the zoom-scaled one. That is
+// why the map still showed a scatter of dots after they were supposedly scaled to zero: the debug
+// read the OLD layers, the screenshot showed the NEW ones. Mount always forces.
+function _saFogDotsForZoom_(force){
   if(!_saFogMap || !_saFogById) return;
   var k=_saDotScale_(_saFogMap.getZoom());
-  if(k===_saDotBand) return;
+  if(!force && k===_saDotBand) return;
   _saDotBand=k;
   Object.keys(_saFogById).forEach(function(id){
     _saFogById[id].forEach(function(l){
       if(!l || l._saRole!=='dot' || typeof l.setRadius!=='function') return;
+      var g=_saFogLayers && _saFogLayers[l._saGroupKey];
+      // A RADIUS OF ZERO DOES NOT HIDE A CANVAS CIRCLE. Leaflet's canvas renderer draws with
+      // Math.max(Math.round(layer._radius), 1), so the smallest a circleMarker can ever be is a
+      // 1px dot - and 1,942 of those speckled the dense clusters exactly like the scatter this was
+      // meant to remove. Verified by hiding the pane: the dots vanished while every layer still
+      // reported radius 0. So "no dot" has to mean REMOVED FROM THE MAP, not scaled to nothing.
+      if(k<=0){ if(g && g.hasLayer(l)) g.removeLayer(l); return; }
       try{ l.setRadius(_saFogStyleOf_(l._saTier).dr * k); }catch(e){}
+      if(g && !g.hasLayer(l)) g.addLayer(l);
     });
   });
 }
@@ -24254,9 +24440,17 @@ function _saFogTierOf_(seg, live){
   // stored state, which is the point: nothing in st.segments can promote a segment into it, so the
   // tier can never show a placement that has since drifted. Unchecked and not-holding both stay at
   // whatever the stored data supports.
-  if(live && live.holds===true) return { t:3, key:'kom', label:'You hold the KOM/QOM', col:'#ff8a3d' };
-  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',     col:'#4ade80' };
-  return               { t:1, key:'seen',label:'Attempted, no PR', col:'#b9d4f2' };
+  var n=(+seg.effortCount>0)?+seg.effortCount:((seg.efforts&&seg.efforts.length)||0);
+  var mk=function(t,key,label){
+    var ramp=_saFogRamp_({t:t}, n);
+    return { t:t, key:key, label:label, ramp:ramp, col:SA_FOG_STYLE[ramp].line, efforts:n };
+  };
+  if(live && live.holds===true) return mk(3,'kom','You hold the KOM/QOM');
+  if(+seg.prSec>0)              return mk(2,'pr','Personal PR');
+  // The attempted tier splits across the cool end of the ramp by how often it has been ridden, so
+  // the label has to say which half it landed on - a legend swatch that does not match the line
+  // under the cursor is worse than no legend.
+  return mk(1,'seen', n>1 ? ('Ridden ×'+n) : 'Ridden once');
 }
 // Map-ready records, plus the counts the page reports. Reads st.segments directly rather than
 // segmentRecordsCompute_ ON PURPOSE, and the reason matters: that function SKIPS every segment with
@@ -24268,7 +24462,7 @@ function _saFogTierOf_(seg, live){
 // the function stays pure and testable - the tier it produces depends only on its arguments.
 function _saFogList_(store, live){
   var keys=isPlainObj_(store)?Object.keys(store):[];
-  var segs=[], noGeom=0, byTier={1:0,2:0,3:0}, checked=0, candidates=0;
+  var segs=[], noGeom=0, byTier={1:0,2:0,3:0}, checked=0, candidates=0, ramp={0:0,1:0,2:0}, real=0;
   live=live||{};
   keys.forEach(function(k){
     var s=store[k]; if(!s) return;
@@ -24280,19 +24474,26 @@ function _saFogList_(store, live){
     var distM=(+s.distMi>0)?(+s.distMi*1609.344):null;
     var sin=_saSinuosity_(s, distM);
     byTier[tier.t]++;
+    if(tier.t===1) ramp[tier.ramp]=(ramp[tier.ramp]||0)+1;
+    if(_saPoly[k]) real++;
     segs.push({ id:s.id, name:s.name||'Segment',
       lat:+s.startLat, lon:+s.startLon,
       endLat:(s.endLat!=null)?+s.endLat:null, endLon:(s.endLon!=null)?+s.endLon:null,
       tier:tier, distMi:(+s.distMi>0)?+s.distMi:null, grade:(s.grade!=null)?+s.grade:null,
       prSec:(+s.prSec>0)?+s.prSec:null, prDate:s.prDate||null,
       live:lv, candidate:_saKomCandidate_(s),
+      // Whether this segment draws on its real road path. Decided HERE rather than at draw time so
+      // the list is the single source - the popup, the counts and the renderer all read one answer.
+      // _saPolyLoad_ only keeps shapes that decoded to 2+ points, so presence in the cache is enough.
+      real:!!_saPoly[k],
       effortCount:(+s.effortCount>0)?+s.effortCount:((s.efforts&&s.efforts.length)||0),
       starred:!!s.starred,
       // straight = the chord is a fair picture of the road; bends = it is not
       bends:(sin==null || sin>=_SA_SINUOUS) });
   });
   return { segs:segs, noGeom:noGeom, total:keys.length, byTier:byTier,
-           checked:checked, candidates:candidates };
+           checked:checked, candidates:candidates,
+           ramp:ramp, real:real };
 }
 // Open where the riding is. Fitting all 1,942 at once spans Michigan to the South Pacific and
 // renders four unreadable specks, so the default view is the densest one-degree cell and everything
@@ -24432,6 +24633,7 @@ function _saFogPromote_(id){
         l._saTier=tier; try{ l.setRadius(_saFogStyleOf_(tier).dr * (_saDotBand||1)); }catch(e){}
       }
     }
+    l._saGroupKey='kom';
     _saFogLayers.kom.addLayer(l);
   });
   if(!_saFogOff.kom && !_saFogMap.hasLayer(_saFogLayers.kom)) _saFogLayers.kom.addTo(_saFogMap);
@@ -24516,9 +24718,25 @@ function _saKomSweep_(){
 // aiRenderOverview_ builds one string and assigns it once, so there is no per-tab render hook to
 // hang this on. Guarded on the element still existing, because a fast tab switch can retire the
 // node before this fires.
+// Redraw a single segment after its shape arrives late (a popup click that also fetched geometry).
+// Cheaper and far less disruptive than remounting ~4,000 layers under the popup being read.
+function _saFogRedrawOne_(key){
+  try{
+    if(!_saFogMap || !_saFogById[key]) return;
+    var pts=_saPoly[key]; if(!pts || pts.length<2) return;
+    _saFogById[key].forEach(function(l){
+      if(l && l._saRole!=='dot' && typeof l.setLatLngs==='function'){
+        l.setLatLngs(pts);
+        try{ l.setStyle({dashArray:null}); }catch(e){}
+      }
+    });
+  }catch(e){}
+}
 function _saFogMount_(){
   var el=document.getElementById('sa-fog-map');
   if(!el || typeof L==='undefined') return;
+  // Shapes load once per session, then the mount re-runs with real geometry in hand.
+  if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saFogMount_(); }catch(e){} }); }
   if(_saFogMap){ try{ _saFogMap.remove(); }catch(e){} _saFogMap=null; }
   var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{});
   if(!data.segs.length) return;
@@ -24554,25 +24772,54 @@ function _saFogMount_(){
   // start point - each in its own pane so the glow can never paint over the line it belongs to.
   // Overlapping glows merge into continuous lit territory, which is the actual fog-of-war read: not
   // colour-coded hairlines, but ground that has been burned clear.
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  // Base tiles carry NO labels. Place names are added back as their own layer ABOVE every drawn
+  // segment and above the fog texture, at full strength - orientation is the one thing the fog is
+  // never allowed to take away, and hazing the basemap as a whole was dimming the city names along
+  // with the terrain.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     {detectRetina:true,maxZoom:20,subdomains:'abcd',className:'sa-fog-tiles',opacity:0.5}).addTo(map);
   map.createPane('fogGlow').style.zIndex=410;
   map.createPane('fogLine').style.zIndex=420;
   map.createPane('fogDot').style.zIndex=430;
+  map.createPane('fogTex').style.zIndex=436;
+  map.createPane('fogLabels').style.zIndex=440;
+  map.getPane('fogTex').style.pointerEvents='none';
+  map.getPane('fogLabels').style.pointerEvents='none';
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    {detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'fogLabels',className:'sa-fog-labels'}).addTo(map);
+  // The cloud layer. It lives in a PANE so it stacks under the labels, but a pane pans with the
+  // map, so it is counter-translated back to the frame on every move - a vignette anchored to the
+  // world instead of the viewport slides off screen the moment you drag.
+  var tex=document.createElement('div');
+  tex.className='sa-fog-tex';
+  map.getPane('fogTex').appendChild(tex);
+  var placeTex=function(){
+    try{
+      var tl=map.containerPointToLayerPoint([0,0]), sz=map.getSize();
+      tex.style.transform='translate('+tl.x+'px,'+tl.y+'px)';
+      tex.style.width=sz.x+'px'; tex.style.height=sz.y+'px';
+    }catch(e){}
+  };
+  map.on('move zoom zoomend viewreset resize', placeTex);
   var rGlow=L.canvas({pane:'fogGlow'}), rLine=L.canvas({pane:'fogLine'}), rDot=L.canvas({pane:'fogDot'});
   var groups={ seen:L.layerGroup(), pr:L.layerGroup(), kom:L.layerGroup() };
   var all=[];
   _saFogById={};
   data.segs.forEach(function(s){
-    var t=s.tier, pts=[[s.lat,s.lon]];
-    if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
-    all.push([s.lat,s.lon]);
-    if(pts.length>1) all.push([s.endLat,s.endLon]);
+    var t=s.tier;
+    // Real road geometry when it has been fetched; the straight chord between stored endpoints
+    // otherwise. Which one is in play decides the line style below, so a guessed shape can never
+    // be mistaken for a measured one.
+    var road=s.real?_saPoly[s.id]:null;
+    var pts;
+    if(road && road.length>1){ pts=road; }
+    else { pts=[[s.lat,s.lon]]; if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]); }
+    for(var pi=0;pi<pts.length;pi++) all.push(pts[pi]);
     var g=groups[t.key];
     // Every layer carries its segment id, its ROLE in the three-pass draw, and the coordinates the
     // viewport sweep filters on - so a live placement result can restyle exactly this segment,
     // pass by pass, without a full remount.
-    var tag=function(l, role){ l._saId=s.id; l._saRole=role; l._saTier=t; l._saLat=s.lat; l._saLon=s.lon;
+    var tag=function(l, role){ l._saId=s.id; l._saRole=role; l._saTier=t; l._saGroupKey=t.key; l._saLat=s.lat; l._saLon=s.lon;
       l._saCand=s.candidate;
       l.bindPopup(_saFogPopup_(s));
       l.on('popupopen', function(){ _saKomOnOpen_(s); });
@@ -24584,7 +24831,9 @@ function _saFogMount_(){
       tag(L.polyline(pts,Object.assign({renderer:rLine,pane:'fogLine',lineCap:'round',
         // A bending road gets a dashed chord: the line is a real fact about the endpoints and a
         // poor picture of the tarmac, and dashes are how that reads without a paragraph.
-        dashArray:s.bends?_saFogStyleOf_(t).dash:null},_saLineStyle_(t))), 'line');
+        // Solid means "this is the road". A fetched polyline always earns that; a chord earns it
+        // only when the segment is straight enough that the chord IS the road.
+        dashArray:(s.real||!s.bends)?null:_saFogStyleOf_(t).dash},_saLineStyle_(t))), 'line');
     } else {
       // A segment with no end point has no chord to glow along, so the glow becomes a halo on the
       // point itself - otherwise these would be the only unlit marks on a lit map.
@@ -24605,8 +24854,9 @@ function _saFogMount_(){
   // they made it. Remembered per session only, so a fresh load still opens on Home.
   if(_saFogView && _saFogView.center) map.setView(_saFogView.center, _saFogView.zoom);
   else _saFogFit_(false);
-  _saDotBand=null; _saFogDotsForZoom_();
-  map.on('zoomend', _saFogDotsForZoom_);
+  _saFogDotsForZoom_(true);
+  placeTex();
+  map.on('zoomend', function(){ _saFogDotsForZoom_(false); });
   map.on('moveend zoomend', function(){
     try{
       // Only remember a view the map could actually measure. A fitBounds on a zero-sized container
@@ -24652,12 +24902,37 @@ function aiSegFogHtml_(){
     // and saturation down turns the whole basemap into terrain you can still orient by while making
     // it incapable of competing with anything drawn on top.
     +'#sa-fog-canvas{background:#070c14}'
-    +'#sa-fog-canvas .leaflet-tile-pane{filter:saturate(.35) contrast(1.05)}'
+    +'#sa-fog-canvas .leaflet-tile-pane{filter:saturate(.4) contrast(1.05)}'
+    // Place names ride ABOVE the fog and above every segment, at full strength and slightly lifted
+    // in contrast. Orientation is never in doubt, whatever the fog is doing underneath.
+    +'.sa-fog-labels{filter:brightness(1.9) contrast(1.15);opacity:.95}'
+    // THE CLOUD LAYER. Flat vignetting reads as a dark rectangle; what reads as unexplored ground
+    // is uneven cover - soft masses of different size and offset, densest at the corners, thinning
+    // toward the middle where the riding is. Five overlapping radial masses plus one broad falloff,
+    // all in the same blue-black as the ground so they look like depth rather than a filter.
+    // Eleven overlapping masses at deliberately uneven sizes, offsets and opacities. Evenly spaced
+    // blobs read as a filter; unequal ones read as weather. Two of them are lighter than the ground
+    // rather than darker, which is what stops the cover looking like a single flat sheet.
+    +'.sa-fog-tex{position:absolute;left:0;top:0;pointer-events:none;'
+      +'background:'
+        +'radial-gradient(34% 31% at 5% 4%,rgba(14,20,34,.95),rgba(14,20,34,0) 70%),'
+        +'radial-gradient(22% 19% at 22% 13%,rgba(30,38,58,.34),rgba(30,38,58,0) 68%),'
+        +'radial-gradient(29% 26% at 95% 6%,rgba(11,16,28,.92),rgba(11,16,28,0) 68%),'
+        +'radial-gradient(19% 24% at 78% 17%,rgba(26,33,52,.3),rgba(26,33,52,0) 70%),'
+        +'radial-gradient(37% 30% at 2% 62%,rgba(12,17,29,.9),rgba(12,17,29,0) 72%),'
+        +'radial-gradient(31% 34% at 99% 58%,rgba(11,16,27,.88),rgba(11,16,27,0) 70%),'
+        +'radial-gradient(41% 33% at 7% 97%,rgba(12,17,29,.94),rgba(12,17,29,0) 73%),'
+        +'radial-gradient(35% 29% at 93% 99%,rgba(10,15,26,.92),rgba(10,15,26,0) 71%),'
+        +'radial-gradient(26% 20% at 44% 1%,rgba(13,18,31,.8),rgba(13,18,31,0) 74%),'
+        +'radial-gradient(28% 22% at 57% 100%,rgba(11,16,27,.84),rgba(11,16,27,0) 76%),'
+        +'radial-gradient(125% 100% at 50% 48%,rgba(0,0,0,0) 34%,rgba(6,10,18,.78) 100%)}'
     // A vignette over the tiles (under the segments) deepens the edges so the lit middle reads as a
     // clearing rather than as a rectangle of map. Pointer-events off so it never eats a click.
     +'#sa-fog-map{position:relative;overflow:hidden}'
-    +'#sa-fog-map:after{content:"";position:absolute;inset:0;pointer-events:none;z-index:500;border-radius:12px;'
-      +'background:radial-gradient(ellipse at center,rgba(0,0,0,0) 52%,rgba(0,0,0,.5) 100%)}'
+    // No :after vignette here any more. It sat above the whole Leaflet container, which meant it
+    // dimmed the city labels along with everything else - the exact thing the labels layer exists to
+    // prevent. The cloud pane does this job instead, from underneath the labels.
+
     +'.sa-fogchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
       +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none}'
     +'.sa-fogbtn{background:none;border:1px solid var(--d-edge);color:var(--d-soft);font-size:11px;font-weight:700;'
@@ -24670,7 +24945,9 @@ function aiSegFogHtml_(){
     +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
     +'<button class="sa-fogbtn" onclick="_saFogFit_(false)">Home</button>'
     +'<button class="sa-fogbtn" onclick="_saFogFit_(true)">Fit all</button>'
-    +'<button class="sa-fogbtn" id="sa-kom-sweep" onclick="_saKomSweep_()" style="border-color:#fc520055;color:#fc5200">Check placements in view</button>'
+    +'<button class="sa-fogbtn" id="sa-kom-sweep" onclick="_saKomSweep_()" style="border-color:#ff7a1855;color:#ffa53d">Check placements in view</button>'
+    +'<button class="sa-fogbtn" id="sa-poly-lit" onclick="_saPolySweep_(true)" style="border-color:#ff5c8a55;color:#ff5c8a">Fetch road shapes (lit)</button>'
+    +'<button class="sa-fogbtn" id="sa-poly-all" onclick="_saPolySweep_(false)">All shapes</button>'
     +'</div></div>';
 
   if(!d.segs.length){
@@ -24681,10 +24958,18 @@ function aiSegFogHtml_(){
   // legend / filters. Counts are the real tier populations, so an empty tier reads as empty rather
   // than as a colour with nothing behind it.
   H+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">';
-  [['kom','#ff8a3d','KOM/QOM held (live-checked)',d.byTier[3]],
-   ['pr','#4ade80','Personal PR',d.byTier[2]],
-   ['seen','#b9d4f2','Attempted, no PR',d.byTier[1]]].forEach(function(t){
-    H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'" onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)" style="color:'+t[1]+'">'
+  [['kom',SA_FOG_STYLE[4].line,'KOM/QOM held (live)',d.byTier[3]],
+   ['pr',SA_FOG_STYLE[3].line,'Personal best',d.byTier[2]],
+   ['seen',SA_FOG_STYLE[2].line,'Ridden ×'+SA_FOG_E3+'+',d.ramp[2]],
+   ['seen2',SA_FOG_STYLE[1].line,'Ridden twice',d.ramp[1]],
+   ['seen3',SA_FOG_STYLE[0].line,'Ridden once',d.ramp[0]]].forEach(function(t){
+    // The two halves of the attempted ramp share ONE layer group, so only the first of them carries
+    // a toggle. A chip that looks clickable and does nothing is worse than a plain swatch, so the
+    // cool half renders as a legend entry rather than a control.
+    var toggles=(t[0].indexOf('seen')!==0 || t[0]==='seen');
+    H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'"'
+      +(toggles?(' onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)"'):'')
+      +' style="color:'+t[1]+(toggles?'':';cursor:default')+'">'
       +'<span style="width:9px;height:9px;border-radius:50%;background:'+t[1]+';flex:none"></span>'
       +esc(t[2])+' <span id="sa-fog-n-'+t[0]+'" style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
   });
@@ -24710,8 +24995,14 @@ function aiSegFogHtml_(){
   H+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--d-t3);line-height:1.6">'
     +'<div><span style="'+LBL+'">Drawn</span><br>'+d.segs.length.toLocaleString()+' of '+d.total.toLocaleString()+' attempted segments</div>'
     +(d.noGeom?('<div><span style="'+LBL+'">No coordinates</span><br>'+d.noGeom+' cannot be placed yet</div>'):'')
-    +'<div><span style="'+LBL+'">Line style</span><br>solid = the chord is close to the road<br>dashed = the road bends, the line does not</div>'
-    +'</div>';
+    +'<div><span style="'+LBL+'">Road shape</span><br>'
+      +'<b style="color:var(--d-soft)">'+d.real.toLocaleString()+'</b> drawn on their real path<br>'
+      +(d.segs.length-d.real>0
+        ? ((d.segs.length-d.real).toLocaleString()+' still a straight line between endpoints')
+        : 'every drawn segment follows its road')+'</div>'
+    +'<div><span style="'+LBL+'">Line style</span><br>solid = the real road, or a segment straight enough that<br>the two are the same<br>dashed = a straight line standing in for a bending road</div>'
+    +'</div>'
+    +'<div id="sa-poly-note" style="font-size:11px;color:var(--d-t3);margin-top:8px"></div>';
 
   // ---- how placement works here, stated where the tier is ----
   // The reason this is worth a paragraph rather than a tooltip: the obvious implementation is wrong.
@@ -47135,7 +47426,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-fog-visual-pass';
+window.__BUILD__ = '2026-08-04-fog-roads-gradient';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".

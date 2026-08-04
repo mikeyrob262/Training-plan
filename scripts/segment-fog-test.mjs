@@ -22,6 +22,16 @@ const src = fs.readFileSync(path.join(root, 'worker.js'), 'utf8');
 const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : c));
 function matchBrace(from){ let i=src.indexOf('{',from), d=0; for(;i<src.length;i++){const c=src[i]; if(c==='{')d++; else if(c==='}'){d--; if(!d)return i;}} return -1; }
 function ex(name){ const i=src.indexOf('function '+name+'('); if(i<0) throw new Error('fn not found: '+name); return src.slice(i, matchBrace(i)+1)+'\n'; }
+// Declarations, not functions. SA_FOG_STYLE is a multi-line object literal; SA_FOG_E2 is a
+// one-liner that declares SA_FOG_E3 alongside it, so extracting the first line takes both.
+function exv(name){
+  const i = src.indexOf('var '+name+'=');
+  if (i < 0) throw new Error('var not found: '+name);
+  const nl = String.fromCharCode(10);
+  const firstLine = src.slice(i, src.indexOf(nl, i));
+  if (firstLine.trim().endsWith('{')) return src.slice(i, matchBrace(i)+1) + ';' + nl;
+  return firstLine + nl;
+}
 
 let fails=0;
 const R='\x1b[31m', G='\x1b[32m', C='\x1b[36m', X='\x1b[0m';
@@ -30,11 +40,14 @@ const check=(label,got,want)=>{ const ok=JSON.stringify(got)===JSON.stringify(wa
 const ok=(label,cond)=>{ if(!cond)fails++; console.log('  '+(cond?G+'PASS'+X:R+'FAIL'+X)+'  '+label); };
 
 const F = new Function(asServed(
-  'var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6;\n'
+  // _saPoly is the session road-shape cache the renderer reads; empty here so every assertion below
+  // describes the un-fetched state, and the one test that cares injects its own shapes.
+  'var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6; var _saPoly={};\n'
   + ex('isPlainObj_') + ex('_saHaversineM_') + ex('_segBearingDeg_') + ex('_saSinuosity_')
-  + ex('_saKomCandidate_') + ex('_saXomSec_')
+  + ex('_saKomCandidate_') + ex('_saXomSec_') + ex('_saPolyDecode_')
+  + exv('SA_FOG_STYLE') + exv('SA_FOG_E2') + ex('_saFogRamp_') + ex('_saFogStyleOf_')
   + ex('_segAbsorb_') + ex('_saFogTierOf_') + ex('_saFogList_') + ex('_saFogHome_') + ex('_saOrdinal_')
-) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_};')();
+) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_, ramp:_saFogRamp_, poly:_saPolyDecode_, STYLE:SA_FOG_STYLE};')();
 
 console.log('\n'+C+'=== 1. the top tier is reachable ONLY from a live check ==='+X);
 check('a live holding result is the top tier', F.tier({prSec:300}, {holds:true}).t, 3);
@@ -149,6 +162,41 @@ check('a payload with no coordinates changes nothing', F.absorb({id:'s5'}, {komR
 console.log('\n'+C+'=== 7. ordinals read as English ==='+X);
 check('1st', F.ord(1), '1st'); check('2nd', F.ord(2), '2nd'); check('3rd', F.ord(3), '3rd');
 check('4th', F.ord(4), '4th'); check('11th not 11st', F.ord(11), '11th'); check('13th', F.ord(13), '13th');
+
+console.log('\n'+C+'=== 7b. the warm-to-cool ramp is driven by real effort counts ==='+X);
+// The ramp is not decoration: the attempted tier splits by how many times a road was actually
+// ridden, which is what makes a home cluster read as radiating rather than as one flat colour.
+check('KOM takes the top step', F.ramp({t:3}, 0), 4);
+check('PR takes the step below it', F.ramp({t:2}, 0), 3);
+check('ridden 3+ is the warm end of the cool half', F.ramp({t:1}, 20), 2);
+check('ridden once is the coldest step', F.ramp({t:1}, 1), 0);
+check('ridden twice is the middle step', F.ramp({t:1}, 2), 1);
+check('exactly 3 reaches the blue step', F.ramp({t:1}, 3), 2);
+check('no effort count is the coldest, never warm', F.ramp({t:1}, 0), 0);
+ok('the ramp runs warm to cool across five distinct colours',
+  new Set([F.STYLE[0].line,F.STYLE[1].line,F.STYLE[2].line,F.STYLE[3].line,F.STYLE[4].line]).size===5);
+ok('line weight increases monotonically up the ramp',
+  [0,1,2,3].every(i=>F.STYLE[i].lw < F.STYLE[i+1].lw));
+ok('glow strength increases monotonically up the ramp',
+  [0,1,2,3].every(i=>F.STYLE[i].go < F.STYLE[i+1].go));
+ok('dot size never out-grows its line', [0,1,2,3,4].every(i=>F.STYLE[i].dr*2 < F.STYLE[i].gw));
+const hotTier=F.tier({prSec:1, effortCount:50}, {holds:true});
+const coldTier=F.tier({effortCount:1}, null);
+ok('a held KOM and a once-ridden road never share a colour', hotTier.col!==coldTier.col);
+check('the attempted label names how often it was ridden', F.tier({effortCount:1}, null).label, 'Ridden once');
+check('...and counts when it is more than one', F.tier({effortCount:7}, null).label, 'Ridden ×7');
+
+console.log('\n'+C+'=== 7c. road geometry: decoded, and never faked ==='+X);
+// Strava's encoded polyline. Verified against a real response: Barcroft is 102 chars / 37 points.
+check('a known encoded polyline decodes to the right point count',
+  F.poly('_p~iF~ps|U_ulLnnqC_mqNvxq`@').length, 3);
+check('the first decoded point is right',
+  F.poly('_p~iF~ps|U_ulLnnqC_mqNvxq`@')[0].map(n=>Math.round(n*100)/100), [38.5,-120.2]);
+check('empty input is null, not an empty path', F.poly(''), null);
+check('null input', F.poly(null), null);
+check('a single-point path is null (nothing to draw)', F.poly('_p~iF~ps|U'), null);
+const geoStore={g:{id:'sg', name:'Curvy', startLat:42.0, startLon:-85.0, endLat:42.02, endLon:-85.0, distMi:3.0, prSec:100}};
+check('without a fetched shape the segment is not marked real', F.list(geoStore,{}).segs[0].real, false);
 
 console.log('\n'+C+'=== 8. invariants in the source ==='+X);
 const codeLines = src.split('\n').filter(L => !/^\s*\/\//.test(L));
