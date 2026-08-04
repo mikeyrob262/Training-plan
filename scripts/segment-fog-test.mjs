@@ -1,9 +1,10 @@
 // Fog-of-war segment coverage map — tiering, geometry and the honesty rules.
 //
 // Three things here are easy to get wrong in a way that still renders:
-//   1. tiering off prRank. pr_rank ranks an effort against the athlete's OWN efforts, so a personal
-//      second-best would be promoted into a leaderboard tier and the map would claim placements
-//      that do not exist. Only kom_rank is a leaderboard fact.
+//   1. tiering off any STORED rank. Strava stamps kom_rank at UPLOAD time and it is provably stale
+//      on this athlete's data - Barcroft carries kom_rank 1 while sitting 10s off the current KOM.
+//      pr_rank is worse still: it ranks an effort against the athlete's OWN efforts. The top tier
+//      must be reachable ONLY from a live check, and nothing about placement may be persisted.
 //   2. reading the store through segmentRecordsCompute_, which skips every segment with no PR time
 //      — 1,875 of 2,017 live. The map would silently lose 93% of its coverage and look plausible.
 //   3. absorbing geometry destructively. Endpoints do not move; re-deriving them per effort churns
@@ -31,47 +32,74 @@ const ok=(label,cond)=>{ if(!cond)fails++; console.log('  '+(cond?G+'PASS'+X:R+'
 const F = new Function(asServed(
   'var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6;\n'
   + ex('isPlainObj_') + ex('_saHaversineM_') + ex('_segBearingDeg_') + ex('_saSinuosity_')
+  + ex('_saKomCandidate_') + ex('_saXomSec_')
   + ex('_segAbsorb_') + ex('_saFogTierOf_') + ex('_saFogList_') + ex('_saFogHome_') + ex('_saOrdinal_')
-) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_};')();
+) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_};')();
 
-console.log('\n'+C+'=== 1. tier precedence uses only facts that exist ==='+X);
-check('kom_rank present -> top-10 tier', F.tier({komRank:7, prSec:300}).t, 3);
-check('kom_rank 1 is still tier 3, not a 4th state', F.tier({komRank:1}).t, 3);
-check('PR time, no kom -> personal PR tier', F.tier({prSec:300}).t, 2);
-check('no PR time -> attempted tier', F.tier({effortCount:9}).t, 1);
-check('kom outranks PR', F.tier({komRank:3, prSec:300}).key, 'kom');
-console.log('  '+C+'-- prRank must NEVER promote a tier --'+X);
-check('prRank 1 alone is not placement', F.tier({prRank:1}).t, 1);
-check('prRank 1 + PR time is still just a PR', F.tier({prRank:1, prSec:300}).t, 2);
-check('prRank 2 does not become 2nd on a leaderboard', F.tier({prRank:2, prSec:300}).key, 'pr');
+console.log('\n'+C+'=== 1. the top tier is reachable ONLY from a live check ==='+X);
+check('a live holding result is the top tier', F.tier({prSec:300}, {holds:true}).t, 3);
+check('PR time, no live check -> personal PR tier', F.tier({prSec:300}, null).t, 2);
+check('live check that came back NOT holding stays at PR', F.tier({prSec:300}, {holds:false}).t, 2);
+check('live check with an unknown answer stays at PR', F.tier({prSec:300}, {holds:null}).t, 2);
+check('a live error never promotes', F.tier({prSec:300}, {err:'unavailable'}).t, 2);
+check('no PR time -> attempted tier', F.tier({effortCount:9}, null).t, 1);
+console.log('  '+C+'-- NO stored field may reach the top tier --'+X);
+check('a stored komRank does not promote', F.tier({komRank:1, prSec:300}, null).t, 2);
+check('a stored komRank of 1 is ignored entirely', F.tier({komRank:1}, null).t, 1);
+check('a stored prRank does not promote', F.tier({prRank:1, prSec:300}, null).t, 2);
+check('stored rank cannot beat a live not-holding', F.tier({komRank:1, prSec:300}, {holds:false}).t, 2);
 ok('every tier has a distinct colour',
-  new Set([F.tier({komRank:1}).col, F.tier({prSec:1}).col, F.tier({}).col]).size===3);
+  new Set([F.tier({prSec:1},{holds:true}).col, F.tier({prSec:1},null).col, F.tier({},null).col]).size===3);
+
+console.log('\n'+C+'=== 1b. only plausible segments are worth a request ==='+X);
+check('a segment with a PR is a candidate', F.cand({prSec:120}), true);
+check('no PR -> not worth a lookup', F.cand({effortCount:40}), false);
+check('prSec 0 is not a PR', F.cand({prSec:0}), false);
+check('null segment', F.cand(null), false);
+
+console.log('\n'+C+'=== 1c. leaderboard times parse in every shape Strava sends ==='+X);
+// All of these appear in this athlete's own library. A naive split on colon yields NaN for '49s',
+// which reads as "no KOM known" on exactly the short sprints where the gap is smallest.
+check('sub-minute 49s', F.xom('49s'), 49);
+check('1:17', F.xom('1:17'), 77);
+check('10:56', F.xom('10:56'), 656);
+check('over an hour 1:02:33', F.xom('1:02:33'), 3753);
+check('null', F.xom(null), null);
+check('empty', F.xom(''), null);
+check('garbage is null, never NaN', F.xom('--'), null);
+check('NaN is never returned', Number.isNaN(F.xom('x:y')), false);
 
 console.log('\n'+C+'=== 2. the map reads EVERY attempted segment, not just PR ones ==='+X);
 // This is the segmentRecordsCompute_ trap: it returns only segments with prSec>0.
 const store={
   a:{id:'sa', name:'PR one',   startLat:42.9, startLon:-85.6, endLat:42.91, endLon:-85.6, prSec:300, distMi:1},
   b:{id:'sb', name:'No PR',    startLat:42.9, startLon:-85.7, endLat:42.92, endLon:-85.7, distMi:1},
-  c:{id:'sc', name:'KOM',      startLat:42.8, startLon:-85.6, endLat:42.81, endLon:-85.6, komRank:4, prSec:250, distMi:1},
+  c:{id:'sc', name:'Fast one', startLat:42.8, startLon:-85.6, endLat:42.81, endLon:-85.6, prSec:250, distMi:1},
   d:{id:'sd', name:'No coords',prSec:100, distMi:1}
 };
-const L=F.list(store);
+const L=F.list(store, {});
 check('all four counted as attempted', L.total, 4);
 check('three are drawable', L.segs.length, 3);
 check('the no-PR segment IS on the map', L.segs.filter(s=>s.id==='sb').length, 1);
 check('the coordinate-less one is reported, not dropped silently', L.noGeom, 1);
-check('tier counts', L.byTier, {1:1,2:1,3:1});
-check('empty store is empty, not an error', F.list({}).segs.length, 0);
-check('null store is handled', F.list(null).segs.length, 0);
+check('tier counts with nothing checked yet', L.byTier, {1:1,2:2,3:0});
+check('...and the top tier appears once a live check holds',
+  F.list(store, {c:{holds:true}}).byTier, {1:1,2:1,3:1});
+check('candidate count is the PR-bearing set', L.candidates, 2);
+check('checked count reflects the live cache', F.list(store, {c:{holds:false}}).checked, 1);
+check('an errored check is not counted as checked', F.list(store, {c:{err:'x'}}).checked, 0);
+check('empty store is empty, not an error', F.list({}, {}).segs.length, 0);
+check('null store is handled', F.list(null, {}).segs.length, 0);
+check('a missing live cache is handled', F.list(store).segs.length, 3);
 
 console.log('\n'+C+'=== 3. the chord is labelled honestly ==='+X);
 // distMi vs the straight-line distance decides solid (chord ~ road) vs dashed (road bends).
 const straight={s:{id:'ss', startLat:42.0, startLon:-85.0, endLat:42.0180, endLon:-85.0, distMi:1.25}};
 const windy  ={w:{id:'sw', startLat:42.0, startLon:-85.0, endLat:42.0180, endLon:-85.0, distMi:3.5}};
-check('a straight segment draws solid', F.list(straight).segs[0].bends, false);
-check('a wandering segment draws dashed', F.list(windy).segs[0].bends, true);
+check('a straight segment draws solid', F.list(straight,{}).segs[0].bends, false);
+check('a wandering segment draws dashed', F.list(windy,{}).segs[0].bends, true);
 check('unknown distance is treated as bending, not as straight',
-  F.list({x:{id:'sx', startLat:42, startLon:-85, endLat:42.01, endLon:-85}}).segs[0].bends, true);
+  F.list({x:{id:'sx', startLat:42, startLon:-85, endLat:42.01, endLon:-85}},{}).segs[0].bends, true);
 
 console.log('\n'+C+'=== 4. the map opens where the riding is ==='+X);
 // Four real clusters exist in the live store; a global fit renders them as specks.
@@ -90,27 +118,23 @@ check('due south', F.bear(43, -85, 42, -85), 180);
 check('missing input -> null, never 0', F.bear(42, -85, null, -85), null);
 ok('0 degrees and null are distinguishable', F.bear(42,-85,43,-85)===0 && F.bear(42,-85,null,null)===null);
 
-console.log('\n'+C+'=== 6. absorbing never destroys what is already stored ==='+X);
-const seg={id:'s1', startLat:42.5, startLon:-85.5, endLat:42.6, endLon:-85.5, bearing:12.3, komRank:2, komRankDate:'2025-01-01'};
-F.absorb(seg, {startLat:1, startLon:1, endLat:2, endLon:2, komRank:9}, '2026-08-04');
+console.log('\n'+C+'=== 6. absorbing takes GEOMETRY ONLY, and never destroys ==='+X);
+const seg={id:'s1', startLat:42.5, startLon:-85.5, endLat:42.6, endLon:-85.5, bearing:12.3};
+F.absorb(seg, {startLat:1, startLon:1, endLat:2, endLon:2, komRank:9, prRank:1});
 check('existing coordinates are not overwritten', [seg.startLat, seg.startLon], [42.5,-85.5]);
 check('existing bearing is not recomputed', seg.bearing, 12.3);
-check('a WORSE later rank does not replace a better one', seg.komRank, 2);
-check('...and keeps the date of the rank it describes', seg.komRankDate, '2025-01-01');
+ok('NO placement field is ever written', !('komRank' in seg) && !('prRank' in seg)
+  && !('komRankDate' in seg) && !('prRankDate' in seg));
 
 const fresh={id:'s2'};
-const wrote=F.absorb(fresh, {startLat:42.1, startLon:-85.1, endLat:42.2, endLon:-85.2, komRank:5, prRank:1}, '2026-08-04');
+const wrote=F.absorb(fresh, {startLat:42.1, startLon:-85.1, endLat:42.2, endLon:-85.2, komRank:5, prRank:1});
 ok('a bare record absorbs geometry', fresh.startLat===42.1 && fresh.endLon===-85.2);
 ok('...and gets a derived bearing', typeof fresh.bearing==='number');
-check('...and the placement, dated', [fresh.komRank, fresh.komRankDate], [5,'2026-08-04']);
-check('...and prRank is stored but separate from placement', fresh.prRank, 1);
+ok('...and STILL stores no placement, even when the payload carries it',
+  !('komRank' in fresh) && !('prRank' in fresh));
 check('absorb reports that it changed something', wrote, true);
-check('a second identical absorb is a no-op', F.absorb(fresh, {startLat:42.1, startLon:-85.1, komRank:5, prRank:1}, '2026-08-04'), false);
-
-const better={id:'s3', komRank:8, komRankDate:'2024-01-01'};
-F.absorb(better, {komRank:2}, '2026-03-03');
-check('a BETTER later rank does replace', [better.komRank, better.komRankDate], [2,'2026-03-03']);
-check('rank 0 / null is ignored', (F.absorb({id:'s4'}, {komRank:0}, '2026-01-01')), false);
+check('a second absorb is a no-op', F.absorb(fresh, {startLat:42.1, startLon:-85.1}), false);
+check('a payload with no coordinates changes nothing', F.absorb({id:'s5'}, {komRank:1}), false);
 
 console.log('\n'+C+'=== 7. ordinals read as English ==='+X);
 check('1st', F.ord(1), '1st'); check('2nd', F.ord(2), '2nd'); check('3rd', F.ord(3), '3rd');
@@ -118,12 +142,20 @@ check('4th', F.ord(4), '4th'); check('11th not 11st', F.ord(11), '11th'); check(
 
 console.log('\n'+C+'=== 8. invariants in the source ==='+X);
 const codeLines = src.split('\n').filter(L => !/^\s*\/\//.test(L));
-const has = (s) => codeLines.some(L => L.indexOf(s)>=0);
-ok('the map does not read segmentRecordsCompute_ for coverage',
-  !/segmentRecordsCompute_/.test(src.slice(src.indexOf('function _saFogList_('), matchBrace(src.indexOf('function _saFogList_(')))));
-ok('placement is always written with a date', has('seg.komRankDate=d'));
+const has = (q) => codeLines.some(L => L.indexOf(q)>=0);
+const fogSrc = src.slice(src.indexOf('function _saFogList_('), matchBrace(src.indexOf('function _saFogList_(')));
+ok('the map does not read segmentRecordsCompute_ for coverage', fogSrc.indexOf('segmentRecordsCompute_')<0);
+const absorbSrc = src.slice(src.indexOf('function _segAbsorb_('), matchBrace(src.indexOf('function _segAbsorb_(')));
+ok('_segAbsorb_ contains no placement write at all',
+  absorbSrc.indexOf('komRank')<0 && absorbSrc.indexOf('prRank')<0);
+ok('the live check reads /segments/{id}, not the upload-time rank endpoint',
+  has("'https://www.strava.com/api/v3/segments/'+segId") && !has('segment_efforts?segment_id'));
 ok('the limitation banner names roads with no segment', has('no Strava segment on it'));
-ok('placement is never labelled as current', has('placement as of that effort, not today'));
+ok('the UI states that placement is never stored', has('Placement is checked live, never stored'));
+ok('the sweep cap is a named constant, not a magic number', has('SA_KOM_SWEEP_CAP'));
+ok('the sweep reports what it capped rather than truncating silently', has('capped at '));
+ok('a deliberate tab change resets the map view',
+  src.slice(src.indexOf('function aiSetTab_('), matchBrace(src.indexOf('function aiSetTab_('))).indexOf('_saFogView=null')>=0);
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

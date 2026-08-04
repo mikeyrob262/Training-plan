@@ -6890,6 +6890,12 @@ function normalizeState_(s){
   if(!isPlainObj_(s.plan)) s.plan = {};
   if(!isPlainObj_(s.strength)) s.strength = {};
   if(!isPlainObj_(s.segments)) s.segments = {};   // per-segment all-time PR store (keyed by 's'+stravaSegmentId), sourced from Strava
+  // Placement must not live in the store. A build shipped earlier today did persist komRank/prRank,
+  // and measuring against Strava showed exactly why the original rule was right: kom_rank is stamped
+  // at UPLOAD time, so a stored 1 sat next to a segment this athlete is 10 seconds off. Stripped on
+  // EVERY normalize rather than once, for the same reason migrateNlKeyPadding_ runs every time - a
+  // device still holding those fields would otherwise push them back through the merge forever.
+  try{ stripSegmentRank_(s); }catch(e){ console.error('[seg-rank-strip] threw: '+(e&&e.message)); }
   if(!isPlainObj_(s.athleteStats)) s.athleteStats = {};   // Strava lifetime totals (all_ride_totals) — true all-time, unaffected by the local library loss
   // Fold split nutrition day keys on EVERY normalize, not once: a device still running the
   // old code keeps reintroducing unpadded keys through the merge, so a one-shot guard would
@@ -24119,16 +24125,79 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // line is drawn SOLID (the chord is very nearly the road), and one that wanders is drawn DASHED.
 // The legend explains both. This is the same honest-degrade rule the wind call already uses.
 var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null;
-// Tier is decided by data that exists, in strict precedence. kom_rank is Strava's own leaderboard
-// placement and it is only ever returned when the athlete is in the top 10, so its mere presence IS
-// the top-N fact - no ranking is invented here. prRank is deliberately NOT used for tiering: it
-// ranks an effort against the athlete's OWN efforts, so treating it as placement would quietly
-// promote a personal second-best into a leaderboard tier.
-function _saFogTierOf_(seg){
+// LIVE placement, held for this page session only and never written to st.segments. Keyed by
+// segment id -> {holds, prSec, komSec, qomSec, gap, at} or {err}. Cleared on reload by construction:
+// it is a plain var, so there is no cache to go stale between sessions.
+var _saKomLive={}, _saKomBusy={};
+// Strava returns a leaderboard time as a STRING in three shapes: '49s', '1:17', '10:56' (and
+// '1:02:33' for the long ones). All four appear in this athlete's own library, so a naive
+// split-on-colon parse yields NaN for every sub-minute segment - which silently reads as "no KOM
+// known" on exactly the short sprints where the gap is smallest.
+function _saXomSec_(t){
+  if(t==null) return null;
+  var s=String(t).trim(); if(!s) return null;
+  if(s.charAt(s.length-1)==='s'){ var n=+s.slice(0,-1); return isFinite(n)?n:null; }
+  var p=s.split(':'); for(var i=0;i<p.length;i++){ if(p[i]==='' || !isFinite(+p[i])) return null; }
+  if(p.length===3) return (+p[0])*3600+(+p[1])*60+(+p[2]);
+  if(p.length===2) return (+p[0])*60+(+p[1]);
+  return isFinite(+s)?+s:null;
+}
+// Is a live check even worth a request? The map holds 2,017 segments and the rate limit is 100 per
+// 15 minutes, so "check everything" is not an option and never was. A segment with no recorded PR
+// time is one this athlete has ridden but never registered a best on, which is the population where
+// holding a KOM is least plausible - 1,825 of the 1,942 drawn. Narrowing to segments that carry a
+// PR takes the candidate set to 117, which is inside one rate-limit window.
+function _saKomCandidate_(seg){ return !!(seg && +seg.prSec>0); }
+// ONE call per segment: /segments/{id} carries the athlete's PR and the CURRENT leaderboard times
+// together, so the comparison is made from a single consistent snapshot. Deliberately NOT
+// /segment_efforts - that returns kom_rank, which Strava stamps at upload time and which is
+// provably stale here (see _segAbsorb_). Comparing your PR against today's KOM is a fact about
+// today; a rank recorded in July is not.
+function _saKomFetch_(segId, cb){
+  var key='s'+segId;
+  if(_saKomLive[key]){ cb(_saKomLive[key]); return; }
+  if(_saKomBusy[key]){ cb(null); return; }
+  _saKomBusy[key]=true;
+  var done=function(v){ delete _saKomBusy[key]; _saKomLive[key]=v; cb(v); };
+  if(typeof withStravaToken_!=='function'){ done({err:'no strava'}); return; }
+  withStravaToken_(function(token){
+    if(!token){ done({err:'connect Strava'}); return; }
+    fetch('https://www.strava.com/api/v3/segments/'+segId,{headers:{'Authorization':'Bearer '+token}})
+      .then(function(r){
+        if(r.status===429){ throw 'rl'; }
+        return r.ok?r.json():null;
+      })
+      .then(function(d){
+        if(!d){ done({err:'unavailable'}); return; }
+        var stats=d.athlete_segment_stats||{};
+        var pr=(+stats.pr_elapsed_time>0)?+stats.pr_elapsed_time:null;
+        var kom=_saXomSec_(d.xoms&&d.xoms.kom), qom=_saXomSec_(d.xoms&&d.xoms.qom);
+        // "Holds it" is a comparison of times, not a rank: your PR is at or under the standing
+        // leaderboard time. Equal counts - a tie IS the time. If either number is missing the
+        // answer is unknown, never false.
+        var best=(kom!=null&&qom!=null)?Math.min(kom,qom):(kom!=null?kom:qom);
+        done({ prSec:pr, komSec:kom, qomSec:qom,
+               holds:(pr!=null&&best!=null)?(pr<=best):null,
+               gap:(pr!=null&&best!=null)?(pr-best):null,
+               athletes:(+d.athlete_count>0)?+d.athlete_count:null,
+               at:Date.now() });
+      })
+      .catch(function(e){ done({err:(e==='rl')?'rate limit — try again in a few minutes':'unavailable'}); });
+  });
+}
+// Tier is decided by data that exists, in strict precedence, and the top tier is decided by data
+// fetched LIVE rather than anything held locally. pr_rank is never used at any tier: it ranks an
+// effort against the athlete's OWN efforts, so treating it as placement would quietly promote a
+// personal second-best into a leaderboard tier.
+function _saFogTierOf_(seg, live){
   if(!seg) return null;
-  if(+seg.komRank>0) return { t:3, key:'kom', label:'Top 10 placement', col:'#fc5200', weight:5, opacity:1 };
-  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',      col:'#22c55e', weight:3.4, opacity:.95 };
-  return               { t:1, key:'seen',label:'Attempted, no PR',  col:'#7c8aa0', weight:2, opacity:.5 };
+  // Tier 3 is only ever awarded by a LIVE check that came back holding. It cannot be reached from
+  // stored state, which is the point: nothing in st.segments can promote a segment into it, so the
+  // tier can never show a placement that has since drifted. Unchecked and not-holding both stay at
+  // whatever the stored data supports.
+  if(live && live.holds===true) return { t:3, key:'kom', label:'You hold the KOM/QOM', col:'#fc5200', weight:5, opacity:1 };
+  if(+seg.prSec>0)   return { t:2, key:'pr',  label:'Personal PR',     col:'#22c55e', weight:3.4, opacity:.95 };
+  return               { t:1, key:'seen',label:'Attempted, no PR', col:'#7c8aa0', weight:2, opacity:.5 };
 }
 // Map-ready records, plus the counts the page reports. Reads st.segments directly rather than
 // segmentRecordsCompute_ ON PURPOSE, and the reason matters: that function SKIPS every segment with
@@ -24136,13 +24205,19 @@ function _saFogTierOf_(seg){
 // wrong one for a coverage map, where a segment ridden once and never won is the whole point.
 // segmentRecordsCompute_ is still the provider for the drill-in progression - one lookup path per
 // question, not one per surface.
-function _saFogList_(store){
+// live: the session-only placement cache (_saKomLive). Passed in rather than read from the global so
+// the function stays pure and testable - the tier it produces depends only on its arguments.
+function _saFogList_(store, live){
   var keys=isPlainObj_(store)?Object.keys(store):[];
-  var segs=[], noGeom=0, byTier={1:0,2:0,3:0};
+  var segs=[], noGeom=0, byTier={1:0,2:0,3:0}, checked=0, candidates=0;
+  live=live||{};
   keys.forEach(function(k){
     var s=store[k]; if(!s) return;
     if(s.startLat==null || s.startLon==null){ noGeom++; return; }
-    var tier=_saFogTierOf_(s);
+    var lv=live[k]||null;
+    if(lv && !lv.err) checked++;
+    if(_saKomCandidate_(s)) candidates++;
+    var tier=_saFogTierOf_(s, lv);
     var distM=(+s.distMi>0)?(+s.distMi*1609.344):null;
     var sin=_saSinuosity_(s, distM);
     byTier[tier.t]++;
@@ -24151,13 +24226,14 @@ function _saFogList_(store){
       endLat:(s.endLat!=null)?+s.endLat:null, endLon:(s.endLon!=null)?+s.endLon:null,
       tier:tier, distMi:(+s.distMi>0)?+s.distMi:null, grade:(s.grade!=null)?+s.grade:null,
       prSec:(+s.prSec>0)?+s.prSec:null, prDate:s.prDate||null,
-      komRank:(+s.komRank>0)?+s.komRank:null, komRankDate:s.komRankDate||null,
+      live:lv, candidate:_saKomCandidate_(s),
       effortCount:(+s.effortCount>0)?+s.effortCount:((s.efforts&&s.efforts.length)||0),
       starred:!!s.starred,
       // straight = the chord is a fair picture of the road; bends = it is not
       bends:(sin==null || sin>=_SA_SINUOUS) });
   });
-  return { segs:segs, noGeom:noGeom, total:keys.length, byTier:byTier };
+  return { segs:segs, noGeom:noGeom, total:keys.length, byTier:byTier,
+           checked:checked, candidates:candidates };
 }
 // Open where the riding is. Fitting all 1,942 at once spans Michigan to the South Pacific and
 // renders four unreadable specks, so the default view is the densest one-degree cell and everything
@@ -24195,15 +24271,9 @@ function _saFogPopup_(s){
   } else {
     H+='<div style="margin-top:6px;font-size:11px;color:#5b6678">No PR time recorded &mdash; ridden, never a best.</div>';
   }
-  // Placement is always dated. A leaderboard position is a fact about a day, not a standing claim,
-  // and the whole reason this was never stored before was the fear of showing a stale rank as
-  // current. Naming the date is what makes storing it honest.
-  if(s.komRank!=null){
-    H+='<div style="margin-top:6px;font-size:11px;color:#0d1016">'
-      +'<b>'+_saOrdinal_(s.komRank)+'</b> on the leaderboard when ridden'
-      +(s.komRankDate?('<span style="color:#5b6678"> &middot; '+esc(String(s.komRankDate).slice(0,10))+'</span>'):'')
-      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">placement as of that effort, not today</div></div>';
-  }
+  // Placement slot. Filled by a live request fired when this popup opens, never from stored state.
+  H+='<div id="sa-kom-'+esc(String(s.id))+'" style="margin-top:7px;font-size:11px;color:#5b6678">'
+    +_saKomHtml_(s)+'</div>';
   if(s.bends) H+='<div style="margin-top:6px;font-size:9.5px;color:#8b95a6">drawn as a straight line &mdash; this road bends</div>';
   if(url) H+='<a href="'+url+'" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:9px;font-size:11px;font-weight:700;color:#fc5200;text-decoration:none">View on Strava &#8599;</a>';
   return H+'</div>';
@@ -24212,6 +24282,76 @@ function _saOrdinal_(n){
   var v=+n; if(!(v>0)) return String(n);
   var t=v%100; if(t>=11 && t<=13) return v+'th';
   var r=v%10; return v+(r===1?'st':(r===2?'nd':(r===3?'rd':'th')));
+}
+// The placement line, rendered from whatever the live cache holds for this segment right now. Four
+// distinct states, and "not checked" is one of them - it never guesses, and never borrows a stored
+// number to fill the gap.
+function _saKomHtml_(s){
+  var lv=_saKomLive['s'+_saSegNum_(s.id)] || _saKomLive[String(s.id)];
+  if(!s.candidate && !lv) return 'No PR here, so no placement check &mdash; leaderboard times are only fetched where you have a best.';
+  if(!lv) return '<span style="color:#8b95a6">Checking today&rsquo;s leaderboard&hellip;</span>';
+  if(lv.err) return '<span style="color:#b45309">Placement unavailable &mdash; '+aiEsc_(lv.err)+'</span>';
+  if(lv.komSec==null) return 'Strava lists no leaderboard time for this segment.';
+  var mm=_saMMSS_;
+  if(lv.holds===true){
+    return '<b style="color:#fc5200">You hold it.</b> Your '+mm(lv.prSec)+' is the standing time'
+      +(lv.athletes?(' across '+lv.athletes.toLocaleString()+' athletes'):'')+'.'
+      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">checked just now, not stored</div>';
+  }
+  if(lv.holds===false){
+    return 'KOM '+mm(lv.komSec)+(lv.qomSec!=null?(' &middot; QOM '+mm(lv.qomSec)):'')
+      +'<div style="color:#0d1016;margin-top:2px">You are <b>'+Math.round(lv.gap)+'s</b> off'
+      +(lv.athletes?(' &middot; '+lv.athletes.toLocaleString()+' athletes'):'')+'</div>'
+      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">checked just now, not stored</div>';
+  }
+  return 'Placement could not be determined from what Strava returned.';
+}
+// 's10009961' -> '10009961'. Shares the id rule with _saSegUrl_ rather than re-deriving it.
+function _saSegNum_(id){
+  var u=_saSegUrl_(id); if(!u) return null;
+  return u.slice(u.lastIndexOf('/')+1);
+}
+// Fired when a popup opens. One segment, one request, and only where a PR makes a placement
+// plausible - the narrowing that keeps this inside the 100-per-15-minute limit with 2,017 segments
+// on the map. Repaints just this popup's slot, and promotes the segment's styling if it came back
+// holding, so a confirmed KOM lights up without rebuilding the whole map.
+function _saKomOnOpen_(s){
+  if(!s || !s.candidate) return;
+  var num=_saSegNum_(s.id); if(!num) return;
+  var slot=function(){ return document.getElementById('sa-kom-'+s.id); };
+  _saKomFetch_(num, function(){
+    var el=slot(); if(el) el.innerHTML=_saKomHtml_(s);
+    var lv=_saKomLive['s'+num];
+    if(lv && lv.holds===true) _saFogPromote_(s.id);
+  });
+}
+// Move one segment's drawn layers into the KOM group and restyle them, in place. Cheaper and far
+// less disruptive than re-running _saFogMount_ over ~3,900 layers, which would also close the popup
+// the athlete is reading.
+function _saFogPromote_(id){
+  if(!_saFogLayers || !_saFogMap) return;
+  var tier=_saFogTierOf_({prSec:1}, {holds:true});
+  ['seen','pr'].forEach(function(k){
+    var g=_saFogLayers[k]; if(!g) return;
+    g.getLayers().slice().forEach(function(l){
+      if(!l || l._saId!==id) return;
+      g.removeLayer(l);
+      try{ l.setStyle({color:tier.col, weight:l._saIsLine?tier.weight:2, fillColor:tier.col, opacity:1, fillOpacity:.95}); }catch(e){}
+      l.addTo(_saFogLayers.kom);
+    });
+  });
+  if(!_saFogOff.kom && !_saFogMap.hasLayer(_saFogLayers.kom)) _saFogLayers.kom.addTo(_saFogMap);
+  _saFogCounts_();
+}
+// Keep the legend counts honest after a promotion.
+function _saFogCounts_(){
+  ['seen','pr','kom'].forEach(function(k){
+    var el=document.getElementById('sa-fog-n-'+k), g=_saFogLayers&&_saFogLayers[k];
+    if(!el || !g) return;
+    // two layers per segment (chord + start marker) where an end point exists, one where it does not
+    var ids={}; g.getLayers().forEach(function(l){ if(l&&l._saId) ids[l._saId]=1; });
+    el.textContent=Object.keys(ids).length;
+  });
 }
 function _saFogToggle_(key){
   _saFogOff[key]=!_saFogOff[key];
@@ -24226,6 +24366,57 @@ function _saFogFit_(all){
   if(!_saFogMap || !_saFogLayers) return;
   var b=all?_saFogLayers.allBounds:_saFogLayers.homeBounds;
   if(b && b.isValid && b.isValid()) _saFogMap.fitBounds(b, {padding:[30,30]});
+}
+// Candidate segments inside the current viewport that have not been checked yet. This is the
+// narrowing the whole live-placement design rests on: 2,017 segments against a 100-per-15-minute
+// limit means "check what is on screen, where a PR makes it plausible" is the only sweep that can
+// ever finish. Home view alone holds 731 segments, so the viewport is not by itself enough - the
+// PR filter is what brings it inside the budget.
+function _saKomPending_(){
+  if(!_saFogMap || !_saFogLayers) return [];
+  var b=_saFogMap.getBounds(), seen={}, out=[];
+  ['seen','pr','kom'].forEach(function(k){
+    var g=_saFogLayers[k]; if(!g) return;
+    g.getLayers().forEach(function(l){
+      if(!l || !l._saId || !l._saCand || seen[l._saId]) return;
+      if(l._saLat==null || !b.contains([l._saLat, l._saLon])) return;
+      var num=_saSegNum_(l._saId); if(!num) return;
+      if(_saKomLive['s'+num]) return;                 // already answered this session
+      seen[l._saId]=1; out.push({id:l._saId, num:num});
+    });
+  });
+  return out;
+}
+var SA_KOM_SWEEP_CAP=25;                              // one press never spends more than a quarter of the window
+var _saKomSweeping=false;
+function _saKomSweep_(){
+  var btn=document.getElementById('sa-kom-sweep'), note=document.getElementById('sa-kom-note');
+  var say=function(t){ if(note) note.innerHTML=t; };
+  if(_saKomSweeping){ say('Already checking&hellip;'); return; }
+  var list=_saKomPending_();
+  if(!list.length){ say('Nothing left to check in this view. Pan somewhere else, or zoom out.'); return; }
+  // The cap is REPORTED, not silent. A sweep that quietly stops at 25 of 60 reads as "all checked".
+  var capped=list.length>SA_KOM_SWEEP_CAP;
+  var run=list.slice(0, SA_KOM_SWEEP_CAP);
+  _saKomSweeping=true; if(btn) btn.disabled=true;
+  var i=0, held=0, done=0, errs=0;
+  var step=function(){
+    if(i>=run.length){
+      _saKomSweeping=false; if(btn) btn.disabled=false;
+      say('Checked '+done+' of '+list.length+' in view'+(capped?(' (capped at '+SA_KOM_SWEEP_CAP+' per press &mdash; press again for the next '+Math.min(SA_KOM_SWEEP_CAP, list.length-run.length)+')'):'')
+        +'. '+held+' held'+(errs?(', '+errs+' unavailable'):'')+'. Nothing was stored.');
+      return;
+    }
+    var it=run[i++];
+    say('Checking '+i+' of '+run.length+'&hellip; '+held+' held so far.');
+    _saKomFetch_(it.num, function(v){
+      done++;
+      if(v && v.err) errs++;
+      if(v && v.holds===true){ held++; _saFogPromote_(it.id); }
+      setTimeout(step, 700);                          // ~85 requests per 15 min at worst, inside the limit
+    });
+  };
+  step();
 }
 // Leaflet mount. Deferred to a task so it runs AFTER the container's innerHTML is in the document -
 // aiRenderOverview_ builds one string and assigns it once, so there is no per-tab render hook to
@@ -24264,14 +24455,21 @@ function _saFogMount_(){
     all.push([s.lat,s.lon]);
     if(pts.length>1) all.push([s.endLat,s.endLon]);
     var g=groups[t.key];
+    // Every layer carries its segment id and the coordinates the viewport sweep filters on, so a
+    // live placement result can restyle exactly this segment without a full remount.
+    var tag=function(l, isLine){ l._saId=s.id; l._saIsLine=!!isLine; l._saLat=s.lat; l._saLon=s.lon;
+      l._saCand=s.candidate;
+      l.bindPopup(_saFogPopup_(s));
+      l.on('popupopen', function(){ _saKomOnOpen_(s); });
+      return l.addTo(g); };
     if(pts.length>1){
-      L.polyline(pts,{color:t.col,weight:t.weight,opacity:t.opacity,lineCap:'round',
+      tag(L.polyline(pts,{color:t.col,weight:t.weight,opacity:t.opacity,lineCap:'round',
         // A bending road gets a dashed chord: the line is a real fact about the endpoints and a
         // poor picture of the tarmac, and dashes are how that reads without a paragraph.
-        dashArray:s.bends?'4 5':null}).addTo(g).bindPopup(_saFogPopup_(s));
+        dashArray:s.bends?'4 5':null}), true);
     }
-    L.circleMarker([s.lat,s.lon],{radius:t.t===3?5:(t.t===2?4:2.6),color:t.col,weight:t.t===3?2:1,
-      fillColor:t.col,fillOpacity:t.t===1?.55:.95,opacity:t.opacity}).addTo(g).bindPopup(_saFogPopup_(s));
+    tag(L.circleMarker([s.lat,s.lon],{radius:t.t===3?5:(t.t===2?4:2.6),color:t.col,weight:t.t===3?2:1,
+      fillColor:t.col,fillOpacity:t.t===1?.55:.95,opacity:t.opacity}), false);
   });
   ['seen','pr','kom'].forEach(function(k){ if(!_saFogOff[k]) groups[k].addTo(map); });
   var home=_saFogHome_(data.segs);
@@ -24319,7 +24517,7 @@ function _saFogMount_(){
 // element sized in CSS, so the only thing that changes with width is its height.
 function aiSegFogHtml_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
-  var d=_saFogList_(store), esc=aiEsc_;
+  var d=_saFogList_(store, _saKomLive), esc=aiEsc_;
   var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<style>'
     +'#sa-fog-map{height:520px;border-radius:12px;background:#0b0e13}'
@@ -24337,6 +24535,7 @@ function aiSegFogHtml_(){
     +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
     +'<button class="sa-fogbtn" onclick="_saFogFit_(false)">Home</button>'
     +'<button class="sa-fogbtn" onclick="_saFogFit_(true)">Fit all</button>'
+    +'<button class="sa-fogbtn" id="sa-kom-sweep" onclick="_saKomSweep_()" style="border-color:#fc520055;color:#fc5200">Check placements in view</button>'
     +'</div></div>';
 
   if(!d.segs.length){
@@ -24347,12 +24546,12 @@ function aiSegFogHtml_(){
   // legend / filters. Counts are the real tier populations, so an empty tier reads as empty rather
   // than as a colour with nothing behind it.
   H+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">';
-  [['kom','#fc5200','Top 10 placement',d.byTier[3]],
+  [['kom','#fc5200','KOM/QOM held (live-checked)',d.byTier[3]],
    ['pr','#22c55e','Personal PR',d.byTier[2]],
    ['seen','#7c8aa0','Attempted, no PR',d.byTier[1]]].forEach(function(t){
     H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'" onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)" style="color:'+t[1]+'">'
       +'<span style="width:9px;height:9px;border-radius:50%;background:'+t[1]+';flex:none"></span>'
-      +esc(t[2])+' <span style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
+      +esc(t[2])+' <span id="sa-fog-n-'+t[0]+'" style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
   });
   H+='<span class="sa-fogchip" style="color:var(--d-dim);cursor:default;border-style:dashed">'
     +'<span style="width:9px;height:9px;border-radius:50%;background:#1b2029;border:1px solid #2b3340;flex:none"></span>'
@@ -24379,16 +24578,22 @@ function aiSegFogHtml_(){
     +'<div><span style="'+LBL+'">Line style</span><br>solid = the chord is close to the road<br>dashed = the road bends, the line does not</div>'
     +'</div>';
 
-  // Placement honesty, once, next to the tier that uses it.
-  if(d.byTier[3]){
-    H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:10px;line-height:1.5">'
-      +'Placement is Strava&rsquo;s own leaderboard rank, recorded on the day of the effort that earned it &mdash; '
-      +'it is not re-checked, and is never shown as your rank today.</div>';
-  } else {
-    H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:10px;line-height:1.5">'
-      +'No leaderboard placement is recorded yet. Strava only returns a rank when you are in a segment&rsquo;s top 10, '
-      +'and it is captured as the effort backfill walks your library &mdash; so this tier fills in as that runs.</div>';
-  }
+  // ---- how placement works here, stated where the tier is ----
+  // The reason this is worth a paragraph rather than a tooltip: the obvious implementation is wrong.
+  // Strava's per-effort kom_rank is stamped at UPLOAD time, and on this athlete's own data it
+  // already disagrees with the leaderboard - so neither storing it nor re-fetching it would give a
+  // true answer. Comparing a live PR against a live leaderboard time does.
+  H+='<div style="margin-top:12px;background:#fc520010;border:1px solid #fc520030;border-radius:12px;padding:11px 13px">'
+    +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fc5200">Placement is checked live, never stored</div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.6">'
+    +'Open a segment and its leaderboard time is fetched from Strava at that moment, compared against your PR, and thrown away. '
+    +'Nothing about placement is written to your data, so nothing can go stale in it.<br>'
+    +'Only the <b style="color:var(--d-soft)">'+d.candidates.toLocaleString()+'</b> segment'+(d.candidates===1?'':'s')+' where you have a recorded PR are checked &mdash; '
+    +'a placement is not plausible on the '+(d.segs.length-d.candidates).toLocaleString()+' you have ridden without ever setting a best, and 2,017 live lookups would not fit Strava&rsquo;s rate limit.<br>'
+    +'<span style="color:var(--d-dim)">Checked this session: '+d.checked.toLocaleString()+'. Strava&rsquo;s own per-effort rank is deliberately ignored &mdash; it records where you placed the day you uploaded, which is not where you place now.</span>'
+    +'</div>'
+    +'<div id="sa-kom-note" style="font-size:11px;color:var(--d-t3);margin-top:8px"></div>'
+    +'</div>';
   H+='</div>';
   try{ setTimeout(_saFogMount_, 0); }catch(e){}
   return H;
@@ -24882,7 +25087,16 @@ function aiRenderOverview_(container){
   // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
   aiEnsureFullLibrary_(function(){ if(_aiMount) aiRenderOverview_(_aiMount); });
 }
-function aiSetTab_(tab){ _aiTab=tab; if(_aiMount) aiRenderOverview_(_aiMount); }
+function aiSetTab_(tab){
+  // A deliberate tab change resets the fog map to Home. The remembered view exists only to survive
+  // the INVOLUNTARY re-render (aiEnsureFullLibrary_ rebuilds the overview a few seconds after the
+  // IDB load, which would otherwise reset a pan under the athlete's hand). Navigating away and back
+  // is a different intent, and the chosen default for that is the densest cluster - not wherever the
+  // map happened to be left. aiRenderOverview_(_aiMount) does NOT route through here, which is
+  // exactly the distinction: this fires on intent, that fires on machinery.
+  _saFogView=null;
+  _aiTab=tab; if(_aiMount) aiRenderOverview_(_aiMount);
+}
 
 // desktop mount: into #ds-content (parity idiom, like dsShowDashboard)
 function dsShowAthleteIntel(){
@@ -41885,11 +42099,11 @@ function syncRidePRs_(days, silent, cb){
           if(_hs && _segEffortPush_(_hs, se.time, String(r.date||'').slice(0,10))){
             _segEffortTrim_(_hs); _hs.effortCount=_hs.efforts.length; histAdded++;
           }
-          // Coordinates and placement ride in on this same payload. Absorbed BEFORE the prRank
-          // gate below, because a segment we have never PR'd still needs its geometry to appear
-          // on the map at all - gating enrichment on a personal best would have left every
-          // attempted-but-never-won segment permanently unmappable.
-          if(_hs && _segAbsorb_(_hs, se, String(r.date||'').slice(0,10))) enriched++;
+          // Coordinates ride in on this same payload. Absorbed BEFORE the prRank gate below,
+          // because a segment we have never PR'd still needs its geometry to appear on the map at
+          // all - gating enrichment on a personal best would have left every attempted-but-
+          // never-won segment permanently unmappable. Placement is NOT absorbed; see _segAbsorb_.
+          if(_hs && _segAbsorb_(_hs, se)) enriched++;
           if(+se.prRank!==1) return;                       // only the athlete's best counts
           var sec=+se.time; if(!(sec>0)) return;
           found++;
@@ -41901,7 +42115,7 @@ function syncRidePRs_(days, silent, cb){
               effortCount:null, starred:!!se.starred, updatedAt:Date.now(), source:'ride' };
             // A segment created here used to arrive with no coordinates at all, which is how a
             // record could exist and still be invisible to both the map and the wind model.
-            _segAbsorb_(st.segments[key], se, date);
+            _segAbsorb_(st.segments[key], se);
             added++; return;
           }
           // Faster wins. Equal times leave the record alone so the date is not churned.
@@ -42088,7 +42302,7 @@ function runSegmentBackfill_(scanOnly, cb){
           // This walk is the one pass that reaches the WHOLE library, so it is where the map's
           // coverage actually comes from. Absorbing here costs nothing extra - the payload is
           // already downloaded and was being discarded field by field.
-          if(_segAbsorb_(seg, se, date)) b.enriched=(b.enriched||0)+1;
+          if(_segAbsorb_(seg, se)) b.enriched=(b.enriched||0)+1;
           if(_segEffortPush_(seg, se.time, date)) b.added++;
           _segEffortTrim_(seg);
           seg.effortCount=seg.efforts.length;
@@ -42191,32 +42405,41 @@ function _segEffortTrim_(seg){
 // that run was permanently unmappable and unprojectable. Written once and never overwritten - a
 // segment's endpoints do not move, and re-deriving them per effort would only add churn.
 //
-// PLACEMENT. syncSegmentPRs_ deliberately refused to persist rank, on the grounds that a stored
-// rank drifts silently. That concern is real but it is about PRESENTATION, not storage: what makes
-// a stale rank a lie is showing it as the rank NOW. So the rank is kept WITH the date of the effort
-// that earned it, and every surface renders it as a placement recorded on that date. Best-ever
-// wins (lower is better), so a later slower ride cannot erase a podium, and the date always names
-// the effort the number actually describes.
-function _segAbsorb_(seg, se, date){
+// PLACEMENT IS NOT ABSORBED, AND MUST NOT BE. syncSegmentPRs_ has always refused to persist rank on
+// the grounds that a stored rank drifts silently, and measuring it against Strava proved the rule
+// understated the problem: kom_rank is recorded AT UPLOAD TIME and is already wrong on this
+// athlete's own data. Barcroft carries kom_rank 1 while the segment's current KOM is 1:22 against a
+// 1:32 PR - 10 seconds off and not the holder. Old Lantern carries 4 while sitting 14s off. Storing
+// those would paint a podium tier out of numbers that were true once; live-FETCHING the same field
+// would too, because the staleness is in the field, not in our copy of it.
+//
+// What IS current is fetched per segment on demand and never kept - see _saKomFetch_.
+// Remove every persisted placement field from the segment store. Returns how many records were
+// touched so the console says whether it actually found anything. Idempotent and cheap - after the
+// first clean pass it walks the keys and changes nothing.
+var SEG_RANK_FIELDS=['komRank','komRankDate','prRank','prRankDate'];
+function stripSegmentRank_(s){
+  var store=s&&s.segments; if(!isPlainObj_(store)) return 0;
+  var keys=Object.keys(store), n=0;
+  for(var i=0;i<keys.length;i++){
+    var seg=store[keys[i]]; if(!seg || typeof seg!=='object') continue;
+    var hit=false;
+    for(var f=0;f<SEG_RANK_FIELDS.length;f++){
+      if(Object.prototype.hasOwnProperty.call(seg, SEG_RANK_FIELDS[f])){ delete seg[SEG_RANK_FIELDS[f]]; hit=true; }
+    }
+    if(hit) n++;
+  }
+  if(n){ try{ console.log('[seg-rank-strip] removed stored placement from '+n+' segment(s) — placement is live-only'); }catch(e){} }
+  return n;
+}
+function _segAbsorb_(seg, se){
   if(!seg || !se) return false;
-  var changed=false;
-  if(seg.startLat==null && se.startLat!=null && se.startLon!=null){
-    seg.startLat=se.startLat; seg.startLon=se.startLon;
-    seg.endLat=(se.endLat!=null)?se.endLat:null; seg.endLon=(se.endLon!=null)?se.endLon:null;
-    var b=_segBearingDeg_(seg.startLat, seg.startLon, seg.endLat, seg.endLon);
-    if(b!=null && seg.bearing==null) seg.bearing=b;
-    changed=true;
-  }
-  var d=String(date||se.date||'').slice(0,10)||null;
-  var kr=(+se.komRank>0)?+se.komRank:null;
-  if(kr!=null && (!(+seg.komRank>0) || kr<+seg.komRank)){
-    seg.komRank=kr; seg.komRankDate=d; changed=true;
-  }
-  var pr=(+se.prRank>0)?+se.prRank:null;
-  if(pr!=null && (!(+seg.prRank>0) || pr<+seg.prRank)){
-    seg.prRank=pr; seg.prRankDate=d; changed=true;
-  }
-  return changed;
+  if(seg.startLat!=null || se.startLat==null || se.startLon==null) return false;
+  seg.startLat=se.startLat; seg.startLon=se.startLon;
+  seg.endLat=(se.endLat!=null)?se.endLat:null; seg.endLon=(se.endLon!=null)?se.endLon:null;
+  var b=_segBearingDeg_(seg.startLat, seg.startLon, seg.endLat, seg.endLon);
+  if(b!=null && seg.bearing==null) seg.bearing=b;
+  return true;
 }
 function harvestSegmentEfforts_(silent, cb){
   cb=cb||function(){};
@@ -42237,7 +42460,7 @@ function harvestSegmentEfforts_(silent, cb){
         if(_segEffortPush_(seg, se.time, date)){ out.added++; touched[key]=1; }
         // Free enrichment: this cached payload already carries the coordinates and placement the
         // store never kept. No API call, so it runs on every harvest rather than being deferred.
-        if(_segAbsorb_(seg, se, date)){ out.enriched++; touched[key]=1; }
+        if(_segAbsorb_(seg, se)){ out.enriched++; touched[key]=1; }
       });
     });
     Object.keys(touched).forEach(function(k){
@@ -46777,7 +47000,7 @@ var LOCAL_FOODS = [
   {n:"Butterball Turkey Sausage (1 link)",cal:100,p:10,c:3,f:5,fiber:0,sodium:600},
 ];
 
-window.__BUILD__ = '2026-08-04-fog-map-keepview';
+window.__BUILD__ = '2026-08-04-fog-live-placement';
 // The stamp only settles wrong-vs-stale if it is CURRENT, and a hand-edited string drifts the
 // moment someone forgets — this one read 2026-07-16 through a full day of deploys, which is why
 // three checks in a row could not tell "the fix is broken" from "the fix is not deployed yet".
