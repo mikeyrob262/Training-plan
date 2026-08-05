@@ -703,6 +703,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('ai')"><i class="ti ti-brain"></i>Athlete Intelligence</div>
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
+      <div class="ds-ni" onclick="showLegacy()"><i class="ti ti-trophy"></i>Legacy</div>
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
@@ -12873,6 +12874,188 @@ var CONST_METRICS=[
   {key:'tss',  label:'Most TSS',      unit:'TSS', get:function(r){return constRideTSS_(r)||0;}},
   {key:'elev', label:'Most Climbing', unit:'ft',  get:function(r){return parseFloat(r.elev)||0;}}
 ];
+// =============================================================================================
+// LEGACY  (Phase 1 of the Legacy / DNA / Momentum surface — one scrollable page, sections added
+// in later phases). READ-ONLY: every function below reads existing stores through the existing
+// accessors and writes nothing. No sync path, no st mutation, no existing renderer touched.
+//
+// PROVENANCE, because every number here was argued for before it was drawn:
+//   Cycling count/miles/hours -> st.athleteStats (Strava /athletes/{id}/stats all_ride_totals).
+//        SERVER-SIDE, so the local library being 83% tombstones does not apply. Rendered through
+//        the EXISTING _msLifetimeStrip_ rather than recomputed.
+//   Cycling elevation         -> st.stravaElevStats.allTime. Chosen over athleteStats.rideElevM
+//        (the two disagree, 363,109 vs 358,800 ft); this one is fresher and already in feet.
+//   Running count/miles       -> st.athleteStats runCount/runMeters. Same server-side source.
+//   Running hours             -> LOCAL, and labelled as such. syncAthleteStats_ reads
+//        all_run_totals but keeps only .count and .distance, discarding moving_time — so no
+//        server-side run hours exist to read. 2015 is excluded: its recorded pace is 21.8 min/mi
+//        against 9.4-10.4 for every other year, so its duration data is not believable.
+//   Running elevation         -> DELIBERATELY ABSENT. Not in athleteStats, and the local field is
+//        100-143 ft/mi for 2015-2020 against 17-35 for 2021+ (cycling, for scale, is 32). There
+//        is no timescale at which it can be stated honestly, so it is not stated at all.
+//   Seasons                   -> local library via _msCycling_ / getRuns. Scoped to the years each
+//        sport is actually dense (see _LG_CYC_FROM / _LG_RUN_FROM) and the scope is printed.
+//
+// Seasons are ranked by MILES alone — a single measured quantity, not a composite. Labels like
+// "Peak Year" or "Breakout" would be a judgement the data has not earned and a scoring formula
+// nobody signed off, so the ranking metric is named instead of dressed up.
+// =============================================================================================
+var _LG_CYC_FROM=2024;   // cycling library has no data at all for 2018/2019/2021, near-none before 2024
+var _LG_RUN_FROM=2016;   // running is dense 2016-2024; 2015 excluded for the pace corruption above
+var _LG_RUN_TO=2024;     // st.runs thins to single digits after 2024
+
+function _lgNum_(n){ return (Math.round(+n||0)).toLocaleString(); }
+// Lifetime cycling tiles. Reuses _msLifetimeStrip_ for the three figures it already owns, then
+// REPLACES its elevation entry with the chosen source. Returns null when lifetime stats have
+// never been synced, so the caller can offer the sync instead of drawing zeros.
+function _lgCycTiles_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  var strip=(typeof _msLifetimeStrip_==='function')?_msLifetimeStrip_(as):null;
+  if(!strip) return null;
+  var es=(typeof st!=='undefined'&&st)?st.stravaElevStats:null;
+  var ft=(es&&+es.allTime>0)?+es.allTime:null;
+  return strip.map(function(s){
+    if(s.k==='ft Climbed') return { k:'ft Climbed', v:(ft!=null?_lgNum_(ft):s.v) };
+    return s;
+  });
+}
+// Lifetime running tiles. Count and miles are server-side; hours are local and say so.
+function _lgRunTiles_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  if(!as || !((+as.runCount)>0 || (+as.runMeters)>0)) return null;
+  var runs=_lgRuns_();
+  var sec=0;
+  runs.forEach(function(r){
+    var y=+String(r.date||'').slice(0,4);
+    if(y>=_LG_RUN_FROM) sec+=(typeof actSecs_==='function')?actSecs_(r):(+r.movingSecs||0);
+  });
+  return [ { k:'Runs', v:_lgNum_(+as.runCount||0) },
+           { k:'Miles', v:_lgNum_((+as.runMeters||0)/1609.344) },
+           { k:'Hours', v:_lgNum_(sec/3600), note:'recorded, '+_LG_RUN_FROM+' onward' } ];
+}
+// Runs through the canonical accessor, with only what this page needs kept.
+function _lgRuns_(){
+  var src=[];
+  try{ src=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ src=[]; }
+  return src.filter(function(r){ return r && r.date && (+r.distance||0)>0; });
+}
+// {n, mi, sec, max, year} per year, from an already-filtered array of {date, distance} rows.
+function _lgByYear_(rows, from, to){
+  var by={};
+  rows.forEach(function(r){
+    var y=+String(r.date||'').slice(0,4);
+    if(!(y>=from)) return;
+    if(to && y>to) return;
+    var b=by[y]||(by[y]={year:y,n:0,mi:0,sec:0,max:0});
+    var mi=(+r.distance!=null?+r.distance:+r.mi)||0;
+    b.n++; b.mi+=mi;
+    b.sec+=(r.sec!=null)?(+r.sec||0):((typeof actSecs_==='function')?actSecs_(r):(+r.movingSecs||0));
+    if(mi>b.max) b.max=mi;
+  });
+  return Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return b.mi-a.mi; });
+}
+function _lgSeasonCard_(s, col, showHours){
+  var rows=[['Activities',_lgNum_(s.n)],['Miles',_lgNum_(s.mi)]];
+  if(showHours) rows.push(['Hours',_lgNum_(s.sec/3600)]);
+  rows.push(['Longest',(Math.round(s.max*10)/10)+' mi']);
+  var H='<div style="flex:1 1 150px;min-width:150px;background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:13px;padding:13px 14px">'
+    +'<div style="font-size:24px;font-weight:800;color:'+col+';line-height:1">'+s.year+'</div>';
+  rows.forEach(function(r){
+    H+='<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-top:7px">'
+      +'<span style="color:var(--d-dim,#8b93a7)">'+r[0]+'</span>'
+      +'<span style="color:var(--d-head,#f1f5f9);font-weight:700">'+r[1]+'</span></div>';
+  });
+  return H+'</div>';
+}
+function _lgTileRow_(tiles, col){
+  var H='<div style="display:flex;flex-wrap:wrap;gap:16px 30px;margin-top:12px">';
+  tiles.forEach(function(t){
+    H+='<div><div style="font-size:27px;font-weight:800;color:var(--d-head,#f1f5f9);line-height:1;letter-spacing:-.01em">'+t.v+'</div>'
+      +'<div style="font-size:11px;color:'+col+';margin-top:3px;font-weight:700">'+t.k+'</div>'
+      +(t.note?'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:1px">'+t.note+'</div>':'')
+      +'</div>';
+  });
+  return H+'</div>';
+}
+function _lgSection_(title, sub, col, tiles, seasons, scopeLine, showHours, extra){
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:15px">'
+    +'<div style="font-size:17px;font-weight:800;color:var(--d-head,#f1f5f9)">'+title+'</div>'
+    +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);margin-top:2px">'+sub+'</div>';
+  H+=tiles?_lgTileRow_(tiles,col)
+          :'<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);margin-top:11px">Lifetime totals have not been synced from Strava yet. Open Settings and run Sync Lifetime Stats &mdash; these come from Strava server-side, so they are unaffected by gaps in the local library.</div>';
+  if(extra) H+=extra;
+  H+='</div>';
+  if(seasons && seasons.length){
+    H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:15px">'
+      +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#f1f5f9)">'+title+' &mdash; Greatest Seasons</div>'
+      +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.5">'+scopeLine+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:11px;margin-top:12px">';
+    seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours); });
+    H+='</div></div>';
+  }
+  return H;
+}
+function showLegacy(){
+  var old=document.getElementById('LEGACY'); if(old) old.remove();
+  var ov=document.createElement('div');
+  ov.id='LEGACY';
+  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#05070d;display:flex;flex-direction:column;overflow:hidden;color:#e6e9ef;font-family:-apple-system,sans-serif';
+
+  var hdr=document.createElement('div');
+  hdr.style.cssText='flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.08)';
+  hdr.innerHTML='<div style="flex:1"><div style="font-size:19px;font-weight:800;color:#f1f5f9">Legacy</div>'
+    +'<div style="font-size:12px;color:#8b93a7;margin-top:1px">Your journey. Your story.</div></div>';
+  var x=document.createElement('button');
+  x.textContent='Close';
+  x.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.16);color:#cbd5e1;border-radius:9px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+  x.onclick=function(){ ov.remove(); };
+  hdr.appendChild(x);
+  ov.appendChild(hdr);
+
+  var body=document.createElement('div');
+  body.style.cssText='flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 18px 40px';
+
+  // ---- CYCLING ----
+  var cyc=[]; try{ cyc=(typeof _msCycling_==='function')?(_msCycling_()||[]):[]; }catch(e){ cyc=[]; }
+  var cycFirst=cyc.length?cyc[0].date:null;
+  var cent=cyc.filter(function(r){ return r.mi>=100; });
+  var cycExtra='';
+  if(cycFirst){
+    cycExtra='<div style="font-size:11.5px;color:#8b93a7;margin-top:13px;line-height:1.55;border-top:1px solid rgba(255,255,255,.07);padding-top:11px">'
+      +'First recorded ride <b style="color:#cbd5e1">'+cycFirst+'</b>'
+      +(cent.length?(' &middot; <b style="color:#cbd5e1">'+cent.length+'</b> century ride'+(cent.length===1?'':'s')+', first '+cent[0].date):'')
+      +'<br>Dated from the earliest ride still in the library, not a claim about when riding began.</div>';
+  }
+  var H=_lgSection_('Cycling','Lifetime totals from Strava, server-side.','#4D9FFF',
+        _lgCycTiles_(), _lgByYear_(cyc,_LG_CYC_FROM,null),
+        'Ranked by miles. Only '+_LG_CYC_FROM+' onward &mdash; the library holds no cycling data at all for 2018, 2019 and 2021, so earlier years cannot be compared honestly.',
+        true, cycExtra);
+
+  // ---- RUNNING ----
+  var runs=_lgRuns_();
+  var rSorted=runs.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+  var runFirst=rSorted.length?String(rSorted[0].date).slice(0,10):null;
+  var mar=runs.filter(function(r){ return (+r.distance||0)>=26; });
+  var half=runs.filter(function(r){ return (+r.distance||0)>=13.1; });
+  var runExtra='';
+  if(runFirst){
+    runExtra='<div style="font-size:11.5px;color:#8b93a7;margin-top:13px;line-height:1.55;border-top:1px solid rgba(255,255,255,.07);padding-top:11px">'
+      +'First recorded run <b style="color:#cbd5e1">'+runFirst+'</b>'
+      +' &middot; <b style="color:#cbd5e1">'+mar.length+'</b> marathon'+(mar.length===1?'':'s')
+      +' &middot; <b style="color:#cbd5e1">'+half.length+'</b> half marathon or longer'
+      +'<br>No elevation figure is shown for running: it is absent from the Strava totals and the local values are not believable before 2021.</div>';
+  }
+  H+=_lgSection_('Running','Lifetime totals from Strava, server-side. Hours are local.','#00C896',
+        _lgRunTiles_(), _lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
+        'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
+        false, runExtra);
+
+  body.innerHTML=H;
+  ov.appendChild(body);
+  document.body.appendChild(ov);
+}
+try{ if(typeof window!=='undefined'){ window.showLegacy=showLegacy; } }catch(e){}
+
 function showConstellation(){
   var old=document.getElementById('CONSTELLATION'); if(old) old.remove();
 
@@ -42419,6 +42602,9 @@ function showMoreSheet(){
     {n:'Run Training',  i:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5',                                                             fn:'showRun',          c:'#00C896'},
     {n:'Training Block', i:'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M12 12h.01',              fn:'showBlockPlan',    c:'#FC4C02'},
     {n:'Athlete Intelligence', i:'M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 0V4a3 3 0 0 0-3-1zM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 0', fn:'showAthleteIntel', c:'#f59e0b'},
+    // Legacy sits beside Constellation: both are additive full-screen read-only surfaces, and
+    // pairing them keeps the mobile sheet and the desktop sidebar offering the same things.
+    {n:'Legacy',        i:'M8 21h8 M12 17v4 M7 4h10v4a5 5 0 0 1-10 0z M7 6H4v2a3 3 0 0 0 3 3 M17 6h3v2a3 3 0 0 1-3 3', fn:'showLegacy',   c:'#F5C518'},
     {n:'Constellation', i:'M12 2l2.4 5.9 6.4.5-4.9 4.1 1.5 6.2L12 17l-5.8 3.7 1.5-6.2-4.9-4.1 6.4-.5z',                            fn:'showConstellation', c:'#F5C518'},
     {n:'Ride Weather',  i:'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',                                                   fn:'showWeather',       c:'#378ADD'},
     {n:'Progress',      i:'M18 20 18 10 M12 20 12 4 M6 20 6 14',                                                                    fn:'showProg',         c:'#4D9FFF'},
