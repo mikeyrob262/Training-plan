@@ -10386,7 +10386,12 @@ function stravaFullResync() {
   }
   toast('Starting full resync from Strava...');
   if(st.stravaRefreshToken) {
-    var CLIENT_ID='260935', CLIENT_SECRET='570c52239e99be3ba40d9c47ed78d5107c5725ba';
+    // BURNED CREDENTIAL REMOVED. This file is NOT deployed — CI runs `wrangler deploy`,
+    // and wrangler.toml points only at worker.js. The secret that used to sit here leaked
+    // via git history and has been rotated at Strava, so it authenticates nothing. The
+    // live equivalent of this function is in worker.js and posts to /api/strava/token,
+    // which holds the secret server-side. Do not paste a real secret back in here.
+    var CLIENT_ID='260935', CLIENT_SECRET='';
     fetch('https://www.strava.com/oauth/token',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:'refresh_token',refresh_token:st.stravaRefreshToken})
     }).then(function(r){return r.json();}).then(function(d){
@@ -10401,7 +10406,7 @@ function stravaFullResync() {
 
 function stravaBackfill() {
   var CLIENT_ID = '260935';
-  var CLIENT_SECRET = '570c52239e99be3ba40d9c47ed78d5107c5725ba';
+  var CLIENT_SECRET = '';  // burned credential removed — see note above; secret is server-side in worker.js (/api/strava/token)
 
   // If we have a refresh token, use it to get a fresh access token silently
   if(st.stravaRefreshToken) {

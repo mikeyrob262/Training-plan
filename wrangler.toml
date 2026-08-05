@@ -1,3 +1,11 @@
 name = "training-plan"
 main = "worker.js"
 compatibility_date = "2024-01-02"
+
+# Strava app identity. NOT a secret (the client id is public — it ships in the OAuth
+# authorize URL in the served page). It lived only as a `|| '260935'` fallback in
+# worker.js, which meant the deployed Worker had no configured identity at all and the
+# id could silently drift from the client_secret it must be paired with. Pinning it
+# here makes the pairing explicit and reviewable; the fallback stays as a backstop.
+[vars]
+STRAVA_CLIENT_ID = "260935"
