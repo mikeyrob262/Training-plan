@@ -7265,6 +7265,60 @@ function initFirebaseSync(){
 // The fix is coalescing, not queueing: while a push is in flight, later callers just mark the state
 // dirty, and one fresh push runs when it drains. That guarantees the LAST PUT is built from the
 // newest st, and collapses a storm of redundant 12.6 MB writes into one.
+// ---- PUSH WATCHDOG FREQUENCY ---------------------------------------------------------------
+// The fbPush watchdog below releases the gate when a push does not settle within 90s. It has
+// been firing during bulk operations and the root cause is still open and tracked separately;
+// the job of this counter is only to make the RATE visible and comparable over time instead of
+// living in console logs nobody is watching when it matters.
+//
+// Deliberately NOT stored in st. st is persisted by sv(), which calls fbPush — the very path
+// the watchdog guards — so counting a stall in synced state would make the instrument re-enter
+// what it is measuring, and a push storm would be busy writing its own storm counter. This is
+// localStorage only, capped, and per-device on purpose: a stall is a property of THIS device's
+// connection, so merging counts across devices would blur the signal.
+//
+// Timestamps are stored rather than running totals. A running total can never answer "this
+// week" after the fact; a list answers session, week, and recorded-total from one record.
+var _wdSession=0;
+var WD_LOG_KEY='fbWatchdogLog', WD_LOG_MAX=200;
+function _wdLog_(){
+  _wdSession++;
+  try{
+    var raw=localStorage.getItem(WD_LOG_KEY);
+    var arr=raw?JSON.parse(raw):[];
+    if(!Array.isArray(arr)) arr=[];
+    arr.push(Date.now());
+    if(arr.length>WD_LOG_MAX) arr=arr.slice(-WD_LOG_MAX);
+    localStorage.setItem(WD_LOG_KEY, JSON.stringify(arr));
+  }catch(e){}
+}
+// {session, week, total, last, capped}. total is "recorded", NOT "ever" — the log is capped at
+// WD_LOG_MAX, so any caller phrasing it as all-time would be overstating what is stored.
+function _wdStats_(){
+  var out={session:_wdSession, week:0, total:0, last:null, capped:false};
+  try{
+    var raw=localStorage.getItem(WD_LOG_KEY);
+    var arr=raw?JSON.parse(raw):[];
+    if(!Array.isArray(arr)) arr=[];
+    var cut=Date.now()-7*24*60*60*1000;
+    out.total=arr.length;
+    out.capped=(arr.length>=WD_LOG_MAX);
+    for(var i=0;i<arr.length;i++){ if(arr[i]>=cut) out.week++; }
+    out.last=arr.length?arr[arr.length-1]:null;
+  }catch(e){}
+  return out;
+}
+// ONE summary string, shared by the mobile and desktop Settings surfaces so the two renderers
+// cannot drift into describing the same number differently.
+function _wdSummary_(){
+  var s=_wdStats_();
+  if(!s.total && !s.session) return 'No stalls recorded on this device.';
+  var when=s.last?new Date(s.last).toLocaleString():'unknown';
+  return s.week+' in the last 7 days &middot; '+s.session+' this session &middot; '
+    +s.total+' recorded'+(s.capped?' (log full)':'')+'<br>Last: '+when;
+}
+try{ if(typeof window!=='undefined'){ window._wdStats_=_wdStats_; window._wdSummary_=_wdSummary_; } }catch(e){}
+
 var _fbPushBusy=false, _fbPushDirty=false;
 function fbPush(silent, forceOverwrite, confirmToken, tag){
   if(Array.isArray(st)) st=Object.assign({},st);
@@ -7285,6 +7339,7 @@ function fbPush(silent, forceOverwrite, confirmToken, tag){
   };
   _fbGuard=setTimeout(function(){
     try{ console.warn('[fbPush] watchdog: a push did not settle within 90s — releasing the gate'); }catch(e){}
+    _wdLog_();   // record the stall for Settings; localStorage only, never sv() — see _wdLog_
     _fbDone();
   }, 90000);
   // A blind full-state PUT from a degraded local state is what repeatedly re-buried the ride
@@ -9787,6 +9842,13 @@ function showSet(){
     +'<button id="export-data-btn" title="Export data" style="width:38px;height:38px;background:linear-gradient(135deg,#0F6E56,#085041);border:none;color:white;font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬇</button>'
     +'<button id="import-data-btn" title="Import data" style="width:38px;height:38px;background:var(--s2);border:1px solid var(--b1);color:var(--t1);font-size:15px;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center">⬆</button>'
     +'<input id="import-data-file" type="file" accept=".json" style="display:none">'
+    +'</div>'
+    // Push watchdog rate. Read-only diagnostic — see _wdLog_ for why this is device-local and
+    // never enters st. Mirrored on desktop (dsShowSettings) off the SAME _wdSummary_.
+    +'<div style="border-top:1px solid var(--b1);padding:9px 16px">'
+    +'<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--t3)">Push watchdog</div>'
+    +'<div style="font-size:11.5px;color:var(--t2);margin-top:3px;line-height:1.45">'+_wdSummary_()+'</div>'
+    +'<div style="font-size:9.5px;color:var(--t3);margin-top:4px;line-height:1.4">Pushes that did not settle within 90s. Counted on this device only, not synced.</div>'
     +'</div>'
     // LAST RESORT. Every other control here MERGES; this is the only one that does not, which is
     // why it is separated, muted until pressed, and gated behind a confirm that states exactly what
@@ -15092,7 +15154,13 @@ function getFitness_(){
 function buildPMCChart(data){
   var W = 360, H = 150;
   var PAD = {top:8, right:40, bottom:18, left:36};
-  var pts = data.slice(-52); // last year
+  // KNOWN BUG, tracked separately and deliberately NOT fixed here: fitnessSeries_() is a DAILY
+  // series (pmcSeries_ pushes one point per calendar day), so this takes the last 52 DAYS, not
+  // the last year the old comment claimed. Left as-is on purpose — widening the window silently
+  // changes what every reader of this chart sees and deserves its own change, not a drive-by
+  // inside the FTP-marker work. Every current ftpHistory date falls inside the 52-day window, so
+  // the markers below render identically either way.
+  var pts = data.slice(-52); // last 52 DAYS (the old comment here said "last year" — it is not)
   if(pts.length < 2){
     // Not enough data — show placeholder message
     return '<div style="height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">'
@@ -15151,6 +15219,49 @@ function buildPMCChart(data){
     svg += '<text x="'+(PAD.left-4)+'" y="'+(parseFloat(zy)+4)+'" text-anchor="end" font-size="9" fill="rgba(255,255,255,.35)" font-family="-apple-system,sans-serif">0</text>';
   }
 
+  // ---- FTP CHANGE MARKERS --------------------------------------------------------------------
+  // Why this exists: re-pricing every ride against a new FTP steps the whole curve, and that step
+  // is visually identical to fitness actually moving. Without a marker there is no way to tell an
+  // FTP CORRECTION from a real form swing, and the chart quietly invites the wrong reading.
+  //
+  // ftpHistory is append-only and carries two shapes this has to survive, both present in the
+  // live log today:
+  //   - soft-deleted rows ({date, deleted:true}) — a RETRACTED change must not draw a marker, or
+  //     the chart asserts an FTP change that was taken back
+  //   - several entries on ONE date (2026-07-29 holds both 183 and 230) — the day ended on the
+  //     last value written, so later-wins and the date draws a single marker, not a stack
+  //
+  // Drawn BEFORE the areas and lines so the curve stays on top and the marker reads as an
+  // annotation rather than as data. A change outside the rendered window is simply omitted —
+  // never clamped to an edge, because a marker parked on the axis would assert a date the chart
+  // is not showing.
+  var _ftpMarks='';
+  try{
+    // settingsArrLive_, NOT _ftpHist_. _ftpHist_ returns the RAW log and is reserved for the
+    // mutating callers; every display reader goes through the live accessor. That is not just a
+    // convention — tombstones are keyed COMPOSITELY (_k:'2026-07-30|183'), so filtering on a
+    // bare e.deleted drops the tombstone row itself but would still draw a marker for a
+    // superseded row that a stale client re-pushed. _arrIsDead_ resolves the key properly.
+    var _fh=(typeof settingsArrLive_==='function')?settingsArrLive_('ftpHistory')
+           :(((typeof st!=='undefined'&&st&&st.ftpHistory)||[]).filter(function(x){ return x && !x.deleted; }));
+    var _idxByDate={};
+    pts.forEach(function(p,i){ _idxByDate[p.date]=i; });
+    var _valByDate={};
+    (_fh||[]).forEach(function(e){
+      if(!e || !e.date) return;
+      if(e.ftp==null) return;        // tombstones carry no value; belt-and-braces after the filter
+      _valByDate[e.date]=e.ftp;      // later entry for the same day wins
+    });
+    Object.keys(_valByDate).sort().forEach(function(dk){
+      if(!(dk in _idxByDate)) return;
+      var _mx=sx(_idxByDate[dk]).toFixed(1);
+      _ftpMarks+='<line x1="'+_mx+'" y1="'+PAD.top+'" x2="'+_mx+'" y2="'+(PAD.top+cH).toFixed(1)+'"'
+        +' stroke="#a855f7" stroke-width="1" stroke-dasharray="3,3" opacity="0.7">'
+        +'<title>FTP set to '+_valByDate[dk]+'W on '+dk+'</title></line>';
+    });
+  }catch(e){ _ftpMarks=''; }
+  svg += _ftpMarks;
+
   // Areas
   svg += makeArea('ctl','#4D9FFF');
   svg += makeArea('atl','#FF7A45');
@@ -15196,6 +15307,11 @@ function buildPMCChart(data){
   svg += '<div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:3px;background:#4D9FFF;border-radius:2px"></div><span style="font-size:11px;color:var(--t2)">Fitness</span></div>';
   svg += '<div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:3px;background:#FF7A45;border-radius:2px"></div><span style="font-size:11px;color:var(--t2)">Fatigue</span></div>';
   svg += '<div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:3px;background:#00C896;border-radius:2px"></div><span style="font-size:11px;color:var(--t2)">Form</span></div>';
+  // Only legend the markers when at least one actually drew. A permanent key for something not
+  // on the chart teaches the reader to look for a line that is not there.
+  if(_ftpMarks){
+    svg += '<div style="display:flex;align-items:center;gap:5px"><div style="width:16px;height:0;border-top:2px dashed #a855f7"></div><span style="font-size:11px;color:var(--t2)">FTP change</span></div>';
+  }
   svg += '</div>';
 
   return svg;
@@ -29058,6 +29174,13 @@ function dsShowSettings(){
     +_gInput('gt-ctl','CTL',_G.ctl)
     +'</div>'
     +'<button onclick="saveGoalTargets_()" style="margin-top:12px;background:#22c55e;border:none;color:#fff;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px">Save Goals</button>'
+    +'</div>'
+    // Push watchdog rate — desktop twin of the block in showSet(), off the SAME _wdSummary_ so
+    // the two surfaces cannot describe the same number differently.
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Push watchdog</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:8px">Cloud pushes that did not settle within 90s and had their gate force-released. Counted on this device only, not synced.</div>'
+    +'<div style="font-size:13px;color:var(--d-t1);line-height:1.5">'+((typeof _wdSummary_==='function')?_wdSummary_():'unavailable')+'</div>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Deploy worker.js</div>'
@@ -46594,9 +46717,31 @@ function fetchStravaPage(token, page, imported, forceAll) {
     return r.json();
   })
   .then(function(acts){
-    if(!acts || !acts.length){
+    // FAILURE vs GENUINELY EMPTY. The two guards above return null on a 401 or a non-ok
+    // response AFTER toasting the reason. Both null and [] used to fall into one
+    // !acts.length branch, so a sync that FAILED announced 'Strava sync done: 0 imported'
+    // over the top of its own error message and then scheduled follow-up work as if it had
+    // finished — the failure and the nothing-to-do case were indistinguishable, and the
+    // louder of the two messages was the wrong one.
+    //
+    // A sync that did not complete must never report a total, because 0 imported reads as
+    // "you are up to date" and that is exactly the claim we cannot make: pages may remain
+    // unread. Anything already imported on earlier pages was saved by the per-page sv(),
+    // so nothing is lost by not saving here.
+    if(acts === null || acts === undefined){
+      toast(imported
+        ? ('Sync did not complete — ' + imported + ' imported before it stopped. Try again.')
+        : 'Sync did not complete — nothing imported. Try again.');
+      var pbF=document.getElementById('perf-body');if(pbF) renderPerf(pbF);
+      return;
+    }
+    if(!acts.length){
       sv();
-      toast('Strava sync done: ' + imported + ' imported'); setTimeout(function(){ fetchStravaElevStats(true); }, 2000);
+      // Reached the end of the feed. Only here can the library be called current.
+      toast(imported
+        ? ('Strava sync done: ' + imported + ' imported')
+        : 'Up to date — nothing new to import');
+      setTimeout(function(){ fetchStravaElevStats(true); }, 2000);
       var pb=document.getElementById('perf-body');if(pb) renderPerf(pb);
       return;
     }
