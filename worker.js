@@ -23222,9 +23222,15 @@ function _dnaRunPaceCurve_(){
              pace:best?best.p:0, paceStr:best?_dnaPaceStr_(best.p):'-',
              date:best?String(best.run.date).slice(0,10):null, run:best?best.run:null, ref:ref, suspect:false };
   });
+  // The violation has to be BIG to count. Bare monotonicity false-positives on thin bands: with the
+  // snapshot unprimed the 1-mile band holds 2 easy runs at 7:44/mi, which is not a maximal mile, so
+  // a 7:30/mi 5K "beats" it by 14 s/mi and looks impossible when it is merely better sampled. A
+  // real corruption is not marginal — the bad 5K row is 168 s/mi faster than the mile — so
+  // requiring a 20 s/mi margin keeps the true fault and drops the artefact.
+  var PACE_MARGIN=20;
   for(var i=1;i<bands.length;i++){
     for(var j=0;j<i;j++){
-      if(bands[i].pace>0 && bands[j].pace>0 && bands[i].pace < bands[j].pace-0.5){ bands[i].suspect=true; break; }
+      if(bands[i].pace>0 && bands[j].pace>0 && bands[i].pace < bands[j].pace-PACE_MARGIN){ bands[i].suspect=true; break; }
     }
   }
   return { ok:true, n:runs.length, bands:bands };
