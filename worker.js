@@ -12956,7 +12956,12 @@ function _lgByYear_(rows, from, to){
     if(!(y>=from)) return;
     if(to && y>to) return;
     var b=by[y]||(by[y]={year:y,n:0,mi:0,sec:0,max:0});
-    var mi=(+r.distance!=null?+r.distance:+r.mi)||0;
+    // NOT (+r.distance != null). The unary + coerces BEFORE the null test, so an absent field
+    // becomes NaN and NaN != null is TRUE — the check always passed and always chose the missing
+    // branch. Cycling rows come from _msCycling_, which emits .mi and has no .distance at all, so
+    // every cycling season silently read 0 miles and 0 longest. Runs carry .distance and were
+    // unaffected, which is why only half the page looked wrong. Test the RAW field, then coerce.
+    var mi=(r.distance!=null?+r.distance:+r.mi)||0;
     b.n++; b.mi+=mi;
     b.sec+=(r.sec!=null)?(+r.sec||0):((typeof actSecs_==='function')?actSecs_(r):(+r.movingSecs||0));
     if(mi>b.max) b.max=mi;
