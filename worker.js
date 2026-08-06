@@ -13151,6 +13151,7 @@ function _lgHTML_(){
     +((typeof _dnaOtherTraitsHTML_==='function')?_dnaOtherTraitsHTML_():'')
     +'</div>';
   H+=((typeof _dnaRunPanelHTML_==='function')?_dnaRunPanelHTML_():'');
+  H+=((typeof _momHTML_==='function')?_momHTML_():'');
   return H;
 }
 // Prime the rails once the HTML is in the document. Until layout runs, scrollWidth and clientWidth
@@ -23533,6 +23534,106 @@ function _dnaRunPanelHTML_(){
     +'Sample size is shown for every band, including the thin ones. Pace is derived from distance and moving time, not the stored pace field, which the snapshot does not carry.</div>';
   H+='</div>';
   return H;
+}
+// ---- ATHLETE MOMENTUM (Phase 4) --------------------------------------------------------------
+// Deliberately NOT a single blended score. The inputs that survived provenance — fitness
+// trajectory, consistency, volume — are not independent: CTL is an exponentially-weighted rolling
+// sum of daily load, so consistency and volume are INPUTS INTO it. Blending them would measure one
+// quantity three times, and any weights would be numerology, unfalsifiable against no ground truth.
+// A composite would also be a second answer to the question the dashboard's TSB readiness
+// stand-in already answers.
+//
+// So: ONE headline derived from ONE input with a stated threshold, always shown with the number
+// that produced it, plus three components each in its own unit, never combined.
+//
+// DEFECT CLEARANCES, checked before anything here was written:
+//   * PMC 52-day window bug is in buildPMCChart's DISPLAY slice, not in pmcSeries_ — the daily
+//     series is complete, so getFitness_ is unaffected and safe to build on.
+//   * The 1800s power-curve fault is untouched: nothing here reads powerCurve.
+//   * The run HR zone mis-calibration is untouched: recovery is DROPPED rather than substituted
+//     with a zone-derived proxy, because there is no honest recovery source at all.
+var _MOM_RAMP_BUILD=1.0, _MOM_RAMP_EASE=-1.0;   // CTL per week; stated on the page, not hidden
+function _momData_(){
+  var F=null; try{ F=(typeof getFitness_==='function')?getFitness_():null; }catch(e){ F=null; }
+  if(!F || !F.loaded) return { ok:false };
+  var ramp=(F.ramp==null)?null:(+F.ramp);
+  var bucket=null;
+  if(ramp!=null) bucket=(ramp>=_MOM_RAMP_BUILD)?'Building':((ramp<=_MOM_RAMP_EASE)?'Easing':'Holding');
+  // 12-week CTL line, weekly samples off the SAME series getFitness_ reads.
+  var line=[];
+  try{
+    var ser=(typeof pmcSeries_==='function')?(pmcSeries_()||[]):[];
+    var tail=ser.slice(-84);
+    for(var i=tail.length-1;i>=0;i-=7){ line.unshift({ v:Math.round(tail[i].ctl), lab:tail[i].date.slice(5) }); }
+  }catch(e){ line=[]; }
+  // Consistency and volume off the shared activity stream, not a private re-walk of the library.
+  var acts=[]; try{ acts=(typeof _dnaActs_==='function')?(_dnaActs_()||[]):[]; }catch(e){ acts=[]; }
+  var today=new Date(); today.setHours(0,0,0,0);
+  var dayMs=86400000;
+  var cut12=new Date(today.getTime()-84*dayMs), cut24=new Date(today.getTime()-168*dayMs);
+  var k=function(d){ return (typeof dayKey_==='function')?dayKey_(d)
+        :(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); };
+  var s12=k(cut12), s24=k(cut24), sNow=k(today);
+  var wk={}, sec12=0, sec24=0, n12=0;
+  acts.forEach(function(a){
+    var d=String(a.date||'').slice(0,10); if(d.length<10) return;
+    if(d>sNow) return;
+    if(d>=s12){ sec12+=(+a.sec||0); n12++; var w=(typeof _dnaWeekKey_==='function')?_dnaWeekKey_(d):d; if(w) wk[w]=1; }
+    else if(d>=s24){ sec24+=(+a.sec||0); }
+  });
+  var weeksActive=Object.keys(wk).length;
+  var h12=sec12/3600, h24=sec24/3600;
+  return { ok:true, ctl:F.ctl, atl:F.atl, tsb:F.tsb, ramp:ramp, bucket:bucket, line:line,
+           weeksActive:weeksActive, weeksWindow:12, consPct:Math.round(weeksActive/12*100),
+           acts12:n12, hours12:h12, hoursPrev12:h24,
+           volDelta:(h24>0?((h12-h24)/h24*100):null) };
+}
+function _momHTML_(){
+  var M=_momData_();
+  if(!M.ok) return '';
+  var COL='#22d3ee';
+  var bCol=(M.bucket==='Building')?'#4ade80':((M.bucket==='Easing')?'#f59e0b':'#60a5fa');
+  var rampStr=(M.ramp==null)?'not enough history':((M.ramp>0?'+':'')+(Math.round(M.ramp*10)/10)+' CTL/week');
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Athlete Momentum</div>'
+    +'<div style="font-size:11px;color:'+COL+';font-weight:700">direction of travel</div></div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px;line-height:1.5">'
+    +'Not a blended score. One direction, taken from your fitness trajectory alone, plus the parts that feed it &mdash; each in its own unit.</div>';
+  // HEADLINE: the label AND the number behind it, so the reader can check the call themselves.
+  H+='<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px">'
+    +'<div style="font-size:31px;font-weight:800;color:'+bCol+';line-height:1;letter-spacing:-.02em">'+(M.bucket||'Unknown')+'</div>'
+    +'<div style="font-size:15px;font-weight:700;color:var(--d-head,#15181D)">'+rampStr+'</div></div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:5px;line-height:1.5">'
+    +'Fitness today minus fitness seven days ago. Building at '+(_MOM_RAMP_BUILD>0?'+':'')+_MOM_RAMP_BUILD
+    +' or more per week, Easing at '+_MOM_RAMP_EASE+' or less, Holding between &mdash; thresholds stated so the call can be checked, not just read.</div>';
+  // COMPONENTS: three, never summed.
+  var spark=(typeof _gcSpark_==='function' && M.line.length>1)?_gcSpark_(M.line, COL, { H:38, fill:true, aria:'Fitness over 12 weeks' }):'';
+  H+='<div style="display:flex;flex-wrap:wrap;gap:16px 30px;margin-top:15px;padding-top:14px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'
+    +'<div style="flex:1 1 200px;min-width:180px">'
+      +'<div style="font-size:23px;font-weight:800;color:var(--d-head,#15181D);line-height:1">'+Math.round(M.ctl)+'</div>'
+      +'<div style="font-size:10.5px;color:'+COL+';font-weight:700;margin-top:2px">FITNESS (CTL)</div>'
+      +(spark?('<div style="margin-top:6px">'+spark+'</div>'):'')
+      +'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:2px">last 12 weeks</div></div>'
+    +'<div style="flex:0 1 150px;min-width:140px">'
+      +'<div style="font-size:23px;font-weight:800;color:var(--d-head,#15181D);line-height:1">'+M.consPct+'%</div>'
+      +'<div style="font-size:10.5px;color:'+COL+';font-weight:700;margin-top:2px">CONSISTENCY</div>'
+      +'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.45">'+M.weeksActive+' of the last '+M.weeksWindow+' weeks had an activity</div></div>'
+    +'<div style="flex:0 1 170px;min-width:150px">'
+      +'<div style="font-size:23px;font-weight:800;color:var(--d-head,#15181D);line-height:1">'+(Math.round(M.hours12))+'h</div>'
+      +'<div style="font-size:10.5px;color:'+COL+';font-weight:700;margin-top:2px">VOLUME</div>'
+      +'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.45">'
+        +(M.volDelta==null?'no earlier window to compare':((M.volDelta>=0?'+':'')+Math.round(M.volDelta)+'% vs the previous 12 weeks ('+Math.round(M.hoursPrev12)+'h)'))
+      +'</div></div>'
+    +'</div>';
+  // NOT MEASURED: named, with the reason, rather than quietly missing.
+  H+='<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'
+    +'<div style="font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--d-dim,#8b93a7);margin-bottom:6px">Not measured</div>'
+    +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);line-height:1.6">'
+    +'<b>Recovery</b> &mdash; there is no honest source. HRV is not stored, resting HR is a single setting rather than a series, the weight log is empty, and run heart-rate zones are mis-calibrated (they read 78% of running time at threshold or above, which is not possible).<br>'
+    +'<b>Plan adherence</b> &mdash; 3 of 185 planned sessions carry a completion score, across two weeks. Not enough to read a trend from.<br>'
+    +'Both are left out rather than approximated. They become real inputs once the data exists.</div></div>';
+  return H+'</div>';
 }
 function _dnaOtherTraitsHTML_(){
   var rows=[];
