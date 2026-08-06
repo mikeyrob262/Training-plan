@@ -23120,6 +23120,93 @@ function _dnaTraits_(acts){
     var hs=mph(hot), cs=mph(cold), faster=hs>cs;
     T.push(_dnaTrait_('You ride '+(faster?'hotter':'colder')+' better', (Math.round(Math.abs(hs-cs)*10)/10)+' mph '+(faster?'in heat':'in cold'), 'Median speed '+hs.toFixed(1)+' mph at 75°F+ ('+hot.length+' rides) vs '+cs.toFixed(1)+' mph at 45°F- ('+cold.length+' rides).', 'median speed split on rides carrying a backfilled temperature', faster?A:B));
   })();
+  // ---- POWER-CURVE TRAITS (cycling). Five traits added in the DNA Phase 2 pass.
+  //
+  // WHY THESE ARE RATIOS, NOT WATTS: they are all expressed against your OWN best 5-minute power,
+  // so each one is a statement about the SHAPE of your curve rather than your absolute fitness.
+  // That is what keeps them distinct — a fitter athlete lifts every point on the curve, but the
+  // ratio between 5s and 5min only moves if the KIND of rider changes. It also makes them
+  // self-referential by construction, which is the "vs your own history" rule with no scoring
+  // layer bolted on.
+  //
+  // DELIBERATELY NOT normalized by st.ftp. FTP reads 183 W while the recorded best hour is 265 W
+  // — 145% of FTP for a full hour, which is not physiologically possible. One of the two is wrong
+  // (tracked separately), and any FTP-relative score would silently inherit that contradiction.
+  //
+  // SOURCE: r.powerCurve, written by the FIT/TCX import path. 61% of cycling rides carry it (307),
+  // 179 of them inside the last 12 months. Power STREAMS (chartPwr) sit at 6% and laps at 3%, which
+  // is why nothing here measures variance or repeatability — those would need data that does not
+  // exist, so the traits below measure capability instead and are named for what they actually are.
+  (function(){
+    var PC_MIN=5;                       // below this the window cannot characterise a rider
+    var src=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+    var isRunR=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String((r&&(r.sportType||r.type))||'')); };
+    var pcRides=src.filter(function(r){ return r && r.date && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
+    var best=function(rows,d){ var b=0; rows.forEach(function(r){ var v=+r.powerCurve[d]; if(v>b) b=v; }); return b; };
+    // Per-year ratio series, so each trait carries the same "how did this move" history the other
+    // traits show. A year with no power-curve rides is a GAP, not a zero — _gcSpark_ breaks the
+    // line there rather than drawing a collapse the athlete never had.
+    var years={};
+    pcRides.forEach(function(r){ var y=String(r.date).slice(0,4); (years[y]=years[y]||[]).push(r); });
+    var yKeys=Object.keys(years).sort();
+    var series=function(d){
+      var out=[];
+      yKeys.forEach(function(y){
+        var rows=years[y], a=best(rows,300), n=best(rows,d);
+        out.push({ v:(a>0&&n>0&&rows.length>=3)?Math.round(n/a*100)/100:null, lab:y });
+      });
+      return out;
+    };
+    var anchor=best(pcRides,300);
+    var PWR=[
+      ['Sprinter',        5,    '#ef4444', 'peak 5-second power against your own best 5-minute power', 'how explosive you are relative to your steady power'],
+      ['Anaerobic Punch', 60,   '#f59e0b', 'best 1-minute power against your own best 5-minute power', 'what you can do over a short, hard effort'],
+      ['Sustained Power', 1200, '#60a5fa', 'best 20-minute power against your own best 5-minute power', 'how well your power holds as the effort lengthens'],
+      ['Aerobic Depth',   3600, '#4ade80', 'best 1-hour power against your own best 5-minute power', 'how deep your aerobic engine runs']
+    ];
+    if(pcRides.length<PC_MIN || !(anchor>0)){
+      PWR.forEach(function(p){
+        T.push(_dnaLock_(p[0], 'needs power data on at least '+PC_MIN+' rides — '+pcRides.length+' carry a power curve so far', p[2]));
+      });
+    } else {
+      PWR.forEach(function(p){
+        var n=best(pcRides,p[1]);
+        if(!(n>0)){ T.push(_dnaLock_(p[0], 'no recorded '+(p[1]<60?(p[1]+'-second'):(Math.round(p[1]/60)+'-minute'))+' effort yet', p[2])); return; }
+        var ratio=Math.round(n/anchor*100)/100;
+        T.push(_dnaTrait_(p[0], ratio.toFixed(2)+'x your 5-min power',
+          'Your best '+(p[1]<60?(p[1]+'-second'):(Math.round(p[1]/60)+'-minute'))+' power is '+Math.round(n)+' W against a best 5-minute of '+Math.round(anchor)+' W &mdash; '+p[4]+'.',
+          p[3], p[2], series(p[1]), 'ratio by year (a gap is a year with no power data)'));
+      });
+    }
+  })();
+  // ---- EXPLORER: new ground, measured as segments you had never ridden before.
+  // Counted as FIRST-EVER effort dates per segment, so re-riding a favourite does not read as
+  // exploring. st.segments carries 2,017 segments and 1,942 of them hold at least one effort.
+  // Caveat kept in the derivation line: a segment is Strava's unit, not a road, so a dense city
+  // ride can register many "new" segments from one outing.
+  (function(){
+    var segs=(typeof st!=='undefined'&&st&&Array.isArray(st.segments))?st.segments:[];
+    var first={};
+    segs.forEach(function(s){
+      if(!s || !Array.isArray(s.efforts)) return;
+      var id=s.id||s.name; if(!id) return;
+      s.efforts.forEach(function(e){
+        var d=e&&e.d?String(e.d).slice(0,10):null; if(!d) return;
+        if(!first[id] || d<first[id]) first[id]=d;
+      });
+    });
+    var ids=Object.keys(first);
+    if(ids.length<10){ T.push(_dnaLock_('Explorer', 'needs segment history — sync segments to unlock', '#a855f7')); return; }
+    var byY={};
+    ids.forEach(function(id){ var y=first[id].slice(0,4); byY[y]=(byY[y]||0)+1; });
+    var ys=Object.keys(byY).sort();
+    var sp2=ys.map(function(y){ return { v:byY[y], lab:y }; });
+    var thisY=String(new Date().getFullYear());
+    T.push(_dnaTrait_('Explorer', ids.length.toLocaleString()+' segments ridden',
+      'You have ridden '+ids.length.toLocaleString()+' distinct Strava segments, '+(byY[thisY]||0).toLocaleString()+' of them first ridden this year.',
+      'distinct segments by FIRST effort date &mdash; re-riding one does not count again', '#a855f7',
+      sp2, 'new segments discovered, by year'));
+  })();
   return T;
 }
 // ---- SIGNATURE: reads the recent window's per-sport z DIRECTLY off _zsCompute_ (the same numbers
