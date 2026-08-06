@@ -23500,8 +23500,13 @@ function _dnaRunPanelHTML_(){
   var nm=function(r){ try{ return (typeof actName_==='function')?actName_(r):String((r&&r.name)||'run'); }catch(e){ return 'run'; } };
   // Bars scale to the SLOWEST band so every bar is comparable; pace is inverted (faster = longer)
   // because a longer bar reading as "better" is the only intuitive direction for a time.
-  var slow=0; withData.forEach(function(b){ if(b.pace>slow) slow=b.pace; });
-  var fast=slow; withData.forEach(function(b){ if(b.pace<fast) fast=b.pace; });
+  // The AXIS RANGE ignores flagged bands. Letting the corrupt 4:27 5K set the top squashed the
+  // trustworthy 7:15-9:28 curve into the bottom third of the plot — a bad row was dictating how
+  // the good rows looked. Flagged points are still drawn, clamped to the edge and marked.
+  var trust=withData.filter(function(b){ return !b.suspect; });
+  var scaleSet=trust.length>=2?trust:withData;
+  var slow=0; scaleSet.forEach(function(b){ if(b.pace>slow) slow=b.pace; });
+  var fast=slow; scaleSet.forEach(function(b){ if(b.pace<fast) fast=b.pace; });
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
     +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Athlete DNA &mdash; pace curve</div>'
@@ -23530,19 +23535,21 @@ function _dnaRunPanelHTML_(){
     var xOf=function(mi){ return (lgMax>lgMin)?(x0+(Math.log(mi)-lgMin)/(lgMax-lgMin)*(x1-x0)):((x0+x1)/2); };
     var pad=(slow-fast)*0.18||30;
     var lo=fast-pad, hi=slow+pad;
-    var yOf=function(p){ return y1-((hi-p)/(hi-lo))*(y1-y0); };   // inverted: faster = higher
+    // inverted (faster = higher), and clamped so a flagged point outside the trusted range still
+    // renders at the edge instead of escaping the plot.
+    var yOf=function(p){ var y=y1-((hi-p)/(hi-lo))*(y1-y0); return Math.max(y0-1, Math.min(y1+1, y)); };
     var svg='<svg viewBox="0 0 '+W+' '+HT+'" style="width:100%;max-width:470px;height:auto" role="img" aria-label="Pace curve: best pace at each distance, all-time">';
     // horizontal guides at the fastest and slowest plotted pace
     [[fast,'fastest'],[slow,'slowest']].forEach(function(g){
       svg+='<line x1="'+x0+'" y1="'+yOf(g[0]).toFixed(1)+'" x2="'+x1+'" y2="'+yOf(g[0]).toFixed(1)+'" style="stroke:var(--d-edge,rgba(0,0,0,.13))" stroke-width="1"/>'
         +'<text x="'+(x0-6)+'" y="'+(yOf(g[0])+3.5).toFixed(1)+'" text-anchor="end" font-size="9" style="fill:var(--d-dim,#7C8595)" font-family="-apple-system,sans-serif">'+_dnaPaceStr_(g[0])+'</text>';
     });
-    // area + line, broken at flagged points
-    var runs2=[], cur=[];
-    pts.forEach(function(b){ if(b.suspect){ if(cur.length){ runs2.push(cur); cur=[]; } } else cur.push(b); });
-    if(cur.length) runs2.push(cur);
-    runs2.forEach(function(seg){
-      if(seg.length<2) return;
+    // The line is the TRUSTWORTHY curve: flagged bands are skipped rather than splitting it. The
+    // first version broke the series at the 5K, which left the 1-mile point floating alone and
+    // read as a rendering fault rather than as a deliberate omission. Now the curve runs
+    // 1 mi -> 10K -> Half -> Marathon continuously and the flagged 5K sits visibly OFF it.
+    var seg=pts.filter(function(b){ return !b.suspect; });
+    if(seg.length>=2){
       var dLine='', dArea='';
       seg.forEach(function(b,i){
         var X=xOf(b.mi).toFixed(1), Y=yOf(b.pace).toFixed(1);
@@ -23552,7 +23559,7 @@ function _dnaRunPanelHTML_(){
       dArea+='L'+xOf(seg[seg.length-1].mi).toFixed(1)+','+y1+'Z';
       svg+='<path d="'+dArea+'" fill="#00C896" opacity="0.16"/>';
       svg+='<path d="'+dLine+'" fill="none" stroke="#00C896" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
-    });
+    }
     // points, labels, click-through
     pts.forEach(function(b){
       var X=xOf(b.mi), Y=yOf(b.pace), thin=(b.n<10);
