@@ -13146,8 +13146,9 @@ function _lgHTML_(){
     +'<div style="font-size:11px;color:#60a5fa;font-weight:700">cycling</div></div>'
     +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px;line-height:1.5">'
     +'Scored against your own curve, never against other athletes &mdash; Strava exposes no ranking to compare with. '
-    +'Climber, Consistency and Explorer are traits rather than axes and live in DNA Insights.</div>'
+    +'The four power traits share one scale; the other three are stated in their own units below.</div>'
     +_dnaRadarHTML_()
+    +((typeof _dnaOtherTraitsHTML_==='function')?_dnaOtherTraitsHTML_():'')
     +'</div>';
   return H;
 }
@@ -22473,13 +22474,14 @@ function aiCardDNA_(ded){
   var rides=(ded||allRidesDeduped_()).filter(function(r){ return r && r.date && (parseFloat(r.distance)||0)>0; });
   if(rides.length<20) return '';
   var MIN=20, traits=[];
-  // Climber — average elevation gain per mile.
+  // Climber — average elevation gain per mile. The MEASUREMENT moved to _dnaClimbFtPerMi_ so the
+  // Legacy DNA section can state the same number without a second implementation; the >=50 ft/mi
+  // gate stays here, because that is this card's editorial rule (only call out what is notable),
+  // not a property of the measurement.
   (function(){
-    var e=rides.filter(function(r){ return (parseFloat(r.elev)||0)>0; });
-    if(e.length<MIN) return;
-    var ft=e.reduce(function(s,r){return s+(parseFloat(r.elev)||0);},0), mi=e.reduce(function(s,r){return s+(parseFloat(r.distance)||0);},0);
-    if(mi<=0) return; var fpm=Math.round(ft/mi);
-    if(fpm>=50) traits.push(['Climber','You average '+fpm+' ft of climbing per mile','#f59e0b']);
+    var c=(typeof _dnaClimbFtPerMi_==='function')?_dnaClimbFtPerMi_(rides, MIN):null;
+    if(!c) return;
+    if(c.fpm>=50) traits.push(['Climber','You average '+c.fpm+' ft of climbing per mile','#f59e0b']);
   })();
   // Endurance Engine — pace on the longest third of rides holds vs the shortest third.
   (function(){
@@ -23053,12 +23055,46 @@ function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:un
 // NO powerCurve at all: 0 of 409, against 307 on st.rides. Raw duplicates are harmless because
 // every figure is a MAXIMUM; a ride imported twice cannot raise its own best 5-second power.
 var _DNA_PC_MIN=5;
+// [label, seconds, colour, derivation, blurb, LEAN (plain-English direction, used to write the
+// narrative sentence from the numbers), ICON path]
 var _DNA_PWR_DEFS=[
-  ['Sprinter',        5,    '#ef4444', 'peak 5-second power against your own best 5-minute power',  'how explosive you are relative to your steady power'],
-  ['Anaerobic Punch', 60,   '#f59e0b', 'best 1-minute power against your own best 5-minute power',  'what you can do over a short, hard effort'],
-  ['Sustained Power', 1200, '#60a5fa', 'best 20-minute power against your own best 5-minute power', 'how well your power holds as the effort lengthens'],
-  ['Aerobic Depth',   3600, '#4ade80', 'best 1-hour power against your own best 5-minute power',    'how deep your aerobic engine runs']
+  ['Sprinter',        5,    '#ef4444', 'peak 5-second power against your own best 5-minute power',  'how explosive you are relative to your steady power', 'short, explosive efforts',   'M13 2L3 14h9l-1 8 10-12h-9l1-8z'],
+  ['Anaerobic Punch', 60,   '#f59e0b', 'best 1-minute power against your own best 5-minute power',  'what you can do over a short, hard effort',           'short, hard efforts',        'M12 2s4.5 4.2 4.5 8.2A4.5 4.5 0 0 1 7.5 10C7.5 6.2 12 2 12 2z'],
+  ['Sustained Power', 1200, '#60a5fa', 'best 20-minute power against your own best 5-minute power', 'how well your power holds as the effort lengthens',   'sustained threshold efforts','M3 12h18 M7 8.5v7 M17 8.5v7'],
+  ['Aerobic Depth',   3600, '#4ade80', 'best 1-hour power against your own best 5-minute power',    'how deep your aerobic engine runs',                   'long, steady output',        'M12 20.5s-6.5-4.2-6.5-9.3A3.9 3.9 0 0 1 12 8.6a3.9 3.9 0 0 1 6.5 2.6c0 5.1-6.5 9.3-6.5 9.3z']
 ];
+// ONE climbing measurement, shared by the Athlete DNA card (which gates it at >=50 ft/mi before
+// calling someone a Climber) and the Legacy DNA section (which states it as a plain stat). Returns
+// null when too few rides carry elevation to say anything.
+function _dnaClimbFtPerMi_(rides, minN){
+  var src=rides||((typeof allRidesDeduped_==='function')?allRidesDeduped_():[]);
+  var e=(src||[]).filter(function(r){ return r && (parseFloat(r.elev)||0)>0 && (parseFloat(r.distance)||0)>0; });
+  if(e.length<(minN||20)) return null;
+  var ft=0, mi=0;
+  e.forEach(function(r){ ft+=parseFloat(r.elev)||0; mi+=parseFloat(r.distance)||0; });
+  if(!(mi>0)) return null;
+  return { fpm:Math.round(ft/mi), n:e.length, ft:Math.round(ft), mi:Math.round(mi) };
+}
+// The narrative sentence, DERIVED from the four ratios every time — never a stored string. It only
+// ever names the highest and lowest axis and quotes their own numbers, so if the shape changes the
+// sentence changes with it, and it cannot claim anything the ratios do not already show.
+function _dnaPowerNarrative_(P){
+  if(!P || !P.ok) return '';
+  var a=P.axes.filter(function(x){ return x.ratio>0; }).slice().sort(function(x,y){ return y.ratio-x.ratio; });
+  if(a.length<2) return '';
+  var top=a[0], bot=a[a.length-1];
+  var s='Your power favours <b>'+top.lean+'</b> over <b>'+bot.lean+'</b> &mdash; '
+    +top.label.toLowerCase()+' sits at '+top.ratio.toFixed(2)+'x your 5-minute power while '
+    +bot.label.toLowerCase()+' sits at '+bot.ratio.toFixed(2)+'x.';
+  // Only mention clustering when the rest genuinely are clustered: the spread across everything
+  // below the leader has to be smaller than the gap between the leader and the runner-up.
+  if(a.length>=3){
+    var rest=a.slice(1), spread=rest[0].ratio-rest[rest.length-1].ratio, gap=top.ratio-rest[0].ratio;
+    if(gap>spread) s+=' The other '+rest.length+' sit within '+spread.toFixed(2)+'x of each other, so '
+      +top.label.toLowerCase()+' is the one trait that stands apart.';
+  }
+  return s;
+}
 function _dnaDurLabel_(s){ return s<60?(s+'-second'):(Math.round(s/60)+'-minute'); }
 function _dnaPowerAxes_(){
   var src=(typeof st!=='undefined'&&st&&Array.isArray(st.rides))?st.rides:[];
@@ -23074,7 +23110,7 @@ function _dnaPowerAxes_(){
   var yKeys=Object.keys(years).sort();
   var axes=_DNA_PWR_DEFS.map(function(p){
     var w=best(rows,p[1]);
-    return { key:'d'+p[1], label:p[0], secs:p[1], durLabel:_dnaDurLabel_(p[1]), col:p[2], deriv:p[3], blurb:p[4],
+    return { key:'d'+p[1], label:p[0], secs:p[1], durLabel:_dnaDurLabel_(p[1]), col:p[2], deriv:p[3], blurb:p[4], lean:p[5], icon:p[6],
       watts:w, ratio:(w>0?Math.round(w/anchor*100)/100:0),
       series:yKeys.map(function(y){
         var g=years[y], a=best(g,300), n=best(g,p[1]);
@@ -23115,8 +23151,8 @@ function _dnaRadarHTML_(){
   drawn=drawn.slice().sort(function(a,b){ return b.ratio-a.ratio; });
   var top=0; drawn.forEach(function(a){ if(a.ratio>top) top=a.ratio; });
   var MAX=Math.max(1.5, Math.ceil(top*2)/2);          // half-step headroom, so the longest bar never touches the edge
-  var LBL=112, PADR=44, X0=LBL, W=360, X1=W-PADR;     // left gutter holds the NAME, so no legend lookup
-  var ROW=27, BAR=13, TOP=20, H=TOP+drawn.length*ROW+16;
+  var LBL=150, PADR=44, X0=LBL, W=400, X1=W-PADR;     // left gutter holds the ICON + NAME, so no legend lookup
+  var ROW=33, BAR=14, TOP=22, H=TOP+drawn.length*ROW+14;   // roomier rows: the bars were crowding each other
   var xOf=function(v){ return X0+(X1-X0)*Math.max(0,Math.min(1,v/MAX)); };
   var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:430px;height:auto" role="img" aria-label="Power profile: best power at each duration relative to your best 5-minute power">';
   // THEMING: colours go through style="fill:var(...)", never a fill="" presentation attribute —
@@ -23133,9 +23169,15 @@ function _dnaRadarHTML_(){
   svg+='<line x1="'+px.toFixed(1)+'" y1="'+(TOP-8)+'" x2="'+px.toFixed(1)+'" y2="'+(TOP+drawn.length*ROW-6)+'" style="stroke:var(--d-dim,#7C8595);opacity:.8" stroke-width="1" stroke-dasharray="3,3"/>';
   svg+='<text x="'+(px+4).toFixed(1)+'" y="'+(TOP-11)+'" font-size="9.5" '+FILL_DIM+' font-family="-apple-system,sans-serif">1.0x &mdash; matches your 5-min power</text>';
   drawn.forEach(function(a,i){
-    var y=TOP+i*ROW, bw=Math.max(2, xOf(a.ratio)-X0);
-    svg+='<text x="'+(LBL-9)+'" y="'+(y+BAR-2)+'" text-anchor="end" font-size="11.5" font-weight="700" '+FILL_HEAD+' font-family="-apple-system,sans-serif">'+a.label+'</text>';
+    var y=TOP+i*ROW, bw=Math.max(2, xOf(a.ratio)-X0), lead=(i===0);
+    // Icon in the trait's own colour, then the name. Same stroke-only icon language as the Cycling
+    // and Running panels above — restrained, no fills, no glow.
+    svg+='<g transform="translate(2,'+(y-2)+')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="'+a.col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+a.icon+'</svg></g>';
+    svg+='<text x="23" y="'+(y+BAR-2)+'" font-size="11.5" font-weight="'+(lead?'800':'700')+'" '+FILL_HEAD+' font-family="-apple-system,sans-serif">'+a.label+'</text>';
     svg+='<rect x="'+X0+'" y="'+y+'" width="'+(X1-X0)+'" height="'+BAR+'" rx="3" style="fill:var(--d-edge,rgba(0,0,0,.13))"/>';
+    // The leader gets a soft halo of its own colour rather than a different shape or a gradient —
+    // enough to draw the eye first, nothing that changes how the length reads.
+    if(lead) svg+='<rect x="'+(X0-2)+'" y="'+(y-2)+'" width="'+(bw+4).toFixed(1)+'" height="'+(BAR+4)+'" rx="5" fill="'+a.col+'" opacity="0.16"/>';
     svg+='<rect x="'+X0+'" y="'+y+'" width="'+bw.toFixed(1)+'" height="'+BAR+'" rx="3" fill="'+a.col+'"/>';
     svg+='<text x="'+(X0+bw+7).toFixed(1)+'" y="'+(y+BAR-2)+'" font-size="11.5" font-weight="800" '+FILL_HEAD+' font-family="-apple-system,sans-serif">'+a.ratio.toFixed(2)+'x</text>';
   });
@@ -23146,9 +23188,50 @@ function _dnaRadarHTML_(){
     key+='<span style="font-size:10px;color:var(--d-dim,#8b93a7)"><b style="color:'+a.col+'">'+a.label+'</b> '+a.durLabel+' &middot; '+Math.round(a.watts)+' W</span>';
   });
   key+='</div>';
-  return '<div style="margin-top:10px">'+svg+key
+  // The one interpreting sentence, written from the numbers above it (see _dnaPowerNarrative_).
+  var nar=_dnaPowerNarrative_(P);
+  var narHTML=nar?('<div style="font-size:12.5px;color:var(--d-t1,#334155);line-height:1.6;margin-top:11px;padding-top:11px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'+nar+'</div>'):'';
+  return '<div style="margin-top:10px">'+svg+key+narHTML
     +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:7px;line-height:1.55">Each bar is your best power for that duration divided by your best 5-minute power ('
     +Math.round(P.anchor)+' W), from '+P.n+' rides carrying a power curve. This is rider TYPE, not fitness &mdash; a stronger rider lifts every duration, so the bars only move when the balance between them changes.</div></div>';
+}
+// The three traits that are NOT on the bar chart, each stated in its own native unit. They are here
+// because a section that mentions them and then shows nothing reads as unfinished — but they are
+// deliberately NOT given a shared scale: ft/mi, a percentage and a count are not comparable, and
+// forcing them onto one axis is the second normalization this project keeps refusing.
+//
+// REUSED, not recomputed: Consistency and Explorer are lifted from _dnaTraits_ by name (the same
+// objects the DNA Insights tab renders), and Climber comes from _dnaClimbFtPerMi_, which the
+// Athlete DNA card also calls. Nothing here does its own arithmetic.
+function _dnaOtherTraitsHTML_(){
+  var rows=[];
+  var climb=(typeof _dnaClimbFtPerMi_==='function')?_dnaClimbFtPerMi_(null,20):null;
+  if(climb) rows.push({ label:'Climber', val:climb.fpm.toLocaleString()+' ft', unit:'per mile climbed', col:'#f59e0b',
+    icon:'M3 19l6-8 4 5 3-4 5 7z' });
+  var T=[];
+  try{ if(typeof _dnaTraits_==='function' && typeof _dnaActs_==='function') T=_dnaTraits_(_dnaActs_())||[]; }catch(e){ T=[]; }
+  var pick=function(n){ for(var i=0;i<T.length;i++){ if(T[i] && T[i].name===n && !T[i].locked) return T[i]; } return null; };
+  var cons=pick('Consistency');
+  // Plain string replace, NOT a regex: a regex literal here loses a backslash level when the page
+  // is served, so /\s*.../ would ship as /s*.../ — valid, silent and wrong. Guarded by
+  // scripts/served-escape-test.mjs, which is what caught this.
+  if(cons) rows.push({ label:'Consistency', val:String(cons.headline).replace(' of weeks active','').trim(), unit:'of weeks active', col:'#4ade80',
+    icon:'M4 12l4 4 12-12' });
+  var exp=pick('Explorer');
+  if(exp) rows.push({ label:'Explorer', val:String(exp.headline).replace(' segments ridden','').trim(), unit:'segments ridden', col:'#a855f7',
+    icon:'M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z M12 8a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z' });
+  if(!rows.length) return '';
+  var H='<div style="margin-top:15px;padding-top:13px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'
+    +'<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--d-dim,#8b93a7);margin-bottom:10px">Also in your DNA</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px 30px">';
+  rows.forEach(function(r){
+    H+='<div style="display:flex;align-items:center;gap:10px">'
+      +'<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="'+r.col+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">'+r.icon+'</svg>'
+      +'<div><div style="font-size:19px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+r.val+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px"><b style="color:'+r.col+'">'+r.label+'</b> &middot; '+r.unit+'</div></div></div>';
+  });
+  H+='</div><div style="font-size:10px;color:var(--d-dim,#8b93a7);margin-top:9px;line-height:1.5">Each in its own unit &mdash; these are not scored against the bars above or against each other, because ft/mi, a percentage and a count share no common scale.</div></div>';
+  return H;
 }
 function _dnaTraits_(acts){
   var T=[], G='#4ade80', A='#f59e0b', B='#60a5fa', P='#a855f7', TEAL='#2dd4bf';
