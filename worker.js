@@ -8734,18 +8734,21 @@ function weightNutritionRowHTML(){
 // just TSB wearing a costume, and the home one carries a comment calling itself a rough stand-in.
 // TSB in bands is the standard, defensible reading, so that is what every surface gets. The
 // thresholds are stated here rather than buried in each renderer.
+// fill is the RING position — four discrete steps, one per band. A continuous fill would put the
+// manufactured precision straight back: the ring would again encode a fake 0-100 derived from one
+// input. Four steps say "which band" and nothing more, which is exactly what is known.
 var _RDY_BANDS=[
-  { min:10,        key:'fresh',    label:'Fresh',    head:'Good day to push',   sub:'Form is positive — fatigue is well below fitness',  col:'#5DCAA5' },
-  { min:-10,       key:'balanced', label:'Balanced', head:'Steady state',       sub:'Fitness and fatigue are close — normal training day', col:'#4D9FFF' },
-  { min:-25,       key:'loaded',   label:'Loaded',   head:'Fatigue is building',sub:'Consider an easier day or shorter intervals',        col:'#EF9F27' },
-  { min:-Infinity, key:'fatigued', label:'Fatigued', head:'Fatigue is high',    sub:'Recent training load is heavy — prioritize recovery', col:'#E24B4A' }
+  { min:10,        key:'fresh',    label:'Fresh',    head:'Good day to push',   sub:'Form is positive — fatigue is well below fitness',  col:'#5DCAA5', fill:1.00 },
+  { min:-10,       key:'balanced', label:'Balanced', head:'Steady state',       sub:'Fitness and fatigue are close — normal training day', col:'#4D9FFF', fill:0.75 },
+  { min:-25,       key:'loaded',   label:'Loaded',   head:'Fatigue is building',sub:'Consider an easier day or shorter intervals',        col:'#EF9F27', fill:0.50 },
+  { min:-Infinity, key:'fatigued', label:'Fatigued', head:'Fatigue is high',    sub:'Recent training load is heavy — prioritize recovery', col:'#E24B4A', fill:0.25 }
 ];
 function getReadiness_(){
   var f=null; try{ f=(typeof getFitness_==='function')?getFitness_():null; }catch(e){ f=null; }
-  if(!f || !f.loaded) return { loaded:false, tsb:null, band:null, label:'—', head:'—', sub:'Not enough logged training yet.', col:'#94a3b8' };
+  if(!f || !f.loaded) return { loaded:false, tsb:null, band:null, label:'—', head:'—', sub:'Not enough logged training yet.', col:'#94a3b8', fill:0 };
   var tsb=+f.tsb||0, b=_RDY_BANDS[_RDY_BANDS.length-1];
   for(var i=0;i<_RDY_BANDS.length;i++){ if(tsb>=_RDY_BANDS[i].min){ b=_RDY_BANDS[i]; break; } }
-  return { loaded:true, tsb:tsb, ctl:f.ctl, atl:f.atl, band:b.key, label:b.label, head:b.head, sub:b.sub, col:b.col };
+  return { loaded:true, tsb:tsb, ctl:f.ctl, atl:f.atl, band:b.key, label:b.label, head:b.head, sub:b.sub, col:b.col, fill:b.fill };
 }
 try{ if(typeof window!=='undefined'){ window.getReadiness_=getReadiness_; } }catch(e){}
 function readinessCardHTML(){
@@ -13688,11 +13691,16 @@ function showHomeDash(){
   // Readiness score: map TSB (typically -30 to +25) onto a 0-10 scale,
   // matching the reference's "8.2 / Good" format. This is a rough
   // stand-in, not a real physiological readiness score.
-  var readinessRaw = 5 + (tsb/6);
-  var readiness = Math.max(0, Math.min(10, readinessRaw));
-  var readinessLabel = readiness>=7.5?'Good':readiness>=5?'Fair':readiness>=3?'Low':'Poor';
-  var readinessColor = readiness>=7.5?'#5DCAA5':readiness>=5?'#FFB938':'#E24B4A';
-  var readinessPct = readiness/10;
+  // Readiness comes from getReadiness_ — the one derivation. This used to be 5+tsb/6 shown as a
+  // decimal out of 10, which disagreed with both the training-load card ("Steady state") and the
+  // calendar ring ("69%") off the identical TSB. The headline figure is now the band, and the
+  // precise number shown alongside is TSB itself: a real measured quantity rather than a score
+  // manufactured from it.
+  var _rdyH=(typeof getReadiness_==='function')?getReadiness_():null;
+  var readinessLabel=_rdyH?_rdyH.label:'—';
+  var readinessColor=_rdyH?_rdyH.col:'#94a3b8';
+  var readinessPct=_rdyH?_rdyH.fill:0;
+  var readinessNum=(_rdyH&&_rdyH.loaded)?((_rdyH.tsb>0?'+':'')+Math.round(_rdyH.tsb)):'—';
 
   var greeting=(function(){
     var h=new Date().getHours();
@@ -13742,7 +13750,7 @@ function showHomeDash(){
     +'<circle id="home-readiness-ring" cx="50" cy="50" r="'+r2+'" fill="none" stroke="'+readinessColor+'" stroke-width="8" stroke-dasharray="'+dash+' '+circ+'" stroke-linecap="round"/>'
     +'</svg>'
     +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">'
-    +'<div id="home-readiness-score" style="font-size:24px;font-weight:800;color:var(--t1)">'+readiness.toFixed(1)+'</div>'
+    +'<div id="home-readiness-score" style="font-size:24px;font-weight:800;color:var(--t1)">'+readinessNum+'</div>'
     +'<div id="home-readiness-label" style="font-size:11px;font-weight:700;color:'+readinessColor+'">'+readinessLabel+'</div>'
     +'</div></div>'
     +'<div style="flex:1;display:flex;flex-direction:column;gap:10px">'
@@ -13941,12 +13949,16 @@ function fetchLiveIntervalsWellness(callback){
       var hrv=(typeof data.hrv==='number' && data.hrv>0)?Math.round(data.hrv):null;
       var rhr=(typeof data.restingHR==='number' && data.restingHR>0)?Math.round(data.restingHR):null;
 
-      var readinessRaw=5+(tsb/6);
-      var readiness=Math.max(0,Math.min(10,readinessRaw));
-      var readinessLabel=readiness>=7.5?'Good':readiness>=5?'Fair':readiness>=3?'Low':'Poor';
-      var readinessColor=readiness>=7.5?'#5DCAA5':readiness>=5?'#FFB938':'#E24B4A';
+      // Repointed at getReadiness_ as well. This live-poll repaint re-derived readiness with the
+      // old 5+tsb/6 and wrote it straight into the DOM, so leaving it would have silently reverted
+      // the band render seconds after paint — the same class of wrong-then-right flicker the
+      // Legacy run figures were fixed for.
+      var _rdyL=(typeof getReadiness_==='function')?getReadiness_():null;
+      var readinessLabel=_rdyL?_rdyL.label:'—';
+      var readinessColor=_rdyL?_rdyL.col:'#94a3b8';
+      var readinessNum=(_rdyL&&_rdyL.loaded)?((_rdyL.tsb>0?'+':'')+Math.round(_rdyL.tsb)):'—';
       var r2=40, circ=2*Math.PI*r2;
-      var dash=circ*(readiness/10);
+      var dash=circ*(_rdyL?_rdyL.fill:0);
 
       var scoreEl=document.getElementById('home-readiness-score');
       var labelEl=document.getElementById('home-readiness-label');
@@ -13956,7 +13968,7 @@ function fetchLiveIntervalsWellness(callback){
       var atlEl=document.getElementById('home-readiness-atl');
       var freshEl=document.getElementById('home-readiness-freshness');
       if(scoreEl){
-        scoreEl.textContent=readiness.toFixed(1);
+        scoreEl.textContent=readinessNum;
         if(labelEl){ labelEl.textContent=readinessLabel; labelEl.style.color=readinessColor; }
         if(ringEl){ ringEl.setAttribute('stroke',readinessColor); ringEl.setAttribute('stroke-dasharray',dash+' '+circ); }
         if(tsbEl) tsbEl.textContent=(tsb>=0?'+':'')+tsb;
@@ -34013,13 +34025,16 @@ function getDesktopFitness_(){
   // variant. Returns the full snapshot; legacy callers just read ctl/atl/tsb.
   return getFitness_();
 }
-// TSB-based readiness on a 0-100 scale (desktop ring), mirroring the mobile
-// card's 5 + TSB/6 (0-10) formula. Returns {score,label,color}.
+// Desktop ring readiness. Was a FOURTH independent derivation of the same thing — it even
+// documented itself as "mirroring the mobile card's 5 + TSB/6 formula", which is how four copies
+// of one idea end up disagreeing. Now delegates to getReadiness_ and keeps its {score,label,color}
+// shape so existing callers need no change; score is the band's ring step, not a manufactured
+// percentage. The tsb argument is ignored on purpose — the single source reads it itself, so a
+// caller passing a stale value can no longer produce a different verdict from the same moment.
 function readinessFromTSB_(tsb){
-  var r10=Math.max(0,Math.min(10,5+(tsb/6)));
-  var label=r10>=7.5?'Good':r10>=5?'Fair':r10>=3?'Low':'Poor';
-  var color=r10>=7.5?'#4ade80':r10>=5?'#FFB938':'#e24b4a';
-  return {score:Math.round(r10*10), label:label, color:color};
+  var r=(typeof getReadiness_==='function')?getReadiness_():null;
+  if(!r || !r.loaded) return {score:0, label:'—', color:'#94a3b8'};
+  return {score:Math.round(r.fill*100), label:r.label, color:r.col};
 }
 // Category W/kg = FTP ÷ bodyweight (kg). This is the metric Chase-1 (3.14 W/kg)
 // is defined by and, unlike per-ride average power, is always available.
@@ -46137,9 +46152,14 @@ function showCalendarTab(){
 
   // Readiness % — derive from TSB the same way Home does (fresher = higher).
   // Maps TSB roughly onto a 0-100 readiness feel.
-  var readiness=Math.max(0,Math.min(100, Math.round(75 + tsb*1.2)));
-  var readyColor=readiness>=80?'#5DCAA5':readiness>=60?'#4D9FFF':readiness>=40?'#EF9F27':'#E24B4A';
-  var readyLabel=readiness>=80?'Great to go!':readiness>=60?'Ready':readiness>=40?'Take it easy':'Recovery day';
+  // Repointed at getReadiness_. This was 75+tsb*1.2 shown as a percentage, which read 69% while
+  // the training-load card called the same TSB "Steady state" and the home ring called it 4.2/10.
+  // The ring position is now the band's own step and the number beside it is TSB, a real measured
+  // quantity, rather than a percentage manufactured from it.
+  var _rdyC=(typeof getReadiness_==='function')?getReadiness_():null;
+  var readiness=Math.round((_rdyC?_rdyC.fill:0)*100);
+  var readyColor=_rdyC?_rdyC.col:'#94a3b8';
+  var readyLabel=_rdyC?_rdyC.head:'—';
 
   // Week model (Mon-anchored), matching the mockup's Mon..Sun strip.
   var now=new Date();
