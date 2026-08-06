@@ -8723,6 +8723,31 @@ function weightNutritionRowHTML(){
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 16px 14px">'+weightTile+nutritionTile+'</div>';
 }
 
+// ---- THE readiness read. ONE derivation, the way getFitness_ is the one CTL/ATL/TSB read.
+//
+// Three existed before this, all off the same TSB and all disagreeing. At a TSB of -5 the app
+// simultaneously said "Steady state" (this card), "4.2/10 — Low" (home dashboard) and "69%"
+// (calendar ring). Same input, three answers, on one athlete's screen.
+//
+// BANDS, NOT A SCALED NUMBER. The two scaled versions were linear remaps of a single input —
+// 5+tsb/6 and 75+tsb*1.2 — which manufacture a decimal that reads like a measurement and is really
+// just TSB wearing a costume, and the home one carries a comment calling itself a rough stand-in.
+// TSB in bands is the standard, defensible reading, so that is what every surface gets. The
+// thresholds are stated here rather than buried in each renderer.
+var _RDY_BANDS=[
+  { min:10,        key:'fresh',    label:'Fresh',    head:'Good day to push',   sub:'Form is positive — fatigue is well below fitness',  col:'#5DCAA5' },
+  { min:-10,       key:'balanced', label:'Balanced', head:'Steady state',       sub:'Fitness and fatigue are close — normal training day', col:'#4D9FFF' },
+  { min:-25,       key:'loaded',   label:'Loaded',   head:'Fatigue is building',sub:'Consider an easier day or shorter intervals',        col:'#EF9F27' },
+  { min:-Infinity, key:'fatigued', label:'Fatigued', head:'Fatigue is high',    sub:'Recent training load is heavy — prioritize recovery', col:'#E24B4A' }
+];
+function getReadiness_(){
+  var f=null; try{ f=(typeof getFitness_==='function')?getFitness_():null; }catch(e){ f=null; }
+  if(!f || !f.loaded) return { loaded:false, tsb:null, band:null, label:'—', head:'—', sub:'Not enough logged training yet.', col:'#94a3b8' };
+  var tsb=+f.tsb||0, b=_RDY_BANDS[_RDY_BANDS.length-1];
+  for(var i=0;i<_RDY_BANDS.length;i++){ if(tsb>=_RDY_BANDS[i].min){ b=_RDY_BANDS[i]; break; } }
+  return { loaded:true, tsb:tsb, ctl:f.ctl, atl:f.atl, band:b.key, label:b.label, head:b.head, sub:b.sub, col:b.col };
+}
+try{ if(typeof window!=='undefined'){ window.getReadiness_=getReadiness_; } }catch(e){}
 function readinessCardHTML(){
   var activities = (st.rides||[]).filter(function(r){ return !r.deleted; })
     .concat((st.runs||[]).map(function(r){ return {date:r.date, avgHR:r.avgHR, duration:r.time, rpe:r.rpe, deleted:false}; }));
@@ -8739,20 +8764,12 @@ function readinessCardHTML(){
   var _f = getFitness_();
   var fitness = _f.ctl, fatigue = _f.atl, form = _f.tsb;
 
-  var headline, sub, badgeLabel, badgeColor, badgeText;
-  if(form >= 10){
-    headline = 'Good day to push'; sub = 'Form is positive — fatigue is well below fitness';
-    badgeLabel='Fresh'; badgeColor='#5DCAA522'; badgeText='#5DCAA5';
-  } else if(form >= -10){
-    headline = 'Steady state'; sub = 'Fitness and fatigue are close — normal training day';
-    badgeLabel='Balanced'; badgeColor='#4D9FFF22'; badgeText='#4D9FFF';
-  } else if(form >= -25){
-    headline = 'Fatigue is building'; sub = 'Consider an easier day or shorter intervals';
-    badgeLabel='Loaded'; badgeColor='#EF9F2722'; badgeText='#EF9F27';
-  } else {
-    headline = 'Fatigue is high'; sub = 'Recent training load is heavy — prioritize recovery';
-    badgeLabel='Fatigued'; badgeColor='#E24B4A22'; badgeText='#E24B4A';
-  }
+  // Verdict now comes from getReadiness_ rather than being re-banded here. Same thresholds, same
+  // wording, same output — this card was the honest one of the three; it just no longer owns the
+  // definition, so the other surfaces can share it instead of inventing their own.
+  var _rdy=(typeof getReadiness_==='function')?getReadiness_():null;
+  var headline=_rdy?_rdy.head:'—', sub=_rdy?_rdy.sub:'', badgeLabel=_rdy?_rdy.label:'—';
+  var badgeText=_rdy?_rdy.col:'#94a3b8', badgeColor=badgeText+'22';
 
   return '<div style="margin:0 16px 12px;background:var(--s2);border-radius:16px;padding:16px">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
