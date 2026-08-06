@@ -23139,9 +23139,15 @@ function _dnaTraits_(acts){
   // exist, so the traits below measure capability instead and are named for what they actually are.
   (function(){
     var PC_MIN=5;                       // below this the window cannot characterise a rider
-    var src=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[];
+    // READS st.rides DIRECTLY, and that is deliberate. allRidesDeduped_ serves the store_v2
+    // snapshot, which is a slimmed projection with its OWN field vocabulary (distanceM, elevGainM,
+    // movingSec, avgPower) and NO powerCurve at all — 0 of 409 carry it, against 307 on st.rides.
+    // Routing this through the canonical accessor silently locked all four traits, which is how
+    // this was caught. Raw duplicates are harmless here because every figure below is a MAXIMUM:
+    // a ride imported twice cannot raise its own best 5-second power.
+    var src=(typeof st!=='undefined'&&st&&Array.isArray(st.rides))?st.rides:[];
     var isRunR=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String((r&&(r.sportType||r.type))||'')); };
-    var pcRides=src.filter(function(r){ return r && r.date && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
+    var pcRides=src.filter(function(r){ return r && r.date && !r.deleted && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
     var best=function(rows,d){ var b=0; rows.forEach(function(r){ var v=+r.powerCurve[d]; if(v>b) b=v; }); return b; };
     // Per-year ratio series, so each trait carries the same "how did this move" history the other
     // traits show. A year with no power-curve rides is a GAP, not a zero — _gcSpark_ breaks the
@@ -23185,7 +23191,10 @@ function _dnaTraits_(acts){
   // Caveat kept in the derivation line: a segment is Strava's unit, not a road, so a dense city
   // ride can register many "new" segments from one outing.
   (function(){
-    var segs=(typeof st!=='undefined'&&st&&Array.isArray(st.segments))?st.segments:[];
+    // Tolerates BOTH shapes: st.segments arrives as an array locally but as a sparse object from
+    // Firebase, and an Array.isArray-only guard silently reads it as empty.
+    var _sg=(typeof st!=='undefined'&&st)?st.segments:null;
+    var segs=Array.isArray(_sg)?_sg:(_sg&&typeof _sg==='object'?Object.keys(_sg).map(function(k){ return _sg[k]; }):[]);
     var first={};
     segs.forEach(function(s){
       if(!s || !Array.isArray(s.efforts)) return;
