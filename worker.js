@@ -23083,12 +23083,25 @@ function _dnaPowerAxes_(){
   });
   return { ok:true, n:rows.length, anchor:anchor, axes:axes };
 }
-// RADAR over the four power axes ONLY. They share one unit (x your own 5-min power), so one shared
-// scale is honest and no per-axis conversion is invented. Climber (ft/mi), Consistency (% of weeks)
-// and Explorer (a count) are deliberately NOT on here: putting them on would require mapping three
-// different units onto a common 0-100, and the app has exactly one normalization (_zsCompute_,
-// monthly distance z) which does not cover any of them. That conversion would be a second
-// normalization and needs its own decision, not one made inside a chart.
+// The four power axes as RANKED HORIZONTAL BARS, not a radar.
+//
+// This shipped as a 4-axis radar first and read badly, for reasons worth keeping: a radar encodes
+// one shared unit as AREA and SHAPE, but axis order is arbitrary, so the "shape" is a property of
+// how the code happened to list the traits rather than of the athlete. With one value at 2.61x and
+// three between 0.88x and 1.34x, the polygon became a kite and the real finding — three traits
+// cluster, one stands well apart — was the thing the picture lost. Vertices also carried colour
+// only, forcing a legend lookup to answer "which one is Sprinter".
+//
+// A magnitude comparison on ONE shared unit is one-dimensional, so it gets a one-dimensional
+// chart: sorted bars, each labelled in place, with the 1.0x parity line drawn ON the plot. Bars
+// are the correct form here under the app-wide chart rule — categorical with no time dimension —
+// and the per-year trajectory each trait does have is already drawn as a sparkline on its trait
+// card in DNA Insights, so no history is lost by not using a line here.
+//
+// Only the four power axes appear. Climber (ft/mi), Consistency (% of weeks) and Explorer (a
+// count) would need three different units mapped onto one scale, and the app has exactly one
+// normalization (_zsCompute_, monthly distance z) which covers none of them. That conversion is a
+// second normalization needing its own decision, not one made inside a chart.
 function _dnaRadarHTML_(){
   var P=_dnaPowerAxes_();
   if(!P || !P.ok){
@@ -23096,45 +23109,38 @@ function _dnaRadarHTML_(){
       +_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry one so far. Rides imported from FIT or TCX files carry it; Strava-only rides do not.</div>';
   }
   var drawn=P.axes.filter(function(a){ return a.ratio>0; });
-  if(drawn.length<3) return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7)">Not enough distinct efforts yet to draw a profile.</div>';
-  var W=250, C=125, R=86;
-  // Scale runs 0..MAX where MAX is the next whole multiple above the biggest axis, so the shape
-  // always fits and the rings stay round numbers a reader can name.
+  if(drawn.length<2) return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7)">Not enough distinct efforts yet to draw a profile.</div>';
+  // Sorted longest-first so the cluster-and-outlier structure is the first thing the eye gets,
+  // rather than an ordering that came from the order the traits were declared in.
+  drawn=drawn.slice().sort(function(a,b){ return b.ratio-a.ratio; });
   var top=0; drawn.forEach(function(a){ if(a.ratio>top) top=a.ratio; });
-  var MAX=Math.max(1, Math.ceil(top));
-  var n=drawn.length;
-  var pt=function(i, mag){
-    var ang=(-Math.PI/2)+(i*2*Math.PI/n), rr=R*Math.max(0,Math.min(1,mag/MAX));
-    return { x:C+rr*Math.cos(ang), y:C+rr*Math.sin(ang) };
-  };
-  var svg='<svg viewBox="0 0 '+W+' '+W+'" style="width:100%;max-width:270px;height:auto" role="img" aria-label="Power profile radar">';
-  // rings at each whole ratio
-  for(var ring=1; ring<=MAX; ring++){
-    var pts=[];
-    for(var i=0;i<n;i++){ var q=pt(i,ring); pts.push(q.x.toFixed(1)+','+q.y.toFixed(1)); }
-    svg+='<polygon points="'+pts.join(' ')+'" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="1"/>';
-    svg+='<text x="'+(C+3)+'" y="'+(C-R*ring/MAX+9)+'" font-size="8" fill="rgba(255,255,255,.32)" font-family="-apple-system,sans-serif">'+ring+'x</text>';
-  }
-  // spokes
-  for(var s=0;s<n;s++){ var e=pt(s,MAX); svg+='<line x1="'+C+'" y1="'+C+'" x2="'+e.x.toFixed(1)+'" y2="'+e.y.toFixed(1)+'" stroke="rgba(255,255,255,.09)" stroke-width="1"/>'; }
-  // the shape
-  var poly=[];
-  for(var k=0;k<n;k++){ var v=pt(k,drawn[k].ratio); poly.push(v.x.toFixed(1)+','+v.y.toFixed(1)); }
-  svg+='<polygon points="'+poly.join(' ')+'" fill="rgba(96,165,250,.20)" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round"/>';
-  for(var m=0;m<n;m++){ var d2=pt(m,drawn[m].ratio);
-    svg+='<circle cx="'+d2.x.toFixed(1)+'" cy="'+d2.y.toFixed(1)+'" r="3.2" fill="'+drawn[m].col+'"/>'; }
-  svg+='</svg>';
-  var legend='<div style="display:flex;flex-direction:column;gap:7px;min-width:180px">';
-  drawn.forEach(function(a){
-    legend+='<div style="display:flex;align-items:baseline;gap:8px;font-size:12px">'
-      +'<span style="width:8px;height:8px;border-radius:50%;background:'+a.col+';flex-shrink:0"></span>'
-      +'<span style="color:var(--d-t1,#cbd5e1);flex:1">'+a.label+'</span>'
-      +'<span style="color:var(--d-head,#f1f5f9);font-weight:800">'+a.ratio.toFixed(2)+'x</span></div>';
+  var MAX=Math.max(1.5, Math.ceil(top*2)/2);          // half-step headroom, so the longest bar never touches the edge
+  var LBL=112, PADR=44, X0=LBL, W=360, X1=W-PADR;     // left gutter holds the NAME, so no legend lookup
+  var ROW=27, BAR=13, TOP=20, H=TOP+drawn.length*ROW+16;
+  var xOf=function(v){ return X0+(X1-X0)*Math.max(0,Math.min(1,v/MAX)); };
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:430px;height:auto" role="img" aria-label="Power profile: best power at each duration relative to your best 5-minute power">';
+  // PARITY LINE at 1.0x, drawn on the plot and labelled in words. Without it a reader has no way to
+  // know whether 0.88x is good, bad or expected — the ratio concept lives in a paragraph otherwise.
+  var px=xOf(1);
+  svg+='<line x1="'+px.toFixed(1)+'" y1="'+(TOP-8)+'" x2="'+px.toFixed(1)+'" y2="'+(TOP+drawn.length*ROW-6)+'" stroke="rgba(255,255,255,.34)" stroke-width="1" stroke-dasharray="3,3"/>';
+  svg+='<text x="'+(px+4).toFixed(1)+'" y="'+(TOP-11)+'" font-size="9.5" fill="rgba(255,255,255,.62)" font-family="-apple-system,sans-serif">1.0x &mdash; matches your 5-min power</text>';
+  drawn.forEach(function(a,i){
+    var y=TOP+i*ROW, bw=Math.max(2, xOf(a.ratio)-X0);
+    svg+='<text x="'+(LBL-9)+'" y="'+(y+BAR-2)+'" text-anchor="end" font-size="11.5" font-weight="700" fill="#dbe2ea" font-family="-apple-system,sans-serif">'+a.label+'</text>';
+    svg+='<rect x="'+X0+'" y="'+y+'" width="'+(X1-X0)+'" height="'+BAR+'" rx="3" fill="rgba(255,255,255,.05)"/>';
+    svg+='<rect x="'+X0+'" y="'+y+'" width="'+bw.toFixed(1)+'" height="'+BAR+'" rx="3" fill="'+a.col+'" opacity="0.85"/>';
+    svg+='<text x="'+(X0+bw+7).toFixed(1)+'" y="'+(y+BAR-2)+'" font-size="11.5" font-weight="800" fill="#f1f5f9" font-family="-apple-system,sans-serif">'+a.ratio.toFixed(2)+'x</text>';
   });
-  legend+='<div style="font-size:10px;color:var(--d-dim,#8b93a7);margin-top:4px;line-height:1.5">Each axis is your best power for that duration divided by your best 5-minute power ('+Math.round(P.anchor)+' W), from '+P.n+' rides carrying a power curve. Shape, not fitness &mdash; a stronger rider lifts every point.</div>';
-  legend+='</div>';
-  return '<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-top:12px">'
-    +'<div style="flex:0 0 auto">'+svg+'</div>'+legend+'</div>';
+  svg+='</svg>';
+  // The durations behind each label, so the chart is self-explaining without the paragraph.
+  var key='<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:9px">';
+  drawn.forEach(function(a){
+    key+='<span style="font-size:10px;color:var(--d-dim,#8b93a7)"><b style="color:'+a.col+'">'+a.label+'</b> '+a.durLabel+' &middot; '+Math.round(a.watts)+' W</span>';
+  });
+  key+='</div>';
+  return '<div style="margin-top:10px">'+svg+key
+    +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:7px;line-height:1.55">Each bar is your best power for that duration divided by your best 5-minute power ('
+    +Math.round(P.anchor)+' W), from '+P.n+' rides carrying a power curve. This is rider TYPE, not fitness &mdash; a stronger rider lifts every duration, so the bars only move when the balance between them changes.</div></div>';
 }
 function _dnaTraits_(acts){
   var T=[], G='#4ade80', A='#f59e0b', B='#60a5fa', P='#a855f7', TEAL='#2dd4bf';
