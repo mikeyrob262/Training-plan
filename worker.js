@@ -23179,11 +23179,24 @@ function _dnaCurveData_(days){
   var cut=(typeof dayKey_==='function')?dayKey_(cutD)
         :(cutD.getFullYear()+'-'+String(cutD.getMonth()+1).padStart(2,'0')+'-'+String(cutD.getDate()).padStart(2,'0'));
   var recent=rows.filter(function(r){ return String(r.date).slice(0,10)>=cut; });
-  var best=function(list,d){ var b=0; list.forEach(function(r){ var v=+r.powerCurve[d]||0; if(v>b) b=v; }); return b; };
+  // Returns the WINNING RIDE too, not just the watts — a record with no ride behind it cannot be
+  // clicked through to, and the holder is itself worth knowing. Ties keep the FIRST ride scanned;
+  // an equal best is genuinely ambiguous and picking the later one would be no more correct.
+  var best=function(list,d){
+    var b=0, who=null;
+    list.forEach(function(r){ var v=+r.powerCurve[d]||0; if(v>b){ b=v; who=r; } });
+    return { w:b, ride:who };
+  };
+  var refOf=function(r){
+    if(!r || typeof rideRefOf_!=='function') return null;
+    try{ var ref=rideRefOf_(r); return (typeof _recRefUsable_==='function' && !_recRefUsable_(ref))?null:ref; }catch(e){ return null; }
+  };
   var out=_DNA_CURVE_SECS.map(function(s){
     var a=best(rows,s), rc=best(recent,s), bd=_dnaBandOf_(s);
-    return { secs:s, label:_dnaSecLabel_(s), band:bd, all:a, recent:rc,
-             pct:(a>0&&rc>0)?Math.max(0,Math.min(1,rc/a)):0, suspect:false };
+    return { secs:s, label:_dnaSecLabel_(s), band:bd, all:a.w, recent:rc.w,
+             allRide:a.ride, allRef:refOf(a.ride),
+             recentRide:rc.ride, recentRef:refOf(rc.ride),
+             pct:(a.w>0&&rc.w>0)?Math.max(0,Math.min(1,rc.w/a.w)):0, suspect:false };
   });
   for(var i=0;i<out.length-1;i++){ if(out[i].all>0 && out[i+1].all>0 && out[i].all < out[i+1].all-0.5) out[i].suspect=true; }
   return { ok:true, nAll:rows.length, nRecent:recent.length, days:(days||90), rows:out };
@@ -23231,14 +23244,36 @@ function _dnaRadarHTML_(){
       // the last-90-days shape, as a fraction of each spoke's own lifetime best
       var poly=[]; rows.forEach(function(r,i){ var q=at(i,r.pct); poly.push(q.x.toFixed(1)+','+q.y.toFixed(1)); });
       svg+='<polygon points="'+poly.join(' ')+'" fill="rgba(96,165,250,.22)" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round"/>';
-      // labels: duration + all-time watts on the rim, recent watts on the point
+      // labels: duration + all-time watts on the rim, recent best on the point. BOTH are
+      // click-throughs to the ride that set them, using the SAME chain the Records board uses
+      // (rideRefOf_ -> rideRefAttr_ -> recOpenRide_, gated on _recRefUsable_). A record whose ride
+      // has since been tombstoned resolves to null and simply renders inert — the affordance is
+      // attached in the same branch as the handler so the two cannot drift apart.
+      var nm=function(r){ try{ return (typeof actName_==='function')?actName_(r):String((r&&r.name)||'ride'); }catch(e){ return 'ride'; } };
+      var esc2=function(s){ return (typeof aiEsc_==='function')?aiEsc_(String(s)):String(s); };
       rows.forEach(function(r,i){
         var a=ang(i), lx=CX+(R+22)*Math.cos(a), ly=CY+(R+22)*Math.sin(a);
         var anchor=(Math.abs(Math.cos(a))<0.25)?'middle':(Math.cos(a)>0?'start':'end');
         svg+='<text x="'+lx.toFixed(1)+'" y="'+(ly-2).toFixed(1)+'" text-anchor="'+anchor+'" font-size="10" font-weight="800" fill="'+r.band.col+'" font-family="-apple-system,sans-serif">'+r.label+(r.suspect?'*':'')+'</text>';
-        svg+='<text x="'+lx.toFixed(1)+'" y="'+(ly+9).toFixed(1)+'" text-anchor="'+anchor+'" font-size="9.5" font-weight="700" style="fill:var(--d-head,#15181D)" font-family="-apple-system,sans-serif">'+Math.round(r.all)+'W</text>';
+        var wAttrs='', wTip='';
+        if(r.allRef!=null && r.allRide){
+          wAttrs=' style="fill:var(--d-head,#15181D);cursor:pointer;text-decoration:underline;text-underline-offset:2px" role="button" tabindex="0"'
+            +' onclick="recOpenRide_('+rideRefAttr_(r.allRef)+')"';
+          wTip='<title>All-time best at '+r.label+': '+Math.round(r.all)+' W on '+String(r.allRide.date).slice(0,10)+' &mdash; '+esc2(nm(r.allRide))+'. Opens this ride.</title>';
+        } else {
+          wAttrs=' style="fill:var(--d-head,#15181D)"';
+        }
+        svg+='<text x="'+lx.toFixed(1)+'" y="'+(ly+9).toFixed(1)+'" text-anchor="'+anchor+'" font-size="9.5" font-weight="700"'+wAttrs+' font-family="-apple-system,sans-serif">'+wTip+Math.round(r.all)+'W</text>';
         var q=at(i,r.pct);
-        svg+='<circle cx="'+q.x.toFixed(1)+'" cy="'+q.y.toFixed(1)+'" r="'+(r.suspect?3.4:2.6)+'" fill="'+(r.suspect?'none':'#60a5fa')+'"'+(r.suspect?(' stroke="'+r.band.col+'" stroke-width="1.6" stroke-dasharray="2,1.6"'):'')+'/>';
+        var dotFill=(r.suspect?'none':'#60a5fa');
+        var dotExtra=(r.suspect?(' stroke="'+r.band.col+'" stroke-width="1.6" stroke-dasharray="2,1.6"'):'');
+        if(r.recentRef!=null && r.recentRide && r.recent>0){
+          // Bigger invisible hit area than the dot: a 2.6px target is not clickable on touch.
+          svg+='<circle cx="'+q.x.toFixed(1)+'" cy="'+q.y.toFixed(1)+'" r="11" fill="transparent" style="cursor:pointer" role="button" tabindex="0"'
+            +' onclick="recOpenRide_('+rideRefAttr_(r.recentRef)+')">'
+            +'<title>Last '+C.days+' days at '+r.label+': '+Math.round(r.recent)+' W on '+String(r.recentRide.date).slice(0,10)+' &mdash; '+esc2(nm(r.recentRide))+'. Opens this ride.</title></circle>';
+        }
+        svg+='<circle cx="'+q.x.toFixed(1)+'" cy="'+q.y.toFixed(1)+'" r="'+(r.suspect?3.4:2.6)+'" fill="'+dotFill+'"'+dotExtra+' pointer-events="none"/>';
       });
       svg+='</svg>';
       var bandKey='<div style="display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:4px">';
@@ -23254,6 +23289,20 @@ function _dnaRadarHTML_(){
       var susNote=sus.length?('<div style="font-size:10.5px;color:#f59e0b;margin-top:8px;line-height:1.5">* '
         +sus.map(function(r){ return r.label; }).join(', ')+' is flagged: its recorded best ('+Math.round(sus[0].all)
         +' W) is LOWER than a longer duration, which a real power curve cannot do. The figure is plotted exactly as stored rather than smoothed &mdash; the fault is in how the import computes that window, and it is tracked separately.</div>'):'';
+      // SHARED HOLDER. Several spokes legitimately point at one ride, which is context rather than
+      // a fault: one exceptional day can own most of a curve. Stated only when it actually
+      // dominates (3+ of the durations), and it links to that ride like everything else here.
+      var holders={}, hRide={};
+      rows.forEach(function(r){ if(r.allRef==null||!r.allRide) return; var k=String(r.allRef); holders[k]=(holders[k]||0)+1; hRide[k]=r.allRide; });
+      var topK=null; Object.keys(holders).forEach(function(k){ if(!topK||holders[k]>holders[topK]) topK=k; });
+      var holdNote='';
+      if(topK && holders[topK]>=3){
+        var hr=hRide[topK];
+        holdNote='<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.5">'
+          +'<b style="color:var(--d-head,#15181D)">'+holders[topK]+' of your '+rows.length+' all-time bests</b> come from one ride &mdash; '
+          +'<span style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;color:#60a5fa" role="button" tabindex="0" onclick="recOpenRide_('+rideRefAttr_(topK)+')">'
+          +esc2(nm(hr))+', '+String(hr.date).slice(0,10)+'</span>. One exceptional day can own most of a curve.</div>';
+      }
       var nar=_dnaCurveNarrative_(C);
       var narHTML=nar?('<div style="font-size:12.5px;color:var(--d-t1,#334155);line-height:1.6;margin-top:11px;padding-top:11px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'+nar+'</div>'):'';
       // Chart and its key sit side by side once there is room, and stack under ~640px. The chart
@@ -23262,7 +23311,9 @@ function _dnaRadarHTML_(){
       return '<div style="margin-top:8px">'
         +'<div style="display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center">'
         +'<div style="flex:0 1 460px;min-width:280px">'+svg+'</div>'
-        +'<div style="flex:1 1 280px;min-width:250px">'+bandKey+legend+susNote+'</div>'
+        +'<div style="flex:1 1 280px;min-width:250px">'+bandKey+legend+susNote+holdNote
+        +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.5">Every watt figure opens the ride that set it &mdash; the rim opens your all-time ride for that duration, the dot on the shape opens your best from the last '+C.days+' days.</div>'
+        +'</div>'
         +'</div>'+narHTML
         +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">Every spoke is its own scale &mdash; the rim is your all-time best AT THAT DURATION and the filled shape is the last '
         +C.days+' days as a share of it, so a 782 W sprint never dwarfs a 186 W hour. Ten durations because ten is what the imports actually store; 3m, 15m and 45m are not recorded and are not invented.</div></div>';
