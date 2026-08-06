@@ -23138,11 +23138,128 @@ function _dnaPowerAxes_(){
 // count) would need three different units mapped onto one scale, and the app has exactly one
 // normalization (_zsCompute_, monthly distance z) which covers none of them. That conversion is a
 // second normalization needing its own decision, not one made inside a chart.
+// ---- THE POWER CURVE, 10 SPOKES, TWO WINDOWS -------------------------------------------------
+// Ten durations because ten is what r.powerCurve actually stores. The reference this was modelled
+// on shows 3m, 15m and 45m as well; those do not exist here and are NOT interpolated — a spoke
+// that is not a measurement has no business on a chart of measurements.
+//
+// EACH SPOKE IS ITS OWN SCALE. The outer ring is your all-time best AT THAT DURATION, so the
+// all-time shape is the boundary itself and the filled shape is the last 90 days as a fraction of
+// it. That is what makes this safe where the 4-axis radar was not: with no shared scale, a 782 W
+// sprint cannot dwarf a 186 W hour, because they are never measured against each other. The
+// absolute watts are printed on every spoke so nothing is hidden behind a proportion.
+//
+// BANDS are the standard coaching duration categories, flagged as new vocabulary and approved
+// rather than quietly invented: neuromuscular <=30s, anaerobic 1-2m, VO2max 5-10m, threshold
+// 20-30m, aerobic 1h. Four of the five carry the trait names already shipped.
+var _DNA_BANDS=[
+  { key:'nm',  label:'Neuromuscular', trait:'Sprinter',        col:'#ef4444', secs:[5,15,30] },
+  { key:'an',  label:'Anaerobic',     trait:'Anaerobic Punch', col:'#f59e0b', secs:[60,120] },
+  { key:'vo2', label:'VO2 max',       trait:null,              col:'#22c55e', secs:[300,600] },
+  { key:'thr', label:'Threshold',     trait:'Sustained Power', col:'#60a5fa', secs:[1200,1800] },
+  { key:'aer', label:'Aerobic',       trait:'Aerobic Depth',   col:'#a855f7', secs:[3600] }
+];
+var _DNA_CURVE_SECS=[5,15,30,60,120,300,600,1200,1800,3600];
+function _dnaSecLabel_(s){ return s<60?(s+'s'):(s%3600===0?((s/3600)+'h'):((s/60)+'m')); }
+function _dnaBandOf_(secs){
+  for(var i=0;i<_DNA_BANDS.length;i++){ if(_DNA_BANDS[i].secs.indexOf(secs)>=0) return _DNA_BANDS[i]; }
+  return _DNA_BANDS[_DNA_BANDS.length-1];
+}
+// {ok, nAll, nRecent, rows:[{secs,label,band,all,recent,pct,suspect}]}
+// SUSPECT is derived, never hardcoded: a duration is flagged when its best is LOWER than a LONGER
+// duration's best, which a real power curve cannot do. Today that catches 1800s (the parser writes
+// it too low on 26% of rides — see the tracked bug). When the parser is fixed the flag disappears
+// on its own, with no code change here.
+function _dnaCurveData_(days){
+  var src=(typeof st!=='undefined'&&st&&Array.isArray(st.rides))?st.rides:[];
+  var isRunR=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String((r&&(r.sportType||r.type))||'')); };
+  var rows=src.filter(function(r){ return r && r.date && !r.deleted && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
+  if(rows.length<_DNA_PC_MIN) return { ok:false, nAll:rows.length, nRecent:0, rows:[] };
+  var cutD=new Date(); cutD.setDate(cutD.getDate()-(days||90));
+  var cut=(typeof dayKey_==='function')?dayKey_(cutD)
+        :(cutD.getFullYear()+'-'+String(cutD.getMonth()+1).padStart(2,'0')+'-'+String(cutD.getDate()).padStart(2,'0'));
+  var recent=rows.filter(function(r){ return String(r.date).slice(0,10)>=cut; });
+  var best=function(list,d){ var b=0; list.forEach(function(r){ var v=+r.powerCurve[d]||0; if(v>b) b=v; }); return b; };
+  var out=_DNA_CURVE_SECS.map(function(s){
+    var a=best(rows,s), rc=best(recent,s), bd=_dnaBandOf_(s);
+    return { secs:s, label:_dnaSecLabel_(s), band:bd, all:a, recent:rc,
+             pct:(a>0&&rc>0)?Math.max(0,Math.min(1,rc/a)):0, suspect:false };
+  });
+  for(var i=0;i<out.length-1;i++){ if(out[i].all>0 && out[i+1].all>0 && out[i].all < out[i+1].all-0.5) out[i].suspect=true; }
+  return { ok:true, nAll:rows.length, nRecent:recent.length, days:(days||90), rows:out };
+}
+// One sentence, derived from the two windows every time — names only the closest and furthest
+// duration and quotes their own percentages, so it changes when the data changes.
+function _dnaCurveNarrative_(C){
+  if(!C || !C.ok) return '';
+  var usable=C.rows.filter(function(r){ return r.all>0 && r.recent>0 && !r.suspect; });
+  if(usable.length<3) return '';
+  var hi=usable[0], lo=usable[0];
+  usable.forEach(function(r){ if(r.pct>hi.pct) hi=r; if(r.pct<lo.pct) lo=r; });
+  if(hi.secs===lo.secs) return '';
+  return 'Over the last '+C.days+' days your form sits closest to your lifetime best at <b>'+hi.label
+    +'</b> ('+Math.round(hi.pct*100)+'% of it, '+Math.round(hi.recent)+' W against '+Math.round(hi.all)
+    +' W) and furthest at <b>'+lo.label+'</b> ('+Math.round(lo.pct*100)+'%). '
+    +(hi.secs<lo.secs
+      ? 'Your short-duration power is holding better than your long-duration power right now.'
+      : 'Your long-duration power is holding better than your short-duration power right now.');
+}
 function _dnaRadarHTML_(){
   var P=_dnaPowerAxes_();
   if(!P || !P.ok){
     return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);line-height:1.55">Power profile needs a power curve on at least '
       +_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry one so far. Rides imported from FIT or TCX files carry it; Strava-only rides do not.</div>';
+  }
+  var C=_dnaCurveData_(90);
+  if(C.ok){
+    var rows=C.rows.filter(function(r){ return r.all>0; });
+    if(rows.length>=6){
+      var W=430, CX=215, CY=196, R=120, n=rows.length;
+      var ang=function(i){ return (-Math.PI/2)+(i*2*Math.PI/n); };
+      var at=function(i,frac){ var a=ang(i), rr=R*Math.max(0,Math.min(1,frac)); return {x:CX+rr*Math.cos(a), y:CY+rr*Math.sin(a)}; };
+      var svg='<svg viewBox="0 0 '+W+' 392" style="width:100%;max-width:460px;height:auto" role="img" aria-label="Power curve: best power at ten durations, last '+C.days+' days against all time">';
+      // rings at 25/50/75/100% of each spoke's own all-time best
+      [0.25,0.5,0.75,1].forEach(function(f){
+        var pts=[]; for(var i=0;i<n;i++){ var q=at(i,f); pts.push(q.x.toFixed(1)+','+q.y.toFixed(1)); }
+        svg+='<polygon points="'+pts.join(' ')+'" fill="none" style="stroke:var(--d-edge,rgba(0,0,0,.13))" stroke-width="1"/>';
+      });
+      // spokes, coloured by duration band
+      rows.forEach(function(r,i){
+        var e=at(i,1);
+        svg+='<line x1="'+CX+'" y1="'+CY+'" x2="'+e.x.toFixed(1)+'" y2="'+e.y.toFixed(1)+'" stroke="'+r.band.col+'" stroke-width="1" opacity="0.45"/>';
+      });
+      // the last-90-days shape, as a fraction of each spoke's own lifetime best
+      var poly=[]; rows.forEach(function(r,i){ var q=at(i,r.pct); poly.push(q.x.toFixed(1)+','+q.y.toFixed(1)); });
+      svg+='<polygon points="'+poly.join(' ')+'" fill="rgba(96,165,250,.22)" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round"/>';
+      // labels: duration + all-time watts on the rim, recent watts on the point
+      rows.forEach(function(r,i){
+        var a=ang(i), lx=CX+(R+22)*Math.cos(a), ly=CY+(R+22)*Math.sin(a);
+        var anchor=(Math.abs(Math.cos(a))<0.25)?'middle':(Math.cos(a)>0?'start':'end');
+        svg+='<text x="'+lx.toFixed(1)+'" y="'+(ly-2).toFixed(1)+'" text-anchor="'+anchor+'" font-size="10" font-weight="800" fill="'+r.band.col+'" font-family="-apple-system,sans-serif">'+r.label+(r.suspect?'*':'')+'</text>';
+        svg+='<text x="'+lx.toFixed(1)+'" y="'+(ly+9).toFixed(1)+'" text-anchor="'+anchor+'" font-size="9.5" font-weight="700" style="fill:var(--d-head,#15181D)" font-family="-apple-system,sans-serif">'+Math.round(r.all)+'W</text>';
+        var q=at(i,r.pct);
+        svg+='<circle cx="'+q.x.toFixed(1)+'" cy="'+q.y.toFixed(1)+'" r="'+(r.suspect?3.4:2.6)+'" fill="'+(r.suspect?'none':'#60a5fa')+'"'+(r.suspect?(' stroke="'+r.band.col+'" stroke-width="1.6" stroke-dasharray="2,1.6"'):'')+'/>';
+      });
+      svg+='</svg>';
+      var bandKey='<div style="display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:4px">';
+      _DNA_BANDS.forEach(function(bd){
+        if(!rows.some(function(r){ return r.band.key===bd.key; })) return;
+        bandKey+='<span style="font-size:10px;color:var(--d-dim,#8b93a7)"><span style="display:inline-block;width:7px;height:7px;border-radius:2px;background:'+bd.col+';margin-right:5px"></span><b style="color:'+bd.col+'">'+bd.label+'</b>'+(bd.trait?(' &middot; '+bd.trait):'')+'</span>';
+      });
+      bandKey+='</div>';
+      var legend='<div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:9px;font-size:11px;color:var(--d-dim,#8b93a7)">'
+        +'<span><span style="display:inline-block;width:16px;height:3px;background:#60a5fa;border-radius:2px;margin-right:5px;vertical-align:middle"></span>last '+C.days+' days ('+C.nRecent+' rides)</span>'
+        +'<span><span style="display:inline-block;width:16px;height:3px;background:transparent;border:1px solid var(--d-edge,rgba(0,0,0,.13));margin-right:5px;vertical-align:middle"></span>outer edge = your all-time best at that duration ('+C.nAll+' rides)</span></div>';
+      var sus=rows.filter(function(r){ return r.suspect; });
+      var susNote=sus.length?('<div style="font-size:10.5px;color:#f59e0b;margin-top:8px;line-height:1.5">* '
+        +sus.map(function(r){ return r.label; }).join(', ')+' is flagged: its recorded best ('+Math.round(sus[0].all)
+        +' W) is LOWER than a longer duration, which a real power curve cannot do. The figure is plotted exactly as stored rather than smoothed &mdash; the fault is in how the import computes that window, and it is tracked separately.</div>'):'';
+      var nar=_dnaCurveNarrative_(C);
+      var narHTML=nar?('<div style="font-size:12.5px;color:var(--d-t1,#334155);line-height:1.6;margin-top:11px;padding-top:11px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'+nar+'</div>'):'';
+      return '<div style="margin-top:8px">'+svg+bandKey+legend+susNote+narHTML
+        +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">Every spoke is its own scale &mdash; the rim is your all-time best AT THAT DURATION and the filled shape is the last '
+        +C.days+' days as a share of it, so a 782 W sprint never dwarfs a 186 W hour. Ten durations because ten is what the imports actually store; 3m, 15m and 45m are not recorded and are not invented.</div></div>';
+    }
   }
   var drawn=P.axes.filter(function(a){ return a.ratio>0; });
   if(drawn.length<2) return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7)">Not enough distinct efforts yet to draw a profile.</div>';
