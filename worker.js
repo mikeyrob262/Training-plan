@@ -256,6 +256,18 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-card:hover::-webkit-scrollbar-track{background:transparent}
 .ds-card:hover::-webkit-scrollbar-thumb{background:var(--d-scroll);border-radius:3px}
 .ds-card:hover::-webkit-scrollbar-thumb:hover{background:var(--d-scroll2)}
+/* Horizontal card rails opt BACK IN to a visible scrollbar. The global rule above hides every
+   scrollbar app-wide, which is fine for vertical panes (the content is obviously continuous) but
+   silently hides content on a horizontal rail: nothing on screen says more cards exist to the
+   right. Unlike .ds-card this is NOT hover-gated — hover cannot be discovered on touch, and the
+   whole point is that it reads at a glance. */
+.lg-hs{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent}
+.lg-hs::-webkit-scrollbar{display:block;height:8px}
+.lg-hs::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:4px}
+.lg-hs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:4px}
+.lg-hs::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.46)}
+.lg-nudge{background:rgba(20,24,34,.86);border:1px solid rgba(255,255,255,.16);color:#e2e8f0;width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
+.lg-nudge[disabled]{opacity:.28;cursor:default}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
 .ds-map-base{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),repeating-linear-gradient(90deg,transparent,transparent 18px,rgba(255,255,255,.02) 18px,rgba(255,255,255,.02) 19px),linear-gradient(135deg,#1a2818 0%,#243020 25%,#1e2a1c 50%,#28382a 75%,#1c2818 100%)}
 .ds-map-ctrl{position:absolute;top:10px;left:10px;background:var(--d-panel);border:1px solid var(--d-line2);border-radius:6px;overflow:hidden}
@@ -13034,14 +13046,53 @@ function _lgHero_(title, sub, iconPath, grad, accent, tiles, prov){
   }
   return H+'</div></div>';
 }
-function _lgSeasonsPanel_(title, col, seasons, scopeLine, showHours, rows){
+// Keeps the fade edges and the arrow buttons honest about where the rail actually is. Called on
+// scroll and once after mount. A fade that is always on would imply hidden content even when the
+// rail is fully scrolled; an arrow that is always enabled would promise movement that cannot
+// happen. Both are therefore derived from scrollLeft, not assumed.
+function _lgHsUpdate_(key){
+  try{
+    var el=document.getElementById('lg-hs-'+key); if(!el) return;
+    var max=el.scrollWidth-el.clientWidth;
+    var atStart=el.scrollLeft<=2, atEnd=el.scrollLeft>=max-2, none=max<=2;
+    var fl=document.getElementById('lg-fl-'+key), fr=document.getElementById('lg-fr-'+key);
+    if(fl) fl.style.opacity=(none||atStart)?'0':'1';
+    if(fr) fr.style.opacity=(none||atEnd)?'0':'1';
+    var bp=document.getElementById('lg-bp-'+key), bn=document.getElementById('lg-bn-'+key);
+    if(bp) bp.disabled=(none||atStart);
+    if(bn) bn.disabled=(none||atEnd);
+  }catch(e){}
+}
+function _lgHsNudge_(key, dir){
+  try{
+    var el=document.getElementById('lg-hs-'+key); if(!el) return;
+    el.scrollBy({ left:dir*Math.max(200, Math.round(el.clientWidth*0.8)), behavior:'smooth' });
+    setTimeout(function(){ _lgHsUpdate_(key); }, 380);
+  }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window._lgHsUpdate_=_lgHsUpdate_; window._lgHsNudge_=_lgHsNudge_; } }catch(e){}
+function _lgSeasonsPanel_(title, col, seasons, scopeLine, showHours, rows, key){
   if(!seasons || !seasons.length) return '';
+  // Count is stated in words as well as drawn. The scrollbar and fades say "there is more"; only
+  // the count says HOW MUCH more, which is what stops a reader assuming they have seen it all.
   var H='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
     +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">'+title+' &mdash; Greatest Seasons</div>'
+    +'<div style="font-size:11px;color:'+col+';font-weight:700">'+seasons.length+' season'+(seasons.length===1?'':'s')+'</div>'
+    +'<div style="flex:1"></div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button id="lg-bp-'+key+'" class="lg-nudge" aria-label="Scroll to earlier seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,-1)">&#8249;</button>'
+    +'<button id="lg-bn-'+key+'" class="lg-nudge" aria-label="Scroll to more seasons" onclick="_lgHsNudge_(&#39;'+key+'&#39;,1)">&#8250;</button>'
+    +'</div></div>'
     +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">'+scopeLine+'</div>'
-    +'<div style="display:flex;gap:12px;margin-top:13px;overflow-x:auto;padding-bottom:4px">';
+    +'<div style="position:relative;margin-top:13px">'
+    +'<div id="lg-hs-'+key+'" class="lg-hs" onscroll="_lgHsUpdate_(&#39;'+key+'&#39;)" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:9px">';
   seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours,rows); });
-  return H+'</div></div>';
+  H+='</div>'
+    +'<div id="lg-fl-'+key+'" style="position:absolute;left:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(90deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
+    +'<div id="lg-fr-'+key+'" style="position:absolute;right:0;top:0;bottom:9px;width:34px;pointer-events:none;opacity:0;transition:opacity .18s;background:linear-gradient(270deg,rgba(5,7,13,.92),rgba(5,7,13,0))"></div>'
+    +'</div></div>';
+  return H;
 }
 // ONE builder, both surfaces. Desktop renders it into ds-content beside the sidebar; mobile puts
 // the same string in a full-screen sheet. Two renderers reading one function is the only way the
@@ -13065,7 +13116,7 @@ function _lgHTML_(){
         _lgCycTiles_(), cycProv);
   H+=_lgSeasonsPanel_('Cycling','#a78bfa',_lgByYear_(cyc,_LG_CYC_FROM,null),
         'Ranked by miles. Only '+_LG_CYC_FROM+' onward &mdash; the library holds no cycling data at all for 2018, 2019 and 2021, so earlier years cannot be compared honestly.',
-        true, cyc);
+        true, cyc, 'cyc');
 
   // ---- RUNNING ----
   var runs=_lgRuns_();
@@ -13085,8 +13136,13 @@ function _lgHTML_(){
         _lgRunTiles_(), runProv);
   H+=_lgSeasonsPanel_('Running','#fb923c',_lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
         'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
-        false, runs);
+        false, runs, 'run');
   return H;
+}
+// Prime the rails once the HTML is in the document. Until layout runs, scrollWidth and clientWidth
+// are both 0 and every rail would look fully scrolled — so this cannot be folded into _lgHTML_.
+function _lgPrimeRails_(){
+  setTimeout(function(){ _lgHsUpdate_('cyc'); _lgHsUpdate_('run'); }, 0);
 }
 // DESKTOP. Renders into ds-content like every other section, so the sidebar stays visible and
 // dsNav can mark it active through the EXISTING mechanism (it matches the quoted section name in
@@ -13101,6 +13157,7 @@ function dsShowLegacy(){
     +'<div style="font-size:13px;color:#8b93a7;margin:3px 0 18px">Your journey. Your story.</div>'
     +_lgHTML_();
   mc.appendChild(wrap);
+  _lgPrimeRails_();
 }
 // MOBILE. No sidebar to highlight, so this stays a full-screen sheet — same HTML, own chrome.
 function showLegacy(){
@@ -13123,6 +13180,7 @@ function showLegacy(){
   body.innerHTML=_lgHTML_();
   ov.appendChild(body);
   document.body.appendChild(ov);
+  _lgPrimeRails_();
 }
 try{ if(typeof window!=='undefined'){ window.showLegacy=showLegacy; window.dsShowLegacy=dsShowLegacy; } }catch(e){}
 
