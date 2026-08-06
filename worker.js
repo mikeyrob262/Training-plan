@@ -23501,6 +23501,7 @@ function _dnaRunPanelHTML_(){
   // Bars scale to the SLOWEST band so every bar is comparable; pace is inverted (faster = longer)
   // because a longer bar reading as "better" is the only intuitive direction for a time.
   var slow=0; withData.forEach(function(b){ if(b.pace>slow) slow=b.pace; });
+  var fast=slow; withData.forEach(function(b){ if(b.pace<fast) fast=b.pace; });
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
     +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
     +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Athlete DNA &mdash; pace curve</div>'
@@ -23509,23 +23510,68 @@ function _dnaRunPanelHTML_(){
     +'A historical profile, not current form &mdash; only 3 runs in the last 90 days, so there is no recent window to compare against. '
     +'Best whole-run pace in each distance band, from '+C.n.toLocaleString()+' timed runs.</div>'
     +'<div style="margin-top:13px">';
-  C.bands.forEach(function(b){
-    var thin=(b.n>0 && b.n<10);
-    if(!b.n){
-      H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px;color:var(--d-dim,#8b93a7)">'
-        +'<span style="width:64px;font-weight:700">'+b.label+'</span><span>no runs at this distance</span></div>';
-      return;
-    }
-    var w=Math.max(4, Math.round((slow>0?(slow/b.pace):1)*100));
-    if(w>100) w=100;
-    var clickable=(b.ref!=null && b.run);
-    H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
-      +'<span style="width:64px;font-size:12px;font-weight:700;color:'+b.col+'">'+b.label+(b.suspect?'*':'')+'</span>'
-      +'<span style="flex:1 1 auto;max-width:230px;height:12px;border-radius:3px;background:var(--d-edge,rgba(0,0,0,.13));position:relative;overflow:hidden">'
-      +'<span style="position:absolute;left:0;top:0;bottom:0;width:'+w+'%;background:'+b.col+';opacity:'+(b.suspect?'0.35':'0.9')+';border-radius:3px"></span></span>'
-      +'<span'+(clickable?(' role="button" tabindex="0" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-size:12.5px;font-weight:800;color:var(--d-head,#15181D)" onclick="recOpenRide_('+rideRefAttr_(b.ref)+')" title="'+esc2(b.paceStr)+'/mi on '+b.date+' &mdash; '+esc2(nm(b.run))+'. Opens this run."'):' style="font-size:12.5px;font-weight:800;color:var(--d-head,#15181D)"')+'>'+b.paceStr+'/mi</span>'
-      +'<span style="font-size:10.5px;color:var(--d-dim,#8b93a7)">'+b.n+' run'+(b.n===1?'':'s')+(thin?' &middot; thin':'')+(b.date?(' &middot; '+b.date):'')+'</span>'
-      +'</div>';
+  // LINE + AREA, not bars. The x-axis here is a CONTINUOUS ORDERED quantity (1 -> 26.2 miles), and
+  // how pace decays as distance grows is the actual physiological story, so a connected curve says
+  // something bars cannot. That is the opposite of the four power traits, which were genuinely
+  // categorical archetypes with no meaningful order and correctly got bars.
+  //
+  // Three adaptations the data forces:
+  //   x is LOG-SPACED. Linear spacing puts 1 mi, 5K and 10K in the left quarter and hands half the
+  //     chart to the gap between Half and Marathon, which is a picture of the axis, not the runner.
+  //   y is INVERTED so faster sits higher. Pace is a time: smaller is better, and a line that
+  //     climbs as it worsens reads backwards to everyone.
+  //   the line BREAKS at a flagged band. Drawing through the corrupt 5K would let a bad row imply
+  //     a shape that never happened; the point is still plotted, just not connected.
+  var pts=C.bands.filter(function(b){ return b.n>0 && b.pace>0; });
+  if(pts.length>=2){
+    var W=420, HT=190, PADL=44, PADR=54, PADT=26, PADB=34;
+    var x0=PADL, x1=W-PADR, y0=PADT, y1=HT-PADB;
+    var lgMin=Math.log(pts[0].mi), lgMax=Math.log(pts[pts.length-1].mi);
+    var xOf=function(mi){ return (lgMax>lgMin)?(x0+(Math.log(mi)-lgMin)/(lgMax-lgMin)*(x1-x0)):((x0+x1)/2); };
+    var pad=(slow-fast)*0.18||30;
+    var lo=fast-pad, hi=slow+pad;
+    var yOf=function(p){ return y1-((hi-p)/(hi-lo))*(y1-y0); };   // inverted: faster = higher
+    var svg='<svg viewBox="0 0 '+W+' '+HT+'" style="width:100%;max-width:470px;height:auto" role="img" aria-label="Pace curve: best pace at each distance, all-time">';
+    // horizontal guides at the fastest and slowest plotted pace
+    [[fast,'fastest'],[slow,'slowest']].forEach(function(g){
+      svg+='<line x1="'+x0+'" y1="'+yOf(g[0]).toFixed(1)+'" x2="'+x1+'" y2="'+yOf(g[0]).toFixed(1)+'" style="stroke:var(--d-edge,rgba(0,0,0,.13))" stroke-width="1"/>'
+        +'<text x="'+(x0-6)+'" y="'+(yOf(g[0])+3.5).toFixed(1)+'" text-anchor="end" font-size="9" style="fill:var(--d-dim,#7C8595)" font-family="-apple-system,sans-serif">'+_dnaPaceStr_(g[0])+'</text>';
+    });
+    // area + line, broken at flagged points
+    var runs2=[], cur=[];
+    pts.forEach(function(b){ if(b.suspect){ if(cur.length){ runs2.push(cur); cur=[]; } } else cur.push(b); });
+    if(cur.length) runs2.push(cur);
+    runs2.forEach(function(seg){
+      if(seg.length<2) return;
+      var dLine='', dArea='';
+      seg.forEach(function(b,i){
+        var X=xOf(b.mi).toFixed(1), Y=yOf(b.pace).toFixed(1);
+        dLine+=(i?'L':'M')+X+','+Y;
+        dArea+=(i?'L':('M'+X+','+y1+'L'))+X+','+Y;
+      });
+      dArea+='L'+xOf(seg[seg.length-1].mi).toFixed(1)+','+y1+'Z';
+      svg+='<path d="'+dArea+'" fill="#00C896" opacity="0.16"/>';
+      svg+='<path d="'+dLine+'" fill="none" stroke="#00C896" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    });
+    // points, labels, click-through
+    pts.forEach(function(b){
+      var X=xOf(b.mi), Y=yOf(b.pace), thin=(b.n<10);
+      if(b.ref!=null && b.run){
+        svg+='<circle cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="12" fill="transparent" style="cursor:pointer" role="button" tabindex="0" onclick="recOpenRide_('+rideRefAttr_(b.ref)+')">'
+          +'<title>'+esc2(b.label)+' best: '+esc2(b.paceStr)+'/mi on '+b.date+' &mdash; '+esc2(nm(b.run))+' ('+b.n+' run'+(b.n===1?'':'s')+' at this distance). Opens this run.</title></circle>';
+      }
+      svg+='<circle cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="'+(b.suspect?4:3.4)+'" fill="'+(b.suspect?'none':b.col)+'"'
+        +(b.suspect?(' stroke="'+b.col+'" stroke-width="1.8" stroke-dasharray="2,1.6"'):'')+' pointer-events="none"/>';
+      svg+='<text x="'+X.toFixed(1)+'" y="'+(Y-9).toFixed(1)+'" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--d-head,#15181D)" font-family="-apple-system,sans-serif" pointer-events="none">'+b.paceStr+'</text>';
+      svg+='<text x="'+X.toFixed(1)+'" y="'+(y1+13)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="'+b.col+'" font-family="-apple-system,sans-serif">'+b.label+(b.suspect?'*':'')+'</text>';
+      svg+='<text x="'+X.toFixed(1)+'" y="'+(y1+24)+'" text-anchor="middle" font-size="8.5" style="fill:var(--d-dim,#7C8595)" font-family="-apple-system,sans-serif">'+b.n+(thin?' (thin)':'')+'</text>';
+    });
+    svg+='<text x="'+x0+'" y="'+(y0-10)+'" font-size="9" style="fill:var(--d-dim,#7C8595)" font-family="-apple-system,sans-serif">faster &#9650;  &middot;  distance on a log scale  &middot;  run count under each point</text>';
+    svg+='</svg>';
+    H+=svg;
+  }
+  C.bands.filter(function(b){ return !b.n; }).forEach(function(b){
+    H+='<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:4px">'+b.label+' &mdash; no runs at this distance</div>';
   });
   H+='</div>';
   var sus=C.bands.filter(function(b){ return b.suspect; });
