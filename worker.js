@@ -23569,7 +23569,10 @@ function _dnaRunPanelHTML_(){
       }
       svg+='<circle cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="'+(b.suspect?4:3.4)+'" fill="'+(b.suspect?'none':b.col)+'"'
         +(b.suspect?(' stroke="'+b.col+'" stroke-width="1.8" stroke-dasharray="2,1.6"'):'')+' pointer-events="none"/>';
-      svg+='<text x="'+X.toFixed(1)+'" y="'+(Y-9).toFixed(1)+'" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--d-head,#15181D)" font-family="-apple-system,sans-serif" pointer-events="none">'+b.paceStr+'</text>';
+      // A clamped point sits at the very top, where a label above it collides with the axis note.
+      // Flip that one under its marker instead.
+      var lblY=(Y<y0+12)?(Y+15):(Y-9);
+      svg+='<text x="'+X.toFixed(1)+'" y="'+lblY.toFixed(1)+'" text-anchor="middle" font-size="10" font-weight="800" style="fill:var(--d-head,#15181D)" font-family="-apple-system,sans-serif" pointer-events="none">'+b.paceStr+'</text>';
       svg+='<text x="'+X.toFixed(1)+'" y="'+(y1+13)+'" text-anchor="middle" font-size="9.5" font-weight="700" fill="'+b.col+'" font-family="-apple-system,sans-serif">'+b.label+(b.suspect?'*':'')+'</text>';
       svg+='<text x="'+X.toFixed(1)+'" y="'+(y1+24)+'" text-anchor="middle" font-size="8.5" style="fill:var(--d-dim,#7C8595)" font-family="-apple-system,sans-serif">'+b.n+(thin?' (thin)':'')+'</text>';
     });
