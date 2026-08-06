@@ -6301,9 +6301,27 @@ function mergeItemFast_(a, b){
   // two arrays with mergeArrays_ (a union), so a ride carrying Garmin auto-laps (7) and a re-synced copy
   // carrying Strava's differently-triggered laps (7) UNIONED into one 14-lap array. Laps must be atomic
   // — ONE source, REPLACE never append — resolved below (Garmin auto-lap is authoritative).
-  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis') aNoGps[k]=a[k]; });
-  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis') bNoGps[k]=b[k]; });
+  // powerCurve is excluded for the SAME reason as GPS and laps, and it is the third instance of
+  // this exact fault. A power curve is ONE stream measured at ten window lengths, so its slots are
+  // not independent — they are mathematically bound (the best 30-min average can never be lower
+  // than the best 60-min average). mergeState_ merged the object key by key, so a ride carrying
+  // eight slots from one import and two from another ended up with a curve that no stream ever
+  // produced: measured on 47 of 186 rides, all showing 30-min BELOW 60-min, which is impossible.
+  // Resolved atomically below — ONE source wins the whole curve, never a blend of slots.
+  Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis'&&k!=='powerCurve') aNoGps[k]=a[k]; });
+  Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis'&&k!=='powerCurve') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
+  // Atomic power-curve resolution: the side with MORE populated durations wins the whole object.
+  // More slots means the richer stream was available to whoever computed it, and taking it whole
+  // keeps the curve internally consistent. A tie keeps the local side, matching the laps rule.
+  // Never a key-by-key union — that is precisely the blend this fixes.
+  var _pcN=function(o){ var c=0; if(o&&typeof o==='object') Object.keys(o).forEach(function(k){ if((+o[k])>0) c++; }); return c; };
+  var _aPC=(a.powerCurve&&typeof a.powerCurve==='object')?a.powerCurve:null;
+  var _bPC=(b.powerCurve&&typeof b.powerCurve==='object')?b.powerCurve:null;
+  if(_aPC || _bPC){
+    var _pcWin=(!_aPC)?_bPC:((!_bPC)?_aPC:((_pcN(_bPC)>_pcN(_aPC))?_bPC:_aPC));
+    merged.powerCurve=_pcWin;
+  } else { delete merged.powerCurve; }
   // Atomic lap resolution: prefer the Garmin auto-lap source (distance-based, consistent); then a set
   // already on the moving-time basis over a stale elapsed-time one; else whichever side has laps.
   // Never concatenate the two — that is the doubling this fixes. lapTimeBasis rides along with the
@@ -12942,8 +12960,44 @@ function _lgRunTiles_(){
            { k:'Miles', v:_lgNum_((+as.runMeters||0)/1609.344) },
            { k:'Hours', v:_lgNum_(sec/3600), note:'recorded, '+_LG_RUN_FROM+' onward' } ];
 }
+// Is the run snapshot actually primed? getRuns() DEGRADES to getRunsLegacy_ until it is, and that
+// fallback documents itself as inflated — no tombstone filter, ride-derived runs concatenated with
+// st.runs, no dedup. On this page that showed 342 activities / 2,967 mi for 2019 for the first
+// seconds after load, settling to the correct 220 / 1,909. A page whose whole claim is trustworthy
+// numbers cannot flash a wrong one and then quietly correct itself: the reader has already read it.
+// So running figures WAIT rather than paint twice.
+function _lgRunsPrimed_(){
+  try{
+    return !!(typeof STORE_V2_RUNS!=='undefined' && STORE_V2_RUNS
+      && typeof _storeV2Runs!=='undefined' && _storeV2Runs && _storeV2Runs.length>0);
+  }catch(e){ return false; }
+}
+function _lgWaitingHTML_(what){
+  return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">'+what+'</div>'
+    +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);margin-top:5px;line-height:1.55">Reading your run library&hellip; '
+    +'These numbers appear once the full run history has loaded. They are held back rather than shown early, because the partial view double-counts.</div></div>';
+}
+// Re-render once priming lands. Bounded, and it re-renders only the surface that is actually open.
+var _lgAwaitTimer=null;
+function _lgAwaitPrime_(){
+  if(_lgAwaitTimer) return;
+  var tries=0;
+  _lgAwaitTimer=setInterval(function(){
+    tries++;
+    var open=document.getElementById('LEGACY')||document.getElementById('ds-content');
+    if(!open || tries>40){ clearInterval(_lgAwaitTimer); _lgAwaitTimer=null; return; }
+    if(!_lgRunsPrimed_()) return;
+    clearInterval(_lgAwaitTimer); _lgAwaitTimer=null;
+    try{
+      if(document.getElementById('LEGACY')) showLegacy();
+      else if(typeof _dsCurView!=='undefined' && _dsCurView==='legacy') dsShowLegacy();
+    }catch(e){}
+  }, 1500);
+}
 // Runs through the canonical accessor, with only what this page needs kept.
 function _lgRuns_(){
+  if(!_lgRunsPrimed_()) return [];
   var src=[];
   try{ src=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ src=[]; }
   return src.filter(function(r){ return r && r.date && (+r.distance||0)>0; });
@@ -13123,6 +13177,10 @@ function _lgHTML_(){
         true, cyc, 'cyc');
 
   // ---- RUNNING ----
+  if(!_lgRunsPrimed_()){
+    _lgAwaitPrime_();
+    return H+_lgWaitingHTML_('Running');
+  }
   var runs=_lgRuns_();
   var rSorted=runs.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
   var runFirst=rSorted.length?String(rSorted[0].date).slice(0,10):null;
@@ -23211,6 +23269,9 @@ function _dnaPaceStr_(secPerMi){
 // Today that catches the 5K (a stored 4:27/mi, i.e. a 13:50 5K, which st.runs does not agree with
 // — the snapshot holds a corrupt row). Flagged and shown as stored, never silently dropped.
 function _dnaRunPaceCurve_(){
+  // Same gate as the Legacy running panels: the unprimed fallback double-counts, and a pace
+  // computed off a double-counted population is not a pace anyone should read.
+  if(typeof _lgRunsPrimed_==='function' && !_lgRunsPrimed_()) return { ok:false, n:0, bands:[] };
   var G=[];
   try{ G=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ G=[]; }
   var runs=G.filter(function(r){ return r && r.date && (+r.distance||0)>0 && _dnaRunSec_(r)>0; });
