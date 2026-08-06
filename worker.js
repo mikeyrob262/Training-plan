@@ -703,7 +703,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('ai')"><i class="ti ti-brain"></i>Athlete Intelligence</div>
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
-      <div class="ds-ni" onclick="showLegacy()"><i class="ti ti-trophy"></i>Legacy</div>
+      <div class="ds-ni" onclick="dsNav('legacy')"><i class="ti ti-trophy"></i>Legacy</div>
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
@@ -12954,53 +12954,160 @@ function _lgByYear_(rows, from, to){
   });
   return Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return b.mi-a.mi; });
 }
-function _lgSeasonCard_(s, col, showHours){
-  var rows=[['Activities',_lgNum_(s.n)],['Miles',_lgNum_(s.mi)]];
-  if(showHours) rows.push(['Hours',_lgNum_(s.sec/3600)]);
-  rows.push(['Longest',(Math.round(s.max*10)/10)+' mi']);
-  var H='<div style="flex:1 1 150px;min-width:150px;background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:13px;padding:13px 14px">'
-    +'<div style="font-size:24px;font-weight:800;color:'+col+';line-height:1">'+s.year+'</div>';
-  rows.forEach(function(r){
-    H+='<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-top:7px">'
-      +'<span style="color:var(--d-dim,#8b93a7)">'+r[0]+'</span>'
-      +'<span style="color:var(--d-head,#f1f5f9);font-weight:700">'+r[1]+'</span></div>';
+// SEASON SPARKLINE SOURCE: monthly miles inside that one year, summed from the SAME rows the
+// season card is already counting. No new store, no smoothing, no invented shape — twelve real
+// sums. Drawn with the existing _gcSpark_ per the app-wide chart rule; it returns '' for a series
+// with fewer than two real points, so a season too thin to have a trajectory simply gets no line
+// rather than a decorative squiggle.
+//
+// The IN-PROGRESS year is truncated at the current month. Padding it to December would draw a
+// cliff to zero that means "the year has not happened yet", which reads as a collapse in form.
+var _LG_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _lgMonthlyPts_(rows, year){
+  var m=[], i;
+  for(i=0;i<12;i++) m.push(0);
+  var any=false;
+  (rows||[]).forEach(function(r){
+    var ds=String((r&&r.date)||'');
+    if((+ds.slice(0,4))!==year) return;
+    var mo=+ds.slice(5,7);
+    if(!(mo>=1&&mo<=12)) return;
+    var mi=(r.mi!=null?+r.mi:+r.distance)||0;
+    m[mo-1]+=mi; any=true;
   });
-  return H+'</div>';
+  if(!any) return [];
+  var end=12, now=new Date();
+  if(year===now.getFullYear()) end=now.getMonth()+1;
+  var out=[];
+  for(i=0;i<end;i++) out.push({ v:Math.round(m[i]*10)/10, lab:_LG_MON[i] });
+  return out;
 }
-function _lgTileRow_(tiles, col){
-  var H='<div style="display:flex;flex-wrap:wrap;gap:16px 30px;margin-top:12px">';
-  tiles.forEach(function(t){
-    H+='<div><div style="font-size:27px;font-weight:800;color:var(--d-head,#f1f5f9);line-height:1;letter-spacing:-.01em">'+t.v+'</div>'
-      +'<div style="font-size:11px;color:'+col+';margin-top:3px;font-weight:700">'+t.k+'</div>'
-      +(t.note?'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:1px">'+t.note+'</div>':'')
-      +'</div>';
+function _lgSeasonCard_(s, col, showHours, rows){
+  var rowsOut=[['Activities',_lgNum_(s.n)],['Miles',_lgNum_(s.mi)]];
+  if(showHours) rowsOut.push(['Hours',_lgNum_(s.sec/3600)]);
+  rowsOut.push(['Longest',(Math.round(s.max*10)/10)+' mi']);
+  var H='<div style="flex:1 1 190px;min-width:190px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:15px;padding:14px 15px 11px;display:flex;flex-direction:column">'
+    +'<div style="font-size:25px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+s.year+'</div>'
+    +'<div style="margin-top:9px;flex:1 1 auto">';
+  rowsOut.forEach(function(r){
+    H+='<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;margin-top:6px">'
+      +'<span style="color:#8b93a7">'+r[0]+'</span>'
+      +'<span style="color:#f1f5f9;font-weight:700">'+r[1]+'</span></div>';
   });
-  return H+'</div>';
-}
-function _lgSection_(title, sub, col, tiles, seasons, scopeLine, showHours, extra){
-  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:15px">'
-    +'<div style="font-size:17px;font-weight:800;color:var(--d-head,#f1f5f9)">'+title+'</div>'
-    +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);margin-top:2px">'+sub+'</div>';
-  H+=tiles?_lgTileRow_(tiles,col)
-          :'<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);margin-top:11px">Lifetime totals have not been synced from Strava yet. Open Settings and run Sync Lifetime Stats &mdash; these come from Strava server-side, so they are unaffected by gaps in the local library.</div>';
-  if(extra) H+=extra;
   H+='</div>';
-  if(seasons && seasons.length){
-    H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:15px">'
-      +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#f1f5f9)">'+title+' &mdash; Greatest Seasons</div>'
-      +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:3px;line-height:1.5">'+scopeLine+'</div>'
-      +'<div style="display:flex;flex-wrap:wrap;gap:11px;margin-top:12px">';
-    seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours); });
-    H+='</div></div>';
+  var pts=_lgMonthlyPts_(rows, s.year);
+  var spark=(typeof _gcSpark_==='function')?_gcSpark_(pts, col, { H:38, fill:true, aria:s.year+' monthly miles' }):'';
+  H+=spark
+    ? ('<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07)">'+spark
+       +'<div style="font-size:9px;color:#6b7280;margin-top:2px">Miles by month</div></div>')
+    : '<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);font-size:9px;color:#6b7280">Too few months to plot</div>';
+  return H+'</div>';
+}
+// GRADIENT HERO. A deliberate departure from the flat house style, asked for explicitly for this
+// page: the section identity carries the colour (cycling violet, running orange) and the numbers
+// sit on it. Provenance text rides on the same card rather than in a footnote, so the caveat is
+// never separated from the figure it qualifies.
+function _lgHero_(title, sub, iconPath, grad, accent, tiles, prov){
+  var H='<div style="position:relative;overflow:hidden;border-radius:18px;padding:18px 20px;margin-bottom:14px;background:'+grad+';border:1px solid rgba(255,255,255,.10)">'
+    +'<div style="position:relative;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">'
+    +'<div style="flex:1 1 320px;min-width:280px">'
+    +'<div style="display:flex;align-items:center;gap:11px">'
+    +'<div style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
+    +'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg></div>'
+    +'<div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1.15">'+title+'</div>'
+    +'<div style="font-size:11.5px;color:rgba(255,255,255,.72);margin-top:1px">'+sub+'</div></div></div>';
+  if(tiles){
+    H+='<div style="display:flex;flex-wrap:wrap;gap:14px 28px;margin-top:15px">';
+    tiles.forEach(function(t){
+      H+='<div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+t.v+'</div>'
+        +'<div style="font-size:11px;color:'+accent+';margin-top:3px;font-weight:700">'+t.k+'</div>'
+        +(t.note?'<div style="font-size:9.5px;color:rgba(255,255,255,.6);margin-top:1px">'+t.note+'</div>':'')
+        +'</div>';
+    });
+    H+='</div>';
+  } else {
+    H+='<div style="font-size:12.5px;color:rgba(255,255,255,.8);margin-top:13px;max-width:460px">Lifetime totals have not been synced from Strava yet. Open Settings and run Sync Lifetime Stats &mdash; these come from Strava server-side, so they are unaffected by gaps in the local library.</div>';
   }
+  H+='</div>';
+  if(prov){
+    H+='<div style="flex:1 1 260px;min-width:240px;font-size:11px;color:rgba(255,255,255,.74);line-height:1.6;align-self:flex-end">'+prov+'</div>';
+  }
+  return H+'</div></div>';
+}
+function _lgSeasonsPanel_(title, col, seasons, scopeLine, showHours, rows){
+  if(!seasons || !seasons.length) return '';
+  var H='<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.075);border-radius:18px;padding:16px 18px;margin-bottom:16px">'
+    +'<div style="font-size:14px;font-weight:800;color:#f1f5f9">'+title+' &mdash; Greatest Seasons</div>'
+    +'<div style="font-size:11px;color:#8b93a7;margin-top:3px;line-height:1.5">'+scopeLine+'</div>'
+    +'<div style="display:flex;gap:12px;margin-top:13px;overflow-x:auto;padding-bottom:4px">';
+  seasons.forEach(function(s){ H+=_lgSeasonCard_(s,col,showHours,rows); });
+  return H+'</div></div>';
+}
+// ONE builder, both surfaces. Desktop renders it into ds-content beside the sidebar; mobile puts
+// the same string in a full-screen sheet. Two renderers reading one function is the only way the
+// two stay identical — see the desktop/mobile drift note.
+function _lgHTML_(){
+  var ICO_BIKE='<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6h3l2.5 6.5M5.5 17.5l4-9h5l3.5 9"/>';
+  var ICO_RUN='<circle cx="13" cy="4" r="1.6"/><path d="M7 20l3-6 3 2 1-5 3 3h2"/><path d="M9 9l4-2 3 3"/>';
+
+  // ---- CYCLING ----
+  var cyc=[]; try{ cyc=(typeof _msCycling_==='function')?(_msCycling_()||[]):[]; }catch(e){ cyc=[]; }
+  var cycFirst=cyc.length?cyc[0].date:null;
+  var cent=cyc.filter(function(r){ return r.mi>=100; });
+  var cycProv='';
+  if(cycFirst){
+    cycProv='First recorded ride <b style="color:#fff">'+cycFirst+'</b>'
+      +(cent.length?(' &middot; <b style="color:#fff">'+cent.length+'</b> century ride'+(cent.length===1?'':'s')+', first '+cent[0].date):'')
+      +'<br>Dated from the earliest ride still in the library, not a claim about when riding began.';
+  }
+  var H=_lgHero_('Cycling','Lifetime totals from Strava, server-side.',ICO_BIKE,
+        'linear-gradient(118deg,#241a4d 0%,#4a2a8c 46%,#7c3aed 100%)','#c4b5fd',
+        _lgCycTiles_(), cycProv);
+  H+=_lgSeasonsPanel_('Cycling','#a78bfa',_lgByYear_(cyc,_LG_CYC_FROM,null),
+        'Ranked by miles. Only '+_LG_CYC_FROM+' onward &mdash; the library holds no cycling data at all for 2018, 2019 and 2021, so earlier years cannot be compared honestly.',
+        true, cyc);
+
+  // ---- RUNNING ----
+  var runs=_lgRuns_();
+  var rSorted=runs.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+  var runFirst=rSorted.length?String(rSorted[0].date).slice(0,10):null;
+  var mar=runs.filter(function(r){ return (+r.distance||0)>=26; });
+  var half=runs.filter(function(r){ return (+r.distance||0)>=13.1; });
+  var runProv='';
+  if(runFirst){
+    runProv='First recorded run <b style="color:#fff">'+runFirst+'</b>'
+      +' &middot; <b style="color:#fff">'+mar.length+'</b> marathon'+(mar.length===1?'':'s')
+      +' &middot; <b style="color:#fff">'+half.length+'</b> half marathon or longer'
+      +'<br>No elevation figure is shown for running: it is absent from the Strava totals and the local values are not believable before 2021.';
+  }
+  H+=_lgHero_('Running','Lifetime totals from Strava, server-side. Hours are local.',ICO_RUN,
+        'linear-gradient(118deg,#3d1c0c 0%,#8a3f12 46%,#f97316 100%)','#fed7aa',
+        _lgRunTiles_(), runProv);
+  H+=_lgSeasonsPanel_('Running','#fb923c',_lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
+        'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
+        false, runs);
   return H;
 }
+// DESKTOP. Renders into ds-content like every other section, so the sidebar stays visible and
+// dsNav can mark it active through the EXISTING mechanism (it matches the quoted section name in
+// the item's onclick, which is why this is reached via dsNav('legacy') and not a direct call).
+function dsShowLegacy(){
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+  mc.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='padding:22px 24px 40px;overflow-y:auto;height:100%;box-sizing:border-box;background:radial-gradient(1200px 500px at 15% -10%,rgba(124,58,237,.10),transparent 60%),radial-gradient(900px 420px at 85% 8%,rgba(249,115,22,.07),transparent 60%)';
+  wrap.innerHTML='<div style="font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Legacy</div>'
+    +'<div style="font-size:13px;color:#8b93a7;margin:3px 0 18px">Your journey. Your story.</div>'
+    +_lgHTML_();
+  mc.appendChild(wrap);
+}
+// MOBILE. No sidebar to highlight, so this stays a full-screen sheet — same HTML, own chrome.
 function showLegacy(){
   var old=document.getElementById('LEGACY'); if(old) old.remove();
   var ov=document.createElement('div');
   ov.id='LEGACY';
   ov.style.cssText='position:fixed;inset:0;z-index:3000;background:#05070d;display:flex;flex-direction:column;overflow:hidden;color:#e6e9ef;font-family:-apple-system,sans-serif';
-
   var hdr=document.createElement('div');
   hdr.style.cssText='flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid rgba(255,255,255,.08)';
   hdr.innerHTML='<div style="flex:1"><div style="font-size:19px;font-weight:800;color:#f1f5f9">Legacy</div>'
@@ -13011,50 +13118,13 @@ function showLegacy(){
   x.onclick=function(){ ov.remove(); };
   hdr.appendChild(x);
   ov.appendChild(hdr);
-
   var body=document.createElement('div');
-  body.style.cssText='flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 18px 40px';
-
-  // ---- CYCLING ----
-  var cyc=[]; try{ cyc=(typeof _msCycling_==='function')?(_msCycling_()||[]):[]; }catch(e){ cyc=[]; }
-  var cycFirst=cyc.length?cyc[0].date:null;
-  var cent=cyc.filter(function(r){ return r.mi>=100; });
-  var cycExtra='';
-  if(cycFirst){
-    cycExtra='<div style="font-size:11.5px;color:#8b93a7;margin-top:13px;line-height:1.55;border-top:1px solid rgba(255,255,255,.07);padding-top:11px">'
-      +'First recorded ride <b style="color:#cbd5e1">'+cycFirst+'</b>'
-      +(cent.length?(' &middot; <b style="color:#cbd5e1">'+cent.length+'</b> century ride'+(cent.length===1?'':'s')+', first '+cent[0].date):'')
-      +'<br>Dated from the earliest ride still in the library, not a claim about when riding began.</div>';
-  }
-  var H=_lgSection_('Cycling','Lifetime totals from Strava, server-side.','#4D9FFF',
-        _lgCycTiles_(), _lgByYear_(cyc,_LG_CYC_FROM,null),
-        'Ranked by miles. Only '+_LG_CYC_FROM+' onward &mdash; the library holds no cycling data at all for 2018, 2019 and 2021, so earlier years cannot be compared honestly.',
-        true, cycExtra);
-
-  // ---- RUNNING ----
-  var runs=_lgRuns_();
-  var rSorted=runs.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
-  var runFirst=rSorted.length?String(rSorted[0].date).slice(0,10):null;
-  var mar=runs.filter(function(r){ return (+r.distance||0)>=26; });
-  var half=runs.filter(function(r){ return (+r.distance||0)>=13.1; });
-  var runExtra='';
-  if(runFirst){
-    runExtra='<div style="font-size:11.5px;color:#8b93a7;margin-top:13px;line-height:1.55;border-top:1px solid rgba(255,255,255,.07);padding-top:11px">'
-      +'First recorded run <b style="color:#cbd5e1">'+runFirst+'</b>'
-      +' &middot; <b style="color:#cbd5e1">'+mar.length+'</b> marathon'+(mar.length===1?'':'s')
-      +' &middot; <b style="color:#cbd5e1">'+half.length+'</b> half marathon or longer'
-      +'<br>No elevation figure is shown for running: it is absent from the Strava totals and the local values are not believable before 2021.</div>';
-  }
-  H+=_lgSection_('Running','Lifetime totals from Strava, server-side. Hours are local.','#00C896',
-        _lgRunTiles_(), _lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
-        'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
-        false, runExtra);
-
-  body.innerHTML=H;
+  body.style.cssText='flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 40px;background:radial-gradient(700px 320px at 20% -5%,rgba(124,58,237,.13),transparent 62%),radial-gradient(600px 300px at 85% 10%,rgba(249,115,22,.09),transparent 62%)';
+  body.innerHTML=_lgHTML_();
   ov.appendChild(body);
   document.body.appendChild(ov);
 }
-try{ if(typeof window!=='undefined'){ window.showLegacy=showLegacy; } }catch(e){}
+try{ if(typeof window!=='undefined'){ window.showLegacy=showLegacy; window.dsShowLegacy=dsShowLegacy; } }catch(e){}
 
 function showConstellation(){
   var old=document.getElementById('CONSTELLATION'); if(old) old.remove();
@@ -29302,6 +29372,12 @@ function dsNav(section){
     dsShowDashboard();
   } else if(section === 'calendar') {
     dsShowCalendar();
+  } else if(section === 'legacy') {
+    // Routed through dsNav rather than called straight off the nav item so the sidebar highlight
+    // comes from the SAME matcher every other section uses (it looks for the quoted section name
+    // inside the item's onclick). A direct showLegacy() call can never match it — which is why
+    // Constellation still does not highlight.
+    dsShowLegacy();
   } else if(section === 'analytics') {
     dsShowAnalytics();
   } else if(section === 'nutrition') {
