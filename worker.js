@@ -6311,15 +6311,31 @@ function mergeItemFast_(a, b){
   Object.keys(a).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis'&&k!=='powerCurve') aNoGps[k]=a[k]; });
   Object.keys(b).forEach(function(k){ if(k!=='gpsLats'&&k!=='gpsLons'&&k!=='gpsQuality'&&k!=='lats'&&k!=='lons'&&k!=='laps'&&k!=='lapSource'&&k!=='lapTimeBasis'&&k!=='powerCurve') bNoGps[k]=b[k]; });
   var merged = mergeState_(aNoGps, bNoGps);
-  // Atomic power-curve resolution: the side with MORE populated durations wins the whole object.
-  // More slots means the richer stream was available to whoever computed it, and taking it whole
-  // keeps the curve internally consistent. A tie keeps the local side, matching the laps rule.
-  // Never a key-by-key union — that is precisely the blend this fixes.
-  var _pcN=function(o){ var c=0; if(o&&typeof o==='object') Object.keys(o).forEach(function(k){ if((+o[k])>0) c++; }); return c; };
+  // Atomic power-curve resolution. COHERENCE outranks completeness: a curve must be non-increasing
+  // with duration (you cannot hold more watts for longer), so a curve that violates that is
+  // provably not a real measurement no matter how many slots it has. Ranking by slot count alone
+  // would have made this merge UNDO the repair of the 47 blended curves — the corrupt copies carry
+  // ten slots against the repaired eight, so a stale device re-pushing one would win and restore
+  // the corruption. Coherent beats incoherent; among equals, more slots wins; then local.
+  var _PC_D=[5,15,30,60,120,300,600,1200,1800,3600];
+  var _pcN=function(o){ var c=0; if(o&&typeof o==='object') _PC_D.forEach(function(d){ if((+o[d])>0) c++; }); return c; };
+  var _pcOk=function(o){
+    if(!o||typeof o!=='object') return false;
+    var prev=Infinity, ok=true;
+    _PC_D.forEach(function(d){ var v=+o[d]||0; if(v>0){ if(v>prev+0.5) ok=false; prev=v; } });
+    return ok;
+  };
   var _aPC=(a.powerCurve&&typeof a.powerCurve==='object')?a.powerCurve:null;
   var _bPC=(b.powerCurve&&typeof b.powerCurve==='object')?b.powerCurve:null;
   if(_aPC || _bPC){
-    var _pcWin=(!_aPC)?_bPC:((!_bPC)?_aPC:((_pcN(_bPC)>_pcN(_aPC))?_bPC:_aPC));
+    var _pcWin;
+    if(!_aPC) _pcWin=_bPC;
+    else if(!_bPC) _pcWin=_aPC;
+    else {
+      var _ao=_pcOk(_aPC), _bo=_pcOk(_bPC);
+      if(_ao!==_bo) _pcWin=_ao?_aPC:_bPC;                       // coherent wins outright
+      else _pcWin=(_pcN(_bPC)>_pcN(_aPC))?_bPC:_aPC;            // else the fuller one, then local
+    }
     merged.powerCurve=_pcWin;
   } else { delete merged.powerCurve; }
   // Atomic lap resolution: prefer the Garmin auto-lap source (distance-based, consistent); then a set
