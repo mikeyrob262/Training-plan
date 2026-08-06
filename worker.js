@@ -13150,6 +13150,7 @@ function _lgHTML_(){
     +_dnaRadarHTML_()
     +((typeof _dnaOtherTraitsHTML_==='function')?_dnaOtherTraitsHTML_():'')
     +'</div>';
+  H+=((typeof _dnaRunPanelHTML_==='function')?_dnaRunPanelHTML_():'');
   return H;
 }
 // Prime the rails once the HTML is in the document. Until layout runs, scrollWidth and clientWidth
@@ -22483,15 +22484,15 @@ function aiCardDNA_(ded){
     if(!c) return;
     if(c.fpm>=50) traits.push(['Climber','You average '+c.fpm+' ft of climbing per mile','#f59e0b']);
   })();
-  // Endurance Engine — pace on the longest third of rides holds vs the shortest third.
+  // Endurance Engine — speed on the longest third of rides holds vs the shortest third. The METHOD
+  // moved to _dnaDurability_ so the run-side trait uses one implementation rather than a second
+  // copy of the same thirds-comparison; the >=0.98 call and this card's wording stay here.
   (function(){
-    var s=rides.map(function(r){ var d=parseFloat(r.distance)||0, sec=_durSec_(r); return (d>0&&sec>0)?{d:d, mph:d/(sec/3600)}:null; }).filter(Boolean).filter(function(x){return x.mph>3&&x.mph<40;});
-    if(s.length<MIN*3) return;
-    var byD=s.slice().sort(function(a,b){return a.d-b.d;}), t=Math.floor(byD.length/3);
-    if(t<MIN) return;
-    var avg=function(g){ return g.reduce(function(a,x){return a+x.mph;},0)/g.length; };
-    var sh=avg(byD.slice(0,t)), lg=avg(byD.slice(byD.length-t));
-    if(lg>=sh*0.98) traits.push(['Endurance Engine','Pace holds on long rides ('+(Math.round(lg*10)/10)+' vs '+(Math.round(sh*10)/10)+' mph short)','#4ade80']);
+    var s=rides.map(function(r){ var d=parseFloat(r.distance)||0, sec=_durSec_(r); return (d>0&&sec>0)?{d:d, spd:d/(sec/3600)}:null; })
+      .filter(Boolean).filter(function(x){ return x.spd>3 && x.spd<40; });
+    var g=(typeof _dnaDurability_==='function')?_dnaDurability_(s, MIN):null;
+    if(!g || !g.holds) return;
+    traits.push(['Endurance Engine','Pace holds on long rides ('+(Math.round(g.longAvg*10)/10)+' vs '+(Math.round(g.shortAvg*10)/10)+' mph short)','#4ade80']);
   })();
   // Weekend Warrior — share of rides on Sat/Sun.
   (function(){
@@ -23161,6 +23162,102 @@ var _DNA_BANDS=[
 ];
 var _DNA_CURVE_SECS=[5,15,30,60,120,300,600,1200,1800,3600];
 function _dnaSecLabel_(s){ return s<60?(s+'s'):(s%3600===0?((s/3600)+'h'):((s/60)+'m')); }
+// ---- RUNNING DNA -----------------------------------------------------------------------------
+// An explicitly HISTORICAL profile. Running is currently dormant — 3 runs and 10 miles in the last
+// 90 days against 2,151 all-time — so the recent-vs-lifetime structure that carries the cycling
+// curve cannot be built here, and pretending otherwise would hang a "current form" label on an
+// eleven-year-old archive. Everything below is all-time and says so.
+//
+// SOURCES, chosen around the snapshot trap that locked the cycling power traits:
+//   pace    -> DERIVED from distance and moving time via getRuns(), never the stored r.pace field.
+//              The snapshot carries no pace at all (0% on getRuns, 99% on st.runs), and a derived
+//              pace additionally cannot disagree with the distance and time it came from.
+//   cadence -> st.runs ONLY. Cadence is absent from the snapshot vocabulary entirely (26% on
+//              getRuns, all of it live-tail rows folded back; 97% on st.runs), so traits built on
+//              it are scoped to the 1,290 runs st.runs holds, through 2026-04-13, and say so.
+// Run HR zones are deliberately ABSENT: they read 78% of all running time at Z4+, which is not
+// possible, so the model is wrong rather than the coverage thin. Tracked separately.
+var _DNA_RUN_BANDS=[
+  { label:'1 mi',     mi:1,      col:'#f472b6' },
+  { label:'5K',       mi:3.107,  col:'#fb923c' },
+  { label:'10K',      mi:6.214,  col:'#facc15' },
+  { label:'Half',     mi:13.109, col:'#4ade80' },
+  { label:'Marathon', mi:26.219, col:'#38bdf8' }
+];
+var _DNA_RUN_TOL=0.06;   // the same +/-6% banding the Records engine uses; the run log has no splits
+function _dnaRunSec_(r){
+  var m=+((r&&(r.movingSecs!=null?r.movingSecs:r.movingSec))||0);
+  if(m>0) return m;
+  var e=+((r&&(r.elapsedSec!=null?r.elapsedSec:r.elapsed))||0);
+  return e>0?e:0;
+}
+function _dnaPaceStr_(secPerMi){
+  if(!(secPerMi>0)) return '-';
+  var m=Math.floor(secPerMi/60), s=Math.round(secPerMi%60);
+  if(s===60){ m++; s=0; }
+  return m+':'+(s<10?'0':'')+s;
+}
+// Best whole-run pace inside each distance band, all-time, with the run that set it so each band
+// opens it — the same click-through chain the power curve uses.
+//
+// SUSPECT is derived exactly like the power curve's monotonicity check, and needs no threshold:
+// pace must get SLOWER as distance grows, so a band faster than any SHORTER band is impossible.
+// Today that catches the 5K (a stored 4:27/mi, i.e. a 13:50 5K, which st.runs does not agree with
+// — the snapshot holds a corrupt row). Flagged and shown as stored, never silently dropped.
+function _dnaRunPaceCurve_(){
+  var G=[];
+  try{ G=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ G=[]; }
+  var runs=G.filter(function(r){ return r && r.date && (+r.distance||0)>0 && _dnaRunSec_(r)>0; });
+  if(runs.length<20) return { ok:false, n:runs.length, bands:[] };
+  var bands=_DNA_RUN_BANDS.map(function(b){
+    var lo=b.mi*(1-_DNA_RUN_TOL), hi=b.mi*(1+_DNA_RUN_TOL);
+    var inB=runs.filter(function(r){ var d=+r.distance; return d>=lo && d<=hi; });
+    var best=null;
+    inB.forEach(function(r){ var p=_dnaRunSec_(r)/(+r.distance); if(!best || p<best.p) best={ p:p, run:r }; });
+    var ref=null;
+    if(best && typeof rideRefOf_==='function'){
+      try{ var rr=rideRefOf_(best.run); ref=(typeof _recRefUsable_==='function' && !_recRefUsable_(rr))?null:rr; }catch(e){ ref=null; }
+    }
+    return { label:b.label, mi:b.mi, col:b.col, n:inB.length,
+             pace:best?best.p:0, paceStr:best?_dnaPaceStr_(best.p):'-',
+             date:best?String(best.run.date).slice(0,10):null, run:best?best.run:null, ref:ref, suspect:false };
+  });
+  for(var i=1;i<bands.length;i++){
+    for(var j=0;j<i;j++){
+      if(bands[i].pace>0 && bands[j].pace>0 && bands[i].pace < bands[j].pace-0.5){ bands[i].suspect=true; break; }
+    }
+  }
+  return { ok:true, n:runs.length, bands:bands };
+}
+// Median cadence per year. st.runs only — see the source note above.
+function _dnaRunCadence_(){
+  var src=(typeof st!=='undefined'&&st&&Array.isArray(st.runs))?st.runs:[];
+  var rows=src.filter(function(r){ return r && !r.deleted && r.date && (+r.cadence)>0; });
+  if(rows.length<30) return { ok:false, n:rows.length, years:[] };
+  var byY={};
+  rows.forEach(function(r){ var y=String(r.date).slice(0,4); (byY[y]=byY[y]||[]).push(+r.cadence); });
+  var years=Object.keys(byY).sort().map(function(y){
+    var a=byY[y].slice().sort(function(x,z){ return x-z; });
+    return { year:y, n:a.length, med:a[Math.floor(a.length/2)] };
+  });
+  var all=rows.map(function(r){ return +r.cadence; }).sort(function(x,z){ return x-z; });
+  return { ok:true, n:rows.length, years:years, median:all[Math.floor(all.length/2)],
+           last:years[years.length-1]||null };
+}
+// SHARED with the ride-side Endurance Engine: does speed hold up on your longest efforts? One
+// implementation, two populations — the ride card and the run trait were otherwise going to carry
+// the same method written out twice.
+function _dnaDurability_(list, minPerThird){
+  var s=(list||[]).filter(function(x){ return x && x.d>0 && x.spd>0; });
+  var t=Math.floor(s.length/3);
+  if(t<(minPerThird||20)) return null;
+  var byD=s.slice().sort(function(a,b){ return a.d-b.d; });
+  var avg=function(g){ return g.reduce(function(a,x){ return a+x.spd; },0)/g.length; };
+  var shortAvg=avg(byD.slice(0,t)), longAvg=avg(byD.slice(byD.length-t));
+  return { n:s.length, third:t, shortAvg:shortAvg, longAvg:longAvg,
+           ratio:(shortAvg>0?longAvg/shortAvg:0), holds:(longAvg>=shortAvg*0.98),
+           shortMed:byD[Math.floor(t/2)].d, longMed:byD[byD.length-1-Math.floor(t/2)].d };
+}
 function _dnaBandOf_(secs){
   for(var i=0;i<_DNA_BANDS.length;i++){ if(_DNA_BANDS[i].secs.indexOf(secs)>=0) return _DNA_BANDS[i]; }
   return _DNA_BANDS[_DNA_BANDS.length-1];
@@ -23378,6 +23475,59 @@ function _dnaRadarHTML_(){
 // REUSED, not recomputed: Consistency and Explorer are lifted from _dnaTraits_ by name (the same
 // objects the DNA Insights tab renders), and Climber comes from _dnaClimbFtPerMi_, which the
 // Athlete DNA card also calls. Nothing here does its own arithmetic.
+// RUNNING DNA panel. Framed as history throughout, because it is: 3 runs in the last 90 days
+// against 2,151 all-time. Every band shows its sample size next to it rather than hiding a thin
+// one, and a band whose pace is impossible for its distance is flagged, not corrected.
+function _dnaRunPanelHTML_(){
+  if(typeof _dnaRunPaceCurve_!=='function') return '';
+  var C=_dnaRunPaceCurve_();
+  if(!C.ok) return '';
+  var withData=C.bands.filter(function(b){ return b.n>0 && b.pace>0; });
+  if(!withData.length) return '';
+  var esc2=function(s){ return (typeof aiEsc_==='function')?aiEsc_(String(s)):String(s); };
+  var nm=function(r){ try{ return (typeof actName_==='function')?actName_(r):String((r&&r.name)||'run'); }catch(e){ return 'run'; } };
+  // Bars scale to the SLOWEST band so every bar is comparable; pace is inverted (faster = longer)
+  // because a longer bar reading as "better" is the only intuitive direction for a time.
+  var slow=0; withData.forEach(function(b){ if(b.pace>slow) slow=b.pace; });
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Athlete DNA &mdash; pace curve</div>'
+    +'<div style="font-size:11px;color:#00C896;font-weight:700">running &middot; all-time</div></div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px;line-height:1.5">'
+    +'A historical profile, not current form &mdash; only 3 runs in the last 90 days, so there is no recent window to compare against. '
+    +'Best whole-run pace in each distance band, from '+C.n.toLocaleString()+' timed runs.</div>'
+    +'<div style="margin-top:13px">';
+  C.bands.forEach(function(b){
+    var thin=(b.n>0 && b.n<10);
+    if(!b.n){
+      H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:12px;color:var(--d-dim,#8b93a7)">'
+        +'<span style="width:64px;font-weight:700">'+b.label+'</span><span>no runs at this distance</span></div>';
+      return;
+    }
+    var w=Math.max(4, Math.round((slow>0?(slow/b.pace):1)*100));
+    if(w>100) w=100;
+    var clickable=(b.ref!=null && b.run);
+    H+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
+      +'<span style="width:64px;font-size:12px;font-weight:700;color:'+b.col+'">'+b.label+(b.suspect?'*':'')+'</span>'
+      +'<span style="flex:1 1 auto;max-width:230px;height:12px;border-radius:3px;background:var(--d-edge,rgba(0,0,0,.13));position:relative;overflow:hidden">'
+      +'<span style="position:absolute;left:0;top:0;bottom:0;width:'+w+'%;background:'+b.col+';opacity:'+(b.suspect?'0.35':'0.9')+';border-radius:3px"></span></span>'
+      +'<span'+(clickable?(' role="button" tabindex="0" style="cursor:pointer;text-decoration:underline;text-underline-offset:2px;font-size:12.5px;font-weight:800;color:var(--d-head,#15181D)" onclick="recOpenRide_('+rideRefAttr_(b.ref)+')" title="'+esc2(b.paceStr)+'/mi on '+b.date+' &mdash; '+esc2(nm(b.run))+'. Opens this run."'):' style="font-size:12.5px;font-weight:800;color:var(--d-head,#15181D)"')+'>'+b.paceStr+'/mi</span>'
+      +'<span style="font-size:10.5px;color:var(--d-dim,#8b93a7)">'+b.n+' run'+(b.n===1?'':'s')+(thin?' &middot; thin':'')+(b.date?(' &middot; '+b.date):'')+'</span>'
+      +'</div>';
+  });
+  H+='</div>';
+  var sus=C.bands.filter(function(b){ return b.suspect; });
+  if(sus.length){
+    H+='<div style="font-size:10.5px;color:#f59e0b;margin-top:4px;line-height:1.5">* '
+      +sus.map(function(b){ return b.label; }).join(', ')+' is flagged: its best pace is FASTER than a shorter distance, which is not possible. '
+      +'The stored figure is shown as-is rather than corrected &mdash; the source row is wrong, and hiding it would hide the fault.</div>';
+  }
+  H+='<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">'
+    +'Bands are whole-run distances within &plusmn;6%, the same banding the records board uses &mdash; the run log holds no in-run splits, so a "5K time" here means a run that WAS about 5K. '
+    +'Sample size is shown for every band, including the thin ones. Pace is derived from distance and moving time, not the stored pace field, which the snapshot does not carry.</div>';
+  H+='</div>';
+  return H;
+}
 function _dnaOtherTraitsHTML_(){
   var rows=[];
   var climb=(typeof _dnaClimbFtPerMi_==='function')?_dnaClimbFtPerMi_(null,20):null;
@@ -23541,6 +23691,37 @@ function _dnaTraits_(acts){
         'Your best '+a.durLabel+' power is '+Math.round(a.watts)+' W against a best 5-minute of '+Math.round(P.anchor)+' W &mdash; '+a.blurb+'.',
         a.deriv, a.col, a.series, 'ratio by year (a gap is a year with no power data)'));
     });
+  })();
+  // ---- RUNNING: cadence and long-run durability. Both all-time and labelled as history — running
+  // is dormant (3 runs in the last 90 days), so nothing here claims to describe current form.
+  (function(){
+    if(typeof _dnaRunCadence_!=='function') return;
+    var c=_dnaRunCadence_();
+    if(!c.ok){ T.push(_dnaLock_('Run cadence', 'needs cadence on at least 30 runs &mdash; '+c.n+' carry it so far', '#2dd4bf')); return; }
+    var yrs=c.years.filter(function(y){ return y.n>=5; });          // a year of 2 runs is not a reading
+    var sp=yrs.map(function(y){ return { v:y.med, lab:y.year }; });
+    var lastY=yrs.length?yrs[yrs.length-1]:null;
+    T.push(_dnaTrait_('Run cadence', c.median+' spm median',
+      'Across '+c.n.toLocaleString()+' runs carrying cadence'+(lastY?(', most recently a '+lastY.med+' spm median in '+lastY.year+' from '+lastY.n+' runs'):'')+'.',
+      'median steps per minute per year, years with 5+ runs; from st.runs, which the snapshot does not carry', '#2dd4bf',
+      sp, 'median cadence by year'));
+  })();
+  (function(){
+    if(typeof _dnaDurability_!=='function') return;
+    var G=[];
+    try{ G=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){ G=[]; }
+    var s=G.map(function(r){
+      var d=+r.distance||0, sec=(typeof _dnaRunSec_==='function')?_dnaRunSec_(r):0;
+      return (d>0&&sec>0)?{ d:d, spd:d/(sec/3600) }:null;
+    }).filter(Boolean).filter(function(x){ return x.spd>2 && x.spd<14; });   // 2-14 mph brackets real running
+    var g=_dnaDurability_(s, 20);
+    if(!g){ T.push(_dnaLock_('Long-run durability', 'needs more timed runs to compare your longest against your shortest', '#4ade80')); return; }
+    var pace=function(mph){ return (typeof _dnaPaceStr_==='function')?_dnaPaceStr_(3600/mph):String(Math.round(mph*10)/10); };
+    T.push(_dnaTrait_('Long-run durability',
+      (g.holds?'Pace holds':'Pace fades')+' on your longest runs',
+      'Your longest third average '+pace(g.longAvg)+'/mi against '+pace(g.shortAvg)+'/mi on your shortest third ('
+        +(Math.round(g.longMed*10)/10)+' mi vs '+(Math.round(g.shortMed*10)/10)+' mi typical), across '+g.n.toLocaleString()+' timed runs.',
+      'mean speed of the longest third vs the shortest third, all-time', '#4ade80'));
   })();
   // ---- EXPLORER: new ground, measured as segments you had never ridden before.
   // Counted as FIRST-EVER effort dates per segment, so re-riding a favourite does not read as
