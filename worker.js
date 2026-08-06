@@ -256,16 +256,13 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .ds-card:hover::-webkit-scrollbar-track{background:transparent}
 .ds-card:hover::-webkit-scrollbar-thumb{background:var(--d-scroll);border-radius:3px}
 .ds-card:hover::-webkit-scrollbar-thumb:hover{background:var(--d-scroll2)}
-/* Horizontal card rails opt BACK IN to a visible scrollbar. The global rule above hides every
-   scrollbar app-wide, which is fine for vertical panes (the content is obviously continuous) but
-   silently hides content on a horizontal rail: nothing on screen says more cards exist to the
-   right. Unlike .ds-card this is NOT hover-gated — hover cannot be discovered on touch, and the
-   whole point is that it reads at a glance. */
-.lg-hs{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.3) transparent}
-.lg-hs::-webkit-scrollbar{display:block;height:8px}
-.lg-hs::-webkit-scrollbar-track{background:rgba(255,255,255,.06);border-radius:4px}
-.lg-hs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.28);border-radius:4px}
-.lg-hs::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.46)}
+/* .lg-hs is the horizontal season rail. It deliberately keeps the app-wide hidden scrollbar from
+   the rule above — a visible bar competed with the content for attention. Discoverability is
+   carried instead by three things that do not add furniture: fade edges derived from scrollLeft,
+   prev/next buttons that disable at each end, and the season count in the header. The class stays
+   as the rail's hook and as the record of that decision. */
+.lg-hs{scrollbar-width:none}
+.lg-hs::-webkit-scrollbar{display:none}
 .lg-nudge{background:rgba(20,24,34,.86);border:1px solid rgba(255,255,255,.16);color:#e2e8f0;width:28px;height:28px;border-radius:50%;cursor:pointer;font-family:inherit;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;transition:opacity .15s}
 .lg-nudge[disabled]{opacity:.28;cursor:default}
 .ds-mapbox{height:210px;background:#1c2535;position:relative;overflow:hidden;flex-shrink:0}
@@ -12998,7 +12995,7 @@ function _lgSeasonCard_(s, col, showHours, rows){
   var rowsOut=[['Activities',_lgNum_(s.n)],['Miles',_lgNum_(s.mi)]];
   if(showHours) rowsOut.push(['Hours',_lgNum_(s.sec/3600)]);
   rowsOut.push(['Longest',(Math.round(s.max*10)/10)+' mi']);
-  var H='<div style="flex:1 1 190px;min-width:190px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:15px;padding:14px 15px 11px;display:flex;flex-direction:column">'
+  var H='<div style="flex:1 1 190px;min-width:190px;background:var(--d-panel2,rgba(255,255,255,.035));border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 15px 11px;display:flex;flex-direction:column">'
     +'<div style="font-size:25px;font-weight:800;color:'+col+';line-height:1;letter-spacing:-.02em">'+s.year+'</div>'
     +'<div style="margin-top:9px;flex:1 1 auto">';
   rowsOut.forEach(function(r){
@@ -13015,34 +13012,37 @@ function _lgSeasonCard_(s, col, showHours, rows){
     : '<div style="margin-top:10px;padding-top:9px;border-top:1px solid rgba(255,255,255,.07);font-size:9px;color:#6b7280">Too few months to plot</div>';
   return H+'</div>';
 }
-// GRADIENT HERO. A deliberate departure from the flat house style, asked for explicitly for this
-// page: the section identity carries the colour (cycling violet, running orange) and the numbers
-// sit on it. Provenance text rides on the same card rather than in a footnote, so the caveat is
-// never separated from the figure it qualifies.
-function _lgHero_(title, sub, iconPath, grad, accent, tiles, prov){
-  var H='<div style="position:relative;overflow:hidden;border-radius:18px;padding:18px 20px;margin-bottom:14px;background:'+grad+';border:1px solid rgba(255,255,255,.10)">'
-    +'<div style="position:relative;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">'
+// FLAT SUMMARY PANEL. Same surface treatment as every other panel in the app — solid --d-panel,
+// one hairline border, no gradient and no glow. An earlier pass built this as a large gradient
+// hero; that direction is retired, and the sport identity is carried by the accent COLOUR on the
+// tile labels and the icon only, never by a filled block.
+//
+// The layout gains from that pass are kept: the tile row, and provenance text on the SAME panel as
+// the figures rather than in a detached footnote, so a caveat can never drift from what it
+// qualifies.
+function _lgSummaryPanel_(title, sub, iconPath, accent, tiles, prov){
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start">'
     +'<div style="flex:1 1 320px;min-width:280px">'
-    +'<div style="display:flex;align-items:center;gap:11px">'
-    +'<div style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">'
-    +'<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+iconPath+'</svg></div>'
-    +'<div><div style="font-size:17px;font-weight:800;color:#fff;line-height:1.15">'+title+'</div>'
-    +'<div style="font-size:11.5px;color:rgba(255,255,255,.72);margin-top:1px">'+sub+'</div></div></div>';
+    +'<div style="display:flex;align-items:center;gap:10px">'
+    +'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="'+accent+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">'+iconPath+'</svg>'
+    +'<div><div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9);line-height:1.15">'+title+'</div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:1px">'+sub+'</div></div></div>';
   if(tiles){
-    H+='<div style="display:flex;flex-wrap:wrap;gap:14px 28px;margin-top:15px">';
+    H+='<div style="display:flex;flex-wrap:wrap;gap:14px 28px;margin-top:14px">';
     tiles.forEach(function(t){
-      H+='<div><div style="font-size:28px;font-weight:800;color:#fff;line-height:1;letter-spacing:-.02em">'+t.v+'</div>'
+      H+='<div><div style="font-size:27px;font-weight:800;color:var(--d-head,#f1f5f9);line-height:1;letter-spacing:-.02em">'+t.v+'</div>'
         +'<div style="font-size:11px;color:'+accent+';margin-top:3px;font-weight:700">'+t.k+'</div>'
-        +(t.note?'<div style="font-size:9.5px;color:rgba(255,255,255,.6);margin-top:1px">'+t.note+'</div>':'')
+        +(t.note?'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:1px">'+t.note+'</div>':'')
         +'</div>';
     });
     H+='</div>';
   } else {
-    H+='<div style="font-size:12.5px;color:rgba(255,255,255,.8);margin-top:13px;max-width:460px">Lifetime totals have not been synced from Strava yet. Open Settings and run Sync Lifetime Stats &mdash; these come from Strava server-side, so they are unaffected by gaps in the local library.</div>';
+    H+='<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);margin-top:13px;max-width:460px">Lifetime totals have not been synced from Strava yet. Open Settings and run Sync Lifetime Stats &mdash; these come from Strava server-side, so they are unaffected by gaps in the local library.</div>';
   }
   H+='</div>';
   if(prov){
-    H+='<div style="flex:1 1 260px;min-width:240px;font-size:11px;color:rgba(255,255,255,.74);line-height:1.6;align-self:flex-end">'+prov+'</div>';
+    H+='<div style="flex:1 1 260px;min-width:240px;font-size:11px;color:var(--d-dim,#8b93a7);line-height:1.6;align-self:flex-end">'+prov+'</div>';
   }
   return H+'</div></div>';
 }
@@ -13111,9 +13111,8 @@ function _lgHTML_(){
       +(cent.length?(' &middot; <b style="color:#fff">'+cent.length+'</b> century ride'+(cent.length===1?'':'s')+', first '+cent[0].date):'')
       +'<br>Dated from the earliest ride still in the library, not a claim about when riding began.';
   }
-  var H=_lgHero_('Cycling','Lifetime totals from Strava, server-side.',ICO_BIKE,
-        'linear-gradient(118deg,#241a4d 0%,#4a2a8c 46%,#7c3aed 100%)','#c4b5fd',
-        _lgCycTiles_(), cycProv);
+  var H=_lgSummaryPanel_('Cycling','Lifetime totals from Strava, server-side.',ICO_BIKE,
+        '#a78bfa', _lgCycTiles_(), cycProv);
   H+=_lgSeasonsPanel_('Cycling','#a78bfa',_lgByYear_(cyc,_LG_CYC_FROM,null),
         'Ranked by miles. Only '+_LG_CYC_FROM+' onward &mdash; the library holds no cycling data at all for 2018, 2019 and 2021, so earlier years cannot be compared honestly.',
         true, cyc, 'cyc');
@@ -13131,9 +13130,8 @@ function _lgHTML_(){
       +' &middot; <b style="color:#fff">'+half.length+'</b> half marathon or longer'
       +'<br>No elevation figure is shown for running: it is absent from the Strava totals and the local values are not believable before 2021.';
   }
-  H+=_lgHero_('Running','Lifetime totals from Strava, server-side. Hours are local.',ICO_RUN,
-        'linear-gradient(118deg,#3d1c0c 0%,#8a3f12 46%,#f97316 100%)','#fed7aa',
-        _lgRunTiles_(), runProv);
+  H+=_lgSummaryPanel_('Running','Lifetime totals from Strava, server-side. Hours are local.',ICO_RUN,
+        '#fb923c', _lgRunTiles_(), runProv);
   H+=_lgSeasonsPanel_('Running','#fb923c',_lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
         'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
         false, runs, 'run');
@@ -13152,7 +13150,7 @@ function dsShowLegacy(){
   var mc=document.getElementById('ds-content'); if(!mc) return;
   mc.innerHTML='';
   var wrap=document.createElement('div');
-  wrap.style.cssText='padding:22px 24px 40px;overflow-y:auto;height:100%;box-sizing:border-box;background:radial-gradient(1200px 500px at 15% -10%,rgba(124,58,237,.10),transparent 60%),radial-gradient(900px 420px at 85% 8%,rgba(249,115,22,.07),transparent 60%)';
+  wrap.style.cssText='padding:22px 24px 40px;overflow-y:auto;height:100%;box-sizing:border-box';
   wrap.innerHTML='<div style="font-size:27px;font-weight:800;color:#f1f5f9;letter-spacing:-.02em">Legacy</div>'
     +'<div style="font-size:13px;color:#8b93a7;margin:3px 0 18px">Your journey. Your story.</div>'
     +_lgHTML_();
@@ -13176,7 +13174,7 @@ function showLegacy(){
   hdr.appendChild(x);
   ov.appendChild(hdr);
   var body=document.createElement('div');
-  body.style.cssText='flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 40px;background:radial-gradient(700px 320px at 20% -5%,rgba(124,58,237,.13),transparent 62%),radial-gradient(600px 300px at 85% 10%,rgba(249,115,22,.09),transparent 62%)';
+  body.style.cssText='flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px 40px';
   body.innerHTML=_lgHTML_();
   ov.appendChild(body);
   document.body.appendChild(ov);
