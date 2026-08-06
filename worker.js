@@ -23119,17 +23119,25 @@ function _dnaRadarHTML_(){
   var ROW=27, BAR=13, TOP=20, H=TOP+drawn.length*ROW+16;
   var xOf=function(v){ return X0+(X1-X0)*Math.max(0,Math.min(1,v/MAX)); };
   var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:430px;height:auto" role="img" aria-label="Power profile: best power at each duration relative to your best 5-minute power">';
+  // THEMING: colours go through style="fill:var(...)", never a fill="" presentation attribute —
+  // var() is INVALID in SVG presentation attributes and silently drops to black/none. The first
+  // version of this chart hardcoded the DARK palette (#f1f5f9 text, rgba(255,255,255,.34) rule),
+  // which rendered near-white text on the white light-mode card and made the parity line vanish
+  // outright. --d-head and --d-dim already resolve per theme (#15181D / #7C8595 in light,
+  // #f1f5f9 / #5b6678 in dark), so they are the correct source.
+  var FILL_HEAD='style="fill:var(--d-head,#15181D)"';
+  var FILL_DIM='style="fill:var(--d-dim,#7C8595)"';
   // PARITY LINE at 1.0x, drawn on the plot and labelled in words. Without it a reader has no way to
   // know whether 0.88x is good, bad or expected — the ratio concept lives in a paragraph otherwise.
   var px=xOf(1);
-  svg+='<line x1="'+px.toFixed(1)+'" y1="'+(TOP-8)+'" x2="'+px.toFixed(1)+'" y2="'+(TOP+drawn.length*ROW-6)+'" stroke="rgba(255,255,255,.34)" stroke-width="1" stroke-dasharray="3,3"/>';
-  svg+='<text x="'+(px+4).toFixed(1)+'" y="'+(TOP-11)+'" font-size="9.5" fill="rgba(255,255,255,.62)" font-family="-apple-system,sans-serif">1.0x &mdash; matches your 5-min power</text>';
+  svg+='<line x1="'+px.toFixed(1)+'" y1="'+(TOP-8)+'" x2="'+px.toFixed(1)+'" y2="'+(TOP+drawn.length*ROW-6)+'" style="stroke:var(--d-dim,#7C8595);opacity:.8" stroke-width="1" stroke-dasharray="3,3"/>';
+  svg+='<text x="'+(px+4).toFixed(1)+'" y="'+(TOP-11)+'" font-size="9.5" '+FILL_DIM+' font-family="-apple-system,sans-serif">1.0x &mdash; matches your 5-min power</text>';
   drawn.forEach(function(a,i){
     var y=TOP+i*ROW, bw=Math.max(2, xOf(a.ratio)-X0);
-    svg+='<text x="'+(LBL-9)+'" y="'+(y+BAR-2)+'" text-anchor="end" font-size="11.5" font-weight="700" fill="#dbe2ea" font-family="-apple-system,sans-serif">'+a.label+'</text>';
-    svg+='<rect x="'+X0+'" y="'+y+'" width="'+(X1-X0)+'" height="'+BAR+'" rx="3" fill="rgba(255,255,255,.05)"/>';
-    svg+='<rect x="'+X0+'" y="'+y+'" width="'+bw.toFixed(1)+'" height="'+BAR+'" rx="3" fill="'+a.col+'" opacity="0.85"/>';
-    svg+='<text x="'+(X0+bw+7).toFixed(1)+'" y="'+(y+BAR-2)+'" font-size="11.5" font-weight="800" fill="#f1f5f9" font-family="-apple-system,sans-serif">'+a.ratio.toFixed(2)+'x</text>';
+    svg+='<text x="'+(LBL-9)+'" y="'+(y+BAR-2)+'" text-anchor="end" font-size="11.5" font-weight="700" '+FILL_HEAD+' font-family="-apple-system,sans-serif">'+a.label+'</text>';
+    svg+='<rect x="'+X0+'" y="'+y+'" width="'+(X1-X0)+'" height="'+BAR+'" rx="3" style="fill:var(--d-edge,rgba(0,0,0,.13))"/>';
+    svg+='<rect x="'+X0+'" y="'+y+'" width="'+bw.toFixed(1)+'" height="'+BAR+'" rx="3" fill="'+a.col+'"/>';
+    svg+='<text x="'+(X0+bw+7).toFixed(1)+'" y="'+(y+BAR-2)+'" font-size="11.5" font-weight="800" '+FILL_HEAD+' font-family="-apple-system,sans-serif">'+a.ratio.toFixed(2)+'x</text>';
   });
   svg+='</svg>';
   // The durations behind each label, so the chart is self-explaining without the paragraph.
