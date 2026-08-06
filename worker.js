@@ -13135,6 +13135,20 @@ function _lgHTML_(){
   H+=_lgSeasonsPanel_('Running','#fb923c',_lgByYear_(runs,_LG_RUN_FROM,_LG_RUN_TO),
         'Ranked by miles. '+_LG_RUN_FROM+'&ndash;'+_LG_RUN_TO+' &mdash; 2015 is excluded because its recorded pace (21.8 min/mi) is not believable, and later years hold too few runs to rank.',
         false, runs, 'run');
+
+  // ---- ATHLETE DNA (Phase 2) — the power profile only.
+  // The full trait set lives in the DNA Insights tab and is NOT re-implemented here; this section
+  // renders the one part that is genuinely a chart. Four axes, one shared unit, one computation
+  // (_dnaPowerAxes_) shared with the trait text so the two can never disagree.
+  H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:17px 19px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'
+    +'<div style="font-size:16px;font-weight:800;color:var(--d-head,#f1f5f9)">Athlete DNA &mdash; power profile</div>'
+    +'<div style="font-size:11px;color:#60a5fa;font-weight:700">cycling</div></div>'
+    +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px;line-height:1.5">'
+    +'Scored against your own curve, never against other athletes &mdash; Strava exposes no ranking to compare with. '
+    +'Climber, Consistency and Explorer are traits rather than axes and live in DNA Insights.</div>'
+    +_dnaRadarHTML_()
+    +'</div>';
   return H;
 }
 // Prime the rails once the HTML is in the document. Until layout runs, scrollWidth and clientWidth
@@ -23022,6 +23036,106 @@ function _dnaEras_(acts){
 // rule says draw the line where the history is real, not everywhere.
 function _dnaTrait_(name, headline, detail, deriv, col, spark, sparkNote){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false, spark:spark||null, sparkNote:sparkNote||''}; }
 function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:unlock, col:col}; }
+// ---- POWER AXES: ONE computation, two consumers (the DNA traits below and the radar on the
+// Legacy page). Split out precisely so a chart cannot quietly disagree with the trait text beside
+// it — the same failure the _zsCompute_ comment warns about one surface up.
+//
+// WHY RATIOS, NOT WATTS: every axis is against your OWN best 5-minute power, so each states the
+// SHAPE of your curve rather than absolute fitness. A fitter athlete lifts every point; the
+// 5s-to-5min ratio only moves when the KIND of rider changes. That also makes them
+// self-referential by construction — the vs-your-own-history rule with no scoring layer added.
+//
+// DELIBERATELY NOT normalized by st.ftp: FTP reads 183 W while the recorded best hour is 265 W,
+// which is 145% of FTP for an hour and not physiologically possible.
+//
+// SOURCE: st.rides directly, NOT allRidesDeduped_. That accessor serves the store_v2 snapshot — a
+// slimmed projection with its own vocabulary (distanceM, elevGainM, movingSec, avgPower) carrying
+// NO powerCurve at all: 0 of 409, against 307 on st.rides. Raw duplicates are harmless because
+// every figure is a MAXIMUM; a ride imported twice cannot raise its own best 5-second power.
+var _DNA_PC_MIN=5;
+var _DNA_PWR_DEFS=[
+  ['Sprinter',        5,    '#ef4444', 'peak 5-second power against your own best 5-minute power',  'how explosive you are relative to your steady power'],
+  ['Anaerobic Punch', 60,   '#f59e0b', 'best 1-minute power against your own best 5-minute power',  'what you can do over a short, hard effort'],
+  ['Sustained Power', 1200, '#60a5fa', 'best 20-minute power against your own best 5-minute power', 'how well your power holds as the effort lengthens'],
+  ['Aerobic Depth',   3600, '#4ade80', 'best 1-hour power against your own best 5-minute power',    'how deep your aerobic engine runs']
+];
+function _dnaDurLabel_(s){ return s<60?(s+'-second'):(Math.round(s/60)+'-minute'); }
+function _dnaPowerAxes_(){
+  var src=(typeof st!=='undefined'&&st&&Array.isArray(st.rides))?st.rides:[];
+  var isRunR=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String((r&&(r.sportType||r.type))||'')); };
+  var rows=src.filter(function(r){ return r && r.date && !r.deleted && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
+  var best=function(list,d){ var b=0; list.forEach(function(r){ var v=+r.powerCurve[d]; if(v>b) b=v; }); return b; };
+  var anchor=best(rows,300);
+  if(rows.length<_DNA_PC_MIN || !(anchor>0)) return { ok:false, n:rows.length, anchor:anchor, axes:[] };
+  // Per-year series. A year with no power-curve rides is a GAP, not a zero — _gcSpark_ breaks the
+  // line there rather than drawing a collapse the athlete never had.
+  var years={};
+  rows.forEach(function(r){ var y=String(r.date).slice(0,4); (years[y]=years[y]||[]).push(r); });
+  var yKeys=Object.keys(years).sort();
+  var axes=_DNA_PWR_DEFS.map(function(p){
+    var w=best(rows,p[1]);
+    return { key:'d'+p[1], label:p[0], secs:p[1], durLabel:_dnaDurLabel_(p[1]), col:p[2], deriv:p[3], blurb:p[4],
+      watts:w, ratio:(w>0?Math.round(w/anchor*100)/100:0),
+      series:yKeys.map(function(y){
+        var g=years[y], a=best(g,300), n=best(g,p[1]);
+        return { v:(a>0&&n>0&&g.length>=3)?Math.round(n/a*100)/100:null, lab:y };
+      }) };
+  });
+  return { ok:true, n:rows.length, anchor:anchor, axes:axes };
+}
+// RADAR over the four power axes ONLY. They share one unit (x your own 5-min power), so one shared
+// scale is honest and no per-axis conversion is invented. Climber (ft/mi), Consistency (% of weeks)
+// and Explorer (a count) are deliberately NOT on here: putting them on would require mapping three
+// different units onto a common 0-100, and the app has exactly one normalization (_zsCompute_,
+// monthly distance z) which does not cover any of them. That conversion would be a second
+// normalization and needs its own decision, not one made inside a chart.
+function _dnaRadarHTML_(){
+  var P=_dnaPowerAxes_();
+  if(!P || !P.ok){
+    return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);line-height:1.55">Power profile needs a power curve on at least '
+      +_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry one so far. Rides imported from FIT or TCX files carry it; Strava-only rides do not.</div>';
+  }
+  var drawn=P.axes.filter(function(a){ return a.ratio>0; });
+  if(drawn.length<3) return '<div style="font-size:12.5px;color:var(--d-dim,#8b93a7)">Not enough distinct efforts yet to draw a profile.</div>';
+  var W=250, C=125, R=86;
+  // Scale runs 0..MAX where MAX is the next whole multiple above the biggest axis, so the shape
+  // always fits and the rings stay round numbers a reader can name.
+  var top=0; drawn.forEach(function(a){ if(a.ratio>top) top=a.ratio; });
+  var MAX=Math.max(1, Math.ceil(top));
+  var n=drawn.length;
+  var pt=function(i, mag){
+    var ang=(-Math.PI/2)+(i*2*Math.PI/n), rr=R*Math.max(0,Math.min(1,mag/MAX));
+    return { x:C+rr*Math.cos(ang), y:C+rr*Math.sin(ang) };
+  };
+  var svg='<svg viewBox="0 0 '+W+' '+W+'" style="width:100%;max-width:270px;height:auto" role="img" aria-label="Power profile radar">';
+  // rings at each whole ratio
+  for(var ring=1; ring<=MAX; ring++){
+    var pts=[];
+    for(var i=0;i<n;i++){ var q=pt(i,ring); pts.push(q.x.toFixed(1)+','+q.y.toFixed(1)); }
+    svg+='<polygon points="'+pts.join(' ')+'" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="1"/>';
+    svg+='<text x="'+(C+3)+'" y="'+(C-R*ring/MAX+9)+'" font-size="8" fill="rgba(255,255,255,.32)" font-family="-apple-system,sans-serif">'+ring+'x</text>';
+  }
+  // spokes
+  for(var s=0;s<n;s++){ var e=pt(s,MAX); svg+='<line x1="'+C+'" y1="'+C+'" x2="'+e.x.toFixed(1)+'" y2="'+e.y.toFixed(1)+'" stroke="rgba(255,255,255,.09)" stroke-width="1"/>'; }
+  // the shape
+  var poly=[];
+  for(var k=0;k<n;k++){ var v=pt(k,drawn[k].ratio); poly.push(v.x.toFixed(1)+','+v.y.toFixed(1)); }
+  svg+='<polygon points="'+poly.join(' ')+'" fill="rgba(96,165,250,.20)" stroke="#60a5fa" stroke-width="2" stroke-linejoin="round"/>';
+  for(var m=0;m<n;m++){ var d2=pt(m,drawn[m].ratio);
+    svg+='<circle cx="'+d2.x.toFixed(1)+'" cy="'+d2.y.toFixed(1)+'" r="3.2" fill="'+drawn[m].col+'"/>'; }
+  svg+='</svg>';
+  var legend='<div style="display:flex;flex-direction:column;gap:7px;min-width:180px">';
+  drawn.forEach(function(a){
+    legend+='<div style="display:flex;align-items:baseline;gap:8px;font-size:12px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+a.col+';flex-shrink:0"></span>'
+      +'<span style="color:var(--d-t1,#cbd5e1);flex:1">'+a.label+'</span>'
+      +'<span style="color:var(--d-head,#f1f5f9);font-weight:800">'+a.ratio.toFixed(2)+'x</span></div>';
+  });
+  legend+='<div style="font-size:10px;color:var(--d-dim,#8b93a7);margin-top:4px;line-height:1.5">Each axis is your best power for that duration divided by your best 5-minute power ('+Math.round(P.anchor)+' W), from '+P.n+' rides carrying a power curve. Shape, not fitness &mdash; a stronger rider lifts every point.</div>';
+  legend+='</div>';
+  return '<div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-top:12px">'
+    +'<div style="flex:0 0 auto">'+svg+'</div>'+legend+'</div>';
+}
 function _dnaTraits_(acts){
   var T=[], G='#4ade80', A='#f59e0b', B='#60a5fa', P='#a855f7', TEAL='#2dd4bf';
   var runs=acts.filter(function(a){return a.sport==='run';});
@@ -23138,52 +23252,23 @@ function _dnaTraits_(acts){
   // is why nothing here measures variance or repeatability — those would need data that does not
   // exist, so the traits below measure capability instead and are named for what they actually are.
   (function(){
-    var PC_MIN=5;                       // below this the window cannot characterise a rider
-    // READS st.rides DIRECTLY, and that is deliberate. allRidesDeduped_ serves the store_v2
-    // snapshot, which is a slimmed projection with its OWN field vocabulary (distanceM, elevGainM,
-    // movingSec, avgPower) and NO powerCurve at all — 0 of 409 carry it, against 307 on st.rides.
-    // Routing this through the canonical accessor silently locked all four traits, which is how
-    // this was caught. Raw duplicates are harmless here because every figure below is a MAXIMUM:
-    // a ride imported twice cannot raise its own best 5-second power.
-    var src=(typeof st!=='undefined'&&st&&Array.isArray(st.rides))?st.rides:[];
-    var isRunR=function(r){ return /run|treadmill/i.test((typeof rideSport_==='function')?rideSport_(r):String((r&&(r.sportType||r.type))||'')); };
-    var pcRides=src.filter(function(r){ return r && r.date && !r.deleted && !isRunR(r) && r.powerCurve && typeof r.powerCurve==='object'; });
-    var best=function(rows,d){ var b=0; rows.forEach(function(r){ var v=+r.powerCurve[d]; if(v>b) b=v; }); return b; };
-    // Per-year ratio series, so each trait carries the same "how did this move" history the other
-    // traits show. A year with no power-curve rides is a GAP, not a zero — _gcSpark_ breaks the
-    // line there rather than drawing a collapse the athlete never had.
-    var years={};
-    pcRides.forEach(function(r){ var y=String(r.date).slice(0,4); (years[y]=years[y]||[]).push(r); });
-    var yKeys=Object.keys(years).sort();
-    var series=function(d){
-      var out=[];
-      yKeys.forEach(function(y){
-        var rows=years[y], a=best(rows,300), n=best(rows,d);
-        out.push({ v:(a>0&&n>0&&rows.length>=3)?Math.round(n/a*100)/100:null, lab:y });
+    // Guarded like every other cross-function call in this bundle: the power axes live in their
+    // own function so the radar can share them, and a trait list must never hard-fail because one
+    // helper is out of scope.
+    if(typeof _dnaPowerAxes_!=='function') return;
+    var P=_dnaPowerAxes_();
+    if(!P || !P.ok){
+      _DNA_PWR_DEFS.forEach(function(p){
+        T.push(_dnaLock_(p[0], 'needs power data on at least '+_DNA_PC_MIN+' rides &mdash; '+((P&&P.n)||0)+' carry a power curve so far', p[2]));
       });
-      return out;
-    };
-    var anchor=best(pcRides,300);
-    var PWR=[
-      ['Sprinter',        5,    '#ef4444', 'peak 5-second power against your own best 5-minute power', 'how explosive you are relative to your steady power'],
-      ['Anaerobic Punch', 60,   '#f59e0b', 'best 1-minute power against your own best 5-minute power', 'what you can do over a short, hard effort'],
-      ['Sustained Power', 1200, '#60a5fa', 'best 20-minute power against your own best 5-minute power', 'how well your power holds as the effort lengthens'],
-      ['Aerobic Depth',   3600, '#4ade80', 'best 1-hour power against your own best 5-minute power', 'how deep your aerobic engine runs']
-    ];
-    if(pcRides.length<PC_MIN || !(anchor>0)){
-      PWR.forEach(function(p){
-        T.push(_dnaLock_(p[0], 'needs power data on at least '+PC_MIN+' rides — '+pcRides.length+' carry a power curve so far', p[2]));
-      });
-    } else {
-      PWR.forEach(function(p){
-        var n=best(pcRides,p[1]);
-        if(!(n>0)){ T.push(_dnaLock_(p[0], 'no recorded '+(p[1]<60?(p[1]+'-second'):(Math.round(p[1]/60)+'-minute'))+' effort yet', p[2])); return; }
-        var ratio=Math.round(n/anchor*100)/100;
-        T.push(_dnaTrait_(p[0], ratio.toFixed(2)+'x your 5-min power',
-          'Your best '+(p[1]<60?(p[1]+'-second'):(Math.round(p[1]/60)+'-minute'))+' power is '+Math.round(n)+' W against a best 5-minute of '+Math.round(anchor)+' W &mdash; '+p[4]+'.',
-          p[3], p[2], series(p[1]), 'ratio by year (a gap is a year with no power data)'));
-      });
+      return;
     }
+    P.axes.forEach(function(a){
+      if(!(a.watts>0)){ T.push(_dnaLock_(a.label, 'no recorded '+a.durLabel+' effort yet', a.col)); return; }
+      T.push(_dnaTrait_(a.label, a.ratio.toFixed(2)+'x your 5-min power',
+        'Your best '+a.durLabel+' power is '+Math.round(a.watts)+' W against a best 5-minute of '+Math.round(P.anchor)+' W &mdash; '+a.blurb+'.',
+        a.deriv, a.col, a.series, 'ratio by year (a gap is a year with no power data)'));
+    });
   })();
   // ---- EXPLORER: new ground, measured as segments you had never ridden before.
   // Counted as FIRST-EVER effort dates per segment, so re-riding a favourite does not read as
