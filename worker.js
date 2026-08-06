@@ -13146,7 +13146,7 @@ function _lgHTML_(){
     +'<div style="font-size:11px;color:#60a5fa;font-weight:700">cycling</div></div>'
     +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px;line-height:1.5">'
     +'Scored against your own curve, never against other athletes &mdash; Strava exposes no ranking to compare with. '
-    +'The four power traits share one scale; the other three are stated in their own units below.</div>'
+    +'Every duration is measured against your own best at that duration; Climber, Consistency and Explorer are stated in their own units below.</div>'
     +_dnaRadarHTML_()
     +((typeof _dnaOtherTraitsHTML_==='function')?_dnaOtherTraitsHTML_():'')
     +'</div>';
@@ -23256,7 +23256,14 @@ function _dnaRadarHTML_(){
         +' W) is LOWER than a longer duration, which a real power curve cannot do. The figure is plotted exactly as stored rather than smoothed &mdash; the fault is in how the import computes that window, and it is tracked separately.</div>'):'';
       var nar=_dnaCurveNarrative_(C);
       var narHTML=nar?('<div style="font-size:12.5px;color:var(--d-t1,#334155);line-height:1.6;margin-top:11px;padding-top:11px;border-top:1px solid var(--d-edge,rgba(0,0,0,.13))">'+nar+'</div>'):'';
-      return '<div style="margin-top:8px">'+svg+bandKey+legend+susNote+narHTML
+      // Chart and its key sit side by side once there is room, and stack under ~640px. The chart
+      // is capped at 460px, so on a full-width desktop panel it was stranded in the left third
+      // with the key stretched under it.
+      return '<div style="margin-top:8px">'
+        +'<div style="display:flex;flex-wrap:wrap;gap:10px 26px;align-items:center">'
+        +'<div style="flex:0 1 460px;min-width:280px">'+svg+'</div>'
+        +'<div style="flex:1 1 280px;min-width:250px">'+bandKey+legend+susNote+'</div>'
+        +'</div>'+narHTML
         +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:8px;line-height:1.55">Every spoke is its own scale &mdash; the rim is your all-time best AT THAT DURATION and the filled shape is the last '
         +C.days+' days as a share of it, so a 782 W sprint never dwarfs a 186 W hour. Ten durations because ten is what the imports actually store; 3m, 15m and 45m are not recorded and are not invented.</div></div>';
     }
