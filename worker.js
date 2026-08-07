@@ -26641,11 +26641,17 @@ function aiSegTargetsHtml_(ctx){
   // shown so the number can never be read as more complete than it is.
   var unchecked=Math.max(0, d.komable-d.checked);
   var crownStr=(d.checked>0)?String(d.held):'&mdash;';
+  // The unchecked em-dash is NOT drawn at the headline size. At 38px/800 it renders as a heavy black
+  // bar that reads as a redaction or a failed load rather than "nothing measured yet" — the opposite
+  // of the honesty it is there to carry. Unmeasured is drawn quiet and small; a real count is loud.
+  var crownSize=(d.checked>0)?'38px':'26px';
+  var crownWeight=(d.checked>0)?'800':'600';
+  var crownCol=(d.checked>0)?(d.held>0?SA_FOG_STYLE[4].line:'var(--d-head)'):'var(--d-dim)';
   H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">';
   H+='<div style="min-width:0">'
     +'<div style="'+LBL+';color:'+SA_FOG_STYLE[4].line+'">Crowns held</div>'
     +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
-      +'<span style="font-size:38px;font-weight:800;line-height:1;color:'+(d.held>0?SA_FOG_STYLE[4].line:'var(--d-head)')+'">'+crownStr+'</span>'
+      +'<span style="font-size:'+crownSize+';font-weight:'+crownWeight+';line-height:1;color:'+crownCol+'">'+crownStr+'</span>'
       +'<span style="font-size:13px;color:var(--d-t3);font-weight:600">of '+d.total.toLocaleString()+' target'+(d.total===1?'':'s')+'</span></div>'
     +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.5">'
     +(d.checked>0
