@@ -26359,144 +26359,412 @@ function _saFogMount_(){
 }
 // The section. One renderer for both surfaces, same as the rest of this page - the map is a block
 // element sized in CSS, so the only thing that changes with width is its height.
-function aiSegFogHtml_(){
+// ==================== TARGET LIST — the primary Segment Attack view ====================
+//
+// This REPLACES the fog-of-war coverage map as the page's main view. The map answered "where have I
+// been", which is an open-ended 2,017-segment haystack; this answers "which segments am I trying to
+// convert into PRs and crowns, and how far along am I" — a closed, finite list you can finish.
+//
+// MEMBERSHIP IS TWO TIMESTAMPS, NOT A BOOLEAN. mergeState_ merges booleans with a-OR-b, so a
+// target:false can never beat a remote true and "remove from my list" would silently undo
+// itself on the next sync — the same class of bug as deleting a key from a synced object store.
+// Numbers merge with Math.max, so a pair of monotonic stamps is a correct last-write-wins: whichever
+// action happened later wins on every device, in both directions.
+function _saIsTarget_(seg){ return (+((seg&&seg.targetAt)||0)) > (+((seg&&seg.untargetAt)||0)); }
+// The seed stamp is a CONSTANT, deliberately not Date.now(). Seeding runs on every render (idempotent
+// — max-merging the same constant is that constant), which avoids the synced-migration-flag trap:
+// a one-shot guard would be blocked from re-running while sync re-added what it dropped. Because the
+// stamp is 1, ANY real user action carries a larger number and always wins over the seed, so a
+// removed target stays removed instead of being re-seeded on the next load.
+var _SA_TARGET_SEED_AT=1;
+function _saSeedTargets_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
-  var d=_saFogList_(store, _saKomLive), esc=aiEsc_;
+  var n=0;
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s) return;
+    if(s.targetAt!=null || s.untargetAt!=null) return;          // already decided, either way
+    if(!(s.starred || +s.prSec>0)) return;                      // seed = starred UNION has a Strava PB
+    s.targetAt=_SA_TARGET_SEED_AT; n++;
+  });
+  return n;
+}
+function _saSetTarget_(key, on){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:null;
+  var s=store&&store[key]; if(!s) return;
+  if(on) s.targetAt=Date.now(); else s.untargetAt=Date.now();
+  try{ if(typeof sv==='function') sv(); }catch(e){}
+  try{ if(typeof aiSetTab_==='function') aiSetTab_('segattack'); }catch(e){}
+}
+window._saSetTarget_=_saSetTarget_;
+// Strava's own sidebar buckets, which are already the right shape for this: Personal best, then
+// Ridden 3+ / twice / once. "Never ridden" is added because 50 starred segments have no effort on
+// record at all — they were flagged as somewhere to go, not somewhere that has been.
+var _SA_BUCKETS=[
+  {k:'pb',    label:'Personal best',  col:SA_FOG_STYLE[3].line},
+  {k:'three', label:'Ridden 3+',      col:SA_FOG_STYLE[2].line},
+  {k:'twice', label:'Ridden twice',   col:SA_FOG_STYLE[1].line},
+  {k:'once',  label:'Ridden once',    col:SA_FOG_STYLE[0].line},
+  {k:'never', label:'Never ridden',   col:'#64748b'}
+];
+// One row per target. Every field states what it is and, when it is missing, WHY — a blank
+// chance-of-PR cell would read as "no chance" when it means "the model has nothing to fit".
+function _saTargetRows_(ctx){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var rows=[], counts={pb:0,three:0,twice:0,once:0,never:0}, komable=0, checked=0, held=0, scored=0;
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s || !_saIsTarget_(s)) return;
+    var effs=(s.efforts&&s.efforts.length)?s.efforts:[];
+    // MAX, not "field else array". The stored effortCount and the recorded effort array disagree —
+    // Hannah Lake Sprint carries effortCount 1 while holding enough powered efforts for the model to
+    // fit a CdA, which needs three. Printing "1 ride" beside a fitted probability invites exactly the
+    // question the row cannot answer. The array length is a hard floor on efforts actually known.
+    var n=Math.max(+s.effortCount||0, effs.length);
+    // The Strava PB is server-side and all-time. A "PB" derived from local effort history is the
+    // fastest thing ON RECORD, which is not the same claim, so it is labelled differently.
+    var prSec=(+s.prSec>0)?+s.prSec:null, prDerived=false;
+    if(prSec==null){ var f=null; effs.forEach(function(e){ if(e&&e.s>0&&(!f||e.s<f.s)) f=e; }); if(f){ prSec=f.s; prDerived=true; } }
+    var bucket = (+s.prSec>0)?'pb' : (n>=SA_FOG_E3?'three' : (n===2?'twice' : (n===1?'once':'never')));
+    counts[bucket]++;
+    // Chance of PR, from the existing physics model (out.prob). It only returns a number when it
+    // could fit CdA from 3+ efforts carrying power; every other outcome is a reason, carried through
+    // verbatim rather than blanked.
+    //
+    // CONTESTED travels with it and is not decoration. The model's probability is against the
+    // STANDING TIME, and on most segments that time was a soft pass — the first version of this
+    // feature listed 77 "winnable" segments all pinned at the 95% ceiling because beating a 108W
+    // cruise with a 234W capability is arithmetic, not a PR attempt. So an uncontested segment shows
+    // its number labelled as an easy mark, never ranked as an opportunity.
+    var chance=null, chanceWhy='', contested=false, capped=false, evidence=null, note='';
+    var ev=null; try{ ev=_saEvaluate_(s, ctx); }catch(e){ ev=null; }
+    if(ev && ev.tier==='full' && ev.prob!=null){
+      chance=ev.prob; contested=!!ev.contested; capped=!!ev.probCapped;
+      evidence=ev.evidence||null; note=ev.note||''; scored++;
+    }
+    else if(bucket==='never') chanceWhy='never ridden';
+    else if(ev && ev.why) chanceWhy=ev.why;
+    else chanceWhy='not enough data to model';
+    var num=_saSegNum_(s.id);
+    var cand=_saKomCandidate_(s); if(cand) komable++;
+    var lv=num?(_saKomLive['s'+num]||null):null;
+    if(lv && !lv.err){ checked++; if(lv.holds===true) held++; }
+    rows.push({ key:k, id:s.id, num:num, name:s.name||'Segment', bucket:bucket,
+                distMi:(+s.distMi>0)?+s.distMi:null, grade:(s.grade!=null)?+s.grade:null,
+                prSec:prSec, prDerived:prDerived, prDate:s.prDate||null, efforts:n,
+                chance:chance, chanceWhy:chanceWhy, contested:contested, capped:capped,
+                evidence:evidence, note:note, komable:cand, live:lv,
+                hasGeom:(s.startLat!=null&&s.startLon!=null) });
+  });
+  // Contested-and-scored first (the real opportunities), then scored-but-soft, then unscorable —
+  // and within each, longest odds last. Ordering IS the recommendation on this page, so an
+  // uncontested 95% must never sort above a contested 60%.
+  var rank=function(r){ return (r.chance!=null&&r.contested)?0:((r.chance!=null)?1:2); };
+  rows.sort(function(a,b){
+    if(rank(a)!==rank(b)) return rank(a)-rank(b);
+    if(a.chance!=null&&b.chance!=null&&a.chance!==b.chance) return b.chance-a.chance;
+    return (b.efforts||0)-(a.efforts||0);
+  });
+  return { rows:rows, counts:counts, total:rows.length, komable:komable,
+           checked:checked, held:held, scored:scored };
+}
+// ORGANIC GROWTH. Segments first ridden recently that are NOT already targets — "you rode through N
+// new segments, add them?" rather than making the athlete hunt through 2,017.
+//
+// A ROLLING 30-DAY WINDOW, not the calendar month. A month window is empty for the first week of
+// every month by construction — on the day this was built (Aug 7) it returned zero while July alone
+// had first seen 109 new segments, so the prompt would simply not exist for a quarter of the year.
+// The window is stated in the copy, so a rolling count is not passed off as a calendar one.
+//
+// First-seen comes from the earliest effort date on record. A segment with no dated effort cannot be
+// placed in time at all and is excluded rather than guessed at.
+var _SA_NEW_WINDOW_D=30;
+function _saNewSegs_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var cut=new Date(); cut.setDate(cut.getDate()-_SA_NEW_WINDOW_D);
+  var ck=cut.getFullYear()+'-'+('0'+(cut.getMonth()+1)).slice(-2)+'-'+('0'+cut.getDate()).slice(-2);
+  var out=[];
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s || _saIsTarget_(s)) return;
+    if(s.untargetAt!=null) return;                    // explicitly removed once — do not re-offer
+    var first=null;
+    (s.efforts||[]).forEach(function(e){ if(e&&e.d&&(!first||e.d<first)) first=e.d; });
+    if(!first || String(first).slice(0,10)<ck) return;
+    out.push({key:k, name:s.name||'Segment', distMi:(+s.distMi>0)?+s.distMi:null});
+  });
+  out.sort(function(a,b){ return (b.distMi||0)-(a.distMi||0); });
+  return {list:out, days:_SA_NEW_WINDOW_D};
+}
+function _saAddNewMonth_(){
+  var d=_saNewSegs_();
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var t=Date.now();
+  d.list.forEach(function(x){ if(store[x.key]) store[x.key].targetAt=t; });
+  try{ if(typeof sv==='function') sv(); }catch(e){}
+  try{ if(typeof toast==='function') toast(d.list.length+' segment'+(d.list.length===1?'':'s')+' added to your targets'); }catch(e){}
+  try{ if(typeof aiSetTab_==='function') aiSetTab_('segattack'); }catch(e){}
+}
+window._saAddNewMonth_=_saAddNewMonth_;
+// Crown sweep over the TARGET list. Same 100-read/15-min ceiling as everywhere else on this page, so
+// it caps per press and REPORTS the cap rather than stopping quietly. Session-only by construction —
+// _saKomFetch_ writes to _saKomLive, which is a plain var and dies on reload.
+var SA_TGT_SWEEP_CAP=90, _saTgtSweeping=false;
+function _saTgtKomPending_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var out=[];
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s || !_saIsTarget_(s) || !_saKomCandidate_(s)) return;
+    var num=_saSegNum_(k)||_saSegNum_(s.id); if(!num) return;
+    if(_saKomLive['s'+num]) return;                    // already answered this session
+    out.push({key:k, num:num, id:s.id});
+  });
+  return out;
+}
+function _saTgtKomSweep_(){
+  var btn=document.getElementById('sa-tgt-sweep'), note=document.getElementById('sa-tgt-note');
+  var say=function(t){ if(note) note.innerHTML=t; };
+  if(_saTgtSweeping){ say('Already checking&hellip;'); return; }
+  var list=_saTgtKomPending_();
+  if(!list.length){ say('Every target with a PB has been checked this session.'); return; }
+  var capped=list.length>SA_TGT_SWEEP_CAP, run=list.slice(0, SA_TGT_SWEEP_CAP);
+  _saTgtSweeping=true; if(btn) btn.disabled=true;
+  var i=0, held=0, done=0, errs=0;
+  var step=function(){
+    if(i>=run.length){
+      _saTgtSweeping=false; if(btn) btn.disabled=false;
+      say('Checked '+done+' of '+list.length+' unchecked target'+(list.length===1?'':'s')
+        +(capped?(' &mdash; capped at '+SA_TGT_SWEEP_CAP+' per press, press again for the next '+Math.min(SA_TGT_SWEEP_CAP, list.length-run.length)):'')
+        +'. '+held+' held'+(errs?(', '+errs+' unavailable'):'')+'. Nothing was stored.');
+      try{ if(typeof aiSetTab_==='function') aiSetTab_('segattack'); }catch(e){}
+      return;
+    }
+    var it=run[i++];
+    say('Checking '+i+' of '+run.length+'&hellip; '+held+' held so far.');
+    _saKomFetch_(it.num, function(v){
+      done++;
+      if(v && v.err) errs++;
+      if(v && v.holds===true) held++;
+      setTimeout(step, 700);                           // ~85 requests per 15 min at worst
+    });
+  };
+  step();
+}
+window._saTgtKomSweep_=_saTgtKomSweep_;
+// Per-row map. The map is SECONDARY now: one segment, on demand, instead of 1,942 plotted at once.
+var _saRowMap=null, _saRowMapKey=null;
+function _saRowMapToggle_(key){
+  var host=document.getElementById('sa-rowmap-'+key);
+  if(!host) return;
+  var open=host.getAttribute('data-open')==='1';
+  // Only one open at a time — two Leaflet instances on a list this long is all cost, no benefit.
+  try{
+    var all=document.querySelectorAll('[id^="sa-rowmap-"]');
+    for(var i=0;i<all.length;i++){ all[i].innerHTML=''; all[i].style.display='none'; all[i].setAttribute('data-open','0'); }
+  }catch(e){}
+  if(open){ _saRowMap=null; _saRowMapKey=null; return; }
+  host.style.display='block'; host.setAttribute('data-open','1');
+  // showScreen() removes EVERY .leaflet-container in the document, so mount on a CHILD of the sized
+  // box, never the box itself.
+  host.innerHTML='<div id="sa-rowmap-canvas" style="height:100%;border-radius:10px;overflow:hidden"></div>';
+  _saRowMapKey=key;
+  setTimeout(function(){ _saRowMapMount_(key); }, 0);
+}
+window._saRowMapToggle_=_saRowMapToggle_;
+function _saRowMapMount_(key){
+  var el=document.getElementById('sa-rowmap-canvas'); if(!el) return;
+  if(typeof L==='undefined') { el.innerHTML='<div style="padding:16px;font-size:11.5px;color:var(--d-dim)">Map library not loaded.</div>'; return; }
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var s=store[key]; if(!s || s.startLat==null){ el.innerHTML='<div style="padding:16px;font-size:11.5px;color:var(--d-dim)">No coordinates stored for this segment yet.</div>'; return; }
+  var pts=_saPoly[key]||null, realShape=!!(pts&&pts.length>1);
+  if(!realShape){
+    pts=[[+s.startLat,+s.startLon]];
+    if(s.endLat!=null&&s.endLon!=null) pts.push([+s.endLat,+s.endLon]);
+  }
+  var map;
+  // zoomSnap defaults to INTEGER, so fitBounds on a short segment wanting z16.6 gives z16 and opens
+  // ~1.5x too far out. zoomDelta stays 1 so the buttons still step whole levels.
+  try{ map=L.map(el,{zoomControl:true, attributionControl:false, zoomSnap:0.25, zoomDelta:1}); }catch(e){ return; }
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  var line=L.polyline(pts,{color:SA_FOG_STYLE[3].line, weight:5, opacity:.95,
+    dashArray: realShape?null:'7 6'}).addTo(map);
+  L.circleMarker(pts[0],{radius:5,color:'#fff',weight:2,fillColor:SA_FOG_STYLE[4].line,fillOpacity:1}).addTo(map);
+  try{ map.fitBounds(line.getBounds().pad(0.25)); }catch(e){ map.setView(pts[0], 15); }
+  // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
+  // renders empty and THROWS NOTHING. Desktop came up fine and mobile came up blank from identical
+  // code until this was added.
+  setTimeout(function(){ try{ map.invalidateSize(); map.fitBounds(line.getBounds().pad(0.25)); }catch(e){} }, 160);
+  _saRowMap=map;
+  if(!realShape){
+    var note=L.control({position:'bottomleft'});
+    note.onAdd=function(){ var d=L.DomUtil.create('div');
+      d.style.cssText='background:rgba(8,12,20,.85);color:#9aa7bd;font:600 10px/1.4 inherit;padding:5px 8px;border-radius:6px;max-width:220px';
+      d.innerHTML='Straight line between the two stored endpoints &mdash; the real road shape has not been fetched for this segment.';
+      return d; };
+    note.addTo(map);
+  }
+}
+// THE PRIMARY VIEW. A scannable target list, bucketed the way Strava's own segment sidebar is.
+function aiSegTargetsHtml_(ctx){
+  var esc=aiEsc_;
+  _saSeedTargets_();
+  var d=_saTargetRows_(ctx);
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var libN=Object.keys(store).length;
   var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<style>'
-    +'#sa-fog-map{height:620px;max-width:1060px;margin-left:auto;margin-right:auto;border-radius:12px;background:#070c14}'
-    +'@media(max-width:820px){#sa-fog-map{height:460px;max-width:none}}'
-    +'@media(max-width:520px){#sa-fog-map{height:400px}}'
-    // The fog itself. Carto dark_all is not dark enough on its own: Lake Michigan renders as a large
-    // mid-grey mass that was the BRIGHTEST object in the default view - unexplored water reading as
-    // lit ground - and the city labels sat above several segment tiers in value. Pushing brightness
-    // and saturation down turns the whole basemap into terrain you can still orient by while making
-    // it incapable of competing with anything drawn on top.
-    +'#sa-fog-canvas{background:#070c14}'
-    +'#sa-fog-canvas .leaflet-tile-pane{filter:saturate(.4) contrast(1.05)}'
-    // Place names ride ABOVE the fog and above every segment, at full strength and slightly lifted
-    // in contrast. Orientation is never in doubt, whatever the fog is doing underneath.
-    +'.sa-fog-labels{filter:brightness(1.9) contrast(1.15);opacity:.95}'
-    // THE CLOUD LAYER. Flat vignetting reads as a dark rectangle; what reads as unexplored ground
-    // is uneven cover - soft masses of different size and offset, densest at the corners, thinning
-    // toward the middle where the riding is. Five overlapping radial masses plus one broad falloff,
-    // all in the same blue-black as the ground so they look like depth rather than a filter.
-    // Eleven overlapping masses at deliberately uneven sizes, offsets and opacities. Evenly spaced
-    // blobs read as a filter; unequal ones read as weather. Two of them are lighter than the ground
-    // rather than darker, which is what stops the cover looking like a single flat sheet.
-    +'.sa-fog-tex{position:absolute;left:0;top:0;pointer-events:none;'
-      +'background:'
-        +'radial-gradient(34% 31% at 5% 4%,rgba(14,20,34,.95),rgba(14,20,34,0) 70%),'
-        +'radial-gradient(22% 19% at 22% 13%,rgba(30,38,58,.34),rgba(30,38,58,0) 68%),'
-        +'radial-gradient(29% 26% at 95% 6%,rgba(11,16,28,.92),rgba(11,16,28,0) 68%),'
-        +'radial-gradient(19% 24% at 78% 17%,rgba(26,33,52,.3),rgba(26,33,52,0) 70%),'
-        +'radial-gradient(37% 30% at 2% 62%,rgba(12,17,29,.9),rgba(12,17,29,0) 72%),'
-        +'radial-gradient(31% 34% at 99% 58%,rgba(11,16,27,.88),rgba(11,16,27,0) 70%),'
-        +'radial-gradient(41% 33% at 7% 97%,rgba(12,17,29,.94),rgba(12,17,29,0) 73%),'
-        +'radial-gradient(35% 29% at 93% 99%,rgba(10,15,26,.92),rgba(10,15,26,0) 71%),'
-        +'radial-gradient(26% 20% at 44% 1%,rgba(13,18,31,.8),rgba(13,18,31,0) 74%),'
-        +'radial-gradient(28% 22% at 57% 100%,rgba(11,16,27,.84),rgba(11,16,27,0) 76%),'
-        +'radial-gradient(125% 100% at 50% 48%,rgba(0,0,0,0) 34%,rgba(6,10,18,.78) 100%)}'
-    // A vignette over the tiles (under the segments) deepens the edges so the lit middle reads as a
-    // clearing rather than as a rectangle of map. Pointer-events off so it never eats a click.
-    +'#sa-fog-map{position:relative;overflow:hidden}'
-    // No :after vignette here any more. It sat above the whole Leaflet container, which meant it
-    // dimmed the city labels along with everything else - the exact thing the labels layer exists to
-    // prevent. The cloud pane does this job instead, from underneath the labels.
-
-    +'.sa-fogchip{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
-      +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none}'
-    +'.sa-fogbtn{background:none;border:1px solid var(--d-edge);color:var(--d-soft);font-size:11px;font-weight:700;'
-      +'border-radius:9px;padding:6px 12px;cursor:pointer;font-family:inherit}'
+    +'.sa-t{width:100%;border-collapse:collapse}'
+    +'.sa-t th{text-align:left;font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;'
+      +'color:var(--d-dim);padding:0 10px 7px;white-space:nowrap}'
+    +'.sa-t td{padding:9px 10px;border-top:1px solid var(--d-edge3);font-size:12.5px;color:var(--d-soft);vertical-align:middle}'
+    +'.sa-t tr.sa-tr:hover td{background:var(--d-inset)}'
+    +'.sa-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
+    +'.sa-why{font-size:11px;color:var(--d-dim);font-weight:600}'
+    +'.sa-tbtn{background:none;border:1px solid var(--d-edge);color:var(--d-t3);font-size:10.5px;font-weight:700;'
+      +'border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;white-space:nowrap}'
+    +'.sa-tbtn:hover{color:var(--d-head);border-color:#3a4457}'
+    // Below 760px the table sheds its two lowest-value columns rather than scrolling sideways:
+    // effort count and grade are context, name/PB/chance are the job.
+    +'@media(max-width:760px){.sa-t .sa-opt{display:none}.sa-t td,.sa-t th{padding-left:6px;padding-right:6px}}'
     +'</style>';
-  H+='<div style="margin-top:26px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px 18px">';
-  H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">'
-    +'<div><div style="font-size:15px;font-weight:800;color:var(--d-head)">Segment coverage</div>'
-    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:4px">Every segment you have attempted, where it actually is. Tap one for its record.</div></div>'
-    +'<div style="display:flex;gap:7px;flex-wrap:wrap">'
-    +'<button class="sa-fogbtn" onclick="_saFogFit_(false)">Home</button>'
-    +'<button class="sa-fogbtn" onclick="_saFogFit_(true)">Fit all</button>'
-    +'<button class="sa-fogbtn" id="sa-kom-sweep" onclick="_saKomSweep_()" style="border-color:#ff7a1855;color:#ffa53d">Check placements in view</button>'
-    +'<button class="sa-fogbtn" id="sa-poly-lit" onclick="_saPolySweep_(true)" style="border-color:#ff5c8a55;color:#ff5c8a">Fetch road shapes (lit)</button>'
-    +'<button class="sa-fogbtn" id="sa-poly-all" onclick="_saPolySweep_(false)">All shapes</button>'
-    +'</div></div>';
 
-  if(!d.segs.length){
-    return H+'<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:12.5px;line-height:1.6">'
-      +'No segment has stored coordinates yet.<br>Run the segment effort backfill in Settings and this map fills in.</div></div>';
+  H+='<div style="margin-top:26px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px 18px">';
+
+  // ---- THE HEADLINE: crowns held, over the closed target list -------------------------------
+  // This is the hook the whole reframe exists for, and it is the one number on this page that
+  // CANNOT be known without asking Strava. There is no stored placement anywhere in this app by
+  // deliberate design: Strava's per-effort kom_rank is stamped at upload time and is already wrong
+  // on this athlete's own data (a segment carrying rank 1 while sitting 10s off the standing time),
+  // so storing it or re-fetching it both produce the same lie. The only honest answer is a live
+  // xoms-vs-PB comparison, at 100 reads per 15 minutes.
+  //
+  // So the figure is rendered as an EM-DASH until something has actually been checked. "0 of 192"
+  // would say the athlete holds no crowns; the truth before a sweep is that nobody has looked, and
+  // those are different claims. The denominator, the checked count and the unchecked count are all
+  // shown so the number can never be read as more complete than it is.
+  var unchecked=Math.max(0, d.komable-d.checked);
+  var crownStr=(d.checked>0)?String(d.held):'&mdash;';
+  H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">';
+  H+='<div style="min-width:0">'
+    +'<div style="'+LBL+';color:'+SA_FOG_STYLE[4].line+'">Crowns held</div>'
+    +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
+      +'<span style="font-size:38px;font-weight:800;line-height:1;color:'+(d.held>0?SA_FOG_STYLE[4].line:'var(--d-head)')+'">'+crownStr+'</span>'
+      +'<span style="font-size:13px;color:var(--d-t3);font-weight:600">of '+d.total.toLocaleString()+' target'+(d.total===1?'':'s')+'</span></div>'
+    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.5">'
+    +(d.checked>0
+      ? (d.checked.toLocaleString()+' checked &middot; '+unchecked.toLocaleString()+' unchecked')
+      : ('Not checked yet &mdash; '+d.komable.toLocaleString()+' target'+(d.komable===1?'':'s')+' have a PB to compare against'))
+    +'</div></div>';
+  H+='<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">'
+    +'<button class="sa-tbtn" id="sa-tgt-sweep" onclick="_saTgtKomSweep_()" style="border-color:'+SA_FOG_STYLE[4].line+'55;color:'+SA_FOG_STYLE[4].line+';font-size:11.5px;padding:8px 13px">'
+    +(unchecked>0?('Check crowns ('+Math.min(SA_TGT_SWEEP_CAP, unchecked)+' of '+unchecked+')'):'All checked')+'</button>'
+    +'</div></div>';
+  H+='<div id="sa-tgt-note" style="font-size:11px;color:var(--d-t3);margin-top:9px"></div>';
+  H+='<div style="font-size:11px;color:var(--d-dim);margin-top:7px;line-height:1.55">'
+    +'Placement is fetched live and thrown away &mdash; nothing about it is written to your data, so nothing in it can go stale. '
+    +'Only targets with a recorded PB are checked; a crown is not plausible on a segment you have ridden without ever setting a best.</div>';
+
+  // ---- the conversion funnel ----
+  // Read RIGHT to LEFT: never ridden -> once -> twice -> 3+ -> a personal best -> a crown. This is
+  // the progress the reframe is about, so the stages are drawn in that order rather than as an
+  // unordered legend.
+  //
+  // EMPTY STAGES ARE DRAWN, DIMMED, NOT HIDDEN. On the seeded list three of the five are zero by
+  // construction — every segment carrying a Strava PB lands in "Personal best", and the 50 starred
+  // ones have no recorded effort at all, so the middle of the funnel is genuinely empty until the
+  // list grows. Hiding those chips would make a two-stage list look like the whole story; showing
+  // them dimmed says the stages exist and nothing is in them yet.
+  H+='<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--d-edge)">'
+    +'<div style="'+LBL+'">Converting the list</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">';
+  _SA_BUCKETS.slice().reverse().forEach(function(b, i){
+    var n=d.counts[b.k]||0, on=(n>0);
+    if(i) H+='<span style="align-self:center;color:var(--d-dim);font-size:11px">&rsaquo;</span>';
+    H+='<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
+      +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;'
+      +'color:'+(on?b.col:'var(--d-dim)')+';opacity:'+(on?'1':'.45')+'">'
+      +'<span style="width:9px;height:9px;border-radius:50%;background:'+(on?b.col:'#39424f')+';flex:none"></span>'
+      +esc(b.label)+' <span style="color:var(--d-dim);font-weight:600">'+n+'</span></span>';
+  });
+  H+='<span style="align-self:center;color:var(--d-dim);font-size:11px">&rsaquo;</span>'
+    +'<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
+    +'background:var(--d-panel2,#151a22);border:1px solid '+SA_FOG_STYLE[4].line+'55;border-radius:999px;padding:5px 11px;'
+    +'color:'+(d.held>0?SA_FOG_STYLE[4].line:'var(--d-dim)')+';opacity:'+(d.held>0?'1':'.55')+'">'
+    +'&#9819; Crown <span style="color:var(--d-dim);font-weight:600">'+(d.checked>0?d.held:'&mdash;')+'</span></span>';
+  H+='</div></div>';
+
+  // ---- organic growth prompt ----
+  var nw=_saNewSegs_();
+  if(nw.list.length){
+    H+='<div style="margin-top:14px;background:#2563eb12;border:1px solid #2563eb33;border-radius:12px;padding:11px 13px;'
+      +'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'
+      +'<div style="min-width:0;font-size:12px;color:var(--d-t3);line-height:1.5">'
+      +'You rode through <b style="color:var(--d-head)">'+nw.list.length.toLocaleString()+'</b> new segment'+(nw.list.length===1?'':'s')+' in the last '+nw.days+' days'
+      +' that are not on your target list.<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">'
+      +esc(nw.list.slice(0,3).map(function(x){return x.name;}).join(' &middot; ').replace(/&middot;/g,'·'))
+      +(nw.list.length>3?(' and '+(nw.list.length-3)+' more'):'')+'</div></div>'
+      +'<button class="sa-tbtn" onclick="_saAddNewMonth_()" style="border-color:#2563eb66;color:#7ba7ff;font-size:11.5px;padding:7px 12px">Add all to targets</button>'
+      +'</div>';
   }
 
-  // legend / filters. Counts are the real tier populations, so an empty tier reads as empty rather
-  // than as a colour with nothing behind it.
-  H+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:13px">';
-  [['kom',SA_FOG_STYLE[4].line,'KOM/QOM held (live)',d.byTier[3]],
-   ['pr',SA_FOG_STYLE[3].line,'Personal best',d.byTier[2]],
-   ['seen',SA_FOG_STYLE[2].line,'Ridden ×'+SA_FOG_E3+'+',d.ramp[2]],
-   ['seen2',SA_FOG_STYLE[1].line,'Ridden twice',d.ramp[1]],
-   ['seen3',SA_FOG_STYLE[0].line,'Ridden once',d.ramp[0]]].forEach(function(t){
-    // The two halves of the attempted ramp share ONE layer group, so only the first of them carries
-    // a toggle. A chip that looks clickable and does nothing is worse than a plain swatch, so the
-    // cool half renders as a legend entry rather than a control.
-    var toggles=(t[0].indexOf('seen')!==0 || t[0]==='seen');
-    H+='<span class="sa-fogchip" id="sa-fog-chip-'+t[0]+'"'
-      +(toggles?(' onclick="_saFogToggle_(&#39;'+t[0]+'&#39;)"'):'')
-      +' style="color:'+t[1]+(toggles?'':';cursor:default')+'">'
-      +'<span style="width:9px;height:9px;border-radius:50%;background:'+t[1]+';flex:none"></span>'
-      +esc(t[2])+' <span id="sa-fog-n-'+t[0]+'" style="color:var(--d-dim);font-weight:600">'+t[3]+'</span></span>';
+  if(!d.total){
+    return H+'<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:12.5px;line-height:1.6">'
+      +'No targets yet. Star a segment on Strava, or set a PB on one, and it lands here.</div></div>';
+  }
+
+  // ---- the list ----
+  H+='<div style="margin-top:16px"><table class="sa-t"><thead><tr>'
+    +'<th>Segment</th><th class="sa-num">Dist</th><th class="sa-num sa-opt">Grade</th>'
+    +'<th class="sa-num">PB</th><th class="sa-num sa-opt">Rides</th><th>Chance of PR</th><th></th>'
+    +'</tr></thead><tbody>';
+  d.rows.forEach(function(r){
+    var bcol=(_SA_BUCKETS.filter(function(b){return b.k===r.bucket;})[0]||{}).col||'#64748b';
+    var crown=r.live&&!r.live.err ? (r.live.holds===true?'<span title="You hold this" style="color:'+SA_FOG_STYLE[4].line+'">&#9819;</span> ':'') : '';
+    // Chance cell. A number ONLY when the model fit; otherwise the reason, so an empty cell can
+    // never be read as "no chance". A soft standing time prints the number but says what it is.
+    var chanceCell;
+    if(r.chance==null) chanceCell='<span class="sa-why">'+esc(r.chanceWhy)+'</span>';
+    else if(!r.contested) chanceCell='<span style="color:var(--d-t3);font-weight:700">'+r.chance+'%</span>'
+        +'<div class="sa-why" style="margin-top:2px">never attacked &mdash; standing time was a soft pass</div>';
+    else chanceCell='<span style="font-size:14px;font-weight:800;color:'+(r.chance>=60?'#4ade80':(r.chance>=35?'#f59e0b':'var(--d-t3)'))+'">'+r.chance+'%</span>'
+        +(r.evidence&&r.evidence.label?('<div class="sa-why" style="margin-top:2px">'+esc(r.evidence.label)+'</div>'):'');
+    var url=_saSegUrl_(r.id);
+    H+='<tr class="sa-tr">'
+      +'<td style="min-width:0"><div style="display:flex;align-items:center;gap:7px">'
+        +'<span style="width:7px;height:7px;border-radius:50%;background:'+bcol+';flex:none"></span>'
+        +crown+'<span style="font-weight:700;color:var(--d-head)">'+esc(r.name)+'</span></div>'
+        +(url?('<a href="'+url+'" target="_blank" rel="noopener" style="font-size:10.5px;color:#fc5200;text-decoration:none">Strava &rsaquo;</a>'):'')
+      +'</td>'
+      +'<td class="sa-num">'+(r.distMi!=null?(Math.round(r.distMi*100)/100+' mi'):'&mdash;')+'</td>'
+      +'<td class="sa-num sa-opt">'+(r.grade!=null?(r.grade+'%'):'&mdash;')+'</td>'
+      +'<td class="sa-num">'+(r.prSec!=null?(_segFmtT_(r.prSec)+(r.prDerived?'<div class="sa-why">fastest on record</div>':'')):'<span class="sa-why">none</span>')+'</td>'
+      +'<td class="sa-num sa-opt">'+(r.efforts||0)+'</td>'
+      +'<td style="min-width:0">'+chanceCell+'</td>'
+      +'<td style="white-space:nowrap">'
+        +(r.hasGeom?('<button class="sa-tbtn" onclick="_saRowMapToggle_(&#39;'+esc(r.key)+'&#39;)">Map</button> '):'')
+        +'<button class="sa-tbtn" onclick="_saSetTarget_(&#39;'+esc(r.key)+'&#39;,false)" title="Remove from targets">&times;</button>'
+      +'</td></tr>';
+    H+='<tr><td colspan="7" style="padding:0;border-top:none">'
+      +'<div id="sa-rowmap-'+esc(r.key)+'" data-open="0" style="display:none;height:280px;margin:0 0 10px"></div></td></tr>';
   });
-  H+='<span class="sa-fogchip" style="color:var(--d-dim);cursor:default;border-style:dashed">'
-    +'<span style="width:9px;height:9px;border-radius:50%;background:#1b2029;border:1px solid #2b3340;flex:none"></span>'
-    +'Never attempted &mdash; unlit ground</span>';
-  H+='</div>';
+  H+='</tbody></table></div>';
 
-  H+='<div id="sa-fog-map" style="margin-top:13px"></div>';
-
-  // ---- the limitation, stated where the map is, not in a footnote ----
-  // This is the one claim a coverage map invites and cannot support, so it is placed directly under
-  // the map rather than somewhere it can be scrolled past.
-  H+='<div style="margin-top:12px;background:#f9731612;border:1px solid #f9731633;border-radius:12px;padding:11px 13px">'
-    +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#f97316">This is segment coverage, not road coverage</div>'
-    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.6">'
-    +'The unlit ground is not road you have never ridden &mdash; it is road with <b style="color:var(--d-soft)">no Strava segment on it</b>, '
-    +'or a segment you have never been matched to. A road you ride every week stays dark forever if nobody ever drew a segment there. '
-    +'This map can only ever show the '+d.total.toLocaleString()+' segment'+(d.total===1?'':'s')+' Strava has matched to your rides.'
-    +'</div></div>';
-
-  // ---- what is on the map and what is not ----
-  H+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--d-t3);line-height:1.6">'
-    +'<div><span style="'+LBL+'">Drawn</span><br>'+d.segs.length.toLocaleString()+' of '+d.total.toLocaleString()+' attempted segments</div>'
-    +(d.noGeom?('<div><span style="'+LBL+'">No coordinates</span><br>'+d.noGeom+' cannot be placed yet</div>'):'')
-    +'<div><span style="'+LBL+'">Road shape</span><br>'
-      +'<b style="color:var(--d-soft)">'+d.real.toLocaleString()+'</b> drawn on their real path<br>'
-      +(d.segs.length-d.real>0
-        ? ((d.segs.length-d.real).toLocaleString()+' still a straight line between endpoints')
-        : 'every drawn segment follows its road')+'</div>'
-    +'<div><span style="'+LBL+'">Line style</span><br>solid = the real road, or a segment straight enough that<br>the two are the same<br>dashed = a straight line standing in for a bending road</div>'
-    +'</div>'
-    +'<div id="sa-poly-note" style="font-size:11px;color:var(--d-t3);margin-top:8px"></div>';
-
-  // ---- how placement works here, stated where the tier is ----
-  // The reason this is worth a paragraph rather than a tooltip: the obvious implementation is wrong.
-  // Strava's per-effort kom_rank is stamped at UPLOAD time, and on this athlete's own data it
-  // already disagrees with the leaderboard - so neither storing it nor re-fetching it would give a
-  // true answer. Comparing a live PR against a live leaderboard time does.
-  H+='<div style="margin-top:12px;background:#fc520010;border:1px solid #fc520030;border-radius:12px;padding:11px 13px">'
-    +'<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fc5200">Placement is checked live, never stored</div>'
-    +'<div style="font-size:11.5px;color:var(--d-t3);margin-top:6px;line-height:1.6">'
-    +'Open a segment and its leaderboard time is fetched from Strava at that moment, compared against your PR, and thrown away. '
-    +'Nothing about placement is written to your data, so nothing can go stale in it.<br>'
-    +'Only the <b style="color:var(--d-soft)">'+d.candidates.toLocaleString()+'</b> segment'+(d.candidates===1?'':'s')+' where you have a recorded PR are checked &mdash; '
-    +'a placement is not plausible on the '+(d.segs.length-d.candidates).toLocaleString()+' you have ridden without ever setting a best, and 2,017 live lookups would not fit Strava&rsquo;s rate limit.<br>'
-    +'<span style="color:var(--d-dim)">Checked this session: '+d.checked.toLocaleString()+'. Strava&rsquo;s own per-effort rank is deliberately ignored &mdash; it records where you placed the day you uploaded, which is not where you place now.</span>'
-    +'</div>'
-    +'<div id="sa-kom-note" style="font-size:11px;color:var(--d-t3);margin-top:8px"></div>'
+  // ---- what this list is and is not ----
+  H+='<div style="margin-top:14px;font-size:11px;color:var(--d-dim);line-height:1.6">'
+    +'Your target list is '+d.total.toLocaleString()+' of the '+libN.toLocaleString()+' segments Strava has matched to your rides &mdash; '
+    +'seeded from the ones you starred or already hold a PB on, and yours to add to or trim. '
+    +'A chance of PR needs three efforts carrying power on the same segment before the model can fit anything, '
+    +'which is why '+(d.total-d.scored).toLocaleString()+' of these say what they are missing instead of showing a number.'
     +'</div>';
   H+='</div>';
-  try{ setTimeout(_saFogMount_, 0); }catch(e){}
   return H;
 }
-// Assemble the whole page. Reads st.segments (Phase 0 backfill), the weather cache and the power
-// curves; computes nothing that _saEvaluate_ does not.
+// The fog-of-war coverage view (aiSegFogHtml_) was DELETED here, not disabled: it plotted all
+// 2,017 segments at once to answer "where have I been", which was the premise of the feature
+// rather than a legibility problem to tune. aiSegTargetsHtml_ replaces it.
+//
+// The drawing machinery below/above it (_saFogMount_, _saFogList_, _saFogTierOf_, _saFogHome_,
+// _saKomSweep_, _saPolySweep_) is deliberately LEFT: _saFogList_/_saFogTierOf_/_saFogHome_ carry
+// the tiering invariants that scripts/segment-fog-test.mjs pins (prRank must never tier; no
+// stored field can reach the KOM tier), and _saFogMount_ now no-ops because nothing renders a
+// #sa-fog-map container for it to find. Removing that machinery is a separate, larger cut.
 function aiRenderSegAttack_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
   var keys=Object.keys(store);
@@ -26680,7 +26948,11 @@ function aiRenderSegAttack_(){
   // Placed AFTER the ranked list on purpose: this page's job is "what should I hit today", and a
   // 520px map above the answer would push the answer below the fold. Today's picks, then the whole
   // territory they came from, then the caveats.
-  H+=_aiSafe_('SegFog', function(){ return aiSegFogHtml_(); }) || '';
+  // The fog-of-war coverage map that used to sit here is GONE, not demoted. It answered "where have
+  // I been" across 2,017 segments — an open-ended haystack — and plotting everything at once was the
+  // premise, not a legibility problem to be tuned. The target list answers "which segments am I
+  // converting into PRs and crowns", and the map is now per-row and on demand.
+  H+=_aiSafe_('SegTargets', function(){ return aiSegTargetsHtml_(ctx); }) || '';
 
   // ---- what could not be projected, and why ----
   H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px">'

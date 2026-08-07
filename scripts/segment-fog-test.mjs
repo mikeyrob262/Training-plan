@@ -208,8 +208,35 @@ ok('_segAbsorb_ contains no placement write at all',
   absorbSrc.indexOf('komRank')<0 && absorbSrc.indexOf('prRank')<0);
 ok('the live check reads /segments/{id}, not the upload-time rank endpoint',
   has("'https://www.strava.com/api/v3/segments/'+segId") && !has('segment_efforts?segment_id'));
-ok('the limitation banner names roads with no segment', has('no Strava segment on it'));
-ok('the UI states that placement is never stored', has('Placement is checked live, never stored'));
+// The coverage MAP is gone (replaced by the target list), and these two assertions used to match
+// copy that lived on it. The invariants behind them did not go anywhere, so they now point at where
+// the target list states the same two things — rather than being deleted along with the wording.
+//   1. This list is a subset of what Strava matched, not of roads ridden. The map said "unlit ground
+//      is road with no Strava segment on it"; the list says the same limit as a denominator.
+//   2. Placement is never stored. This is the one the whole KOM headline rests on.
+ok('the list states it covers only what Strava matched, not roads ridden',
+   has('segments Strava has matched to your rides'));
+ok('the UI states that placement is never stored',
+   has('fetched live and thrown away') && has('nothing about it is written to your data'));
+// The crown headline must NOT print a zero before anything has been checked: "0 of N" asserts the
+// athlete holds none, when the truth pre-sweep is that nobody looked. Guarded on the em-dash branch
+// being keyed to the CHECKED count, not to the held count.
+ok('the crown headline shows an em-dash until something is actually checked',
+   has("var crownStr=(d.checked>0)?String(d.held):'&mdash;'"));
+ok('the crown headline reports the unchecked remainder', has('unchecked'));
+// Membership cannot be a boolean: mergeState_ ORs booleans (a || b), so a `false` never beats a
+// remote `true` and a removal would silently undo itself on the next sync.
+// Checked on the FUNCTION BODY, not the whole file — a source-wide search for 'targetAt' passes even
+// when the predicate has been rewritten to read a boolean, because the writers still mention the
+// field. A mutation test caught this assertion doing exactly that.
+const isTgtSrc = (function(){ const i = src.indexOf('function _saIsTarget_('); return i < 0 ? '' : src.slice(i, matchBrace(i)); })();
+ok('the membership predicate exists', isTgtSrc.length > 0);
+ok('membership is decided by comparing two timestamps',
+   isTgtSrc.indexOf('targetAt') >= 0 && isTgtSrc.indexOf('untargetAt') >= 0 && isTgtSrc.indexOf('>') >= 0);
+ok('the membership predicate reads no boolean flag',
+   !/seg\s*&&\s*seg\.target\b(?!At)/.test(isTgtSrc));
+ok('the target seed uses a constant stamp so a user removal always outranks it',
+   has('_SA_TARGET_SEED_AT') && !has('s.targetAt=Date.now(); n++'));
 ok('the sweep cap is a named constant, not a magic number', has('SA_KOM_SWEEP_CAP'));
 ok('the sweep reports what it capped rather than truncating silently', has('capped at '));
 ok('a deliberate tab change resets the map view',
