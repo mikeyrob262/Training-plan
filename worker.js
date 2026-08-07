@@ -26182,9 +26182,19 @@ function _saMapMount_(){
   // picks the densest one-degree cell measured in EFFORTS RIDDEN, not segment count: counting
   // segments ranks Chicago first on 692 from a single day out, while Grand Rapids has fewer segments
   // and far more riding.
+  // _saFogHome_ returns FOUR NUMBERS (south/north/west/east), not a LatLngBounds and not a .bounds
+  // field. The first version of this mount tested home && home.bounds, which is never truthy, so
+  // the home-cluster branch was dead and every load fell through to the fit-all below. That failure
+  // is silent and looks like a working map: measured on the live page it opened at zoom 2.5 centred
+  // on [18.3, 22.4] - the middle of the Atlantic - because this library reaches from Michigan to the
+  // South Pacific. Build the bounds from the numbers the function actually returns.
   var home=_saFogHome_(data.segs);
+  var homeB=null;
+  if(home && isFinite(home.south) && isFinite(home.north) && isFinite(home.west) && isFinite(home.east)){
+    try{ homeB=L.latLngBounds([[home.south,home.west],[home.north,home.east]]); }catch(e){ homeB=null; }
+  }
   if(_saMapView){ try{ map.setView(_saMapView.c, _saMapView.z); }catch(e){} }
-  else if(home && home.bounds){ try{ map.fitBounds(home.bounds, {padding:[24,24]}); }catch(e){} }
+  else if(homeB && homeB.isValid()){ try{ map.fitBounds(homeB, {padding:[24,24]}); }catch(e){} }
   else { try{ map.fitBounds(L.latLngBounds(data.segs.map(function(s){return [s.lat,s.lon];}))); }catch(e){} }
   // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
   // renders empty and throws nothing. Desktop came up fine and mobile came up blank from identical

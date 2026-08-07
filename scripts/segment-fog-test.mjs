@@ -255,5 +255,48 @@ ok('the map legend states that never-ridden is not drawable', has('not drawable'
 ok('the list scroll area hides its scrollbar',
    has('scrollbar-width:none') && has('.sa-list::-webkit-scrollbar'));
 
+// ---- the opening view, producer against consumer -------------------------------------------
+// This is the check that was missing when the map shipped opening on a world view. _saFogHome_
+// returns four NUMBERS; the mount read a `.bounds` field off it that has never existed, so the
+// home-cluster branch was dead and every load fell through to fit-all. Nothing failed: the map
+// still drew, still had tiles, still had segments on it - it just opened at zoom 2.5 over the
+// Atlantic, because this library spans Michigan to the South Pacific. A silent fall-through to a
+// plausible-looking wrong answer needs the producer and the consumer asserted TOGETHER.
+console.log('\n'+C+'=== 9. the map opens on the home cluster, not the whole globe ==='+X);
+const homeSegs = [
+  // A dense home cluster...
+  {lat:42.96, lon:-85.67, endLat:42.99, endLon:-85.60, effortCount:400},
+  {lat:42.98, lon:-85.70, endLat:43.02, endLon:-85.64, effortCount:350},
+  {lat:43.01, lon:-85.61, endLat:43.05, endLon:-85.55, effortCount:300},
+  // ...and one segment on the far side of the planet, which is what breaks a fit-all.
+  {lat:-17.53, lon:-149.56, endLat:-17.50, endLon:-149.50, effortCount:1}
+];
+const hb = F.home(homeSegs);
+ok('_saFogHome_ returns a home cluster at all', !!hb);
+ok('...as four finite numbers', !!hb && ['south','north','west','east'].every(k => Number.isFinite(hb[k])));
+ok('...and NOT as a .bounds field, which is what the mount wrongly read',
+   !!hb && hb.bounds === undefined);
+ok('the home cluster excludes the far-side-of-the-planet outlier',
+   !!hb && hb.south > 40 && hb.north < 45 && hb.west > -90 && hb.east < -80);
+// Now the consumer, on the mount's own body.
+// COMMENTS STRIPPED FIRST. The comment explaining this bug necessarily quotes the broken
+// expression, so asserting over raw source fails on the very prose that documents the fix — the
+// same "assert on the body, not the file" trap the membership check hit.
+const nl = String.fromCharCode(10);
+const mountRaw = asServed(src.slice(src.indexOf('function _saMapMount_('),
+                                    matchBrace(src.indexOf('function _saMapMount_('))+1));
+const mountSrc = mountRaw.split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+ok('the mount no longer branches on a .bounds field that does not exist',
+   !/home\s*&&\s*home\.bounds/.test(mountSrc) && !/fitBounds\(\s*home\.bounds/.test(mountSrc));
+ok('the mount builds its bounds from the four fields _saFogHome_ actually returns',
+   /home\.south/.test(mountSrc) && /home\.north/.test(mountSrc)
+   && /home\.west/.test(mountSrc) && /home\.east/.test(mountSrc));
+// Branch ORDER, not declaration order: remembered pan, then home cluster, then fit-all.
+const iView = mountSrc.indexOf('if(_saMapView)');
+const iHome = mountSrc.indexOf('else if(homeB');
+const iAll  = mountSrc.lastIndexOf('data.segs.map');
+ok('the home fit is preferred over the fit-all fallback', iHome > 0 && iAll > iHome);
+ok('a remembered pan still outranks both (the involuntary-remount guard)', iView > 0 && iView < iHome);
+
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);
