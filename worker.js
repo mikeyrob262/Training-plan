@@ -26823,7 +26823,7 @@ function aiRenderTab_(tab, ded){
     var live=cols.filter(function(c){ return c; });
     if(!live.length) return '';
     var t=(live.length===cols.length)?tmpl:('repeat('+live.length+', minmax(0,1fr))');
-    return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:12px;margin-bottom:12px">'+live.join('')+'</div>';
+    return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:10px;margin-bottom:10px">'+live.join('')+'</div>';
   };
   var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
   if(hero) html+=hero;
@@ -26855,38 +26855,55 @@ function _ovHeroHTML_(){
       ms=open[0]||null;
     }
   }catch(e){ ms=null; }
-  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:18px 20px;margin-bottom:12px">'
-    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Athlete status</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:22px 40px;margin-top:10px;align-items:flex-start">';
-  // LEFT: direction
-  H+='<div style="flex:1 1 260px;min-width:230px">';
+  // ONE ROW, not three stacked blocks: small headline, a compact gauge, and the milestone as a
+  // corner stat. The previous version stacked a display-size headline, a status pill and a
+  // full-width milestone bar, which gave one card the vertical weight of three.
+  //
+  // THE GAUGE IS READINESS, NOT A SCORE. The reference puts an "Athlete IQ 72" ring here; that
+  // number does not exist and will not be invented. Readiness already has a ring convention in this
+  // app — four discrete steps from getReadiness_, deliberately not a continuous 0-100, because a
+  // smooth fill would re-manufacture the precision the band exists to avoid. So the compact visual
+  // is real: the ring says which band, the figure inside is TSB, a measured quantity.
+  var ringHTML='';
+  if(R && R.loaded){
+    var rr=26, circ=2*Math.PI*rr, dash=circ*(R.fill||0);
+    ringHTML='<div style="flex:0 0 auto;display:flex;align-items:center;gap:10px">'
+      +'<div style="position:relative;width:66px;height:66px">'
+      +'<svg width="66" height="66" viewBox="0 0 66 66" style="transform:rotate(-90deg)">'
+      +'<circle cx="33" cy="33" r="'+rr+'" fill="none" style="stroke:var(--d-edge,rgba(0,0,0,.13))" stroke-width="6"/>'
+      +'<circle cx="33" cy="33" r="'+rr+'" fill="none" stroke="'+R.col+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+dash.toFixed(1)+' '+circ.toFixed(1)+'"/>'
+      +'</svg>'
+      +'<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1">'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D)">'+((R.tsb>0?'+':'')+Math.round(R.tsb))+'</div>'
+      +'<div style="font-size:7.5px;font-weight:700;letter-spacing:.06em;color:var(--d-dim,#8b93a7)">FORM</div></div></div>'
+      +'<div><div style="font-size:12.5px;font-weight:800;color:'+R.col+';line-height:1.2">'+R.label+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);max-width:120px;line-height:1.35">'+R.head+'</div></div></div>';
+  }
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:13px 16px;margin-bottom:10px">'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;justify-content:space-between">';
+  // LEFT: direction, at text scale rather than display scale
+  H+='<div style="flex:1 1 210px;min-width:190px">'
+    +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Athlete status</div>';
   if(M && M.ok && M.bucket){
-    H+='<div style="font-size:30px;font-weight:800;color:'+bCol+';line-height:1.05;letter-spacing:-.02em">You&rsquo;re '+M.bucket+'</div>'
-      +'<div style="font-size:12.5px;color:var(--d-t1,#334155);margin-top:6px">Fitness '+(ramp!=null?(ramp+' this week'):'trend not available')
+    H+='<div style="font-size:19px;font-weight:800;color:'+bCol+';line-height:1.15;letter-spacing:-.01em;margin-top:2px">You&rsquo;re '+M.bucket+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px">Fitness '+(ramp!=null?(ramp+' this week'):'trend n/a')
       +' &middot; CTL '+Math.round(M.ctl)+'</div>';
   } else {
-    H+='<div style="font-size:22px;font-weight:800;color:var(--d-dim,#8b93a7)">&mdash;</div>'
-      +'<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);margin-top:6px">Not enough logged training to read a direction yet.</div>';
-  }
-  if(R && R.loaded){
-    H+='<div style="display:inline-flex;align-items:center;gap:7px;margin-top:11px;background:'+R.col+'1f;border:1px solid '+R.col+'55;border-radius:999px;padding:5px 11px">'
-      +'<span style="width:7px;height:7px;border-radius:50%;background:'+R.col+'"></span>'
-      +'<span style="font-size:12px;font-weight:800;color:'+R.col+'">'+R.head+'</span>'
-      +'<span style="font-size:11px;color:var(--d-dim,#8b93a7)">form '+((R.tsb>0?'+':'')+Math.round(R.tsb))+'</span></div>';
+    H+='<div style="font-size:17px;font-weight:800;color:var(--d-dim,#8b93a7);margin-top:2px">&mdash;</div>'
+      +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:2px">Not enough logged training to read a direction yet.</div>';
   }
   H+='</div>';
-  // RIGHT: next milestone
+  H+=ringHTML;
+  // RIGHT: milestone as a corner stat — the remaining distance is the headline, not a bar.
   if(ms){
     var pct=Math.max(0,Math.min(100,ms.pct||0));
-    H+='<div style="flex:0 1 260px;min-width:220px">'
-      +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Next milestone</div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);margin-top:5px">'+aiEsc_(ms.name)+'</div>'
-      +'<div style="height:6px;border-radius:3px;background:var(--d-edge,rgba(0,0,0,.13));margin-top:8px;overflow:hidden">'
-      +'<div style="height:100%;width:'+pct+'%;background:#60a5fa;border-radius:3px"></div></div>'
-      +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:5px">'
-      +Math.round(ms.current).toLocaleString()+' / '+Math.round(ms.target).toLocaleString()+(ms.unit?(' '+ms.unit):'')
-      +' &middot; '+pct.toFixed(0)+'%'
-      +(ms.projectedDate?(' &middot; on current rate, '+((typeof _msFmtDate_==='function')?_msFmtDate_(ms.projectedDate):ms.projectedDate)):' &middot; no rate to project from')
+    var left=Math.max(0, Math.round(ms.remaining||0));
+    H+='<div style="flex:0 1 auto;min-width:120px;text-align:right">'
+      +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Next milestone</div>'
+      +'<div style="font-size:19px;font-weight:800;color:var(--d-head,#15181D);line-height:1.15;margin-top:2px">'
+      +left.toLocaleString()+(ms.unit?('<span style="font-size:11px;font-weight:700;color:var(--d-dim,#8b93a7)"> '+ms.unit+'</span>'):'')+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);line-height:1.35">to '+aiEsc_(ms.name)+' &middot; '+pct.toFixed(0)+'%'
+      +(ms.projectedDate?('<br>'+((typeof _msFmtDate_==='function')?_msFmtDate_(ms.projectedDate):ms.projectedDate)+' at current rate'):'')
       +'</div></div>';
   }
   return H+'</div></div>';
@@ -26902,13 +26919,13 @@ function _ovMomentumHTML_(){
     ? _gcSpark_(M.line, '#22d3ee', { H:44, fill:true, aria:'Fitness over 12 weeks' }) : '';
   var cell=function(lab,val,col){
     return '<div style="min-width:58px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--d-dim,#8b93a7)">'+lab+'</div>'
-      +'<div style="font-size:19px;font-weight:800;color:'+(col||'var(--d-head,#15181D)')+';line-height:1.1">'+val+'</div></div>';
+      +'<div style="font-size:17px;font-weight:800;color:'+(col||'var(--d-head,#15181D)')+';line-height:1.1">'+val+'</div></div>';
   };
-  return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
-    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Momentum</div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:14px 26px;align-items:flex-start;margin-top:9px">'
+  return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
+    +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Momentum</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:10px 20px;align-items:flex-start;margin-top:9px">'
       +'<div style="flex:1 1 150px;min-width:140px">'
-        +'<div style="font-size:24px;font-weight:800;color:'+bCol+';line-height:1.1">'+M.bucket+'</div>'
+        +'<div style="font-size:18px;font-weight:800;color:'+bCol+';line-height:1.1">'+M.bucket+'</div>'
         +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:3px">'
         +((M.ramp==null)?'no trend yet':((M.ramp>0?'+':'')+(Math.round(M.ramp*10)/10)+' CTL/week'))+'</div></div>'
       +'<div style="display:flex;gap:18px;flex:0 1 auto">'
@@ -26966,14 +26983,14 @@ function _ovHighlightsHTML_(){
   add(pick(function(r){ return parseFloat(r.elev)||0; }), '#22c55e', 'Most climbing',
       function(v){ return Math.round(v).toLocaleString()+' ft'; });
   if(!rows.length) return '';
-  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
-    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">This week&rsquo;s highlights</div>';
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
+    +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">This week&rsquo;s highlights</div>';
   rows.forEach(function(r,i){
     H+='<div style="display:flex;align-items:center;gap:10px'+(i?';margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge,rgba(0,0,0,.10))':';margin-top:11px')+'">'
       +'<span style="width:8px;height:8px;border-radius:50%;background:'+r.col+';flex-shrink:0"></span>'
       +'<div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--d-dim,#8b93a7)">'+r.lab+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t1,#334155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(String(r.sub).slice(0,34))+'</div></div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);flex-shrink:0">'+r.val+'</div></div>';
+      +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#15181D);flex-shrink:0">'+r.val+'</div></div>';
   });
   return H+'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">Last 7 days.</div></div>';
 }
@@ -27002,12 +27019,12 @@ function _ovOpportunityHTML_(){
     var gain=Math.abs(Math.round(e.delta));
     var mm=Math.floor(gain/60), ss=gain%60;
     var col=(typeof _saProbCol_==='function')?_saProbCol_(e.prob):'#4ade80';
-    return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
-      +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your biggest opportunity</div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(e.name)+'</div>'
+    return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
+      +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your biggest opportunity</div>'
+      +'<div style="font-size:14px;font-weight:800;color:var(--d-head,#15181D);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(e.name)+'</div>'
       +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:2px">'
         +((e.distMi!=null)?((Math.round(e.distMi*100)/100)+' mi'):'')+((e.grade!=null)?(' &middot; '+e.grade+'% grade'):'')+'</div>'
-      +'<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1.1;margin-top:9px">&minus;'
+      +'<div style="font-size:24px;font-weight:800;color:'+col+';line-height:1.1;margin-top:9px">&minus;'
         +(mm>0?(mm+':'+(ss<10?'0':'')+ss):(gain+'s'))+'</div>'
       +'<div style="font-size:11.5px;color:var(--d-t1,#334155);margin-top:2px">faster than your PR, at your current fitness</div>'
       +'<div style="font-size:11.5px;color:'+col+';font-weight:800;margin-top:8px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
@@ -27021,12 +27038,12 @@ function _ovOpportunityHTML_(){
 function _ovLegacyHTML_(){
   var tiles=(typeof _lgCycTiles_==='function')?_lgCycTiles_():null;
   if(!tiles || !tiles.length) return '';
-  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
-    +'<div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your legacy</div>'
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your legacy</div>'
     +'<div style="font-size:10.5px;color:#a78bfa;font-weight:700">cycling, all-time</div></div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:14px 32px;margin-top:11px">';
+    +'<div style="display:flex;flex-wrap:wrap;gap:11px 24px;margin-top:11px">';
   tiles.forEach(function(t){
-    H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
+    H+='<div><div style="font-size:18px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px">'+t.k+'</div></div>';
   });
   return H+'</div><div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">From Strava&rsquo;s server-side totals, so gaps in the local library do not undercount it.</div></div>';
