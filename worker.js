@@ -29211,7 +29211,9 @@ function _smLaps_(r, ftp){
   }catch(e){ return null; }
 }
 function _smurkelContext_(dateKey, ride){
-  var C={ dateKey:dateKey };
+  // ride is carried on the context so downstream fact builders can reach the RAW record (GPS, for
+  // the away-from-home read) rather than only the normalised numbers in C.act.
+  var C={ dateKey:dateKey, ride:ride };
   try{
     var prof=(typeof _actProfile_==='function')?_actProfile_(ride):{noun:'ride', cyclingPower:true};
     var ftp=(typeof ftpOn_==='function')?_smNum_(ftpOn_(dateKey)):_smNum_(st && st.ftp);
@@ -29366,10 +29368,50 @@ function _smDaysBetween_(aKey, bKey){
   try{ var a=new Date(aKey+'T00:00:00'), b=new Date(bKey+'T00:00:00');
     return Math.round(Math.abs(b.getTime()-a.getTime())/86400000); }catch(e){ return 999; }
 }
+// WHERE the ride happened, without inventing a place name. Rides carry NO city/state/country field
+// — checked across the library, none exists — so naming "Brookfield, Illinois" would require reverse
+// geocoding, a new external dependency with its own rate limits and its own failure mode.
+//
+// What IS derivable from stored data: whether this ride started somewhere the athlete does not
+// normally ride. Home is the MEDIAN start point of recent GPS-bearing rides (median, not mean, so a
+// single trip cannot drag it); the ride is "away" when it starts far enough from that to not be a
+// different local trailhead. That is the observation that actually carries the coaching weight —
+// unfamiliar roads, travel disruption, sleep and food off-routine — and it does not need the name.
+// Returns null when GPS is missing, which is ~40% of recent rides, and the coach then says nothing.
+function _smGeoAway_(ride){
+  try{
+    if(!ride || !Array.isArray(ride.gpsLats) || !ride.gpsLats.length) return null;
+    var lat0=+ride.gpsLats[0], lon0=+ride.gpsLons[0];
+    if(!isFinite(lat0) || !isFinite(lon0)) return null;
+    var pool=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
+    var pts=[];
+    (pool||[]).forEach(function(r){
+      if(!r || r.deleted || r===ride) return;
+      if(!Array.isArray(r.gpsLats) || !r.gpsLats.length) return;
+      var la=+r.gpsLats[0], lo=+r.gpsLons[0];
+      if(isFinite(la) && isFinite(lo)) pts.push({la:la, lo:lo, d:String(r.date||'')});
+    });
+    if(pts.length<10) return null;                       // too few anchors to call anywhere "usual"
+    pts.sort(function(x,y){ return x.d<y.d?1:-1; });
+    pts=pts.slice(0,120);
+    var med=function(arr){ var s=arr.slice().sort(function(p,q){return p-q;}); return s[Math.floor(s.length/2)]; };
+    var hLa=med(pts.map(function(p){return p.la;})), hLo=med(pts.map(function(p){return p.lo;}));
+    var R=6371, toR=function(d){ return d*Math.PI/180; };
+    var dLa=toR(lat0-hLa), dLo=toR(lon0-hLo);
+    var h=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toR(hLa))*Math.cos(toR(lat0))*Math.sin(dLo/2)*Math.sin(dLo/2);
+    var km=2*R*Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
+    if(!(km>60)) return null;                            // inside 60km is a local ride, not travel
+    return { km:Math.round(km), mi:Math.round(km*0.621371) };
+  }catch(e){ return null; }
+}
 function _smurkelFacts_(C){
   var L=[], a=C.act||{}, NL=String.fromCharCode(10);
   var n=function(v,suf,dp){ if(v==null) return 'not recorded'; var x=(dp!=null)?(Math.round(v*Math.pow(10,dp))/Math.pow(10,dp)):Math.round(v); return x+(suf||''); };
   L.push('ACTIVITY: '+actName_(a)+' on '+(a.date||C.dateKey)+', a '+(C.noun||'ride')+'.');
+  var _away=(typeof _smGeoAway_==='function')?_smGeoAway_(C.ride||a.__ride||null):null;
+  if(_away) L.push('  LOCATION: started about '+_away.mi+' miles from where this athlete usually rides. '
+    +'They are away from home — unfamiliar roads, and travel disrupts sleep, food and recovery. '
+    +'You do NOT know the town, so do not name one.');
   L.push('  distance '+n(a.miles,' mi',1)+', time '+(a.duration||'not recorded')+', TSS '+n(a.tss)+'.');
   if(C.cyclingPower){
     L.push('  NP '+n(a.np,'W')+', average power '+n(a.avg,'W')+', FTP '+n(a.ftp,'W')
@@ -29452,25 +29494,48 @@ function _smurkelFacts_(C){
 // specced direct, confrontational, Type-A-by-name, and the rename to Dr. Smurkel introduced a fresh
 // persona reading "warm and funny / generous about real work", which is what produced a hedged
 // clinical summary. Warmth is not the job here; the athlete already knows the numbers were fine.
+// PERSONA — rewritten as a CONVERSATIONAL spec, not a verdict spec.
+//
+// The previous version mandated the opposite of what was wanted, which is why three wording passes
+// could not fix it. It said "lead with the verdict, never open with a data recap", "instructions as
+// instructions - imperative", and "one emoji maximum". The reference voice does the reverse: it
+// opens by walking the data in named sections, uses emoji freely as punctuation, asks the athlete
+// questions back, and cheerfully corrects itself when caught out. Those are not tone adjustments on
+// top of a verdict — they are a different deliverable. Editing adjectives inside the old spec could
+// never get there.
+//
+// What is KEPT from the old spec, because it was right: second person, no hedging vocabulary, no
+// scolding, scale the reaction to the size of what happened, and update the read when the athlete
+// gives a good reason.
 var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this athlete all block. '
-  +'You are direct and confrontational. You speak TO the athlete as "you", in the present tense, and '
-  +'you give instructions as instructions - imperative, not suggestions. You never refer to the athlete '
-  +'in the third person and you never talk about your own reasoning. '
+  +'You are having a CONVERSATION with them, not filing a report. Warm, funny, genuinely interested, '
+  +'and confident about the numbers. Think knowledgeable training partner who has seen every session, '
+  +'not a consultant delivering findings. '
+  +'STRUCTURE: walk the ride in short named sections with plain headers (for example "The Data", '
+  +'"The Heat Tax", "What Stood Out", "The Bigger Picture"). Opening with the data is CORRECT here — '
+  +'lay out what happened, then say what it means. Keep each section to a few lines. '
+  +'VOICE: speak TO them as "you", present tense. Emoji are welcome where they land naturally — a '
+  +'handful across the whole debrief, as punctuation and warmth, not decoration on every line. '
+  +'React like a person: if something is impressive, be impressed and say why. If something is funny, '
+  +'be funny about it. '
+  +'BE CURIOUS. When the data implies something about their life you cannot see — travelling, weather, '
+  +'unfamiliar roads, an unusual time of day — say what you notice and ASK about it. Ending with a real '
+  +'question to the athlete is good. You are allowed to be wrong; if they correct you, take it with '
+  +'humour, say so plainly, and fold the correction into your read. Never repeat a point they have '
+  +'already answered. '
   +'This athlete is Type A: the tendency is to push when the prescription says hold back, to add one '
-  +'more interval, to read a ceiling as a target. Where the numbers show that tendency, name it as the '
-  +'Type A talking and tell them to ignore it. Where they held the line, say so plainly and briefly. '
-  +'BANNED, because every one of them is a way of not committing: "worth noting", "I am judging this on", '
+  +'more interval, to read a ceiling as a target. Where the numbers show that tendency, name it and '
+  +'tell them to ignore it. Where they held the line, say so and mean it. '
+  +'BANNED, because every one is a way of not committing: "worth noting", "I am judging this on", '
   +'"it is worth", "that said", "somewhat", "fairly", "arguably", "may be", "might be", "seems", '
   +'"appears to", "one could". Say the thing. '
-  +'Lead with the verdict, then the evidence for it. Never open with a data recap. '
-  +'DIRECT IS NOT HARSH. You are on this athlete side and it has to read that way. Confidence, not '
-  +'severity. Never scold, never write a bare condemning fragment such as "that is the problem", never '
-  +'imply a session was wasted or that they have set themselves back when the numbers do not say so. '
-  +'Scale the verdict to the SIZE of what actually happened: a 2 bpm overrun on an easy run is a small '
-  +'correction, and calling it a failure is simply inaccurate. Name what went WELL first when anything '
-  +'did, and when you correct something, give the reason and the fix in the same breath. If the athlete '
-  +'has a good reason for a choice you flagged, say so and update your read rather than repeating it. '
-  +'One emoji maximum in the whole debrief, and only if it earns its place.';
+  +'NEVER scold, never imply a session was wasted or that they have set themselves back when the '
+  +'numbers do not say so. Scale your reaction to the SIZE of what actually happened: a 2 bpm overrun '
+  +'on an easy run is a small correction, and calling it a failure is inaccurate. Name what went well '
+  +'first when anything did, and when you correct something give the reason and the fix in the same '
+  +'breath. '
+  +'Only ever use the numbers you are given. If a figure is not in the facts, you do not have it — '
+  +'do not estimate it, and do not name a place, a segment or a result you were not told.';
 // The full debrief. Cached on the prompt hash exactly like the ride insight, so a completed session
 // settles on ONE reading — the numbers behind it cannot change unless the ride or the week changes,
 // and if they do the hash changes and it regenerates.
@@ -29600,6 +29665,29 @@ function _smurkelMount_(dk){
 // the conversation carries the same facts the debrief was built from — the coach answers about THIS
 // session's real numbers, not from memory of what it wrote.
 var _SM_CONVO=null;
+// Attach the SAME reply thread to any surface that shows a coach read. The debrief on the Plan page
+// already had this; the activity-page card did not, so wherever the athlete actually reads Smurkel
+// determined whether they could answer back — and on the activity card the answer was no.
+//
+// The card itself stays BRIEF by design (its own comment explains that duplicating the full debrief
+// at two lengths is how the two end up contradicting each other). A reply path is not a duplicate:
+// fetchSmurkelReply_ rebuilds the facts for the ride being discussed, so the conversation is
+// grounded in the same measured numbers either surface was built from.
+function _smAttachReply_(hostEl, ride){
+  try{
+    if(!hostEl || !ride || typeof _smurkelReplyUI_!=='function') return;
+    // Ids inside the reply UI are fixed, so an older thread elsewhere in the DOM must go first
+    // rather than leaving two elements answering to the same id.
+    var old=document.getElementById('sm-reply');
+    if(old){ var ow=old.closest('div'); if(ow && ow.parentNode && ow.parentNode!==hostEl) ow.parentNode.removeChild(ow); }
+    var wrap=document.createElement('div');
+    wrap.innerHTML=_smurkelReplyUI_();
+    hostEl.appendChild(wrap);
+    _SM_CONVO={ dk:((typeof normDate==='function')?normDate(ride.date):String(ride.date||'').slice(0,10)),
+                ride:ride, debrief:'', turns:[] };
+    if(typeof _smurkelBindReply_==='function') _smurkelBindReply_();
+  }catch(e){}
+}
 function _smurkelReplyUI_(){
   return '<div id="sm-convo" style="margin-top:14px"></div>'
     +'<div style="margin-top:10px;display:flex;gap:8px;align-items:flex-end">'
@@ -36598,6 +36686,7 @@ function renderRideOverviewTab(body, r, idx, FTP, BWT){
     if(!el) return;
     if(err || !text){ el.textContent='Coach insight unavailable right now.'; return; }
     renderCoachInsightContent(el, text, r);
+    if(typeof _smAttachReply_==='function') _smAttachReply_(el, r);
   });
 }
 
