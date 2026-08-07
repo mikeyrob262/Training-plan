@@ -21565,6 +21565,17 @@ var _SA_MIN_FIT=3;              // efforts needed before a residual sigma means 
 var _SA_CDA_LO=0.18, _SA_CDA_HI=0.75;   // physiological bounds; a fit outside these is rejected
 // Air density from temperature and elevation. Both real inputs: temp from the weather fetch,
 // elevation from the segment. Falls back to sea-level 15C only when neither is known.
+// THE weather-cache unwrap. wxCache_.weather is a WRAPPER — {data, fetchedAt} — and reading a
+// payload field straight off the slot is a bug this codebase has already had once. It was unwrapped
+// correctly but SEPARATELY in each consumer, so adding a third surface meant a third copy of the
+// same three-level guard. One accessor instead: every caller gets the current conditions or null,
+// and there is exactly one place that knows the wrapper's shape.
+function _saCurrentWx_(){
+  try{
+    var wx=(typeof wxCache_!=='undefined' && wxCache_ && wxCache_.weather)?wxCache_.weather:null;
+    return (wx && wx.data && wx.data.current)?wx.data.current:null;
+  }catch(e){ return null; }
+}
 function _saRho_(tempF, elevM){
   var t=(tempF!=null&&isFinite(tempF))?((tempF-32)*5/9):15;
   var h=(elevM!=null&&isFinite(elevM))?elevM:0;
@@ -26365,8 +26376,7 @@ function aiRenderSegAttack_(){
   // wxCache_[slot] is a WRAPPER - {data, fetchedAt} - not the payload. Reading wx.current instead
   // of wx.data.current silently yields undefined, which is why this card read "Weather unavailable"
   // forever while the Weather page was fine: the fetch always worked, the unwrap never did.
-  var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
-  var cur=(wx&&wx.data&&wx.data.current)?wx.data.current:null;
+  var cur=_saCurrentWx_();
   try{ if(!cur && typeof _trjKickWeather_==='function') _trjKickWeather_(); }catch(e){}
   var esc=aiEsc_;
   // One renderer, both surfaces. The row is a 5-column grid on desktop that collapses in stages:
@@ -26571,8 +26581,7 @@ function _saEvalAll_(){
   // wxCache_[slot] is a WRAPPER - {data, fetchedAt} - not the payload. Reading wx.current instead
   // of wx.data.current silently yields undefined, which is why this card read "Weather unavailable"
   // forever while the Weather page was fine: the fetch always worked, the unwrap never did.
-  var wx=null; try{ wx=(typeof wxCache_!=='undefined'&&wxCache_&&wxCache_.weather)?wxCache_.weather:null; }catch(e){}
-  var cur=(wx&&wx.data&&wx.data.current)?wx.data.current:null;
+  var cur=_saCurrentWx_();
   // The library needs today's wind as much as the attack page does, and reading the cache without
   // ever asking for a fill leaves it permanently empty on a cold session.
   try{ if(!cur && typeof _trjKickWeather_==='function') _trjKickWeather_(); }catch(e){}
@@ -26785,6 +26794,10 @@ function aiRenderTab_(tab, ded){
   // with the cards below it.
   var hero=_aiSafe_('Hero', function(){return _ovHeroHTML_();});
   var focus=_aiSafe_('TodaysFocus', function(){return _ovFocusHTML_();});
+  var ovMom=_aiSafe_('OvMomentum', function(){return _ovMomentumHTML_();});
+  var ovHi=_aiSafe_('OvHighlights', function(){return _ovHighlightsHTML_();});
+  var ovOpp=_aiSafe_('OvOpportunity', function(){return _ovOpportunityHTML_();});
+  var ovLeg=_aiSafe_('OvLegacy', function(){return _ovLegacyHTML_();});
   var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
   var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
   var watch=_aiSafe_('Watchlist', function(){return aiCardWatchlist_();});
@@ -26802,9 +26815,21 @@ function aiRenderTab_(tab, ded){
   // Adherence leads the metric row — a declining completion rate is an early warning.
   var grid=[dna, mom, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
-  var html='';
+  // LAYOUT, following the reference: a full-width status hero, then Today's Focus beside Momentum
+  // (focus narrow, momentum wide), then Opportunity beside Highlights, then Legacy full width.
+  // Every row collapses to a single column under ~860px, so mobile reads top to bottom in the same
+  // order of importance rather than in whatever order the grid happened to wrap.
+  var row=function(cols, tmpl){
+    var live=cols.filter(function(c){ return c; });
+    if(!live.length) return '';
+    var t=(live.length===cols.length)?tmpl:('repeat('+live.length+', minmax(0,1fr))');
+    return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:12px;margin-bottom:12px">'+live.join('')+'</div>';
+  };
+  var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
   if(hero) html+=hero;
-  if(focus) html+=focus;
+  html+=row([focus, ovMom], 'minmax(0,1fr) minmax(0,1.6fr)');
+  html+=row([ovOpp, ovHi], 'minmax(0,1fr) minmax(0,1fr)');
+  html+=row([ovLeg], 'minmax(0,1fr)');
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
   return html;
@@ -26865,6 +26890,127 @@ function _ovHeroHTML_(){
       +'</div></div>';
   }
   return H+'</div></div>';
+}
+// ---- Momentum (compact) -----------------------------------------------------------------------
+// The same _momData_ the Legacy page renders in full. One computation, two presentations — a second
+// derivation here is how the two would eventually disagree about the same week.
+function _ovMomentumHTML_(){
+  var M=(typeof _momData_==='function')?_momData_():null;
+  if(!M || !M.ok) return '';
+  var bCol=(M.bucket==='Building')?'#4ade80':((M.bucket==='Easing')?'#f59e0b':'#60a5fa');
+  var spark=(typeof _gcSpark_==='function' && M.line && M.line.length>1)
+    ? _gcSpark_(M.line, '#22d3ee', { H:44, fill:true, aria:'Fitness over 12 weeks' }) : '';
+  var cell=function(lab,val,col){
+    return '<div style="min-width:58px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--d-dim,#8b93a7)">'+lab+'</div>'
+      +'<div style="font-size:19px;font-weight:800;color:'+(col||'var(--d-head,#15181D)')+';line-height:1.1">'+val+'</div></div>';
+  };
+  return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Momentum</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px 26px;align-items:flex-start;margin-top:9px">'
+      +'<div style="flex:1 1 150px;min-width:140px">'
+        +'<div style="font-size:24px;font-weight:800;color:'+bCol+';line-height:1.1">'+M.bucket+'</div>'
+        +'<div style="font-size:11.5px;color:var(--d-dim,#8b93a7);margin-top:3px">'
+        +((M.ramp==null)?'no trend yet':((M.ramp>0?'+':'')+(Math.round(M.ramp*10)/10)+' CTL/week'))+'</div></div>'
+      +'<div style="display:flex;gap:18px;flex:0 1 auto">'
+        +cell('CTL', Math.round(M.ctl))
+        +cell('ATL', Math.round(M.atl))
+        +cell('TSB', (M.tsb>0?'+':'')+Math.round(M.tsb))
+      +'</div></div>'
+    +(spark?('<div style="margin-top:10px">'+spark+'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:2px">Fitness, last 12 weeks</div></div>'):'')
+    +'</div>';
+}
+// ---- This Week's Highlights -------------------------------------------------------------------
+// Strictly the last 7 days, and only facts the library holds. The mockup's "VO2 Max estimate +2" is
+// absent because vo2maxHistory holds two entries dated the same day — there is no trend to state.
+// "Fastest climb in 9 months" is absent because a climb ranking needs segment comparison this card
+// does not do. What is left is real: the biggest ride, the hardest ride, the most climbing.
+function _ovHighlightsHTML_(){
+  var rides=[];
+  try{ rides=(typeof allRidesLegacy_==='function')?(allRidesLegacy_()||[]):((st&&st.rides)||[]); }catch(e){ rides=[]; }
+  var now=new Date(); now.setHours(0,0,0,0);
+  var cutD=new Date(now.getTime()-6*86400000);
+  var k=function(d){ return (typeof dayKey_==='function')?dayKey_(d)
+      :(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); };
+  var lo=k(cutD), hi=k(now);
+  var wk=rides.filter(function(r){
+    if(!r || r.deleted || !r.date) return false;
+    var d=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);
+    return d>=lo && d<=hi;
+  });
+  if(!wk.length) return '';
+  var rows=[];
+  var pick=function(fn){ var b=null, bv=-1; wk.forEach(function(r){ var v=fn(r)||0; if(v>bv){ bv=v; b=r; } }); return (bv>0)?{r:b,v:bv}:null; };
+  var far=pick(function(r){ return parseFloat(r.distance)||0; });
+  if(far) rows.push({ col:'#60a5fa', lab:'Longest ride', val:(Math.round(far.v*10)/10)+' mi', sub:actName_(far.r) });
+  var hard=pick(function(r){ return (typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(+r.tss||0); });
+  if(hard) rows.push({ col:'#f59e0b', lab:'Hardest ride', val:Math.round(hard.v)+' TSS', sub:actName_(hard.r) });
+  var climb=pick(function(r){ return parseFloat(r.elev)||0; });
+  if(climb) rows.push({ col:'#22c55e', lab:'Most climbing', val:Math.round(climb.v).toLocaleString()+' ft', sub:actName_(climb.r) });
+  if(!rows.length) return '';
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">This week&rsquo;s highlights</div>';
+  rows.forEach(function(r,i){
+    H+='<div style="display:flex;align-items:center;gap:10px'+(i?';margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge,rgba(0,0,0,.10))':';margin-top:11px')+'">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+r.col+';flex-shrink:0"></span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;color:var(--d-dim,#8b93a7)">'+r.lab+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t1,#334155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(String(r.sub).slice(0,34))+'</div></div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);flex-shrink:0">'+r.val+'</div></div>';
+  });
+  return H+'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">Last 7 days.</div></div>';
+}
+// ---- Your Biggest Opportunity -----------------------------------------------------------------
+// Runs the REAL Segment Attack model — _saEvaluate_, the same function the Segment Attack tab uses,
+// which fits CdA per segment from this athlete's own past efforts and derives its probability from
+// the residual scatter of that fit. Only 'full' tier entries carry a projection at all; below the
+// evidence gate the model refuses a number and so does this card.
+//
+// The mockup shows a 40K segment; the qualifying segments here are 0.4-0.9 mi, because those are
+// the ones with enough powered efforts to fit. The card shows what is real, not what is aspirational.
+function _ovOpportunityHTML_(){
+  try{
+    // _saEvalAll_ is the existing entry point: it builds the model context (wind, mass, capability
+    // rides, today) and evaluates every segment. Rebuilding that context here would have been a
+    // second copy of the same inputs — and it also kicks a weather fetch on a cold session, which a
+    // hand-rolled version would have missed, leaving this card permanently windless.
+    if(typeof _saEvalAll_!=='function') return '';
+    var all=_saEvalAll_();
+    if(!all || !all.list || !all.list.length) return '';
+    var evals=all.list
+      .filter(function(e){ return e && e.tier==='full' && e.delta<0 && e.prob!=null; })
+      .sort(function(a,b){ return (b.prob-a.prob)||(a.delta-b.delta); });
+    if(!evals.length) return '';
+    var e=evals[0];
+    var gain=Math.abs(Math.round(e.delta));
+    var mm=Math.floor(gain/60), ss=gain%60;
+    var col=(typeof _saProbCol_==='function')?_saProbCol_(e.prob):'#4ade80';
+    return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
+      +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your biggest opportunity</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+aiEsc_(e.name)+'</div>'
+      +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:2px">'
+        +((e.distMi!=null)?((Math.round(e.distMi*100)/100)+' mi'):'')+((e.grade!=null)?(' &middot; '+e.grade+'% grade'):'')+'</div>'
+      +'<div style="font-size:30px;font-weight:800;color:'+col+';line-height:1.1;margin-top:9px">&minus;'
+        +(mm>0?(mm+':'+(ss<10?'0':'')+ss):(gain+'s'))+'</div>'
+      +'<div style="font-size:11.5px;color:var(--d-t1,#334155);margin-top:2px">faster than your PR, at your current fitness</div>'
+      +'<div style="font-size:11.5px;color:'+col+';font-weight:800;margin-top:8px">'+e.prob+'% chance'+(e.probCapped?' (capped)':'')+'</div>'
+      +'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:7px;line-height:1.5">Modelled from your own past efforts on this segment and today&rsquo;s wind. Below the evidence gate the model shows nothing rather than a guess.</div>'
+      +'</div>';
+  }catch(e){ return ''; }
+}
+// ---- Legacy (compact) -------------------------------------------------------------------------
+// Reuses _lgCycTiles_ — the same server-side lifetime totals the Legacy page shows, with the same
+// elevation source. Nothing recomputed.
+function _ovLegacyHTML_(){
+  var tiles=(typeof _lgCycTiles_==='function')?_lgCycTiles_():null;
+  if(!tiles || !tiles.length) return '';
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
+    +'<div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your legacy</div>'
+    +'<div style="font-size:10.5px;color:#a78bfa;font-weight:700">cycling, all-time</div></div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:14px 32px;margin-top:11px">';
+  tiles.forEach(function(t){
+    H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
+      +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px">'+t.k+'</div></div>';
+  });
+  return H+'</div><div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">From Strava&rsquo;s server-side totals, so gaps in the local library do not undercount it.</div></div>';
 }
 // ---- Today's Focus ----------------------------------------------------------------------------
 // Only lines with something real behind them. The mockup's "Ideal day for Threshold work — you

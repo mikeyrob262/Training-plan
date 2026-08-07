@@ -46,8 +46,14 @@ if (bad.length) bad.forEach((b) => console.log('    ' + R + b + X));
 // The specific pattern that broke: `var cur=(wx&&wx.current)`.
 console.log('\n=== the exact bug pattern is gone ===');
 check('no (wx && wx.current) unwrap-skipping read', /\(wx&&wx\.current\)\?wx\.current/.test(src), false);
-const unwrapped = (src.match(/\(wx&&wx\.data&&wx\.data\.current\)\?wx\.data\.current/g) || []).length;
-check('both Segment Attack consumers unwrap properly', unwrapped, 2);
+// The unwrap is now done ONCE, in _saCurrentWx_, rather than copied into each consumer. Counting
+// copies was a proxy for "nobody skips the unwrap"; a single accessor serves that intent directly,
+// so the assertion is that exactly one place knows the wrapper shape and every consumer goes
+// through it. Raised from 2 copies to 1 accessor when a third surface needed the same read.
+const unwrapped = (src.match(/\(wx && wx\.data && wx\.data\.current\)\?wx\.data\.current/g) || []).length;
+check('exactly one place unwraps the weather slot', unwrapped, 1);
+check('...and it is the shared accessor', /function _saCurrentWx_\(\)/.test(src), true);
+check('no consumer re-implements the unwrap inline', /var cur=\(wx&&wx\.data&&wx\.data\.current\)/.test(src), false);
 
 console.log('\n=== the fetch kicker retries on failure and repaints any tab ===');
 const kick = src.slice(src.indexOf('function _trjKickWeather_('),
