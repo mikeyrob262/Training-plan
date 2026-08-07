@@ -29378,18 +29378,35 @@ function _smDaysBetween_(aKey, bKey){
 // different local trailhead. That is the observation that actually carries the coaching weight —
 // unfamiliar roads, travel disruption, sleep and food off-routine — and it does not need the name.
 // Returns null when GPS is missing, which is ~40% of recent rides, and the coach then says nothing.
+// VIRTUAL RIDES CARRY FICTIONAL COORDINATES and must be excluded from both sides of this.
+// Zwift stamps its worlds with real lat/lon: Watopia sits at about -11.6, 166.9 (the Solomon
+// Islands) and its New York world at 40.7, -74.0. Those dominate this athlete's recent library, so
+// including them put the "usual riding area" median in the Pacific Ocean and produced a confident
+// "roughly 7,500 miles from home" on a ride to the next state. Provenance, not geography — the same
+// rule the fog map had to adopt.
+function _smIsVirtual_(r){
+  try{
+    if(!r) return false;
+    if(r.trainer===true) return true;
+    var sp=(typeof rideSport_==='function')?String(rideSport_(r)):String((r.sportType||r.type)||'');
+    if(/virtual/i.test(sp)) return true;
+    return /zwift/i.test(String(r.name||''));
+  }catch(e){ return false; }
+}
 function _smGeoAway_(ride){
   try{
     if(!ride || !Array.isArray(ride.gpsLats) || !ride.gpsLats.length) return null;
+    if(_smIsVirtual_(ride)) return null;               // a virtual ride is never "away from home"
     var lat0=+ride.gpsLats[0], lon0=+ride.gpsLons[0];
-    if(!isFinite(lat0) || !isFinite(lon0)) return null;
+    if(!isFinite(lat0) || !isFinite(lon0) || Math.abs(lat0)>90 || Math.abs(lon0)>180) return null;
     var pool=(typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]);
     var pts=[];
     (pool||[]).forEach(function(r){
       if(!r || r.deleted || r===ride) return;
+      if(_smIsVirtual_(r)) return;                     // fictional coordinates cannot define home
       if(!Array.isArray(r.gpsLats) || !r.gpsLats.length) return;
       var la=+r.gpsLats[0], lo=+r.gpsLons[0];
-      if(isFinite(la) && isFinite(lo)) pts.push({la:la, lo:lo, d:String(r.date||'')});
+      if(isFinite(la) && isFinite(lo) && Math.abs(la)<=90 && Math.abs(lo)<=180) pts.push({la:la, lo:lo, d:String(r.date||'')});
     });
     if(pts.length<10) return null;                       // too few anchors to call anywhere "usual"
     pts.sort(function(x,y){ return x.d<y.d?1:-1; });
