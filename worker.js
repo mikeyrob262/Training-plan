@@ -18248,7 +18248,11 @@ function aiReviveNulls_(execute){
     return flipped;
   }catch(e){ console.log('[revive] error ' + (e&&e.message)); }
 }
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['changed','What Changed'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
+// 'changed' (What Changed) was REMOVED from the nav. Its card had already been dropped from the
+// Overview grid as redundant with Momentum + Highlights in the hero, which left the tab pointing at
+// a destination holding one card and nothing else. aiCardWhatChanged_ is deliberately kept (see the
+// note on it) — the nav entry and the tab dispatch are what went.
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
 function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -18350,6 +18354,10 @@ function _monthTooEarly_(now, dim){
     return _periodTooEarly_(n.getDate(), d);
   }catch(e){ return false; }
 }
+// CURRENTLY UNMOUNTED. Dropped from the Overview grid (redundant with Momentum + Highlights in the
+// hero) and its nav tab removed with it. Kept rather than deleted: the month-over-month delta logic
+// is real and correct, and it is one of the two consumers of _monthTooEarly_ that the cross-surface
+// check uses to keep that predicate single-sourced. Re-mount it by adding a nav entry AND a dispatch.
 function aiCardWhatChanged_(ded){
   var rides=ded||allRidesDeduped_();
   function inMonth(r,back){ var d=new Date(); d.setMonth(d.getMonth()-back); var y=d.getFullYear(), m=d.getMonth();
@@ -18419,7 +18427,10 @@ function aiCardZones_(ded){
 }
 
 // ---- Weight: current + goal always (if any weight known); trend + sparkline when >=2 logged ----
-function aiCardWeight_(){
+// Returns the BARE block, no card shell: it is folded into the Legacy card rather than standing as
+// its own card, so the shell is the caller's. (It was the last tile left in the Overview grid after
+// the trim, sitting alone in a three-column row beside two empty cells.)
+function _ovWeightBlock_(){
   var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
   var vals=wl.map(function(x){return parseFloat(x.weight);});
   var cur = vals.length ? vals[vals.length-1] : (parseFloat(st.weight)||null);
@@ -18438,7 +18449,9 @@ function aiCardWeight_(){
     var dcol=delta<=0?'#4ade80':'#f59e0b';
     deltaStr='<span style="font-size:12px;font-weight:700;color:'+dcol+'">'+(delta>0?'+':'')+delta+' lb'+(windowed?' · 90d':'')+'</span>';
   }
-  inner+='<div style="display:flex;align-items:baseline;gap:10px"><span style="font-size:34px;font-weight:800;color:var(--d-head);line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:13px;color:var(--d-t3)">lb</span>'+deltaStr+'</div>';
+  // 26px, not 34: this now sits under the Legacy tiles (18px), and the old card-headline size made
+  // bodyweight the loudest number in a card whose subject is a 16-year cycling total.
+  inner+='<div style="display:flex;align-items:baseline;gap:9px"><span style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1">'+(Math.round(cur*10)/10)+'</span><span style="font-size:12px;color:var(--d-t3)">lb</span>'+deltaStr+'</div>';
   // sparkline only when there are >=2 real logged points
   if(vals.length>=2){
     var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals); if(max<=min) max=min+1;
@@ -18448,9 +18461,9 @@ function aiCardWeight_(){
   }
   if(goal){
     var toGo=Math.round((cur-goal)*10)/10;
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);display:flex;justify-content:space-between;font-size:12px;color:var(--d-t3)"><span>Goal '+goal+' lb</span><span style="color:var(--d-head);font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
+    inner+='<div style="margin-top:9px;display:flex;justify-content:space-between;font-size:11.5px;color:var(--d-t3)"><span>Goal '+goal+' lb</span><span style="color:var(--d-head);font-weight:700">'+(toGo>0?(toGo+' lb to go'):(toGo<0?(Math.abs(toGo)+' lb under goal'):'at goal'))+'</span></div>';
   }
-  return aiCard_(inner);
+  return inner;
 }
 
 // ---- Adherence: rolling weekly executionScore across the plan (strength/mobility AND rides) ----
@@ -26864,17 +26877,9 @@ function aiRenderSegLibrary_(){
 function aiRenderTab_(tab, ded){
   if(tab==='segattack') return _aiSafe_('SegAttack', function(){return aiRenderSegAttack_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Attack — render error.</div>';
   if(tab==='seglib') return _aiSafe_('SegLibrary', function(){return aiRenderSegLibrary_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Segment Library — render error.</div>';
-  // 'changed' was in AI_TABS and clickable as its own tab, but had no case here — it fell through to
-  // the generic "coming soon" fallback below even though aiCardWhatChanged_ already exists and
-  // already renders real month-over-month deltas inside the Overview tab. The feature was built;
-  // only this tab's wiring was missing, so the app was telling the athlete a shipped feature had not
-  // shipped. Same honest-empty-state rule as everywhere else: the card returns '' when there is not
-  // enough data (fewer than 4 combined activities across the two months), and that must say so
-  // rather than render a blank page.
-  if(tab==='changed') return _aiSafe_('WhatChanged', function(){
-    var h=aiCardWhatChanged_(ded);
-    return h || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough activity in the last two months to show what changed yet.</div>';
-  }) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">What Changed — render error.</div>';
+  // The 'changed' dispatch went with the nav entry. An unreachable tab must not keep a live
+  // renderer: the pair is what the "every nav tab has a dispatch" invariant checks, and leaving a
+  // dispatch behind a removed tab is the same drift in the opposite direction.
   // Wrapped like every sibling. Trends guards its own sub-computations (_trStory_, _trDrivers_,
   // _trPredictions_, _trWatchDay_) but the dispatch itself was bare, so a throw anywhere in the
   // rest of the body — coverage, the PMC block, chart assembly — escaped aiRenderTab_ and took the
@@ -26905,23 +26910,26 @@ function aiRenderTab_(tab, ded){
   var ovMom=_aiSafe_('OvMomentum', function(){return _ovMomentumHTML_();});
   var ovHi=_aiSafe_('OvHighlights', function(){return _ovHighlightsHTML_();});
   var ovOpp=_aiSafe_('OvOpportunity', function(){return _ovOpportunityHTML_();});
-  var ovLeg=_aiSafe_('OvLegacy', function(){return _ovLegacyHTML_();});
-  var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
+  var ovLeg=_aiSafe_('OvLegacy', function(){return _ovLegacyHTML_();});   // now carries Weight too
   var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
-  // GRID TRIM. Overview keeps the hero clusters and Your Athletic Story; everything that has a home
-  // of its own now lives there instead of being duplicated here at equal volume:
+  // GRID TRIM. The card grid under the hero rows is GONE — Overview is the hero clusters, the three
+  // context cards, and Your Athletic Story. Everything that has a home of its own lives there now
+  // instead of being duplicated here at equal volume:
   //   Athlete DNA                      -> DNA Insights tab (aiRenderDNA_)
   //   Strength Adherence / Progression,
   //   Ride Adherence, Zones            -> Trends tab (aiRenderTrends_)
   //   Records                          -> Records tab (aiRenderRecords_)
+  //   Weight                           -> folded INTO the Legacy card (_ovLegacyHTML_). It was the
+  //                  last tile left in the grid, sitting alone in a three-column row beside two
+  //                  empty cells. Folded rather than widened: a lone full-width bodyweight card
+  //                  would have given one number the visual weight of a whole row.
   // DROPPED outright, not moved:
   //   Watchlist    — its annual-mileage line reads st.yearlyMileageGoal, a second goal system beside
   //                  the approved Century/Everest targets. (The mileage FIGURE was a separate bug and
   //                  is fixed at source in _ytdCycMi_ / _athleteStatsStale_, because the same number
   //                  still feeds the mobile YTD ring and the coach's day state.)
   //   What Changed — redundant with Momentum and Highlights in the hero above.
-  var grid=[weight].filter(function(h){return h;});
-  if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
+  if(!hero && !focus && !ovMom && !ovHi && !ovOpp && !ovLeg && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   // LAYOUT, following the reference: a full-width status hero, then Today's Focus beside Momentum
   // (focus narrow, momentum wide), then Opportunity beside Highlights, then Legacy full width.
   // Every row collapses to a single column under ~860px, so mobile reads top to bottom in the same
@@ -26940,7 +26948,6 @@ function aiRenderTab_(tab, ded){
   // inheriting a three-card row's width and reading wider than their content. Legacy is a real card
   // with real numbers, so it fills the slot instead of stretching the other two to cover it.
   html+=row([ovOpp, ovHi, ovLeg], 'repeat(3, minmax(0,1fr))');
-  if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
   return html;
 }
@@ -27165,20 +27172,35 @@ function _ovOpportunityHTML_(){
 // ---- Legacy (compact) -------------------------------------------------------------------------
 // Reuses _lgCycTiles_ — the same server-side lifetime totals the Legacy page shows, with the same
 // elevation source. Nothing recomputed.
+// Your numbers. The all-time cycling totals, plus current bodyweight folded in below them.
+//
+// The two halves are LABELLED SEPARATELY on purpose. The Strava footnote is the reason the cycling
+// tiles can exceed the local library, and it is true of those tiles only — bodyweight is logged in
+// this app and is a CURRENT reading, not an all-time one. Sliding it into the 2x2 grid under a
+// single "cycling, all-time" heading and a single Strava attribution would have made the card claim
+// two false things about it at once. So the accent line broadens to "your numbers", the tiles keep
+// their own "cycling, all-time" qualifier, and the footnote stays attached to the tiles.
 function _ovLegacyHTML_(){
   var tiles=(typeof _lgCycTiles_==='function')?_lgCycTiles_():null;
-  if(!tiles || !tiles.length) return '';
+  var wt=(typeof _ovWeightBlock_==='function')?_aiSafe_('OvWeight', function(){return _ovWeightBlock_();}):'';
+  var hasTiles=!!(tiles && tiles.length);
+  if(!hasTiles && !wt) return '';                  // neither half has anything -> no card
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
     +'<div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your legacy</div>'
-    +'<div style="font-size:10.5px;color:#a78bfa;font-weight:700">cycling, all-time</div></div>'
-    // 2x2 rather than one wide row: this card now sits in a third-width column, where four tiles
-    // side by side would wrap unevenly and leave a ragged edge.
-    +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin-top:11px">';
-  tiles.forEach(function(t){
-    H+='<div><div style="font-size:18px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
-      +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px">'+t.k+'</div></div>';
-  });
-  return H+'</div><div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">From Strava&rsquo;s server-side totals, so gaps in the local library do not undercount it.</div></div>';
+    +'<div style="font-size:10.5px;color:#a78bfa;font-weight:700">your numbers</div></div>';
+  if(hasTiles){
+    H+='<div style="font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--d-dim,#8b93a7);margin-top:11px">Cycling, all-time</div>'
+      // 2x2 rather than one wide row: this card sits in a third-width column, where four tiles side
+      // by side would wrap unevenly and leave a ragged edge.
+      +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin-top:7px">';
+    tiles.forEach(function(t){
+      H+='<div><div style="font-size:18px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
+        +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px">'+t.k+'</div></div>';
+    });
+    H+='</div><div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:9px">From Strava&rsquo;s server-side totals, so gaps in the local library do not undercount it.</div>';
+  }
+  if(wt) H+='<div style="margin-top:'+(hasTiles?'13':'11')+'px;padding-top:'+(hasTiles?'12':'0')+'px;'+(hasTiles?'border-top:1px solid var(--d-edge);':'')+'">'+wt+'</div>';
+  return H+'</div>';
 }
 // ---- Today's Focus ----------------------------------------------------------------------------
 // Only lines with something real behind them. The mockup's "Ideal day for Threshold work — you

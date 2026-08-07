@@ -180,17 +180,26 @@ check('no window export calls its own name (infinite recursion)', selfWrap, []);
 // caught this assertion doing.
 const dispatches = [...src.matchAll(/if\(tab==='([a-z]+)'\)\s*return\s+([A-Za-z_$][\w$]*)/g)]
   .map(m => ({tab:m[1], callee:m[2]}));
-// INVARIANT: no tab in AI_TABS may fall through to "coming soon" when its card already exists.
-// 'changed' did exactly that - aiCardWhatChanged_ was built and rendering inside Overview while the
-// tab told the athlete the feature had not shipped.
+// INVARIANT: the nav and the dispatch table agree, BOTH WAYS. This replaces a pair of checks that
+// hardcoded the 'changed' tab. That tab was in AI_TABS with no dispatch, so it fell through to
+// "coming soon" while its card was already rendering inside Overview — the app telling the athlete
+// a shipped feature had not shipped. It has since been removed from the nav entirely, which is the
+// mirror-image drift: a live dispatch behind a tab nobody can reach. Stating the invariant
+// generically catches both, and catches the next tab too instead of only this one.
+const navTabs = [...(((src.match(/var AI_TABS=(\[.*?\]);/) || [])[1]) || '').matchAll(/\['([a-z]+)','[^']*'\]/g)].map(m => m[1]);
+check('the nav tab list was parsed', navTabs.length > 0, true);
+check('every nav tab has a dispatch (none falls through to "coming soon")',
+      navTabs.filter(t => t !== 'overview' && !dispatches.some(d => d.tab === t)), []);
+check('every dispatch has a nav tab (no renderer behind an unreachable tab)',
+      dispatches.filter(d => !navTabs.includes(d.tab)).map(d => d.tab), []);
+check('What Changed is gone from the nav', navTabs.includes('changed'), false);
 // INVARIANT: ONE definition of "too early in this month to compare". Both the Year view's chapter
 // labels and the What Changed card ask it; two copies of the formula is how they come to disagree.
+// aiCardWhatChanged_ is currently unmounted but deliberately kept, so it is still a consumer here.
 check('there is exactly one too-early predicate', countCode(/function _monthTooEarly_/g), 1);
 check('no surface re-derives the threshold inline', countCode(/Math\.max\(10, Math\.round\([A-Za-z_]+\*0\.4\)\)/g), 1);
 check('the chapter label asks it', /if\(_monthTooEarly_\(now, dimNow\)\)/.test(src), true);
 check('the What Changed card asks it too', /if\(_monthTooEarly_\(_now\)\)/.test(src), true);
-check('the What Changed tab is wired to its card', /if\(tab===.changed.\) return _aiSafe_\(.WhatChanged./.test(src), true);
-check('...and its empty state says WHY, not a blank page', /Not enough activity in the last two months/.test(src), true);
 check('every AI tab dispatch exists', dispatches.length>0, true);
 check('every AI tab dispatch returns _aiSafe_ FIRST',
       dispatches.filter(d => d.callee !== '_aiSafe_').map(d => d.tab+' -> '+d.callee), []);
