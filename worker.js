@@ -26939,13 +26939,32 @@ function _ovHighlightsHTML_(){
   });
   if(!wk.length) return '';
   var rows=[];
-  var pick=function(fn){ var b=null, bv=-1; wk.forEach(function(r){ var v=fn(r)||0; if(v>bv){ bv=v; b=r; } }); return (bv>0)?{r:b,v:bv}:null; };
-  var far=pick(function(r){ return parseFloat(r.distance)||0; });
-  if(far) rows.push({ col:'#60a5fa', lab:'Longest ride', val:(Math.round(far.v*10)/10)+' mi', sub:actName_(far.r) });
-  var hard=pick(function(r){ return (typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(+r.tss||0); });
-  if(hard) rows.push({ col:'#f59e0b', lab:'Hardest ride', val:Math.round(hard.v)+' TSS', sub:actName_(hard.r) });
-  var climb=pick(function(r){ return parseFloat(r.elev)||0; });
-  if(climb) rows.push({ col:'#22c55e', lab:'Most climbing', val:Math.round(climb.v).toLocaleString()+' ft', sub:actName_(climb.r) });
+  // One standout ride usually wins every category at once, and three rows naming the same activity
+  // is a list pretending to be three findings. Each category prefers a ride not already used; if no
+  // other ride qualifies it still reports the honest winner rather than inventing variety, and the
+  // repeat is labelled so it reads as "that ride again", not as a rendering fault.
+  var used=[];
+  var pick=function(fn){
+    var b=null, bv=-1, bF=null, bvF=-1;
+    wk.forEach(function(r){
+      var v=fn(r)||0; if(!(v>0)) return;
+      if(v>bvF){ bvF=v; bF=r; }
+      if(used.indexOf(r)>=0) return;
+      if(v>bv){ bv=v; b=r; }
+    });
+    if(b){ used.push(b); return {r:b, v:bv, dup:false}; }
+    return bF?{r:bF, v:bvF, dup:true}:null;
+  };
+  var add=function(res, col, lab, valFn){
+    if(!res) return;
+    rows.push({ col:col, lab:lab+(res.dup?' (same ride)':''), val:valFn(res.v), sub:actName_(res.r) });
+  };
+  add(pick(function(r){ return parseFloat(r.distance)||0; }), '#60a5fa', 'Longest ride',
+      function(v){ return (Math.round(v*10)/10)+' mi'; });
+  add(pick(function(r){ return (typeof constRideTSS_==='function')?(constRideTSS_(r)||0):(+r.tss||0); }), '#f59e0b', 'Hardest ride',
+      function(v){ return Math.round(v)+' TSS'; });
+  add(pick(function(r){ return parseFloat(r.elev)||0; }), '#22c55e', 'Most climbing',
+      function(v){ return Math.round(v).toLocaleString()+' ft'; });
   if(!rows.length) return '';
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 18px">'
     +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">This week&rsquo;s highlights</div>';
