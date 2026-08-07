@@ -26828,8 +26828,11 @@ function aiRenderTab_(tab, ded){
   var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
   if(hero) html+=hero;
   html+=row([focus, ovMom], 'minmax(0,1fr) minmax(0,1.6fr)');
-  html+=row([ovOpp, ovHi], 'minmax(0,1fr) minmax(0,1fr)');
-  html+=row([ovLeg], 'minmax(0,1fr)');
+  // Legacy MOVES into the third row rather than sitting full-bleed underneath it. Goals & Progress
+  // was dropped from v1 (its target fields do not exist), which left Opportunity and Highlights
+  // inheriting a three-card row's width and reading wider than their content. Legacy is a real card
+  // with real numbers, so it fills the slot instead of stretching the other two to cover it.
+  html+=row([ovOpp, ovHi, ovLeg], 'repeat(3, minmax(0,1fr))');
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
   return html;
@@ -26879,10 +26882,14 @@ function _ovHeroHTML_(){
       +'<div><div style="font-size:12.5px;font-weight:800;color:'+R.col+';line-height:1.2">'+R.label+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);max-width:120px;line-height:1.35">'+R.head+'</div></div></div>';
   }
+  // CLUSTERED, not corner-to-corner. space-between on a full-bleed card pushed the text to the far
+  // left and the ring/milestone to the far right, opening a dead zone across the middle at desktop
+  // width. The three parts are one reading unit — direction, form, what is next — so they sit
+  // together at a fixed gap and the card simply ends after them.
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:13px 16px;margin-bottom:10px">'
-    +'<div style="display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;justify-content:space-between">';
+    +'<div style="display:flex;flex-wrap:wrap;gap:12px 34px;align-items:center;justify-content:flex-start">';
   // LEFT: direction, at text scale rather than display scale
-  H+='<div style="flex:1 1 210px;min-width:190px">'
+  H+='<div style="flex:0 1 auto;min-width:170px">'
     +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Athlete status</div>';
   if(M && M.ok && M.bucket){
     H+='<div style="font-size:19px;font-weight:800;color:'+bCol+';line-height:1.15;letter-spacing:-.01em;margin-top:2px">You&rsquo;re '+M.bucket+'</div>'
@@ -26898,7 +26905,7 @@ function _ovHeroHTML_(){
   if(ms){
     var pct=Math.max(0,Math.min(100,ms.pct||0));
     var left=Math.max(0, Math.round(ms.remaining||0));
-    H+='<div style="flex:0 1 auto;min-width:120px;text-align:right">'
+    H+='<div style="flex:0 1 auto;min-width:120px">'
       +'<div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Next milestone</div>'
       +'<div style="font-size:19px;font-weight:800;color:var(--d-head,#15181D);line-height:1.15;margin-top:2px">'
       +left.toLocaleString()+(ms.unit?('<span style="font-size:11px;font-weight:700;color:var(--d-dim,#8b93a7)"> '+ms.unit+'</span>'):'')+'</div>'
@@ -26915,8 +26922,24 @@ function _ovMomentumHTML_(){
   var M=(typeof _momData_==='function')?_momData_():null;
   if(!M || !M.ok) return '';
   var bCol=(M.bucket==='Building')?'#4ade80':((M.bucket==='Easing')?'#f59e0b':'#60a5fa');
-  var spark=(typeof _gcSpark_==='function' && M.line && M.line.length>1)
-    ? _gcSpark_(M.line, '#22d3ee', { H:96, fill:true, aria:'Fitness over 12 weeks' }) : '';
+  // The chart FILLS the card rather than floating at the top of it. At 44px, and then 96px, the
+  // line sat in the upper band of a container the grid row stretched to ~230px, leaving a dead
+  // strip above the caption. It is now sized to the space it actually has and labelled on both
+  // axes — the CTL range it spans and the months it covers — so the height is carrying information
+  // instead of padding.
+  var spark='';
+  if(typeof _gcSpark_==='function' && M.line && M.line.length>1){
+    var vals=M.line.map(function(p){ return +p.v||0; });
+    var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals);
+    var svg=_gcSpark_(M.line, '#22d3ee', { H:132, fill:true, aria:'Fitness over 12 weeks' });
+    spark='<div style="display:flex;gap:7px;margin-top:8px">'
+      +'<div style="flex:0 0 auto;display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--d-dim,#8b93a7);height:132px;padding:1px 0">'
+        +'<span>'+Math.round(hi)+'</span><span>'+Math.round(lo)+'</span></div>'
+      +'<div style="flex:1 1 auto;min-width:0">'+svg
+        +'<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--d-dim,#8b93a7);margin-top:2px">'
+        +'<span>'+(M.line[0].lab||'')+'</span><span>Fitness (CTL), last 12 weeks</span><span>'+(M.line[M.line.length-1].lab||'')+'</span></div>'
+      +'</div></div>';
+  }
   var cell=function(lab,val,col){
     return '<div style="min-width:58px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--d-dim,#8b93a7)">'+lab+'</div>'
       +'<div style="font-size:17px;font-weight:800;color:'+(col||'var(--d-head,#15181D)')+';line-height:1.1">'+val+'</div></div>';
@@ -26933,7 +26956,7 @@ function _ovMomentumHTML_(){
         +cell('ATL', Math.round(M.atl))
         +cell('TSB', (M.tsb>0?'+':'')+Math.round(M.tsb))
       +'</div></div>'
-    +(spark?('<div style="margin-top:10px">'+spark+'<div style="font-size:9.5px;color:var(--d-dim,#8b93a7);margin-top:2px">Fitness, last 12 weeks</div></div>'):'')
+    +spark
     +'</div>';
 }
 // ---- This Week's Highlights -------------------------------------------------------------------
@@ -27041,7 +27064,9 @@ function _ovLegacyHTML_(){
   var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:13px 15px">'
     +'<div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Your legacy</div>'
     +'<div style="font-size:10.5px;color:#a78bfa;font-weight:700">cycling, all-time</div></div>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:11px 24px;margin-top:11px">';
+    // 2x2 rather than one wide row: this card now sits in a third-width column, where four tiles
+    // side by side would wrap unevenly and leave a ragged edge.
+    +'<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;margin-top:11px">';
   tiles.forEach(function(t){
     H+='<div><div style="font-size:18px;font-weight:800;color:var(--d-head,#15181D);line-height:1.05">'+t.v+'</div>'
       +'<div style="font-size:10.5px;color:var(--d-dim,#8b93a7);margin-top:2px">'+t.k+'</div></div>';
