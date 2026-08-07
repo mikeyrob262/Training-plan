@@ -10,16 +10,28 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const src = fs.readFileSync(path.join(root, 'worker.js'), 'utf8');
 
 function matchBrace(from){ let i=src.indexOf('{',from), depth=0; for(;i<src.length;i++){const c=src[i]; if(c==='{')depth++; else if(c==='}'){depth--; if(depth===0)return i;}} return -1; }
+// The whole app ships inside ONE template literal, so a `\\d` in worker.js source is SERVED as `\d`.
+// Extracting raw source and eval'ing it gives the doubled form, whose regexes match a literal
+// backslash — _actSameDay_'s date test silently fails that way and drags the ride matcher with it.
+// Collapse the escape level so the closure under test is the one the browser actually runs.
+const unserve = s => s.replace(/\\\\/g, '\\');
 function extract(name){
   let idx=src.indexOf('function '+name+'(');
   if(idx<0) idx=src.indexOf('function '+name+' (');
   if(idx<0) throw new Error('closure fn not found in worker.js: '+name);
-  return src.slice(idx, matchBrace(idx)+1)+'\n';
+  return unserve(src.slice(idx, matchBrace(idx)+1))+'\n';
 }
 
 // Dependency closure for the two adherence cards (verified against worker.js call graph).
 // Add a card + its closure fns here when you want it under the smoke test.
-const CLOSURE = ['aiCard_','aiLbl_','aiEsc_','_adhLbl_','_adherenceTrend_','strengthAdherenceTrend_','rideAdherenceTrend_','_adhCardInner_','aiCardStrengthAdherence_','aiCardRideAdherence_'];
+// _sessSport_ / _adhKind_ / _sessActivityMatch_ / _sessEffTargets_ / computeRideExecutionScore_ and
+// their own helpers are in the closure because the ride series now RESOLVES a score at read time
+// (an actually-ridden session that was never tapped "complete" used to count as a miss forever).
+// _planSessionFromDef_ and SESSION_DEFS are deliberately NOT pulled in — they drag the whole
+// generator in — so _sessEffTargets_ falls through to stored targets here, which the fixture sets.
+const CLOSURE = ['aiCard_','aiLbl_','aiEsc_','_adhLbl_','_adherenceTrend_','strengthAdherenceTrend_','rideAdherenceTrend_','_adhCardInner_','aiCardStrengthAdherence_','aiCardRideAdherence_',
+  '_sessSport_','_adhKind_','_sessActivityMatch_','_sessEffTargets_','computeRideExecutionScore_',
+  '_durSec_','activitiesForDate_','_actSameDay_','_actSport_','parseDayKey','normDate','rideKey'];
 let code=''; for(const f of CLOSURE) code+=extract(f);
 
 // ---- fixture: recent weeks of scored + unscored sessions across all three types ----
@@ -65,6 +77,36 @@ function runAll(label){
 }
 runAll('full');
 global.st = LOWN; runAll('low-n');
+
+// ---- behavioural assertions on the ride series (the "0/6, 0 scored" defect) ------------------
+// Two distinct faults produced that reading, so both are pinned here:
+//   1. a session that was actually RIDDEN but never tapped "mark complete" carried no persisted
+//      executionScore, and the engine only ever read the persisted field -> counted as a miss.
+//   2. the migrated plan types every run as type:'ride', so runs inflated the ride denominator.
+function dkOf(offsetDays){
+  const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-offsetDays);
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+const RIDE_DK = dkOf(1);
+global.st = {
+  plan: { [RIDE_DK]: { sessions: [
+    // ridden, never tapped: no status, no completedRideKey, no executionScore
+    { id:'s1', type:'ride', name:'VO2', status:'planned', targets:{durationMin:45} },
+    // the migration's mistyped run — must NOT land in the ride denominator
+    { id:'s2', type:'ride', name:'Easy Run', intent:'easyRun', status:'planned', targets:{durationMin:25} }
+  ] } },
+  rides: [ { id:'r1', date:RIDE_DK, name:'Zwift - VO2 Work', type:'VirtualRide', distance:14.1, movingSecs:45*60 } ],
+  runs: []
+};
+const cur = globalThis.rideAdherenceTrend_(global.st, 8).slice(-1)[0];
+if(cur.planned !== 1) fails.push(`ride series: planned=${cur.planned}, expected 1 (the mistyped Easy Run must not count as a ride)`);
+if(cur.scored !== 1) fails.push(`ride series: scored=${cur.scored}, expected 1 (a ridden-but-untapped session must resolve a score at read time)`);
+if(cur.mean !== 100) fails.push(`ride series: mean=${cur.mean}, expected 100 (45 min ridden against a 45 min target)`);
+// Negative control: with the matching ride removed, the SAME fixture must go back to unscored —
+// proves the score came from the resolved match and not from something incidental.
+global.st = { plan: global.st.plan, rides: [], runs: [] };
+const noRide = globalThis.rideAdherenceTrend_(global.st, 8).slice(-1)[0];
+if(noRide.scored !== 0) fails.push(`negative control: scored=${noRide.scored} with no recorded ride, expected 0`);
 
 if(fails.length){
   console.error('\x1b[31m✗ AI card smoke-test FAILED:\x1b[0m');

@@ -6211,10 +6211,33 @@ function computeExecutionScore_(sess){
 // session's completedRideKey ONLY (the caller passes the linked ride) — never a guessed date match.
 // NOTE (flagged, not resolved): an ASYMMETRIC penalty may eventually be right — for a masters
 // athlete a 20% overshoot is arguably worse than a 20% undershoot. Start symmetric; revisit on data.
+// A session's EFFECTIVE targets. A generated session stores targets:{} — its prescription lives in
+// SESSION_DEFS and is rebuilt at read time by every surface that prints it (_sessionRxFor_ does
+// exactly this, and so does the block plan). The scorer was the one reader that did NOT: it read the
+// raw field, found {}, and returned null. Measured 2026-08-07: 115 ride sessions in the plan, 7
+// marked completed, 1 with a linked ride, and 0 scored EVER — including Aug 6's Z2 Endurance, which
+// was completed AND correctly linked to the Brookfield ride and still could not produce a number.
+// Stored targets win field by field; the def only fills gaps, so a hand-edited target still rules.
+// blockWeek only affects the exercise list (strength), never a ride's duration/TSS band.
+function _sessEffTargets_(sess){
+  var stored=(sess && sess.targets && typeof sess.targets==='object') ? sess.targets : {};
+  var derived={};
+  try{
+    if(sess && sess.intent && typeof _planSessionFromDef_==='function'){
+      var wk=(sess.block && +sess.block.week)||1;
+      var built=_planSessionFromDef_(sess.intent, wk);
+      if(built && built.targets) derived=built.targets;
+    }
+  }catch(e){}
+  var out={};
+  Object.keys(derived).forEach(function(k){ out[k]=derived[k]; });
+  Object.keys(stored).forEach(function(k){ if(stored[k]!=null) out[k]=stored[k]; });
+  return out;
+}
 function computeRideExecutionScore_(sess, ride){
   if(!sess || typeof sess!=='object' || !ride || typeof ride!=='object') return null;
   function _num_(v){ var n = Number(v); return isFinite(n) ? n : 0; }
-  var tgt = sess.targets || {};
+  var tgt = (typeof _sessEffTargets_==='function') ? _sessEffTargets_(sess) : (sess.targets || {});
   var target = null, actual = null;
   var tssTarget = _num_(tgt.tssTarget), rideTss = _num_(ride.tss);
   if(tssTarget > 0 && rideTss > 0){ target = tssTarget; actual = rideTss; }                 // preferred: TSS
@@ -18436,8 +18459,48 @@ function aiCardWeight_(){
 // ISO week (Mon start); future-dated weeks excluded. _todayRef is a test seam. The types arg picks the
 // session types counted. Strength and rides are kept SEPARATE (different behaviors, different failure
 // modes — averaging them together would hide which one is slipping).
-//   planned = live sessions of those types in the week, ANY status (synthetic scaffolding excluded)
-//   scored  = those with a non-null executionScore ; mean = rounded avg of those (null when scored=0)
+//   planned = live sessions of those KINDS in the week, ANY status (synthetic scaffolding excluded).
+//             Kind comes from _adhKind_ (_sessSport_), not the stored type — see the note there.
+//   scored  = those with an executionScore, PERSISTED or resolved at read time via
+//             _sessActivityMatch_ + computeRideExecutionScore_ ; mean = rounded avg (null at 0)
+// THE pairing between a planned session and the activity that answered it. One function, so the
+// adherence engine and any surface that wants to show a match can never name different activities
+// for the same session.
+//   1. an explicit link (completedRideKey, written by the manual "mark complete" tap) always wins
+//   2. otherwise the first recorded activity on that date whose SPORT matches the session's
+// READ-ONLY by design: it resolves a pairing, it never writes status/executionScore back. Persisting
+// would have to fight the _edited mask and the boot write-storm, and the card is a read surface.
+// Strength and mobility are deliberately out of scope — they are scored off their logged sets, not
+// off an activity record, and pairing them to "whatever was logged that morning" is the exact fault
+// _sdCompleteSession_ already refuses to commit.
+function _sessActivityMatch_(dateKey, sess){
+  if(!sess || sess.deleted) return null;
+  var want=(typeof _sessSport_==='function') ? String(_sessSport_(sess)||'').toLowerCase() : String(sess.type||'').toLowerCase();
+  if(want!=='ride' && want!=='run') return null;
+  try{
+    if(sess.completedRideKey!=null && typeof st!=='undefined' && st && st.rides){
+      for(var i=0;i<st.rides.length;i++){ var r=st.rides[i];
+        if(r && !r.deleted && (typeof rideKey==='function'?rideKey(r):r.id)===sess.completedRideKey) return r; }
+    }
+  }catch(e){}
+  try{
+    if(typeof activitiesForDate_!=='function') return null;
+    var acts=activitiesForDate_(dateKey)||[];
+    for(var j=0;j<acts.length;j++){
+      if(acts[j] && String(acts[j].sport||'').toLowerCase()===want) return acts[j].obj||null;
+    }
+  }catch(e){}
+  return null;
+}
+// Which SERIES a session belongs to. Reads _sessSport_, NOT the stored type: the migrated plan typed
+// every run as type:'ride' (11 easyRun + 4 run10k sessions, and no session carries type:'run' at
+// all), so a raw type filter counted runs in the ride denominator — 2 of the 6 "planned rides" in
+// the week of Aug 3 2026 were Easy Runs. Falls back to the stored type when the accessor is absent.
+function _adhKind_(x){
+  var s=(typeof _sessSport_==='function') ? String(_sessSport_(x)||'').toLowerCase() : '';
+  if(s==='ride'||s==='run'||s==='strength'||s==='mobility'||s==='rest') return s;
+  return String((x&&x.type)||'').toLowerCase();
+}
 function _adherenceTrend_(st, weeks, types, _todayRef){
   weeks = weeks||8;
   function _wk(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var g=x.getDay(); x.setDate(x.getDate()-(g===0?6:g-1)); x.setHours(0,0,0,0); return x; }   // Monday start
@@ -18455,9 +18518,22 @@ function _adherenceTrend_(st, weeks, types, _todayRef){
     day.sessions.forEach(function(x){
       if(!x||x.deleted) return;
       if(x.synthetic===true || x.source==='synthetic') return;   // validation scaffolding never counts toward a real metric
-      if(types.indexOf(x.type)<0) return;
+      if(types.indexOf(_adhKind_(x))<0) return;
       b.planned++;
-      if(x.executionScore!=null){ b.scored++; b._sum+=(+x.executionScore||0); }
+      var sc=x.executionScore;
+      // RESOLVE at read time when nothing was persisted. The only writer of a ride's score is the
+      // manual "mark complete" tap in the session sheet, so a session that was actually ridden but
+      // never tapped counted as a miss forever — the Aug 4 Zwift VO2 sat at status:'planned' beside
+      // the 14.1 mi ride that answered it. The Calendar never made this match either: its PLAN chip
+      // is date co-location, it just draws the day's planned sessions next to the day's activities.
+      // So the match is MADE here, once, in _sessActivityMatch_, and both surfaces can read it.
+      if(sc==null && _adhKind_(x)==='ride' && typeof _sessActivityMatch_==='function'){
+        try{
+          var act=_sessActivityMatch_(dk, x);
+          if(act && typeof computeRideExecutionScore_==='function') sc=computeRideExecutionScore_(x, act);
+        }catch(e){}
+      }
+      if(sc!=null){ b.scored++; b._sum+=(+sc||0); }
     });
   });
   return order.map(function(k){ var b=byKey[k]; return { weekStart:k, mean:(b.scored>0?Math.round(b._sum/b.scored):null), scored:b.scored, planned:b.planned }; });
@@ -22430,10 +22506,15 @@ function _recEngineSectionHTML_(){
 }
 function aiRenderRecords_(){
   var all=(typeof segmentRecordsCompute_==='function')?segmentRecordsCompute_(st.segments):[];
+  // The Records summary card, moved off the Overview grid to the tab it summarises. Built above the
+  // segment gate — it reads the ride library, not st.segments, so an unsynced segment store must
+  // not take it down with the segment half.
+  var _recCard=_aiSafe_('Records', function(){return aiCardRecords_();});
+  var _recCardHTML=_recCard?('<div class="ai-ov-grid" style="margin-bottom:14px">'+_recCard+'</div>'):'';
   if(!all.length){
     // The ride-library records (distance / power / climbing) do not depend on the segment store,
     // so an unsynced segment library must not blank them out — it only removes the segment half.
-    return '<div style="padding-bottom:16px">'+_recEngineSectionHTML_()
+    return '<div style="padding-bottom:16px">'+_recCardHTML+_recEngineSectionHTML_()
       +'<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:14px;line-height:1.6">'
       +'No segment records synced yet.<br>Use Sync Segment PRs to pull them from Strava.</div></div>';
   }
@@ -22587,7 +22668,7 @@ function aiRenderRecords_(){
     +'Every figure here is read from your synced segment records. Sport filters are absent because '
     +'stored segments carry no activity type, and no speculative success score or target time is '
     +'shown because nothing in this data supports one.</div>';
-  return '<div style="padding-bottom:16px">'+H+'</div>';
+  return '<div style="padding-bottom:16px">'+_recCardHTML+H+'</div>';
 }
 
 // ---- Athlete DNA (only traits that pass a real threshold + >=20-ride gate) ----
@@ -22903,7 +22984,21 @@ function aiRenderTrends_(ded){
   var GRN='#22c55e', ORG='#FC4C02', BLU='#60a5fa', GOOD='#22c55e', BAD='#ef4444';
   var story=_aiSafe_('TrStory', function(){return _trStory_();});
   var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
-  if(!story && series.length<2){ return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet for trends. Log or sync rides to build your fitness story.</div>'; }
+  // Cards moved off the Overview grid, where they competed with the hero at equal volume. They are
+  // execution and distribution — "did you do the work, and what kind" — which is this tab's question.
+  // Built here, ABOVE the coverage gate, so a thin fitness series cannot take them down with it:
+  // adherence reads st.plan, not the PMC, and is perfectly readable on its own.
+  var _trMoved=[
+    _aiSafe_('StrengthAdherence', function(){return aiCardStrengthAdherence_();}),
+    _aiSafe_('RideAdherence',     function(){return aiCardRideAdherence_();}),
+    _aiSafe_('StrengthProgress',  function(){return aiCardStrengthProgress_();}),
+    _aiSafe_('Zones',             function(){return aiCardZones_(ded);})
+  ].filter(function(h){return h;});
+  var _trMovedHTML=_trMoved.length?('<div class="ai-ov-grid" style="margin-bottom:14px">'+_trMoved.join('')+'</div>'):'';
+  if(!story && series.length<2){
+    return (_trMovedHTML?('<div style="padding:2px 2px 0">'+_trMovedHTML+'</div>'):'')
+      +'<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet for trends. Log or sync rides to build your fitness story.</div>';
+  }
   var cov=_trCoverage_();
   var H='<div style="padding:2px 2px 30px">';
   H+='<div style="font-size:13px;color:var(--d-t4);margin:0 2px 14px">Understand what is happening. Learn why. See what is next.</div>';
@@ -23074,6 +23169,12 @@ function aiRenderTrends_(ded){
     +'<div style="font-size:26px;font-weight:800;color:'+(pos.length?GRN:'#94a3b8')+';line-height:1">'+pos.length+'<span style="font-size:15px;color:var(--d-dim);font-weight:700"> of '+drv.length+'</span></div>'
     +'<div style="font-size:10px;color:var(--d-dim);margin-top:4px;max-width:96px;line-height:1.35">drivers trending positive</div></div>';
   H+='</div></div></div>';
+
+  // ===== EXECUTION & DISTRIBUTION (moved off the Overview grid) =====
+  if(_trMovedHTML){
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.06em;margin:4px 2px 10px">Execution &amp; distribution</div>';
+    H+=_trMovedHTML;
+  }
 
   // ===== ONE THING TO REMEMBER =====
   var oneThing='';
@@ -24066,7 +24167,13 @@ function _dnaSignature_(){
 function _dnaEraColor_(dom){ return dom==='run'?'#2dd4bf':(dom==='ride'?'#f59e0b':'#a855f7'); }
 function aiRenderDNA_(){
   var acts=_dnaActs_();
-  if(acts.length<50) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Your DNA reads off your activity history — a little more logged data and it will fill in.</div>';
+  // The Athlete DNA summary card, moved off the Overview grid to the tab it summarises. Built above
+  // the 50-activity gate so the short-history message still carries the card's own honest state
+  // (aiCardDNA_ returns '' on its own when it has nothing to say).
+  var _dnaCard=_aiSafe_('DNA', function(){return aiCardDNA_(null);});   // null -> the card takes allRidesDeduped_ itself
+  var _dnaCardHTML=_dnaCard?('<div class="ai-ov-grid" style="margin-bottom:18px">'+_dnaCard+'</div>'):'';
+  if(acts.length<50) return (_dnaCardHTML?('<div style="max-width:1120px;margin:0 auto">'+_dnaCardHTML+'</div>'):'')
+    +'<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Your DNA reads off your activity history — a little more logged data and it will fill in.</div>';
   var eras=_dnaEras_(acts), traits=_dnaTraits_(acts), sig=_dnaSignature_();
   var unlocked=traits.filter(function(t){return !t.locked;}), locked=traits.filter(function(t){return t.locked;});
   var span=acts[0].date.slice(0,4)+'–'+acts[acts.length-1].date.slice(0,4);
@@ -24074,6 +24181,7 @@ function aiRenderDNA_(){
   var H='<div style="max-width:1120px;margin:0 auto">';
   H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
     +nRun.toLocaleString()+' runs and '+nRide.toLocaleString()+' rides, '+span+'. Every trait states its derivation; a trait without enough observations to be honest is locked, with what would unlock it.</div>';
+  H+=_dnaCardHTML;
   // ERA SPINE
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
   H+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-bottom:22px">';
@@ -26798,22 +26906,21 @@ function aiRenderTab_(tab, ded){
   var ovHi=_aiSafe_('OvHighlights', function(){return _ovHighlightsHTML_();});
   var ovOpp=_aiSafe_('OvOpportunity', function(){return _ovOpportunityHTML_();});
   var ovLeg=_aiSafe_('OvLegacy', function(){return _ovLegacyHTML_();});
-  var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
-  var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
-  var watch=_aiSafe_('Watchlist', function(){return aiCardWatchlist_();});
-  var changed=_aiSafe_('WhatChanged', function(){return aiCardWhatChanged_(ded);});
-  var zones=_aiSafe_('Zones', function(){return aiCardZones_(ded);});
   var weight=_aiSafe_('Weight', function(){return aiCardWeight_();});
-  var recs=_aiSafe_('Records', function(){return aiCardRecords_();});
-  var adh=_aiSafe_('StrengthAdherence', function(){return aiCardStrengthAdherence_();});
-  var strp=_aiSafe_('StrengthProgress', function(){return aiCardStrengthProgress_();});
-  var ridh=_aiSafe_('RideAdherence', function(){return aiCardRideAdherence_();});
   var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
-  // Mockup grid: hero row (DNA | Momentum | Watchlist), then the metric cards, and
-  // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
-  // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
-  // Adherence leads the metric row — a declining completion rate is an early warning.
-  var grid=[dna, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
+  // GRID TRIM. Overview keeps the hero clusters and Your Athletic Story; everything that has a home
+  // of its own now lives there instead of being duplicated here at equal volume:
+  //   Athlete DNA                      -> DNA Insights tab (aiRenderDNA_)
+  //   Strength Adherence / Progression,
+  //   Ride Adherence, Zones            -> Trends tab (aiRenderTrends_)
+  //   Records                          -> Records tab (aiRenderRecords_)
+  // DROPPED outright, not moved:
+  //   Watchlist    — its annual-mileage line reads st.yearlyMileageGoal, a second goal system beside
+  //                  the approved Century/Everest targets. (The mileage FIGURE was a separate bug and
+  //                  is fixed at source in _ytdCycMi_ / _athleteStatsStale_, because the same number
+  //                  still feeds the mobile YTD ring and the coach's day state.)
+  //   What Changed — redundant with Momentum and Highlights in the hero above.
+  var grid=[weight].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   // LAYOUT, following the reference: a full-width status hero, then Today's Focus beside Momentum
   // (focus narrow, momentum wide), then Opportunity beside Highlights, then Legacy full width.
@@ -32290,25 +32397,62 @@ function _appYtdCycMi_(){
 // for the year total), else the deduped snapshot via _appYtdCycMi_. It deliberately does NOT fall
 // through to raw st.rides: that library is lossy, and reading it directly is exactly what told the
 // coach "600 mi behind" while Strava's dashboard said 442 ahead — same athlete, a crippled copy.
+// Can the stored Strava YTD be used at all? It must exist, be positive, and — when it carries a
+// timestamp — have been taken THIS calendar year. A snapshot from a previous year holds last year's
+// year-to-date; folding this year's tail onto it would report a hybrid of two years as one.
+function _ytdStravaUsable_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  if(!(as && as.ytdRideMeters!=null && as.ytdRideMeters>0)) return false;
+  var t=+(as.updatedAt||0);
+  if(t && new Date(t).getFullYear()!==new Date().getFullYear()) return false;
+  return true;
+}
+// Miles ridden AFTER the Strava snapshot was taken. Same shape as storeV2Tail_: an authoritative but
+// POINT-IN-TIME figure with the live tail folded on, so the total stays right in the window between
+// boot and a refresh landing (and stays right at all if Strava is unreachable). The cut is STRICTLY
+// AFTER the snapshot's calendar day: a ride stores a day, not a time (see the capture note on
+// ride start hours), so a same-day ride cannot be told apart from one already inside the snapshot —
+// and under-counting by at most one ride is the safe direction. Returns 0 once a fresh sync lands.
+function _ytdStravaTailMi_(){
+  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
+  var t=+((as&&as.updatedAt)||0); if(!t) return 0;
+  var d=new Date(t);
+  var cut=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  try{
+    var rides=(typeof allRidesDeduped_==='function')?allRidesDeduped_():((st.rides||[]).filter(function(r){ return r&&!r.deleted; }));
+    var tail=rides.filter(function(r){
+      if(!r || !r.date || String(r.date).slice(0,10)<=cut) return false;
+      var s=(typeof rideSport_==='function')?rideSport_(r):'';
+      return !s || /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i.test(s);
+    });
+    return _sumRideMi_(tail);
+  }catch(e){ return 0; }
+}
 function _ytdCycMi_(){
-  var as=st.athleteStats;
-  if(as && as.ytdRideMeters!=null && as.ytdRideMeters>0) return Math.round(as.ytdRideMeters/1609.344);
+  if(_ytdStravaUsable_()) return Math.round(st.athleteStats.ytdRideMeters/1609.344 + _ytdStravaTailMi_());
   return _appYtdCycMi_();
 }
 // WHICH source that figure came from. The fallback to the local library is silent, and a caller
 // that states a confident number off it repeats the "600 mi behind" fault: the stored athleteStats
 // was written before ytdRideMeters existed, so the field reads undefined and the lossy local count
 // (1,754 mi) stands in for the real year to date.
-function _ytdCycSrc_(){
-  var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
-  return (as && as.ytdRideMeters!=null && as.ytdRideMeters>0) ? 'strava' : 'local';
-}
-// True when athleteStats exists but predates the ytd fields -- a stale SHAPE, not a stale value,
-// which waiting never fixes because only a re-sync writes the missing keys.
+function _ytdCycSrc_(){ return _ytdStravaUsable_() ? 'strava' : 'local'; }
+// How long a stored Strava snapshot may stand before the boot path refreshes it.
+var _ATHLETE_STATS_TTL_MS=12*3600*1000;
+// True when the stored athleteStats needs a re-sync. TWO reasons, and the second one is the fix:
+//   SHAPE  -- written before the ytd fields existed, so ytdRideMeters reads undefined and every YTD
+//             reader silently falls back to the lossy local library.
+//   AGE    -- the shape test alone passes forever once ONE sync has run, so the boot refresh never
+//             fired again and the YTD figure froze at whatever it was that day. Measured
+//             2026-08-07: the snapshot was from Jul 28 (3,283 mi) while Strava read 3,459.4, so the
+//             app announced "ahead of your 5000 mi goal by ~283 mi" against a real ~459. The pace
+//             formula was never wrong -- 3,459.4 through _paceStatus_ returns 459 -- the input was.
 function _athleteStatsStale_(){
   var as=(typeof st!=='undefined'&&st)?st.athleteStats:null;
   if(!as) return true;
-  return (as.ytdRideMeters===undefined || as.ytdRideCount===undefined || as.rideCount==null);
+  if(as.ytdRideMeters===undefined || as.ytdRideCount===undefined || as.rideCount==null) return true;
+  var t=+(as.updatedAt||0);
+  return !t || (Date.now()-t) > _ATHLETE_STATS_TTL_MS;
 }
 // (2) LINEAR-pace status vs an annual goal. Linear is a STATED simplification — real training is not
 //     linear — so the copy always says "linear pace", never "on pace" as if the target were destiny.
@@ -49357,9 +49501,10 @@ window.onload = function(){
         try{ if(typeof ftpSyncHistory_==='function') ftpSyncHistory_(); }catch(e){}
         // Fill nutrients onto already-logged items whose database row gained them after the fact.
         try{ if(typeof backfillNutrientsFromDB_==='function') backfillNutrientsFromDB_(); }catch(e){}
-        // athleteStats written before the ytd fields existed leaves ytdRideMeters undefined, which
-        // silently demotes every YTD reader to the lossy local library. Only a re-sync writes the
-        // missing keys, so trigger one when the stored shape is old.
+        // Refresh the Strava lifetime/YTD snapshot when the stored copy is stale in SHAPE (written
+        // before the ytd fields existed, so every YTD reader silently drops to the lossy local
+        // library) or in AGE (the shape test alone passed forever, freezing the YTD figure at
+        // whatever it was the day the one sync ran). _athleteStatsStale_ now tests both.
         try{ if(typeof _athleteStatsStale_==='function' && _athleteStatsStale_()
               && typeof syncAthleteStats_==='function' && (st.stravaToken||st.stravaRefreshToken)) syncAthleteStats_(true); }catch(e){}
         // Bike odometers come from Strava's per-gear record; pull once when a bike has no gear id.
