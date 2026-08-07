@@ -18431,7 +18431,13 @@ function aiCardZones_(ded){
 // its own card, so the shell is the caller's. (It was the last tile left in the Overview grid after
 // the trim, sitting alone in a three-column row beside two empty cells.)
 function _ovWeightBlock_(){
-  var wl=(st.weightLog||[]).filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+  // Read through settingsArrLive_, the canonical LWW-array accessor — it drops tombstones. The raw
+  // st.weightLog read here relied on a deleted row also having lost its weight field, which is an
+  // accident of how deletion writes rather than a rule; a tombstone that kept its value would have
+  // walked straight back into the trend. (All four rows in this log are tombstones today, which is
+  // why the block honestly shows current + goal and draws no line.)
+  var _wlSrc=(typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):((st.weightLog||[]).filter(function(x){return x&&!x.deleted;}));
+  var wl=_wlSrc.filter(function(x){return x&&x.date&&x.weight!=null&&!isNaN(parseFloat(x.weight));}).slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
   var vals=wl.map(function(x){return parseFloat(x.weight);});
   var cur = vals.length ? vals[vals.length-1] : (parseFloat(st.weight)||null);
   if(cur==null) return '';   // no weight known anywhere -> hide
