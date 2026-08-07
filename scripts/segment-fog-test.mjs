@@ -298,8 +298,9 @@ const iAll  = mountSrc.lastIndexOf('data.segs.map');
 ok('the home fit is preferred over the fit-all fallback', iHome > 0 && iAll > iHome);
 ok('a remembered pan still outranks both (the involuntary-remount guard)', iView > 0 && iView < iHome);
 
-// The row-tap fly is capped. Uncapped, a 0.09 mi segment fitted to z18.75 and the imagery came back
-// 6 tiles of 42 - a grey checkerboard that still passed every "the map drew" assertion.
+// The row-tap fly is capped, so a 0.09 mi segment does not fit edge-to-edge with no context around
+// it (uncapped it went to z18.75). The grey checkerboard right after a fly is Esri pacing the tile
+// burst, not the cap - every tile returns 200 and all 36 are in by 30s.
 const focusRaw = asServed(src.slice(src.indexOf('function _saMapFocus_('),
                                     matchBrace(src.indexOf('function _saMapFocus_('))+1));
 const focusSrc = focusRaw.split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);

@@ -26113,8 +26113,7 @@ var _saKomSweeping=false;
 // nearby needs a /segments/explore bbox crawl this app does not do. The legend says so rather than
 // showing an empty swatch that implies the map is watching for them.
 var _saMap=null, _saMapView=null, _saMapById={};
-// Deepest zoom a row-tap will fly to. See the note in _saMapFocus_ - above this the imagery tiles
-// stop reliably existing and the segment loses all surrounding context.
+// Deepest zoom a row-tap will fly to. See the note in _saMapFocus_.
 var _SA_FOCUS_MAXZ=17;
 function _saMapMount_(){
   var el=document.getElementById('sa-cov-map');
@@ -26219,12 +26218,17 @@ function _saMapFocus_(id){
   try{
     if(!_saMap || !_saMapById[id]) return;
     var l=_saMapById[id][0]; if(!l) return;
-    // CAP THE FLY ZOOM. An uncapped fitBounds on a short segment goes to the very top of the tile
-    // pyramid - the 0.09 mi Champs-Elysees sprint fitted to z18.75, where only 6 of 42 imagery tiles
-    // ever arrived and the frame stayed a grey checkerboard six seconds later. It is also the least
-    // useful picture of a segment: edge-to-edge road with no surrounding context to place it. At
-    // z17 that same sprint is still ~180px long and sits in its neighbourhood, and the tiles are
-    // reliably there. Longer segments fit below this cap anyway, so it only binds on the short ones.
+    // CAP THE FLY ZOOM. An uncapped fitBounds on a short segment fills the frame edge-to-edge with
+    // road and nothing around it to say where that road is - the 0.09 mi Champs-Elysees sprint
+    // fitted to z18.75. At z17 it is still ~180px long and sits in its neighbourhood, which is the
+    // picture worth flying to. Longer segments already fit below the cap, so this only binds on the
+    // short ones.
+    //
+    // It is NOT a fix for missing imagery, and an earlier version of this comment said it was. The
+    // grey checkerboard seen right after a fly is Esri PACING the burst, not tiles that do not
+    // exist: measured on the deployed page, every requested tile returns 200, but only ~24 of 36
+    // have arrived at 9s and all 36 are in by 30s. A deep fly makes that worse by needing a whole
+    // fresh screenful at a zoom nothing is cached for; it does not make it permanent.
     var bb=(typeof l.getBounds==='function')?l.getBounds():null;
     if(bb && bb.isValid()) _saMap.fitBounds(bb.pad(0.4), {maxZoom:_SA_FOCUS_MAXZ});
     else _saMap.setView(l.getLatLng(), _SA_FOCUS_MAXZ);
