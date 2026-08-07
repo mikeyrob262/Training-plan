@@ -26813,7 +26813,7 @@ function aiRenderTab_(tab, ded){
   // Your Athletic Story full-width at the bottom (a horizontal timeline). align-items
   // stretch keeps each row's cards equal height so there are no ragged gaps. Strength
   // Adherence leads the metric row — a declining completion rate is an early warning.
-  var grid=[dna, mom, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
+  var grid=[dna, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   // LAYOUT, following the reference: a full-width status hero, then Today's Focus beside Momentum
   // (focus narrow, momentum wide), then Opportunity beside Highlights, then Legacy full width.
@@ -26916,7 +26916,7 @@ function _ovMomentumHTML_(){
   if(!M || !M.ok) return '';
   var bCol=(M.bucket==='Building')?'#4ade80':((M.bucket==='Easing')?'#f59e0b':'#60a5fa');
   var spark=(typeof _gcSpark_==='function' && M.line && M.line.length>1)
-    ? _gcSpark_(M.line, '#22d3ee', { H:44, fill:true, aria:'Fitness over 12 weeks' }) : '';
+    ? _gcSpark_(M.line, '#22d3ee', { H:96, fill:true, aria:'Fitness over 12 weeks' }) : '';
   var cell=function(lab,val,col){
     return '<div style="min-width:58px"><div style="font-size:9.5px;font-weight:800;letter-spacing:.06em;color:var(--d-dim,#8b93a7)">'+lab+'</div>'
       +'<div style="font-size:17px;font-weight:800;color:'+(col||'var(--d-head,#15181D)')+';line-height:1.1">'+val+'</div></div>';
