@@ -237,10 +237,23 @@ ok('the membership predicate reads no boolean flag',
    !/seg\s*&&\s*seg\.target\b(?!At)/.test(isTgtSrc));
 ok('the target seed uses a constant stamp so a user removal always outranks it',
    has('_SA_TARGET_SEED_AT') && !has('s.targetAt=Date.now(); n++'));
-ok('the sweep cap is a named constant, not a magic number', has('SA_KOM_SWEEP_CAP'));
+// SA_KOM_SWEEP_CAP guarded the old viewport sweep, which went with the fog map. The live sweep is
+// over the TARGET list; asserting on the dead constant would have kept passing on nothing.
+ok('the sweep cap is a named constant, not a magic number', has('SA_TGT_SWEEP_CAP'));
+ok('the retired viewport-sweep cap is gone with its sweep', !has('SA_KOM_SWEEP_CAP'));
 ok('the sweep reports what it capped rather than truncating silently', has('capped at '));
 ok('a deliberate tab change resets the map view',
-  src.slice(src.indexOf('function aiSetTab_('), matchBrace(src.indexOf('function aiSetTab_('))).indexOf('_saFogView=null')>=0);
+  src.slice(src.indexOf('function aiSetTab_('), matchBrace(src.indexOf('function aiSetTab_('))).indexOf('_saMapView=null')>=0);
+// The old always-on route tangle must not survive anywhere - not as a fallback, not alongside the
+// new map. These name the symbols that WERE it, so a re-introduction fails loudly.
+ok('the fog mount is gone', !has('function _saFogMount_'));
+ok('the fog view HTML is gone', !has('function aiSegFogHtml_'));
+ok('no fog map state survives', !has('var _saFogMap') && !has('_saFogLayers'));
+ok('the coverage map uses the shared base builder, not a hand-rolled dark tile layer',
+   has('addRideMapBase_(map,') && has("id='sa-cov-canvas'"));
+ok('the map legend states that never-ridden is not drawable', has('not drawable'));
+ok('the list scroll area hides its scrollbar',
+   has('scrollbar-width:none') && has('.sa-list::-webkit-scrollbar'));
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

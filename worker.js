@@ -25599,7 +25599,6 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // endpoints, DASHED, because that is a true fact about the endpoints and a false picture of the
 // road. Real geometry draws solid. The count of each is reported on the page rather than blurred
 // together, so a half-fetched library never pretends to be a road map.
-var _saFogMap=null, _saFogLayers=null, _saFogOff={}, _saFogView=null, _saFogById={};
 // Decoded segment paths, keyed 's'+id -> [[lat,lon],...]. Loaded once per session from /segpoly and
 // kept OUT of the main state blob: at ~150 bytes encoded per segment the whole library is ~330 KB,
 // which is 2.6% added to every 12.6 MB full-blob PUT for data that never changes. Same reasoning,
@@ -25723,7 +25722,7 @@ function _saKomFetch_(segId, cb){
     // was only asking about placement quietly upgrades that segment's geometry too.
     if(res.poly && !_saPoly[key]){
       var pts=_saPolyDecode_(res.poly);
-      if(pts){ _saPoly[key]=pts; _saPolyPut_(key, res.poly); _saFogRedrawOne_(key); }
+      if(pts){ _saPoly[key]=pts; _saPolyPut_(key, res.poly); }
     }
     done(res.live);
   });
@@ -25775,7 +25774,7 @@ function _saPolySweep_(litOnly){
     say(msg+' &mdash; '+got+' road shape'+(got===1?'':'s')+' added'
       +(none?(', '+none+' had no shape on Strava'):'')+(errs?(', '+errs+' failed'):'')
       +(capped||i<list.length ? (' &middot; '+(list.length-i)+' still to fetch, press again to continue') : ' &middot; this set is complete')+'.');
-    try{ _saFogMount_(); }catch(e){}
+    try{ _saMapMount_(); }catch(e){}
   };
   var step=function(){
     if(_saPolyRun.stop) return finish('Stopped');
@@ -25879,26 +25878,7 @@ var _saDotBand=null;
 // every freshly-built dot kept its full construction radius instead of the zoom-scaled one. That is
 // why the map still showed a scatter of dots after they were supposedly scaled to zero: the debug
 // read the OLD layers, the screenshot showed the NEW ones. Mount always forces.
-function _saFogDotsForZoom_(force){
-  if(!_saFogMap || !_saFogById) return;
-  var k=_saDotScale_(_saFogMap.getZoom());
-  if(!force && k===_saDotBand) return;
-  _saDotBand=k;
-  Object.keys(_saFogById).forEach(function(id){
-    _saFogById[id].forEach(function(l){
-      if(!l || l._saRole!=='dot' || typeof l.setRadius!=='function') return;
-      var g=_saFogLayers && _saFogLayers[l._saGroupKey];
-      // A RADIUS OF ZERO DOES NOT HIDE A CANVAS CIRCLE. Leaflet's canvas renderer draws with
-      // Math.max(Math.round(layer._radius), 1), so the smallest a circleMarker can ever be is a
-      // 1px dot - and 1,942 of those speckled the dense clusters exactly like the scatter this was
-      // meant to remove. Verified by hiding the pane: the dots vanished while every layer still
-      // reported radius 0. So "no dot" has to mean REMOVED FROM THE MAP, not scaled to nothing.
-      if(k<=0){ if(g && g.hasLayer(l)) g.removeLayer(l); return; }
-      try{ l.setRadius(_saFogStyleOf_(l._saTier).dr * k); }catch(e){}
-      if(g && !g.hasLayer(l)) g.addLayer(l);
-    });
-  });
-}
+
 function _saLineStyle_(t){ var v=_saFogStyleOf_(t); return {color:v.line, weight:v.lw, opacity:v.lo}; }
 function _saGlowStyle_(t){ var v=_saFogStyleOf_(t); return {color:v.glow, weight:v.gw, opacity:v.go}; }
 function _saGlowDotStyle_(t){ var v=_saFogStyleOf_(t);
@@ -26077,286 +26057,163 @@ function _saKomOnOpen_(s){
   _saKomFetch_(num, function(){
     var el=slot(); if(el) el.innerHTML=_saKomHtml_(s);
     var lv=_saKomLive['s'+num];
-    if(lv && lv.holds===true) _saFogPromote_(s.id);
+    if(lv && lv.holds===true) _saMapPromote_(s.id);
   });
 }
-// Move one segment's drawn layers into the KOM group and restyle them, in place. Cheaper and far
-// less disruptive than re-running _saFogMount_ over ~3,900 layers, which would also close the popup
-// the athlete is reading.
-function _saFogPromote_(id){
-  if(!_saFogLayers || !_saFogMap) return;
-  var layers=_saFogById[id]; if(!layers || !layers.length) return;
-  var tier=_saFogTierOf_({prSec:1}, {holds:true});
-  // Restyle by ROLE. A promotion that applied the line's weight to the glow (or the glow's opacity
-  // to the line) would leave the segment brighter but structurally wrong - a fat translucent smear
-  // with no crisp edge, or a hard line with no halo, neither of which reads as the top tier.
-  var restyle={ glow:_saGlowStyle_(tier), line:_saLineStyle_(tier), dot:_saDotStyle_(tier) };
-  layers.forEach(function(l){
-    ['seen','pr'].forEach(function(k){ if(_saFogLayers[k] && _saFogLayers[k].hasLayer(l)) _saFogLayers[k].removeLayer(l); });
-    var st2=restyle[l._saRole];
-    if(st2){
-      // A glow drawn on a point rather than a chord needs its radius set, not its weight.
-      if(l._saRole==='glow' && typeof l.setRadius==='function') { try{ l.setStyle(_saGlowDotStyle_(tier)); }catch(e){} }
-      else { try{ l.setStyle(st2); }catch(e){} }
-      // The promoted tier has a bigger base dot, but the CURRENT zoom band still applies - restyling
-      // to the raw radius would make one segment's dot ignore the zoom rule every other dot obeys.
-      if(l._saRole==='dot' && typeof l.setRadius==='function'){
-        l._saTier=tier; try{ l.setRadius(_saFogStyleOf_(tier).dr * (_saDotBand||1)); }catch(e){}
-      }
-    }
-    l._saGroupKey='kom';
-    _saFogLayers.kom.addLayer(l);
-  });
-  if(!_saFogOff.kom && !_saFogMap.hasLayer(_saFogLayers.kom)) _saFogLayers.kom.addTo(_saFogMap);
-  _saFogCounts_();
+// Restyle one segment's drawn layers to the crown colour, in place. Cheaper and far less disruptive
+// than remounting ~3,800 layers, which would also close the popup the athlete is reading. Guarded
+// on the map existing at all, because the list can be read with the map collapsed.
+function _saMapPromote_(id){
+  try{
+    var layers=_saMapById && _saMapById[id];
+    if(!layers || !layers.length) return;
+    var stl=SA_FOG_STYLE[4];
+    layers.forEach(function(l){
+      if(!l || typeof l.setStyle!=='function') return;
+      if(typeof l.getRadius==='function') l.setStyle({fillColor:stl.line, color:'#fff'});
+      else l.setStyle({color:stl.line, weight:6, opacity:1});
+    });
+  }catch(e){}
 }
-// Keep the legend counts honest after a promotion.
-function _saFogCounts_(){
-  ['seen','pr','kom'].forEach(function(k){
-    var el=document.getElementById('sa-fog-n-'+k), g=_saFogLayers&&_saFogLayers[k];
-    if(!el || !g) return;
-    // two layers per segment (chord + start marker) where an end point exists, one where it does not
-    var ids={}; g.getLayers().forEach(function(l){ if(l&&l._saId) ids[l._saId]=1; });
-    el.textContent=Object.keys(ids).length;
-  });
-}
-function _saFogToggle_(key){
-  _saFogOff[key]=!_saFogOff[key];
-  var chip=document.getElementById('sa-fog-chip-'+key);
-  if(chip) chip.style.opacity=_saFogOff[key]?'.35':'1';
-  if(_saFogLayers && _saFogLayers[key] && _saFogMap){
-    if(_saFogOff[key]) _saFogMap.removeLayer(_saFogLayers[key]);
-    else _saFogLayers[key].addTo(_saFogMap);
-  }
-}
-function _saFogFit_(all){
-  if(!_saFogMap || !_saFogLayers) return;
-  var b=all?_saFogLayers.allBounds:_saFogLayers.homeBounds;
-  if(b && b.isValid && b.isValid()) _saFogMap.fitBounds(b, {padding:[30,30]});
-}
+
+
+
 // Candidate segments inside the current viewport that have not been checked yet. This is the
 // narrowing the whole live-placement design rests on: 2,017 segments against a 100-per-15-minute
 // limit means "check what is on screen, where a PR makes it plausible" is the only sweep that can
 // ever finish. Home view alone holds 731 segments, so the viewport is not by itself enough - the
 // PR filter is what brings it inside the budget.
-function _saKomPending_(){
-  if(!_saFogMap || !_saFogLayers) return [];
-  var b=_saFogMap.getBounds(), seen={}, out=[];
-  ['seen','pr','kom'].forEach(function(k){
-    var g=_saFogLayers[k]; if(!g) return;
-    g.getLayers().forEach(function(l){
-      if(!l || !l._saId || !l._saCand || seen[l._saId]) return;
-      if(l._saLat==null || !b.contains([l._saLat, l._saLon])) return;
-      var num=_saSegNum_(l._saId); if(!num) return;
-      if(_saKomLive['s'+num]) return;                 // already answered this session
-      seen[l._saId]=1; out.push({id:l._saId, num:num});
-    });
-  });
-  return out;
-}
-var SA_KOM_SWEEP_CAP=25;                              // one press never spends more than a quarter of the window
+
 var _saKomSweeping=false;
-function _saKomSweep_(){
-  var btn=document.getElementById('sa-kom-sweep'), note=document.getElementById('sa-kom-note');
-  var say=function(t){ if(note) note.innerHTML=t; };
-  if(_saKomSweeping){ say('Already checking&hellip;'); return; }
-  var list=_saKomPending_();
-  if(!list.length){ say('Nothing left to check in this view. Pan somewhere else, or zoom out.'); return; }
-  // The cap is REPORTED, not silent. A sweep that quietly stops at 25 of 60 reads as "all checked".
-  var capped=list.length>SA_KOM_SWEEP_CAP;
-  var run=list.slice(0, SA_KOM_SWEEP_CAP);
-  _saKomSweeping=true; if(btn) btn.disabled=true;
-  var i=0, held=0, done=0, errs=0;
-  var step=function(){
-    if(i>=run.length){
-      _saKomSweeping=false; if(btn) btn.disabled=false;
-      say('Checked '+done+' of '+list.length+' in view'+(capped?(' (capped at '+SA_KOM_SWEEP_CAP+' per press &mdash; press again for the next '+Math.min(SA_KOM_SWEEP_CAP, list.length-run.length)+')'):'')
-        +'. '+held+' held'+(errs?(', '+errs+' unavailable'):'')+'. Nothing was stored.');
-      return;
-    }
-    var it=run[i++];
-    say('Checking '+i+' of '+run.length+'&hellip; '+held+' held so far.');
-    _saKomFetch_(it.num, function(v){
-      done++;
-      if(v && v.err) errs++;
-      if(v && v.holds===true){ held++; _saFogPromote_(it.id); }
-      setTimeout(step, 700);                          // ~85 requests per 15 min at worst, inside the limit
-    });
-  };
-  step();
-}
+
 // Leaflet mount. Deferred to a task so it runs AFTER the container's innerHTML is in the document -
 // aiRenderOverview_ builds one string and assigns it once, so there is no per-tab render hook to
 // hang this on. Guarded on the element still existing, because a fast tab switch can retire the
 // node before this fires.
 // Redraw a single segment after its shape arrives late (a popup click that also fetched geometry).
 // Cheaper and far less disruptive than remounting ~4,000 layers under the popup being read.
-function _saFogRedrawOne_(key){
-  try{
-    if(!_saFogMap || !_saFogById[key]) return;
-    var pts=_saPoly[key]; if(!pts || pts.length<2) return;
-    _saFogById[key].forEach(function(l){
-      if(l && l._saRole!=='dot' && typeof l.setLatLngs==='function'){
-        l.setLatLngs(pts);
-        try{ l.setStyle({dashArray:null}); }catch(e){}
-      }
-    });
-  }catch(e){}
-}
-function _saFogMount_(){
-  var el=document.getElementById('sa-fog-map');
+
+// THE COVERAGE MAP. Replaces the old always-on route tangle entirely: same segments, but drawn for
+// legibility instead of atmosphere.
+//
+// WHAT CHANGED AND WHY. The previous mount put Carto dark_nolabels at opacity .5 over a #070c14
+// ground, desaturated it, then laid eleven radial "cloud" masses over the top. That was the
+// fog-of-war conceit, and it is what made the page unreadable - coloured hairlines over near-black
+// with no road context to hang them on. This one uses the SAME shared base builder every ride map
+// uses (addRideMapBase_), defaulted to satellite, with a real labels pane above the lines. No fog,
+// no vignette, no opacity tricks.
+//
+// STATUS COLOURS, not a heat ramp: crown held (live-checked) > personal best > ridden. Start dots
+// are drawn ONLY for the top two so the eye lands on the segments that are actually targets rather
+// than on 1,800 identical specks.
+//
+// "NEVER RIDDEN" IS NOT DRAWABLE AND IS NOT FAKED. st.segments only contains segments Strava has
+// matched to a ride, so a segment never ridden has no record here and no coordinates - measured:
+// all 50 never-ridden targets carry no startLat at all. Enumerating segments that merely EXIST
+// nearby needs a /segments/explore bbox crawl this app does not do. The legend says so rather than
+// showing an empty swatch that implies the map is watching for them.
+var _saMap=null, _saMapView=null, _saMapById={};
+function _saMapMount_(){
+  var el=document.getElementById('sa-cov-map');
   if(!el || typeof L==='undefined') return;
-  // Shapes load once per session, then the mount re-runs with real geometry in hand.
-  if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saFogMount_(); }catch(e){} }); }
-  if(_saFogMap){ try{ _saFogMap.remove(); }catch(e){} _saFogMap=null; }
-  var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{});
-  if(!data.segs.length) return;
-  // Leaflet is mounted on a CHILD of the sized box, not the box itself. showScreen() removes every
-  // .leaflet-container in the document to clear stray weather maps, and Leaflet puts that class on
-  // whatever element it is handed - so mounting directly on #sa-fog-map meant a screen change could
-  // delete the styled container out from under the section. The child is disposable; the box is not.
-  var host=document.getElementById('sa-fog-canvas');
-  if(host) host.parentNode.removeChild(host);
+  // Road shapes load once per session; the mount re-runs with real geometry once they land, so the
+  // first paint is chords and the second is roads.
+  if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
+  if(_saMap){ try{ _saMap.remove(); }catch(e){} _saMap=null; }
+  _saMapById={};
+  var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{}, _saKomLive);
+  if(!data.segs.length){
+    el.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--d-dim);font-size:12.5px">No segment has stored coordinates yet.</div>';
+    return;
+  }
+  // Mount on a CHILD of the sized box. showScreen() removes every .leaflet-container in the document
+  // to clear stray weather maps, and Leaflet puts that class on whatever element it is handed - so
+  // mounting on the styled box itself lets a screen change delete it out from under the section.
+  var host=document.getElementById('sa-cov-canvas');
+  if(host && host.parentNode) host.parentNode.removeChild(host);
   host=document.createElement('div');
-  host.id='sa-fog-canvas';
+  host.id='sa-cov-canvas';
   host.style.cssText='width:100%;height:100%;border-radius:12px';
   el.appendChild(host);
-  // preferCanvas: ~2,000 segments is ~4,000 vector layers, which is a slideshow in SVG mode and
-  // smooth on canvas. This is a rendering choice only; nothing about the data changes.
-  // zoomSnap 0.25: Leaflet snaps fitBounds to INTEGER zoom by default, so a cluster that wants z9.6
-  // gets z9 and the map opens 1.5x further out than the bounds asked for. That is most of why the
-  // default view kept looking sparse - measured at 61% vertical fill on bounds that should have
-  // filled the frame. zoomDelta stays at 1 so the +/- buttons still step a whole level.
-  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,preferCanvas:true,tap:false,
-    zoomSnap:0.25, zoomDelta:1});
-  _saFogMap=map;
-  // THE FOG. A dark tile layer alone is not fog - it is just a dark map, and the first version read
-  // as faint scratches on one. Two things fix it, and both are needed.
-  //
-  // First, the basemap is actively suppressed rather than merely dark. Carto's dark_all still paints
-  // Lake Michigan as a large mid-grey mass and city labels in legible grey, and at the default view
-  // the LAKE was the brightest object on screen - unexplored water reading as lit ground. The CSS
-  // filter on the tile pane pushes all of it down and the colour out of it, so what remains is
-  // terrain you can orient by but never mistake for something revealed.
-  //
-  // Second, revealed segments are drawn in THREE passes - a wide soft glow, a crisp line, then the
-  // start point - each in its own pane so the glow can never paint over the line it belongs to.
-  // Overlapping glows merge into continuous lit territory, which is the actual fog-of-war read: not
-  // colour-coded hairlines, but ground that has been burned clear.
-  // Base tiles carry NO labels. Place names are added back as their own layer ABOVE every drawn
-  // segment and above the fog texture, at full strength - orientation is the one thing the fog is
-  // never allowed to take away, and hazing the basemap as a whole was dimming the city names along
-  // with the terrain.
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
-    {detectRetina:true,maxZoom:20,subdomains:'abcd',className:'sa-fog-tiles',opacity:0.5}).addTo(map);
-  map.createPane('fogGlow').style.zIndex=410;
-  map.createPane('fogLine').style.zIndex=420;
-  map.createPane('fogDot').style.zIndex=430;
-  map.createPane('fogTex').style.zIndex=436;
-  map.createPane('fogLabels').style.zIndex=440;
-  map.getPane('fogTex').style.pointerEvents='none';
-  map.getPane('fogLabels').style.pointerEvents='none';
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
-    {detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'fogLabels',className:'sa-fog-labels'}).addTo(map);
-  // The cloud layer. It lives in a PANE so it stacks under the labels, but a pane pans with the
-  // map, so it is counter-translated back to the frame on every move - a vignette anchored to the
-  // world instead of the viewport slides off screen the moment you drag.
-  var tex=document.createElement('div');
-  tex.className='sa-fog-tex';
-  map.getPane('fogTex').appendChild(tex);
-  var placeTex=function(){
-    try{
-      var tl=map.containerPointToLayerPoint([0,0]), sz=map.getSize();
-      tex.style.transform='translate('+tl.x+'px,'+tl.y+'px)';
-      tex.style.width=sz.x+'px'; tex.style.height=sz.y+'px';
-    }catch(e){}
-  };
-  map.on('move zoom zoomend viewreset resize', placeTex);
-  var rGlow=L.canvas({pane:'fogGlow'}), rLine=L.canvas({pane:'fogLine'}), rDot=L.canvas({pane:'fogDot'});
-  var groups={ seen:L.layerGroup(), pr:L.layerGroup(), kom:L.layerGroup() };
-  var all=[];
-  _saFogById={};
+  // preferCanvas: ~1,900 segments is ~3,800 vector layers, a slideshow in SVG and smooth on canvas.
+  // zoomSnap 0.25 because Leaflet snaps fitBounds to INTEGER zoom by default, so bounds wanting z9.6
+  // open at z9 - about 1.5x too far out, which is most of why the old default view read as sparse.
+  var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
+                      preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
+  _saMap=map;
+  addRideMapBase_(map,'satellite');
+  // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
+  // street names stay readable over the lines instead of under them.
+  if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
+  var rend=L.canvas({pane:'segLines'});
+  var drawn=0, real=0;
   data.segs.forEach(function(s){
-    var t=s.tier;
-    // Real road geometry when it has been fetched; the straight chord between stored endpoints
-    // otherwise. Which one is in play decides the line style below, so a guessed shape can never
-    // be mistaken for a measured one.
-    var road=s.real?_saPoly[s.id]:null;
-    var pts;
-    if(road && road.length>1){ pts=road; }
-    else { pts=[[s.lat,s.lon]]; if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]); }
-    for(var pi=0;pi<pts.length;pi++) all.push(pts[pi]);
-    var g=groups[t.key];
-    // Every layer carries its segment id, its ROLE in the three-pass draw, and the coordinates the
-    // viewport sweep filters on - so a live placement result can restyle exactly this segment,
-    // pass by pass, without a full remount.
-    var tag=function(l, role){ l._saId=s.id; l._saRole=role; l._saTier=t; l._saGroupKey=t.key; l._saLat=s.lat; l._saLon=s.lon;
-      l._saCand=s.candidate;
-      l.bindPopup(_saFogPopup_(s));
-      l.on('popupopen', function(){ _saKomOnOpen_(s); });
-      l.addTo(g);
-      (_saFogById[s.id]=_saFogById[s.id]||[]).push(l);
-      return l; };
-    if(pts.length>1){
-      tag(L.polyline(pts,Object.assign({renderer:rGlow,pane:'fogGlow',lineCap:'round'},_saGlowStyle_(t))), 'glow');
-      tag(L.polyline(pts,Object.assign({renderer:rLine,pane:'fogLine',lineCap:'round',
-        // A bending road gets a dashed chord: the line is a real fact about the endpoints and a
-        // poor picture of the tarmac, and dashes are how that reads without a paragraph.
-        // Solid means "this is the road". A fetched polyline always earns that; a chord earns it
-        // only when the segment is straight enough that the chord IS the road.
-        dashArray:(s.real||!s.bends)?null:_saFogStyleOf_(t).dash},_saLineStyle_(t))), 'line');
-    } else {
-      // A segment with no end point has no chord to glow along, so the glow becomes a halo on the
-      // point itself - otherwise these would be the only unlit marks on a lit map.
-      tag(L.circleMarker([s.lat,s.lon],Object.assign({renderer:rGlow,pane:'fogGlow'},_saGlowDotStyle_(t))), 'glow');
+    var stl=_saFogStyleOf_(s.tier);
+    var pts=_saPoly['s'+_saSegNum_(s.id)]||_saPoly[s.id]||null;
+    var isReal=!!(pts && pts.length>1);
+    if(!isReal){
+      pts=[[s.lat,s.lon]];
+      if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
+      if(pts.length<2) return;
     }
-    tag(L.circleMarker([s.lat,s.lon],Object.assign({renderer:rDot,pane:'fogDot'},_saDotStyle_(t))), 'dot');
+    if(isReal) real++;
+    drawn++;
+    var top=(s.tier.t>=2);
+    var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:stl.line,
+      weight: top?5:2.6, opacity: top?1:0.75,
+      // Dashed says "this is a straight line standing in for a bending road", not decoration.
+      dashArray: isReal?null:'6 5', lineCap:'round', lineJoin:'round' }).addTo(map);
+    line.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
+    line.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
+    _saMapById[s.id]=[line];
+    // Start dots for the two top tiers only. 1,900 dots at a wide zoom string dense corridors into
+    // bead-chains, which is the "disconnected dots rather than roads" read; the targets are what the
+    // dot is for.
+    if(top){
+      var dot=L.circleMarker(pts[0],{ pane:'segLines', renderer:rend, radius:(s.tier.t===3?6:4.5),
+        color:'#fff', weight:2, fillColor:stl.line, fillOpacity:1 }).addTo(map);
+      dot.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
+      dot.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
+      _saMapById[s.id].push(dot);
+    }
   });
-  ['seen','pr','kom'].forEach(function(k){ if(!_saFogOff[k]) groups[k].addTo(map); });
+  // Open where the riding actually is. A fit-all here spans 254 degrees of longitude - this library
+  // reaches from Michigan into the South Pacific - and renders four unreadable specks. _saFogHome_
+  // picks the densest one-degree cell measured in EFFORTS RIDDEN, not segment count: counting
+  // segments ranks Chicago first on 692 from a single day out, while Grand Rapids has fewer segments
+  // and far more riding.
   var home=_saFogHome_(data.segs);
-  _saFogLayers=Object.assign({}, groups, {
-    allBounds:L.latLngBounds(all),
-    homeBounds:home?L.latLngBounds([[home.south,home.west],[home.north,home.east]]):L.latLngBounds(all)
-  });
-  // Where the map was pointing survives a rebuild. Measured in headless Chrome: this mounts TWICE
-  // on mobile, 5.5s apart, because aiEnsureFullLibrary_ re-renders the whole overview once the full
-  // library loads from IndexedDB - which replaces the container and forces a fresh map. Refitting to
-  // Home there would silently throw away a pan the athlete had already made, several seconds after
-  // they made it. Remembered per session only, so a fresh load still opens on Home.
-  if(_saFogView && _saFogView.center) map.setView(_saFogView.center, _saFogView.zoom);
-  else _saFogFit_(false);
-  _saFogDotsForZoom_(true);
-  placeTex();
-  map.on('zoomend', function(){ _saFogDotsForZoom_(false); });
+  if(_saMapView){ try{ map.setView(_saMapView.c, _saMapView.z); }catch(e){} }
+  else if(home && home.bounds){ try{ map.fitBounds(home.bounds, {padding:[24,24]}); }catch(e){} }
+  else { try{ map.fitBounds(L.latLngBounds(data.segs.map(function(s){return [s.lat,s.lon];}))); }catch(e){} }
+  // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
+  // renders empty and throws nothing. Desktop came up fine and mobile came up blank from identical
+  // code until this was added.
+  setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 160);
+  // Preserve the view across the remount that follows the IDB library load, or a pan silently resets
+  // seconds later. Only record once the map has a real size, or a zero-sized first mount persists a
+  // junk view.
   map.on('moveend zoomend', function(){
-    try{
-      // Only remember a view the map could actually measure. A fitBounds on a zero-sized container
-      // still fires moveend, with a center and zoom derived from no viewport at all - recording that
-      // would persist a junk view AND make the invalidateSize path below think there was a real one
-      // worth preserving, so the empty-box case would repair itself into a wrong position instead.
-      var sz=map.getSize(); if(!sz || !sz.x || !sz.y) return;
-      var c=map.getCenter(); _saFogView={center:[c.lat,c.lng], zoom:map.getZoom()};
-    }catch(e){}
+    try{ var sz=map.getSize(); if(sz && sz.x>0 && sz.y>0) _saMapView={c:map.getCenter(), z:map.getZoom()}; }catch(e){}
   });
-  // A Leaflet map initialised into a container the browser has not laid out yet computes a size of
-  // zero and then loads no tiles - it renders as an empty box and throws nothing. That is reachable
-  // here: aiRenderOverview_ re-renders itself asynchronously from aiEnsureFullLibrary_, so the node
-  // this mounted into can be replaced a tick later, and the mobile overlay lays out on a different
-  // frame from the desktop panel. Verified in headless Chrome: the desktop map came up 520px with
-  // 18 tiles and the mobile one came up 0px with none, from identical code. invalidateSize after a
-  // frame re-measures and refits, and is a no-op when the first measurement was already right.
-  setTimeout(function(){
-    try{
-      if(_saFogMap!==map) return;                       // a newer mount already replaced this one
-      if(!document.getElementById('sa-fog-canvas')) return;
-      var s=map.getSize();
-      map.invalidateSize(false);
-      // Refit only if the first fit measured nothing AND there is no view to preserve - a refit on
-      // top of a remembered pan is the same silent reset this is meant to prevent.
-      if((!s || !s.y) && !_saFogView) _saFogFit_(false);
-    }catch(e){}
-  }, 150);
+  var note=document.getElementById('sa-cov-note');
+  if(note) note.innerHTML=drawn.toLocaleString()+' segment'+(drawn===1?'':'s')+' drawn &middot; '
+    +real.toLocaleString()+' on their real road shape, '+(drawn-real).toLocaleString()+' as a straight line between endpoints';
 }
+// Tapping a list row flies the map to that segment and opens its popup - the list and the map are
+// one surface, not two.
+function _saMapFocus_(id){
+  try{
+    if(!_saMap || !_saMapById[id]) return;
+    var l=_saMapById[id][0]; if(!l) return;
+    var bb=(typeof l.getBounds==='function')?l.getBounds():null;
+    if(bb && bb.isValid()) _saMap.fitBounds(bb.pad(0.4)); else _saMap.setView(l.getLatLng(), 15);
+    l.openPopup();
+    var el=document.getElementById('sa-cov-map');
+    if(el && el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
+  }catch(e){}
+}
+window._saMapFocus_=_saMapFocus_;
 // The section. One renderer for both surfaces, same as the rest of this page - the map is a block
 // element sized in CSS, so the only thing that changes with width is its height.
 // ==================== TARGET LIST — the primary Segment Attack view ====================
@@ -26549,58 +26406,8 @@ function _saTgtKomSweep_(){
 }
 window._saTgtKomSweep_=_saTgtKomSweep_;
 // Per-row map. The map is SECONDARY now: one segment, on demand, instead of 1,942 plotted at once.
-var _saRowMap=null, _saRowMapKey=null;
-function _saRowMapToggle_(key){
-  var host=document.getElementById('sa-rowmap-'+key);
-  if(!host) return;
-  var open=host.getAttribute('data-open')==='1';
-  // Only one open at a time — two Leaflet instances on a list this long is all cost, no benefit.
-  try{
-    var all=document.querySelectorAll('[id^="sa-rowmap-"]');
-    for(var i=0;i<all.length;i++){ all[i].innerHTML=''; all[i].style.display='none'; all[i].setAttribute('data-open','0'); }
-  }catch(e){}
-  if(open){ _saRowMap=null; _saRowMapKey=null; return; }
-  host.style.display='block'; host.setAttribute('data-open','1');
-  // showScreen() removes EVERY .leaflet-container in the document, so mount on a CHILD of the sized
-  // box, never the box itself.
-  host.innerHTML='<div id="sa-rowmap-canvas" style="height:100%;border-radius:10px;overflow:hidden"></div>';
-  _saRowMapKey=key;
-  setTimeout(function(){ _saRowMapMount_(key); }, 0);
-}
-window._saRowMapToggle_=_saRowMapToggle_;
-function _saRowMapMount_(key){
-  var el=document.getElementById('sa-rowmap-canvas'); if(!el) return;
-  if(typeof L==='undefined') { el.innerHTML='<div style="padding:16px;font-size:11.5px;color:var(--d-dim)">Map library not loaded.</div>'; return; }
-  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
-  var s=store[key]; if(!s || s.startLat==null){ el.innerHTML='<div style="padding:16px;font-size:11.5px;color:var(--d-dim)">No coordinates stored for this segment yet.</div>'; return; }
-  var pts=_saPoly[key]||null, realShape=!!(pts&&pts.length>1);
-  if(!realShape){
-    pts=[[+s.startLat,+s.startLon]];
-    if(s.endLat!=null&&s.endLon!=null) pts.push([+s.endLat,+s.endLon]);
-  }
-  var map;
-  // zoomSnap defaults to INTEGER, so fitBounds on a short segment wanting z16.6 gives z16 and opens
-  // ~1.5x too far out. zoomDelta stays 1 so the buttons still step whole levels.
-  try{ map=L.map(el,{zoomControl:true, attributionControl:false, zoomSnap:0.25, zoomDelta:1}); }catch(e){ return; }
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
-  var line=L.polyline(pts,{color:SA_FOG_STYLE[3].line, weight:5, opacity:.95,
-    dashArray: realShape?null:'7 6'}).addTo(map);
-  L.circleMarker(pts[0],{radius:5,color:'#fff',weight:2,fillColor:SA_FOG_STYLE[4].line,fillOpacity:1}).addTo(map);
-  try{ map.fitBounds(line.getBounds().pad(0.25)); }catch(e){ map.setView(pts[0], 15); }
-  // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
-  // renders empty and THROWS NOTHING. Desktop came up fine and mobile came up blank from identical
-  // code until this was added.
-  setTimeout(function(){ try{ map.invalidateSize(); map.fitBounds(line.getBounds().pad(0.25)); }catch(e){} }, 160);
-  _saRowMap=map;
-  if(!realShape){
-    var note=L.control({position:'bottomleft'});
-    note.onAdd=function(){ var d=L.DomUtil.create('div');
-      d.style.cssText='background:rgba(8,12,20,.85);color:#9aa7bd;font:600 10px/1.4 inherit;padding:5px 8px;border-radius:6px;max-width:220px';
-      d.innerHTML='Straight line between the two stored endpoints &mdash; the real road shape has not been fetched for this segment.';
-      return d; };
-    note.addTo(map);
-  }
-}
+
+
 // THE PRIMARY VIEW. A scannable target list, bucketed the way Strava's own segment sidebar is.
 function aiSegTargetsHtml_(ctx){
   var esc=aiEsc_;
@@ -26610,19 +26417,36 @@ function aiSegTargetsHtml_(ctx){
   var libN=Object.keys(store).length;
   var LBL='font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim)';
   var H='<style>'
-    +'.sa-t{width:100%;border-collapse:collapse}'
-    +'.sa-t th{text-align:left;font-size:9.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;'
-      +'color:var(--d-dim);padding:0 10px 7px;white-space:nowrap}'
-    +'.sa-t td{padding:9px 10px;border-top:1px solid var(--d-edge3);font-size:12.5px;color:var(--d-soft);vertical-align:middle}'
-    +'.sa-t tr.sa-tr:hover td{background:var(--d-inset)}'
-    +'.sa-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}'
-    +'.sa-why{font-size:11px;color:var(--d-dim);font-weight:600}'
+    +'.sa-list{max-height:560px;overflow-y:auto;margin-top:16px;'
+      +'scrollbar-width:none;-ms-overflow-style:none}'
+    +'.sa-list::-webkit-scrollbar{width:0;height:0;display:none}'
+    +'.sa-sec{margin-bottom:6px}'
+    +'.sa-sec-h{position:sticky;top:0;z-index:2;background:var(--d-panel);border-left:3px solid;'
+      +'padding:8px 10px;font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase}'
+    +'.sa-sec-s{font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--d-dim);margin-top:3px;line-height:1.45}'
+    +'.sa-r{display:grid;grid-template-columns:minmax(0,1fr) 74px 132px 30px;'
+      // DOUBLE quotes for the CSS area names, never escaped single ones: this file is served from a
+      // template literal that eats a backslash level, so a source-level \' arrives as a bare ' and
+      // terminates the JS string. Same trap as the regex escapes, on quotes instead.
+      +'grid-template-areas:"name pb ch x" "meta pb ch x";'
+      +'gap:1px 12px;align-items:center;padding:9px 10px;border-top:1px solid var(--d-edge3)}'
+    +'.sa-r:hover{background:var(--d-inset)}'
+    +'.sa-r-name{grid-area:name;display:flex;align-items:center;gap:7px;min-width:0}'
+    +'.sa-r-t{font-size:13px;font-weight:700;color:var(--d-head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.sa-r-dot{width:8px;height:8px;border-radius:50%;flex:none}'
+    +'.sa-r-meta{grid-area:meta;font-size:10.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'.sa-r-pb{grid-area:pb;text-align:right;font-size:13px;color:var(--d-soft);font-variant-numeric:tabular-nums}'
+    +'.sa-r-ch{grid-area:ch;text-align:right}'
+    +'.sa-r-x{grid-area:x;text-align:right}'
+    +'.sa-why{font-size:10.5px;color:var(--d-dim);font-weight:600;line-height:1.35}'
     +'.sa-tbtn{background:none;border:1px solid var(--d-edge);color:var(--d-t3);font-size:10.5px;font-weight:700;'
       +'border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;white-space:nowrap}'
     +'.sa-tbtn:hover{color:var(--d-head);border-color:#3a4457}'
     // Below 760px the table sheds its two lowest-value columns rather than scrolling sideways:
     // effort count and grade are context, name/PB/chance are the job.
-    +'@media(max-width:760px){.sa-t .sa-opt{display:none}.sa-t td,.sa-t th{padding-left:6px;padding-right:6px}}'
+    +'@media(max-width:760px){.sa-r{grid-template-columns:minmax(0,1fr) 60px 30px;'
+      +'grid-template-areas:"name pb x" "meta ch x"}.sa-r-ch{text-align:left}'
+      +'#sa-cov-map{height:380px}}'
     +'</style>';
 
   H+='<div style="margin-top:26px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:16px;padding:16px 18px 18px">';
@@ -26715,42 +26539,94 @@ function aiSegTargetsHtml_(ctx){
       +'No targets yet. Star a segment on Strava, or set a PB on one, and it lands here.</div></div>';
   }
 
-  // ---- the list ----
-  H+='<div style="margin-top:16px"><table class="sa-t"><thead><tr>'
-    +'<th>Segment</th><th class="sa-num">Dist</th><th class="sa-num sa-opt">Grade</th>'
-    +'<th class="sa-num">PB</th><th class="sa-num sa-opt">Rides</th><th>Chance of PR</th><th></th>'
-    +'</tr></thead><tbody>';
+  // ---- THE MAP, above the list ----
+  // The two are one surface: tapping a row flies the map to that segment. The map is NOT a per-row
+  // accordion any more - one map, always mounted, and the list points at it.
+  H+='<div style="margin-top:16px">'
+    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">'
+    +'<div style="'+LBL+'">Segment coverage</div>'
+    +'<div id="sa-cov-note" style="font-size:10.5px;color:var(--d-dim)"></div></div>'
+    +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:#0b1017"></div>';
+  // Legend. Crown reads em-dash until a check has run, for the same reason the headline does.
+  H+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--d-t3)">';
+  [[SA_FOG_STYLE[4].line,'Crown held',(d.checked>0?String(d.held):'&mdash;')],
+   [SA_FOG_STYLE[3].line,'Personal best',String(d.counts.pb||0)],
+   [SA_FOG_STYLE[2].line,'Ridden',null]].forEach(function(t){
+    H+='<span style="display:inline-flex;align-items:center;gap:6px">'
+      +'<span style="width:16px;height:3px;border-radius:2px;background:'+t[0]+';flex:none"></span>'
+      +esc(t[1])+(t[2]!=null?(' <span style="color:var(--d-dim)">'+t[2]+'</span>'):'')+'</span>';
+  });
+  // NEVER RIDDEN cannot be a drawn status and the legend says so instead of showing a dead swatch.
+  // st.segments only holds segments Strava matched to a ride, so a segment never ridden has no
+  // record here and no coordinates at all - all 50 never-ridden targets carry no startLat.
+  H+='<span style="display:inline-flex;align-items:center;gap:6px;color:var(--d-dim)">'
+    +'<span style="width:16px;height:3px;border-radius:2px;background:#39424f;flex:none"></span>'
+    +'Never ridden &mdash; not drawable, no coordinates are stored for a segment you have never been matched to</span>';
+  H+='</div></div>';
+
+  // ---- THE LIST ----
+  // Four sections in a fixed order, because the order IS the recommendation:
+  //   1. Contested opportunities - enough data to model, and the standing time was actually raced
+  //   2. Crowns held - a short roll of honour, deliberately NOT ranked among the opportunities
+  //   3. Has data but not contested, or too few efforts to model - close, not ready
+  //   4. Never ridden - last
+  var held=[], opp=[], close=[], never=[];
   d.rows.forEach(function(r){
-    var bcol=(_SA_BUCKETS.filter(function(b){return b.k===r.bucket;})[0]||{}).col||'#64748b';
-    var crown=r.live&&!r.live.err ? (r.live.holds===true?'<span title="You hold this" style="color:'+SA_FOG_STYLE[4].line+'">&#9819;</span> ':'') : '';
-    // Chance cell. A number ONLY when the model fit; otherwise the reason, so an empty cell can
-    // never be read as "no chance". A soft standing time prints the number but says what it is.
+    var isHeld=!!(r.live && !r.live.err && r.live.holds===true);
+    if(isHeld) held.push(r);
+    else if(r.bucket==='never') never.push(r);
+    else if(r.chance!=null && r.contested) opp.push(r);
+    else close.push(r);
+  });
+  opp.sort(function(a,b){ return b.chance-a.chance; });
+  close.sort(function(a,b){
+    // Scorable-but-soft above unscorable, then by whatever signal each has.
+    var as=(a.chance!=null)?0:1, bs=(b.chance!=null)?0:1;
+    if(as!==bs) return as-bs;
+    if(a.chance!=null && b.chance!=null) return b.chance-a.chance;
+    return (b.efforts||0)-(a.efforts||0);
+  });
+  never.sort(function(a,b){ return (b.distMi||0)-(a.distMi||0); });
+
+  function rowHTML(r){
+    var isHeld=!!(r.live && !r.live.err && r.live.holds===true);
+    var dotCol=isHeld?SA_FOG_STYLE[4].line:((r.bucket==='pb')?SA_FOG_STYLE[3].line:((r.bucket==='never')?'#64748b':SA_FOG_STYLE[2].line));
     var chanceCell;
     if(r.chance==null) chanceCell='<span class="sa-why">'+esc(r.chanceWhy)+'</span>';
     else if(!r.contested) chanceCell='<span style="color:var(--d-t3);font-weight:700">'+r.chance+'%</span>'
-        +'<div class="sa-why" style="margin-top:2px">never attacked &mdash; standing time was a soft pass</div>';
-    else chanceCell='<span style="font-size:14px;font-weight:800;color:'+(r.chance>=60?'#4ade80':(r.chance>=35?'#f59e0b':'var(--d-t3)'))+'">'+r.chance+'%</span>'
-        +(r.evidence&&r.evidence.label?('<div class="sa-why" style="margin-top:2px">'+esc(r.evidence.label)+'</div>'):'');
+        +'<div class="sa-why">never attacked &mdash; standing time was a soft pass</div>';
+    else chanceCell='<span style="font-size:15px;font-weight:800;color:'+(r.chance>=60?'#4ade80':(r.chance>=35?'#f59e0b':'var(--d-t3)'))+'">'+r.chance+'%</span>'
+        +(r.evidence&&r.evidence.label?('<div class="sa-why">'+esc(r.evidence.label)+'</div>'):'');
     var url=_saSegUrl_(r.id);
-    H+='<tr class="sa-tr">'
-      +'<td style="min-width:0"><div style="display:flex;align-items:center;gap:7px">'
-        +'<span style="width:7px;height:7px;border-radius:50%;background:'+bcol+';flex:none"></span>'
-        +crown+'<span style="font-weight:700;color:var(--d-head)">'+esc(r.name)+'</span></div>'
-        +(url?('<a href="'+url+'" target="_blank" rel="noopener" style="font-size:10.5px;color:#fc5200;text-decoration:none">Strava &rsaquo;</a>'):'')
-      +'</td>'
-      +'<td class="sa-num">'+(r.distMi!=null?(Math.round(r.distMi*100)/100+' mi'):'&mdash;')+'</td>'
-      +'<td class="sa-num sa-opt">'+(r.grade!=null?(r.grade+'%'):'&mdash;')+'</td>'
-      +'<td class="sa-num">'+(r.prSec!=null?(_segFmtT_(r.prSec)+(r.prDerived?'<div class="sa-why">fastest on record</div>':'')):'<span class="sa-why">none</span>')+'</td>'
-      +'<td class="sa-num sa-opt">'+(r.efforts||0)+'</td>'
-      +'<td style="min-width:0">'+chanceCell+'</td>'
-      +'<td style="white-space:nowrap">'
-        +(r.hasGeom?('<button class="sa-tbtn" onclick="_saRowMapToggle_(&#39;'+esc(r.key)+'&#39;)">Map</button> '):'')
-        +'<button class="sa-tbtn" onclick="_saSetTarget_(&#39;'+esc(r.key)+'&#39;,false)" title="Remove from targets">&times;</button>'
-      +'</td></tr>';
-    H+='<tr><td colspan="7" style="padding:0;border-top:none">'
-      +'<div id="sa-rowmap-'+esc(r.key)+'" data-open="0" style="display:none;height:280px;margin:0 0 10px"></div></td></tr>';
-  });
-  H+='</tbody></table></div>';
+    return '<div class="sa-r"'+(r.hasGeom?(' onclick="_saMapFocus_(&#39;'+esc(String(r.id))+'&#39;)" style="cursor:pointer"'):'')+'>'
+      +'<div class="sa-r-name">'
+        +'<span class="sa-r-dot" style="background:'+dotCol+'"></span>'
+        +(isHeld?('<span title="You hold this" style="color:'+SA_FOG_STYLE[4].line+';flex:none">&#9819;</span>'):'')
+        +'<span class="sa-r-t">'+esc(r.name)+'</span></div>'
+      +'<div class="sa-r-meta">'
+        +(r.distMi!=null?(Math.round(r.distMi*100)/100+' mi'):'&mdash;')
+        +(r.grade!=null?(' &middot; '+r.grade+'%'):'')
+        +(r.efforts?(' &middot; '+r.efforts+' ride'+(r.efforts===1?'':'s')):'')
+        +(url?(' &middot; <a href="'+url+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#fc5200;text-decoration:none">Strava &rsaquo;</a>'):'')
+      +'</div>'
+      +'<div class="sa-r-pb">'+(r.prSec!=null?('<b>'+_segFmtT_(r.prSec)+'</b>'+(r.prDerived?'<div class="sa-why">fastest on record</div>':'')):'<span class="sa-why">no PB</span>')+'</div>'
+      +'<div class="sa-r-ch">'+chanceCell+'</div>'
+      +'<div class="sa-r-x"><button class="sa-tbtn" onclick="event.stopPropagation();_saSetTarget_(&#39;'+esc(r.key)+'&#39;,false)" title="Remove from targets">&times;</button></div>'
+      +'</div>';
+  }
+  function sectionHTML(title, sub, list, col){
+    if(!list.length) return '';
+    return '<div class="sa-sec"><div class="sa-sec-h" style="border-left-color:'+col+'">'
+      +'<span style="color:'+col+'">'+esc(title)+'</span> <span style="color:var(--d-dim);font-weight:600">'+list.length+'</span>'
+      +(sub?('<div class="sa-sec-s">'+esc(sub)+'</div>'):'')+'</div>'
+      +list.map(rowHTML).join('')+'</div>';
+  }
+  H+='<div class="sa-list">';
+  H+=sectionHTML('Contested opportunities', 'Enough data to model, and the standing time was actually raced.', opp, '#4ade80');
+  H+=sectionHTML('Crowns held', 'Live-checked this session. Kept out of the opportunity ranking - these are already won.', held, SA_FOG_STYLE[4].line);
+  H+=sectionHTML('Close, not ready', 'Either the standing time was a soft pass, or there are too few efforts with power to model one.', close, SA_FOG_STYLE[2].line);
+  H+=sectionHTML('Never ridden', 'Starred but never matched to a ride, so there is nothing to measure and nothing to map yet.', never, '#64748b');
+  H+='</div>';
 
   // ---- what this list is and is not ----
   H+='<div style="margin-top:14px;font-size:11px;color:var(--d-dim);line-height:1.6">'
@@ -26760,6 +26636,9 @@ function aiSegTargetsHtml_(ctx){
     +'which is why '+(d.total-d.scored).toLocaleString()+' of these say what they are missing instead of showing a number.'
     +'</div>';
   H+='</div>';
+  // Deferred to a task so it runs AFTER this string is in the document — aiRenderOverview_ builds one
+  // string and assigns it once, so there is no per-tab render hook to hang the mount on.
+  try{ setTimeout(_saMapMount_, 0); }catch(e){}
   return H;
 }
 // The fog-of-war coverage view (aiSegFogHtml_) was DELETED here, not disabled: it plotted all
@@ -26961,10 +26840,8 @@ function aiRenderSegAttack_(){
   // Placed AFTER the ranked list on purpose: this page's job is "what should I hit today", and a
   // 520px map above the answer would push the answer below the fold. Today's picks, then the whole
   // territory they came from, then the caveats.
-  // The fog-of-war coverage map that used to sit here is GONE, not demoted. It answered "where have
-  // I been" across 2,017 segments — an open-ended haystack — and plotting everything at once was the
-  // premise, not a legibility problem to be tuned. The target list that replaced it is rendered
-  // ABOVE the daily pick (see there); the map is now per-row and on demand.
+  // The fog-of-war view and its mount are both GONE. What replaced them — the coverage map and the
+  // target list — render together, above the daily pick (see there).
 
   // ---- what could not be projected, and why ----
   H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px">'
@@ -27597,7 +27474,7 @@ function aiSetTab_(tab){
   // is a different intent, and the chosen default for that is the densest cluster - not wherever the
   // map happened to be left. aiRenderOverview_(_aiMount) does NOT route through here, which is
   // exactly the distinction: this fires on intent, that fires on machinery.
-  _saFogView=null;
+  _saMapView=null;
   _aiTab=tab; if(_aiMount) aiRenderOverview_(_aiMount);
 }
 
@@ -38027,7 +37904,11 @@ function rideMapBasePref_(){
 // in a dedicated high-z pane so names stay legible ABOVE the route line.
 // The labels layer follows the base toggle so you never get dark labels
 // over satellite imagery.
-function addRideMapBase_(map){
+// defaultBase (optional) picks which base wins when the athlete has never chosen one. Ride maps
+// leave it unset and keep opening dark; the Segment Coverage map passes 'satellite', because a
+// segment map is read for WHERE a road goes and dark tiles under coloured segment lines is the
+// near-black-on-black this page was rebuilt to get away from. An explicit choice still wins over it.
+function addRideMapBase_(map, defaultBase){
   var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
   // High-z pane (above the overlayPane where the route polylines live) so
@@ -38047,7 +37928,8 @@ function addRideMapBase_(map){
     try{ map.removeLayer(satLabels); }catch(e){}
     try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){}
   }
-  var pref=rideMapBasePref_();
+  var stored=null; try{ stored=localStorage.getItem('aiq_rideMapBase'); }catch(e){}
+  var pref=stored?rideMapBasePref_():((defaultBase==='satellite')?'satellite':rideMapBasePref_());
   (pref==='satellite'?sat:dark).addTo(map);
   showLabels(pref);
   L.control.layers({Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
