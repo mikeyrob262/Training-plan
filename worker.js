@@ -26868,6 +26868,13 @@ function aiRenderSegAttack_(){
   }
   H=H.replace('<div style="margin-top:9px" id="sa-pot-body"></div>','<div style="margin-top:9px">'+potHtml+'</div>');
 
+  // ---- THE TARGET LIST — the primary view, above the daily pick ----
+  // Order matters here and is the point of the reframe. "N segments are winnable today" is an
+  // open-ended search across the whole library for wherever the odds happen to fall; the target list
+  // is the closed set being converted into PRs and crowns. The closed list leads, and the daily pick
+  // reads as what it is — today's weather-and-form cut across it — rather than as the job itself.
+  H+=_aiSafe_('SegTargets', function(){ return aiSegTargetsHtml_(ctx); }) || '';
+
   // ---- ranked list ----
   H+='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:22px 0 4px">'
     +'<div><div style="font-size:14px;font-weight:800;color:var(--d-head);letter-spacing:.01em">'
@@ -26950,9 +26957,8 @@ function aiRenderSegAttack_(){
   // territory they came from, then the caveats.
   // The fog-of-war coverage map that used to sit here is GONE, not demoted. It answered "where have
   // I been" across 2,017 segments — an open-ended haystack — and plotting everything at once was the
-  // premise, not a legibility problem to be tuned. The target list answers "which segments am I
-  // converting into PRs and crowns", and the map is now per-row and on demand.
-  H+=_aiSafe_('SegTargets', function(){ return aiSegTargetsHtml_(ctx); }) || '';
+  // premise, not a legibility problem to be tuned. The target list that replaced it is rendered
+  // ABOVE the daily pick (see there); the map is now per-row and on demand.
 
   // ---- what could not be projected, and why ----
   H+='<div style="margin-top:20px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:14px 16px">'
