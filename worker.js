@@ -29429,6 +29429,20 @@ function _smurkelFacts_(C){
   if(_away) L.push('  LOCATION: started about '+_away.mi+' miles from where this athlete usually rides. '
     +'They are away from home — unfamiliar roads, and travel disrupts sleep, food and recovery. '
     +'You do NOT know the town, so do not name one.');
+  // WEATHER. Temperature only, and only when the backfill actually resolved one for this ride
+  // (open-meteo archive, r.temp, present on ~69% of outdoor rides). Humidity, wind and apparent
+  // temperature are stored NOWHERE in this app — checked across the whole library — so the fence
+  // below is not politeness, it is the difference between a heat observation and an invented one.
+  // Indoor rides never carry a meaningful outdoor temperature and are skipped.
+  var _rideRaw=C.ride||null;
+  var _tmp=(_rideRaw && _rideRaw.temp!=null && !(typeof _smIsVirtual_==='function' && _smIsVirtual_(_rideRaw)))?(+_rideRaw.temp):null;
+  if(_tmp!=null && isFinite(_tmp)){
+    L.push('  WEATHER: about '+Math.round(_tmp)+'F at the start, from a historical weather archive. '
+      +'You do NOT have humidity, wind speed, or a feels-like figure for this ride — do not state or '
+      +'imply any of them. Temperature is the only weather fact you have.'
+      +(_tmp>=78?' This is warm enough that heat is a real load on HR — you may say so.':'')
+      +(_tmp<=40?' This is cold enough to matter for warm-up and pacing — you may say so.':''));
+  }
   L.push('  distance '+n(a.miles,' mi',1)+', time '+(a.duration||'not recorded')+', TSS '+n(a.tss)+'.');
   if(C.cyclingPower){
     L.push('  NP '+n(a.np,'W')+', average power '+n(a.avg,'W')+', FTP '+n(a.ftp,'W')
