@@ -26772,6 +26772,19 @@ function aiRenderTab_(tab, ded){
     var name=(AI_TABS.filter(function(t){return t[0]===tab;})[0]||['','This tab'])[1];
     return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">'+aiEsc_(name)+' — coming soon.</div>';
   }
+  // ---- OVERVIEW v1: HERO + TODAY'S FOCUS ------------------------------------------------------
+  // The page's problem was eleven cards shouting at equal volume with no read order. These two sit
+  // ABOVE the grid and answer "what matters right now" before anything else competes.
+  //
+  // NO composite score. The mockup's "Athlete IQ 72" is deliberately absent: it would blend inputs
+  // that are not independent (CTL already contains consistency and volume) with weights nothing can
+  // validate. Same objection that killed the blended Momentum score, same answer.
+  //
+  // Everything here reuses an existing single source — _momData_ for direction, getReadiness_ for
+  // readiness, _msCatalog_ for the milestone. Nothing is recomputed, so the hero cannot disagree
+  // with the cards below it.
+  var hero=_aiSafe_('Hero', function(){return _ovHeroHTML_();});
+  var focus=_aiSafe_('TodaysFocus', function(){return _ovFocusHTML_();});
   var dna=_aiSafe_('DNA', function(){return aiCardDNA_(ded);});
   var mom=_aiSafe_('Momentum', function(){return aiCardMomentum_(ded);});
   var watch=_aiSafe_('Watchlist', function(){return aiCardWatchlist_();});
@@ -26790,9 +26803,114 @@ function aiRenderTab_(tab, ded){
   var grid=[dna, mom, watch, adh, strp, ridh, changed, zones, weight, recs].filter(function(h){return h;});
   if(!grid.length && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
   var html='';
+  if(hero) html+=hero;
+  if(focus) html+=focus;
   if(grid.length) html+='<div class="ai-ov-grid">'+grid.join('')+'</div>';
   if(story) html+='<div style="margin-top:12px">'+story+'</div>';
   return html;
+}
+// ---- Athlete Status hero ----------------------------------------------------------------------
+// Direction, readiness and the next milestone — the three things that answer "where am I and what
+// is today". Each comes from the app's single source for that fact, never a local re-derivation.
+function _ovHeroHTML_(){
+  var M=(typeof _momData_==='function')?_momData_():{ok:false};
+  var R=(typeof getReadiness_==='function')?getReadiness_():null;
+  if((!M||!M.ok) && (!R||!R.loaded)) return '';
+  var bCol=(M&&M.bucket==='Building')?'#4ade80':((M&&M.bucket==='Easing')?'#f59e0b':'#60a5fa');
+  var ramp=(M&&M.ok&&M.ramp!=null)?((M.ramp>0?'+':'')+(Math.round(M.ramp*10)/10)):null;
+  // NEXT MILESTONE: the closest one still unreached, by percentage complete. An already-unlocked
+  // milestone is not "next", and one with no projection is still shown — the distance remaining is
+  // real even when the rate is too thin to date it.
+  var ms=null;
+  try{
+    var cat=(typeof _msCatalog_==='function')?_msCatalog_():null;
+    if(cat && cat.proj){
+      var open=cat.proj.filter(function(p){ return p && !p.unlocked && p.target>0 && p.remaining>0; });
+      open.sort(function(a,b){ return b.pct-a.pct; });
+      ms=open[0]||null;
+    }
+  }catch(e){ ms=null; }
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:18px 20px;margin-bottom:12px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Athlete status</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:22px 40px;margin-top:10px;align-items:flex-start">';
+  // LEFT: direction
+  H+='<div style="flex:1 1 260px;min-width:230px">';
+  if(M && M.ok && M.bucket){
+    H+='<div style="font-size:30px;font-weight:800;color:'+bCol+';line-height:1.05;letter-spacing:-.02em">You&rsquo;re '+M.bucket+'</div>'
+      +'<div style="font-size:12.5px;color:var(--d-t1,#334155);margin-top:6px">Fitness '+(ramp!=null?(ramp+' this week'):'trend not available')
+      +' &middot; CTL '+Math.round(M.ctl)+'</div>';
+  } else {
+    H+='<div style="font-size:22px;font-weight:800;color:var(--d-dim,#8b93a7)">&mdash;</div>'
+      +'<div style="font-size:12.5px;color:var(--d-dim,#8b93a7);margin-top:6px">Not enough logged training to read a direction yet.</div>';
+  }
+  if(R && R.loaded){
+    H+='<div style="display:inline-flex;align-items:center;gap:7px;margin-top:11px;background:'+R.col+'1f;border:1px solid '+R.col+'55;border-radius:999px;padding:5px 11px">'
+      +'<span style="width:7px;height:7px;border-radius:50%;background:'+R.col+'"></span>'
+      +'<span style="font-size:12px;font-weight:800;color:'+R.col+'">'+R.head+'</span>'
+      +'<span style="font-size:11px;color:var(--d-dim,#8b93a7)">form '+((R.tsb>0?'+':'')+Math.round(R.tsb))+'</span></div>';
+  }
+  H+='</div>';
+  // RIGHT: next milestone
+  if(ms){
+    var pct=Math.max(0,Math.min(100,ms.pct||0));
+    H+='<div style="flex:0 1 260px;min-width:220px">'
+      +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--d-dim,#8b93a7)">Next milestone</div>'
+      +'<div style="font-size:15px;font-weight:800;color:var(--d-head,#15181D);margin-top:5px">'+aiEsc_(ms.name)+'</div>'
+      +'<div style="height:6px;border-radius:3px;background:var(--d-edge,rgba(0,0,0,.13));margin-top:8px;overflow:hidden">'
+      +'<div style="height:100%;width:'+pct+'%;background:#60a5fa;border-radius:3px"></div></div>'
+      +'<div style="font-size:11px;color:var(--d-dim,#8b93a7);margin-top:5px">'
+      +Math.round(ms.current).toLocaleString()+' / '+Math.round(ms.target).toLocaleString()+(ms.unit?(' '+ms.unit):'')
+      +' &middot; '+pct.toFixed(0)+'%'
+      +(ms.projectedDate?(' &middot; on current rate, '+((typeof _msFmtDate_==='function')?_msFmtDate_(ms.projectedDate):ms.projectedDate)):' &middot; no rate to project from')
+      +'</div></div>';
+  }
+  return H+'</div></div>';
+}
+// ---- Today's Focus ----------------------------------------------------------------------------
+// Only lines with something real behind them. The mockup's "Ideal day for Threshold work — you
+// perform best on days like today" is absent: the app knows the most FREQUENT training day, not
+// performance by day, and there is no model that turns one into the other.
+function _ovFocusHTML_(){
+  var rows=[];
+  var R=(typeof getReadiness_==='function')?getReadiness_():null;
+  if(R && R.loaded) rows.push({ col:R.col, t:R.head, s:R.sub });
+  // Today's prescribed session, through the canonical day-level resolver.
+  try{
+    // dayKey_ ONLY. toISOString is UTC, so from early evening local it names tomorrow — "today's
+    // focus" would show tomorrow's session for hours every day. The cross-surface guard forbids it
+    // for exactly this reason, and it caught this line.
+    var now=new Date();
+    var dk=(typeof dayKey_==='function')?dayKey_(now)
+      :(now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'));
+    var rx=(typeof _sessionRxFor_==='function')?_sessionRxFor_(dk, null):null;
+    if(rx && rx.intent){
+      var bits=[];
+      if(rx.label && rx.label!==rx.intent) bits.push(rx.label);
+      if(rx.targets && rx.targets.powerLo && rx.targets.powerHi) bits.push(rx.targets.powerLo+'-'+rx.targets.powerHi+'W');
+      if(rx.hrCeiling) bits.push('HR ceiling '+rx.hrCeiling);
+      rows.push({ col:'#60a5fa', t:'Today: '+aiEsc_(String(rx.label||rx.intent)),
+                  s:bits.length?aiEsc_(bits.join(' · ')):'On the plan for today.' });
+    }
+  }catch(e){}
+  // Momentum, stated as the one-line reason rather than repeating the hero's headline.
+  try{
+    var M=(typeof _momData_==='function')?_momData_():null;
+    if(M && M.ok && M.consPct!=null){
+      rows.push({ col:'#22d3ee', t:M.weeksActive+' of the last '+M.weeksWindow+' weeks active',
+                  s:(M.volDelta==null)?'Consistency over the last 12 weeks.'
+                    :('Volume '+(M.volDelta>=0?'up ':'down ')+Math.abs(Math.round(M.volDelta))+'% against the previous 12 weeks.') });
+    }
+  }catch(e){}
+  if(!rows.length) return '';
+  var H='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:16px;padding:16px 20px;margin-bottom:12px">'
+    +'<div style="font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim,#8b93a7);margin-bottom:10px">Today&rsquo;s focus</div>';
+  rows.forEach(function(r,i){
+    H+='<div style="display:flex;gap:11px;align-items:flex-start'+(i?';margin-top:12px;padding-top:12px;border-top:1px solid var(--d-edge,rgba(0,0,0,.10))':'')+'">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+r.col+';flex-shrink:0;margin-top:6px"></span>'
+      +'<div style="min-width:0"><div style="font-size:13.5px;font-weight:800;color:var(--d-head,#15181D);line-height:1.3">'+r.t+'</div>'
+      +'<div style="font-size:12px;color:var(--d-dim,#8b93a7);line-height:1.5;margin-top:2px">'+r.s+'</div></div></div>';
+  });
+  return H+'</div>';
 }
 
 // ---- shared renderer (both surfaces) ----
