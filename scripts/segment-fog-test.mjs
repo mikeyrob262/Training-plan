@@ -298,5 +298,16 @@ const iAll  = mountSrc.lastIndexOf('data.segs.map');
 ok('the home fit is preferred over the fit-all fallback', iHome > 0 && iAll > iHome);
 ok('a remembered pan still outranks both (the involuntary-remount guard)', iView > 0 && iView < iHome);
 
+// The row-tap fly is capped. Uncapped, a 0.09 mi segment fitted to z18.75 and the imagery came back
+// 6 tiles of 42 - a grey checkerboard that still passed every "the map drew" assertion.
+const focusRaw = asServed(src.slice(src.indexOf('function _saMapFocus_('),
+                                    matchBrace(src.indexOf('function _saMapFocus_('))+1));
+const focusSrc = focusRaw.split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+ok('the row-tap fly caps its zoom rather than fitting a short segment edge-to-edge',
+   /fitBounds\([^)]*maxZoom\s*:/.test(focusSrc) || /maxZoom\s*:\s*_SA_FOCUS_MAXZ/.test(focusSrc));
+ok('...off a named constant, not a magic number', has('_SA_FOCUS_MAXZ') && /_SA_FOCUS_MAXZ/.test(focusSrc));
+ok('...and the cap is inside the imagery layer\'s own maxZoom of 19',
+   (() => { const m = asServed(src).match(/var\s+_SA_FOCUS_MAXZ\s*=\s*(\d+)/); return !!m && +m[1] >= 13 && +m[1] <= 18; })());
+
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

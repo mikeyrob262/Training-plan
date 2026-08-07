@@ -26113,6 +26113,9 @@ var _saKomSweeping=false;
 // nearby needs a /segments/explore bbox crawl this app does not do. The legend says so rather than
 // showing an empty swatch that implies the map is watching for them.
 var _saMap=null, _saMapView=null, _saMapById={};
+// Deepest zoom a row-tap will fly to. See the note in _saMapFocus_ - above this the imagery tiles
+// stop reliably existing and the segment loses all surrounding context.
+var _SA_FOCUS_MAXZ=17;
 function _saMapMount_(){
   var el=document.getElementById('sa-cov-map');
   if(!el || typeof L==='undefined') return;
@@ -26216,8 +26219,15 @@ function _saMapFocus_(id){
   try{
     if(!_saMap || !_saMapById[id]) return;
     var l=_saMapById[id][0]; if(!l) return;
+    // CAP THE FLY ZOOM. An uncapped fitBounds on a short segment goes to the very top of the tile
+    // pyramid - the 0.09 mi Champs-Elysees sprint fitted to z18.75, where only 6 of 42 imagery tiles
+    // ever arrived and the frame stayed a grey checkerboard six seconds later. It is also the least
+    // useful picture of a segment: edge-to-edge road with no surrounding context to place it. At
+    // z17 that same sprint is still ~180px long and sits in its neighbourhood, and the tiles are
+    // reliably there. Longer segments fit below this cap anyway, so it only binds on the short ones.
     var bb=(typeof l.getBounds==='function')?l.getBounds():null;
-    if(bb && bb.isValid()) _saMap.fitBounds(bb.pad(0.4)); else _saMap.setView(l.getLatLng(), 15);
+    if(bb && bb.isValid()) _saMap.fitBounds(bb.pad(0.4), {maxZoom:_SA_FOCUS_MAXZ});
+    else _saMap.setView(l.getLatLng(), _SA_FOCUS_MAXZ);
     l.openPopup();
     var el=document.getElementById('sa-cov-map');
     if(el && el.scrollIntoView) el.scrollIntoView({block:'center', behavior:'smooth'});
