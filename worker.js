@@ -26245,6 +26245,13 @@ var _saMapSegs=[], _saPinLayer=null;
 // attRing is the ORANGE edge on attempted pins only - the sampled gold, reused as a ring so the
 // blue pins read against the blue lines they sit on.
 var SA_MAP_COL={ pb:'#fc9339', kom:'#ee4e98', att:'#4887f0', never:'#9aa3af', attRing:'#fc9339' };
+// EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
+// best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
+// twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
+// under the markers rather than competing with them.
+var SA_LINE_COL='#d97a1a';
+// How far the satellite imagery is dimmed. One number, easy to move, applied to the imagery only.
+var SA_MAP_DIM=0.78;
 // Line weight is a HARD CONSTRAINT, not a preference. Thick strokes turned this map into stacked
 // highlighter bars over the streets instead of roads with a colour on them; 2px is the whole spec.
 var SA_MAP_W=2;
@@ -26267,20 +26274,37 @@ function _saStatusCol_(t){
 // 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
 // on the reference proportion; the numbers in the verification are what this was tuned against.
 var SA_PIN_W=11, SA_PIN_H=16;
-function _saPinIcon_(col, crown){
+// Which marker a segment gets. THE PIN NOW CARRIES THE STATUS, because the lines no longer do -
+// every line is one colour, so crown-vs-ring is the only thing distinguishing a PR from an attempt.
+function _saPinKind_(tier){ var t=(tier&&tier.t)||1; return (t>=3)?'kom':((t===2)?'pb':'att'); }
+function _saPinIcon_(col, kind){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
-  // ATTEMPTED PINS RING IN ORANGE. Blue fill, orange edge - only for this status. A personal best
-  // and a crown keep the plain white edge they already had, so the ring is a signal rather than
-  // decoration: it marks the one status that is neither won nor bested.
-  var edge=(col===SA_MAP_COL.att)?SA_MAP_COL.attRing:'#fff';
-  var ew=(col===SA_MAP_COL.att)?1:0.7;
+  // PERSONAL BEST IS A CROWN, not a teardrop. It replaces the pin shape outright: on imagery a
+  // silhouette reads faster than a colour, and a PR is the thing worth spotting from across the map.
+  if(kind==='pb'){
+    var cw=13, ch=11, s=cw/12;
+    // Classic five-point crown, drawn in a 12x10 space and scaled.
+    var cd='M '+(1*s)+' '+(9*s)+' L '+(1*s)+' '+(2.6*s)+' L '+(3.6*s)+' '+(5.2*s)
+          +' L '+(6*s)+' '+(1.2*s)+' L '+(8.4*s)+' '+(5.2*s)+' L '+(11*s)+' '+(2.6*s)
+          +' L '+(11*s)+' '+(9*s)+' Z';
+    return L.divIcon({ className:'', iconSize:[cw,ch], iconAnchor:[cw/2,ch/2], popupAnchor:[0,-ch/2],
+      html:'<svg width="'+cw+'" height="'+ch+'" viewBox="0 0 '+cw+' '+ch+'" style="display:block">'
+        +'<path d="'+cd+'" fill="'+SA_MAP_COL.pb+'" stroke="#3a2708" stroke-width="0.6" '
+        +'stroke-linejoin="round"/></svg>' });
+  }
+  // ATTEMPTED IS A HOLLOW ORANGE RING - orange outline, WHITE centre, no blue anywhere. Against a
+  // single orange line colour a filled pin would disappear into it; a white core keeps it readable.
+  var isAtt=(kind==='att');
+  var fill=isAtt?'#ffffff':col;
+  var edge=isAtt?SA_MAP_COL.attRing:'#fff';
+  var ew=isAtt?1.6:0.7;
   // Teardrop: a circle at the top closing to a point at the bottom.
   var d='M '+cx+' '+h+' C '+(cx-r*1.15)+' '+(h-r*1.9)+' '+(cx-r)+' '+(cy+r*0.7)+' '+(cx-r)+' '+cy
        +' A '+r+' '+r+' 0 1 1 '+(cx+r)+' '+cy
        +' C '+(cx+r)+' '+(cy+r*0.7)+' '+(cx+r*1.15)+' '+(h-r*1.9)+' '+cx+' '+h+' Z';
   return L.divIcon({ className:'', iconSize:[w,h], iconAnchor:[cx,h], popupAnchor:[0,-h],
     html:'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block">'
-      +'<path d="'+d+'" fill="'+col+'" stroke="'+edge+'" stroke-width="'+ew+'"/></svg>' });
+      +'<path d="'+d+'" fill="'+fill+'" stroke="'+edge+'" stroke-width="'+ew+'"/></svg>' });
 }
 function _saPinsRefresh_(map){
   if(!map) return;
@@ -26305,7 +26329,7 @@ function _saPinsRefresh_(map){
     if(!e.at || !b.contains(L.latLng(e.at[0], e.at[1]))) continue;
     if(++n>_SA_PIN_CAP) break;
     (function(ent){
-      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, ent.s.tier&&ent.s.tier.t>=3), riseOnHover:true})
+      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, _saPinKind_(ent.s.tier)), riseOnHover:true})
         .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
       m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
       _saPinLayer.addLayer(m);
@@ -26347,7 +26371,16 @@ function _saMapMount_(){
   var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
   _saMap=map;
-  addRideMapBase_(map,'light','aiq_segMapBase');
+  addRideMapBase_(map,'satellite','aiq_segMapBase');
+  // A MODEST DARKENING PASS, on the IMAGERY ONLY. Applied to tilePane, so the roads and place
+  // labels in routeLabels and the segments above them keep their full brightness - darkening the
+  // whole map would defeat the point by dimming exactly what has to stay readable. Deliberately
+  // gentle and deliberately a single named number: this is a starting point to react to, not a
+  // value anyone can pick correctly up front.
+  try{
+    var tp=map.getPane('tilePane');
+    if(tp) tp.style.filter='brightness('+SA_MAP_DIM+') saturate(0.92)';
+  }catch(e){}
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
@@ -26373,7 +26406,7 @@ function _saMapMount_(){
     // which reads as three different KINDS of thing on a map whose whole legend is status. Crown,
     // personal best, ridden - and never-ridden, which cannot be drawn at all (no coordinates are
     // stored for a segment that was never matched to a ride).
-    var col=_saStatusCol_(s.tier);
+    var col=SA_LINE_COL;                     // one colour for every line; the pin carries status
     var pts=_saPoly['s'+_saSegNum_(s.id)]||_saPoly[s.id]||null;
     var isReal=!!(pts && pts.length>1);
     if(!isReal){
@@ -26397,7 +26430,7 @@ function _saMapMount_(){
     // THE INTERACTIVE LINE IS ALWAYS INDEX 0 - _saMapFocus_ opens [0]'s popup and _saMapPromote_
     // recolours [0]. One layer per segment now that the casing is gone.
     _saMapById[s.id]=[line];
-    _saMapSegs.push({s:s, at:pts[0], col:col});
+    _saMapSegs.push({s:s, at:pts[0], col:_saStatusCol_(s.tier)});
   });
   // Pin markers ride ON TOP of the stretches, the way Strava's segment map reads: the line says
   // where the segment runs, the pin says "there is one here" and carries the status badge.
@@ -38479,13 +38512,20 @@ function addRideMapBase_(map, defaultBase, storeKey){
     }
   }catch(e){}
   var darkLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
-  var satLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,pane:'routeLabels'});
+  // HYBRID: imagery + ROADS + place labels, the way Google and Strava do it. Boundaries_and_Places
+  // alone gives towns and nothing to navigate by; World_Transportation is the road network, and it
+  // is the layer that makes imagery usable. Both ride in routeLabels above the segments, and
+  // detectRetina is off for the same reason as the street base - it halves their drawn size.
+  var satLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'routeLabels'});
+  var satRoads=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'routeLabels'});
   var lightLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}
     try{ map.removeLayer(satLabels); }catch(e){}
+    try{ map.removeLayer(satRoads); }catch(e){}
     try{ map.removeLayer(lightLabels); }catch(e){}
     try{ (which==='satellite'?satLabels:(which==='light'?lightLabels:darkLabels)).addTo(map); }catch(e){}
+    if(which==='satellite'){ try{ satRoads.addTo(map); }catch(e){} }
   }
   // STORAGE KEY IS PER-SURFACE. Every map shared one key, so a Satellite or Dark choice made once
   // on a ride map silently overrode the Segment Map's light default on every later visit - the page

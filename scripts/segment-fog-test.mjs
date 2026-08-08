@@ -591,17 +591,17 @@ ok('pin size is measured, not a magic number', has('var SA_PIN_W=') && has('SA_P
 // 128 CSS px and every label renders at a quarter size. Invisible at devicePixelRatio 1.
 // NB: the tile URL itself contains {s}/{z}/{x}/{y}, so a lazy brace match grabs those placeholders
 // rather than the options object. Assert on the declaration as a whole.
-ok('the light basemap does NOT use detectRetina', (() => {
+ok('the base tiles do NOT use detectRetina', (() => {
   const b = bodyOf('addRideMapBase_');
   const i = b.indexOf('var light=L.tileLayer(');
   return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
 })());
 ok('the pin matches the image: a teardrop path', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
-ok('the pin is filled in its status colour', /fill="'\+col\+'"/.test(pinIcon));
+ok('the pin is filled from its status or the attempted white', /fill="'\+fill\+'"/.test(pinIcon));
 // Attempted pins ring in ORANGE; PB and KOM keep the plain white edge.
 ok('attempted pins take the orange ring', /attRing/.test(pinIcon) && has("attRing:'#fc9339'"));
-ok('...only attempted - the edge is conditional on the attempted colour',
-   /col===SA_MAP_COL\.att/.test(pinIcon) && /:'#fff'/.test(pinIcon));
+ok('...only attempted - the edge is conditional on the attempted kind',
+   /isAtt\?SA_MAP_COL\.attRing/.test(pinIcon) && /:'#fff'/.test(pinIcon));
 // Voyager bakes labels into the base tile at z200, under the segments at z620 and pins at z640.
 ok('the light base uses the NOLABELS style', has('voyager_nolabels'));
 ok('...with labels re-added in the pane ABOVE the segments and pins',
@@ -609,9 +609,9 @@ ok('...with labels re-added in the pane ABOVE the segments and pins',
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
 ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
 // Basemap: light, and immune to a ride-map preference set elsewhere.
-ok('the segment map defaults to the light street base', /addRideMapBase_\(map,'light'/.test(mountSrc));
+ok('the segment map defaults to the HYBRID base', /addRideMapBase_\(map,'satellite'/.test(mountSrc));
 ok('...under its OWN storage key, so a ride-map choice cannot override it',
-   /addRideMapBase_\(map,'light','aiq_segMapBase'\)/.test(mountSrc));
+   /addRideMapBase_\(map,'satellite','aiq_segMapBase'\)/.test(mountSrc));
 ok('addRideMapBase_ honours a per-surface key', (() => {
   const b = bodyOf('addRideMapBase_');
   return /storeKey/.test(b) && /var KEY=storeKey\|\|/.test(b) && /getItem\(KEY\)/.test(b) && /setItem\(KEY/.test(b);
