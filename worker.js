@@ -26246,16 +26246,20 @@ function _saStatusCol_(t){
 // colour inside. Deliberately NOT the previous 22x30 teardrop with a white outline and a drop
 // shadow: at map scale that reads as a pushpin the size of a town, and hundreds of them buried the
 // segments they were meant to mark. No halo, no shadow - the ring is the whole affordance.
-var SA_PIN_D=17;
+// 11px, 1px ring. Measured on a devicePixelRatio-2 display, 17px pins in a corridor where several
+// segments converge on one intersection - the Grandville run - merged into an unbroken chain of
+// rings that hid the streets underneath entirely. The marker's job is to say "a segment starts
+// here", which needs to be legible, not prominent; the line carries the segment.
+var SA_PIN_D=11;
 function _saPinIcon_(col, crown){
   var r=SA_PIN_D/2;
   var inner=crown
-    ? '<text x="'+r+'" y="'+(r+3.4)+'" text-anchor="middle" font-size="8.5" fill="'+col+'">&#9819;</text>'
-    : '<circle cx="'+r+'" cy="'+r+'" r="2.6" fill="'+col+'"/>';
+    ? '<circle cx="'+r+'" cy="'+r+'" r="1.9" fill="'+col+'"/>'
+    : '<circle cx="'+r+'" cy="'+r+'" r="1.6" fill="'+col+'"/>';
   return L.divIcon({ className:'', iconSize:[SA_PIN_D,SA_PIN_D],
     iconAnchor:[r,r], popupAnchor:[0,-r],
     html:'<svg width="'+SA_PIN_D+'" height="'+SA_PIN_D+'" viewBox="0 0 '+SA_PIN_D+' '+SA_PIN_D+'" style="display:block">'
-      +'<circle cx="'+r+'" cy="'+r+'" r="'+(r-1)+'" fill="#fff" stroke="'+col+'" stroke-width="1.6"/>'
+      +'<circle cx="'+r+'" cy="'+r+'" r="'+(r-0.7)+'" fill="#fff" stroke="'+col+'" stroke-width="1"/>'
       +inner+'</svg>' });
 }
 function _saPinsRefresh_(map){
@@ -38420,7 +38424,18 @@ function addRideMapBase_(map, defaultBase, storeKey){
   // a muted street map recedes behind them. Voyager keeps road classes and place names legible at
   // the few-mile zoom this map opens on. Its labels are baked in, so it takes no labels overlay -
   // adding one would double-print every town name.
-  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+  //
+  // detectRetina is OFF here, and that is the whole reason the streets read. Leaflet's retina mode
+  // halves the tile size and bumps the zoom, so on a scaled display a 512px tile is painted into
+  // 128 CSS px - every road casing and place label renders at a QUARTER of its intended size, which
+  // is exactly the "thin grey lines, barely legible labels" complaint. It is invisible at
+  // devicePixelRatio 1, which is all a headless harness runs at by default, so it survived every
+  // previous check. Sharper tiles are not worth an unreadable basemap.
+  //
+  // Voyager rather than Positron, measured against the reference: Positron drops most of the road
+  // grid to near-white and its labels go pale grey, which makes the washed-out problem worse, not
+  // better. Voyager keeps road classes, place names and water legible under thin coloured lines.
+  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   // High-z pane (above the overlayPane where the route polylines live) so
   // labels paint over the route, not under it. pointer-events off so the
   // overlay never eats map interactions.

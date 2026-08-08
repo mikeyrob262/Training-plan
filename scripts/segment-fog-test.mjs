@@ -558,8 +558,21 @@ ok('promote recolours without fattening the stroke',
    /weight:SA_MAP_W/.test(bodyOf('_saMapPromote_')));
 // Pins: circular, 16-18px, white fill, thin coloured ring, no shadow, no teardrop path.
 const pinIcon = bodyOf('_saPinIcon_');
-ok('pin diameter is a named constant in the 16-18px range',
-   (() => { const m = asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/); return !!m && +m[1] >= 16 && +m[1] <= 18; })());
+// 10-12px. 17px pins merged into an unbroken chain of rings wherever several segments converge on
+// one intersection, hiding the streets under them.
+ok('pin diameter is a named constant in the 10-12px range',
+   (() => { const m = asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/); return !!m && +m[1] >= 10 && +m[1] <= 12; })(),
+   (asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/)||[])[1]);
+ok('the ring is a hairline, not a band', /stroke-width="1"/.test(bodyOf('_saPinIcon_')));
+// detectRetina halves the tile size and bumps zoom, so on a scaled display a 512px tile lands in
+// 128 CSS px and every label renders at a quarter size. Invisible at devicePixelRatio 1.
+// NB: the tile URL itself contains {s}/{z}/{x}/{y}, so a lazy brace match grabs those placeholders
+// rather than the options object. Assert on the declaration as a whole.
+ok('the light basemap does NOT use detectRetina', (() => {
+  const b = bodyOf('addRideMapBase_');
+  const i = b.indexOf('var light=L.tileLayer(');
+  return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
+})());
 ok('the pin is a circle, not a teardrop path', /<circle/.test(pinIcon) && !/<path/.test(pinIcon));
 ok('the pin is white-filled with a coloured ring', /fill="#fff"\s+stroke="'\+col\+'"/.test(pinIcon));
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
