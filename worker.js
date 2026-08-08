@@ -26242,7 +26242,9 @@ var _saMapSegs=[], _saPinLayer=null;
 // magenta crown = KOM/QOM). Note the mockup's marker counts do NOT agree with its own legend
 // counts - it is a synthetic image - so the legend is what is trusted for meaning, the pixels for
 // the values. Grey is legend/stat-bar only; never-attempted has no coordinates and is never drawn.
-var SA_MAP_COL={ pb:'#fc9339', kom:'#ee4e98', att:'#4887f0', never:'#9aa3af' };
+// attRing is the ORANGE edge on attempted pins only - the sampled gold, reused as a ring so the
+// blue pins read against the blue lines they sit on.
+var SA_MAP_COL={ pb:'#fc9339', kom:'#ee4e98', att:'#4887f0', never:'#9aa3af', attRing:'#fc9339' };
 // Line weight is a HARD CONSTRAINT, not a preference. Thick strokes turned this map into stacked
 // highlighter bars over the streets instead of roads with a colour on them; 2px is the whole spec.
 var SA_MAP_W=2;
@@ -26267,13 +26269,18 @@ function _saStatusCol_(t){
 var SA_PIN_W=11, SA_PIN_H=16;
 function _saPinIcon_(col, crown){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
+  // ATTEMPTED PINS RING IN ORANGE. Blue fill, orange edge - only for this status. A personal best
+  // and a crown keep the plain white edge they already had, so the ring is a signal rather than
+  // decoration: it marks the one status that is neither won nor bested.
+  var edge=(col===SA_MAP_COL.att)?SA_MAP_COL.attRing:'#fff';
+  var ew=(col===SA_MAP_COL.att)?1:0.7;
   // Teardrop: a circle at the top closing to a point at the bottom.
   var d='M '+cx+' '+h+' C '+(cx-r*1.15)+' '+(h-r*1.9)+' '+(cx-r)+' '+(cy+r*0.7)+' '+(cx-r)+' '+cy
        +' A '+r+' '+r+' 0 1 1 '+(cx+r)+' '+cy
        +' C '+(cx+r)+' '+(cy+r*0.7)+' '+(cx+r*1.15)+' '+(h-r*1.9)+' '+cx+' '+h+' Z';
   return L.divIcon({ className:'', iconSize:[w,h], iconAnchor:[cx,h], popupAnchor:[0,-h],
     html:'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block">'
-      +'<path d="'+d+'" fill="'+col+'" stroke="#fff" stroke-width="0.7"/></svg>' });
+      +'<path d="'+d+'" fill="'+col+'" stroke="'+edge+'" stroke-width="'+ew+'"/></svg>' });
 }
 function _saPinsRefresh_(map){
   if(!map) return;
@@ -38454,7 +38461,13 @@ function addRideMapBase_(map, defaultBase, storeKey){
   // Voyager rather than Positron, measured against the reference: Positron drops most of the road
   // grid to near-white and its labels go pale grey, which makes the washed-out problem worse, not
   // better. Voyager keeps road classes, place names and water legible under thin coloured lines.
-  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+  //
+  // NOLABELS, with the labels re-added as a separate overlay below. Voyager bakes its labels into
+  // the base tile, which puts them in tilePane at z200 - UNDER the segment lines at z620 and the
+  // pins at z640. Every place name the map did render was being painted over by the very segments
+  // it was supposed to sit behind. Splitting the style lets the labels go in routeLabels at z650,
+  // above everything.
+  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   // High-z pane (above the overlayPane where the route polylines live) so
   // labels paint over the route, not under it. pointer-events off so the
   // overlay never eats map interactions.
@@ -38467,12 +38480,12 @@ function addRideMapBase_(map, defaultBase, storeKey){
   }catch(e){}
   var darkLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_only_labels/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
   var satLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,pane:'routeLabels'});
+  var lightLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}
     try{ map.removeLayer(satLabels); }catch(e){}
-    // Voyager already carries its own labels; adding an overlay double-prints every place name.
-    if(which==='light') return;
-    try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){}
+    try{ map.removeLayer(lightLabels); }catch(e){}
+    try{ (which==='satellite'?satLabels:(which==='light'?lightLabels:darkLabels)).addTo(map); }catch(e){}
   }
   // STORAGE KEY IS PER-SURFACE. Every map shared one key, so a Satellite or Dark choice made once
   // on a ride map silently overrode the Segment Map's light default on every later visit - the page

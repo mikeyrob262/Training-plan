@@ -597,8 +597,15 @@ ok('the light basemap does NOT use detectRetina', (() => {
   return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
 })());
 ok('the pin matches the image: a teardrop path', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
-ok('the pin is filled in its status colour with a thin white edge',
-   /fill="'\+col\+'"/.test(pinIcon) && /stroke="#fff"/.test(pinIcon));
+ok('the pin is filled in its status colour', /fill="'\+col\+'"/.test(pinIcon));
+// Attempted pins ring in ORANGE; PB and KOM keep the plain white edge.
+ok('attempted pins take the orange ring', /attRing/.test(pinIcon) && has("attRing:'#fc9339'"));
+ok('...only attempted - the edge is conditional on the attempted colour',
+   /col===SA_MAP_COL\.att/.test(pinIcon) && /:'#fff'/.test(pinIcon));
+// Voyager bakes labels into the base tile at z200, under the segments at z620 and pins at z640.
+ok('the light base uses the NOLABELS style', has('voyager_nolabels'));
+ok('...with labels re-added in the pane ABOVE the segments and pins',
+   has('voyager_only_labels') && /voyager_only_labels[\s\S]{0,160}pane:'routeLabels'/.test(asServed(src)));
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
 ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
 // Basemap: light, and immune to a ride-map preference set elsewhere.
