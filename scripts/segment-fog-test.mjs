@@ -368,6 +368,12 @@ ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
 ok('...and the cap is REPORTED, not silently truncating', /of \'\+n\+\' pins|zoom in for the rest/.test(pinSrc));
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
+// _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of
+// _getTopLeftPoint and takes the WHOLE MOUNT down with it -- the map ends up with no view at all
+// and every later getBounds throws. Shipped exactly that way once; only a screenshot caught it.
+ok('the first pin refresh runs AFTER the view is set, never before',
+   mountSrc.indexOf('_saPinsRefresh_') > mountSrc.indexOf('if(_saMapView)'),
+   'refresh@' + mountSrc.indexOf('_saPinsRefresh_') + ' view@' + mountSrc.indexOf('if(_saMapView)'));
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
                                matchBrace(src.indexOf('function _saMapPromote_('))+1))

@@ -26288,8 +26288,11 @@ function _saMapMount_(){
   // THEY ARE VIEWPORT-SCOPED AND ZOOM-GATED, because 1,942 divIcon markers is 1,942 DOM nodes and
   // the map stops being interactive. Below _SA_PIN_MINZ there is no pin at all - at that scale they
   // would be the bead-chain problem the old dots had - and above it only what is on screen is built.
-  _saPinsRefresh_(map);
-  map.on('moveend zoomend', function(){ try{ _saPinsRefresh_(map); }catch(e){} });
+  //
+  // THE FIRST REFRESH CANNOT HAPPEN HERE. It reads getZoom/getBounds, and a Leaflet map with no
+  // view set yet throws "Set map center and zoom first" out of _getTopLeftPoint - which aborted the
+  // whole mount before the fit below ever ran, leaving a map with no view at all. It is wired up
+  // after the view is established instead.
   // Open where the riding actually is. A fit-all here spans 254 degrees of longitude - this library
   // reaches from Michigan into the South Pacific - and renders four unreadable specks. _saFogHome_
   // picks the densest one-degree cell measured in EFFORTS RIDDEN, not segment count: counting
@@ -26312,10 +26315,13 @@ function _saMapMount_(){
   // hub keeps the box to a few miles - but a cap costs nothing and bounds the degenerate case.
   else if(homeB && homeB.isValid()){ try{ map.fitBounds(homeB, {padding:[24,24], maxZoom:14}); }catch(e){} }
   else { try{ map.fitBounds(L.latLngBounds(data.segs.map(function(s){return [s.lat,s.lon];}))); }catch(e){} }
+  // Pins, now that the map has a view to read. Bound here rather than at draw time for that reason.
+  map.on('moveend zoomend', function(){ try{ _saPinsRefresh_(map); }catch(e){} });
+  try{ _saPinsRefresh_(map); }catch(e){}
   // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
   // renders empty and throws nothing. Desktop came up fine and mobile came up blank from identical
   // code until this was added.
-  setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} }, 160);
+  setTimeout(function(){ try{ map.invalidateSize(); _saPinsRefresh_(map); }catch(e){} }, 160);
   // Preserve the view across the remount that follows the IDB library load, or a pan silently resets
   // seconds later. Only record once the map has a real size, or a zero-sized first mount persists a
   // junk view.
