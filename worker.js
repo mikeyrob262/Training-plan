@@ -25754,8 +25754,22 @@ function _saPolyPending_(litOnly){
     var num=_saSegNum_(k); if(!num) return;
     out.push({key:k, num:num, lit:(+s.prSec>0)});
   });
-  // Lit first, so a partial run improves the part of the map that matters most.
-  out.sort(function(a,b){ return (b.lit?1:0)-(a.lit?1:0); });
+  // IN VIEW FIRST, then lit. A partial run should improve the frame the athlete is actually looking
+  // at: a straight chord standing in for a bending road is only clutter where it is on screen, and
+  // this map opens on a few miles of home roads rather than the whole library.
+  var b=null;
+  try{ if(_saMap && _saMap.getSize && _saMap.getSize().x>0) b=_saMap.getBounds(); }catch(e){ b=null; }
+  if(b){
+    out.forEach(function(o){
+      var s=store[o.key];
+      o.inView=!!(s && s.startLat!=null && b.contains(L.latLng(+s.startLat, +s.startLon)));
+    });
+  }
+  out.sort(function(a,b2){
+    var av=(a.inView?1:0), bv=(b2.inView?1:0);
+    if(av!==bv) return bv-av;
+    return (b2.lit?1:0)-(a.lit?1:0);
+  });
   return out;
 }
 function _saPolyStop_(){ _saPolyRun.stop=true; }
@@ -26267,10 +26281,16 @@ function _saMapMount_(){
     drawn++;
     var top=(s.tier.t>=2);
     var w=(s.tier.t===3)?5.5:(s.tier.t===2?4.5:3.5);
+    // A CHORD IS DRAWN SUBORDINATE TO A ROAD. Only 117 of 1,942 segments have a real shape, so the
+    // straight endpoint-to-endpoint stand-ins are most of what is on screen - and a long one cuts
+    // clean across the frame at an angle no road takes, which is the tangle this page kept being
+    // judged on. Thinner and more transparent lets the real geometry read as the map and the chords
+    // as the placeholder they are. It is a stopgap for the shape backfill, not a substitute.
+    if(!isReal) w=Math.max(2, w-1.6);
     var cas=L.polyline(pts,{ pane:'segCase', renderer:caseRend, color:'#0a0f16',
-      weight:w+3, opacity:0.5, lineCap:'round', lineJoin:'round', interactive:false }).addTo(map);
+      weight:w+3, opacity:isReal?0.5:0.3, lineCap:'round', lineJoin:'round', interactive:false }).addTo(map);
     var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:col,
-      weight:w, opacity: top?1:0.85,
+      weight:w, opacity: isReal?(top?1:0.85):0.5,
       // Dashed says "this is a straight line standing in for a bending road", not decoration.
       dashArray: isReal?null:'6 5', lineCap:'round', lineJoin:'round' }).addTo(map);
     line.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
@@ -26358,6 +26378,11 @@ function _saMapFocus_(id){
   }catch(e){}
 }
 window._saMapFocus_=_saMapFocus_;
+// Exported explicitly, like every other inline handler on this page. The sweep is reached from an
+// onclick, and relying on the declaration being an implicit global is the kind of thing that works
+// until the file is wrapped in a scope.
+window._saPolySweep_=_saPolySweep_;
+window._saPolyStop_=_saPolyStop_;
 // The section. One renderer for both surfaces, same as the rest of this page - the map is a block
 // element sized in CSS, so the only thing that changes with width is its height.
 // ==================== TARGET LIST — the primary Segment Attack view ====================
@@ -26692,6 +26717,14 @@ function aiSegTargetsHtml_(ctx){
     +'<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">'
     +'<div id="sa-cov-pins" style="font-size:10.5px;color:var(--d-t3)"></div>'
     +'<div id="sa-cov-note" style="font-size:10.5px;color:var(--d-dim)"></div></div></div>'
+    // THE ROAD-SHAPE BACKFILL, given a button again. The sweep, its rate-limit budget and its
+    // resumability all already existed and were correct - but the only control that called it went
+    // with the fog view, so it had been unreachable dead code and the library sat at 117 real shapes
+    // out of 1,942. That gap IS the difference between this and Strava's map: Strava draws real road
+    // geometry, and 94% of these are still straight lines between two endpoints.
+    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">'
+    +'<button class="sa-tbtn" onclick="_saPolySweep_(false)">Load road shapes</button>'
+    +'<div id="sa-poly-note" style="font-size:10.5px;color:var(--d-dim);flex:1;min-width:180px"></div></div>'
     +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:#0b1017"></div>';
   // Legend. Crown reads em-dash until a check has run, for the same reason the headline does.
   H+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--d-t3)">';

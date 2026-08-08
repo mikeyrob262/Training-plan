@@ -374,6 +374,24 @@ ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
 ok('the first pin refresh runs AFTER the view is set, never before',
    mountSrc.indexOf('_saPinsRefresh_') > mountSrc.indexOf('if(_saMapView)'),
    'refresh@' + mountSrc.indexOf('_saPinsRefresh_') + ' view@' + mountSrc.indexOf('if(_saMapView)'));
+// ---- 13. the road-shape backfill is REACHABLE ------------------------------------------------
+// It was complete, correct, rate-limit-aware -- and dead. The only control that called it went with
+// the fog view, so the library sat at 117 real shapes of 1,942 while the map was judged on the
+// straight chords standing in for the other 94%.
+console.log('\n'+C+'=== 13. the road-shape backfill has a way to be run ==='+X);
+ok('the sweep is called from somewhere, not just defined', /onclick="_saPolySweep_\(/.test(asServed(src)));
+ok('...and exported for that inline handler', has('window._saPolySweep_=_saPolySweep_'));
+ok('the page renders the note element the sweep writes into', has("id=\"sa-poly-note\""));
+ok('the sweep still reports what it capped', has('press again to continue'));
+ok('pending work is ordered by what is ON SCREEN first', (() => {
+  const p = asServed(src.slice(src.indexOf('function _saPolyPending_('),
+                               matchBrace(src.indexOf('function _saPolyPending_('))+1))
+    .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+  return /inView/.test(p) && /getBounds\(\)/.test(p);
+})());
+ok('a chord is drawn subordinate to a real road shape, not identically',
+   /if\(!isReal\) w=/.test(mountSrc) && /isReal\?0\.5:0\.3/.test(mountSrc));
+
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
                                matchBrace(src.indexOf('function _saMapPromote_('))+1))
