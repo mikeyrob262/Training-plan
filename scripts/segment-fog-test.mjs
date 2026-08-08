@@ -43,11 +43,13 @@ const F = new Function(asServed(
   // _saPoly is the session road-shape cache the renderer reads; empty here so every assertion below
   // describes the un-fetched state, and the one test that cares injects its own shapes.
   'var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6; var _saPoly={};\n'
+  + exv('_SA_HOME_R_M')
   + ex('isPlainObj_') + ex('_saHaversineM_') + ex('_segBearingDeg_') + ex('_saSinuosity_')
   + ex('_saKomCandidate_') + ex('_saXomSec_') + ex('_saPolyDecode_')
   + exv('SA_FOG_STYLE') + exv('SA_FOG_E2') + ex('_saFogRamp_') + ex('_saFogStyleOf_')
   + ex('_segAbsorb_') + ex('_saFogTierOf_') + ex('_saFogList_') + ex('_saFogHome_') + ex('_saOrdinal_')
-) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_, ramp:_saFogRamp_, poly:_saPolyDecode_, STYLE:SA_FOG_STYLE};')();
+  + ex('_saStatusCol_')
+) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_, ramp:_saFogRamp_, poly:_saPolyDecode_, statusCol:_saStatusCol_, STYLE:SA_FOG_STYLE};')();
 
 console.log('\n'+C+'=== 1. the top tier is reachable ONLY from a live check ==='+X);
 check('a live holding result is the top tier', F.tier({prSec:300}, {holds:true}).t, 3);
@@ -309,6 +311,69 @@ ok('the row-tap fly caps its zoom rather than fitting a short segment edge-to-ed
 ok('...off a named constant, not a magic number', has('_SA_FOCUS_MAXZ') && /_SA_FOCUS_MAXZ/.test(focusSrc));
 ok('...and the cap is inside the imagery layer\'s own maxZoom of 19',
    (() => { const m = asServed(src).match(/var\s+_SA_FOCUS_MAXZ\s*=\s*(\d+)/); return !!m && +m[1] >= 13 && +m[1] <= 18; })());
+
+// ---- 10. the opening view is a FEW MILES, and still the right city ---------------------------
+console.log('\n'+C+'=== 10. the home cluster is tight, and tightening did not move it ==='+X);
+const MI = 69.0;
+const boxMi = h => h ? { h: (h.north - h.south) * MI, w: (h.east - h.west) * MI * Math.cos(h.south * Math.PI / 180) } : null;
+// Home riding: SPREAD across ~6 miles, 40 segments, 20 efforts each = 800 efforts.
+// Away riding: one day out, PACKED into half a mile, 30 segments, 24 efforts each = 720 efforts.
+// The away cluster is far denser per unit area; the coarse cell must still choose home, and the
+// tightening inside home must not jump to it.
+// The home region is shaped like the real one: a dense core inside sprawling outskirts. Without the
+// outskirts a too-wide radius still yields a small box, and the tightness assertion passes for the
+// wrong reason -- which it did on the first version of this fixture.
+const home40 = [], away30 = [];
+for (let i = 0; i < 30; i++) home40.push({ lat: 42.85 + (i % 6) * 0.008, lon: -85.65 + Math.floor(i / 6) * 0.012, effortCount: 30 });
+for (let i = 0; i < 20; i++) home40.push({ lat: 42.55 + (i % 5) * 0.12, lon: -85.95 + Math.floor(i / 5) * 0.18, effortCount: 5 });
+for (let i = 0; i < 30; i++) away30.push({ lat: 41.85 + (i % 6) * 0.001, lon: -87.85 + Math.floor(i / 6) * 0.001, effortCount: 24 });
+const mixed = home40.concat(away30);
+const hm = F.home(mixed);
+ok('the coarse stage still picks the region with more RIDING, not more density',
+   !!hm && hm.south > 42 && hm.south < 43.5 && hm.west > -86.5 && hm.west < -85,
+   hm && [hm.south.toFixed(2), hm.west.toFixed(2)].join(','));
+const bm = boxMi(hm);
+ok('the opening box is a few miles across, not tens', !!bm && bm.h < 15 && bm.w < 15,
+   bm && (bm.h.toFixed(1) + ' x ' + bm.w.toFixed(1) + ' mi'));
+// The old ±1.2-degree cluster swept in anything within ~50 miles. That is what put Howard City,
+// 35 miles north of the riding, on screen and zoomed everything else into hairlines.
+const withFar = home40.concat([{ lat: 43.40, lon: -85.47, effortCount: 30 }]);   // ~38 mi north
+const hf = F.home(withFar);
+ok('a segment 38 miles out does not stretch the opening view to reach it',
+   !!hf && (hf.north - hf.south) * MI < 15, hf && ((hf.north - hf.south) * MI).toFixed(1) + ' mi tall');
+ok('...and that is a real exclusion, not an empty result', !!hf && isFinite(hf.north) && hf.n > 1);
+
+console.log('\n'+C+'=== 11. status colour, with no effort ramp ==='+X);
+check('a crown is the crown colour', F.statusCol({t:3}), F.STYLE[4].line);
+check('a personal best is the PB colour', F.statusCol({t:2}), F.STYLE[3].line);
+check('ridden once is the ridden colour', F.statusCol({t:1, ramp:0}), F.STYLE[2].line);
+ok('ridden 5 times is the SAME colour as ridden once - status, not a heat ramp',
+   F.statusCol({t:1, ramp:0}) === F.statusCol({t:1, ramp:2}));
+ok('the three drawn statuses are three distinct colours',
+   new Set([F.statusCol({t:1}), F.statusCol({t:2}), F.statusCol({t:3})]).size === 3);
+
+console.log('\n'+C+'=== 12. pins: on top of the stretches, but bounded ==='+X);
+ok('segment stretches are still drawn - pins did not replace the lines',
+   /L\.polyline\(/.test(mountSrc) && /_saPoly\[/.test(mountSrc));
+ok('a casing is drawn under the colour for contrast on imagery',
+   /segCase/.test(mountSrc) && has("map.createPane('segCase')"));
+ok('the interactive line is index 0, so a row tap opens a popup that exists',
+   /_saMapById\[s\.id\]=\[line, ?cas\]/.test(mountSrc));
+const pinSrc = asServed(src.slice(src.indexOf('function _saPinsRefresh_('),
+                                  matchBrace(src.indexOf('function _saPinsRefresh_('))+1))
+  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+ok('pins are zoom-gated off a named constant', /_SA_PIN_MINZ/.test(pinSrc) && has('_SA_PIN_MINZ'));
+ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
+ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
+ok('...and the cap is REPORTED, not silently truncating', /of \'\+n\+\' pins|zoom in for the rest/.test(pinSrc));
+ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
+   /_saPinLayer=null/.test(mountSrc));
+ok('promote recolours the line only, never the casing', (() => {
+  const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
+                               matchBrace(src.indexOf('function _saMapPromote_('))+1))
+    .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+  return /layers\[0\]/.test(p) && !/layers\.forEach/.test(p);
+})());
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

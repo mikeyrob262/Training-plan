@@ -25956,6 +25956,10 @@ function _saFogList_(store, live){
 // efforts spread across weeks, holding 95 of the 117 PRs. "Where most of my history actually is" is
 // the second one, and a segment count cannot tell them apart because one big day on unfamiliar roads
 // racks up more distinct segments than months on home roads ever will.
+// Radius of the opening view, in metres. 5 miles: measured on this library it yields 167 segments
+// holding 50 of the region's 99 PRs in a 7.5 x 11.4 mile box, which fits at z12 - the "few miles"
+// scale Strava opens on. 3 mi is too thin (87 segments), 8 mi is back to a 14-mile box.
+var _SA_HOME_R_M=8046;
 function _saFogHome_(segs){
   if(!segs || !segs.length) return null;
   var cell={}, best=null;
@@ -25968,8 +25972,42 @@ function _saFogHome_(segs){
   });
   if(!best) return null;
   var p=best.split(','), cLat=+p[0], cLon=+p[1];
-  var near=segs.filter(function(s){ return Math.abs(s.lat-cLat)<=1.2 && Math.abs(s.lon-cLon)<=1.2; });
-  if(!near.length) near=segs;
+  var region=segs.filter(function(s){ return Math.abs(s.lat-cLat)<=1.2 && Math.abs(s.lon-cLon)<=1.2; });
+  if(!region.length) region=segs;
+  // STAGE 2: TIGHTEN INSIDE THE REGION. The coarse cell above is 1 degree - about 50 miles - and
+  // fitting all of it opened the map 60 miles tall, reaching Howard City. That is not a segment map,
+  // it is a state map with hairlines on it. Strava opens on a few miles, and segments are short
+  // enough (median 0.96 mi) that a few miles is where they stop being clutter and start being roads.
+  //
+  // TIGHTENING THE GRID ALONE FLIPS THE ANSWER TO THE WRONG CITY. Re-run the density pick at 0.05
+  // degrees and the winner is 41.85,-87.85 - a Chicago suburb, 310 efforts, ZERO PRs - because one
+  // day out on the lakefront concentrates into a single fine cell, while home riding spreads across
+  // four adjacent ones (42.85 at -85.60/-85.65/-85.70/-85.75 sum to ~840 efforts and 42 PRs but no
+  // single cell beats 310). So the coarse pick STAYS as the region chooser, and the tightening runs
+  // only inside it: sum efforts within a few miles of each segment and take the densest hub. Every
+  // radius from 3 to 8 miles then lands in Grand Rapids.
+  // Planar, not haversine: this is O(n^2) over ~531 segments, and 282k haversines is a third of a
+  // second of trig on every mount. Over a 5-mile radius at one latitude the flat approximation is
+  // accurate to metres, which is far inside anything that could change which hub wins.
+  var kY=111320, kX=111320*Math.cos(cLat*Math.PI/180), R2=_SA_HOME_R_M*_SA_HOME_R_M;
+  var pts=region.map(function(s){ return {y:s.lat*kY, x:s.lon*kX, w:Math.max(1,+s.effortCount||0)}; });
+  var hubI=-1, hubScore=-1;
+  for(var i=0;i<pts.length;i++){
+    var sc=0;
+    for(var j=0;j<pts.length;j++){
+      var dy=pts[i].y-pts[j].y, dx=pts[i].x-pts[j].x;
+      if(dy*dy+dx*dx<=R2) sc+=pts[j].w;
+    }
+    if(sc>hubScore){ hubScore=sc; hubI=i; }
+  }
+  var near=region;
+  if(hubI>=0){
+    near=region.filter(function(s,ix){
+      var dy=pts[hubI].y-pts[ix].y, dx=pts[hubI].x-pts[ix].x;
+      return dy*dy+dx*dx<=R2;
+    });
+  }
+  if(!near.length) near=region;
   // Bounds are the FULL extent of the cluster, not a trimmed percentile of it. Trimming was the
   // first fix tried and it was the wrong one: measured on this library the riding area is about 1:1
   // however it is trimmed, so going from min/max to a 5/95 window moved the content from filling 39%
@@ -26068,11 +26106,17 @@ function _saMapPromote_(id){
     var layers=_saMapById && _saMapById[id];
     if(!layers || !layers.length) return;
     var stl=SA_FOG_STYLE[4];
-    layers.forEach(function(l){
-      if(!l || typeof l.setStyle!=='function') return;
-      if(typeof l.getRadius==='function') l.setStyle({fillColor:stl.line, color:'#fff'});
-      else l.setStyle({color:stl.line, weight:6, opacity:1});
-    });
+    // Index 0 only - the colour line. The casing at index 1 is the dark outline that buys contrast
+    // on satellite; recolouring it too would erase the outline exactly on the segments that most
+    // need to stand out.
+    var line=layers[0];
+    if(line && typeof line.setStyle==='function') line.setStyle({color:stl.line, weight:5.5, opacity:1});
+    // The pin carries the same status, so it has to be rebuilt or the crown shows on the line and
+    // not on the marker sitting on top of it.
+    for(var i=0;i<_saMapSegs.length;i++){
+      if(_saMapSegs[i].s && _saMapSegs[i].s.id===id){ _saMapSegs[i].col=stl.line; break; }
+    }
+    if(_saMap) _saPinsRefresh_(_saMap);
   }catch(e){}
 }
 
@@ -26115,6 +26159,53 @@ var _saKomSweeping=false;
 var _saMap=null, _saMapView=null, _saMapById={};
 // Deepest zoom a row-tap will fly to. See the note in _saMapFocus_.
 var _SA_FOCUS_MAXZ=17;
+// Pins appear only from this zoom in, and only for what is on screen. Below it the stretches carry
+// the map on their own; a pin per segment at a wide zoom is the bead-chain that made the old dot
+// layer unreadable.
+var _SA_PIN_MINZ=12, _SA_PIN_CAP=400;
+var _saMapSegs=[], _saPinLayer=null;
+// ONE status colour per state, no effort ramp. SA_FOG_STYLE[4] crown, [3] personal best, [2] ridden.
+// Never-ridden has no colour here on purpose: st.segments only holds segments Strava matched to a
+// ride, so a never-ridden segment has no coordinates and cannot be placed on a map at all.
+function _saStatusCol_(t){
+  var i=(t&&t.t)||1;
+  return SA_FOG_STYLE[i>=3?4:(i===2?3:2)].line;
+}
+// A Strava-style teardrop pin. Built as an inline SVG divIcon so the fill can carry the status
+// colour and a crown can be stamped into the head without a second image request.
+function _saPinIcon_(col, crown){
+  var head=crown
+    ? '<text x="11" y="15" text-anchor="middle" font-size="11" fill="#fff">&#9819;</text>'
+    : '<circle cx="11" cy="10.5" r="3.6" fill="#fff" opacity=".92"/>';
+  return L.divIcon({ className:'', iconSize:[22,30], iconAnchor:[11,29], popupAnchor:[0,-26],
+    html:'<svg width="22" height="30" viewBox="0 0 22 30" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))">'
+      +'<path d="M11 29C11 29 20.5 17.6 20.5 10.5A9.5 9.5 0 0 0 1.5 10.5C1.5 17.6 11 29 11 29Z" '
+      +'fill="'+col+'" stroke="#fff" stroke-width="1.6"/>'+head+'</svg>' });
+}
+function _saPinsRefresh_(map){
+  if(!map) return;
+  if(!_saPinLayer){ _saPinLayer=L.layerGroup().addTo(map); }
+  _saPinLayer.clearLayers();
+  if(map.getZoom()<_SA_PIN_MINZ) return;
+  var b=map.getBounds().pad(0.15), n=0;
+  for(var i=0;i<_saMapSegs.length;i++){
+    var e=_saMapSegs[i];
+    if(!e.at || !b.contains(L.latLng(e.at[0], e.at[1]))) continue;
+    // REPORT the cap rather than trimming in silence - a map that quietly stops drawing pins at a
+    // busy zoom looks like a rendering fault.
+    if(++n>_SA_PIN_CAP) break;
+    (function(ent){
+      var m=L.marker(ent.at, {icon:_saPinIcon_(ent.col, ent.s.tier&&ent.s.tier.t>=3), riseOnHover:true})
+        .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
+      m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
+      _saPinLayer.addLayer(m);
+    })(e);
+  }
+  var note=document.getElementById('sa-cov-pins');
+  if(note) note.textContent=(n>_SA_PIN_CAP)
+    ? ('showing '+_SA_PIN_CAP+' of '+n+' pins in view - zoom in for the rest')
+    : (n?(n+' pin'+(n===1?'':'s')+' in view'):'');
+}
 function _saMapMount_(){
   var el=document.getElementById('sa-cov-map');
   if(!el || typeof L==='undefined') return;
@@ -26147,10 +26238,24 @@ function _saMapMount_(){
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
+  // Casing UNDER the colour, in its own pane. A bare coloured hairline on satellite imagery is the
+  // hardest thing on this page to see - it competes with tree canopy and roof lines at the same
+  // saturation. Strava draws its segment stretches over a light basemap where that is not a problem;
+  // over imagery the casing is what buys the contrast back.
+  if(!map.getPane('segCase')){ map.createPane('segCase'); map.getPane('segCase').style.zIndex=615; }
+  var caseRend=L.canvas({pane:'segCase'});
   var rend=L.canvas({pane:'segLines'});
   var drawn=0, real=0;
+  // Both of these are module-level and SURVIVE a remount. _saPinLayer would still be pointing at
+  // the map that was just removed, so the guard inside _saPinsRefresh_ would consider it live and
+  // add pins to a dead map - the same trap the old dot-band guard hit.
+  _saMapSegs=[]; _saPinLayer=null;
   data.segs.forEach(function(s){
-    var stl=_saFogStyleOf_(s.tier);
+    // STATUS COLOUR, not an effort ramp. The ramp split "ridden" into three blues by ride count,
+    // which reads as three different KINDS of thing on a map whose whole legend is status. Crown,
+    // personal best, ridden - and never-ridden, which cannot be drawn at all (no coordinates are
+    // stored for a segment that was never matched to a ride).
+    var col=_saStatusCol_(s.tier);
     var pts=_saPoly['s'+_saSegNum_(s.id)]||_saPoly[s.id]||null;
     var isReal=!!(pts && pts.length>1);
     if(!isReal){
@@ -26161,24 +26266,30 @@ function _saMapMount_(){
     if(isReal) real++;
     drawn++;
     var top=(s.tier.t>=2);
-    var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:stl.line,
-      weight: top?5:2.6, opacity: top?1:0.75,
+    var w=(s.tier.t===3)?5.5:(s.tier.t===2?4.5:3.5);
+    var cas=L.polyline(pts,{ pane:'segCase', renderer:caseRend, color:'#0a0f16',
+      weight:w+3, opacity:0.5, lineCap:'round', lineJoin:'round', interactive:false }).addTo(map);
+    var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:col,
+      weight:w, opacity: top?1:0.85,
       // Dashed says "this is a straight line standing in for a bending road", not decoration.
       dashArray: isReal?null:'6 5', lineCap:'round', lineJoin:'round' }).addTo(map);
     line.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
     line.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
-    _saMapById[s.id]=[line];
-    // Start dots for the two top tiers only. 1,900 dots at a wide zoom string dense corridors into
-    // bead-chains, which is the "disconnected dots rather than roads" read; the targets are what the
-    // dot is for.
-    if(top){
-      var dot=L.circleMarker(pts[0],{ pane:'segLines', renderer:rend, radius:(s.tier.t===3?6:4.5),
-        color:'#fff', weight:2, fillColor:stl.line, fillOpacity:1 }).addTo(map);
-      dot.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
-      dot.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
-      _saMapById[s.id].push(dot);
-    }
+    // THE INTERACTIVE LINE IS ALWAYS INDEX 0. _saMapFocus_ opens [0]'s popup and _saMapPromote_
+    // recolours [0]; the casing carries neither a popup nor a status colour, so putting it first
+    // would silently break the row-tap popup and paint the outline crown-orange. Draw order is set
+    // by the panes (segCase 615 under segLines 620), never by this array's order.
+    _saMapById[s.id]=[line, cas];
+    _saMapSegs.push({s:s, at:pts[0], col:col});
   });
+  // Pin markers ride ON TOP of the stretches, the way Strava's segment map reads: the line says
+  // where the segment runs, the pin says "there is one here" and carries the status badge.
+  //
+  // THEY ARE VIEWPORT-SCOPED AND ZOOM-GATED, because 1,942 divIcon markers is 1,942 DOM nodes and
+  // the map stops being interactive. Below _SA_PIN_MINZ there is no pin at all - at that scale they
+  // would be the bead-chain problem the old dots had - and above it only what is on screen is built.
+  _saPinsRefresh_(map);
+  map.on('moveend zoomend', function(){ try{ _saPinsRefresh_(map); }catch(e){} });
   // Open where the riding actually is. A fit-all here spans 254 degrees of longitude - this library
   // reaches from Michigan into the South Pacific - and renders four unreadable specks. _saFogHome_
   // picks the densest one-degree cell measured in EFFORTS RIDDEN, not segment count: counting
@@ -26196,7 +26307,10 @@ function _saMapMount_(){
     try{ homeB=L.latLngBounds([[home.south,home.west],[home.north,home.east]]); }catch(e){ homeB=null; }
   }
   if(_saMapView){ try{ map.setView(_saMapView.c, _saMapView.z); }catch(e){} }
-  else if(homeB && homeB.isValid()){ try{ map.fitBounds(homeB, {padding:[24,24]}); }catch(e){} }
+  // maxZoom on the home fit: a rider whose densest neighbourhood holds one short segment would
+  // otherwise open at street level with nothing around it. The floor matters less - the two-stage
+  // hub keeps the box to a few miles - but a cap costs nothing and bounds the degenerate case.
+  else if(homeB && homeB.isValid()){ try{ map.fitBounds(homeB, {padding:[24,24], maxZoom:14}); }catch(e){} }
   else { try{ map.fitBounds(L.latLngBounds(data.segs.map(function(s){return [s.lat,s.lon];}))); }catch(e){} }
   // A map built into a container that has not been laid out yet computes size 0, loads no tiles,
   // renders empty and throws nothing. Desktop came up fine and mobile came up blank from identical
@@ -26569,7 +26683,9 @@ function aiSegTargetsHtml_(ctx){
   H+='<div style="margin-top:16px">'
     +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">'
     +'<div style="'+LBL+'">Segment coverage</div>'
-    +'<div id="sa-cov-note" style="font-size:10.5px;color:var(--d-dim)"></div></div>'
+    +'<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">'
+    +'<div id="sa-cov-pins" style="font-size:10.5px;color:var(--d-t3)"></div>'
+    +'<div id="sa-cov-note" style="font-size:10.5px;color:var(--d-dim)"></div></div></div>'
     +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:#0b1017"></div>';
   // Legend. Crown reads em-dash until a check has run, for the same reason the headline does.
   H+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--d-t3)">';
