@@ -25679,18 +25679,36 @@ function _saPolyPut_(key, enc){
 // ONE request, BOTH answers. /segments/{id} carries the road shape and the leaderboard state
 // together, so this is the single place either is fetched - and calling it for one purpose warms
 // the other for free rather than spending a second request on it later.
+// A HELD CONNECTION MUST NOT STALL A SEQUENTIAL SWEEP. fetch has no default timeout, and both
+// sweeps here advance ONLY when this callback fires - so one request Strava accepts and never
+// answers parks the whole run. Observed three times in a row on the crown sweep, always in the last
+// few of a 90-press, where throttling starts: the note sat on "Checking 85 of 90" forever with the
+// button disabled and no recovery short of a reload. A 429 was never the problem; that path was
+// always caught. This is the silent one.
+var SA_SEG_TIMEOUT_MS=20000;
 function _saSegDetail_(segId, cb){
   withStravaToken_(function(token){
     if(!token){ cb({err:'connect Strava'}); return; }
-    fetch('https://www.strava.com/api/v3/segments/'+segId,{headers:{'Authorization':'Bearer '+token}})
+    // fire() is the single exit. Every path below routes through it, so the callback happens exactly
+    // once whether the answer, an error or the timer gets there first.
+    var done=false, ctl=null;
+    try{ ctl=new AbortController(); }catch(e){ ctl=null; }
+    var fire=function(v){ if(done) return; done=true; clearTimeout(timer); cb(v); };
+    var timer=setTimeout(function(){
+      try{ if(ctl) ctl.abort(); }catch(e){}
+      fire({err:'timed out'});
+    }, SA_SEG_TIMEOUT_MS);
+    var opt={headers:{'Authorization':'Bearer '+token}};
+    if(ctl) opt.signal=ctl.signal;
+    fetch('https://www.strava.com/api/v3/segments/'+segId, opt)
       .then(function(r){ if(r.status===429) throw 'rl'; return r.ok?r.json():null; })
       .then(function(d){
-        if(!d){ cb({err:'unavailable'}); return; }
+        if(!d){ fire({err:'unavailable'}); return; }
         var stats=d.athlete_segment_stats||{};
         var pr=(+stats.pr_elapsed_time>0)?+stats.pr_elapsed_time:null;
         var kom=_saXomSec_(d.xoms&&d.xoms.kom), qom=_saXomSec_(d.xoms&&d.xoms.qom);
         var best=(kom!=null&&qom!=null)?Math.min(kom,qom):(kom!=null?kom:qom);
-        cb({
+        fire({
           poly:(d.map&&(d.map.polyline||d.map.summary_polyline))||null,
           live:{ prSec:pr, komSec:kom, qomSec:qom,
                  holds:(pr!=null&&best!=null)?(pr<=best):null,
@@ -25698,7 +25716,7 @@ function _saSegDetail_(segId, cb){
                  athletes:(+d.athlete_count>0)?+d.athlete_count:null, at:Date.now() }
         });
       })
-      .catch(function(e){ cb({err:(e==='rl')?'rate limit — try again in a few minutes':'unavailable'}); });
+      .catch(function(e){ fire({err:(e==='rl')?'rate limit — try again in a few minutes':'unavailable'}); });
   });
 }
 // ONE call per segment: /segments/{id} carries the athlete's PR and the CURRENT leaderboard times

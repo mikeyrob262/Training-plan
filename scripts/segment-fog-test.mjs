@@ -392,6 +392,39 @@ ok('pending work is ordered by what is ON SCREEN first', (() => {
 ok('a chord is drawn subordinate to a real road shape, not identically',
    /if\(!isReal\) w=/.test(mountSrc) && /isReal\?0\.5:0\.3/.test(mountSrc));
 
+// ---- 14. a sweep can never park on an unanswered request -------------------------------------
+// Both sweeps step forward ONLY when _saSegDetail_'s callback fires, and fetch has no default
+// timeout. One request Strava accepts and never answers stalled the crown sweep three runs in a
+// row at "Checking 85 of 90" -- button disabled, no recovery but a reload. The 429 path was always
+// caught; this is the silent one.
+console.log('\n'+C+'=== 14. no sweep can hang on a request that never answers ==='+X);
+const detSrc = asServed(src.slice(src.indexOf('function _saSegDetail_('),
+                                  matchBrace(src.indexOf('function _saSegDetail_('))+1))
+  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+ok('the segment request is on a timer', /setTimeout\(/.test(detSrc) && /SA_SEG_TIMEOUT_MS/.test(detSrc));
+ok('...off a named constant', has('var SA_SEG_TIMEOUT_MS='));
+ok('...that is a sane few seconds, not minutes', (() => {
+  const m = asServed(src).match(/var\s+SA_SEG_TIMEOUT_MS\s*=\s*(\d+)/);
+  return !!m && +m[1] >= 5000 && +m[1] <= 60000;
+})());
+ok('the callback has ONE exit, so it cannot fire twice or zero times', /var fire=function/.test(detSrc));
+ok('every outcome routes through it - no bare cb( left on a result path',
+   (detSrc.match(/fire\(/g) || []).length >= 4
+   && !/\.then\(function\(d\)\{[\s\S]*?[^_]cb\(/.test(detSrc));
+ok('the timer is cleared once something answers', /clearTimeout\(timer\)/.test(detSrc));
+ok('a timed-out request is aborted, not left running', /abort\(\)/.test(detSrc));
+// Behavioural: drive the real function with a fetch that never settles and assert cb still fires.
+const detFn = new Function('fetchImpl', 'withStravaToken_', 'AbortController', 'SA_SEG_TIMEOUT_MS', '_saXomSec_',
+  'var fetch=fetchImpl;' + asServed(ex('_saSegDetail_')) + '\nreturn _saSegDetail_;');
+const hangingFetch = () => new Promise(() => {});                      // never settles, ever
+const fakeAC = function(){ this.signal = {}; this.abort = function(){}; };
+const detached = detFn(hangingFetch, f => f('tok'), fakeAC, 60, F.xom);
+const fired = await new Promise(res => { let got = null; detached(123, v => { got = v; res(got); });
+                                         setTimeout(() => res(got), 900); });
+ok('a request that NEVER settles still produces a callback', !!fired, JSON.stringify(fired));
+ok('...and it is reported as an error, not as a segment with no data',
+   !!fired && !!fired.err, JSON.stringify(fired));
+
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
                                matchBrace(src.indexOf('function _saMapPromote_('))+1))
