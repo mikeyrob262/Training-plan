@@ -437,6 +437,24 @@ ok('the timer is armed before the token call, not inside it',
    detSrc.indexOf('setTimeout(') < detSrc.indexOf('withStravaToken_('),
    'timer@' + detSrc.indexOf('setTimeout(') + ' token@' + detSrc.indexOf('withStravaToken_('));
 
+// ---- 15. the sweep's result outlives the re-render the sweep triggers ------------------------
+// finish() writes its summary and then calls aiSetTab_ so rows can move into Crowns held. That
+// re-render replaces the panel, #sa-tgt-note included, microseconds later. The message was gone
+// before anyone could read it -- and every "the sweep is hanging" diagnosis was really this.
+console.log('\n'+C+'=== 15. the crown sweep result survives its own re-render ==='+X);
+const swpSrc = asServed(src.slice(src.indexOf('function _saTgtKomSweep_('),
+                                  matchBrace(src.indexOf('function _saTgtKomSweep_('))+1))
+  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+ok('the summary is held outside the DOM', has('var _saTgtNote='));
+ok('say() writes it to the holder, not only to an element', /_saTgtNote=t/.test(swpSrc));
+ok('say() re-queries the element instead of closing over a detachable one',
+   /getElementById\('sa-tgt-note'\)/.test(swpSrc)
+   && !/var\s+note=document\.getElementById\('sa-tgt-note'\)/.test(swpSrc));
+ok('the renderer seeds the note from the holder, so a re-render restores it',
+   /id="sa-tgt-note"[^>]*>'\+\(_saTgtNote/.test(asServed(src)));
+ok('the sweep still re-renders so rows can move into Crowns held',
+   /aiSetTab_\('segattack'\)/.test(swpSrc));
+
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
                                matchBrace(src.indexOf('function _saMapPromote_('))+1))

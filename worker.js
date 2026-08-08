@@ -26276,7 +26276,7 @@ function _saMapMount_(){
   var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
   _saMap=map;
-  addRideMapBase_(map,'satellite');
+  addRideMapBase_(map,'light');
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
@@ -26292,7 +26292,15 @@ function _saMapMount_(){
   // the map that was just removed, so the guard inside _saPinsRefresh_ would consider it live and
   // add pins to a dead map - the same trap the old dot-band guard hit.
   _saMapSegs=[]; _saPinLayer=null;
+  var hidden=0, outOfWindow=0;
   data.segs.forEach(function(s){
+    // Filters, applied at DRAW time so the counts below can report what was withheld rather than
+    // quietly showing less map than the legend claims.
+    if(_saMapHide[_saStatusKey_(s.tier)]){ hidden++; return; }
+    if(_saMapWhen!=='all'){
+      var rec=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments[s.id]:null;
+      if(rec && !_saInWindow_(rec)){ outOfWindow++; return; }
+    }
     // STATUS COLOUR, not an effort ramp. The ramp split "ridden" into three blues by ride count,
     // which reads as three different KINDS of thing on a map whose whole legend is status. Crown,
     // personal best, ridden - and never-ridden, which cannot be drawn at all (no coordinates are
@@ -26377,8 +26385,12 @@ function _saMapMount_(){
     try{ var sz=map.getSize(); if(sz && sz.x>0 && sz.y>0) _saMapView={c:map.getCenter(), z:map.getZoom()}; }catch(e){}
   });
   var note=document.getElementById('sa-cov-note');
+  // Say what was WITHHELD as well as what was drawn. A filtered map that only reports its drawn
+  // count reads as a smaller library rather than a narrower view.
   if(note) note.innerHTML=drawn.toLocaleString()+' segment'+(drawn===1?'':'s')+' drawn &middot; '
-    +real.toLocaleString()+' on their real road shape, '+(drawn-real).toLocaleString()+' as a straight line between endpoints';
+    +real.toLocaleString()+' on their real road shape, '+(drawn-real).toLocaleString()+' as a straight line between endpoints'
+    +(outOfWindow?(' &middot; '+outOfWindow.toLocaleString()+' outside the date filter'):'')
+    +(hidden?(' &middot; '+hidden.toLocaleString()+' hidden by filters'):'');
 }
 // Tapping a list row flies the map to that segment and opens its popup - the list and the map are
 // one surface, not two.
@@ -26520,6 +26532,122 @@ function _saTargetRows_(ctx){
   return { rows:rows, counts:counts, total:rows.length, komable:komable,
            checked:checked, held:held, scored:scored };
 }
+// ==================== SEGMENT MAP STATS — the legend row and the summary bar ====================
+// Every cell here is computed from st.segments. Measured on this library, so the shipped numbers are
+// known rather than assumed: Personal Best 142, Attempted 1,800, Never Attempted 75, of 2,017.
+//
+// EFFORTS COME IN TWO SHAPES. 4,855 records use {d,s} and 207 legacy ones use {date,sec}. Reading
+// only .s silently drops the legacy set - which is exactly the kind of quiet undercount a total-time
+// figure would carry without anyone noticing.
+function _saEffSec_(e){ return e ? ((+e.s>0)?+e.s:((+e.sec>0)?+e.sec:0)) : 0; }
+function _saEffDay_(e){ return e ? String(e.d||e.date||'').slice(0,10) : ''; }
+function _saMapStats_(){
+  var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
+  var pb=0, att=0, never=0, total=0, segSec=0, effN=0;
+  var prByDay={}, longest=null;
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s) return;
+    total++;
+    var effs=(s.efforts&&s.efforts.length)?s.efforts:[];
+    var n=Math.max(+s.effortCount||0, effs.length);
+    if(+s.prSec>0) pb++;
+    else if(n>0) att++;
+    if(!n) never++;
+    for(var i=0;i<effs.length;i++){ var t=_saEffSec_(effs[i]); if(t>0){ segSec+=t; effN++; } }
+    if(s.prDate){ var d=String(s.prDate).slice(0,10); prByDay[d]=(prByDay[d]||0)+1; }
+    if(n>0 && +s.distMi>0 && (!longest || +s.distMi>longest.mi)){
+      var last=null;
+      for(var j=0;j<effs.length;j++){ var dd=_saEffDay_(effs[j]); if(dd && (!last||dd>last)) last=dd; }
+      longest={mi:+s.distMi, name:s.name||'Segment', date:last};
+    }
+  });
+  // Most PRs in a day, with the surrounding days kept so the cell can carry a real sparkline rather
+  // than a decorative one.
+  var days=Object.keys(prByDay).map(function(d){ return {d:d, n:prByDay[d]}; });
+  days.sort(function(a,b){ return b.n-a.n; });
+  var best=days.length?days[0]:null;
+  var recent=Object.keys(prByDay).sort().slice(-14).map(function(d){ return prByDay[d]; });
+  // Crowns are LIVE ONLY and never stored, so this is a count of what has been checked this session,
+  // with its own denominator - never a library figure.
+  var checked=0, held=0, komable=0;
+  Object.keys(store).forEach(function(k){
+    var s=store[k]; if(!s) return;
+    if(_saKomCandidate_(s)) komable++;
+    var num=_saSegNum_(s.id); if(!num) return;
+    var lv=_saKomLive['s'+num];
+    if(lv && !lv.err){ checked++; if(lv.holds===true) held++; }
+  });
+  return { pb:pb, att:att, never:never, total:total,
+           segSec:segSec, effN:effN, longest:longest,
+           prBest:best, prSpark:recent,
+           komChecked:checked, komHeld:held, komable:komable };
+}
+// ---- map filter state -------------------------------------------------------------------------
+// Session-only, like every other view preference on this page. _saMapWhen filters by EFFORT DATE,
+// which the data genuinely supports; there is no sport filter because nothing joins a segment to a
+// sport (see the disabled control's title).
+var _saMapWhen='all', _saMapHide={};
+var _SA_WHEN=[['all','All Time'],['365','Last 12 months'],['180','Last 6 months'],['90','Last 90 days'],['30','Last 30 days']];
+function _saWhenOpts_(){
+  var o='';
+  for(var i=0;i<_SA_WHEN.length;i++){
+    o+='<option value="'+_SA_WHEN[i][0]+'"'+(_SA_WHEN[i][0]===_saMapWhen?' selected':'')+'>'+_SA_WHEN[i][1]+'</option>';
+  }
+  return o;
+}
+// True when a segment has an effort inside the window. A segment with no dated effort cannot be
+// placed in time at all, so it drops out of every window except All Time rather than being guessed
+// into one.
+function _saInWindow_(s){
+  if(_saMapWhen==='all') return true;
+  var days=+_saMapWhen; if(!(days>0)) return true;
+  var cut=new Date(); cut.setDate(cut.getDate()-days);
+  var ck=cut.getFullYear()+'-'+('0'+(cut.getMonth()+1)).slice(-2)+'-'+('0'+cut.getDate()).slice(-2);
+  var effs=(s&&s.efforts&&s.efforts.length)?s.efforts:[];
+  for(var i=0;i<effs.length;i++){ var d=_saEffDay_(effs[i]); if(d && d>=ck) return true; }
+  return false;
+}
+function _saMapWhen_(v){
+  _saMapWhen=v||'all';
+  // Remount rather than re-render the section: the window only changes what is DRAWN, and a full
+  // re-render would also reset the pan.
+  try{ _saMapMount_(); }catch(e){}
+  var n=document.getElementById('sa-cov-when');
+  if(n) n.textContent=(_saMapWhen==='all')?'':('filtered to efforts in the last '+_saMapWhen+' days');
+}
+window._saMapWhen_=_saMapWhen_;
+// Status visibility. Three drawn statuses, toggled off one at a time.
+function _saMapFilters_(){
+  var on=function(k){ return !_saMapHide[k]; };
+  var row=function(k,label,col){
+    return '<label style="display:flex;align-items:center;gap:9px;padding:7px 2px;cursor:pointer;font-size:13px;color:var(--d-t3)">'
+      +'<input type="checkbox" '+(on(k)?'checked':'')+' onchange="_saMapToggle_(&#39;'+k+'&#39;,this.checked)">'
+      +'<span style="width:16px;height:3px;border-radius:2px;background:'+col+';flex:none"></span>'+label+'</label>';
+  };
+  var html='<div style="min-width:220px">'
+    +row('crown','Crown held',SA_FOG_STYLE[4].line)
+    +row('pb','Personal best',SA_FOG_STYLE[3].line)
+    +row('att','Attempted',SA_FOG_STYLE[2].line)
+    +'<div style="font-size:11px;color:var(--d-dim);margin-top:8px;line-height:1.5">'
+    +'Never Attempted is not listed because it cannot be drawn - no coordinates are stored for a '
+    +'segment that has never been matched to a ride.</div></div>';
+  try{ if(typeof uiAlert==='function'){ uiAlert(html,'Filters'); return; } }catch(e){}
+  try{ if(typeof uiConfirm==='function'){ uiConfirm(html,'Filters'); return; } }catch(e){}
+}
+window._saMapFilters_=_saMapFilters_;
+function _saMapToggle_(k,on){
+  _saMapHide[k]=!on;
+  try{ _saMapMount_(); }catch(e){}
+}
+window._saMapToggle_=_saMapToggle_;
+// Which status bucket a drawn segment belongs to, for the filter.
+function _saStatusKey_(t){ var i=(t&&t.t)||1; return i>=3?'crown':(i===2?'pb':'att'); }
+function _saFmtHM_(sec){
+  if(!(sec>0)) return '0 h';
+  var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60);
+  if(m===60){ h++; m=0; }
+  return h.toLocaleString()+' h'+(m?(' '+m+' m'):'');
+}
 // ORGANIC GROWTH. Segments first ridden recently that are NOT already targets — "you rode through N
 // new segments, add them?" rather than making the athlete hunt through 2,017.
 //
@@ -26572,9 +26700,25 @@ function _saTgtKomPending_(){
   });
   return out;
 }
+// THE SWEEP'S OWN COMPLETION MESSAGE USED TO ERASE ITSELF. finish() writes the summary and then
+// calls aiSetTab_ so rows can move into the Crowns held section - and that re-render replaces the
+// whole panel, #sa-tgt-note included, microseconds after the summary lands in it. The athlete
+// pressed the button, waited two minutes, and watched the result flash and vanish.
+//
+// It also cost four "the sweep is hanging" diagnoses, two shipped timeout fixes and a lot of read
+// budget: every probe was waiting for that message to appear, and every sweep had actually finished.
+// A heartbeat inside the page settled it in one run - the main thread was never blocked.
+//
+// So the summary is held in a var and re-rendered by aiSegTargetsHtml_, and say() re-queries the
+// element rather than closing over one that a re-render can detach.
+var _saTgtNote='';
 function _saTgtKomSweep_(){
-  var btn=document.getElementById('sa-tgt-sweep'), note=document.getElementById('sa-tgt-note');
-  var say=function(t){ if(note) note.innerHTML=t; };
+  var btn=document.getElementById('sa-tgt-sweep');
+  var say=function(t){
+    _saTgtNote=t;
+    var n=document.getElementById('sa-tgt-note');
+    if(n) n.innerHTML=t;
+  };
   if(_saTgtSweeping){ say('Already checking&hellip;'); return; }
   var list=_saTgtKomPending_();
   if(!list.length){ say('Every target with a PB has been checked this session.'); return; }
@@ -26639,6 +26783,29 @@ function aiSegTargetsHtml_(ctx){
     +'.sa-tbtn{background:none;border:1px solid var(--d-edge);color:var(--d-t3);font-size:10.5px;font-weight:700;'
       +'border-radius:7px;padding:4px 8px;cursor:pointer;font-family:inherit;white-space:nowrap}'
     +'.sa-tbtn:hover{color:var(--d-head);border-color:#3a4457}'
+    // ---- Segment Map chrome: legend row, filter controls, summary bar ----
+    +'.sm-row{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:12px 0 9px}'
+    +'.sm-leg{display:flex;gap:16px;flex-wrap:wrap;align-items:center}'
+    +'.sm-leg-i{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--d-t3);font-weight:600}'
+    +'.sm-ctls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}'
+    +'.sm-ctl{display:inline-flex;align-items:center;gap:7px;background:var(--d-panel2,#151a22);'
+      +'border:1px solid var(--d-edge);border-radius:9px;padding:7px 11px;font-size:12px;font-weight:600;'
+      +'color:var(--d-t3);font-family:inherit;cursor:pointer}'
+    +'.sm-ctl:hover{color:var(--d-head)}'
+    +'.sm-ctl[disabled]{opacity:.5;cursor:not-allowed}'
+    +'.sm-ctl select{background:none;border:none;color:inherit;font:inherit;cursor:pointer;outline:none}'
+    // The summary bar sits under the map as one panel, cells divided by hairlines, wrapping to two
+    // rows on a narrow desktop rather than scrolling sideways.
+    +'.sm-bar{display:flex;flex-wrap:wrap;align-items:stretch;background:var(--d-panel2,#151a22);'
+      +'border:1px solid var(--d-edge);border-radius:14px;margin-top:12px;overflow:hidden}'
+    +'.sm-cell{flex:1 1 150px;min-width:132px;padding:13px 16px;border-left:1px solid var(--d-edge3)}'
+    +'.sm-cell:first-child{border-left:none}'
+    +'.sm-k{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--d-dim)}'
+    +'.sm-v{font-size:23px;font-weight:800;line-height:1.15;color:var(--d-head);margin-top:3px;font-variant-numeric:tabular-nums}'
+    +'.sm-s{font-size:10.5px;color:var(--d-dim);margin-top:3px;line-height:1.45}'
+    +'.sm-h{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:5px}'
+    +'.sm-h i{flex:1;background:'+SA_FOG_STYLE[3].line+';border-radius:1px;min-height:2px;display:block}'
+    +'@media(max-width:900px){.sm-cell{flex:1 1 45%}}'
     // Below 760px the table sheds its two lowest-value columns rather than scrolling sideways:
     // effort count and grade are context, name/PB/chance are the job.
     +'@media(max-width:760px){.sa-r{grid-template-columns:minmax(0,1fr) 60px 30px;'
@@ -26683,7 +26850,9 @@ function aiSegTargetsHtml_(ctx){
     +'<button class="sa-tbtn" id="sa-tgt-sweep" onclick="_saTgtKomSweep_()" style="border-color:'+SA_FOG_STYLE[4].line+'55;color:'+SA_FOG_STYLE[4].line+';font-size:11.5px;padding:8px 13px">'
     +(unchecked>0?('Check crowns ('+Math.min(SA_TGT_SWEEP_CAP, unchecked)+' of '+unchecked+')'):'All checked')+'</button>'
     +'</div></div>';
-  H+='<div id="sa-tgt-note" style="font-size:11px;color:var(--d-t3);margin-top:9px"></div>';
+  // Seeded from the held summary, so the last sweep's result survives the re-render that sweep
+  // itself triggers. Empty on a fresh load, which is correct - nothing has been checked yet.
+  H+='<div id="sa-tgt-note" style="font-size:11px;color:var(--d-t3);margin-top:9px">'+(_saTgtNote||'')+'</div>';
   H+='<div style="font-size:11px;color:var(--d-dim);margin-top:7px;line-height:1.55">'
     +'Placement is fetched live and thrown away &mdash; nothing about it is written to your data, so nothing in it can go stale. '
     +'Only targets with a recorded PB are checked; a crown is not plausible on a segment you have ridden without ever setting a best.</div>';
@@ -26739,36 +26908,119 @@ function aiSegTargetsHtml_(ctx){
   // ---- THE MAP, above the list ----
   // The two are one surface: tapping a row flies the map to that segment. The map is NOT a per-row
   // accordion any more - one map, always mounted, and the list points at it.
+  var ms=_saMapStats_();
   H+='<div style="margin-top:16px">'
-    +'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:9px">'
-    +'<div style="'+LBL+'">Segment coverage</div>'
-    +'<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">'
-    +'<div id="sa-cov-pins" style="font-size:10.5px;color:var(--d-t3)"></div>'
-    +'<div id="sa-cov-note" style="font-size:10.5px;color:var(--d-dim)"></div></div></div>'
+    // ---- title row: name + tagline on the left, the drawing stats on the right ----
+    +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">'
+    +'<div style="min-width:0">'
+      +'<div style="display:flex;align-items:center;gap:7px">'
+      +'<span style="font-size:20px;font-weight:800;color:var(--d-head);letter-spacing:-.01em">Segment Map</span>'
+      +'<span title="Every segment Strava has matched to one of your rides. Colour is status: personal best, crown held, or attempted. Segments you have never been matched to have no stored coordinates and cannot be drawn." '
+      +'style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;'
+      +'border:1px solid var(--d-edge);color:var(--d-dim);font-size:10px;font-weight:700;cursor:help;flex:none">i</span></div>'
+      +'<div style="font-size:12px;color:var(--d-t3);margin-top:3px">See every segment in your area. Click any segment for details.</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;font-size:10.5px">'
+    +'<div id="sa-cov-pins" style="color:var(--d-t3)"></div>'
+    +'<div id="sa-cov-note" style="color:var(--d-dim)"></div></div></div>'
     // THE ROAD-SHAPE BACKFILL, given a button again. The sweep, its rate-limit budget and its
     // resumability all already existed and were correct - but the only control that called it went
     // with the fog view, so it had been unreachable dead code and the library sat at 117 real shapes
     // out of 1,942. That gap IS the difference between this and Strava's map: Strava draws real road
     // geometry, and 94% of these are still straight lines between two endpoints.
-    +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px">'
-    +'<button class="sa-tbtn" onclick="_saPolySweep_(false)">Load road shapes</button>'
-    +'<div id="sa-poly-note" style="font-size:10.5px;color:var(--d-dim);flex:1;min-width:180px"></div></div>'
-    +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:#0b1017"></div>';
-  // Legend. Crown reads em-dash until a check has run, for the same reason the headline does.
-  H+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--d-t3)">';
-  [[SA_FOG_STYLE[4].line,'Crown held',(d.checked>0?String(d.held):'&mdash;')],
-   [SA_FOG_STYLE[3].line,'Personal best',String(d.counts.pb||0)],
-   [SA_FOG_STYLE[2].line,'Ridden',null]].forEach(function(t){
-    H+='<span style="display:inline-flex;align-items:center;gap:6px">'
-      +'<span style="width:16px;height:3px;border-radius:2px;background:'+t[0]+';flex:none"></span>'
-      +esc(t[1])+(t[2]!=null?(' <span style="color:var(--d-dim)">'+t[2]+'</span>'):'')+'</span>';
-  });
-  // NEVER RIDDEN cannot be a drawn status and the legend says so instead of showing a dead swatch.
-  // st.segments only holds segments Strava matched to a ride, so a segment never ridden has no
-  // record here and no coordinates at all - all 50 never-ridden targets carry no startLat.
-  H+='<span style="display:inline-flex;align-items:center;gap:6px;color:var(--d-dim)">'
-    +'<span style="width:16px;height:3px;border-radius:2px;background:#39424f;flex:none"></span>'
-    +'Never ridden &mdash; not drawable, no coordinates are stored for a segment you have never been matched to</span>';
+    // ---- legend row (left) + filter controls (right) ----
+    // The legend carries COUNTS, so it doubles as the census: what the map is showing and how much
+    // of it. KOM/QOM is its own category, not a slice of Personal Best - a crown is held against the
+    // world, a PB against yourself, and collapsing them would make the rarer one invisible.
+    +'<div class="sm-row"><div class="sm-leg">'
+    +'<span class="sm-leg-i"><span style="color:'+SA_FOG_STYLE[3].line+';font-size:13px">&#9819;</span>'
+      +'Personal Best <b style="color:var(--d-head)">('+ms.pb.toLocaleString()+')</b></span>'
+    // CROWNS ARE NOT A LIBRARY FIGURE AND MUST NOT PRINT AS ONE. Placement is never stored, so the
+    // only honest count is what this session has actually checked, with its own denominator. Before
+    // a sweep the truth is "nobody has looked", which is not the same claim as zero.
+    +'<span class="sm-leg-i" title="Placement is fetched live and never stored, so this counts only what has been checked this session."><span style="color:'+SA_FOG_STYLE[4].line+';font-size:13px">&#9819;</span>'
+      +'KOM / QOM <b style="color:var(--d-head)">'
+      +(ms.komChecked>0 ? ('('+ms.komHeld+' of '+ms.komChecked+' checked)') : '(not checked yet)')
+      +'</b></span>'
+    +'<span class="sm-leg-i"><span style="width:16px;height:3px;border-radius:2px;background:'+SA_FOG_STYLE[2].line+';flex:none"></span>'
+      +'Attempted <b style="color:var(--d-head)">('+ms.att.toLocaleString()+')</b></span>'
+    +'<span class="sm-leg-i" title="No effort on record, so no coordinates are stored and these cannot be drawn on the map."><span style="width:16px;height:3px;border-radius:2px;background:#5b6472;flex:none"></span>'
+      +'Never Attempted <b style="color:var(--d-head)">('+ms.never.toLocaleString()+')</b>'
+      +'<span style="color:var(--d-dim);font-weight:600"> &middot; not drawable</span></span>'
+    +'</div>'
+    +'<div class="sm-ctls">'
+    // ALL SPORTS IS DISABLED, NOT DECORATIVE. st.segments carries no sport, and an effort record is
+    // {d,s,w} with no ride id, so there is nothing to join a sport to. A dropdown that silently did
+    // nothing would be worse than one that says why it cannot.
+    +'<button class="sm-ctl" disabled title="Segments do not carry a sport, and effort records hold no ride id to join one from - so this cannot filter honestly yet.">'
+      +'&#9679; All Sports</button>'
+    +'<span class="sm-ctl"><select id="sa-map-when" onchange="_saMapWhen_(this.value)">'
+      +_saWhenOpts_()+'</select></span>'
+    +'<button class="sm-ctl" onclick="_saMapFilters_()" title="Show or hide segment statuses on the map">'
+      +'&#9776; Filters</button>'
+    +'</div></div>'
+    +'<div style="position:relative">'
+    +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:var(--d-inset,#0b1017)"></div>'
+    // Button overlaid top-left of the map, per the layout. z-index over Leaflet's own panes (400)
+    // and controls (1000), or the zoom buttons sit on top of it.
+    +'<div style="position:absolute;top:12px;left:12px;z-index:1001;display:flex;gap:8px;align-items:center">'
+    +'<button class="sm-ctl" style="background:var(--d-panel);box-shadow:0 1px 4px rgba(0,0,0,.28)" '
+      +'onclick="_saPolySweep_(false)">&#9707; Load road shapes</button>'
+    +'<span id="sa-poly-note" style="font-size:10.5px;color:var(--d-t3);background:var(--d-panel);'
+      +'padding:4px 8px;border-radius:7px;max-width:420px"></span></div>'
+    +'</div>';
+  // ---- THE SUMMARY BAR ---------------------------------------------------------------------
+  // The four status counts repeat the legend deliberately: the legend explains the map, the bar
+  // reports the library. After them, three cells that are about the RIDING rather than the census.
+  H+='<div class="sm-bar">';
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[3].line+'">Personal Bests</div>'
+    +'<div class="sm-v">'+ms.pb.toLocaleString()+'</div>'
+    +'<div class="sm-s">of '+ms.total.toLocaleString()+' segments</div></div>';
+  // The crown cell keeps the pattern the headline established: unmeasured is drawn small and dim,
+  // a real count is drawn loud. "0" before a sweep would assert something nobody has checked.
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[4].line+'">KOM / QOM</div>'
+    +(ms.komChecked>0
+      ? ('<div class="sm-v" style="color:'+(ms.komHeld>0?SA_FOG_STYLE[4].line:'var(--d-head)')+'">'+ms.komHeld+'</div>'
+         +'<div class="sm-s">'+ms.komChecked.toLocaleString()+' checked &middot; '
+         +Math.max(0,ms.komable-ms.komChecked).toLocaleString()+' unchecked</div>')
+      : ('<div class="sm-v" style="font-size:15px;font-weight:600;color:var(--d-dim)">Not checked</div>'
+         +'<div class="sm-s">'+ms.komable.toLocaleString()+' have a PB to compare &middot; never stored</div>'))
+    +'</div>';
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[2].line+'">Attempted</div>'
+    +'<div class="sm-v">'+ms.att.toLocaleString()+'</div>'
+    +'<div class="sm-s">ridden, no PB yet</div></div>';
+  H+='<div class="sm-cell"><div class="sm-k">Never Attempted</div>'
+    +'<div class="sm-v" style="color:var(--d-t3)">'+ms.never.toLocaleString()+'</div>'
+    +'<div class="sm-s">no effort on record, so not on the map</div></div>';
+  // Longest segment RIDDEN, named as such. It is not "longest effort" in the sense of a single
+  // ride's hardest push; it is the longest segment with an effort against it.
+  H+='<div class="sm-cell"><div class="sm-k">Longest Segment</div>'
+    +(ms.longest
+      ? ('<div class="sm-v">'+(Math.round(ms.longest.mi*10)/10)+' mi</div>'
+         +'<div class="sm-s">'+esc(ms.longest.name)
+         +(ms.longest.date?('<br>last ridden '+esc(ms.longest.date)):'')+'</div>')
+      : '<div class="sm-v" style="font-size:15px;color:var(--d-dim)">&mdash;</div>')
+    +'</div>';
+  H+='<div class="sm-cell"><div class="sm-k">Most PRs in a Day</div>'
+    +(ms.prBest
+      ? ('<div class="sm-v">'+ms.prBest.n+'</div><div class="sm-s">'+esc(ms.prBest.d)+'</div>'
+         // Real bars: the last 14 days that actually set a PR. Not decoration - if there is only
+         // one such day, one bar is drawn.
+         +(ms.prSpark.length?('<div class="sm-h">'+ms.prSpark.map(function(v){
+             var mx=Math.max.apply(null, ms.prSpark)||1;
+             return '<i style="height:'+Math.max(8, Math.round(100*v/mx))+'%"></i>';
+           }).join('')+'</div>'):''))
+      : '<div class="sm-v" style="font-size:15px;color:var(--d-dim)">&mdash;</div>')
+    +'</div>';
+  // TOTAL TIME IS A SUM, NOT A SHARE. The mockup wanted "% of all riding time" beside it and that
+  // figure cannot be made honest here: segments overlap (a nested segment is counted inside its
+  // parent, so the sum double-counts the same minutes), and the denominator is missing 181 of 820
+  // rides that carry no numeric time field. Computed anyway it reads 68%, which would be presented
+  // as a fact and is not one. The sum itself is real, so that is what is shown, with what it is
+  // summed from.
+  H+='<div class="sm-cell"><div class="sm-k">Time on Segments</div>'
+    +'<div class="sm-v">'+_saFmtHM_(ms.segSec)+'</div>'
+    +'<div class="sm-s">'+ms.effN.toLocaleString()+' timed efforts &middot; segments overlap, so this is not a share of ride time</div></div>';
   H+='</div></div>';
 
   // ---- THE LIST ----
@@ -38102,7 +38354,10 @@ try{ if(typeof window!=='undefined'){ window.coachInsightForget_=coachInsightFor
 
 // Persisted base-layer choice for ride maps (dark default, satellite opt-in).
 function rideMapBasePref_(){
-  try{ return localStorage.getItem('aiq_rideMapBase')==='satellite'?'satellite':'dark'; }catch(e){ return 'dark'; }
+  try{
+    var v=localStorage.getItem('aiq_rideMapBase');
+    return (v==='satellite'||v==='light')?v:'dark';
+  }catch(e){ return 'dark'; }
 }
 // Dark ("dark matter") + Esri satellite base layers wired into a corner
 // layers toggle. The choice persists across rides via localStorage.
@@ -38118,6 +38373,12 @@ function rideMapBasePref_(){
 function addRideMapBase_(map, defaultBase){
   var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
+  // LIGHT STREET base. Segment work reads better over a pale street map than over imagery: the
+  // stretches are thin coloured lines, and imagery competes with them at the same saturation while
+  // a muted street map recedes behind them. Voyager keeps road classes and place names legible at
+  // the few-mile zoom this map opens on. Its labels are baked in, so it takes no labels overlay -
+  // adding one would double-print every town name.
+  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   // High-z pane (above the overlayPane where the route polylines live) so
   // labels paint over the route, not under it. pointer-events off so the
   // overlay never eats map interactions.
@@ -38133,19 +38394,22 @@ function addRideMapBase_(map, defaultBase){
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}
     try{ map.removeLayer(satLabels); }catch(e){}
+    // Voyager already carries its own labels; adding an overlay double-prints every place name.
+    if(which==='light') return;
     try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){}
   }
   var stored=null; try{ stored=localStorage.getItem('aiq_rideMapBase'); }catch(e){}
-  var pref=stored?rideMapBasePref_():((defaultBase==='satellite')?'satellite':rideMapBasePref_());
-  (pref==='satellite'?sat:dark).addTo(map);
+  var wanted=(defaultBase==='satellite'||defaultBase==='light')?defaultBase:null;
+  var pref=stored?rideMapBasePref_():(wanted||rideMapBasePref_());
+  (pref==='satellite'?sat:(pref==='light'?light:dark)).addTo(map);
   showLabels(pref);
-  L.control.layers({Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
+  L.control.layers({Light:light,Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',function(e){
-    var v=(e&&e.name==='Satellite')?'satellite':'dark';
+    var v=(e&&e.name==='Satellite')?'satellite':((e&&e.name==='Light')?'light':'dark');
     showLabels(v);
     try{ localStorage.setItem('aiq_rideMapBase',v); }catch(err){}
   });
-  return {dark:dark,sat:sat};
+  return {dark:dark,sat:sat,light:light};
 }
 
 // Green dot at the start, checkered flag at the finish.
