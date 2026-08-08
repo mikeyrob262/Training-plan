@@ -424,6 +424,18 @@ const fired = await new Promise(res => { let got = null; detached(123, v => { go
 ok('a request that NEVER settles still produces a callback', !!fired, JSON.stringify(fired));
 ok('...and it is reported as an error, not as a segment with no data',
    !!fired && !!fired.err, JSON.stringify(fired));
+// AND the token step, which is the one that actually kept it hung. withStravaToken_ refreshes
+// against the proxy with its own untimed fetch; a timer armed inside its callback is never armed
+// when that call is what stalls. Bounding only the segment request moved the hang from 85/90 to
+// 90/90 rather than fixing it.
+const hangingToken = () => {};                                        // never invokes its callback
+const detached2 = detFn(hangingFetch, hangingToken, fakeAC, 60, F.xom);
+const fired2 = await new Promise(res => { let got = null; detached2(123, v => { got = v; res(got); });
+                                          setTimeout(() => res(got), 900); });
+ok('a TOKEN step that never calls back still produces a callback', !!fired2, JSON.stringify(fired2));
+ok('the timer is armed before the token call, not inside it',
+   detSrc.indexOf('setTimeout(') < detSrc.indexOf('withStravaToken_('),
+   'timer@' + detSrc.indexOf('setTimeout(') + ' token@' + detSrc.indexOf('withStravaToken_('));
 
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),

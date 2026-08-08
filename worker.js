@@ -25687,17 +25687,27 @@ function _saPolyPut_(key, enc){
 // always caught. This is the silent one.
 var SA_SEG_TIMEOUT_MS=20000;
 function _saSegDetail_(segId, cb){
+  // fire() is the single exit. Every path routes through it, so the callback happens exactly once
+  // whether the answer, an error or the timer gets there first.
+  var done=false, ctl=null;
+  try{ ctl=new AbortController(); }catch(e){ ctl=null; }
+  var fire=function(v){ if(done) return; done=true; clearTimeout(timer); cb(v); };
+  // THE TIMER IS ARMED BEFORE THE TOKEN STEP, NOT INSIDE IT. withStravaToken_ refreshes against the
+  // proxy with its own untimed fetch and can itself never call back - and a timer armed inside that
+  // callback is then never armed at all. The first version of this fix bounded only the segment
+  // request, and the sweep still parked: it moved from "Checking 85 of 90" to "Checking 90 of 90".
+  // Bound the WHOLE operation, token acquisition included.
+  //
+  // Worth knowing: withStravaToken_ is refresh-first, so a 90-segment sweep also makes 90 token
+  // refreshes. Those count against the 200/15min overall limit on top of the 90 reads, which is
+  // very likely why the stall always arrives near the end of a press.
+  var timer=setTimeout(function(){
+    try{ if(ctl) ctl.abort(); }catch(e){}
+    fire({err:'timed out'});
+  }, SA_SEG_TIMEOUT_MS);
   withStravaToken_(function(token){
-    if(!token){ cb({err:'connect Strava'}); return; }
-    // fire() is the single exit. Every path below routes through it, so the callback happens exactly
-    // once whether the answer, an error or the timer gets there first.
-    var done=false, ctl=null;
-    try{ ctl=new AbortController(); }catch(e){ ctl=null; }
-    var fire=function(v){ if(done) return; done=true; clearTimeout(timer); cb(v); };
-    var timer=setTimeout(function(){
-      try{ if(ctl) ctl.abort(); }catch(e){}
-      fire({err:'timed out'});
-    }, SA_SEG_TIMEOUT_MS);
+    if(done) return;
+    if(!token){ fire({err:'connect Strava'}); return; }
     var opt={headers:{'Authorization':'Bearer '+token}};
     if(ctl) opt.signal=ctl.signal;
     fetch('https://www.strava.com/api/v3/segments/'+segId, opt)
