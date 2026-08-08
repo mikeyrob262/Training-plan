@@ -26260,6 +26260,10 @@ function _saPinIcon_(col, crown){
 }
 function _saPinsRefresh_(map){
   if(!map) return;
+  // PINS MUST PAINT ABOVE THE LINES. Leaflet's default markerPane sits at z600 and the segment
+  // lines are at z620, so every stretch was drawn straight THROUGH the rings - the markers read as
+  // blobs fused into the line rather than as pins sitting on it.
+  if(!map.getPane('segPins')){ map.createPane('segPins'); map.getPane('segPins').style.zIndex=640; }
   if(!_saPinLayer){ _saPinLayer=L.layerGroup().addTo(map); }
   _saPinLayer.clearLayers();
   if(map.getZoom()<_SA_PIN_MINZ) return;
@@ -26271,7 +26275,7 @@ function _saPinsRefresh_(map){
     // busy zoom looks like a rendering fault.
     if(++n>_SA_PIN_CAP) break;
     (function(ent){
-      var m=L.marker(ent.at, {icon:_saPinIcon_(ent.col, ent.s.tier&&ent.s.tier.t>=3), riseOnHover:true})
+      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, ent.s.tier&&ent.s.tier.t>=3), riseOnHover:true})
         .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
       m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
       _saPinLayer.addLayer(m);

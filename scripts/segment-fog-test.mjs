@@ -375,6 +375,11 @@ ok('the interactive line is index 0, so a row tap opens a popup that exists',
    /_saMapById\[s\.id\]=\[line\]/.test(mountSrc));
 const pinSrc = bodyOf('_saPinsRefresh_');
 ok('pins are zoom-gated off a named constant', /_SA_PIN_MINZ/.test(pinSrc) && has('_SA_PIN_MINZ'));
+// Leaflet's markerPane is z600 and the segment lines are z620, so without their own higher pane the
+// stretches paint straight THROUGH the pins and the markers read as blobs fused into the line.
+ok('pins get their own pane ABOVE the segment lines',
+   /createPane\('segPins'\)/.test(pinSrc) && /zIndex=64/.test(pinSrc));
+ok('...and every marker is placed into it', /pane:'segPins'/.test(pinSrc));
 ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
 ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
 ok('...and the cap is REPORTED, not silently truncating', /of \'\+n\+\' pins|zoom in for the rest/.test(pinSrc));
