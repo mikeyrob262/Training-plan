@@ -382,7 +382,19 @@ ok('pins get their own pane ABOVE the segment lines',
 ok('...and every marker is placed into it', /pane:'segPins'/.test(pinSrc));
 ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
 ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
-ok('...and the cap is REPORTED, not silently truncating', /of \'\+n\+\' pins|zoom in for the rest/.test(pinSrc));
+// CLUSTERING, because size was never the fix. Measured at the default zoom: 204 of 256 pins
+// physically overlapped another, the closest pair was 0px apart, and one 40x40px box held 24.
+ok('overlapping pins are clustered in SCREEN space', /latLngToContainerPoint/.test(pinSrc));
+ok('...off a named pixel radius', /_SA_PIN_CLUSTER_PX/.test(pinSrc) && has('_SA_PIN_CLUSTER_PX'));
+ok('...greedily, not on a grid whose cell boundaries leak', !/Math\.round\(p\.x\//.test(pinSrc));
+ok('a cluster carries its count', /_saClusterIcon_/.test(pinSrc) && has('function _saClusterIcon_'));
+ok('a cluster advertises the best status inside it', /_saPinRank_/.test(pinSrc));
+ok('clicking a cluster zooms in rather than opening a popup', /fitBounds|setView/.test(pinSrc));
+ok('...and handles coincident starts, where the bounds have zero area',
+   /getNorth\(\)!==/.test(pinSrc) && /setView\(seed\.at/.test(pinSrc));
+ok('the readout reports segments in view, not just marker count',
+   /segment'\+\(total===1/.test(pinSrc));
+ok('...and the cap is REPORTED, not silently truncating', /capped at/.test(pinSrc));
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
 // _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of

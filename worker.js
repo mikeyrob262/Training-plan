@@ -26225,7 +26225,9 @@ var _SA_FOCUS_MAXZ=17;
 // Pins appear only from this zoom in, and only for what is on screen. Below it the stretches carry
 // the map on their own; a pin per segment at a wide zoom is the bead-chain that made the old dot
 // layer unreadable.
-var _SA_PIN_MINZ=12, _SA_PIN_CAP=400;
+// Minimum centre-to-centre spacing, in screen pixels, before two markers merge into one bubble.
+// 20px against an 11px pin leaves a clear gap between neighbours at every zoom.
+var _SA_PIN_MINZ=12, _SA_PIN_CAP=400, _SA_PIN_CLUSTER_PX=20;
 var _saMapSegs=[], _saPinLayer=null;
 // THE SEGMENT MAP HAS ITS OWN PALETTE, not the fog ramp's. SA_FOG_STYLE was built for a heat map
 // and its two top steps are INVERTED against this page's reference: it paints a personal best pink
@@ -26262,6 +26264,21 @@ function _saPinIcon_(col, crown){
       +'<circle cx="'+r+'" cy="'+r+'" r="'+(r-0.7)+'" fill="#fff" stroke="'+col+'" stroke-width="1"/>'
       +inner+'</svg>' });
 }
+// A CLUSTER BUBBLE. Same visual language as a pin - white fill, status ring - carrying a count
+// instead of a dot, and growing a little with the magnitude so a 40 does not have to fit in an 11px
+// circle.
+function _saClusterIcon_(col, n){
+  var d=(n>=100)?26:((n>=10)?22:19), r=d/2;
+  var fs=(n>=100)?8.5:((n>=10)?9.5:10);
+  return L.divIcon({ className:'', iconSize:[d,d], iconAnchor:[r,r], popupAnchor:[0,-r],
+    html:'<svg width="'+d+'" height="'+d+'" viewBox="0 0 '+d+' '+d+'" style="display:block">'
+      +'<circle cx="'+r+'" cy="'+r+'" r="'+(r-0.8)+'" fill="#fff" stroke="'+col+'" stroke-width="1.4"/>'
+      +'<text x="'+r+'" y="'+(r+fs*0.35)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" '
+      +'font-family="-apple-system,Segoe UI,Roboto,sans-serif" fill="'+col+'">'+n+'</text></svg>' });
+}
+// Rank for a cluster's colour: a crown in the group outranks a personal best, which outranks an
+// attempt. The bubble should advertise the best thing inside it.
+function _saPinRank_(e){ var t=(e&&e.s&&e.s.tier&&e.s.tier.t)||1; return t>=3?3:(t===2?2:1); }
 function _saPinsRefresh_(map){
   if(!map) return;
   // PINS MUST PAINT ABOVE THE LINES. Leaflet's default markerPane sits at z600 and the segment
@@ -26271,24 +26288,80 @@ function _saPinsRefresh_(map){
   if(!_saPinLayer){ _saPinLayer=L.layerGroup().addTo(map); }
   _saPinLayer.clearLayers();
   if(map.getZoom()<_SA_PIN_MINZ) return;
-  var b=map.getBounds().pad(0.15), n=0;
+  var b=map.getBounds().pad(0.15);
+  // CLUSTERED IN SCREEN SPACE, because the problem was never pin SIZE. Measured at the default
+  // zoom on this library: 204 of 256 pins physically overlapped another, the closest pair was 0px
+  // apart, and one 40x40px box held 24 of them. Shrinking 17px to 11px could not fix that and did
+  // not - segments genuinely start at the same intersection, so at a few-mile zoom their markers
+  // occupy the same pixel whatever size they are.
+  //
+  // Greedy, not a grid. A grid guarantees spacing only WITHIN a cell: two centroids either side of
+  // a boundary can land a pixel apart, which is the same chain with extra steps. This walks the
+  // list, and each unclaimed pin claims every other unclaimed pin within _SA_PIN_CLUSTER_PX.
+  // The bubble sits on the SEED's own coordinates rather than the group centroid, so it still
+  // marks a real segment start instead of a point in a field.
+  var pts=[];
   for(var i=0;i<_saMapSegs.length;i++){
     var e=_saMapSegs[i];
     if(!e.at || !b.contains(L.latLng(e.at[0], e.at[1]))) continue;
-    // REPORT the cap rather than trimming in silence - a map that quietly stops drawing pins at a
-    // busy zoom looks like a rendering fault.
-    if(++n>_SA_PIN_CAP) break;
-    (function(ent){
-      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, ent.s.tier&&ent.s.tier.t>=3), riseOnHover:true})
-        .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
-      m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
-      _saPinLayer.addLayer(m);
-    })(e);
+    pts.push({e:e, p:map.latLngToContainerPoint(L.latLng(e.at[0], e.at[1]))});
   }
+  var total=pts.length, used=new Array(total), groups=[];
+  for(var a=0;a<total;a++){
+    if(used[a]) continue;
+    used[a]=true;
+    var g=[pts[a]];
+    for(var c=a+1;c<total;c++){
+      if(used[c]) continue;
+      var dx=pts[a].p.x-pts[c].p.x, dy=pts[a].p.y-pts[c].p.y;
+      if(dx*dx+dy*dy<=_SA_PIN_CLUSTER_PX*_SA_PIN_CLUSTER_PX){ used[c]=true; g.push(pts[c]); }
+    }
+    groups.push(g);
+  }
+  var n=0;
+  for(var k=0;k<groups.length;k++){
+    if(++n>_SA_PIN_CAP) break;
+    (function(g){
+      var seed=g[0].e;
+      if(g.length===1){
+        var m=L.marker(seed.at, {pane:'segPins', icon:_saPinIcon_(seed.col, seed.s.tier&&seed.s.tier.t>=3), riseOnHover:true})
+          .bindPopup(function(){ return _saFogPopup_(seed.s); }, {maxWidth:280});
+        m.on('popupopen', function(){ try{ _saKomOnOpen_(seed.s); }catch(e){} });
+        _saPinLayer.addLayer(m);
+        return;
+      }
+      var best=g[0].e, bestR=_saPinRank_(g[0].e);
+      for(var q=1;q<g.length;q++){ var rr=_saPinRank_(g[q].e); if(rr>bestR){ bestR=rr; best=g[q].e; } }
+      var cm=L.marker(seed.at, {pane:'segPins', icon:_saClusterIcon_(best.col, g.length),
+                                riseOnHover:true, title:g.length+' segments here'});
+      // A cluster ZOOMS IN rather than opening a popup: the useful answer to "what is under this"
+      // is the segments themselves, and at a closer zoom the group splits on its own.
+      cm.on('click', function(){
+        try{
+          var la=[], lo=[];
+          for(var z=0;z<g.length;z++){ la.push(g[z].e.at[0]); lo.push(g[z].e.at[1]); }
+          var bb=L.latLngBounds([[Math.min.apply(null,la), Math.min.apply(null,lo)],
+                                 [Math.max.apply(null,la), Math.max.apply(null,lo)]]);
+          // Coincident starts give a zero-area box, which fitBounds cannot use - step the zoom.
+          if(bb.isValid() && (bb.getNorth()!==bb.getSouth() || bb.getEast()!==bb.getWest()))
+            map.fitBounds(bb.pad(0.6), {maxZoom:Math.min(_SA_FOCUS_MAXZ, map.getZoom()+4)});
+          else map.setView(seed.at, Math.min(_SA_FOCUS_MAXZ, map.getZoom()+3));
+        }catch(e){}
+      });
+      _saPinLayer.addLayer(cm);
+    })(groups[k]);
+  }
+  // Report BOTH numbers. "23 markers" alone would look like the map had quietly lost 233 segments;
+  // the count that matters to the athlete is how many segments are under them.
   var note=document.getElementById('sa-cov-pins');
-  if(note) note.textContent=(n>_SA_PIN_CAP)
-    ? ('showing '+_SA_PIN_CAP+' of '+n+' pins in view - zoom in for the rest')
-    : (n?(n+' pin'+(n===1?'':'s')+' in view'):'');
+  if(note){
+    var shown=Math.min(n, _SA_PIN_CAP);
+    note.textContent=total
+      ? (shown+' marker'+(shown===1?'':'s')+' &middot; '+total+' segment'+(total===1?'':'s')+' in view')
+        .replace('&middot;','·')
+        +(n>_SA_PIN_CAP?(' (capped at '+_SA_PIN_CAP+')'):'')
+      : '';
+  }
 }
 function _saMapMount_(){
   var el=document.getElementById('sa-cov-map');
