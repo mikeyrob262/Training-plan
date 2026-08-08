@@ -26260,7 +26260,11 @@ function _saStatusCol_(t){
 //   h / w  = 1.44, i.e. TALLER THAN WIDE - a teardrop pin, not a circle
 // The circle came from a verbal paraphrase earlier in the thread; the image itself says otherwise,
 // and the image is the spec. Anchored at the tip, which is the point the pin actually marks.
-var SA_PIN_W=8, SA_PIN_H=12;
+// NOMINAL, not the measured core. The analysis measures the COLOURED area, and the white edge plus
+// antialiasing costs about 2px of it, so a nominal 8x12 measured only 6x9 against the reference's
+// 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
+// on the reference proportion; the numbers in the verification are what this was tuned against.
+var SA_PIN_W=11, SA_PIN_H=16;
 function _saPinIcon_(col, crown){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
   // Teardrop: a circle at the top closing to a point at the bottom.

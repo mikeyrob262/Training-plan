@@ -401,9 +401,9 @@ ok('...with the reference aspect ratio (h/w between 1.3 and 1.6)', (() => {
   const h = +(asServed(src).match(/SA_PIN_H\s*=\s*(\d+)/) || [])[1];
   return w && h && (h / w) >= 1.3 && (h / w) <= 1.6;
 })());
-ok('...and a width near 0.68% of a ~1210px panel, i.e. 7-9px', (() => {
+ok('...and a nominal width that yields the reference core proportion, i.e. 10-13px', (() => {
   const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/) || [])[1];
-  return w >= 7 && w <= 9;
+  return w >= 10 && w <= 13;
 })());
 ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
