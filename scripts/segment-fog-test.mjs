@@ -285,9 +285,19 @@ ok('the home cluster excludes the far-side-of-the-planet outlier',
 // expression, so asserting over raw source fails on the very prose that documents the fix — the
 // same "assert on the body, not the file" trap the membership check hit.
 const nl = String.fromCharCode(10);
-const mountRaw = asServed(src.slice(src.indexOf('function _saMapMount_('),
-                                    matchBrace(src.indexOf('function _saMapMount_('))+1));
-const mountSrc = mountRaw.split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+// CRLF-SAFE. JS "." does not match \r, so /^\s*\/\/.*$/ silently matches NOTHING on a CRLF file --
+// no comment is stripped, and every assertion then reads the prose that documents the fix as if it
+// were code. Two checks "failed" that way, both on comments quoting the bug they describe. Strip the
+// carriage return first, and never assume the file's line endings.
+function bodyOf(name){
+  const i = src.indexOf('function ' + name + '(');
+  if (i < 0) throw new Error('fn not found: ' + name);
+  return asServed(src.slice(i, matchBrace(i) + 1))
+    .split(nl)
+    .map(l => l.replace(/\r$/, '').replace(/^\s*\/\/.*$/, ''))
+    .join(nl);
+}
+const mountSrc = bodyOf('_saMapMount_');
 ok('the mount no longer branches on a .bounds field that does not exist',
    !/home\s*&&\s*home\.bounds/.test(mountSrc) && !/fitBounds\(\s*home\.bounds/.test(mountSrc));
 ok('the mount builds its bounds from the four fields _saFogHome_ actually returns',
@@ -303,9 +313,7 @@ ok('a remembered pan still outranks both (the involuntary-remount guard)', iView
 // The row-tap fly is capped, so a 0.09 mi segment does not fit edge-to-edge with no context around
 // it (uncapped it went to z18.75). The grey checkerboard right after a fly is Esri pacing the tile
 // burst, not the cap - every tile returns 200 and all 36 are in by 30s.
-const focusRaw = asServed(src.slice(src.indexOf('function _saMapFocus_('),
-                                    matchBrace(src.indexOf('function _saMapFocus_('))+1));
-const focusSrc = focusRaw.split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+const focusSrc = bodyOf('_saMapFocus_');
 ok('the row-tap fly caps its zoom rather than fitting a short segment edge-to-edge',
    /fitBounds\([^)]*maxZoom\s*:/.test(focusSrc) || /maxZoom\s*:\s*_SA_FOCUS_MAXZ/.test(focusSrc));
 ok('...off a named constant, not a magic number', has('_SA_FOCUS_MAXZ') && /_SA_FOCUS_MAXZ/.test(focusSrc));
@@ -359,9 +367,7 @@ ok('a casing is drawn under the colour for contrast on imagery',
    /segCase/.test(mountSrc) && has("map.createPane('segCase')"));
 ok('the interactive line is index 0, so a row tap opens a popup that exists',
    /_saMapById\[s\.id\]=\[line, ?cas\]/.test(mountSrc));
-const pinSrc = asServed(src.slice(src.indexOf('function _saPinsRefresh_('),
-                                  matchBrace(src.indexOf('function _saPinsRefresh_('))+1))
-  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+const pinSrc = bodyOf('_saPinsRefresh_');
 ok('pins are zoom-gated off a named constant', /_SA_PIN_MINZ/.test(pinSrc) && has('_SA_PIN_MINZ'));
 ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
 ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
@@ -384,9 +390,7 @@ ok('...and exported for that inline handler', has('window._saPolySweep_=_saPolyS
 ok('the page renders the note element the sweep writes into', has("id=\"sa-poly-note\""));
 ok('the sweep still reports what it capped', has('press again to continue'));
 ok('pending work is ordered by what is ON SCREEN first', (() => {
-  const p = asServed(src.slice(src.indexOf('function _saPolyPending_('),
-                               matchBrace(src.indexOf('function _saPolyPending_('))+1))
-    .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+  const p = bodyOf('_saPolyPending_');
   return /inView/.test(p) && /getBounds\(\)/.test(p);
 })());
 ok('a chord is drawn subordinate to a real road shape, not identically',
@@ -398,9 +402,7 @@ ok('a chord is drawn subordinate to a real road shape, not identically',
 // row at "Checking 85 of 90" -- button disabled, no recovery but a reload. The 429 path was always
 // caught; this is the silent one.
 console.log('\n'+C+'=== 14. no sweep can hang on a request that never answers ==='+X);
-const detSrc = asServed(src.slice(src.indexOf('function _saSegDetail_('),
-                                  matchBrace(src.indexOf('function _saSegDetail_('))+1))
-  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+const detSrc = bodyOf('_saSegDetail_');
 ok('the segment request is on a timer', /setTimeout\(/.test(detSrc) && /SA_SEG_TIMEOUT_MS/.test(detSrc));
 ok('...off a named constant', has('var SA_SEG_TIMEOUT_MS='));
 ok('...that is a sane few seconds, not minutes', (() => {
@@ -442,9 +444,7 @@ ok('the timer is armed before the token call, not inside it',
 // re-render replaces the panel, #sa-tgt-note included, microseconds later. The message was gone
 // before anyone could read it -- and every "the sweep is hanging" diagnosis was really this.
 console.log('\n'+C+'=== 15. the crown sweep result survives its own re-render ==='+X);
-const swpSrc = asServed(src.slice(src.indexOf('function _saTgtKomSweep_('),
-                                  matchBrace(src.indexOf('function _saTgtKomSweep_('))+1))
-  .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+const swpSrc = bodyOf('_saTgtKomSweep_');
 ok('the summary is held outside the DOM', has('var _saTgtNote='));
 ok('say() writes it to the holder, not only to an element', /_saTgtNote=t/.test(swpSrc));
 ok('say() re-queries the element instead of closing over a detachable one',
@@ -484,10 +484,27 @@ const stats2 = runStats({ x: { efforts: [{ d: '2026-01-01', s: 60 }, { date: '20
 check('total time counts the legacy {date,sec} effort shape too', stats2.segSec, 100);
 check('...and counts both as timed efforts', stats2.effN, 2);
 
+// ---- 17. the map chrome is theme-aware ------------------------------------------------------
+// The summary bar shipped painted with var(--d-panel2,#151a22). --d-panel2 IS DEFINED NOWHERE, so
+// the hard-coded dark fallback always won -- and in light mode that put near-black --d-head values
+// on a near-black bar. 142, 1,825 and 736 h were invisible on the rendered page while every
+// assertion passed. Same class as the desktop light-mode sweep: a literal hex over a working theme.
+console.log('\n'+C+'=== 17. map chrome uses tokens that actually exist ==='+X);
+// Scoped to an OPAQUE DARK fallback, which is the failure mode: it wins in both themes and puts
+// near-black text on a near-black panel in light mode. One --d-panel2 remains elsewhere in the app
+// with an rgba(255,255,255,.035) fallback -- also an undefined token, but a translucent tint that
+// degrades to "no tint" rather than to an unreadable block. Left alone deliberately.
+ok('no segment-map chrome paints from --d-panel2 with an opaque dark fallback',
+   !/--d-panel2\s*,\s*#[0-9a-fA-F]{3,8}/.test(asServed(src)));
+ok('...and the token it was replaced with is really defined', /--d-inset\s*:/.test(src));
+ok('the summary bar paints from a themed token, not a literal hex',
+   /\.sm-bar\{[^}]*var\(--d-inset\)/.test(asServed(src)));
+ok('the filter controls too', /\.sm-ctl\{[^}]*var\(--d-inset\)/.test(asServed(src)));
+ok('the road-shapes button does not sit on top of the zoom control',
+   has('.leaflet-top.leaflet-left{margin-top'));
+
 ok('promote recolours the line only, never the casing', (() => {
-  const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
-                               matchBrace(src.indexOf('function _saMapPromote_('))+1))
-    .split(nl).map(l => l.replace(/^\s*\/\/.*$/, '')).join(nl);
+  const p = bodyOf('_saMapPromote_');
   return /layers\[0\]/.test(p) && !/layers\.forEach/.test(p);
 })());
 

@@ -26792,7 +26792,7 @@ function aiSegTargetsHtml_(ctx){
     +'.sm-leg{display:flex;gap:16px;flex-wrap:wrap;align-items:center}'
     +'.sm-leg-i{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--d-t3);font-weight:600}'
     +'.sm-ctls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}'
-    +'.sm-ctl{display:inline-flex;align-items:center;gap:7px;background:var(--d-panel2,#151a22);'
+    +'.sm-ctl{display:inline-flex;align-items:center;gap:7px;background:var(--d-inset);'
       +'border:1px solid var(--d-edge);border-radius:9px;padding:7px 11px;font-size:12px;font-weight:600;'
       +'color:var(--d-t3);font-family:inherit;cursor:pointer}'
     +'.sm-ctl:hover{color:var(--d-head)}'
@@ -26800,7 +26800,7 @@ function aiSegTargetsHtml_(ctx){
     +'.sm-ctl select{background:none;border:none;color:inherit;font:inherit;cursor:pointer;outline:none}'
     // The summary bar sits under the map as one panel, cells divided by hairlines, wrapping to two
     // rows on a narrow desktop rather than scrolling sideways.
-    +'.sm-bar{display:flex;flex-wrap:wrap;align-items:stretch;background:var(--d-panel2,#151a22);'
+    +'.sm-bar{display:flex;flex-wrap:wrap;align-items:stretch;background:var(--d-inset);'
       +'border:1px solid var(--d-edge);border-radius:14px;margin-top:12px;overflow:hidden}'
     +'.sm-cell{flex:1 1 150px;min-width:132px;padding:13px 16px;border-left:1px solid var(--d-edge3)}'
     +'.sm-cell:first-child{border-left:none}'
@@ -26809,6 +26809,10 @@ function aiSegTargetsHtml_(ctx){
     +'.sm-s{font-size:10.5px;color:var(--d-dim);margin-top:3px;line-height:1.45}'
     +'.sm-h{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:5px}'
     +'.sm-h i{flex:1;background:'+SA_FOG_STYLE[3].line+';border-radius:1px;min-height:2px;display:block}'
+    // Leaflet puts its zoom control top-left, which is where the layout puts the road-shapes button.
+    // Push the control stack below it rather than moving the button: the button is part of the page
+    // design, the zoom is Leaflet furniture.
+    +'#sa-cov-map .leaflet-top.leaflet-left{margin-top:46px}'
     +'@media(max-width:900px){.sm-cell{flex:1 1 45%}}'
     // Below 760px the table sheds its two lowest-value columns rather than scrolling sideways:
     // effort count and grade are context, name/PB/chance are the job.
@@ -26878,14 +26882,14 @@ function aiSegTargetsHtml_(ctx){
     var n=d.counts[b.k]||0, on=(n>0);
     if(i) H+='<span style="align-self:center;color:var(--d-dim);font-size:11px">&rsaquo;</span>';
     H+='<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
-      +'background:var(--d-panel2,#151a22);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;'
+      +'background:var(--d-inset);border:1px solid var(--d-edge);border-radius:999px;padding:5px 11px;'
       +'color:'+(on?b.col:'var(--d-dim)')+';opacity:'+(on?'1':'.45')+'">'
       +'<span style="width:9px;height:9px;border-radius:50%;background:'+(on?b.col:'#39424f')+';flex:none"></span>'
       +esc(b.label)+' <span style="color:var(--d-dim);font-weight:600">'+n+'</span></span>';
   });
   H+='<span style="align-self:center;color:var(--d-dim);font-size:11px">&rsaquo;</span>'
     +'<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
-    +'background:var(--d-panel2,#151a22);border:1px solid '+SA_FOG_STYLE[4].line+'55;border-radius:999px;padding:5px 11px;'
+    +'background:var(--d-inset);border:1px solid '+SA_FOG_STYLE[4].line+'55;border-radius:999px;padding:5px 11px;'
     +'color:'+(d.held>0?SA_FOG_STYLE[4].line:'var(--d-dim)')+';opacity:'+(d.held>0?'1':'.55')+'">'
     +'&#9819; Crown <span style="color:var(--d-dim);font-weight:600">'+(d.checked>0?d.held:'&mdash;')+'</span></span>';
   H+='</div></div>';
