@@ -382,19 +382,34 @@ ok('pins get their own pane ABOVE the segment lines',
 ok('...and every marker is placed into it', /pane:'segPins'/.test(pinSrc));
 ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
 ok('pins are capped', /_SA_PIN_CAP/.test(pinSrc));
-// CLUSTERING, because size was never the fix. Measured at the default zoom: 204 of 256 pins
-// physically overlapped another, the closest pair was 0px apart, and one 40x40px box held 24.
-ok('overlapping pins are clustered in SCREEN space', /latLngToContainerPoint/.test(pinSrc));
-ok('...off a named pixel radius', /_SA_PIN_CLUSTER_PX/.test(pinSrc) && has('_SA_PIN_CLUSTER_PX'));
-ok('...greedily, not on a grid whose cell boundaries leak', !/Math\.round\(p\.x\//.test(pinSrc));
-ok('a cluster carries its count', /_saClusterIcon_/.test(pinSrc) && has('function _saClusterIcon_'));
-ok('a cluster advertises the best status inside it', /_saPinRank_/.test(pinSrc));
-ok('clicking a cluster zooms in rather than opening a popup', /fitBounds|setView/.test(pinSrc));
-ok('...and handles coincident starts, where the bounds have zero area',
-   /getNorth\(\)!==/.test(pinSrc) && /setView\(seed\.at/.test(pinSrc));
-ok('the readout reports segments in view, not just marker count',
-   /segment'\+\(total===1/.test(pinSrc));
-ok('...and the cap is REPORTED, not silently truncating', /capped at/.test(pinSrc));
+// NO CLUSTERING, EVER. Measured on the reference image: 124 marker components, every one a single
+// small pin, zero count bubbles at any density. Where markers coincide they simply overlap - that
+// IS the reference's answer to density. A previous pass invented screen-space clustering to solve
+// the overlap, which added a control the design does not have.
+ok('there is no clustering machinery left', !has('_saClusterIcon_') && !has('_SA_PIN_CLUSTER_PX'));
+ok('...and no screen-space grouping in the pin refresh',
+   !/latLngToContainerPoint/.test(pinSrc) && !/groups/.test(pinSrc));
+ok('one marker is added per visible segment', /_saPinLayer\.addLayer\(m\)/.test(pinSrc)
+   && (pinSrc.match(/addLayer\(/g) || []).length === 1);
+// Pin geometry, straight off the image: median 9x13px in a 1317px panel -> 0.683% of map width,
+// h/w 1.44 (a teardrop, taller than wide - NOT a circle).
+const pinIconSrc = bodyOf('_saPinIcon_');
+ok('the pin is a teardrop path, not a circle', /<path/.test(pinIconSrc) && !/<circle/.test(pinIconSrc));
+ok('pin width and height are named constants', has('var SA_PIN_W=') && has('SA_PIN_H='));
+ok('...with the reference aspect ratio (h/w between 1.3 and 1.6)', (() => {
+  const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/) || [])[1];
+  const h = +(asServed(src).match(/SA_PIN_H\s*=\s*(\d+)/) || [])[1];
+  return w && h && (h / w) >= 1.3 && (h / w) <= 1.6;
+})());
+ok('...and a width near 0.68% of a ~1210px panel, i.e. 7-9px', (() => {
+  const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/) || [])[1];
+  return w >= 7 && w <= 9;
+})());
+ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
+// Colours sampled from the reference's own markers.
+check('personal best is the sampled gold', F.MAPCOL.pb, '#fc9339');
+check('KOM/QOM is the sampled magenta', F.MAPCOL.kom, '#ee4e98');
+check('attempted is the sampled blue', F.MAPCOL.att, '#4887f0');
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
 // _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of
@@ -570,12 +585,8 @@ ok('promote recolours without fattening the stroke',
    /weight:SA_MAP_W/.test(bodyOf('_saMapPromote_')));
 // Pins: circular, 16-18px, white fill, thin coloured ring, no shadow, no teardrop path.
 const pinIcon = bodyOf('_saPinIcon_');
-// 10-12px. 17px pins merged into an unbroken chain of rings wherever several segments converge on
-// one intersection, hiding the streets under them.
-ok('pin diameter is a named constant in the 10-12px range',
-   (() => { const m = asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/); return !!m && +m[1] >= 10 && +m[1] <= 12; })(),
-   (asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/)||[])[1]);
-ok('the ring is a hairline, not a band', /stroke-width="1"/.test(bodyOf('_saPinIcon_')));
+// Geometry now comes from the reference image (section 12), not from a chosen px value.
+ok('pin size is measured, not a magic number', has('var SA_PIN_W=') && has('SA_PIN_H='));
 // detectRetina halves the tile size and bumps zoom, so on a scaled display a 512px tile lands in
 // 128 CSS px and every label renders at a quarter size. Invisible at devicePixelRatio 1.
 // NB: the tile URL itself contains {s}/{z}/{x}/{y}, so a lazy brace match grabs those placeholders
@@ -585,8 +596,9 @@ ok('the light basemap does NOT use detectRetina', (() => {
   const i = b.indexOf('var light=L.tileLayer(');
   return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
 })());
-ok('the pin is a circle, not a teardrop path', /<circle/.test(pinIcon) && !/<path/.test(pinIcon));
-ok('the pin is white-filled with a coloured ring', /fill="#fff"\s+stroke="'\+col\+'"/.test(pinIcon));
+ok('the pin matches the image: a teardrop path', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
+ok('the pin is filled in its status colour with a thin white edge',
+   /fill="'\+col\+'"/.test(pinIcon) && /stroke="#fff"/.test(pinIcon));
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
 ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
 // Basemap: light, and immune to a ride-map preference set elsewhere.
