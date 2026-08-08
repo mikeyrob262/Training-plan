@@ -25815,8 +25815,16 @@ function _saPolyPending_(litOnly){
 }
 function _saPolyStop_(){ _saPolyRun.stop=true; }
 function _saPolySweep_(litOnly){
-  var note=document.getElementById('sa-poly-note');
-  var say=function(t){ if(note) note.innerHTML=t; };
+  // The note is re-queried per call and lives UNDER the map, never over it. The button carries the
+  // live count so progress is visible without a banner covering the thing being drawn.
+  var say=function(t){
+    var n=document.getElementById('sa-poly-note');
+    if(n) n.innerHTML=t;
+  };
+  var btnSay=function(t){
+    var b=document.getElementById('sa-poly-btn');
+    if(b) b.innerHTML='&#9707; '+t;
+  };
   if(_saPolyRun.running){ say('Already fetching&hellip;'); return; }
   var list=_saPolyPending_(litOnly);
   if(!list.length){ say('Every segment in this set already has its road shape.'); return; }
@@ -25826,6 +25834,7 @@ function _saPolySweep_(litOnly){
   var i=0, got=0, none=0, errs=0;
   var finish=function(msg){
     _saPolyRun.running=false;
+    btnSay('Load road shapes');
     say(msg+' &mdash; '+got+' road shape'+(got===1?'':'s')+' added'
       +(none?(', '+none+' had no shape on Strava'):'')+(errs?(', '+errs+' failed'):'')
       +(capped||i<list.length ? (' &middot; '+(list.length-i)+' still to fetch, press again to continue') : ' &middot; this set is complete')+'.');
@@ -25835,6 +25844,7 @@ function _saPolySweep_(litOnly){
     if(_saPolyRun.stop) return finish('Stopped');
     if(i>=run.length) return finish('Done');
     var it=run[i++];
+    btnSay(i+' / '+run.length+'…');
     say('Fetching road shapes&hellip; '+i+' of '+run.length+' ('+got+' added)');
     _saSegDetail_(it.num, function(res){
       if(!res || res.err){ errs++; if(res && res.err && res.err.indexOf('rate limit')>=0) return finish('Rate limit reached'); }
@@ -26160,16 +26170,14 @@ function _saMapPromote_(id){
   try{
     var layers=_saMapById && _saMapById[id];
     if(!layers || !layers.length) return;
-    var stl=SA_FOG_STYLE[4];
-    // Index 0 only - the colour line. The casing at index 1 is the dark outline that buys contrast
-    // on satellite; recolouring it too would erase the outline exactly on the segments that most
-    // need to stand out.
+    // Recolour only - the WEIGHT never changes. Promoting used to bump the stroke to 5.5px, which
+    // put a fat bar on the map the moment a crown was confirmed. 2px is the spec at every status.
     var line=layers[0];
-    if(line && typeof line.setStyle==='function') line.setStyle({color:stl.line, weight:5.5, opacity:1});
+    if(line && typeof line.setStyle==='function') line.setStyle({color:SA_MAP_COL.kom, weight:SA_MAP_W, opacity:1});
     // The pin carries the same status, so it has to be rebuilt or the crown shows on the line and
     // not on the marker sitting on top of it.
     for(var i=0;i<_saMapSegs.length;i++){
-      if(_saMapSegs[i].s && _saMapSegs[i].s.id===id){ _saMapSegs[i].col=stl.line; break; }
+      if(_saMapSegs[i].s && _saMapSegs[i].s.id===id){ _saMapSegs[i].col=SA_MAP_COL.kom; break; }
     }
     if(_saMap) _saPinsRefresh_(_saMap);
   }catch(e){}
@@ -26219,23 +26227,36 @@ var _SA_FOCUS_MAXZ=17;
 // layer unreadable.
 var _SA_PIN_MINZ=12, _SA_PIN_CAP=400;
 var _saMapSegs=[], _saPinLayer=null;
-// ONE status colour per state, no effort ramp. SA_FOG_STYLE[4] crown, [3] personal best, [2] ridden.
-// Never-ridden has no colour here on purpose: st.segments only holds segments Strava matched to a
-// ride, so a never-ridden segment has no coordinates and cannot be placed on a map at all.
+// THE SEGMENT MAP HAS ITS OWN PALETTE, not the fog ramp's. SA_FOG_STYLE was built for a heat map
+// and its two top steps are INVERTED against this page's reference: it paints a personal best pink
+// and a crown orange. Here gold is the personal best and magenta is the crown, which is also the
+// order that reads correctly - a crown is the rarer thing and magenta is the louder colour.
+//
+// Never-attempted has a colour for the legend and the stat bar only. It can never be drawn: those
+// segments have no effort on record and therefore no stored coordinates.
+var SA_MAP_COL={ pb:'#f59e0b', kom:'#d61f9b', att:'#2f7ff0', never:'#9aa3af' };
+// Line weight is a HARD CONSTRAINT, not a preference. Thick strokes turned this map into stacked
+// highlighter bars over the streets instead of roads with a colour on them; 2px is the whole spec.
+var SA_MAP_W=2;
 function _saStatusCol_(t){
   var i=(t&&t.t)||1;
-  return SA_FOG_STYLE[i>=3?4:(i===2?3:2)].line;
+  return (i>=3)?SA_MAP_COL.kom:((i===2)?SA_MAP_COL.pb:SA_MAP_COL.att);
 }
-// A Strava-style teardrop pin. Built as an inline SVG divIcon so the fill can carry the status
-// colour and a crown can be stamped into the head without a second image request.
+// A SMALL CIRCULAR PIN, 17px. White fill, a thin ring in the status colour, and a small dot of that
+// colour inside. Deliberately NOT the previous 22x30 teardrop with a white outline and a drop
+// shadow: at map scale that reads as a pushpin the size of a town, and hundreds of them buried the
+// segments they were meant to mark. No halo, no shadow - the ring is the whole affordance.
+var SA_PIN_D=17;
 function _saPinIcon_(col, crown){
-  var head=crown
-    ? '<text x="11" y="15" text-anchor="middle" font-size="11" fill="#fff">&#9819;</text>'
-    : '<circle cx="11" cy="10.5" r="3.6" fill="#fff" opacity=".92"/>';
-  return L.divIcon({ className:'', iconSize:[22,30], iconAnchor:[11,29], popupAnchor:[0,-26],
-    html:'<svg width="22" height="30" viewBox="0 0 22 30" style="display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.75))">'
-      +'<path d="M11 29C11 29 20.5 17.6 20.5 10.5A9.5 9.5 0 0 0 1.5 10.5C1.5 17.6 11 29 11 29Z" '
-      +'fill="'+col+'" stroke="#fff" stroke-width="1.6"/>'+head+'</svg>' });
+  var r=SA_PIN_D/2;
+  var inner=crown
+    ? '<text x="'+r+'" y="'+(r+3.4)+'" text-anchor="middle" font-size="8.5" fill="'+col+'">&#9819;</text>'
+    : '<circle cx="'+r+'" cy="'+r+'" r="2.6" fill="'+col+'"/>';
+  return L.divIcon({ className:'', iconSize:[SA_PIN_D,SA_PIN_D],
+    iconAnchor:[r,r], popupAnchor:[0,-r],
+    html:'<svg width="'+SA_PIN_D+'" height="'+SA_PIN_D+'" viewBox="0 0 '+SA_PIN_D+' '+SA_PIN_D+'" style="display:block">'
+      +'<circle cx="'+r+'" cy="'+r+'" r="'+(r-1)+'" fill="#fff" stroke="'+col+'" stroke-width="1.6"/>'
+      +inner+'</svg>' });
 }
 function _saPinsRefresh_(map){
   if(!map) return;
@@ -26292,16 +26313,13 @@ function _saMapMount_(){
   var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
   _saMap=map;
-  addRideMapBase_(map,'light');
+  addRideMapBase_(map,'light','aiq_segMapBase');
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
-  // Casing UNDER the colour, in its own pane. A bare coloured hairline on satellite imagery is the
-  // hardest thing on this page to see - it competes with tree canopy and roof lines at the same
-  // saturation. Strava draws its segment stretches over a light basemap where that is not a problem;
-  // over imagery the casing is what buys the contrast back.
-  if(!map.getPane('segCase')){ map.createPane('segCase'); map.getPane('segCase').style.zIndex=615; }
-  var caseRend=L.canvas({pane:'segCase'});
+  // THE CASING IS GONE. It existed to buy contrast for a coloured hairline over satellite imagery.
+  // On a light street basemap it buys nothing and costs everything: a dark outline 3px wider than
+  // the line is what made these read as blocks rather than roads.
   var rend=L.canvas({pane:'segLines'});
   var drawn=0, real=0;
   // Both of these are module-level and SURVIVE a remount. _saPinLayer would still be pointing at
@@ -26332,26 +26350,19 @@ function _saMapMount_(){
     if(isReal) real++;
     drawn++;
     var top=(s.tier.t>=2);
-    var w=(s.tier.t===3)?5.5:(s.tier.t===2?4.5:3.5);
-    // A CHORD IS DRAWN SUBORDINATE TO A ROAD. Only 117 of 1,942 segments have a real shape, so the
-    // straight endpoint-to-endpoint stand-ins are most of what is on screen - and a long one cuts
-    // clean across the frame at an angle no road takes, which is the tangle this page kept being
-    // judged on. Thinner and more transparent lets the real geometry read as the map and the chords
-    // as the placeholder they are. It is a stopgap for the shape backfill, not a substitute.
-    if(!isReal) w=Math.max(2, w-1.6);
-    var cas=L.polyline(pts,{ pane:'segCase', renderer:caseRend, color:'#0a0f16',
-      weight:w+3, opacity:isReal?0.5:0.3, lineCap:'round', lineJoin:'round', interactive:false }).addTo(map);
+    // ONE WEIGHT, 2px, EVERY SEGMENT. No tier-scaled strokes, no dark casing underneath. Both of
+    // those were what turned this into stacked highlighter bars: a 5.5px line with a 8.5px casing
+    // is an 8.5px block of colour on a street map whose own roads are about 2px wide. A segment is
+    // a piece of road, so it is drawn at the width of a road.
     var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:col,
-      weight:w, opacity: isReal?(top?1:0.85):0.5,
+      weight:SA_MAP_W, opacity: isReal?0.95:0.6,
       // Dashed says "this is a straight line standing in for a bending road", not decoration.
-      dashArray: isReal?null:'6 5', lineCap:'round', lineJoin:'round' }).addTo(map);
+      dashArray: isReal?null:'5 4', lineCap:'round', lineJoin:'round' }).addTo(map);
     line.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
     line.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
-    // THE INTERACTIVE LINE IS ALWAYS INDEX 0. _saMapFocus_ opens [0]'s popup and _saMapPromote_
-    // recolours [0]; the casing carries neither a popup nor a status colour, so putting it first
-    // would silently break the row-tap popup and paint the outline crown-orange. Draw order is set
-    // by the panes (segCase 615 under segLines 620), never by this array's order.
-    _saMapById[s.id]=[line, cas];
+    // THE INTERACTIVE LINE IS ALWAYS INDEX 0 - _saMapFocus_ opens [0]'s popup and _saMapPromote_
+    // recolours [0]. One layer per segment now that the casing is gone.
+    _saMapById[s.id]=[line];
     _saMapSegs.push({s:s, at:pts[0], col:col});
   });
   // Pin markers ride ON TOP of the stretches, the way Strava's segment map reads: the line says
@@ -26482,8 +26493,8 @@ window._saSetTarget_=_saSetTarget_;
 // Ridden 3+ / twice / once. "Never ridden" is added because 50 starred segments have no effort on
 // record at all — they were flagged as somewhere to go, not somewhere that has been.
 var _SA_BUCKETS=[
-  {k:'pb',    label:'Personal best',  col:SA_FOG_STYLE[3].line},
-  {k:'three', label:'Ridden 3+',      col:SA_FOG_STYLE[2].line},
+  {k:'pb',    label:'Personal best',  col:SA_MAP_COL.pb},
+  {k:'three', label:'Ridden 3+',      col:SA_MAP_COL.att},
   {k:'twice', label:'Ridden twice',   col:SA_FOG_STYLE[1].line},
   {k:'once',  label:'Ridden once',    col:SA_FOG_STYLE[0].line},
   {k:'never', label:'Never ridden',   col:'#64748b'}
@@ -26645,9 +26656,9 @@ function _saMapFilters_(){
       +'<span style="width:16px;height:3px;border-radius:2px;background:'+col+';flex:none"></span>'+label+'</label>';
   };
   var html='<div style="min-width:220px">'
-    +row('crown','Crown held',SA_FOG_STYLE[4].line)
-    +row('pb','Personal best',SA_FOG_STYLE[3].line)
-    +row('att','Attempted',SA_FOG_STYLE[2].line)
+    +row('crown','Crown held',SA_MAP_COL.kom)
+    +row('pb','Personal best',SA_MAP_COL.pb)
+    +row('att','Attempted',SA_MAP_COL.att)
     +'<div style="font-size:11px;color:var(--d-dim);margin-top:8px;line-height:1.5">'
     +'Never Attempted is not listed because it cannot be drawn - no coordinates are stored for a '
     +'segment that has never been matched to a ride.</div></div>';
@@ -26816,7 +26827,7 @@ function aiSegTargetsHtml_(ctx){
     +'.sm-ctl select{background:none;border:none;color:inherit;font:inherit;cursor:pointer;outline:none}'
     // The summary bar sits under the map as one panel, cells divided by hairlines, wrapping to two
     // rows on a narrow desktop rather than scrolling sideways.
-    +'.sm-bar{display:flex;flex-wrap:wrap;align-items:stretch;background:var(--d-inset);'
+    +'.sm-bar{display:flex;flex-wrap:wrap;align-items:stretch;background:var(--d-panel);'
       +'border:1px solid var(--d-edge);border-radius:14px;margin-top:12px;overflow:hidden}'
     +'.sm-cell{flex:1 1 150px;min-width:132px;padding:13px 16px;border-left:1px solid var(--d-edge3)}'
     +'.sm-cell:first-child{border-left:none}'
@@ -26824,7 +26835,7 @@ function aiSegTargetsHtml_(ctx){
     +'.sm-v{font-size:23px;font-weight:800;line-height:1.15;color:var(--d-head);margin-top:3px;font-variant-numeric:tabular-nums}'
     +'.sm-s{font-size:10.5px;color:var(--d-dim);margin-top:3px;line-height:1.45}'
     +'.sm-h{display:flex;align-items:flex-end;gap:2px;height:22px;margin-top:5px}'
-    +'.sm-h i{flex:1;background:'+SA_FOG_STYLE[3].line+';border-radius:1px;min-height:2px;display:block}'
+    +'.sm-h i{flex:1;background:'+SA_MAP_COL.pb+';border-radius:1px;min-height:2px;display:block}'
     // Leaflet puts its zoom control top-left, which is where the layout puts the road-shapes button.
     // Push the control stack below it rather than moving the button: the button is part of the page
     // design, the zoom is Leaflet furniture.
@@ -26858,10 +26869,10 @@ function aiSegTargetsHtml_(ctx){
   // of the honesty it is there to carry. Unmeasured is drawn quiet and small; a real count is loud.
   var crownSize=(d.checked>0)?'38px':'26px';
   var crownWeight=(d.checked>0)?'800':'600';
-  var crownCol=(d.checked>0)?(d.held>0?SA_FOG_STYLE[4].line:'var(--d-head)'):'var(--d-dim)';
+  var crownCol=(d.checked>0)?(d.held>0?SA_MAP_COL.kom:'var(--d-head)'):'var(--d-dim)';
   H+='<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap">';
   H+='<div style="min-width:0">'
-    +'<div style="'+LBL+';color:'+SA_FOG_STYLE[4].line+'">Crowns held</div>'
+    +'<div style="'+LBL+';color:'+SA_MAP_COL.kom+'">Crowns held</div>'
     +'<div style="display:flex;align-items:baseline;gap:9px;margin-top:5px">'
       +'<span style="font-size:'+crownSize+';font-weight:'+crownWeight+';line-height:1;color:'+crownCol+'">'+crownStr+'</span>'
       +'<span style="font-size:13px;color:var(--d-t3);font-weight:600">of '+d.total.toLocaleString()+' target'+(d.total===1?'':'s')+'</span></div>'
@@ -26871,7 +26882,7 @@ function aiSegTargetsHtml_(ctx){
       : ('Not checked yet &mdash; '+d.komable.toLocaleString()+' target'+(d.komable===1?'':'s')+' have a PB to compare against'))
     +'</div></div>';
   H+='<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:flex-start">'
-    +'<button class="sa-tbtn" id="sa-tgt-sweep" onclick="_saTgtKomSweep_()" style="border-color:'+SA_FOG_STYLE[4].line+'55;color:'+SA_FOG_STYLE[4].line+';font-size:11.5px;padding:8px 13px">'
+    +'<button class="sa-tbtn" id="sa-tgt-sweep" onclick="_saTgtKomSweep_()" style="border-color:'+SA_MAP_COL.kom+'55;color:'+SA_MAP_COL.kom+';font-size:11.5px;padding:8px 13px">'
     +(unchecked>0?('Check crowns ('+Math.min(SA_TGT_SWEEP_CAP, unchecked)+' of '+unchecked+')'):'All checked')+'</button>'
     +'</div></div>';
   // Seeded from the held summary, so the last sweep's result survives the re-render that sweep
@@ -26905,8 +26916,8 @@ function aiSegTargetsHtml_(ctx){
   });
   H+='<span style="align-self:center;color:var(--d-dim);font-size:11px">&rsaquo;</span>'
     +'<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;'
-    +'background:var(--d-inset);border:1px solid '+SA_FOG_STYLE[4].line+'55;border-radius:999px;padding:5px 11px;'
-    +'color:'+(d.held>0?SA_FOG_STYLE[4].line:'var(--d-dim)')+';opacity:'+(d.held>0?'1':'.55')+'">'
+    +'background:var(--d-inset);border:1px solid '+SA_MAP_COL.kom+'55;border-radius:999px;padding:5px 11px;'
+    +'color:'+(d.held>0?SA_MAP_COL.kom:'var(--d-dim)')+';opacity:'+(d.held>0?'1':'.55')+'">'
     +'&#9819; Crown <span style="color:var(--d-dim);font-weight:600">'+(d.checked>0?d.held:'&mdash;')+'</span></span>';
   H+='</div></div>';
 
@@ -26957,18 +26968,18 @@ function aiSegTargetsHtml_(ctx){
     // of it. KOM/QOM is its own category, not a slice of Personal Best - a crown is held against the
     // world, a PB against yourself, and collapsing them would make the rarer one invisible.
     +'<div class="sm-row"><div class="sm-leg">'
-    +'<span class="sm-leg-i"><span style="color:'+SA_FOG_STYLE[3].line+';font-size:13px">&#9819;</span>'
+    +'<span class="sm-leg-i"><span style="color:'+SA_MAP_COL.pb+';font-size:13px">&#9819;</span>'
       +'Personal Best <b style="color:var(--d-head)">('+ms.pb.toLocaleString()+')</b></span>'
     // CROWNS ARE NOT A LIBRARY FIGURE AND MUST NOT PRINT AS ONE. Placement is never stored, so the
     // only honest count is what this session has actually checked, with its own denominator. Before
     // a sweep the truth is "nobody has looked", which is not the same claim as zero.
-    +'<span class="sm-leg-i" title="Placement is fetched live and never stored, so this counts only what has been checked this session."><span style="color:'+SA_FOG_STYLE[4].line+';font-size:13px">&#9819;</span>'
+    +'<span class="sm-leg-i" title="Placement is fetched live and never stored, so this counts only what has been checked this session."><span style="color:'+SA_MAP_COL.kom+';font-size:13px">&#9819;</span>'
       +'KOM / QOM <b style="color:var(--d-head)">'
       +(ms.komChecked>0 ? ('('+ms.komHeld+' of '+ms.komChecked+' checked)') : '(not checked yet)')
       +'</b></span>'
-    +'<span class="sm-leg-i"><span style="width:16px;height:3px;border-radius:2px;background:'+SA_FOG_STYLE[2].line+';flex:none"></span>'
+    +'<span class="sm-leg-i"><span style="width:16px;height:2px;border-radius:2px;background:'+SA_MAP_COL.att+';flex:none"></span>'
       +'Attempted <b style="color:var(--d-head)">('+ms.att.toLocaleString()+')</b></span>'
-    +'<span class="sm-leg-i" title="No effort on record, so no coordinates are stored and these cannot be drawn on the map."><span style="width:16px;height:3px;border-radius:2px;background:#5b6472;flex:none"></span>'
+    +'<span class="sm-leg-i" title="No effort on record, so no coordinates are stored and these cannot be drawn on the map."><span style="width:16px;height:2px;border-radius:2px;background:'+SA_MAP_COL.never+';flex:none"></span>'
       +'Never Attempted <b style="color:var(--d-head)">('+ms.never.toLocaleString()+')</b>'
       +'<span style="color:var(--d-dim);font-weight:600"> &middot; not drawable</span></span>'
     +'</div>'
@@ -26987,30 +26998,33 @@ function aiSegTargetsHtml_(ctx){
     +'<div id="sa-cov-map" style="height:520px;border-radius:12px;overflow:hidden;background:var(--d-inset,#0b1017)"></div>'
     // Button overlaid top-left of the map, per the layout. z-index over Leaflet's own panes (400)
     // and controls (1000), or the zoom buttons sit on top of it.
-    +'<div style="position:absolute;top:12px;left:12px;z-index:1001;display:flex;gap:8px;align-items:center">'
-    +'<button class="sm-ctl" style="background:var(--d-panel);box-shadow:0 1px 4px rgba(0,0,0,.28)" '
-      +'onclick="_saPolySweep_(false)">&#9707; Load road shapes</button>'
-    +'<span id="sa-poly-note" style="font-size:10.5px;color:var(--d-t3);background:var(--d-panel);'
-      +'padding:4px 8px;border-radius:7px;max-width:420px"></span></div>'
-    +'</div>';
+    // NO STATUS BANNER OVER THE MAP. This used to carry a wide dark strip that printed things like
+    // "Rate limit reached - 0 road shapes added..." straight across the top of the map, which is
+    // debug output sitting on the thing it is describing. Progress now lives in the button's own
+    // label, and the detail goes to a subtle line UNDER the map where it cannot cover anything.
+    +'<div style="position:absolute;top:12px;left:12px;z-index:1001">'
+    +'<button class="sm-ctl" id="sa-poly-btn" style="background:var(--d-panel)" '
+      +'onclick="_saPolySweep_(false)">&#9707; Load road shapes</button></div>'
+    +'</div>'
+    +'<div id="sa-poly-note" style="font-size:10.5px;color:var(--d-dim);margin-top:7px;min-height:14px"></div>';
   // ---- THE SUMMARY BAR ---------------------------------------------------------------------
   // The four status counts repeat the legend deliberately: the legend explains the map, the bar
   // reports the library. After them, three cells that are about the RIDING rather than the census.
   H+='<div class="sm-bar">';
-  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[3].line+'">Personal Bests</div>'
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_MAP_COL.pb+'">Personal Bests</div>'
     +'<div class="sm-v">'+ms.pb.toLocaleString()+'</div>'
     +'<div class="sm-s">of '+ms.total.toLocaleString()+' segments</div></div>';
   // The crown cell keeps the pattern the headline established: unmeasured is drawn small and dim,
   // a real count is drawn loud. "0" before a sweep would assert something nobody has checked.
-  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[4].line+'">KOM / QOM</div>'
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_MAP_COL.kom+'">KOM / QOM</div>'
     +(ms.komChecked>0
-      ? ('<div class="sm-v" style="color:'+(ms.komHeld>0?SA_FOG_STYLE[4].line:'var(--d-head)')+'">'+ms.komHeld+'</div>'
+      ? ('<div class="sm-v" style="color:'+(ms.komHeld>0?SA_MAP_COL.kom:'var(--d-head)')+'">'+ms.komHeld+'</div>'
          +'<div class="sm-s">'+ms.komChecked.toLocaleString()+' checked &middot; '
          +Math.max(0,ms.komable-ms.komChecked).toLocaleString()+' unchecked</div>')
       : ('<div class="sm-v" style="font-size:15px;font-weight:600;color:var(--d-dim)">Not checked</div>'
          +'<div class="sm-s">'+ms.komable.toLocaleString()+' have a PB to compare &middot; never stored</div>'))
     +'</div>';
-  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_FOG_STYLE[2].line+'">Attempted</div>'
+  H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_MAP_COL.att+'">Attempted</div>'
     +'<div class="sm-v">'+ms.att.toLocaleString()+'</div>'
     +'<div class="sm-s">ridden, no PB yet</div></div>';
   H+='<div class="sm-cell"><div class="sm-k">Never Attempted</div>'
@@ -27073,7 +27087,7 @@ function aiSegTargetsHtml_(ctx){
 
   function rowHTML(r){
     var isHeld=!!(r.live && !r.live.err && r.live.holds===true);
-    var dotCol=isHeld?SA_FOG_STYLE[4].line:((r.bucket==='pb')?SA_FOG_STYLE[3].line:((r.bucket==='never')?'#64748b':SA_FOG_STYLE[2].line));
+    var dotCol=isHeld?SA_MAP_COL.kom:((r.bucket==='pb')?SA_MAP_COL.pb:((r.bucket==='never')?'#64748b':SA_MAP_COL.att));
     var chanceCell;
     if(r.chance==null) chanceCell='<span class="sa-why">'+esc(r.chanceWhy)+'</span>';
     else if(!r.contested) chanceCell='<span style="color:var(--d-t3);font-weight:700">'+r.chance+'%</span>'
@@ -27084,7 +27098,7 @@ function aiSegTargetsHtml_(ctx){
     return '<div class="sa-r"'+(r.hasGeom?(' onclick="_saMapFocus_(&#39;'+esc(String(r.id))+'&#39;)" style="cursor:pointer"'):'')+'>'
       +'<div class="sa-r-name">'
         +'<span class="sa-r-dot" style="background:'+dotCol+'"></span>'
-        +(isHeld?('<span title="You hold this" style="color:'+SA_FOG_STYLE[4].line+';flex:none">&#9819;</span>'):'')
+        +(isHeld?('<span title="You hold this" style="color:'+SA_MAP_COL.kom+';flex:none">&#9819;</span>'):'')
         +'<span class="sa-r-t">'+esc(r.name)+'</span></div>'
       +'<div class="sa-r-meta">'
         +(r.distMi!=null?(Math.round(r.distMi*100)/100+' mi'):'&mdash;')
@@ -27106,8 +27120,8 @@ function aiSegTargetsHtml_(ctx){
   }
   H+='<div class="sa-list">';
   H+=sectionHTML('Contested opportunities', 'Enough data to model, and the standing time was actually raced.', opp, '#4ade80');
-  H+=sectionHTML('Crowns held', 'Live-checked this session. Kept out of the opportunity ranking - these are already won.', held, SA_FOG_STYLE[4].line);
-  H+=sectionHTML('Close, not ready', 'Either the standing time was a soft pass, or there are too few efforts with power to model one.', close, SA_FOG_STYLE[2].line);
+  H+=sectionHTML('Crowns held', 'Live-checked this session. Kept out of the opportunity ranking - these are already won.', held, SA_MAP_COL.kom);
+  H+=sectionHTML('Close, not ready', 'Either the standing time was a soft pass, or there are too few efforts with power to model one.', close, SA_MAP_COL.att);
   H+=sectionHTML('Never ridden', 'Starred but never matched to a ride, so there is nothing to measure and nothing to map yet.', never, '#64748b');
   H+='</div>';
 
@@ -38394,7 +38408,7 @@ function rideMapBasePref_(){
 // leave it unset and keep opening dark; the Segment Coverage map passes 'satellite', because a
 // segment map is read for WHERE a road goes and dark tiles under coloured segment lines is the
 // near-black-on-black this page was rebuilt to get away from. An explicit choice still wins over it.
-function addRideMapBase_(map, defaultBase){
+function addRideMapBase_(map, defaultBase, storeKey){
   var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
   var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
   // LIGHT STREET base. Segment work reads better over a pale street map than over imagery: the
@@ -38422,16 +38436,23 @@ function addRideMapBase_(map, defaultBase){
     if(which==='light') return;
     try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){}
   }
-  var stored=null; try{ stored=localStorage.getItem('aiq_rideMapBase'); }catch(e){}
-  var wanted=(defaultBase==='satellite'||defaultBase==='light')?defaultBase:null;
-  var pref=stored?rideMapBasePref_():(wanted||rideMapBasePref_());
+  // STORAGE KEY IS PER-SURFACE. Every map shared one key, so a Satellite or Dark choice made once
+  // on a ride map silently overrode the Segment Map's light default on every later visit - the page
+  // rendered dark for anyone who had ever touched that toggle. It never reproduced under test
+  // because a headless run starts from a cold profile with no key set at all, so the default always
+  // won there. A caller that passes its own key gets its own preference.
+  var KEY=storeKey||'aiq_rideMapBase';
+  var stored=null; try{ stored=localStorage.getItem(KEY); }catch(e){}
+  var norm=function(v){ return (v==='satellite'||v==='light')?v:(v==='dark'?'dark':null); };
+  var wanted=norm(defaultBase);
+  var pref=norm(stored)||wanted||rideMapBasePref_();
   (pref==='satellite'?sat:(pref==='light'?light:dark)).addTo(map);
   showLabels(pref);
   L.control.layers({Light:light,Dark:dark,Satellite:sat},null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',function(e){
     var v=(e&&e.name==='Satellite')?'satellite':((e&&e.name==='Light')?'light':'dark');
     showLabels(v);
-    try{ localStorage.setItem('aiq_rideMapBase',v); }catch(err){}
+    try{ localStorage.setItem(KEY,v); }catch(err){}
   });
   return {dark:dark,sat:sat,light:light};
 }

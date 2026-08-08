@@ -43,13 +43,13 @@ const F = new Function(asServed(
   // _saPoly is the session road-shape cache the renderer reads; empty here so every assertion below
   // describes the un-fetched state, and the one test that cares injects its own shapes.
   'var _SA_SINUOUS=1.15, _SA_SINUOUS_BAD=1.6; var _saPoly={};\n'
-  + exv('_SA_HOME_R_M')
+  + exv('_SA_HOME_R_M') + exv('SA_MAP_COL') + exv('SA_MAP_W')
   + ex('isPlainObj_') + ex('_saHaversineM_') + ex('_segBearingDeg_') + ex('_saSinuosity_')
   + ex('_saKomCandidate_') + ex('_saXomSec_') + ex('_saPolyDecode_')
   + exv('SA_FOG_STYLE') + exv('SA_FOG_E2') + ex('_saFogRamp_') + ex('_saFogStyleOf_')
   + ex('_segAbsorb_') + ex('_saFogTierOf_') + ex('_saFogList_') + ex('_saFogHome_') + ex('_saOrdinal_')
   + ex('_saStatusCol_')
-) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_, ramp:_saFogRamp_, poly:_saPolyDecode_, statusCol:_saStatusCol_, STYLE:SA_FOG_STYLE};')();
+) + '\nreturn {tier:_saFogTierOf_, list:_saFogList_, home:_saFogHome_, ord:_saOrdinal_, bear:_segBearingDeg_, absorb:_segAbsorb_, cand:_saKomCandidate_, xom:_saXomSec_, ramp:_saFogRamp_, poly:_saPolyDecode_, statusCol:_saStatusCol_, STYLE:SA_FOG_STYLE, MAPCOL:SA_MAP_COL, MAPW:SA_MAP_W};')();
 
 console.log('\n'+C+'=== 1. the top tier is reachable ONLY from a live check ==='+X);
 check('a live holding result is the top tier', F.tier({prSec:300}, {holds:true}).t, 3);
@@ -352,9 +352,14 @@ ok('a segment 38 miles out does not stretch the opening view to reach it',
 ok('...and that is a real exclusion, not an empty result', !!hf && isFinite(hf.north) && hf.n > 1);
 
 console.log('\n'+C+'=== 11. status colour, with no effort ramp ==='+X);
-check('a crown is the crown colour', F.statusCol({t:3}), F.STYLE[4].line);
-check('a personal best is the PB colour', F.statusCol({t:2}), F.STYLE[3].line);
-check('ridden once is the ridden colour', F.statusCol({t:1, ramp:0}), F.STYLE[2].line);
+// The reference wants GOLD for a personal best and MAGENTA for a crown. SA_FOG_STYLE has those
+// two inverted (pink PB, orange crown) because it was built as a heat ramp, which is why this page
+// carries its own palette rather than borrowing that one.
+check('a crown is magenta', F.statusCol({t:3}), F.MAPCOL.kom);
+check('a personal best is gold', F.statusCol({t:2}), F.MAPCOL.pb);
+check('attempted is blue', F.statusCol({t:1, ramp:0}), F.MAPCOL.att);
+ok('the crown colour is NOT the fog ramp crown colour', F.MAPCOL.kom !== F.STYLE[4].line);
+ok('personal best is gold-ish, not pink', /^#f/i.test(F.MAPCOL.pb) && F.MAPCOL.pb !== F.STYLE[3].line);
 ok('ridden 5 times is the SAME colour as ridden once - status, not a heat ramp',
    F.statusCol({t:1, ramp:0}) === F.statusCol({t:1, ramp:2}));
 ok('the three drawn statuses are three distinct colours',
@@ -363,10 +368,11 @@ ok('the three drawn statuses are three distinct colours',
 console.log('\n'+C+'=== 12. pins: on top of the stretches, but bounded ==='+X);
 ok('segment stretches are still drawn - pins did not replace the lines',
    /L\.polyline\(/.test(mountSrc) && /_saPoly\[/.test(mountSrc));
-ok('a casing is drawn under the colour for contrast on imagery',
-   /segCase/.test(mountSrc) && has("map.createPane('segCase')"));
+// The casing was for contrast over SATELLITE imagery. On a light street basemap it is what made
+// segments read as blocks: a dark outline 3px wider than the line. It is gone, and must stay gone.
+ok('NO casing pane or casing renderer survives', !/segCase/.test(mountSrc) && !has("createPane('segCase')"));
 ok('the interactive line is index 0, so a row tap opens a popup that exists',
-   /_saMapById\[s\.id\]=\[line, ?cas\]/.test(mountSrc));
+   /_saMapById\[s\.id\]=\[line\]/.test(mountSrc));
 const pinSrc = bodyOf('_saPinsRefresh_');
 ok('pins are zoom-gated off a named constant', /_SA_PIN_MINZ/.test(pinSrc) && has('_SA_PIN_MINZ'));
 ok('pins are viewport-scoped, not one per library segment', /getBounds\(\)/.test(pinSrc) && /contains\(/.test(pinSrc));
@@ -393,8 +399,10 @@ ok('pending work is ordered by what is ON SCREEN first', (() => {
   const p = bodyOf('_saPolyPending_');
   return /inView/.test(p) && /getBounds\(\)/.test(p);
 })());
-ok('a chord is drawn subordinate to a real road shape, not identically',
-   /if\(!isReal\) w=/.test(mountSrc) && /isReal\?0\.5:0\.3/.test(mountSrc));
+// A chord is still distinguished from a real road shape -- but by opacity and dashing, NOT by a
+// different stroke width. Width is fixed at SA_MAP_W for every segment at every status.
+ok('a chord is distinguished from a real road shape, without changing the stroke width',
+   /isReal\?0\.95:0\.6/.test(mountSrc) && /dashArray: ?isReal\?null:/.test(mountSrc));
 
 // ---- 14. a sweep can never park on an unanswered request -------------------------------------
 // Both sweeps step forward ONLY when _saSegDetail_'s callback fires, and fetch has no default
@@ -497,8 +505,9 @@ console.log('\n'+C+'=== 17. map chrome uses tokens that actually exist ==='+X);
 ok('no segment-map chrome paints from --d-panel2 with an opaque dark fallback',
    !/--d-panel2\s*,\s*#[0-9a-fA-F]{3,8}/.test(asServed(src)));
 ok('...and the token it was replaced with is really defined', /--d-inset\s*:/.test(src));
-ok('the summary bar paints from a themed token, not a literal hex',
-   /\.sm-bar\{[^}]*var\(--d-inset\)/.test(asServed(src)));
+// The reference shows the summary bar as a WHITE card row, not the page's grey inset.
+ok('the summary bar is a white card row from a themed token, not a literal hex',
+   /\.sm-bar\{[^}]*var\(--d-panel\)/.test(asServed(src)));
 ok('the filter controls too', /\.sm-ctl\{[^}]*var\(--d-inset\)/.test(asServed(src)));
 ok('the road-shapes button does not sit on top of the zoom control',
    has('.leaflet-top.leaflet-left{margin-top'));
@@ -527,6 +536,49 @@ ok('promote recolours the line only, never the casing', (() => {
   const p = bodyOf('_saMapPromote_');
   return /layers\[0\]/.test(p) && !/layers\.forEach/.test(p);
 })());
+
+
+// ---- 19. the reference spec's hard constraints ----------------------------------------------
+// This page was rejected repeatedly on three things: thick lines, oversized pins, and a basemap
+// that came up dark. Each of those is now a pinned number or a pinned absence, because "looks
+// right" is not something the suite can see and these are what kept regressing.
+console.log('\n'+C+'=== 19. thin lines, small pins, light base ==='+X);
+check('the stroke width constant is 2px', F.MAPW, 2);
+ok('every polyline in the mount uses that constant, with no per-tier width',
+   (() => {
+     const weights = [...mountSrc.matchAll(/weight:\s*([^,}]+)/g)].map(m => m[1].trim());
+     return weights.length > 0 && weights.every(w => w === 'SA_MAP_W');
+   })(), [...mountSrc.matchAll(/weight:\s*([^,}]+)/g)].map(m => m[1].trim()).join(' | '));
+ok('promote recolours without fattening the stroke',
+   /weight:SA_MAP_W/.test(bodyOf('_saMapPromote_')));
+// Pins: circular, 16-18px, white fill, thin coloured ring, no shadow, no teardrop path.
+const pinIcon = bodyOf('_saPinIcon_');
+ok('pin diameter is a named constant in the 16-18px range',
+   (() => { const m = asServed(src).match(/var\s+SA_PIN_D\s*=\s*(\d+)/); return !!m && +m[1] >= 16 && +m[1] <= 18; })());
+ok('the pin is a circle, not a teardrop path', /<circle/.test(pinIcon) && !/<path/.test(pinIcon));
+ok('the pin is white-filled with a coloured ring', /fill="#fff"\s+stroke="'\+col\+'"/.test(pinIcon));
+ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
+ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
+// Basemap: light, and immune to a ride-map preference set elsewhere.
+ok('the segment map defaults to the light street base', /addRideMapBase_\(map,'light'/.test(mountSrc));
+ok('...under its OWN storage key, so a ride-map choice cannot override it',
+   /addRideMapBase_\(map,'light','aiq_segMapBase'\)/.test(mountSrc));
+ok('addRideMapBase_ honours a per-surface key', (() => {
+  const b = bodyOf('addRideMapBase_');
+  return /storeKey/.test(b) && /var KEY=storeKey\|\|/.test(b) && /getItem\(KEY\)/.test(b) && /setItem\(KEY/.test(b);
+})());
+// No debug banner over the map surface.
+ok('the backfill note is NOT positioned over the map',
+   !/position:absolute[^']*id="sa-poly-note"/.test(asServed(src))
+   && /id="sa-poly-note"[^>]*margin-top/.test(asServed(src)));
+ok('the button carries live progress instead of a banner',
+   /btnSay\(/.test(bodyOf('_saPolySweep_')));
+// Total time must not claim a share of riding time.
+// Comment-stripped, because the note explaining WHY this figure is absent necessarily names it --
+// the same trap that made two earlier checks read their own documentation as code.
+const rendSrc = bodyOf('aiSegTargetsHtml_');
+ok('the stat bar still refuses to print a % of riding time',
+   /not a share of ride time/.test(rendSrc) && !/% of all riding time/.test(rendSrc));
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);
