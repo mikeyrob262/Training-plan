@@ -503,6 +503,26 @@ ok('the filter controls too', /\.sm-ctl\{[^}]*var\(--d-inset\)/.test(asServed(sr
 ok('the road-shapes button does not sit on top of the zoom control',
    has('.leaflet-top.leaflet-left{margin-top'));
 
+// ---- 18. showScreen must not delete a map it does not own -----------------------------------
+// Measured: 2 of 6 cold loads rendered NO MAP. showScreen sweeps every .leaflet-container in the
+// document to clear stray weather maps, and the store_v2 tail load calls showHomeDash() a few
+// seconds after boot regardless of the surface showing -- so a map mounted at 1.1s was removed at
+// 5.3s with nothing to re-mount it. Mounting on a child protects the BOX, not the canvas: Leaflet
+// stamps .leaflet-container on the child, which is exactly what the sweep matched.
+console.log('\n'+C+'=== 18. the global leaflet sweep is scoped ==='+X);
+const scrSrc = bodyOf('showScreen');
+ok('showScreen still clears stray leaflet containers', /leaflet-container/.test(scrSrc));
+ok('...but skips surfaces that own their map lifecycle',
+   /data-keep-map/.test(scrSrc) && /closest\(/.test(scrSrc));
+ok('...and the skip happens BEFORE the remove', (() => {
+  const i = scrSrc.indexOf('data-keep-map'), j = scrSrc.indexOf('el.remove()', i);
+  return i > 0 && j > i;
+})());
+ok('the segment map marks itself as owning its lifecycle',
+   /setAttribute\('data-keep-map'/.test(mountSrc));
+ok('...on the sized box, so the canvas child is covered by closest()',
+   /el\.setAttribute\('data-keep-map'/.test(mountSrc));
+
 ok('promote recolours the line only, never the casing', (() => {
   const p = bodyOf('_saMapPromote_');
   return /layers\[0\]/.test(p) && !/layers\.forEach/.test(p);

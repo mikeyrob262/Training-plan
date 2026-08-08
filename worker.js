@@ -9510,8 +9510,21 @@ function showScreen(id){
   try{Object.keys(window).filter(function(k){return k.indexOf('_wxmap_')===0;}).forEach(function(k){try{window[k].remove();}catch(e){}delete window[k];});}catch(e){}
   // Remove all fixed overlay screens
   ['WX-DETAIL','CAL-SCREEN','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
-  // Remove any stray leaflet containers
-  document.querySelectorAll('.leaflet-container').forEach(function(el){el.remove();});
+  // Remove any stray leaflet containers.
+  //
+  // SCOPED, because this sweep is global and showScreen only owns the fixed overlay screens above.
+  // It was deleting the desktop Segment Map out from under a user who was looking at it: the
+  // store_v2 tail load resolves a few seconds after boot and calls showHomeDash() no matter which
+  // surface is showing, so a map mounted at 1.1s was removed at 5.3s with nothing to re-mount it.
+  // Measured 2 failures in 6 cold loads, and the map simply was not there.
+  //
+  // Mounting on a CHILD of the sized box protects the box, not the canvas - Leaflet stamps
+  // .leaflet-container on whatever element it is handed, so the child is exactly what this matched.
+  // A surface that manages its own map lifecycle marks itself data-keep-map and is skipped.
+  document.querySelectorAll('.leaflet-container').forEach(function(el){
+    try{ if(el.closest && el.closest('[data-keep-map]')) return; }catch(e){}
+    el.remove();
+  });
   // Ensure week header is visible
   var bwt=document.getElementById('btn-wt');if(bwt)bwt.style.display='';
   document.getElementById('TRAIN').style.display=id==='TRAIN'?'block':'none';
@@ -26251,6 +26264,9 @@ function _saPinsRefresh_(map){
 function _saMapMount_(){
   var el=document.getElementById('sa-cov-map');
   if(!el || typeof L==='undefined') return;
+  // This surface owns its map's lifecycle: it is remounted by its own render, by the road-shape
+  // load and by the filters. showScreen's global .leaflet-container sweep must not reach inside it.
+  try{ el.setAttribute('data-keep-map','1'); }catch(e){}
   // Road shapes load once per session; the mount re-runs with real geometry once they land, so the
   // first paint is chords and the second is roads.
   if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
