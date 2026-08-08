@@ -455,6 +455,35 @@ ok('the renderer seeds the note from the holder, so a re-render restores it',
 ok('the sweep still re-renders so rows can move into Crowns held',
    /aiSetTab_\('segattack'\)/.test(swpSrc));
 
+// ---- 16. the legend census must add up ------------------------------------------------------
+// Shipped once adding to 2,042 of 2,017: "never attempted" was a separate no-efforts test, so the
+// 25 segments carrying a Strava PB with no harvested efforts counted as BOTH a personal best and
+// never attempted. Three status buckets over one library have exactly one invariant worth pinning.
+console.log('\n'+C+'=== 16. the status buckets partition the library ==='+X);
+const statsFn = new Function('isPlainObj_', '_saKomCandidate_', '_saSegNum_', '_saKomLive', 'st',
+  asServed(ex('_saEffSec_') + ex('_saEffDay_') + ex('_saMapStats_')) + '\nreturn _saMapStats_;');
+const mkStore = () => ({
+  a: { prSec: 100, efforts: [{ d: '2026-01-01', s: 90 }] },        // PB, ridden
+  b: { prSec: 120, efforts: [] },                                   // PB, NO efforts -- the trap
+  c: { efforts: [{ d: '2026-01-02', s: 80 }] },                     // attempted, no PB
+  d: { efforts: [] },                                               // never attempted
+  e: { effortCount: 3 }                                             // attempted via effortCount only
+});
+// statsFn RETURNS _saMapStats_; it does not run it. The extra () is the actual call.
+const runStats = store => statsFn(o => !!o && typeof o === 'object' && !Array.isArray(o),
+                                  () => false, () => 0, {}, { segments: store })();
+const stats = runStats(mkStore());
+check('personal bests', stats.pb, 2);
+check('attempted', stats.att, 2);
+check('never attempted excludes the PB-with-no-efforts segment', stats.never, 1);
+ok('the three buckets sum to the library total',
+   stats.pb + stats.att + stats.never === stats.total,
+   stats.pb + '+' + stats.att + '+' + stats.never + ' vs ' + stats.total);
+// Total time reads BOTH effort shapes -- {d,s} and the legacy {date,sec}.
+const stats2 = runStats({ x: { efforts: [{ d: '2026-01-01', s: 60 }, { date: '2026-01-02', sec: 40 }] } });
+check('total time counts the legacy {date,sec} effort shape too', stats2.segSec, 100);
+check('...and counts both as timed efforts', stats2.effN, 2);
+
 ok('promote recolours the line only, never the casing', (() => {
   const p = asServed(src.slice(src.indexOf('function _saMapPromote_('),
                                matchBrace(src.indexOf('function _saMapPromote_('))+1))

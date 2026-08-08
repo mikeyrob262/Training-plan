@@ -26550,9 +26550,13 @@ function _saMapStats_(){
     total++;
     var effs=(s.efforts&&s.efforts.length)?s.efforts:[];
     var n=Math.max(+s.effortCount||0, effs.length);
+    // MUTUALLY EXCLUSIVE, and they must sum to the total. The first version counted never as a
+    // separate "no efforts" test, which double-counted the 25 segments that carry a Strava PB but
+    // have no effort records harvested: they landed in Personal Best AND in Never Attempted, and the
+    // legend added up to 2,042 of 2,017. A segment holding a PB has self-evidently been attempted.
     if(+s.prSec>0) pb++;
     else if(n>0) att++;
-    if(!n) never++;
+    else never++;
     for(var i=0;i<effs.length;i++){ var t=_saEffSec_(effs[i]); if(t>0){ segSec+=t; effN++; } }
     if(s.prDate){ var d=String(s.prDate).slice(0,10); prByDay[d]=(prByDay[d]||0)+1; }
     if(n>0 && +s.distMi>0 && (!longest || +s.distMi>longest.mi)){
