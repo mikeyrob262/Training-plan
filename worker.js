@@ -27241,7 +27241,7 @@ function aiSegTargetsHtml_(ctx){
   // itself triggers. Empty on a fresh load, which is correct - nothing has been checked yet.
   H+='<div id="sa-tgt-note" style="font-size:11px;color:var(--d-t3);margin-top:9px">'+(_saTgtNote||'')+'</div>';
   H+='<div style="font-size:11px;color:var(--d-dim);margin-top:7px;line-height:1.55">'
-    +'Placement is fetched live and thrown away &mdash; nothing about it is written to your data, so nothing in it can go stale. '
+    +'Placement is checked against the current Strava leaderboard and saved with the date it was checked, so a crown always says how old it is and is re-verified after 30 days. '
     +'Only targets with a recorded PB are checked; a crown is not plausible on a segment you have ridden without ever setting a best.</div>';
 
   // ---- the conversion funnel ----

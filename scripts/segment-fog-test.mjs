@@ -215,11 +215,19 @@ ok('the live check reads /segments/{id}, not the upload-time rank endpoint',
 // the target list states the same two things — rather than being deleted along with the wording.
 //   1. This list is a subset of what Strava matched, not of roads ridden. The map said "unlit ground
 //      is road with no Strava segment on it"; the list says the same limit as a denominator.
-//   2. Placement is never stored. This is the one the whole KOM headline rests on.
+//   2. What a placement's age is. Placements ARE stored now, so the honesty the old wording carried
+//      ("never stored, so it cannot go stale") has to be carried by the date instead.
 ok('the list states it covers only what Strava matched, not roads ridden',
    has('segments Strava has matched to your rides'));
-ok('the UI states that placement is never stored',
-   has('fetched live and thrown away') && has('nothing about it is written to your data'));
+// SUPERSEDED BY DESIGN, NOT BY ACCIDENT. This used to assert the UI said placement was "fetched
+// live and thrown away". That was true, and it was how the surface stayed honest - but it meant
+// every reload discarded every check and the headline read "not checked yet" forever. The honesty
+// now comes from the date rather than from refusing to store, so the assertion inverts: the old
+// claim must be GONE, and the new one must be present and say it re-verifies.
+ok('the UI no longer claims placement is thrown away',
+   !has('fetched live and thrown away') && !has('nothing about it is written to your data'));
+ok('...and tells the athlete a crown is dated and re-verified',
+   has('saved with the date it was checked') && has('re-verified after 30 days'));
 // The crown headline must NOT print a zero before anything has been checked: "0 of N" asserts the
 // athlete holds none, when the truth pre-sweep is that nobody looked. Guarded on the em-dash branch
 // being keyed to the CHECKED count, not to the held count.
@@ -762,7 +770,12 @@ ok('the sweep no longer tells the athlete nothing was stored',
 // A rule QUOTED IN A COMMENT is not a violation, and this file is CRLF - so strip on CR-aware
 // line ends, not on $ alone.
 const codeOnly = src.split(/\r?\n/).filter(L => !/^\s*\/\//.test(L)).join('\n');
-ok('no surface still tells the athlete placements are never stored', !/never stored/.test(codeOnly));
+// Three different phrasings of the same now-false claim shipped in three places; the first grep
+// for it found only one, so this asserts on all of them.
+ok('no surface still tells the athlete placements are never stored',
+   !/never stored/.test(codeOnly));
+ok('...nor that they are thrown away', !/thrown away/.test(codeOnly));
+ok('...nor that nothing is written to the data', !/written to your data/.test(codeOnly));
 ok('...and the legend tooltip says they are dated instead',
    /stored with the date it was checked/.test(codeOnly));
 ok('placements hydrate on mount like road shapes do',
