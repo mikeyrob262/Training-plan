@@ -407,7 +407,12 @@ ok('...and a nominal width matching the reference core, 10-13px', (() => {
 })());
 ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
-check('personal best is DARK orange', F.MAPCOL.pb, '#c2410c');
+check('personal best is GOLD', F.MAPCOL.pb, '#fea541');
+// The crown used to be the line colour, so every crown sat invisibly on the segment it marked.
+ok('...and the crown does NOT share the line colour', (() => {
+  const line = (asServed(src).match(/var SA_LINE_COL='([^']+)'/)||[])[1];
+  return line && F.MAPCOL.pb.toLowerCase() !== line.toLowerCase();
+})());
 check('KOM/QOM is the legend purple', F.MAPCOL.kom, '#c73dca');
 check('attempted is near-black, for the square', F.MAPCOL.att, '#111827');
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',

@@ -26236,7 +26236,12 @@ var _saMapSegs=[], _saPinLayer=null;
 // that actually holds against a light basemap - a PR being hard to pick out was the whole problem.
 // Shape now carries the distinction as well as tone: crown vs drop, dark vs light.
 // KOM/QOM keeps the legend purple (it is not blue, and it was not part of the override).
-var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#111827', never:'#9ca3af' };
+// PERSONAL BEST IS GOLD. It is the #fea541 measured off the reference image's own legend crown,
+// not an invented gold. The crown was previously the same dark orange as the lines, so every crown
+// sat invisibly on the segment it marked - luminance 88 against 88. Gold is 177, an 89-step
+// separation from the line and 78 from the white halo, so it reads against both.
+// Lines stay #c2410c, attempts stay near-black, KOM/QOM stays purple.
+var SA_MAP_COL={ pb:'#fea541', kom:'#c73dca', att:'#111827', never:'#9ca3af' };
 // EVERY line is this one colour - the same dark orange as the personal-best crown. Status lives
 // entirely in the pin now (crown / square / teardrop), so colouring the line as well would state it
 // twice and give the map two legends for one fact.
