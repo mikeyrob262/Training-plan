@@ -26244,16 +26244,17 @@ var _saMapSegs=[], _saPinLayer=null;
 // the values. Grey is legend/stat-bar only; never-attempted has no coordinates and is never drawn.
 // attRing is the ORANGE edge on attempted pins only - the sampled gold, reused as a ring so the
 // blue pins read against the blue lines they sit on.
-var SA_MAP_COL={ pb:'#fc9339', kom:'#ee4e98', att:'#4887f0', never:'#9aa3af', attRing:'#fc9339' };
+// SAMPLED FROM THE REFERENCE'S LEGEND ROW, which is the row the categories are defined by:
+//   Personal Best  #fea541 gold      KOM / QOM  #c73dca purple      Attempted  #107df9 blue
+// The map pins in the same mockup sample slightly differently (#fc9339 / #ee4e98 / #4887f0) - it is
+// a synthetic image and its own legend and markers disagree. The legend wins, because that is what
+// names the categories, and one palette across legend, pins and lines beats matching two halves of
+// an inconsistent source.
+var SA_MAP_COL={ pb:'#fea541', kom:'#c73dca', att:'#107df9', never:'#9ca3af', attRing:'#fea541' };
 // EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
 // under the markers rather than competing with them.
-// LIGHT CYAN, deliberately not warm. The Esri hybrid draws its road network in salmon/orange, and
-// an orange segment line sat right on top of that hue - confirmed unreadable in satellite view. Cyan
-// shares no hue with the road overlay, with the gold crown, or with the imagery's greens and browns,
-// so all three read separately. Light rather than dark so the gold crown stands out against it.
-var SA_LINE_COL='#22d3ee';
 // How far the satellite imagery is dimmed. One number, easy to move, applied to the imagery only.
 // >1 LIGHTENS. The dim pass made the imagery muddy; this lifts it instead so the segments and
 // crowns sit on a brighter ground. Imagery only - roads, labels and segments are in higher panes.
@@ -26279,38 +26280,21 @@ function _saStatusCol_(t){
 // antialiasing costs about 2px of it, so a nominal 8x12 measured only 6x9 against the reference's
 // 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
 // on the reference proportion; the numbers in the verification are what this was tuned against.
-var SA_PIN_W=14, SA_PIN_H=20;
-// Which marker a segment gets. THE PIN NOW CARRIES THE STATUS, because the lines no longer do -
-// every line is one colour, so crown-vs-ring is the only thing distinguishing a PR from an attempt.
+var SA_PIN_W=11, SA_PIN_H=16;
+// One teardrop per segment, filled in its CATEGORY colour, per the reference. The crown-for-PB and
+// the white/orange ring were a later direction that the reference does not contain: in the image
+// every marker is the same teardrop and only its colour differs.
 function _saPinKind_(tier){ var t=(tier&&tier.t)||1; return (t>=3)?'kom':((t===2)?'pb':'att'); }
-function _saPinIcon_(col, kind){
+function _saPinIcon_(col){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
-  // PERSONAL BEST IS A CROWN, not a teardrop. It replaces the pin shape outright: on imagery a
-  // silhouette reads faster than a colour, and a PR is the thing worth spotting from across the map.
-  if(kind==='pb'){
-    var cw=17, ch=14, s=cw/12;
-    // Classic five-point crown, drawn in a 12x10 space and scaled.
-    var cd='M '+(1*s)+' '+(9*s)+' L '+(1*s)+' '+(2.6*s)+' L '+(3.6*s)+' '+(5.2*s)
-          +' L '+(6*s)+' '+(1.2*s)+' L '+(8.4*s)+' '+(5.2*s)+' L '+(11*s)+' '+(2.6*s)
-          +' L '+(11*s)+' '+(9*s)+' Z';
-    return L.divIcon({ className:'', iconSize:[cw,ch], iconAnchor:[cw/2,ch/2], popupAnchor:[0,-ch/2],
-      html:'<svg width="'+cw+'" height="'+ch+'" viewBox="0 0 '+cw+' '+ch+'" style="display:block">'
-        +'<path d="'+cd+'" fill="'+SA_MAP_COL.pb+'" stroke="#3a2708" stroke-width="0.6" '
-        +'stroke-linejoin="round"/></svg>' });
-  }
-  // ATTEMPTED IS A HOLLOW ORANGE RING - orange outline, WHITE centre, no blue anywhere. Against a
-  // single orange line colour a filled pin would disappear into it; a white core keeps it readable.
-  var isAtt=(kind==='att');
-  var fill=isAtt?'#ffffff':col;
-  var edge=isAtt?SA_MAP_COL.attRing:'#fff';
-  var ew=isAtt?1.6:0.7;
-  // Teardrop: a circle at the top closing to a point at the bottom.
+  // Teardrop: a circle at the top closing to a point at the bottom. Measured off the reference at
+  // 9x13px of coloured core in a 1317px panel - h/w 1.44, taller than wide.
   var d='M '+cx+' '+h+' C '+(cx-r*1.15)+' '+(h-r*1.9)+' '+(cx-r)+' '+(cy+r*0.7)+' '+(cx-r)+' '+cy
        +' A '+r+' '+r+' 0 1 1 '+(cx+r)+' '+cy
        +' C '+(cx+r)+' '+(cy+r*0.7)+' '+(cx+r*1.15)+' '+(h-r*1.9)+' '+cx+' '+h+' Z';
   return L.divIcon({ className:'', iconSize:[w,h], iconAnchor:[cx,h], popupAnchor:[0,-h],
     html:'<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" style="display:block">'
-      +'<path d="'+d+'" fill="'+fill+'" stroke="'+edge+'" stroke-width="'+ew+'"/></svg>' });
+      +'<path d="'+d+'" fill="'+col+'" stroke="#fff" stroke-width="0.7"/></svg>' });
 }
 function _saPinsRefresh_(map){
   if(!map) return;
@@ -26335,7 +26319,7 @@ function _saPinsRefresh_(map){
     if(!e.at || !b.contains(L.latLng(e.at[0], e.at[1]))) continue;
     if(++n>_SA_PIN_CAP) break;
     (function(ent){
-      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, _saPinKind_(ent.s.tier)), riseOnHover:true})
+      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col), riseOnHover:true})
         .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
       m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
       _saPinLayer.addLayer(m);
@@ -26377,16 +26361,7 @@ function _saMapMount_(){
   var map=L.map(host,{zoomControl:true,scrollWheelZoom:false,attributionControl:false,
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
   _saMap=map;
-  addRideMapBase_(map,'satellite','aiq_segMapBase');
-  // A MODEST DARKENING PASS, on the IMAGERY ONLY. Applied to tilePane, so the roads and place
-  // labels in routeLabels and the segments above them keep their full brightness - darkening the
-  // whole map would defeat the point by dimming exactly what has to stay readable. Deliberately
-  // gentle and deliberately a single named number: this is a starting point to react to, not a
-  // value anyone can pick correctly up front.
-  try{
-    var tp=map.getPane('tilePane');
-    if(tp) tp.style.filter='brightness('+SA_MAP_BRIGHT+') saturate(0.94)';
-  }catch(e){}
+  addRideMapBase_(map,'light','aiq_segMapBase');
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
@@ -26399,37 +26374,8 @@ function _saMapMount_(){
   // the map that was just removed, so the guard inside _saPinsRefresh_ would consider it live and
   // add pins to a dead map - the same trap the old dot-band guard hit.
   _saMapSegs=[]; _saPinLayer=null;
-  var hidden=0, outOfWindow=0, dupLine=0;
-  // COLLINEAR PILE-UP. Measured in the default view: 157 of 230 segments in frame sit within 12px
-  // and 12 degrees of another - Strava carries many segments over the same stretch of popular road,
-  // and drawing every one of them braids five or six lines along a single carriageway. That is the
-  // clutter at Paul B Henry Fwy and every other busy junction.
-  //
-  // Since every line is now ONE colour, an overlapping duplicate carries no information at all, so
-  // skipping it loses nothing: the segment keeps its PIN and stays clickable and listed. Keyed
-  // geographically, not in screen space, so the decision does not change under zoom.
-  var lineSeen={};
-  // Keyed on MIDPOINT + BEARING, which is the overlap that was actually measured. An
-  // endpoint-pair key only catches exact duplicates: it merged 447 across the library but left the
-  // default view untouched at 230, because segments sharing a carriageway rarely share both ends.
-  // Bearing is folded to 180 degrees so an out-and-back pair counts once.
-  var geoKey=function(pts){
-    var a=pts[0], z=pts[pts.length-1];
-    var mLat=(a[0]+z[0])/2, mLon=(a[1]+z[1])/2;
-    var q=function(v){ return Math.round(v*250)/250; };          // ~440m cell
-    var brg=Math.atan2(z[0]-a[0], (z[1]-a[1])*Math.cos(mLat*Math.PI/180))*180/Math.PI;
-    brg=((brg%180)+180)%180;                                     // direction-agnostic
-    return q(mLat)+','+q(mLon)+'@'+Math.round(brg/20);
-  };
-  // LONGEST FIRST, so the survivor of a merge is never shorter than what it stands in for. Drawn in
-  // arrival order, a 200m segment could claim the cell and suppress the 3km one sharing that road,
-  // which would show LESS road than the data has.
-  var drawList=data.segs.slice().sort(function(p,q2){
-    var lp=_saHaversineM_(p.lat,p.lon,(p.endLat!=null?p.endLat:p.lat),(p.endLon!=null?p.endLon:p.lon))||0;
-    var lq=_saHaversineM_(q2.lat,q2.lon,(q2.endLat!=null?q2.endLat:q2.lat),(q2.endLon!=null?q2.endLon:q2.lon))||0;
-    return lq-lp;
-  });
-  drawList.forEach(function(s){
+  var hidden=0, outOfWindow=0;
+  data.segs.forEach(function(s){
     // Filters, applied at DRAW time so the counts below can report what was withheld rather than
     // quietly showing less map than the legend claims.
     if(_saMapHide[_saStatusKey_(s.tier)]){ hidden++; return; }
@@ -26441,7 +26387,7 @@ function _saMapMount_(){
     // which reads as three different KINDS of thing on a map whose whole legend is status. Crown,
     // personal best, ridden - and never-ridden, which cannot be drawn at all (no coordinates are
     // stored for a segment that was never matched to a ride).
-    var col=SA_LINE_COL;                     // one colour for every line; the pin carries status
+    var col=_saStatusCol_(s.tier);           // category colour, per the legend
     var pts=_saPoly['s'+_saSegNum_(s.id)]||_saPoly[s.id]||null;
     var isReal=!!(pts && pts.length>1);
     if(!isReal){
@@ -26449,14 +26395,6 @@ function _saMapMount_(){
       if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
       if(pts.length<2) return;
     }
-    // Drop a line that duplicates a stretch already drawn. The pin is still added below.
-    var gk=geoKey(pts);
-    if(lineSeen[gk]){
-      dupLine++;
-      _saMapSegs.push({s:s, at:pts[0], col:_saStatusCol_(s.tier)});
-      return;
-    }
-    lineSeen[gk]=1;
     if(isReal) real++;
     drawn++;
     var top=(s.tier.t>=2);
@@ -26527,8 +26465,6 @@ function _saMapMount_(){
   if(note) note.innerHTML=drawn.toLocaleString()+' segment'+(drawn===1?'':'s')+' drawn &middot; '
     +real.toLocaleString()+' on their real road shape, '+(drawn-real).toLocaleString()+' as a straight line between endpoints'
     +(outOfWindow?(' &middot; '+outOfWindow.toLocaleString()+' outside the date filter'):'')
-    +(outOfWindow?'':'')
-    +(dupLine?(' &middot; '+dupLine.toLocaleString()+' sharing a stretch already drawn'):'')
     +(hidden?(' &middot; '+hidden.toLocaleString()+' hidden by filters'):'');
 }
 // Tapping a list row flies the map to that segment and opens its popup - the list and the map are
@@ -26683,6 +26619,8 @@ function _saEffDay_(e){ return e ? String(e.d||e.date||'').slice(0,10) : ''; }
 function _saMapStats_(){
   var store=(typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{};
   var pb=0, att=0, never=0, total=0, segSec=0, effN=0;
+  // Time split by status, so the donut draws a real proportion rather than decoration.
+  var secBy={pb:0, att:0, never:0};
   var prByDay={}, longest=null;
   Object.keys(store).forEach(function(k){
     var s=store[k]; if(!s) return;
@@ -26696,7 +26634,8 @@ function _saMapStats_(){
     if(+s.prSec>0) pb++;
     else if(n>0) att++;
     else never++;
-    for(var i=0;i<effs.length;i++){ var t=_saEffSec_(effs[i]); if(t>0){ segSec+=t; effN++; } }
+    var bucketK=(+s.prSec>0)?'pb':((n>0)?'att':'never');
+    for(var i=0;i<effs.length;i++){ var t=_saEffSec_(effs[i]); if(t>0){ segSec+=t; effN++; secBy[bucketK]+=t; } }
     if(s.prDate){ var d=String(s.prDate).slice(0,10); prByDay[d]=(prByDay[d]||0)+1; }
     if(n>0 && +s.distMi>0 && (!longest || +s.distMi>longest.mi)){
       var last=null;
@@ -26720,7 +26659,7 @@ function _saMapStats_(){
     var lv=_saKomLive['s'+num];
     if(lv && !lv.err){ checked++; if(lv.holds===true) held++; }
   });
-  return { pb:pb, att:att, never:never, total:total,
+  return { pb:pb, att:att, never:never, total:total, secBy:secBy,
            segSec:segSec, effN:effN, longest:longest,
            prBest:best, prSpark:recent,
            komChecked:checked, komHeld:held, komable:komable };
@@ -27168,9 +27107,26 @@ function aiSegTargetsHtml_(ctx){
   // rides that carry no numeric time field. Computed anyway it reads 68%, which would be presented
   // as a fact and is not one. The sum itself is real, so that is what is shown, with what it is
   // summed from.
-  H+='<div class="sm-cell"><div class="sm-k">Time on Segments</div>'
+  // THE DONUT DRAWS THE TIME SPLIT BY STATUS, which is a real proportion of a real total. The
+  // reference puts "% of all riding time" here and that figure still cannot be made honest -
+  // segment efforts overlap, so the numerator double-counts, and 181 of 820 rides carry no numeric
+  // time at all. This keeps the donut the reference asks for and gives it something true to show:
+  // how the time on segments divides between personal bests and everything else.
+  var dTot=Math.max(1, ms.secBy.pb+ms.secBy.att);
+  var dPb=ms.secBy.pb/dTot, R=17, C=2*Math.PI*R;
+  H+='<div class="sm-cell" style="display:flex;align-items:center;gap:12px">'
+    +'<div style="min-width:0;flex:1">'
+    +'<div class="sm-k">Time on Segments</div>'
     +'<div class="sm-v">'+_saFmtHM_(ms.segSec)+'</div>'
-    +'<div class="sm-s">'+ms.effN.toLocaleString()+' timed efforts &middot; segments overlap, so this is not a share of ride time</div></div>';
+    +'<div class="sm-s">'+ms.effN.toLocaleString()+' timed efforts &middot; '
+    +Math.round(dPb*100)+'% on personal bests</div></div>'
+    +'<svg width="46" height="46" viewBox="0 0 46 46" style="flex:none">'
+    +'<circle cx="23" cy="23" r="'+R+'" fill="none" stroke="var(--d-edge3)" stroke-width="7"/>'
+    +'<circle cx="23" cy="23" r="'+R+'" fill="none" stroke="'+SA_MAP_COL.att+'" stroke-width="7"'
+    +' stroke-dasharray="'+C+'" stroke-dashoffset="0" transform="rotate(-90 23 23)"/>'
+    +'<circle cx="23" cy="23" r="'+R+'" fill="none" stroke="'+SA_MAP_COL.pb+'" stroke-width="7"'
+    +' stroke-dasharray="'+(C*dPb)+' '+(C*(1-dPb))+'" transform="rotate(-90 23 23)"/>'
+    +'</svg></div>';
   H+='</div></div>';
 
   // ---- THE LIST ----

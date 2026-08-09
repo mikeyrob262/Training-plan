@@ -401,15 +401,15 @@ ok('...with the reference aspect ratio (h/w between 1.3 and 1.6)', (() => {
   const h = +(asServed(src).match(/SA_PIN_H\s*=\s*(\d+)/) || [])[1];
   return w && h && (h / w) >= 1.3 && (h / w) <= 1.6;
 })());
-ok('...and a nominal width in the sized-up band, 13-16px', (() => {
+ok('...and a nominal width matching the reference core, 10-13px', (() => {
   const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/) || [])[1];
-  return w >= 13 && w <= 16;
+  return w >= 10 && w <= 13;
 })());
 ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
-check('personal best is the sampled gold', F.MAPCOL.pb, '#fc9339');
-check('KOM/QOM is the sampled magenta', F.MAPCOL.kom, '#ee4e98');
-check('attempted is the sampled blue', F.MAPCOL.att, '#4887f0');
+check('personal best is the legend gold', F.MAPCOL.pb, '#fea541');
+check('KOM/QOM is the legend purple', F.MAPCOL.kom, '#c73dca');
+check('attempted is the legend blue', F.MAPCOL.att, '#107df9');
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
 // _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of
@@ -597,11 +597,10 @@ ok('the base tiles do NOT use detectRetina', (() => {
   return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
 })());
 ok('the pin matches the image: a teardrop path', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
-ok('the pin is filled from its status or the attempted white', /fill="'\+fill\+'"/.test(pinIcon));
+ok('the pin is filled in its category colour', /fill="'\+col\+'"/.test(pinIcon));
 // Attempted pins ring in ORANGE; PB and KOM keep the plain white edge.
-ok('attempted pins take the orange ring', /attRing/.test(pinIcon) && has("attRing:'#fc9339'"));
-ok('...only attempted - the edge is conditional on the attempted kind',
-   /isAtt\?SA_MAP_COL\.attRing/.test(pinIcon) && /:'#fff'/.test(pinIcon));
+
+
 // Voyager bakes labels into the base tile at z200, under the segments at z620 and pins at z640.
 ok('the light base uses the NOLABELS style', has('voyager_nolabels'));
 ok('...with labels re-added in the pane ABOVE the segments and pins',
@@ -609,9 +608,9 @@ ok('...with labels re-added in the pane ABOVE the segments and pins',
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
 ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
 // Basemap: light, and immune to a ride-map preference set elsewhere.
-ok('the segment map defaults to the HYBRID base', /addRideMapBase_\(map,'satellite'/.test(mountSrc));
+ok('the segment map defaults to the light/flat base', /addRideMapBase_\(map,'light'/.test(mountSrc));
 ok('...under its OWN storage key, so a ride-map choice cannot override it',
-   /addRideMapBase_\(map,'satellite','aiq_segMapBase'\)/.test(mountSrc));
+   /addRideMapBase_\(map,'light','aiq_segMapBase'\)/.test(mountSrc));
 ok('addRideMapBase_ honours a per-surface key', (() => {
   const b = bodyOf('addRideMapBase_');
   return /storeKey/.test(b) && /var KEY=storeKey\|\|/.test(b) && /getItem\(KEY\)/.test(b) && /setItem\(KEY/.test(b);
@@ -627,48 +626,32 @@ ok('the button carries live progress instead of a banner',
 // the same trap that made two earlier checks read their own documentation as code.
 const rendSrc = bodyOf('aiSegTargetsHtml_');
 ok('the stat bar still refuses to print a % of riding time',
-   /not a share of ride time/.test(rendSrc) && !/% of all riding time/.test(rendSrc));
+   !/% of all riding time/.test(rendSrc) && /% on personal bests/.test(rendSrc));
 
 
-// ---- 20. the hybrid pass -----------------------------------------------------------------------
-console.log('\n'+C+'=== 20. hybrid base, crown/ring pins, one line colour ==='+X);
-ok('imagery carries a ROADS overlay, not just place labels', has('World_Transportation'));
-ok('...and it sits in the pane above the segments',
-   /World_Transportation[\s\S]{0,160}pane:'routeLabels'/.test(asServed(src)));
-ok('every segment line is one colour', has('var SA_LINE_COL=') && /var col=SA_LINE_COL/.test(mountSrc));
-ok('...and the pin still gets the STATUS colour', /col:_saStatusCol_\(s\.tier\)/.test(mountSrc));
-ok('a personal best draws a crown, not a teardrop', /kind==='pb'/.test(pinIconSrc));
-ok('an attempted pin is white-filled with an orange ring, no blue',
-   /isAtt\?'#ffffff'/.test(pinIconSrc) && /isAtt\?SA_MAP_COL\.attRing/.test(pinIconSrc));
-// The Esri hybrid draws its road network in salmon/orange; a warm segment line sits on that hue.
-ok('the segment line shares no hue with the road overlay', (() => {
-  const m = asServed(src).match(/var\s+SA_LINE_COL='#([0-9a-fA-F]{6})'/);
-  if (!m) return false;
-  const r = parseInt(m[1].slice(0,2),16), g = parseInt(m[1].slice(2,4),16), b = parseInt(m[1].slice(4,6),16);
-  return b > r && g > r;                      // cool, not a warm orange
-})(), (asServed(src).match(/var\s+SA_LINE_COL='([^']+)'/)||[])[1]);
-ok('the imagery brightness is a single named constant',
-   has('var SA_MAP_BRIGHT=') && /SA_MAP_BRIGHT/.test(mountSrc));
-ok('...and it LIGHTENS rather than dims', (() => {
-  const m = asServed(src).match(/var\s+SA_MAP_BRIGHT\s*=\s*([\d.]+)/);
-  return !!m && parseFloat(m[1]) > 1;
-})());
-ok('...on the imagery pane only, so roads and labels stay bright',
-   /getPane\('tilePane'\)[\s\S]{0,140}filter/.test(mountSrc));
-// Collinear pile-up: measured 157 of 230 segments in the default view overlapping another.
-ok('collinear duplicate LINES are skipped', /lineSeen/.test(mountSrc) && /geoKey/.test(mountSrc));
-ok('...keyed geographically, so zoom cannot change the decision',
-   !/latLngToContainerPoint[\s\S]{0,80}geoKey/.test(mountSrc));
-ok('...direction-agnostic, so an out-and-back pair counts once', /brg=\(\(brg%180\)\+180\)%180/.test(mountSrc));
-ok('...and the LONGEST of a merged group is the one drawn', /drawList/.test(mountSrc) && /lq-lp/.test(mountSrc));
-ok('...the skipped segment still gets its PIN',
-   /dupLine\+\+;[\s\S]{0,140}_saMapSegs\.push/.test(mountSrc));
-ok('...and the count is REPORTED, not silently dropped',
-   /sharing a stretch already drawn/.test(mountSrc));
-ok('pins were sized up', (() => {
-  const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/)||[])[1];
-  return w >= 13 && w <= 16;
-})());
+// ---- 20. back on the reference: light base, category colours, every segment drawn ------------
+// This section replaces the hybrid/crown/single-line assertions. That direction came from later
+// instructions and is not in the reference image; these pin the image's own scheme instead.
+console.log('\n'+C+'=== 20. the reference scheme ==='+X);
+ok('the base is the light/flat style, not imagery', /addRideMapBase_\(map,'light'/.test(mountSrc));
+ok('no brightness filter is applied to the tiles', !/tilePane'\)[\s\S]{0,140}filter/.test(mountSrc));
+ok('lines are CATEGORY coloured again', /var col=_saStatusCol_\(s\.tier\)/.test(mountSrc));
+ok('...with no single-line-colour constant left', !has('SA_LINE_COL'));
+ok('every segment is drawn - no line dedupe', !has('lineSeen') && !has('geoKey'));
+ok('the pin is one plain teardrop, not a crown', !/kind==='pb'/.test(pinIconSrc) && /<path/.test(pinIconSrc));
+ok('...filled in its category colour', /fill="'\+col\+'"/.test(pinIconSrc));
+// Legend colours, sampled from the reference's own legend row.
+check('personal best is the legend gold', F.MAPCOL.pb, '#fea541');
+check('KOM/QOM is the legend PURPLE', F.MAPCOL.kom, '#c73dca');
+check('attempted is the legend blue', F.MAPCOL.att, '#107df9');
+ok('the KOM colour is purple, not the magenta sampled off the map pins',
+   F.MAPCOL.kom.toLowerCase() !== '#ee4e98');
+// Footer: the donut the reference shows, drawing a real proportion.
+ok('the Total Time card carries a donut', /stroke-dasharray/.test(rendSrc));
+ok('...driven by measured per-status time, not a decorative constant',
+   /secBy\.pb/.test(rendSrc) && has('var secBy='));
+ok('...and still refuses the unprovable share of riding time',
+   !/% of all riding time/.test(rendSrc));
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);
