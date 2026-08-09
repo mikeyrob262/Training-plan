@@ -357,8 +357,8 @@ html.aiq-mobile #app-shell{max-width:480px!important;margin:0 auto!important;hei
 .wo-day{font-size:11px;font-weight:700;color:var(--t3);letter-spacing:.06em}
 .wo-sess{font-size:15px;font-weight:800;color:var(--t1);margin:2px 0}
 .wo-det{font-size:13px;color:var(--t2);line-height:1.45}
-.str-btn{margin-top:6px;margin-right:6px;background:transparent;border:1px solid var(--b2);color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;cursor:pointer;font-family:inherit}
-.swap-sm{margin-top:6px;margin-left:6px;background:transparent;border:1px solid var(--b2);color:var(--t3);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;cursor:pointer;font-family:inherit}
+.str-btn{margin-top:6px;margin-right:6px;background:transparent;border:1px solid var(--b2);color:var(--t2);font-size:11px;font-weight:600;padding:4px 10px;border-radius:9px;cursor:pointer;font-family:inherit}
+.swap-sm{margin-top:6px;margin-left:6px;background:transparent;border:1px solid var(--b2);color:var(--t3);font-size:11px;font-weight:600;padding:4px 10px;border-radius:9px;cursor:pointer;font-family:inherit}
 .wo-ft{border-top:1px solid var(--b1);display:flex;padding:10px 14px;gap:10px;background:var(--s2);border-radius:0 0 16px 16px}
 .wof{flex:1}
 .wof-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:3px}
@@ -405,8 +405,8 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .swap-panel{padding:12px 14px;background:var(--s3);border-top:1px solid var(--b2)}
 .swap-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px}
 .swap-opts{display:flex;flex-wrap:wrap;gap:6px}
-.swap-opt{background:var(--s2);border:1px solid var(--b2);color:var(--blue);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;font-family:inherit}
-.swap-cancel{background:transparent;border:1px solid var(--b1);color:var(--t3);font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;cursor:pointer;font-family:inherit}
+.swap-opt{background:var(--s2);border:1px solid var(--b2);color:var(--blue);font-size:12px;font-weight:600;padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit}
+.swap-cancel{background:transparent;border:1px solid var(--b1);color:var(--t3);font-size:12px;font-weight:600;padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit}
 .pk-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:150;display:none}
 .pk-bg.open{display:block}
 .pk-sheet{position:fixed;top:62px;left:50%;transform:translateX(-50%) scaleY(0);transform-origin:top;width:220px;background:var(--s1);border-radius:12px;padding:0;z-index:200;transition:transform .2s ease;max-height:35vh;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.22);border:1px solid var(--b2)}
@@ -464,7 +464,7 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 .ui-modal-cancel{background:var(--s2,#2a2a2e);border-color:var(--b1,#3a3a3e);color:var(--t2,#c7c7cc)}
 .ui-modal-ok{background:rgba(41,128,185,.15);border-color:rgba(41,128,185,.35);color:#2980B9}
 .ui-modal-danger{background:rgba(231,76,60,.15);border-color:rgba(231,76,60,.4);color:#E74C3C}
-.back-btn{background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer;letter-spacing:-.1px}
+.back-btn{background:var(--s2);border:1px solid var(--b1);color:var(--t2);font-size:13px;font-weight:600;padding:6px 14px;border-radius:9px;cursor:pointer;letter-spacing:-.1px}
 
 .bnav{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--b1);display:flex;z-index:250;padding-bottom:env(safe-area-inset-bottom)}
 .bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 4px 6px;cursor:pointer;border:none;background:transparent;color:var(--t3);font-size:10px;font-weight:600;font-family:inherit;gap:3px;transition:color .15s}
@@ -12264,7 +12264,7 @@ function renderNutr(){
     mCalSpan.style.cssText='font-size:12px;color:var(--t3)';
     mCalSpan.textContent=mCal+' cal';
     var mAddBtn=document.createElement('button');
-    mAddBtn.style.cssText='background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:inherit';
+    mAddBtn.style.cssText='background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:5px 12px;border-radius:9px;cursor:pointer;font-family:inherit';
     mAddBtn.textContent='+ Add';
     (function(mn){mAddBtn.onclick=function(){ try{ openFoodForMeal(mn); }catch(e){ toast('Food modal error: '+e.message); } };})(meal);
     mRight.appendChild(mCalSpan);mRight.appendChild(mAddBtn);
@@ -12743,7 +12743,7 @@ function renderFoodRows(container, list){
     qtyInput.oninput = function(){ meta.textContent = makeMeta(parseFloat(qtyInput.value)||1); };
 
     var addBtn = document.createElement('button');
-    addBtn.style.cssText = 'background:rgba(0,200,150,.15);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 13px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0';
+    addBtn.style.cssText = 'background:rgba(0,200,150,.15);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:700;padding:6px 13px;border-radius:9px;cursor:pointer;font-family:inherit;flex-shrink:0';
     addBtn.textContent = 'Add';
 
     topRow.appendChild(info); topRow.appendChild(qtyInput); topRow.appendChild(addBtn);
@@ -15395,7 +15395,7 @@ function renderRideList(container, limit){
   })();
 
 
-  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;cursor:pointer">+ Add Ride</button></div>';
+  html+='<div style="padding:4px 16px 8px;display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Activity History</div><button onclick="openManualActivity()" style="background:rgba(0,200,150,.12);border:1px solid rgba(0,200,150,.25);color:#00C896;font-size:12px;font-weight:600;padding:6px 14px;border-radius:9px;cursor:pointer">+ Add Ride</button></div>';
   if(years.length>1){
     html+='<div class="aiq-hscroll" style="padding:0 16px 10px">';
     years.forEach(function(y){
@@ -18936,7 +18936,7 @@ function _yvySportPicker_(cur){
     var on=(p[0]===cur);
     return '<button onclick="if(window.yvySetSport_)yvySetSport_(&#39;'+p[0]+'&#39;)" '
       +'style="appearance:none;cursor:pointer;font:inherit;font-size:12.5px;font-weight:700;'
-      +'padding:6px 15px;border-radius:999px;border:1px solid '+(on?'#FC4C02':'#1c2130')+';'
+      +'padding:6px 15px;border-radius:9px;border:1px solid '+(on?'#FC4C02':'#1c2130')+';'
       +'background:'+(on?'#FC4C02':'#0e1117')+';color:'+(on?'#fff':'#94a3b8')+'">'+p[1]+'</button>';
   }).join('');
   return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px">'
@@ -27924,7 +27924,7 @@ function aiRenderSegLibrary_(){
   var chips=[['all','All'],['contest','Real contests'],['untested','Never raced'],['thin','Thin data'],['strong','Well supported'],['nodata','Not projectable']];
   H+='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px">';
   chips.forEach(function(c){
-    H+='<button onclick="saFilter_(&#39;'+c[0]+'&#39;)" id="sa-f-'+c[0]+'" style="background:'+(_saFilter===c[0]?'#f973161f':'#111318')+';border:1px solid '+(_saFilter===c[0]?'#f97316':'#232a38')+';color:'+(_saFilter===c[0]?'#f97316':'#8b97ab')+';font-size:11px;font-weight:700;border-radius:999px;padding:6px 12px;cursor:pointer;font-family:inherit">'+c[1]+'</button>';
+    H+='<button onclick="saFilter_(&#39;'+c[0]+'&#39;)" id="sa-f-'+c[0]+'" style="background:'+(_saFilter===c[0]?'#f973161f':'#111318')+';border:1px solid '+(_saFilter===c[0]?'#f97316':'#232a38')+';color:'+(_saFilter===c[0]?'#f97316':'#8b97ab')+';font-size:11px;font-weight:700;border-radius:9px;padding:6px 12px;cursor:pointer;font-family:inherit">'+c[1]+'</button>';
   });
   H+='</div>';
   var sorts=[['prob','Chance'],['name','Name'],['dist','Distance'],['evidence','Evidence']];
@@ -43454,7 +43454,7 @@ function renderMyFoods(container){
     info.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.n+'</div>'
       +'<div style="font-size:11px;color:var(--t3)">'+f.cal+' cal · '+f.p+'g P · '+f.c+'g C · '+f.f+'g F'+(f.srv?' · '+f.srv:'')+'</div>';
     var addBtn=document.createElement('button');
-    addBtn.style.cssText='background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0';
+    addBtn.style.cssText='background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0';
     addBtn.textContent='Add';
     (function(food){
       addBtn.onclick=function(){
@@ -45305,10 +45305,10 @@ function showAICoach(){
     inputRow.style.cssText='display:flex;gap:8px;padding-bottom:4px';
     var inp=document.createElement('input');
     inp.placeholder='Ask anything about your training...';
-    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:20px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
+    inp.style.cssText='flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:9px;padding:10px 16px;color:var(--t1);font-size:14px;font-family:inherit;outline:none';
     var sendBtn=document.createElement('button');
     sendBtn.textContent='Ask';
-    sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 16px;border-radius:20px;cursor:pointer;font-family:inherit;flex-shrink:0';
+    sendBtn.style.cssText='background:#a855f7;border:none;color:white;font-weight:700;padding:10px 16px;border-radius:9px;cursor:pointer;font-family:inherit;flex-shrink:0';
     
     var chatHistory=[{role:'assistant',content:text}];
     
@@ -46248,7 +46248,7 @@ function showWeather(){
   tabDefs.forEach(function(t){
     var btn=document.createElement('button');
     btn.textContent=t.label;
-    btn.style.cssText='flex-shrink:0;padding:7px 14px;border-radius:20px;border:none;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap';
+    btn.style.cssText='flex-shrink:0;padding:7px 14px;border-radius:9px;border:none;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap';
     btn.onclick=function(){ weatherActiveTab=t.id; renderWeatherTabs(); };
     tabBtns[t.id]=btn;
     tabsRow.appendChild(btn);
@@ -49016,11 +49016,11 @@ function showCal(){
 
   var mbtn=document.createElement('button');
   mbtn.textContent='Month';
-  mbtn.style.cssText='padding:7px 20px;border-radius:20px;border:1px solid var(--b1);background:#FC4C02;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+  mbtn.style.cssText='padding:7px 20px;border-radius:9px;border:1px solid var(--b1);background:#FC4C02;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
 
   var ybtn=document.createElement('button');
   ybtn.textContent='Year';
-  ybtn.style.cssText='padding:7px 20px;border-radius:20px;border:1px solid var(--b1);background:var(--s2);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+  ybtn.style.cssText='padding:7px 20px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
 
   mbtn.onclick=function(){calView='month';monthPanel.style.display='flex';yearPanel.style.display='none';mbtn.style.background='#FC4C02';mbtn.style.color='#fff';ybtn.style.background='var(--s2)';ybtn.style.color='var(--t2)';};
   ybtn.onclick=function(){calView='year';monthPanel.style.display='none';yearPanel.style.display='block';ybtn.style.background='#FC4C02';ybtn.style.color='#fff';mbtn.style.background='var(--s2)';mbtn.style.color='var(--t2)';renderYear();};

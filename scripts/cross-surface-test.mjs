@@ -552,28 +552,45 @@ check('recentRides_ sorts through _actSortT_, not on the date string',
 console.log('');
 
 // ---- no pill-shaped buttons -------------------------------------------------
-// STANDING RULE (athlete, 2026-08-09): no pill/capsule-shaped buttons anywhere in the app. The
-// house shape for a control is .sm-ctl - a modest 9px radius, flat, sized to its label.
+// STANDING RULE (athlete, 2026-08-09): no pill/capsule-shaped buttons anywhere. The house control
+// shape is .sm-ctl - flat, border-radius 9px, sized to its label. The sweep is DONE, so this is no
+// longer a ratchet with a baseline: the correct count is zero.
 //
-// This is a RATCHET, not a clean-room assertion: 14 capsule-radius controls already exist and are
-// not retrofitted by this change. The count may only go DOWN. If this fails because you added a
-// control, use border-radius 9px instead of raising the number.
-//
-// KNOWN BLIND SPOT, stated rather than hidden: the match is per line, so a control whose style is
-// concatenated across several lines (the You-vs-You sport picker is one) hides its radius from the
-// line carrying '<button' and is not counted. Tightening this means inspecting the built string,
-// not widening the regex - do NOT "fix" it by counting radius lines alone, which would sweep in
-// every circular avatar and status dot.
-const CAP_RADIUS = /border-radius:\s*(999+px|9999px|100px|20px)/;
-const INTERACTIVE = /onclick=|data-act=|<button|cursor:\s*pointer|-btn\{|\.swap-|\.back-btn/;
-const capsuleCtls = codeLines.filter(L => CAP_RADIUS.test(L) && INTERACTIVE.test(L));
-check('no NEW pill-shaped button was added (ratchet: may only go down)', capsuleCtls.length <= 14, true);
-if (capsuleCtls.length < 14) console.log('  '+D+'   ratchet moved: '+capsuleCtls.length+' left, lower the baseline'+X);
+// The check is ELEMENT-AWARE, and it has to be. Two weaker versions were tried and both lied:
+//   - per line: missed every control whose style is concatenated across several lines (the
+//     You-vs-You sport picker hid its 999px from the line carrying '<button' exactly that way).
+//   - per flattened line: flagged two CLICKABLE ROWS that merely CONTAIN a capsule badge - a plan
+//     row with an "Active" pill, a bike card with a status pill. Neither row is a capsule.
+// Matching inside a single element opening tag separates the row from the badge nested in it.
+const flatLines = [];
+for (const L of codeLines) {
+  if (/^\s*\+/.test(L) && flatLines.length) flatLines[flatLines.length - 1] += L.trim();
+  else flatLines.push(L);
+}
+const flatSrc = flatLines.join('\n');
+const CAPSULE = /border-radius:\s*(?:999+px|9999px|100px|20px)(?!\s+\d)/;  // '20px 20px 0 0' is a sheet corner
+const isCtl = t => /onclick=|data-act=|cursor:\s*pointer/.test(t) || /^<button/.test(t);
+const capsuleTags = (flatSrc.match(/<(?:button|div|span|a)\b[^>]*>/g) || []).filter(t => CAPSULE.test(t) && isCtl(t));
+check('no button element is capsule-shaped', capsuleTags.map(t => t.replace(/\s+/g, ' ').slice(0, 90)), []);
+const capsuleRules = (flatSrc.match(/\.[a-zA-Z0-9_-]*(?:btn|button|swap)[a-zA-Z0-9_-]*\{[^}]*\}/g) || []).filter(r => CAPSULE.test(r));
+check('no button CSS class is capsule-shaped', capsuleRules.map(r => r.slice(0, 60)), []);
+const capsuleAssigns = flatLines.filter(L => /\b\w*[Bb]tn\w*\.style\.cssText\s*=/.test(L) && CAPSULE.test(L));
+check('no button styled from JS is capsule-shaped', capsuleAssigns.map(L => L.trim().slice(0, 60)), []);
+// NEGATIVE CONTROL: the sweep was buttons ONLY. If these lost their capsules it over-reached into
+// the badges and chips the athlete explicitly kept.
+const stillCapsule = n => CAPSULE.test(codeLines.find(L => L.includes(n)) || '');
+check('the .phase-pill badge is untouched', stillCapsule('.phase-pill{'), true);
+check('the .badge class is untouched', stillCapsule('.badge{'), true);
+check('the Segment Attack funnel chips are untouched',
+      (flatSrc.match(/border-radius:999px/g) || []).length >= 2, true);
+check('strength type/RPE badges are untouched',
+      (flatSrc.match(/border-radius:100px/g) || []).length >= 2, true);
+check('bottom-sheet corners are untouched', (flatSrc.match(/border-radius:20px 20px 0 0/g) || []).length, 7);
 // The button this rule came from must itself be compliant, sized to its label, and beside its text.
 const todayBtn = codeLines.find(L => /data-act="plan"/.test(L) && /View</.test(L));
 check('the Today\'s Plan control exists', !!todayBtn, true);
 check('...is labelled just "View"', /">View<\/span>/.test(todayBtn || ''), true);
-check('...is not a capsule', !CAP_RADIUS.test(todayBtn || ''), true);
+check('...is not a capsule', !CAPSULE.test(todayBtn || ''), true);
 check('...uses the house 9px radius', /border-radius:9px/.test(todayBtn || ''), true);
 check('...sits with the plan text, not pushed to the card bottom',
       !/margin-top:auto/.test(todayBtn || ''), true);
