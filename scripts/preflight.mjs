@@ -381,6 +381,20 @@ try {
     fail('Form (TSB) no longer agrees with Fitness and Fatigue (see above).');
   }
 
+
+  // ---- 23b. Distance PRs: the in-ride split must be the BEST window in the ride, a marker the
+  //           ride never reached must record nothing rather than an estimate, and dpr must survive
+  //           storage slimming - losing it costs a 30-minute rate-limited Strava backfill to rebuild.
+  console.log(`${D}· checking distance-PR layer…${X}`);
+  try {
+    const so = execSync('node scripts/dpr-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the distance-PR layer no longer holds (see above).');
+  }
+
   // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
   //          field straight off it yields undefined silently, which is how Segment Attack showed
   //          "Weather unavailable" on every visit while the Weather page worked fine.

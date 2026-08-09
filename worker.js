@@ -5334,6 +5334,190 @@ function runZoneBackfill(){
   });
 }
 // --------------------------------------------------------------------------
+// DISTANCE-PR BACKFILL — the in-ride split the records layer has always refused to invent.
+//
+// _recDistance_ deliberately reports BANDED WHOLE-RIDE times (a 40km "PR" is the fastest ride whose
+// total distance was within +6% of 40km) because the app had no per-ride distance/time series to
+// find a real split in. That band is honest but blunt: a 42km ride counts as a 40km effort, and the
+// best 40km INSIDE a 100km ride is invisible. r.dpr replaces the guess with a measurement.
+//
+// MEASURED before building, because two spec assumptions were wrong:
+//   1. Only 24 of 470 cycling rides carry a stored distance+time pair, and those are DOWNSAMPLED to
+//      200 points — on an 82-mile ride that is ~82 seconds between samples, so a 1km or 5km window
+//      cannot be located to better than a minute. Strava returns the same activity at
+//      resolution "high": 16,272 points, median gap 1s. The re-fetch is what makes the number real.
+//   2. Strava's distance stream is METRES. The stored chartDist is MILES. Same name, different unit.
+//
+// SO EVERY dpr IS COMPUTED FROM A FRESH FULL-RESOLUTION FETCH, never from the coarse stored series.
+// Mixing them would bias the record: a coarse ride can only ever OVER-state its best window, so it
+// would lose every PR it should have won and the progression history would quietly favour whichever
+// rides happened to be re-fetched. dpr.res records the measured sample spacing so a future reader
+// can still tell what it was computed from.
+var DPR_VERSION=1;
+// Kilometre markers. Short ones are where the resolution argument above actually bites, long ones
+// are only reachable on a handful of rides — both are kept, and the read side reports how many
+// rides could reach each marker rather than hiding the thin ones.
+var DPR_MARKERS_KM=[1,5,10,20,40,50,80,100,160];
+// ELAPSED time, not moving time. A distance PR is "how long did it take to cover this distance",
+// which is the clock, stops included — the same convention a time trial uses. Strava's time stream
+// is elapsed seconds from the start and carries the stops as gaps (0,1,99,100,...), so subtracting
+// two of its values already gives elapsed. Switching to moving time later would silently change
+// every stored record, which is what the version stamp exists to catch.
+function dprFromStreams_(dist, time){
+  if(!dist || !time) return null;
+  var n=Math.min(dist.length, time.length);
+  if(n<2) return null;
+  var out={}, mi;
+  for(mi=0; mi<DPR_MARKERS_KM.length; mi++){
+    var need=DPR_MARKERS_KM[mi]*1000, best=null, j=0, i;
+    // Two pointers. dist is cumulative and non-decreasing, so as the window start i advances the
+    // first j that satisfies the distance can only move forward — O(n) per marker, not O(n^2).
+    for(i=0;i<n;i++){
+      if(j<i) j=i;
+      while(j<n && (dist[j]-dist[i])<need) j++;
+      if(j>=n) break;                         // nothing further can reach the marker; longer i is worse
+      var t=time[j]-time[i];
+      if(t>0 && (best===null || t<best)) best=t;
+    }
+    if(best!==null) out[String(DPR_MARKERS_KM[mi])]=best;
+  }
+  return out;
+}
+// Median sample spacing, the honest description of what the record was measured from.
+function dprResolution_(time){
+  if(!time || time.length<3) return null;
+  var g=[], i, cap=Math.min(time.length, 600);
+  for(i=1;i<cap;i++){ var d=time[i]-time[i-1]; if(d>0) g.push(d); }
+  if(!g.length) return null;
+  g.sort(function(a,b){ return a-b; });
+  return g[Math.floor(g.length/2)];
+}
+function _dprIsCycling_(r){
+  var s=String((typeof rideSport_==='function'?rideSport_(r):((r&&r.sportType)||(r&&r.type)))||'').toLowerCase();
+  return /ride|cycl|ebike|gravel|mountain|handcycle|velomobile/.test(s);
+}
+// A ride still needs the backfill if it is cycling, has a Strava id to fetch with, and does not
+// already carry a dpr at the CURRENT version. Version-aware on purpose: bumping DPR_VERSION after a
+// formula change re-queues everything rather than leaving two definitions mixed in one board.
+function dprNeeds_(r){
+  if(!r || r.deleted || !r.stravaId) return false;
+  if(!_dprIsCycling_(r)) return false;
+  return !(r.dpr && r.dpr.v===DPR_VERSION);
+}
+function dprCandidates_(){
+  return ((typeof st!=='undefined'&&st.rides)?st.rides:[]).filter(dprNeeds_);
+}
+// ---- read-time board -------------------------------------------------------------------------
+// NOTHING AGGREGATE IS STORED. Current best and the progression are both derived here on every
+// read, from the per-ride dpr values. Storing a "current best" would be a second copy of a fact the
+// rides already hold, and it is exactly the shape that has drifted before — and Milestones needs the
+// whole progression, not the tip, so the tip is not even the useful thing to cache.
+function dprBoard_(env){
+  var live=((typeof st!=='undefined'&&st.rides)?st.rides:[]).filter(function(r){ return r && !r.deleted; });
+  var cyc=live.filter(_dprIsCycling_);
+  var scoped=cyc;
+  if(env==='indoor')       scoped=cyc.filter(function(r){ return rideIsIndoor(r); });
+  else if(env==='outdoor') scoped=cyc.filter(function(r){ return !rideIsIndoor(r); });
+  var withDpr=scoped.filter(function(r){ return r.dpr && r.dpr.v===DPR_VERSION && r.dpr.m; });
+  // Chronological, so "progression" means what it says. Undated rides cannot take part in a
+  // history and are counted separately rather than silently sorted to the epoch.
+  var undated=withDpr.filter(function(r){ return !String((r&&r.date)||'').slice(0,10); }).length;
+  var dated=withDpr.filter(function(r){ return !!String((r&&r.date)||'').slice(0,10); })
+    .sort(function(a,b){ return String(a.date).slice(0,10).localeCompare(String(b.date).slice(0,10)); });
+  var markers=DPR_MARKERS_KM.map(function(km){
+    var key=String(km), best=null, prog=[], reached=0;
+    dated.forEach(function(r){
+      var secs=r.dpr.m[key];
+      if(!(secs>0)) return;
+      reached++;
+      if(best===null || secs<best.secs){
+        best={ secs:secs, date:String(r.date).slice(0,10),
+               rideKey:(typeof rideKey==='function')?rideKey(r):null,
+               name:(typeof actName_==='function')?actName_(r):(r.name||'Ride'),
+               res:(r.dpr.res!=null)?r.dpr.res:null };
+        prog.push({ date:best.date, secs:secs, rideKey:best.rideKey, name:best.name });
+      }
+    });
+    return { km:km, best:best, progression:prog, reached:reached };
+  });
+  return {
+    env:env||'all', markers:markers,
+    // The honest denominators, all three of them, because they are all different numbers.
+    cyclingN:cyc.length, scopedN:scoped.length, measuredN:withDpr.length,
+    undatedN:undated,
+    pendingN:scoped.filter(dprNeeds_).length,
+    // Rides that can NEVER be measured: cycling, but with no Strava id to fetch a stream for.
+    unfetchableN:scoped.filter(function(r){ return !r.stravaId && !(r.dpr&&r.dpr.v===DPR_VERSION); }).length,
+    version:DPR_VERSION
+  };
+}
+// ---- the backfill runner ---------------------------------------------------------------------
+// RESUME IS BY DATA FIRST, CURSOR SECOND. The candidate list is recomputed from dprNeeds_ on every
+// press, so a ride already carrying a current-version dpr is never re-fetched no matter what any
+// stored cursor says — "guard on the SUCCESS, not on the attempt", which this app has been bitten
+// by twice. st.dprCursor is kept only so a resumed run can REPORT where it left off and so a long
+// run does not restart from the top of an unchanged list.
+var _dprBackfill={running:false, stop:false};
+function stopDprBackfill(){ _dprBackfill.stop=true; }
+function runDprBackfill(){
+  var say=function(t){ var n=document.getElementById('dpr-backfill-status'); if(n) n.textContent=t;
+    try{ console.log('[dpr] '+t); }catch(e){} };
+  if(_dprBackfill.running){ say('Already running...'); return; }
+  var list=dprCandidates_();
+  if(!list.length){ say('Every cycling ride with a Strava id already has a current distance-PR set.'); return; }
+  if(!st.stravaToken && !st.stravaRefreshToken){ say('Connect Strava first, then run this.'); return; }
+  _dprBackfill.running=true; _dprBackfill.stop=false;
+  var i=0, got=0, noStream=0, err=0, total=list.length;
+  // Strava's READ limit is 100/15min, which is the binding one for streams (the 200/15min overall
+  // limit is not what trips first). 1100ms spacing keeps a run under it; a 429 stops the run and
+  // says so rather than burning the rest of the window on retries.
+  say('Starting - ' + total + ' rides to measure. Rate-limited, about 90 per 15 minutes.');
+  withStravaToken_(function(token){
+    if(!token){ _dprBackfill.running=false; say('No Strava token - reconnect Strava and retry.'); return; }
+    function finish(msg){
+      _dprBackfill.running=false;
+      try{ st.dprCursor={ i:i, at:Date.now(), v:DPR_VERSION }; }catch(e){}
+      try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
+      var left=dprCandidates_().length;
+      say(msg+' - '+got+' rides measured'
+        +(noStream?(', '+noStream+' had no distance stream on Strava'):'')
+        +(err?(', '+err+' errors'):'')
+        +(left?('. '+left+' still to do - press again for the next batch.'):'. All done.'));
+    }
+    function step(){
+      if(_dprBackfill.stop) return finish('Stopped');
+      if(i>=list.length) return finish('Complete');
+      var r=list[i++];
+      say('Measuring '+i+'/'+total+'... '+got+' done'+(noStream?(', '+noStream+' no-stream'):''));
+      var url='https://www.strava.com/api/v3/activities/'+r.stravaId+'/streams?keys=distance,time&key_by_type=true';
+      fetch(url,{headers:{'Authorization':'Bearer '+token}}).then(function(x){
+        if(x.status===429){ finish('Strava rate limit reached'); throw 'rl'; }
+        if(x.status===401){ finish('Strava auth expired (reconnect)'); throw 'auth'; }
+        return x.ok?x.json():null;
+      }).then(function(j){
+        var d=(j&&j.distance&&j.distance.data)||null, t=(j&&j.time&&j.time.data)||null;
+        var m=(d&&t)?dprFromStreams_(d,t):null;
+        // An empty marker set is NOT a measurement - a 2km ride reaches no marker and must not be
+        // stamped as done, or it would be excluded from every future run while carrying nothing.
+        // It is stamped with an explicit empty set so it is not re-fetched forever either.
+        if(m){
+          r.dpr={ v:DPR_VERSION, at:Date.now(), n:Math.min(d.length,t.length),
+                  res:dprResolution_(t), src:'strava', m:m };
+          got++;
+        } else { noStream++; if(d&&t){ r.dpr={ v:DPR_VERSION, at:Date.now(), n:Math.min(d.length,t.length), res:dprResolution_(t), src:'strava', m:{} }; } }
+        if(got && got%25===0){ try{ st.dprCursor={i:i,at:Date.now(),v:DPR_VERSION}; sv(); }catch(e){} }
+        setTimeout(step, 1100);
+      }).catch(function(e){ if(e==='rl'||e==='auth') return; err++; setTimeout(step, 1100); });
+    }
+    step();
+  });
+}
+window.runDprBackfill=runDprBackfill;
+window.stopDprBackfill=stopDprBackfill;
+window.dprBoard_=dprBoard_;
+window.dprCandidates_=dprCandidates_;
+
+// --------------------------------------------------------------------------
 // TEMPERATURE BACKFILL (G4) — for each OUTDOOR ride with a date and no r.temp yet,
 // look up the historical temperature at the ride's OWN start coordinate + hour from
 // Open-Meteo's archive API and store r.temp (°F, avg over the ride window) plus a
@@ -7092,6 +7276,13 @@ function normalizeState_(s){
 // authoritatively in Firebase (/data.json and /gps/{key}) and lazy-load on
 // demand, so the localStorage cache (a ~5MB-capped store) must NOT carry them.
 var STORAGE_HEAVY_FIELDS_=['lats','lons','gpsLats','gpsLons','chartPwr','chartHR','chartEle','chartCad','chartSpd','chartTime','chartDist','laps','streams'];
+// NEVER SLIMMED, whatever anyone adds to the list above. These are small DERIVED values that each
+// cost a rate-limited Strava read to rebuild: dpr is the distance-PR set (a handful of numbers
+// computed from a ~16,000-point stream that is itself never stored), zoneTime and temp are the same
+// shape of thing. Losing them to a quota event would silently empty the records boards and cost
+// another 30-minute backfill to recover. ENFORCED, not documented - slimForStorage_ filters the
+// heavy list through this one, so a future edit that adds 'dpr' up there simply does nothing.
+var STORAGE_KEEP_FIELDS_=['dpr','zoneTime','temp','tempSource'];
 
 // ===== IndexedDB durable store =====================================================
 // localStorage caps at ~5MB. The full ride library (live + tombstoned) serializes to
@@ -7194,6 +7385,7 @@ function slimForStorage_(s){
       var slim=null;
       for(var i=0;i<STORAGE_HEAVY_FIELDS_.length;i++){
         var f=STORAGE_HEAVY_FIELDS_[i];
+        if(STORAGE_KEEP_FIELDS_.indexOf(f)>=0) continue;      // protected - see STORAGE_KEEP_FIELDS_
         if(r[f]!=null){ if(!slim){ slim={}; for(var kk in r){ if(Object.prototype.hasOwnProperty.call(r,kk)) slim[kk]=r[kk]; } } delete slim[f]; }
       }
       return slim||r;
@@ -32058,6 +32250,13 @@ function dsShowSettings(){
     +'<div id="zone-backfill-status" style="font-size:12px;color:var(--d-t3);margin-bottom:8px">Ready.</div>'
     +'<button onclick="runZoneBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Power Zones</button>'
     +' <button onclick="stopZoneBackfill()" style="background:transparent;border:1px solid var(--b1);color:var(--d-t3);padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
+    +'</div>'
+    +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
+    +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Distance-PR Backfill</div>'
+    +'<div style="font-size:12px;color:var(--t3);margin-bottom:10px">Fetches each cycling ride&#39;s FULL-resolution distance and time stream and stores the best in-ride time for each km marker (r.dpr) - a real split, not the banded whole-ride estimate. About 90 rides per 15 minutes; press again to continue where it stopped.</div>'
+    +'<div id="dpr-backfill-status" style="font-size:12px;color:#94a3b8;margin-bottom:8px">'+((typeof dprCandidates_==='function')?(dprCandidates_().length.toLocaleString()+' rides still to measure.'):'Ready.')+'</div>'
+    +'<button onclick="runDprBackfill()" style="background:#22c55e;border:none;color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Backfill Distance PRs</button>'
+    +' <button onclick="stopDprBackfill()" style="background:transparent;border:1px solid var(--b1);color:#94a3b8;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px">Stop</button>'
     +'</div>'
     +'<div style="background:var(--s2);border:1px solid var(--b1);border-radius:12px;padding:16px">'
     +'<div style="font-size:13px;font-weight:700;color:var(--d-t1);margin-bottom:4px">Temperature Backfill</div>'
