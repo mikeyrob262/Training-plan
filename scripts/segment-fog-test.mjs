@@ -359,7 +359,7 @@ check('a crown is magenta', F.statusCol({t:3}), F.MAPCOL.kom);
 check('a personal best is gold', F.statusCol({t:2}), F.MAPCOL.pb);
 check('attempted is blue', F.statusCol({t:1, ramp:0}), F.MAPCOL.att);
 ok('the crown colour is NOT the fog ramp crown colour', F.MAPCOL.kom !== F.STYLE[4].line);
-ok('personal best is gold-ish, not pink', /^#f/i.test(F.MAPCOL.pb) && F.MAPCOL.pb !== F.STYLE[3].line);
+ok('personal best is a dark orange, not the fog ramp pink', F.MAPCOL.pb !== F.STYLE[3].line);
 ok('ridden 5 times is the SAME colour as ridden once - status, not a heat ramp',
    F.statusCol({t:1, ramp:0}) === F.statusCol({t:1, ramp:2}));
 ok('the three drawn statuses are three distinct colours',
@@ -407,9 +407,9 @@ ok('...and a nominal width matching the reference core, 10-13px', (() => {
 })());
 ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
-check('personal best is the legend gold', F.MAPCOL.pb, '#fea541');
+check('personal best is DARK orange', F.MAPCOL.pb, '#c2410c');
 check('KOM/QOM is the legend purple', F.MAPCOL.kom, '#c73dca');
-check('attempted is the legend blue', F.MAPCOL.att, '#107df9');
+check('attempted is LIGHT orange', F.MAPCOL.att, '#fb923c');
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
 // _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of
@@ -596,8 +596,8 @@ ok('the base tiles do NOT use detectRetina', (() => {
   const i = b.indexOf('var light=L.tileLayer(');
   return i >= 0 && /detectRetina:false/.test(b.slice(i, b.indexOf(');', i)));
 })());
-ok('the pin matches the image: a teardrop path', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
-ok('the pin is filled in its category colour', /fill="'\+col\+'"/.test(pinIcon));
+ok('markers are path shapes, not circles', /<path/.test(pinIcon) && !/<circle/.test(pinIcon));
+ok('the teardrop is filled in its category colour', /fill="'\+col\+'"/.test(pinIcon));
 // Attempted pins ring in ORANGE; PB and KOM keep the plain white edge.
 
 
@@ -638,12 +638,35 @@ ok('no brightness filter is applied to the tiles', !/tilePane'\)[\s\S]{0,140}fil
 ok('lines are CATEGORY coloured again', /var col=_saStatusCol_\(s\.tier\)/.test(mountSrc));
 ok('...with no single-line-colour constant left', !has('SA_LINE_COL'));
 ok('every segment is drawn - no line dedupe', !has('lineSeen') && !has('geoKey'));
-ok('the pin is one plain teardrop, not a crown', !/kind==='pb'/.test(pinIconSrc) && /<path/.test(pinIconSrc));
-ok('...filled in its category colour', /fill="'\+col\+'"/.test(pinIconSrc));
+ok('a personal best draws a CROWN', /kind==='pb'/.test(pinIconSrc) && /stroke-linejoin="round"/.test(pinIconSrc));
+ok('...and an attempt draws a teardrop', /A '\+r\+' '\+r\+' 0 1 1/.test(pinIconSrc));
+ok('the two are different SHAPES, not just tones',
+   (pinIconSrc.match(/L\.divIcon/g)||[]).length === 2);
+// DIRECT INSTRUCTION: no blue anywhere on this surface.
+// NO BLUE on the two statuses that are drawn everywhere. KOM is excluded deliberately: purple
+// carries a high blue channel by construction, it is not blue, and it was not part of the override.
+ok('NO BLUE for personal best or attempted', (() => {
+  return [F.MAPCOL.pb, F.MAPCOL.att].every(h => {
+    const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+    return r > b && r > g;                      // warm, red-dominant
+  });
+})(), JSON.stringify(F.MAPCOL));
+ok('...and KOM stays purple, not blue', (() => {
+  const h=F.MAPCOL.kom, r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+  return r > g*2 && b > g*2;                    // red AND blue high, green low = purple
+})());
+ok('no blue hex survives anywhere in the segment map UI',
+   !/#(2563eb|7ba7ff|4887f0|107df9|22d3ee)/.test(rendSrc));
+ok('...and the personal-best orange is DARKER than the attempted orange', (() => {
+  const L=h=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
+    return 0.2126*r+0.7152*g+0.0722*b;};
+  return L(F.MAPCOL.pb) < L(F.MAPCOL.att);
+})());
+ok('...the teardrop is filled in its category colour', /fill="'\+col\+'"/.test(pinIconSrc));
 // Legend colours, sampled from the reference's own legend row.
-check('personal best is the legend gold', F.MAPCOL.pb, '#fea541');
+
 check('KOM/QOM is the legend PURPLE', F.MAPCOL.kom, '#c73dca');
-check('attempted is the legend blue', F.MAPCOL.att, '#107df9');
+check('attempted is LIGHT orange', F.MAPCOL.att, '#fb923c');
 ok('the KOM colour is purple, not the magenta sampled off the map pins',
    F.MAPCOL.kom.toLowerCase() !== '#ee4e98');
 // Footer: the donut the reference shows, drawing a real proportion.

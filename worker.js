@@ -26227,30 +26227,16 @@ var _SA_FOCUS_MAXZ=17;
 // layer unreadable.
 var _SA_PIN_MINZ=12, _SA_PIN_CAP=400;
 var _saMapSegs=[], _saPinLayer=null;
-// THE SEGMENT MAP HAS ITS OWN PALETTE, not the fog ramp's. SA_FOG_STYLE was built for a heat map
-// and its two top steps are INVERTED against this page's reference: it paints a personal best pink
-// and a crown orange. Here gold is the personal best and magenta is the crown, which is also the
-// order that reads correctly - a crown is the rarer thing and magenta is the louder colour.
-//
-// Never-attempted has a colour for the legend and the stat bar only. It can never be drawn: those
-// segments have no effort on record and therefore no stored coordinates.
-// SAMPLED FROM THE REFERENCE IMAGE, not picked. Averaging every marker component of each family:
-//   gold    rgb(252,147,57)  #fc9339   personal best
-//   magenta rgb(238, 78,152) #ee4e98   KOM / QOM
-//   blue    rgb( 72,135,240) #4887f0   attempted
-// The status-to-colour mapping comes from the reference's own legend (gold crown = Personal Best,
-// magenta crown = KOM/QOM). Note the mockup's marker counts do NOT agree with its own legend
-// counts - it is a synthetic image - so the legend is what is trusted for meaning, the pixels for
-// the values. Grey is legend/stat-bar only; never-attempted has no coordinates and is never drawn.
-// attRing is the ORANGE edge on attempted pins only - the sampled gold, reused as a ring so the
-// blue pins read against the blue lines they sit on.
-// SAMPLED FROM THE REFERENCE'S LEGEND ROW, which is the row the categories are defined by:
-//   Personal Best  #fea541 gold      KOM / QOM  #c73dca purple      Attempted  #107df9 blue
-// The map pins in the same mockup sample slightly differently (#fc9339 / #ee4e98 / #4887f0) - it is
-// a synthetic image and its own legend and markers disagree. The legend wins, because that is what
-// names the categories, and one palette across legend, pins and lines beats matching two halves of
-// an inconsistent source.
-var SA_MAP_COL={ pb:'#fea541', kom:'#c73dca', att:'#107df9', never:'#9ca3af', attRing:'#fea541' };
+// THE SEGMENT MAP HAS ITS OWN PALETTE, not the fog ramp's - SA_FOG_STYLE is a heat ramp and its
+// two top steps are inverted against this page. Never-attempted has a colour for the legend and the
+// stat bar only; it can never be drawn, those segments have no stored coordinates.
+// DIRECT INSTRUCTION, overriding the reference image on two points: NO BLUE ANYWHERE, and personal
+// bests are DARK ORANGE CROWNS while attempts are LIGHT ORANGE TEARDROPS. The image's blue #107df9
+// attempted colour is gone entirely, and the gold personal-best colour is replaced by a dark orange
+// that actually holds against a light basemap - a PR being hard to pick out was the whole problem.
+// Shape now carries the distinction as well as tone: crown vs drop, dark vs light.
+// KOM/QOM keeps the legend purple (it is not blue, and it was not part of the override).
+var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#fb923c', never:'#9ca3af' };
 // EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
@@ -26281,14 +26267,25 @@ function _saStatusCol_(t){
 // 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
 // on the reference proportion; the numbers in the verification are what this was tuned against.
 var SA_PIN_W=11, SA_PIN_H=16;
-// One teardrop per segment, filled in its CATEGORY colour, per the reference. The crown-for-PB and
-// the white/orange ring were a later direction that the reference does not contain: in the image
-// every marker is the same teardrop and only its colour differs.
+// SHAPE CARRIES STATUS, per direct instruction: a personal best is a DARK ORANGE CROWN, an attempt
+// is a LIGHT ORANGE TEARDROP. Colour alone was not enough - a PR was hard to pick out against the
+// map, which was the actual complaint - so the silhouette differs too, and the tones are far enough
+// apart that the crown reads even where several markers sit together.
 function _saPinKind_(tier){ var t=(tier&&tier.t)||1; return (t>=3)?'kom':((t===2)?'pb':'att'); }
-function _saPinIcon_(col){
+function _saPinIcon_(col, kind){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
-  // Teardrop: a circle at the top closing to a point at the bottom. Measured off the reference at
-  // 9x13px of coloured core in a 1317px panel - h/w 1.44, taller than wide.
+  if(kind==='pb'){
+    // Five-point crown, drawn a little wider than tall so it reads as a crown at map scale.
+    var cw=15, ch=12, u=cw/12;
+    var cd='M '+(1*u)+' '+(9.6*u)+' L '+(1*u)+' '+(2.6*u)+' L '+(3.6*u)+' '+(5.4*u)
+          +' L '+(6*u)+' '+(1.1*u)+' L '+(8.4*u)+' '+(5.4*u)+' L '+(11*u)+' '+(2.6*u)
+          +' L '+(11*u)+' '+(9.6*u)+' Z';
+    return L.divIcon({ className:'', iconSize:[cw,ch], iconAnchor:[cw/2,ch/2], popupAnchor:[0,-ch/2],
+      html:'<svg width="'+cw+'" height="'+ch+'" viewBox="0 0 '+cw+' '+ch+'" style="display:block">'
+        +'<path d="'+cd+'" fill="'+SA_MAP_COL.pb+'" stroke="#fff" stroke-width="0.9" '
+        +'stroke-linejoin="round"/></svg>' });
+  }
+  // Teardrop: a circle at the top closing to a point at the bottom.
   var d='M '+cx+' '+h+' C '+(cx-r*1.15)+' '+(h-r*1.9)+' '+(cx-r)+' '+(cy+r*0.7)+' '+(cx-r)+' '+cy
        +' A '+r+' '+r+' 0 1 1 '+(cx+r)+' '+cy
        +' C '+(cx+r)+' '+(cy+r*0.7)+' '+(cx+r*1.15)+' '+(h-r*1.9)+' '+cx+' '+h+' Z';
@@ -26319,7 +26316,7 @@ function _saPinsRefresh_(map){
     if(!e.at || !b.contains(L.latLng(e.at[0], e.at[1]))) continue;
     if(++n>_SA_PIN_CAP) break;
     (function(ent){
-      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col), riseOnHover:true})
+      var m=L.marker(ent.at, {pane:'segPins', icon:_saPinIcon_(ent.col, _saPinKind_(ent.s.tier)), riseOnHover:true})
         .bindPopup(function(){ return _saFogPopup_(ent.s); }, {maxWidth:280});
       m.on('popupopen', function(){ try{ _saKomOnOpen_(ent.s); }catch(e){} });
       _saPinLayer.addLayer(m);
@@ -26975,14 +26972,14 @@ function aiSegTargetsHtml_(ctx){
   // ---- organic growth prompt ----
   var nw=_saNewSegs_();
   if(nw.list.length){
-    H+='<div style="margin-top:14px;background:#2563eb12;border:1px solid #2563eb33;border-radius:12px;padding:11px 13px;'
+    H+='<div style="margin-top:14px;background:#fb923c14;border:1px solid #fb923c3d;border-radius:12px;padding:11px 13px;'
       +'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'
       +'<div style="min-width:0;font-size:12px;color:var(--d-t3);line-height:1.5">'
       +'You rode through <b style="color:var(--d-head)">'+nw.list.length.toLocaleString()+'</b> new segment'+(nw.list.length===1?'':'s')+' in the last '+nw.days+' days'
       +' that are not on your target list.<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">'
       +esc(nw.list.slice(0,3).map(function(x){return x.name;}).join(' &middot; ').replace(/&middot;/g,'·'))
       +(nw.list.length>3?(' and '+(nw.list.length-3)+' more'):'')+'</div></div>'
-      +'<button class="sa-tbtn" onclick="_saAddNewMonth_()" style="border-color:#2563eb66;color:#7ba7ff;font-size:11.5px;padding:7px 12px">Add all to targets</button>'
+      +'<button class="sa-tbtn" onclick="_saAddNewMonth_()" style="border-color:#c2410c66;color:#c2410c;font-size:11.5px;padding:7px 12px">Add all to targets</button>'
       +'</div>';
   }
 
