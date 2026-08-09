@@ -33,12 +33,16 @@ const check=(l,g,w)=>{ const c=JSON.stringify(g)===JSON.stringify(w); if(!c)fail
 
 // Drive the REAL functions over a synthetic library.
 // _pmcDailyTss_ reads the ride library; stub it so the series is deterministic.
-const harness = new Function('DAILY', asServed(
-  'var _PMC_CTL_D=42, _PMC_ATL_D=7; var _pmcCache={}; var st={rides:[],lthr:0,ftp:0,lastUpdate:0};\n'
+const harness = new Function('DAILY', 'LIVE', 'SERIES', asServed(
+  'var _PMC_CTL_D=42, _PMC_ATL_D=7; var _pmcCache={};\n'
+  + 'var window={__liveWellness:LIVE};\n'
+  + 'var st={rides:[],lthr:0,ftp:0,lastUpdate:0,fitSeries:SERIES,fitSeriesAt:Date.now()};\n'
+  + 'function saveLocal_(){}\n'
   + 'function _pmcDailyTss_(){ return DAILY; }\n'
   + 'function dayKey_(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }\n'
+  + ex('_fitDedupe_') + ex('_fitNewestDate_') + ex('_fitAgeLabel_')
   + ex('pmcSeries_') + ex('getFitness_')
-) + '\nreturn {series:pmcSeries_, fit:getFitness_};');
+) + '\nreturn {series:pmcSeries_, fit:getFitness_, dedupe:_fitDedupe_};');
 
 console.log('\n'+C+'=== 1. the series: Form is same-day CTL - ATL, on every point ==='+X);
 // 60 days of varied load ending today, so the last point is "now".
@@ -49,7 +53,7 @@ for (let i = 59; i >= 0; i--) {
   const k = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   daily[k] = (i % 3 === 0) ? 120 : (i % 7 === 0 ? 0 : 55);
 }
-const H = harness(daily);
+const H = harness(daily, { ctl: 61.4, atl: 65.2, ramp: 0.4, fetchedAt: Date.now() }, []);
 const s = H.series();
 ok('the series built', s.length >= 30, String(s.length));
 const bad = s.filter(p => Math.abs(p.tsb - Math.round((p.ctl - p.atl) * 10) / 10) > 0.051);
@@ -78,6 +82,40 @@ ok('...and no longer keeps a previous-day pair to subtract',
    !/pc=ctl, ?pa=atl/.test(bodyOf('pmcSeries_')) && !/pc-pa/.test(bodyOf('pmcSeries_')));
 // The Intervals import path already used same-day; it must stay that way.
 ok('the Intervals import path is same-day too', /tsb:Math\.round\(\(w\.ctl-w\.atl\)\*10\)\/10/.test(asServed(src)));
+
+
+console.log('\n'+C+'=== 4. Intervals is the source, and there is no silent fallback ==='+X);
+check('the headline comes from Intervals, not the local curve', f.source, 'intervals-live');
+check("...and is Intervals' numbers, rounded", [f.ctl, f.atl], [61, 65]);
+// With NOTHING from Intervals it must report not-loaded - never quietly serve the local PMC, which
+// is the two-computations-of-one-fact defect this change exists to remove.
+const noSrc = harness(daily, null, []).fit();
+check('with no Intervals data at all, it reports not-loaded', noSrc.loaded, false);
+check('...and does NOT fall back to the local calculation', noSrc.source, 'none');
+ok('...so a surface renders an em-dash rather than an invented number',
+   noSrc.loaded === false && noSrc.ctl === 0);
+ok('getFitness_ never reads the local curve for the triple',
+   !/pmcSeries_\(/.test(bodyOf('getFitness_')));
+
+console.log('\n'+C+'=== 5. last known good, served with a visible age ==='+X);
+const cached = harness(daily, null, [{ date:'2026-08-04', ctl:58.5, atl:56.9, ramp:0.2 }]).fit();
+check('a cached Intervals row is served when the live poll is missing', cached.source, 'intervals-series');
+check('...still with Form = Fitness - Fatigue', cached.tsb, cached.ctl - cached.atl);
+ok('...marked stale, with a human-readable age',
+   cached.stale === true && typeof cached.ageLabel === 'string',
+   JSON.stringify({ stale: cached.stale, age: cached.ageLabel }));
+
+console.log('\n'+C+'=== 6. the cached curve holds one row per date ==='+X);
+// mergeArrays_ dedupes these rows by JSON.stringify, so two devices holding different ctl for the
+// same day both survive. Measured live: 357 entries across 166 calendar days.
+const dd = H.dedupe([{ date:'2026-08-03', ctl:57, atl:60 },
+                     { date:'2026-08-03', ctl:57.4, atl:61.2 },
+                     { date:'2026-08-04', ctl:58.5, atl:56.9 }]);
+check('duplicate dates collapse to one row', dd.length, 2);
+check('...keeping the later fetch', dd[0].ctl, 57.4);
+ok('the fetch path dedupes before storing', /out=_fitDedupe_\(out\)/.test(bodyOf('fetchIntervalsFitnessSeries_')));
+ok('freshness is judged on the DATA, not only the max-merged clock',
+   /_fitNewestDate_/.test(bodyOf('ensureFitnessSeries_')));
 
 console.log(fails ? '\n'+R+'form/tsb: '+fails+' FAILED'+X+'\n' : '\n'+G+'form/tsb: all checks passed'+X+'\n');
 process.exit(fails?1:0);

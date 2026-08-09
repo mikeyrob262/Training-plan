@@ -14007,10 +14007,19 @@ function fetchLiveIntervalsWellness(callback){
         scoreEl.textContent=readinessNum;
         if(labelEl){ labelEl.textContent=readinessLabel; labelEl.style.color=readinessColor; }
         if(ringEl){ ringEl.setAttribute('stroke',readinessColor); ringEl.setAttribute('stroke-dasharray',dash+' '+circ); }
-        if(tsbEl) tsbEl.textContent=(tsb>=0?'+':'')+tsb;
-        if(ctlEl) ctlEl.textContent=ctl;
-        if(atlEl) atlEl.textContent=atl;
-        if(freshEl) freshEl.textContent='Live from Intervals.icu';
+        // Painted from getFitness_, not from the local vars above. Those round tsb from the raw
+        // ctl/atl while getFitness_ derives it from the two integers it returns, which can differ
+        // by one - the same split that put Form -14 next to 59 and 65.
+        var _fPaint=(typeof getFitness_==='function')?getFitness_():null;
+        if(_fPaint && _fPaint.loaded){
+          if(tsbEl) tsbEl.textContent=(_fPaint.tsb>=0?'+':'')+_fPaint.tsb;
+          if(ctlEl) ctlEl.textContent=_fPaint.ctl;
+          if(atlEl) atlEl.textContent=_fPaint.atl;
+          // The age is SHOWN, never hidden behind a silent swap to another calculation.
+          if(freshEl) freshEl.textContent=_fPaint.stale
+            ? ('Intervals.icu &middot; as of '+(_fPaint.ageLabel||'unknown')).replace('&middot;','·')
+            : 'Live from Intervals.icu';
+        }
       }
 
       // Cache for other consumers (e.g. the AI Coach prompt, Analytics'
@@ -15490,6 +15499,7 @@ function fetchIntervalsFitnessSeries_(cb){
                      ramp:(typeof w.rampRate==='number')?Math.round(w.rampRate*100)/100:null });
         });
         out.sort(function(a,b){ return a.date<b.date?-1:(a.date>b.date?1:0); });
+        out=_fitDedupe_(out);
         if(out.length && typeof st!=='undefined' && st){
           st.fitSeries=out; st.fitSeriesAt=Date.now();
           try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
@@ -15498,12 +15508,47 @@ function fetchIntervalsFitnessSeries_(cb){
       }).catch(function(){ if(cb) cb(null); });
   }catch(e){ if(cb) cb(null); }
 }
+// ONE ENTRY PER DATE, last write wins.
+//
+// mergeArrays_ finds no id or stravaId on these rows, so it falls back to deduping by
+// JSON.stringify(item) - exact object equality. Two devices that fetched the curve at different
+// moments hold slightly different ctl for the SAME day (Intervals recomputes as activities land),
+// which are different JSON strings, so BOTH survive the merge. Measured on the live account: 357
+// entries spanning 166 calendar days, i.e. most days stored twice with disagreeing values. Any
+// day-indexed read off that is a coin flip.
+function _fitDedupe_(arr){
+  if(!Array.isArray(arr)) return [];
+  var by={};
+  arr.forEach(function(p){
+    if(!p || !p.date) return;
+    var k=String(p.date).slice(0,10);
+    by[k]=p;                                   // later entry wins; the array is date-sorted
+  });
+  return Object.keys(by).sort().map(function(k){ return by[k]; });
+}
+// The newest date the cached curve actually contains. Freshness is judged on THIS, not only on a
+// timestamp - see ensureFitnessSeries_.
+function _fitNewestDate_(arr){
+  var a=_fitDedupe_(arr);
+  return a.length?String(a[a.length-1].date).slice(0,10):null;
+}
 // Refresh the cache when it is missing or old. Safe to call from anywhere; self-throttling.
 function ensureFitnessSeries_(cb){
   try{
     var have=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?st.fitSeries:null;
     var age=(typeof st!=='undefined'&&st&&st.fitSeriesAt)?(Date.now()-st.fitSeriesAt):Infinity;
-    if(have && have.length && age<FIT_SERIES_TTL){ if(cb) cb(have); return; }
+    // THE TIMESTAMP ALONE CANNOT DECIDE THIS. fitSeriesAt is deliberately MAX-merged as a clock, so
+    // the newest fetch on ANY device marks the curve fresh on EVERY device - including ones whose
+    // own copy is days behind. Measured: the cached curve ended 2026-08-04 while the app ran on
+    // 08-09, five days stale, with the TTL reporting it as current the whole time.
+    //
+    // So freshness is judged on the DATA as well: if the newest row is not today's, the curve is
+    // stale whatever the clock says. Self-correcting, and immune to a merged or skewed timestamp.
+    var newest=_fitNewestDate_(have);
+    var todayK=(function(){ var d=new Date();
+      return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); })();
+    var current=(newest===todayK);
+    if(have && have.length && age<FIT_SERIES_TTL && current){ if(cb) cb(have); return; }
     if(window.__fitSeriesInFlight){ if(cb) cb(have); return; }
     window.__fitSeriesInFlight=true;
     fetchIntervalsFitnessSeries_(function(out){ window.__fitSeriesInFlight=false; if(cb) cb(out||have); });
@@ -15607,37 +15652,91 @@ function fitnessSeries_(){
 // Empty library -> zeros with source:'none', so a caller can still say "not loaded" instead of
 // rendering an invented number.
 function getFitness_(){
-  var raw=[]; try{ raw=pmcSeries_()||[]; }catch(e){ raw=[]; }
-  var last=raw.length?raw[raw.length-1]:null;
-  var ctl=0, atl=0, tsb=0, ramp=null, source='none', asOf=null, stale=true;
-  if(last){
-    ctl=Math.round(last.ctl||0); atl=Math.round(last.atl||0);
-    // DERIVED FROM THE TWO NUMBERS THIS FUNCTION RETURNS, not rounded independently from the
-    // series. Rounding tsb separately can land a step away from ctl-atl even when the series is
-    // right (58.6 and 64.9 round to 59 and 65, but -6.3 rounds to -6 while a separate path could
-    // show -7). Deriving it makes "Form = Fitness - Fatigue" true by construction on every surface
-    // that reads this, which is all of them.
-    tsb=ctl-atl;
-    // Ramp = CTL change per WEEK, the unit the peaking/detraining thresholds already use. Derived
-    // from the series rather than read from Intervals, because the series is now ours.
-    if(raw.length>=8) ramp=Math.round((last.ctl-raw[raw.length-8].ctl)*10)/10;
-    source='local'; asOf=Date.now();
-    // Computed from the library on demand, so it is never stale in the way a cached remote read was.
-    stale=false;
+  // THE CURRENT TRIPLE COMES FROM INTERVALS.ICU. The local PMC still exists and still powers the
+  // long-range curve (fitnessSeries_/pmcSeries_), because Intervals only holds this account back to
+  // 2026-02 while the local library reaches back years. But the NUMBER on every surface is
+  // Intervals', so the dashboard, readiness ring, calendar ring and coach prompt cannot disagree
+  // with each other or with intervals.icu itself.
+  //
+  // THERE IS NO SILENT FALLBACK TO THE LOCAL CALCULATION. That was the whole defect: two
+  // computations of one fact, swapping places invisibly. On failure this serves the LAST KNOWN GOOD
+  // Intervals reading and reports how old it is, so a stale number is visibly stale. With nothing
+  // ever cached it reports not-loaded and surfaces render an em-dash rather than an invented zero.
+  var ctl=null, atl=null, tsb=null, ramp=null, source='none', at=null;
+
+  // 1. today's live poll (~10 min), the freshest thing available
+  var lw=(typeof window!=='undefined')?window.__liveWellness:null;
+  if(lw && typeof lw.ctl==='number' && typeof lw.atl==='number'){
+    ctl=Math.round(lw.ctl); atl=Math.round(lw.atl);
+    ramp=(typeof lw.ramp==='number')?lw.ramp:null;
+    source='intervals-live'; at=lw.fetchedAt||Date.now();
   }
-  // window.__liveWellness deliberately NO LONGER overrides these three. It is an Intervals read of
-  // the same quantity, i.e. the second computation this consolidation exists to remove. It still
-  // carries HRV and resting HR, which are genuine Intervals-only wellness data, and those readers
-  // are untouched.
-  // d7 stays available for consumers that want the 7-day move, read off the SAME series.
+  // 2. the newest row of the cached Intervals curve
+  if(ctl==null){
+    var series=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?_fitDedupe_(st.fitSeries):[];
+    var lastRow=series.length?series[series.length-1]:null;
+    if(lastRow && typeof lastRow.ctl==='number' && typeof lastRow.atl==='number'){
+      ctl=Math.round(lastRow.ctl); atl=Math.round(lastRow.atl);
+      ramp=(typeof lastRow.ramp==='number')?lastRow.ramp:null;
+      source='intervals-series'; at=(st&&st.fitSeriesAt)||null;
+    }
+  }
+  // 3. last known good, persisted from a previous successful read
+  if(ctl==null && typeof st!=='undefined' && st && st.fitNow
+     && typeof st.fitNow.ctl==='number' && typeof st.fitNow.atl==='number'){
+    ctl=Math.round(st.fitNow.ctl); atl=Math.round(st.fitNow.atl);
+    ramp=(typeof st.fitNow.ramp==='number')?st.fitNow.ramp:null;
+    source='intervals-cached'; at=st.fitNow.at||null;
+  }
+
+  if(ctl==null){
+    return {ctl:0, atl:0, tsb:0, ramp:null, d7:null, source:'none', asOf:null,
+            ageMs:null, ageLabel:null, stale:true, loaded:false};
+  }
+  // Form is DERIVED from the two integers returned here, never rounded independently - the split
+  // that put Fitness 59, Fatigue 65 and Form -14 on one card.
+  tsb=ctl-atl;
+
+  // Persist the last known good so a later failure has something honest to serve.
+  try{
+    if(source==='intervals-live' && typeof st!=='undefined' && st){
+      var prev=st.fitNow;
+      if(!prev || prev.ctl!==ctl || prev.atl!==atl){
+        st.fitNow={ctl:ctl, atl:atl, ramp:ramp, at:at||Date.now()};
+        if(typeof saveLocal_==='function') saveLocal_();
+      }
+    }
+  }catch(e){}
+
+  // d7 stays available for consumers that want the 7-day move, read off the Intervals curve so it
+  // is the same source as the headline.
   var d7=null;
-  if(raw.length>=8){ var n=raw.length-1, p=raw.length-8;
-    d7={ ctl:Math.round((raw[n].ctl-raw[p].ctl)*10)/10,
-         atl:Math.round((raw[n].atl-raw[p].atl)*10)/10,
-         tsb:Math.round((raw[n].tsb-raw[p].tsb)*10)/10 }; }
-  if(ramp==null && d7) ramp=d7.ctl;
-  return {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, d7:d7, source:source, asOf:asOf, stale:stale,
-          loaded:(source!=='none')};
+  try{
+    var sr=(typeof st!=='undefined'&&st&&Array.isArray(st.fitSeries))?_fitDedupe_(st.fitSeries):[];
+    if(sr.length>=8){ var n=sr.length-1, pI=sr.length-8;
+      d7={ ctl:Math.round((sr[n].ctl-sr[pI].ctl)*10)/10,
+           atl:Math.round((sr[n].atl-sr[pI].atl)*10)/10,
+           tsb:Math.round(((sr[n].ctl-sr[n].atl)-(sr[pI].ctl-sr[pI].atl))*10)/10 };
+      if(ramp==null) ramp=d7.ctl;
+    }
+  }catch(e){}
+
+  var ageMs=at?(Date.now()-at):null;
+  // A reading is stale once it is older than the poll interval by a wide margin. Surfaces show the
+  // age rather than hiding it, so "as of 3h ago" is a visible fact and not a silent substitution.
+  var stale=(source!=='intervals-live') || (ageMs!=null && ageMs>30*60*1000);
+  return {ctl:ctl, atl:atl, tsb:tsb, ramp:ramp, d7:d7, source:source, asOf:at,
+          ageMs:ageMs, ageLabel:_fitAgeLabel_(ageMs), stale:stale, loaded:true};
+}
+// "as of 3h ago", for surfaces that show a stale reading rather than swapping it out.
+function _fitAgeLabel_(ms){
+  if(ms==null) return null;
+  var m=Math.round(ms/60000);
+  if(m<2) return 'just now';
+  if(m<60) return m+'m ago';
+  var h=Math.round(m/60);
+  if(h<24) return h+'h ago';
+  return Math.round(h/24)+'d ago';
 }
 
 function buildPMCChart(data){
@@ -22855,7 +22954,14 @@ function _trLongPMC_(){
   var peakCtl=0, peakDate=null;
   s.forEach(function(p){ if(p.ctl>peakCtl){ peakCtl=p.ctl; peakDate=p.date; } });
   var last=s[s.length-1];
-  return { series:s, ctl:last.ctl, atl:last.atl, tsb:last.tsb,
+  // The SERIES stays local - it reaches back years where Intervals starts in 2026-02 - but the
+  // CURRENT triple comes from getFitness_ like every other surface, so the long view's headline
+  // cannot disagree with the dashboard's.
+  var _fNow=(typeof getFitness_==='function')?getFitness_():null;
+  return { series:s,
+           ctl:(_fNow&&_fNow.loaded)?_fNow.ctl:last.ctl,
+           atl:(_fNow&&_fNow.loaded)?_fNow.atl:last.atl,
+           tsb:(_fNow&&_fNow.loaded)?_fNow.tsb:last.tsb,
            peakCtl:Math.round(peakCtl*10)/10, peakDate:peakDate,
            start:s[0].date, end:last.date, n:s.length };
 
