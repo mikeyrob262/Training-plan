@@ -114,6 +114,12 @@ const dd = H.dedupe([{ date:'2026-08-03', ctl:57, atl:60 },
 check('duplicate dates collapse to one row', dd.length, 2);
 check('...keeping the later fetch', dd[0].ctl, 57.4);
 ok('the fetch path dedupes before storing', /out=_fitDedupe_\(out\)/.test(bodyOf('fetchIntervalsFitnessSeries_')));
+// Dedupe on write alone cannot hold: the sync merge unions the remote copy straight back in.
+ok('rows carry id == date, so mergeArrays_ buckets by day instead of by JSON equality',
+   /id:String\(w\.id\)\.slice\(0,10\)/.test(bodyOf('fetchIntervalsFitnessSeries_')));
+ok('...and normalizeState_ heals a cache poisoned before that landed',
+   /fitSeries = _fitDedupe_/.test(bodyOf('normalizeState_')));
+check('dedupe backfills the merge key on legacy rows', H.dedupe([{date:'2026-08-03',ctl:1,atl:2}])[0].id, '2026-08-03');
 ok('freshness is judged on the DATA, not only the max-merged clock',
    /_fitNewestDate_/.test(bodyOf('ensureFitnessSeries_')));
 

@@ -6946,6 +6946,12 @@ function normalizeState_(s){
   // Collapse both by activity identity here.
   if(Array.isArray(s.runs)) s.runs = dedupeRuns_(s.runs);
   if(Array.isArray(s.rides)) s.rides = dedupeRidesByKey_(s.rides);
+  // The Intervals PMC curve, same union-merge problem: its rows carried no id, so mergeArrays_
+  // fell back to JSON equality and two devices holding a slightly different ctl for the SAME day
+  // both survived. Measured live: 357 entries across 172 calendar dates. Rows now carry id == date
+  // so the merge buckets them, and this heals a cache already poisoned before that landed -
+  // dedupe on write alone could not, because the merge unions the remote copy straight back in.
+  if(Array.isArray(s.fitSeries) && typeof _fitDedupe_==='function') s.fitSeries = _fitDedupe_(s.fitSeries);
   // Manual bike assignments: a plain object keyed by rideKey(r) -> bike id.
   // Lives in st (sibling of st.rides) so it syncs via sv()/fbPush and is
   // deep-merged by mergeState_'s object branch — never touched by
@@ -15493,7 +15499,8 @@ function fetchIntervalsFitnessSeries_(cb){
           // A day Intervals has not scored carries null ctl/atl. Skipped, never zero-filled:
           // a zero would render as a fitness collapse that did not happen.
           if(typeof w.ctl!=='number' || typeof w.atl!=='number') return;
-          out.push({ date:String(w.id).slice(0,10),
+          out.push({ id:String(w.id).slice(0,10),        // == date; mergeArrays_ buckets on this
+                     date:String(w.id).slice(0,10),
                      ctl:Math.round(w.ctl*10)/10, atl:Math.round(w.atl*10)/10,
                      tsb:Math.round((w.ctl-w.atl)*10)/10,
                      ramp:(typeof w.rampRate==='number')?Math.round(w.rampRate*100)/100:null });
@@ -15522,6 +15529,7 @@ function _fitDedupe_(arr){
   arr.forEach(function(p){
     if(!p || !p.date) return;
     var k=String(p.date).slice(0,10);
+    p.id=k;                                    // keep the merge key in step on legacy rows
     by[k]=p;                                   // later entry wins; the array is date-sorted
   });
   return Object.keys(by).sort().map(function(k){ return by[k]; });
