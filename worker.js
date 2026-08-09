@@ -26359,6 +26359,25 @@ function _saMapMount_(){
                       preferCanvas:true,tap:false,zoomSnap:0.25,zoomDelta:1});
   _saMap=map;
   addRideMapBase_(map,'light','aiq_segMapBase');
+  // ON THE LIGHT BASE THE ROADS ARE NOT A SEPARATE LAYER - Voyager bakes them into the base tile
+  // alongside land, parks and water, so there is no roads pane to filter. Desaturating that tile is
+  // the equivalent move: the salmon road casings go grey and stop colliding with the orange pins and
+  // lines, and the road grid keeps all of its luminance hierarchy. It does also neutralise the parks
+  // and water, which is the honest cost of the roads not being separable on this style.
+  //
+  // ONLY when the light base is active. Applying it under Satellite would grey the imagery, which is
+  // exactly what this is meant to avoid - there, the dedicated satRoads pane does the job instead.
+  var applyRoadGrey=function(){
+    try{
+      var tp=map.getPane('tilePane');
+      if(!tp) return;
+      var isLight=false;
+      map.eachLayer(function(l){ if(l && l._url && l._url.indexOf('voyager_nolabels')>=0) isLight=true; });
+      tp.style.filter=isLight?'saturate(0)':'';
+    }catch(e){}
+  };
+  applyRoadGrey();
+  map.on('baselayerchange', function(){ setTimeout(applyRoadGrey, 0); });
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
@@ -38515,7 +38534,20 @@ function addRideMapBase_(map, defaultBase, storeKey){
   // is the layer that makes imagery usable. Both ride in routeLabels above the segments, and
   // detectRetina is off for the same reason as the street base - it halves their drawn size.
   var satLabels=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'routeLabels'});
-  var satRoads=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'routeLabels'});
+  // ROADS GET THEIR OWN PANE so they can be desaturated on their own. In routeLabels they shared a
+  // pane with the place labels, and a filter there would have greyed the labels too. z649 keeps the
+  // stacking exactly as it was - labels at 650 still sit on top - while making the roads
+  // independently filterable. Greying them removes the salmon-vs-orange collision AT SOURCE, which
+  // protects any future pin or line colour instead of forcing one to dodge the basemap.
+  try{
+    if(!map.getPane('satRoads')){
+      map.createPane('satRoads');
+      map.getPane('satRoads').style.zIndex=649;
+      map.getPane('satRoads').style.pointerEvents='none';
+      map.getPane('satRoads').style.filter='grayscale(1)';
+    }
+  }catch(e){}
+  var satRoads=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'satRoads'});
   var lightLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}

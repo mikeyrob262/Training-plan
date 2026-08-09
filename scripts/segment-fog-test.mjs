@@ -655,6 +655,19 @@ ok('...and KOM stays purple, not blue', (() => {
   const h=F.MAPCOL.kom, r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
   return r > g*2 && b > g*2;                    // red AND blue high, green low = purple
 })());
+// GREY ROADS AT SOURCE, so no pin or line colour has to dodge the basemap.
+ok('the hybrid roads overlay has its OWN pane, not the labels pane', (() => {
+  const bb = bodyOf('addRideMapBase_');
+  return /createPane\('satRoads'\)/.test(bb) && /pane:'satRoads'/.test(bb);
+})());
+ok('...and that pane is desaturated', /getPane\('satRoads'\)[\s\S]{0,200}grayscale/.test(bodyOf('addRideMapBase_')));
+ok('...while the labels pane is left untouched',
+   !/routeLabels'\)\.style\.filter/.test(bodyOf('addRideMapBase_')));
+ok('the light base desaturates its tile, where roads are baked in',
+   /applyRoadGrey/.test(mountSrc) && /saturate\(0\)/.test(mountSrc));
+ok('...ONLY when the light base is active, so imagery is never greyed',
+   /voyager_nolabels'\)>=0/.test(mountSrc) && /isLight\?'saturate\(0\)':''/.test(mountSrc));
+ok('...and it re-applies when the base is switched', /baselayerchange[\s\S]{0,80}applyRoadGrey/.test(mountSrc));
 ok('no blue hex survives anywhere in the segment map UI',
    !/#(2563eb|7ba7ff|4887f0|107df9|22d3ee)/.test(rendSrc));
 ok('...and the personal-best orange is DARKER than the attempted orange', (() => {
