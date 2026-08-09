@@ -519,6 +519,36 @@ const softV = LAP._blockLapPowers_({ laps: soft }, '4x4 min, 3 min recovery, fla
 check('a session ridden 25W under the floor still fails', BLK._blockWorkHit_({vals:softV.vals, lo:VO2T.powerLo}) >= 0.5, false);
 check('   ...on four intervals, so the failure is about watts not counting', softV.vals.length, 4);
 
+// ---- the activity sort key -------------------------------------------------
+// recentRides_ used to sort on the date string alone, so two activities on the same day fell back
+// to array order (import order) rather than chronology. _actSortT_ is the ONE place that resolves
+// an activity to a sortable instant; every same-day ordering must go through it.
+const SORT = new Function(asServed(ex('_actSortT_'))+';return {_actSortT_};')();
+const actT = SORT._actSortT_;
+check('a startTime is preferred over the date key',
+  actT({ date:'2026-08-03', startTime:'2026-08-03T20:46:00' }) > actT({ date:'2026-08-03' }), true);
+check('start_date_local is used when startTime is absent',
+  actT({ date:'2026-08-03', start_date_local:'2026-08-03T13:19:00' }) > actT({ date:'2026-08-03' }), true);
+check('a date-only activity still resolves to that day, not 0',
+  actT({ date:'2026-08-03' }) > 0, true);
+// The real Aug 3 2026 pair: a 13:19 trail run and a 20:46 weight session, same date.
+const run = { date:'2026-08-03', startTime:'2026-08-03T13:19:00', name:'Gaines - PHT Trail Run' };
+const lift = { date:'2026-08-03', startTime:'2026-08-03T20:46:00', name:'Afternoon Weight Training' };
+check('   ...so a same-day pair orders newest-first by actual time',
+  [run, lift].sort((a,b)=>actT(b)-actT(a)).map(r=>r.name), ['Afternoon Weight Training','Gaines - PHT Trail Run']);
+check('   ...and the reversed input gives the same answer, so it is not array order',
+  [lift, run].sort((a,b)=>actT(b)-actT(a)).map(r=>r.name), ['Afternoon Weight Training','Gaines - PHT Trail Run']);
+// Strava's start_date_local carries a FAKE Z (it is local time labelled UTC). _localStamp_ strips
+// it at import; if that ever regresses, times land 4-5h off and same-day order silently inverts.
+check('the importers strip the fake Z rather than storing it',
+  /_localStamp_\(a\.start_date_local/.test(src), true);
+check('a garbage timestamp does not poison the sort', actT({ date:'2026-08-03', startTime:'not-a-date' }) > 0, true);
+check('a null activity sorts to 0 rather than NaN', actT(null), 0);
+// A NaN anywhere in a comparator makes the whole sort undefined, not just that pair.
+check('no input yields NaN', [null, {}, {date:''}, {date:'x'}].every(r=>isFinite(actT(r))), true);
+check('recentRides_ sorts through _actSortT_, not on the date string',
+  /_actSortT_\(b\)\s*-\s*_actSortT_\(a\)/.test(ex('recentRides_')), true);
+
 console.log('');
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);
