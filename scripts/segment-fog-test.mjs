@@ -778,8 +778,8 @@ ok('...nor that they are thrown away', !/thrown away/.test(codeOnly));
 ok('...nor that nothing is written to the data', !/written to your data/.test(codeOnly));
 ok('...and the legend tooltip says they are dated instead',
    /stored with the date it was checked/.test(codeOnly));
-ok('placements hydrate on mount like road shapes do',
-   /_saKomLoad_\(function\(\)\{ try\{ _saMapMount_/.test(src));
+ok('placements hydrate on mount, on the same schedule as road shapes',
+   /_saKomLoad_\(function\(\)\{/.test(bodyOf('_saMapMount_')));
 ok('the check is still xoms-vs-PR, not kom_rank',
    /_saXomSec_\(d\.xoms&&d\.xoms\.kom\)/.test(src) && !/kom_rank/.test(bodyOf('_saSegDetail_')));
 ok('expiring checks are re-verified ahead of never-checked ones',
@@ -819,6 +819,22 @@ ok('...and no disabled control is left in the map control row',
    !/class="sm-ctl"[^>]*\sdisabled/.test(codeOnly));
 ok('the controls that remain are the two that work',
    /_saMapWhen_\(this\.value\)/.test(src) && /onclick="_saMapFilters_\(\)"/.test(src));
+
+
+console.log('\n'+C+'=== hydration updates the TEXT, not just the drawn map ==='+X);
+// Caught on a live screenshot: the store held all 142 checks and the panel still read
+// "Not checked yet" with the sweep button offering "Check crowns (90 of 142)". _saMapMount_ only
+// remounts Leaflet; the crown headline, legend counts and stat bar are markup built earlier.
+const hydSrc = bodyOf('_saMapMount_');
+ok('the first placement hydration re-renders the section, not just the map',
+   /_saKomRendered/.test(hydSrc) && /aiSetTab_\('segattack'\)/.test(hydSrc));
+ok('...and is one-shot, so the re-render cannot loop back into a reload',
+   /_saKomRendered=true/.test(hydSrc));
+ok('...with a remount as the fallback path', /_saMapMount_\(\);/.test(hydSrc));
+ok('the flag is declared alongside the other store flags', /_saKomLoaded=false, _saKomStoreBusy=false, _saKomRendered=false/.test(src));
+// Road shapes deliberately do NOT do this - they only change what is drawn, so a remount is enough.
+ok('road shapes still only remount, since they change no text',
+   /_saPolyLoad_\(function\(\)\{ try\{ _saMapMount_\(\); \}catch\(e\)\{\} \}\)/.test(hydSrc));
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

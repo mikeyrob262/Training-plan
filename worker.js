@@ -25864,7 +25864,7 @@ function _saPolyPut_(key, enc){
 //   - kom_rank. Still the wrong source, still stamped at upload time. This store holds the xoms-vs-PR
 //     comparison only, which is why it can carry a date at all.
 var SA_KOM_TTL_MS=30*24*3600*1000;                 // past this, a stored check is re-verified first
-var _saKomLoaded=false, _saKomStoreBusy=false;
+var _saKomLoaded=false, _saKomStoreBusy=false, _saKomRendered=false;
 function _saKomUrl_(key, token){
   return FB_URL.replace('/data.json','') + '/segkom' + (key?('/'+encodeURIComponent(key)):'') + '.json?auth=' + encodeURIComponent(token);
 }
@@ -26602,9 +26602,24 @@ function _saMapMount_(){
   // Road shapes load once per session; the mount re-runs with real geometry once they land, so the
   // first paint is chords and the second is roads.
   if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
-  // Verified placements load the same way and on the same schedule; the mount re-runs when they
-  // land, so crowns appear on the second paint exactly as real road shapes do.
-  if(!_saKomLoaded && !_saKomStoreBusy){ _saKomLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
+  // Verified placements load the same way and on the same schedule - but they need MORE than a
+  // remount, and road shapes do not. A shape only changes what is DRAWN, so re-mounting the map is
+  // the whole update. A placement also changes TEXT that aiSegTargetsHtml_ built before the store
+  // landed: the "Crowns held" headline, the legend's "(n of m checked)", the stat bar and the sweep
+  // button's remaining count. Remounting alone left every one of those reading "Not checked yet"
+  // with a full store behind it, until some unrelated interaction happened to re-render the panel.
+  //
+  // So the first hydration re-renders the section; later ones only remount. _saKomLoaded is set
+  // before this callback runs, so the re-render's own _saMapMount_ cannot loop back into here.
+  if(!_saKomLoaded && !_saKomStoreBusy){
+    _saKomLoad_(function(){
+      if(!_saKomRendered){
+        _saKomRendered=true;
+        try{ if(typeof aiSetTab_==='function'){ aiSetTab_('segattack'); return; } }catch(e){}
+      }
+      try{ _saMapMount_(); }catch(e){}
+    });
+  }
   if(_saMap){ try{ _saMap.remove(); }catch(e){} _saMap=null; }
   _saMapById={};
   var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{}, _saKomLive);
