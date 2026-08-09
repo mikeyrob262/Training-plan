@@ -26236,7 +26236,13 @@ var _saMapSegs=[], _saPinLayer=null;
 // that actually holds against a light basemap - a PR being hard to pick out was the whole problem.
 // Shape now carries the distinction as well as tone: crown vs drop, dark vs light.
 // KOM/QOM keeps the legend purple (it is not blue, and it was not part of the override).
-var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#fb923c', never:'#9ca3af' };
+var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#111827', never:'#9ca3af' };
+// EVERY line is this one colour - the same dark orange as the personal-best crown. Status lives
+// entirely in the pin now (crown / square / teardrop), so colouring the line as well would state it
+// twice and give the map two legends for one fact.
+var SA_LINE_COL='#c2410c';
+// How far the greyscale basemap is darkened. One number, imagery-side only.
+var SA_ROAD_DIM=0.88;
 // EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
@@ -26267,15 +26273,15 @@ function _saStatusCol_(t){
 // 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
 // on the reference proportion; the numbers in the verification are what this was tuned against.
 var SA_PIN_W=11, SA_PIN_H=16;
-// SHAPE CARRIES STATUS, per direct instruction: a personal best is a DARK ORANGE CROWN, an attempt
-// is a LIGHT ORANGE TEARDROP. Colour alone was not enough - a PR was hard to pick out against the
-// map, which was the actual complaint - so the silhouette differs too, and the tones are far enough
-// apart that the crown reads even where several markers sit together.
+// SHAPE CARRIES STATUS ENTIRELY, because the lines no longer do - every line is one dark orange.
+//   personal best -> DARK ORANGE CROWN      attempt -> BLACK SQUARE      KOM/QOM -> PURPLE TEARDROP
+// Three different silhouettes as well as three tones, so a PR is separable from an attempt at a
+// glance and at any density.
 function _saPinKind_(tier){ var t=(tier&&tier.t)||1; return (t>=3)?'kom':((t===2)?'pb':'att'); }
 function _saPinIcon_(col, kind){
   var w=SA_PIN_W, h=SA_PIN_H, cx=w/2, cy=w/2, r=w/2-0.5;
   if(kind==='pb'){
-    // Five-point crown, drawn a little wider than tall so it reads as a crown at map scale.
+    // Five-point crown, a little wider than tall so it reads as a crown at map scale.
     var cw=15, ch=12, u=cw/12;
     var cd='M '+(1*u)+' '+(9.6*u)+' L '+(1*u)+' '+(2.6*u)+' L '+(3.6*u)+' '+(5.4*u)
           +' L '+(6*u)+' '+(1.1*u)+' L '+(8.4*u)+' '+(5.4*u)+' L '+(11*u)+' '+(2.6*u)
@@ -26285,7 +26291,16 @@ function _saPinIcon_(col, kind){
         +'<path d="'+cd+'" fill="'+SA_MAP_COL.pb+'" stroke="#fff" stroke-width="0.9" '
         +'stroke-linejoin="round"/></svg>' });
   }
-  // Teardrop: a circle at the top closing to a point at the bottom.
+  if(kind==='att'){
+    // Black square, centred on the segment start. A thin white edge keeps it separate from the dark
+    // orange line it sits on and from its neighbours where several cluster.
+    var sq=9, o=0.9;
+    return L.divIcon({ className:'', iconSize:[sq,sq], iconAnchor:[sq/2,sq/2], popupAnchor:[0,-sq/2],
+      html:'<svg width="'+sq+'" height="'+sq+'" viewBox="0 0 '+sq+' '+sq+'" style="display:block">'
+        +'<rect x="'+o+'" y="'+o+'" width="'+(sq-2*o)+'" height="'+(sq-2*o)+'" '
+        +'fill="'+SA_MAP_COL.att+'" stroke="#fff" stroke-width="'+o+'"/></svg>' });
+  }
+  // KOM / QOM keeps the purple teardrop, unchanged.
   var d='M '+cx+' '+h+' C '+(cx-r*1.15)+' '+(h-r*1.9)+' '+(cx-r)+' '+(cy+r*0.7)+' '+(cx-r)+' '+cy
        +' A '+r+' '+r+' 0 1 1 '+(cx+r)+' '+cy
        +' C '+(cx+r)+' '+(cy+r*0.7)+' '+(cx+r*1.15)+' '+(h-r*1.9)+' '+cx+' '+h+' Z';
@@ -26373,7 +26388,11 @@ function _saMapMount_(){
       if(!tp) return;
       var isLight=false;
       map.eachLayer(function(l){ if(l && l._url && l._url.indexOf('voyager_nolabels')>=0) isLight=true; });
-      tp.style.filter=isLight?'saturate(0)':'';
+      // brightness, NOT contrast. Voyager's minor roads are LIGHTER than the land, so contrast()
+      // pushes them toward white and the grid vanishes - rendered and rejected. Dropping brightness
+      // darkens the road casings into a clear grey while the segments, in higher panes, keep their
+      // full colour.
+      tp.style.filter=isLight?('saturate(0) brightness('+SA_ROAD_DIM+')'):'';
     }catch(e){}
   };
   applyRoadGrey();
@@ -26403,7 +26422,7 @@ function _saMapMount_(){
     // which reads as three different KINDS of thing on a map whose whole legend is status. Crown,
     // personal best, ridden - and never-ridden, which cannot be drawn at all (no coordinates are
     // stored for a segment that was never matched to a ride).
-    var col=_saStatusCol_(s.tier);           // category colour, per the legend
+    var col=SA_LINE_COL;                     // ONE colour for every line; the pin carries status
     var pts=_saPoly['s'+_saSegNum_(s.id)]||_saPoly[s.id]||null;
     var isReal=!!(pts && pts.length>1);
     if(!isReal){
@@ -27044,7 +27063,7 @@ function aiSegTargetsHtml_(ctx){
       +'KOM / QOM <b style="color:var(--d-head)">'
       +(ms.komChecked>0 ? ('('+ms.komHeld+' of '+ms.komChecked+' checked)') : '(not checked yet)')
       +'</b></span>'
-    +'<span class="sm-leg-i"><span style="width:16px;height:2px;border-radius:2px;background:'+SA_MAP_COL.att+';flex:none"></span>'
+    +'<span class="sm-leg-i"><span style="width:9px;height:9px;border-radius:1px;background:'+SA_MAP_COL.att+';flex:none"></span>'
       +'Attempted <b style="color:var(--d-head)">('+ms.att.toLocaleString()+')</b></span>'
     +'<span class="sm-leg-i" title="No effort on record, so no coordinates are stored and these cannot be drawn on the map."><span style="width:16px;height:2px;border-radius:2px;background:'+SA_MAP_COL.never+';flex:none"></span>'
       +'Never Attempted <b style="color:var(--d-head)">('+ms.never.toLocaleString()+')</b>'

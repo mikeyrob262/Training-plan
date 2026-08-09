@@ -409,7 +409,7 @@ ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
 check('personal best is DARK orange', F.MAPCOL.pb, '#c2410c');
 check('KOM/QOM is the legend purple', F.MAPCOL.kom, '#c73dca');
-check('attempted is LIGHT orange', F.MAPCOL.att, '#fb923c');
+check('attempted is near-black, for the square', F.MAPCOL.att, '#111827');
 ok('the pin layer is rebuilt on remount, not carried over onto a dead map',
    /_saPinLayer=null/.test(mountSrc));
 // _saPinsRefresh_ reads getZoom/getBounds. Called before the view is set, Leaflet throws out of
@@ -635,21 +635,24 @@ ok('the stat bar still refuses to print a % of riding time',
 console.log('\n'+C+'=== 20. the reference scheme ==='+X);
 ok('the base is the light/flat style, not imagery', /addRideMapBase_\(map,'light'/.test(mountSrc));
 ok('no brightness filter is applied to the tiles', !/tilePane'\)[\s\S]{0,140}filter/.test(mountSrc));
-ok('lines are CATEGORY coloured again', /var col=_saStatusCol_\(s\.tier\)/.test(mountSrc));
-ok('...with no single-line-colour constant left', !has('SA_LINE_COL'));
+ok('every line is ONE colour', has('var SA_LINE_COL=') && /var col=SA_LINE_COL/.test(mountSrc));
+check('...and that colour is the personal-best dark orange',
+  (asServed(src).match(/var SA_LINE_COL='([^']+)'/)||[])[1], '#c2410c');
 ok('every segment is drawn - no line dedupe', !has('lineSeen') && !has('geoKey'));
 ok('a personal best draws a CROWN', /kind==='pb'/.test(pinIconSrc) && /stroke-linejoin="round"/.test(pinIconSrc));
-ok('...and an attempt draws a teardrop', /A '\+r\+' '\+r\+' 0 1 1/.test(pinIconSrc));
-ok('the two are different SHAPES, not just tones',
-   (pinIconSrc.match(/L\.divIcon/g)||[]).length === 2);
+ok('...an attempt draws a BLACK SQUARE', /kind==='att'/.test(pinIconSrc) && /<rect/.test(pinIconSrc));
+ok('...and KOM keeps the teardrop', /A '\+r\+' '\+r\+' 0 1 1/.test(pinIconSrc));
+ok('three distinct silhouettes, not just tones',
+   (pinIconSrc.match(/L\.divIcon/g)||[]).length === 3);
 // DIRECT INSTRUCTION: no blue anywhere on this surface.
 // NO BLUE on the two statuses that are drawn everywhere. KOM is excluded deliberately: purple
 // carries a high blue channel by construction, it is not blue, and it was not part of the override.
-ok('NO BLUE for personal best or attempted', (() => {
-  return [F.MAPCOL.pb, F.MAPCOL.att].every(h => {
-    const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
-    return r > b && r > g;                      // warm, red-dominant
-  });
+ok('NO BLUE: personal best is warm, attempted is near-black', (() => {
+  const warm = h => { const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+    return r > b && r > g; };
+  const dark = h => { const r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
+    return (0.2126*r+0.7152*g+0.0722*b) < 60; };
+  return warm(F.MAPCOL.pb) && dark(F.MAPCOL.att);
 })(), JSON.stringify(F.MAPCOL));
 ok('...and KOM stays purple, not blue', (() => {
   const h=F.MAPCOL.kom, r=parseInt(h.slice(1,3),16), g=parseInt(h.slice(3,5),16), b=parseInt(h.slice(5,7),16);
@@ -663,23 +666,22 @@ ok('the hybrid roads overlay has its OWN pane, not the labels pane', (() => {
 ok('...and that pane is desaturated', /getPane\('satRoads'\)[\s\S]{0,200}grayscale/.test(bodyOf('addRideMapBase_')));
 ok('...while the labels pane is left untouched',
    !/routeLabels'\)\.style\.filter/.test(bodyOf('addRideMapBase_')));
-ok('the light base desaturates its tile, where roads are baked in',
-   /applyRoadGrey/.test(mountSrc) && /saturate\(0\)/.test(mountSrc));
+ok('the light base desaturates AND darkens its tile, where roads are baked in',
+   /applyRoadGrey/.test(mountSrc) && /saturate\(0\) brightness\(/.test(mountSrc) && has('var SA_ROAD_DIM='));
+ok('...darkened by brightness, not contrast (which washes the grid out)',
+   !/contrast\(/.test(mountSrc));
 ok('...ONLY when the light base is active, so imagery is never greyed',
-   /voyager_nolabels'\)>=0/.test(mountSrc) && /isLight\?'saturate\(0\)':''/.test(mountSrc));
+   /voyager_nolabels'\)>=0/.test(mountSrc) && /isLight\?\(/.test(mountSrc));
 ok('...and it re-applies when the base is switched', /baselayerchange[\s\S]{0,80}applyRoadGrey/.test(mountSrc));
 ok('no blue hex survives anywhere in the segment map UI',
    !/#(2563eb|7ba7ff|4887f0|107df9|22d3ee)/.test(rendSrc));
-ok('...and the personal-best orange is DARKER than the attempted orange', (() => {
-  const L=h=>{const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);
-    return 0.2126*r+0.7152*g+0.0722*b;};
-  return L(F.MAPCOL.pb) < L(F.MAPCOL.att);
-})());
+ok('...and the three drawn statuses are three distinct colours',
+   new Set([F.MAPCOL.pb, F.MAPCOL.att, F.MAPCOL.kom]).size === 3);
 ok('...the teardrop is filled in its category colour', /fill="'\+col\+'"/.test(pinIconSrc));
 // Legend colours, sampled from the reference's own legend row.
 
 check('KOM/QOM is the legend PURPLE', F.MAPCOL.kom, '#c73dca');
-check('attempted is LIGHT orange', F.MAPCOL.att, '#fb923c');
+check('attempted is near-black, for the square', F.MAPCOL.att, '#111827');
 ok('the KOM colour is purple, not the magenta sampled off the map pins',
    F.MAPCOL.kom.toLowerCase() !== '#ee4e98');
 // Footer: the donut the reference shows, drawing a real proportion.
