@@ -602,9 +602,12 @@ ok('the teardrop is filled in its category colour', /fill="'\+col\+'"/.test(pinI
 
 
 // Voyager bakes labels into the base tile at z200, under the segments at z620 and pins at z640.
-ok('the light base uses the NOLABELS style', has('voyager_nolabels'));
-ok('...with labels re-added in the pane ABOVE the segments and pins',
-   has('voyager_only_labels') && /voyager_only_labels[\s\S]{0,160}pane:'routeLabels'/.test(asServed(src)));
+// The light base is Esri World_Street_Map, chosen on measured road-vs-land contrast: Voyager
+// carried 1.3% dark road ink at 29 steps of separation, Esri Street 8.3% at 63.
+ok('the light base is the high-contrast street style', has('World_Street_Map'));
+// It bakes its own labels, so it must NOT take an overlay - two label layers double-print.
+ok('...and takes NO labels overlay, since it bakes its own',
+   !has('voyager_only_labels') && /which!=='light'/.test(bodyOf('addRideMapBase_')));
 ok('the pin casts NO drop shadow', !/drop-shadow/.test(pinIcon));
 ok('the pin has no white halo behind it', !/opacity=".9/.test(pinIcon));
 // Basemap: light, and immune to a ride-map preference set elsewhere.
@@ -633,8 +636,8 @@ ok('the stat bar still refuses to print a % of riding time',
 // This section replaces the hybrid/crown/single-line assertions. That direction came from later
 // instructions and is not in the reference image; these pin the image's own scheme instead.
 console.log('\n'+C+'=== 20. the reference scheme ==='+X);
-ok('the base is the light/flat style, not imagery', /addRideMapBase_\(map,'light'/.test(mountSrc));
-ok('no brightness filter is applied to the tiles', !/tilePane'\)[\s\S]{0,140}filter/.test(mountSrc));
+ok('the base is the light street style, not imagery', /addRideMapBase_\(map,'light'/.test(mountSrc));
+
 ok('every line is ONE colour', has('var SA_LINE_COL=') && /var col=SA_LINE_COL/.test(mountSrc));
 check('...and that colour is the personal-best dark orange',
   (asServed(src).match(/var SA_LINE_COL='([^']+)'/)||[])[1], '#c2410c');
@@ -666,12 +669,12 @@ ok('the hybrid roads overlay has its OWN pane, not the labels pane', (() => {
 ok('...and that pane is desaturated', /getPane\('satRoads'\)[\s\S]{0,200}grayscale/.test(bodyOf('addRideMapBase_')));
 ok('...while the labels pane is left untouched',
    !/routeLabels'\)\.style\.filter/.test(bodyOf('addRideMapBase_')));
-ok('the light base desaturates AND darkens its tile, where roads are baked in',
-   /applyRoadGrey/.test(mountSrc) && /saturate\(0\) brightness\(/.test(mountSrc) && has('var SA_ROAD_DIM='));
-ok('...darkened by brightness, not contrast (which washes the grid out)',
-   !/contrast\(/.test(mountSrc));
+// Contrast comes from the TILES now, so the filter only desaturates - no brightness pass left.
+ok('the light base is desaturated, not dimmed',
+   /applyRoadGrey/.test(mountSrc) && /isLight\?'saturate\(0\)':''/.test(mountSrc));
+ok('...with the brightness constant gone', !has('SA_ROAD_DIM'));
 ok('...ONLY when the light base is active, so imagery is never greyed',
-   /voyager_nolabels'\)>=0/.test(mountSrc) && /isLight\?\(/.test(mountSrc));
+   /World_Street_Map'\)>=0/.test(mountSrc));
 ok('...and it re-applies when the base is switched', /baselayerchange[\s\S]{0,80}applyRoadGrey/.test(mountSrc));
 ok('no blue hex survives anywhere in the segment map UI',
    !/#(2563eb|7ba7ff|4887f0|107df9|22d3ee)/.test(rendSrc));

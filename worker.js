@@ -26241,16 +26241,6 @@ var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#111827', never:'#9ca3af' };
 // entirely in the pin now (crown / square / teardrop), so colouring the line as well would state it
 // twice and give the map two legends for one fact.
 var SA_LINE_COL='#c2410c';
-// How far the greyscale basemap is darkened. Chosen off a measured ladder, not by eye: 0.88 moved
-// mean luminance only 213 from 242 and read as unchanged; 0.70 lands it at 172, a 19.5% drop from
-// 0.88 and unmistakably grey. 0.62 was darker still but the residential grid starts dissolving into
-// the ground, so 0.70 is the last step that keeps the road network legible.
-//
-// NOTE ON WHAT THIS CAN AND CANNOT DO: a global brightness filter scales everything, so it darkens
-// roads in ABSOLUTE terms but never separates them from the land. Measured at every step, land and
-// road luminance stay ~2-3 apart (0.88: 221 vs 218 - 0.70: 176 vs 174). Voyager draws minor roads
-// LIGHTER than the land, and no global filter can invert that relationship.
-var SA_ROAD_DIM=0.70;
 // EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
@@ -26395,12 +26385,15 @@ function _saMapMount_(){
       var tp=map.getPane('tilePane');
       if(!tp) return;
       var isLight=false;
-      map.eachLayer(function(l){ if(l && l._url && l._url.indexOf('voyager_nolabels')>=0) isLight=true; });
+      map.eachLayer(function(l){ if(l && l._url && l._url.indexOf('World_Street_Map')>=0) isLight=true; });
       // brightness, NOT contrast. Voyager's minor roads are LIGHTER than the land, so contrast()
       // pushes them toward white and the grid vanishes - rendered and rejected. Dropping brightness
       // darkens the road casings into a clear grey while the segments, in higher panes, keep their
       // full colour.
-      tp.style.filter=isLight?('saturate(0) brightness('+SA_ROAD_DIM+')'):'';
+      // Desaturate only. The contrast now comes from the TILES, not from a filter, so there is
+      // nothing left for a brightness pass to buy - and dimming would only flatten the separation
+      // this style was chosen for.
+      tp.style.filter=isLight?'saturate(0)':'';
     }catch(e){}
   };
   applyRoadGrey();
@@ -38539,12 +38532,18 @@ function addRideMapBase_(map, defaultBase, storeKey){
   // grid to near-white and its labels go pale grey, which makes the washed-out problem worse, not
   // better. Voyager keeps road classes, place names and water legible under thin coloured lines.
   //
-  // NOLABELS, with the labels re-added as a separate overlay below. Voyager bakes its labels into
-  // the base tile, which puts them in tilePane at z200 - UNDER the segment lines at z620 and the
-  // pins at z640. Every place name the map did render was being painted over by the very segments
-  // it was supposed to sit behind. Splitting the style lets the labels go in routeLabels at z650,
-  // above everything.
-  var light=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+  // ESRI WORLD_STREET_MAP, chosen on a measured comparison of road-vs-land contrast rather than by
+  // eye. CARTO Voyager draws its minor roads LIGHTER than the land and carries almost no dark road
+  // ink at all - 1.3% of pixels, 29 luminance steps of separation - which is why no brightness value
+  // ever made the roads stand out: a global filter scales road and ground together. Measured over
+  // the same tile: Esri Street has 8.3% dark ink at 63 steps of separation, 2.2x the contrast and 6x
+  // the ink. Positron (30), Esri Light Gray (27), OSM (46), CyclOSM (48, but contour lines make it
+  // noisy) and Esri Topo (53) all scored lower or rendered worse in the page.
+  //
+  // It bakes its own labels, so this style takes NO labels overlay - running one on top printed
+  // every place name twice. The cost is that labels live in tilePane, below the segments, rather
+  // than in a pane above them.
+  var light=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,attribution:'Tiles &copy; Esri'});
   // High-z pane (above the overlayPane where the route polylines live) so
   // labels paint over the route, not under it. pointer-events off so the
   // overlay never eats map interactions.
@@ -38575,13 +38574,12 @@ function addRideMapBase_(map, defaultBase, storeKey){
     }
   }catch(e){}
   var satRoads=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,pane:'satRoads'});
-  var lightLabels=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png',{detectRetina:false,maxZoom:20,subdomains:'abcd',pane:'routeLabels'});
   function showLabels(which){
     try{ map.removeLayer(darkLabels); }catch(e){}
     try{ map.removeLayer(satLabels); }catch(e){}
     try{ map.removeLayer(satRoads); }catch(e){}
-    try{ map.removeLayer(lightLabels); }catch(e){}
-    try{ (which==='satellite'?satLabels:(which==='light'?lightLabels:darkLabels)).addTo(map); }catch(e){}
+    // The light style bakes its own labels; adding an overlay double-prints every place name.
+    if(which!=='light'){ try{ (which==='satellite'?satLabels:darkLabels).addTo(map); }catch(e){} }
     if(which==='satellite'){ try{ satRoads.addTo(map); }catch(e){} }
   }
   // STORAGE KEY IS PER-SURFACE. Every map shared one key, so a Satellite or Dark choice made once
