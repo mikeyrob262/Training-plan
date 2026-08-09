@@ -5353,7 +5353,7 @@ function runZoneBackfill(){
 // would lose every PR it should have won and the progression history would quietly favour whichever
 // rides happened to be re-fetched. dpr.res records the measured sample spacing so a future reader
 // can still tell what it was computed from.
-var DPR_VERSION=1;
+var DPR_VERSION=2;
 // Kilometre markers. Short ones are where the resolution argument above actually bites, long ones
 // are only reachable on a handful of rides — both are kept, and the read side reports how many
 // rides could reach each marker rather than hiding the thin ones.
@@ -5363,21 +5363,47 @@ var DPR_MARKERS_KM=[1,5,10,20,40,50,80,100,160];
 // is elapsed seconds from the start and carries the stops as gaps (0,1,99,100,...), so subtracting
 // two of its values already gives elapsed. Switching to moving time later would silently change
 // every stored record, which is what the version stamp exists to catch.
+// A DISCONTINUITY IN THE DISTANCE STREAM IS NOT A FAST KILOMETRE. v1 shipped and immediately
+// produced a 1 km in ONE SECOND (3,600 km/h) because the two-pointer happily measured a window that
+// spanned a single sample where distance jumped 1,782 m while the clock advanced 1 s.
+//
+// The cut is measured, not a judgement call about how fast a cyclist can go. Across the offending
+// rides, normal steps sit at a median of 5.4-6.1 m/s with p99.9 near 11, while the artifacts are 68,
+// 77, 186, 1401 and 1782 m/s - and there are only 2-3 of them in a 10,000-point ride. 25 m/s
+// (90 km/h) sits in the empty gap: far above any real sample, far below every artifact.
+//
+// This filters DATA INTEGRITY only, deliberately not plausibility. A genuine Zwift descent at
+// 22 m/s survives, because indoor and outdoor are already separate boards and it is not this
+// function's place to rule that a fast virtual descent cannot be a record.
+var DPR_MAX_STEP_MPS=25;
 function dprFromStreams_(dist, time){
   if(!dist || !time) return null;
   var n=Math.min(dist.length, time.length);
   if(n<2) return null;
+  // Split the ride into maximal runs containing no artifact. A window may never span one, so each
+  // run is scanned independently, which also keeps the whole thing linear.
+  var runs=[], startIdx=0, k;
+  for(k=1;k<n;k++){
+    var dd=dist[k]-dist[k-1], dt=time[k]-time[k-1];
+    var artifact=(dd<0) || (dt<0) || (dd/Math.max(1,dt) > DPR_MAX_STEP_MPS);
+    if(artifact){ if(k-startIdx>=2) runs.push([startIdx,k-1]); startIdx=k; }
+  }
+  if(n-startIdx>=2) runs.push([startIdx,n-1]);
+  if(!runs.length) return {};
   var out={}, mi;
   for(mi=0; mi<DPR_MARKERS_KM.length; mi++){
-    var need=DPR_MARKERS_KM[mi]*1000, best=null, j=0, i;
-    // Two pointers. dist is cumulative and non-decreasing, so as the window start i advances the
-    // first j that satisfies the distance can only move forward — O(n) per marker, not O(n^2).
-    for(i=0;i<n;i++){
-      if(j<i) j=i;
-      while(j<n && (dist[j]-dist[i])<need) j++;
-      if(j>=n) break;                         // nothing further can reach the marker; longer i is worse
-      var t=time[j]-time[i];
-      if(t>0 && (best===null || t<best)) best=t;
+    var need=DPR_MARKERS_KM[mi]*1000, best=null, ri;
+    for(ri=0; ri<runs.length; ri++){
+      var lo=runs[ri][0], hi=runs[ri][1], j=lo, i;
+      // Two pointers. dist is cumulative and non-decreasing inside a run, so as the window start i
+      // advances the first j that satisfies the distance can only move forward: O(n), not O(n^2).
+      for(i=lo;i<=hi;i++){
+        if(j<i) j=i;
+        while(j<=hi && (dist[j]-dist[i])<need) j++;
+        if(j>hi) break;                       // nothing further in this run reaches the marker
+        var t=time[j]-time[i];
+        if(t>0 && (best===null || t<best)) best=t;
+      }
     }
     if(best!==null) out[String(DPR_MARKERS_KM[mi])]=best;
   }

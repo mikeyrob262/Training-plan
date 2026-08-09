@@ -23,8 +23,8 @@ const check=(label,got,want)=>{ const ok=JSON.stringify(got)===JSON.stringify(wa
   console.log('  '+(ok?G+'PASS'+X:R+'FAIL'+X)+'  '+label+(ok?'':'   got '+JSON.stringify(got)+', want '+JSON.stringify(want))); };
 const ok=(label,cond)=>{ if(!cond)fails++; console.log('  '+(cond?G+'PASS'+X:R+'FAIL'+X)+'  '+label); };
 
-const H = new Function(asServed(exv('DPR_VERSION')+exv('DPR_MARKERS_KM')+ex('dprFromStreams_')+ex('dprResolution_'))
-  + ';return {dprFromStreams_,dprResolution_,DPR_MARKERS_KM,DPR_VERSION};')();
+const H = new Function(asServed(exv('DPR_VERSION')+exv('DPR_MARKERS_KM')+exv('DPR_MAX_STEP_MPS')+ex('dprFromStreams_')+ex('dprResolution_'))
+  + ';return {dprFromStreams_,dprResolution_,DPR_MARKERS_KM,DPR_VERSION,DPR_MAX_STEP_MPS};')();
 
 console.log('\n'+C+'=== the best window in the ride, not the first ==='+X);
 // 10 km at a steady 10 m/s = 1000s, EXCEPT one stretch ridden at 20 m/s. The fast stretch is in the
@@ -84,6 +84,43 @@ ok('mismatched lengths are truncated, not read past', (() => {
   const m=H.dprFromStreams_([0,1000,2000,3000,4000,5000],[1,2,3]);
   return m && typeof m==='object';
 })());
+
+
+console.log('\n'+C+'=== a stream discontinuity is not a fast kilometre ==='+X);
+// v1 shipped and immediately produced a 1 km in ONE SECOND (3,600 km/h): the window spanned a single
+// sample where distance jumped 1,782 m while the clock advanced 1 s. 62 markers across 39 of 368
+// rides were affected. Measured separation: real steps p99.9 ~11 m/s, artifacts 68+ m/s.
+(function(){
+  // a clean 2 km at 10 m/s, then a 1,782 m teleport in 1 second, then another clean 2 km
+  const dist=[0], time=[0];
+  let d=0, t=0;
+  for(let i=0;i<200;i++){ d+=10; dist.push(d); time.push(++t); }   // 2000 m
+  d+=1782; dist.push(d); time.push(++t);                            // the artifact
+  for(let i=0;i<200;i++){ d+=10; dist.push(d); time.push(++t); }   // 2000 m more
+  const m=H.dprFromStreams_(dist,time);
+  check('the teleport does not become a 1km record', m['1'], 100);
+  // 5 km is only reachable BY crossing the artifact, so it must be absent rather than fabricated
+  check('a marker only reachable across the artifact is absent', m['5'], undefined);
+})();
+(function(){
+  // a real fast descent must NOT be filtered: 22 m/s sustained is legitimate on Zwift
+  const dist=[0], time=[0];
+  let d=0, t=0;
+  for(let i=0;i<200;i++){ d+=22; dist.push(d); time.push(++t); }
+  const m=H.dprFromStreams_(dist,time);
+  check('a genuine 22 m/s descent is kept, not filtered as an artifact', m['1'], 46);
+})();
+(function(){
+  const dist=[0,500,1000,400,900,1400,1900], time=[0,50,100,150,200,250,300];
+  const m=H.dprFromStreams_(dist,time);
+  ok('a backwards jump splits the ride rather than producing a negative window',
+     !m['1'] || m['1']>0);
+})();
+check('the artifact threshold is a named constant', typeof H.DPR_MAX_STEP_MPS, 'number');
+ok('...set in the measured gap between real riding and artifacts',
+   H.DPR_MAX_STEP_MPS>=15 && H.DPR_MAX_STEP_MPS<=60);
+// The formula changed, so the version MUST have moved or v1 records would sit on a v2 board.
+check('the version was bumped when the formula changed', H.DPR_VERSION>=2, true);
 
 console.log('\n'+C+'=== resolution is recorded, because it decides whether the number is real ==='+X);
 check('1 Hz stream reports 1s spacing', H.dprResolution_([0,1,2,3,4,5,6]), 1);
