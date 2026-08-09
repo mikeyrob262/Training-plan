@@ -17571,12 +17571,31 @@ function repairCorruptTss_(commit){
     else go(window.confirm(msg));
   }catch(e){ console.error('[tss-repair] failed: '+((e&&e.message)||e)); }
 }
+// Sortable instant for an activity: its real start when stored, otherwise midnight on its date.
+// Returns 0 for an activity with neither, which sorts it last rather than to 1970-adjacent noise.
+function _actSortT_(r){
+  if(!r) return 0;
+  if(r.startTime){ var t=Date.parse(r.startTime); if(isFinite(t)) return t; }
+  if(r.start_date_local){ var t2=Date.parse(r.start_date_local); if(isFinite(t2)) return t2; }
+  if(r.date){ var t3=Date.parse(String(r.date).slice(0,10)+'T00:00:00'); if(isFinite(t3)) return t3; }
+  return 0;
+}
 function recentRides_(n){
   // PINNED to the legacy path — Recent Activity shows every activity type, and
   // allRidesDeduped_ is now ride-typed. Migrate with the dashboard pass (Group E),
   // which has to decide what an all-sports feed means once 1,760 runs are in scope.
   var out=allRidesLegacy_();
-  out.sort(function(a,b){ return new Date(b.date)-new Date(a.date); });
+  // SORT ON TIME, not just the calendar day. Comparing new Date(r.date) alone makes every activity
+  // on the same day compare EQUAL, so the order among them fell through to whatever order the array
+  // happened to be in - which is import order, not the order they were ridden. A day with a morning
+  // ride and an evening run showed them arbitrarily.
+  //
+  // startTime is used where present and the date is the fallback, so a ride that only carries a
+  // calendar day still sorts to the right day - it just cannot be ordered within it, which is a
+  // storage limitation rather than something the comparator can fix. Strava's start_date_local
+  // carries a fake Z and parses a few hours early, but the shift is identical for every ride, so
+  // relative order within a day is unaffected.
+  out.sort(function(a,b){ return _actSortT_(b)-_actSortT_(a); });
   return out.slice(0, n);
 }
 // ==================== Athlete Intelligence — shared insight engine ====================
