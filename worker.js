@@ -26249,9 +26249,15 @@ var SA_MAP_COL={ pb:'#fc9339', kom:'#ee4e98', att:'#4887f0', never:'#9aa3af', at
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
 // under the markers rather than competing with them.
-var SA_LINE_COL='#d97a1a';
+// LIGHT CYAN, deliberately not warm. The Esri hybrid draws its road network in salmon/orange, and
+// an orange segment line sat right on top of that hue - confirmed unreadable in satellite view. Cyan
+// shares no hue with the road overlay, with the gold crown, or with the imagery's greens and browns,
+// so all three read separately. Light rather than dark so the gold crown stands out against it.
+var SA_LINE_COL='#22d3ee';
 // How far the satellite imagery is dimmed. One number, easy to move, applied to the imagery only.
-var SA_MAP_DIM=0.78;
+// >1 LIGHTENS. The dim pass made the imagery muddy; this lifts it instead so the segments and
+// crowns sit on a brighter ground. Imagery only - roads, labels and segments are in higher panes.
+var SA_MAP_BRIGHT=1.18;
 // Line weight is a HARD CONSTRAINT, not a preference. Thick strokes turned this map into stacked
 // highlighter bars over the streets instead of roads with a colour on them; 2px is the whole spec.
 var SA_MAP_W=2;
@@ -26273,7 +26279,7 @@ function _saStatusCol_(t){
 // antialiasing costs about 2px of it, so a nominal 8x12 measured only 6x9 against the reference's
 // 9x13 - 0.468% of panel width where the reference is 0.683%. Sized up so the measured core lands
 // on the reference proportion; the numbers in the verification are what this was tuned against.
-var SA_PIN_W=11, SA_PIN_H=16;
+var SA_PIN_W=14, SA_PIN_H=20;
 // Which marker a segment gets. THE PIN NOW CARRIES THE STATUS, because the lines no longer do -
 // every line is one colour, so crown-vs-ring is the only thing distinguishing a PR from an attempt.
 function _saPinKind_(tier){ var t=(tier&&tier.t)||1; return (t>=3)?'kom':((t===2)?'pb':'att'); }
@@ -26282,7 +26288,7 @@ function _saPinIcon_(col, kind){
   // PERSONAL BEST IS A CROWN, not a teardrop. It replaces the pin shape outright: on imagery a
   // silhouette reads faster than a colour, and a PR is the thing worth spotting from across the map.
   if(kind==='pb'){
-    var cw=13, ch=11, s=cw/12;
+    var cw=17, ch=14, s=cw/12;
     // Classic five-point crown, drawn in a 12x10 space and scaled.
     var cd='M '+(1*s)+' '+(9*s)+' L '+(1*s)+' '+(2.6*s)+' L '+(3.6*s)+' '+(5.2*s)
           +' L '+(6*s)+' '+(1.2*s)+' L '+(8.4*s)+' '+(5.2*s)+' L '+(11*s)+' '+(2.6*s)
@@ -26379,7 +26385,7 @@ function _saMapMount_(){
   // value anyone can pick correctly up front.
   try{
     var tp=map.getPane('tilePane');
-    if(tp) tp.style.filter='brightness('+SA_MAP_DIM+') saturate(0.92)';
+    if(tp) tp.style.filter='brightness('+SA_MAP_BRIGHT+') saturate(0.94)';
   }catch(e){}
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
@@ -26393,7 +26399,22 @@ function _saMapMount_(){
   // the map that was just removed, so the guard inside _saPinsRefresh_ would consider it live and
   // add pins to a dead map - the same trap the old dot-band guard hit.
   _saMapSegs=[]; _saPinLayer=null;
-  var hidden=0, outOfWindow=0;
+  var hidden=0, outOfWindow=0, dupLine=0;
+  // COLLINEAR PILE-UP. Measured in the default view: 157 of 230 segments in frame sit within 12px
+  // and 12 degrees of another - Strava carries many segments over the same stretch of popular road,
+  // and drawing every one of them braids five or six lines along a single carriageway. That is the
+  // clutter at Paul B Henry Fwy and every other busy junction.
+  //
+  // Since every line is now ONE colour, an overlapping duplicate carries no information at all, so
+  // skipping it loses nothing: the segment keeps its PIN and stays clickable and listed. Keyed
+  // geographically, not in screen space, so the decision does not change under zoom.
+  var lineSeen={};
+  var geoKey=function(pts){
+    var a=pts[0], z=pts[pts.length-1];
+    var q=function(v){ return Math.round(v*300)/300; };          // ~370m at this latitude
+    var k1=q(a[0])+','+q(a[1]), k2=q(z[0])+','+q(z[1]);
+    return (k1<k2)?(k1+'|'+k2):(k2+'|'+k1);                      // direction-agnostic
+  };
   data.segs.forEach(function(s){
     // Filters, applied at DRAW time so the counts below can report what was withheld rather than
     // quietly showing less map than the legend claims.
@@ -26414,6 +26435,14 @@ function _saMapMount_(){
       if(s.endLat!=null && s.endLon!=null) pts.push([s.endLat,s.endLon]);
       if(pts.length<2) return;
     }
+    // Drop a line that duplicates a stretch already drawn. The pin is still added below.
+    var gk=geoKey(pts);
+    if(lineSeen[gk]){
+      dupLine++;
+      _saMapSegs.push({s:s, at:pts[0], col:_saStatusCol_(s.tier)});
+      return;
+    }
+    lineSeen[gk]=1;
     if(isReal) real++;
     drawn++;
     var top=(s.tier.t>=2);
@@ -26484,6 +26513,8 @@ function _saMapMount_(){
   if(note) note.innerHTML=drawn.toLocaleString()+' segment'+(drawn===1?'':'s')+' drawn &middot; '
     +real.toLocaleString()+' on their real road shape, '+(drawn-real).toLocaleString()+' as a straight line between endpoints'
     +(outOfWindow?(' &middot; '+outOfWindow.toLocaleString()+' outside the date filter'):'')
+    +(outOfWindow?'':'')
+    +(dupLine?(' &middot; '+dupLine.toLocaleString()+' sharing a stretch already drawn'):'')
     +(hidden?(' &middot; '+hidden.toLocaleString()+' hidden by filters'):'');
 }
 // Tapping a list row flies the map to that segment and opens its popup - the list and the map are

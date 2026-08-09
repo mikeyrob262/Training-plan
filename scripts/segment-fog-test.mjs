@@ -401,9 +401,9 @@ ok('...with the reference aspect ratio (h/w between 1.3 and 1.6)', (() => {
   const h = +(asServed(src).match(/SA_PIN_H\s*=\s*(\d+)/) || [])[1];
   return w && h && (h / w) >= 1.3 && (h / w) <= 1.6;
 })());
-ok('...and a nominal width that yields the reference core proportion, i.e. 10-13px', (() => {
+ok('...and a nominal width in the sized-up band, 13-16px', (() => {
   const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/) || [])[1];
-  return w >= 10 && w <= 13;
+  return w >= 13 && w <= 16;
 })());
 ok('the pin is anchored at its tip', /iconAnchor:\[cx,h\]/.test(pinIconSrc));
 // Colours sampled from the reference's own markers.
@@ -628,6 +628,46 @@ ok('the button carries live progress instead of a banner',
 const rendSrc = bodyOf('aiSegTargetsHtml_');
 ok('the stat bar still refuses to print a % of riding time',
    /not a share of ride time/.test(rendSrc) && !/% of all riding time/.test(rendSrc));
+
+
+// ---- 20. the hybrid pass -----------------------------------------------------------------------
+console.log('\n'+C+'=== 20. hybrid base, crown/ring pins, one line colour ==='+X);
+ok('imagery carries a ROADS overlay, not just place labels', has('World_Transportation'));
+ok('...and it sits in the pane above the segments',
+   /World_Transportation[\s\S]{0,160}pane:'routeLabels'/.test(asServed(src)));
+ok('every segment line is one colour', has('var SA_LINE_COL=') && /var col=SA_LINE_COL/.test(mountSrc));
+ok('...and the pin still gets the STATUS colour', /col:_saStatusCol_\(s\.tier\)/.test(mountSrc));
+ok('a personal best draws a crown, not a teardrop', /kind==='pb'/.test(pinIconSrc));
+ok('an attempted pin is white-filled with an orange ring, no blue',
+   /isAtt\?'#ffffff'/.test(pinIconSrc) && /isAtt\?SA_MAP_COL\.attRing/.test(pinIconSrc));
+// The Esri hybrid draws its road network in salmon/orange; a warm segment line sits on that hue.
+ok('the segment line shares no hue with the road overlay', (() => {
+  const m = asServed(src).match(/var\s+SA_LINE_COL='#([0-9a-fA-F]{6})'/);
+  if (!m) return false;
+  const r = parseInt(m[1].slice(0,2),16), g = parseInt(m[1].slice(2,4),16), b = parseInt(m[1].slice(4,6),16);
+  return b > r && g > r;                      // cool, not a warm orange
+})(), (asServed(src).match(/var\s+SA_LINE_COL='([^']+)'/)||[])[1]);
+ok('the imagery brightness is a single named constant',
+   has('var SA_MAP_BRIGHT=') && /SA_MAP_BRIGHT/.test(mountSrc));
+ok('...and it LIGHTENS rather than dims', (() => {
+  const m = asServed(src).match(/var\s+SA_MAP_BRIGHT\s*=\s*([\d.]+)/);
+  return !!m && parseFloat(m[1]) > 1;
+})());
+ok('...on the imagery pane only, so roads and labels stay bright',
+   /getPane\('tilePane'\)[\s\S]{0,140}filter/.test(mountSrc));
+// Collinear pile-up: measured 157 of 230 segments in the default view overlapping another.
+ok('collinear duplicate LINES are skipped', /lineSeen/.test(mountSrc) && /geoKey/.test(mountSrc));
+ok('...keyed geographically, so zoom cannot change the decision',
+   !/latLngToContainerPoint[\s\S]{0,80}geoKey/.test(mountSrc));
+ok('...direction-agnostic, so an out-and-back pair counts once', /k1<k2/.test(mountSrc));
+ok('...the skipped segment still gets its PIN',
+   /dupLine\+\+;[\s\S]{0,140}_saMapSegs\.push/.test(mountSrc));
+ok('...and the count is REPORTED, not silently dropped',
+   /sharing a stretch already drawn/.test(mountSrc));
+ok('pins were sized up', (() => {
+  const w = +(asServed(src).match(/var\s+SA_PIN_W\s*=\s*(\d+)/)||[])[1];
+  return w >= 13 && w <= 16;
+})());
 
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);
