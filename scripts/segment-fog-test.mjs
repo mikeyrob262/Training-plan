@@ -372,7 +372,7 @@ ok('segment stretches are still drawn - pins did not replace the lines',
 // segments read as blocks: a dark outline 3px wider than the line. It is gone, and must stay gone.
 ok('NO casing pane or casing renderer survives', !/segCase/.test(mountSrc) && !has("createPane('segCase')"));
 ok('the interactive line is index 0, so a row tap opens a popup that exists',
-   /_saMapById\[s\.id\]=\[line\]/.test(mountSrc));
+   /_saMapById\[s\.id\]=\[line, ?halo\]/.test(mountSrc));
 const pinSrc = bodyOf('_saPinsRefresh_');
 ok('pins are zoom-gated off a named constant', /_SA_PIN_MINZ/.test(pinSrc) && has('_SA_PIN_MINZ'));
 // Leaflet's markerPane is z600 and the segment lines are z620, so without their own higher pane the
@@ -575,11 +575,25 @@ ok('promote recolours the line only, never the casing', (() => {
 // that came up dark. Each of those is now a pinned number or a pinned absence, because "looks
 // right" is not something the suite can see and these are what kept regressing.
 console.log('\n'+C+'=== 19. thin lines, small pins, light base ==='+X);
-check('the stroke width constant is 2px', F.MAPW, 2);
-ok('every polyline in the mount uses that constant, with no per-tier width',
+// Variant D: 4px line inside a 3px white halo, chosen on measured worst-case contrast.
+check('the stroke width constant is 4px', F.MAPW, 4);
+ok('a white halo is drawn UNDER the colour', /segHalo/.test(mountSrc) && /color:'#ffffff'/.test(mountSrc));
+ok('...in its own pane below the lines', /createPane\('segHalo'\)/.test(mountSrc) && /zIndex=615/.test(mountSrc));
+ok('...wider than the line by the halo constant on each side',
+   /weight:SA_MAP_W\+SA_HALO_W\*2/.test(mountSrc) && has('SA_HALO_W'));
+ok('...non-interactive, so it never steals a click from the line',
+   /pane:'segHalo'[\s\S]{0,220}interactive:false/.test(mountSrc));
+ok('the interactive line is still index 0, halo second',
+   /_saMapById\[s\.id\]=\[line, ?halo\]/.test(mountSrc));
+// NAIP 404s above z16 everywhere tested, while advertising LOD 0..23.
+ok('the satellite base is USGS NAIP', has('USGSImageryOnly'));
+ok('...capped at its real tile ceiling so deep zooms upscale instead of going blank',
+   has('maxNativeZoom:16'));
+// Two weights now and only two: the line at SA_MAP_W and its halo at SA_MAP_W+SA_HALO_W*2.
+ok('every polyline weight derives from the constants, with no per-tier width',
    (() => {
-     const weights = [...mountSrc.matchAll(/weight:\s*([^,}]+)/g)].map(m => m[1].trim());
-     return weights.length > 0 && weights.every(w => w === 'SA_MAP_W');
+     const w = [...mountSrc.matchAll(/weight:\s*([^,}]+)/g)].map(m => m[1].trim());
+     return w.length > 0 && w.every(v => v === 'SA_MAP_W' || v === 'SA_MAP_W+SA_HALO_W*2');
    })(), [...mountSrc.matchAll(/weight:\s*([^,}]+)/g)].map(m => m[1].trim()).join(' | '));
 ok('promote recolours without fattening the stroke',
    /weight:SA_MAP_W/.test(bodyOf('_saMapPromote_')));

@@ -26249,9 +26249,13 @@ var SA_LINE_COL='#c2410c';
 // >1 LIGHTENS. The dim pass made the imagery muddy; this lifts it instead so the segments and
 // crowns sit on a brighter ground. Imagery only - roads, labels and segments are in higher panes.
 var SA_MAP_BRIGHT=1.18;
-// Line weight is a HARD CONSTRAINT, not a preference. Thick strokes turned this map into stacked
-// highlighter bars over the streets instead of roads with a colour on them; 2px is the whole spec.
-var SA_MAP_W=2;
+// 4px line inside a 3px white halo - variant D, chosen on measured worst-case contrast against
+// satellite imagery. At the old 2px with no halo, 70.4% of segment pixels had local contrast under
+// 30 against the ground, i.e. effectively invisible; p10 contrast was 2.9. With 4px+3px it is 3.8%
+// and p10 is 50.9 - an 18x improvement in the worst places on the map, which is where a line
+// actually disappears. The halo works structurally rather than by luck: the line's neighbour is
+// white whatever lies underneath, so busy imagery stops mattering.
+var SA_MAP_W=4, SA_HALO_W=3;
 function _saStatusCol_(t){
   var i=(t&&t.t)||1;
   return (i>=3)?SA_MAP_COL.kom:((i===2)?SA_MAP_COL.pb:SA_MAP_COL.att);
@@ -26401,9 +26405,11 @@ function _saMapMount_(){
   // Segments paint in their own pane, below the labels pane addRideMapBase_ creates at z650, so
   // street names stay readable over the lines instead of under them.
   if(!map.getPane('segLines')){ map.createPane('segLines'); map.getPane('segLines').style.zIndex=620; }
-  // THE CASING IS GONE. It existed to buy contrast for a coloured hairline over satellite imagery.
-  // On a light street basemap it buys nothing and costs everything: a dark outline 3px wider than
-  // the line is what made these read as blocks rather than roads.
+  // Halo pane, UNDER the colour. Not the old dark casing - that was a dark outline that made
+  // segments read as blocks. This is a white halo, which separates the line from the ground without
+  // adding visual weight of its own.
+  if(!map.getPane('segHalo')){ map.createPane('segHalo'); map.getPane('segHalo').style.zIndex=615; }
+  var haloRend=L.canvas({pane:'segHalo'});
   var rend=L.canvas({pane:'segLines'});
   var drawn=0, real=0;
   // Both of these are module-level and SURVIVE a remount. _saPinLayer would still be pointing at
@@ -26438,6 +26444,9 @@ function _saMapMount_(){
     // those were what turned this into stacked highlighter bars: a 5.5px line with a 8.5px casing
     // is an 8.5px block of colour on a street map whose own roads are about 2px wide. A segment is
     // a piece of road, so it is drawn at the width of a road.
+    var halo=L.polyline(pts,{ pane:'segHalo', renderer:haloRend, color:'#ffffff',
+      weight:SA_MAP_W+SA_HALO_W*2, opacity:0.95, lineCap:'round', lineJoin:'round',
+      dashArray: isReal?null:'5 4', interactive:false }).addTo(map);
     var line=L.polyline(pts,{ pane:'segLines', renderer:rend, color:col,
       weight:SA_MAP_W, opacity: isReal?0.95:0.6,
       // Dashed says "this is a straight line standing in for a bending road", not decoration.
@@ -26445,8 +26454,8 @@ function _saMapMount_(){
     line.bindPopup(function(){ return _saFogPopup_(s); }, {maxWidth:280});
     line.on('popupopen', function(){ try{ _saKomOnOpen_(s); }catch(e){} });
     // THE INTERACTIVE LINE IS ALWAYS INDEX 0 - _saMapFocus_ opens [0]'s popup and _saMapPromote_
-    // recolours [0]. One layer per segment now that the casing is gone.
-    _saMapById[s.id]=[line];
+    // recolours [0]. The halo carries no popup and no status colour, so it must never be first.
+    _saMapById[s.id]=[line, halo];
     _saMapSegs.push({s:s, at:pts[0], col:_saStatusCol_(s.tier)});
   });
   // Pin markers ride ON TOP of the stretches, the way Strava's segment map reads: the line says
@@ -38514,7 +38523,19 @@ function rideMapBasePref_(){
 // near-black-on-black this page was rebuilt to get away from. An explicit choice still wins over it.
 function addRideMapBase_(map, defaultBase, storeKey){
   var dark=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{detectRetina:true,maxZoom:20,subdomains:'abcd',attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
-  var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{detectRetina:true,maxZoom:19,attribution:'Tiles &copy; Esri'});
+  // USGS NAIP, measurably calmer ground than Esri World_Imagery: local luminance SD 20.7 vs 30.2,
+  // and only 19.7% of 8x8 blocks vary enough to swallow a thin line against Esri's 76.6%. Esri's
+  // "Firefly" variant was evaluated and rejected - it is byte-identical to World_Imagery, same MD5.
+  //
+  // maxNativeZoom 16 IS LOAD-BEARING. NAIP's metadata advertises LOD 0..23 but it 404s above z16
+  // everywhere tested - Grand Rapids, Chicago and Denver all fail at z17 - and the row-tap fly goes
+  // to z17. Without this the deepest views would render blank. Leaflet upscales the z16 tile
+  // instead: softer, but present.
+  //
+  // US ONLY. Paris and Watopia 404 at every zoom, so Zwift segments have no imagery under them in
+  // satellite mode; the roads and labels overlays still draw, so they land on a plain ground rather
+  // than on nothing.
+  var sat=L.tileLayer('https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}',{detectRetina:false,maxZoom:19,maxNativeZoom:16,attribution:'Imagery &copy; USGS NAIP'});
   // LIGHT STREET base. Segment work reads better over a pale street map than over imagery: the
   // stretches are thin coloured lines, and imagery competes with them at the same saturation while
   // a muted street map recedes behind them. Voyager keeps road classes and place names legible at
