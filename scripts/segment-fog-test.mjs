@@ -659,7 +659,8 @@ ok('...on the imagery pane only, so roads and labels stay bright',
 ok('collinear duplicate LINES are skipped', /lineSeen/.test(mountSrc) && /geoKey/.test(mountSrc));
 ok('...keyed geographically, so zoom cannot change the decision',
    !/latLngToContainerPoint[\s\S]{0,80}geoKey/.test(mountSrc));
-ok('...direction-agnostic, so an out-and-back pair counts once', /k1<k2/.test(mountSrc));
+ok('...direction-agnostic, so an out-and-back pair counts once', /brg=\(\(brg%180\)\+180\)%180/.test(mountSrc));
+ok('...and the LONGEST of a merged group is the one drawn', /drawList/.test(mountSrc) && /lq-lp/.test(mountSrc));
 ok('...the skipped segment still gets its PIN',
    /dupLine\+\+;[\s\S]{0,140}_saMapSegs\.push/.test(mountSrc));
 ok('...and the count is REPORTED, not silently dropped',

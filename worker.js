@@ -26409,13 +26409,27 @@ function _saMapMount_(){
   // skipping it loses nothing: the segment keeps its PIN and stays clickable and listed. Keyed
   // geographically, not in screen space, so the decision does not change under zoom.
   var lineSeen={};
+  // Keyed on MIDPOINT + BEARING, which is the overlap that was actually measured. An
+  // endpoint-pair key only catches exact duplicates: it merged 447 across the library but left the
+  // default view untouched at 230, because segments sharing a carriageway rarely share both ends.
+  // Bearing is folded to 180 degrees so an out-and-back pair counts once.
   var geoKey=function(pts){
     var a=pts[0], z=pts[pts.length-1];
-    var q=function(v){ return Math.round(v*300)/300; };          // ~370m at this latitude
-    var k1=q(a[0])+','+q(a[1]), k2=q(z[0])+','+q(z[1]);
-    return (k1<k2)?(k1+'|'+k2):(k2+'|'+k1);                      // direction-agnostic
+    var mLat=(a[0]+z[0])/2, mLon=(a[1]+z[1])/2;
+    var q=function(v){ return Math.round(v*250)/250; };          // ~440m cell
+    var brg=Math.atan2(z[0]-a[0], (z[1]-a[1])*Math.cos(mLat*Math.PI/180))*180/Math.PI;
+    brg=((brg%180)+180)%180;                                     // direction-agnostic
+    return q(mLat)+','+q(mLon)+'@'+Math.round(brg/20);
   };
-  data.segs.forEach(function(s){
+  // LONGEST FIRST, so the survivor of a merge is never shorter than what it stands in for. Drawn in
+  // arrival order, a 200m segment could claim the cell and suppress the 3km one sharing that road,
+  // which would show LESS road than the data has.
+  var drawList=data.segs.slice().sort(function(p,q2){
+    var lp=_saHaversineM_(p.lat,p.lon,(p.endLat!=null?p.endLat:p.lat),(p.endLon!=null?p.endLon:p.lon))||0;
+    var lq=_saHaversineM_(q2.lat,q2.lon,(q2.endLat!=null?q2.endLat:q2.lat),(q2.endLon!=null?q2.endLon:q2.lon))||0;
+    return lq-lp;
+  });
+  drawList.forEach(function(s){
     // Filters, applied at DRAW time so the counts below can report what was withheld rather than
     // quietly showing less map than the legend claims.
     if(_saMapHide[_saStatusKey_(s.tier)]){ hidden++; return; }
