@@ -15565,11 +15565,24 @@ function pmcSeries_(){
   while(d<=end && guard++<20000){
     var k=(typeof dayKey_==='function')?dayKey_(d)
         :(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
-    var t=by[k]||0, pc=ctl, pa=atl;
+    var t=by[k]||0;
     ctl=ctl*kc + t*(1-kc);
     atl=atl*ka + t*(1-ka);
-    out.push({ date:k, ctl:Math.round(ctl*10)/10, atl:Math.round(atl*10)/10,
-               tsb:Math.round((pc-pa)*10)/10 });
+    // SAME-DAY form, not yesterday's. This stored today's CTL and ATL beside YESTERDAY's
+    // differential (the previous pc-pa), so the three headline numbers never agreed with each
+    // other: Fitness 59, Fatigue 65, Form -14 - when 59-65 is -6. Reported twice, Aug 8 and again
+    // today, on the same card.
+    //
+    // Same-day is also what every OTHER path here already used - the Intervals import computes
+    // w.ctl-w.atl, and _trStory_ falls back to p.ctl-p.atl - so the lagged local series was the
+    // odd one out, which is exactly the "two numbers, one fact" shape this app keeps hitting.
+    // intervals.icu agrees: its own Fitness 61 / Fatigue 65 / Form -4 is 61-65.
+    // Round the pair FIRST, then derive form from the rounded pair. Deriving from the raw values
+    // and rounding separately still splits the triple: ctl 6.44 and atl 28.24 store as 6.4 and
+    // 28.2, whose difference is -21.8, while rounding the raw -21.85 gives -21.9. Same class of
+    // disagreement as the lag, one decimal down.
+    var rc=Math.round(ctl*10)/10, ra=Math.round(atl*10)/10;
+    out.push({ date:k, ctl:rc, atl:ra, tsb:Math.round((rc-ra)*10)/10 });
     d.setDate(d.getDate()+1);
   }
   _pmcCache={key:key, out:out};
@@ -15598,7 +15611,13 @@ function getFitness_(){
   var last=raw.length?raw[raw.length-1]:null;
   var ctl=0, atl=0, tsb=0, ramp=null, source='none', asOf=null, stale=true;
   if(last){
-    ctl=Math.round(last.ctl||0); atl=Math.round(last.atl||0); tsb=Math.round(last.tsb||0);
+    ctl=Math.round(last.ctl||0); atl=Math.round(last.atl||0);
+    // DERIVED FROM THE TWO NUMBERS THIS FUNCTION RETURNS, not rounded independently from the
+    // series. Rounding tsb separately can land a step away from ctl-atl even when the series is
+    // right (58.6 and 64.9 round to 59 and 65, but -6.3 rounds to -6 while a separate path could
+    // show -7). Deriving it makes "Form = Fitness - Fatigue" true by construction on every surface
+    // that reads this, which is all of them.
+    tsb=ctl-atl;
     // Ramp = CTL change per WEEK, the unit the peaking/detraining thresholds already use. Derived
     // from the series rather than read from Intervals, because the series is now ours.
     if(raw.length>=8) ramp=Math.round((last.ctl-raw[raw.length-8].ctl)*10)/10;

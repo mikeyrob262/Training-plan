@@ -341,9 +341,23 @@ try {
     const so = execSync('node scripts/cv-yesterday-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
     process.stdout.write(so.toString());
   } catch (e) {
+
     console.error((e.stdout || '').toString());
     console.error((e.stderr || '').toString());
     fail('the Coach V yesterday recap regressed (see above).');
+  }
+
+  // ---- 23. Form (TSB) must equal Fitness (CTL) minus Fatigue (ATL) on every surface. The local
+  //          series stored today's CTL/ATL beside YESTERDAY's differential, so the Athlete IQ Score
+  //          card showed 59 / 65 / -14 when 59-65 is -6. Reported twice on the same card.
+  console.log(`${D}· checking Form = Fitness - Fatigue…${X}`);
+  try {
+    const so = execSync('node scripts/form-tsb-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('Form (TSB) no longer agrees with Fitness and Fatigue (see above).');
   }
 
   // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
