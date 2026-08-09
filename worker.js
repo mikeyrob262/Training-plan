@@ -26241,8 +26241,16 @@ var SA_MAP_COL={ pb:'#c2410c', kom:'#c73dca', att:'#111827', never:'#9ca3af' };
 // entirely in the pin now (crown / square / teardrop), so colouring the line as well would state it
 // twice and give the map two legends for one fact.
 var SA_LINE_COL='#c2410c';
-// How far the greyscale basemap is darkened. One number, imagery-side only.
-var SA_ROAD_DIM=0.88;
+// How far the greyscale basemap is darkened. Chosen off a measured ladder, not by eye: 0.88 moved
+// mean luminance only 213 from 242 and read as unchanged; 0.70 lands it at 172, a 19.5% drop from
+// 0.88 and unmistakably grey. 0.62 was darker still but the residential grid starts dissolving into
+// the ground, so 0.70 is the last step that keeps the road network legible.
+//
+// NOTE ON WHAT THIS CAN AND CANNOT DO: a global brightness filter scales everything, so it darkens
+// roads in ABSOLUTE terms but never separates them from the land. Measured at every step, land and
+// road luminance stay ~2-3 apart (0.88: 221 vs 218 - 0.70: 176 vs 174). Voyager draws minor roads
+// LIGHTER than the land, and no global filter can invert that relationship.
+var SA_ROAD_DIM=0.70;
 // EVERY SEGMENT LINE IS THIS ONE COLOUR. Status is carried by the PIN now - a crown for a personal
 // best, a hollow orange ring for an attempt - so colouring the lines as well said the same thing
 // twice and turned the map into two competing legends. Darker than the pin gold so the lines sit
