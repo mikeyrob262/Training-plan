@@ -7643,7 +7643,12 @@ function uiModal_(opts){
     var card=document.createElement('div');card.className='ui-modal-card';
     var html='';
     if(opts.title)html+='<div class="ui-modal-title">'+uiEsc_(opts.title)+'</div>';
-    if(opts.message)html+='<div class="ui-modal-msg">'+uiEsc_(opts.message)+'</div>';
+    // THE MESSAGE IS ESCAPED BY DEFAULT AND THAT DEFAULT MUST STAY. Nearly every caller passes a
+    // string built from ride, segment or food names, all of which the athlete can edit - the same
+    // reason r.name is never printed raw. opts.html is a deliberate opt-in for the few callers that
+    // build their own markup, and is only ever correct for markup constructed in this file. Do not
+    // "fix" a caller whose HTML shows as text by flipping the default; give that caller html:true.
+    if(opts.message)html+='<div class="ui-modal-msg">'+(opts.html?opts.message:uiEsc_(opts.message))+'</div>';
     card.innerHTML=html;
     // Text-input mode (uiPrompt): a styled field in the same card, OK resolves its value.
     var input=null;
@@ -7675,8 +7680,8 @@ function uiModal_(opts){
     setTimeout(function(){try{if(input){input.focus();input.select();}else ok.focus();}catch(_){}},0);
   });
 }
-function uiConfirm(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:true,danger:opts.danger,okText:opts.okText,cancelText:opts.cancelText});}
-function uiAlert(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:false,okText:opts.okText});}
+function uiConfirm(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:true,danger:opts.danger,okText:opts.okText,cancelText:opts.cancelText,html:opts.html});}
+function uiAlert(message,opts){opts=opts||{};return uiModal_({message:message,title:opts.title,confirm:false,okText:opts.okText,html:opts.html});}
 function uiPrompt(message,defaultValue,opts){opts=opts||{};return uiModal_({input:true,message:message,defaultValue:defaultValue,title:opts.title,placeholder:opts.placeholder,password:opts.password,okText:opts.okText||'OK',cancelText:opts.cancelText});}
 
 function updDots(){
@@ -27006,8 +27011,12 @@ function _saMapFilters_(){
     +'<div style="font-size:11px;color:var(--d-dim);margin-top:8px;line-height:1.5">'
     +'Never Attempted is not listed because it cannot be drawn - no coordinates are stored for a '
     +'segment that has never been matched to a ride.</div></div>';
-  try{ if(typeof uiAlert==='function'){ uiAlert(html,'Filters'); return; } }catch(e){}
-  try{ if(typeof uiConfirm==='function'){ uiConfirm(html,'Filters'); return; } }catch(e){}
+  // TWO BUGS LIVED ON THESE TWO LINES. The markup was handed to a modal that escapes its message
+  // by design, so the athlete saw literal <div style=...> and &#39; on screen instead of a
+  // checklist - hence html:true. And 'Filters' was passed where the OPTIONS OBJECT goes, so
+  // opts.title read undefined and the popup had no heading either. A bare string is not a title.
+  try{ if(typeof uiAlert==='function'){ uiAlert(html,{title:'Filters', html:true}); return; } }catch(e){}
+  try{ if(typeof uiConfirm==='function'){ uiConfirm(html,{title:'Filters', html:true}); return; } }catch(e){}
 }
 window._saMapFilters_=_saMapFilters_;
 function _saMapToggle_(k,on){
@@ -27336,11 +27345,16 @@ function aiSegTargetsHtml_(ctx){
       +'<span style="color:var(--d-dim);font-weight:600"> &middot; not drawable</span></span>'
     +'</div>'
     +'<div class="sm-ctls">'
-    // ALL SPORTS IS DISABLED, NOT DECORATIVE. st.segments carries no sport, and an effort record is
-    // {d,s,w} with no ride id, so there is nothing to join a sport to. A dropdown that silently did
-    // nothing would be worse than one that says why it cannot.
-    +'<button class="sm-ctl" disabled title="Segments do not carry a sport, and effort records hold no ride id to join one from - so this cannot filter honestly yet.">'
-      +'&#9679; All Sports</button>'
+    // NO "ALL SPORTS" CONTROL. It used to sit here disabled with a tooltip explaining why, which
+    // still read as a feature that existed and was merely off - the athlete clicked it and nothing
+    // happened. A disabled control is a promise; there is nothing behind this one.
+    //
+    // MEASURED over the live store, 2,017 segments and 5,062 effort records: no segment carries a
+    // sport, activity or type field of any kind, and an effort is {d,s,w} (207 legacy ones are
+    // {date,sec}) with no ride id to join a sport from. Strava does return activity_type on
+    // GET /segments/{id}, so the data is obtainable - but that is one read per segment against a
+    // 100-read/15-minute ceiling, which is a deliberate backfill, not a UI fix. Re-add this control
+    // only once that field is actually stored, and only over the segments that carry it.
     +'<span class="sm-ctl"><select id="sa-map-when" onchange="_saMapWhen_(this.value)">'
       +_saWhenOpts_()+'</select></span>'
     +'<button class="sm-ctl" onclick="_saMapFilters_()" title="Show or hide segment statuses on the map">'

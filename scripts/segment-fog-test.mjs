@@ -785,5 +785,40 @@ ok('the check is still xoms-vs-PR, not kom_rank',
 ok('expiring checks are re-verified ahead of never-checked ones',
    /\(x\.age==null\)!==\(y\.age==null\)/.test(bodyOf('_saTgtKomPending_')));
 
+
+console.log('\n'+C+'=== the filters popup renders as a checklist, not as source ==='+X);
+// The athlete saw literal <div style=...> and &#39; on screen: _saMapFilters_ builds markup and
+// handed it to uiModal_, which escapes its message by design.
+const modalSrc = bodyOf('uiModal_'), filtSrc = bodyOf('_saMapFilters_');
+ok('the modal still ESCAPES by default - most callers pass athlete-editable names',
+   /opts\.html\?opts\.message:uiEsc_\(opts\.message\)/.test(modalSrc));
+ok('...with markup as an explicit per-caller opt-in', /opts\.html/.test(modalSrc));
+ok('uiAlert forwards the opt-in', /function uiAlert[^]*?html:opts\.html/.test(src));
+ok('uiConfirm forwards it too', /function uiConfirm[^]*?html:opts\.html/.test(src));
+ok('the filters popup opts in', /html:\s*true/.test(filtSrc));
+// 'Filters' was passed where the OPTIONS OBJECT goes, so the popup had no heading either.
+ok('...and passes a real options object, not a bare string as the title',
+   /uiAlert\(html,\s*\{title:'Filters'/.test(filtSrc) && !/uiAlert\(html,\s*'Filters'/.test(filtSrc));
+ok('the checkbox still calls the toggle', /_saMapToggle_\(&#39;/.test(filtSrc));
+// Behaviour: the built markup must actually be markup, and must carry one row per drawn status.
+const FILT = new Function('SA_MAP_COL','_saMapHide','uiAlert',
+  asServed(ex('_saMapFilters_')) + ';return _saMapFilters_;')(
+  {kom:'#a', pb:'#b', att:'#c'}, {}, function(h, o){ globalThis.__h = h; globalThis.__o = o; });
+FILT();
+check('the popup is given markup, not text', /^<div/.test(globalThis.__h), true);
+check('...one checkbox per drawn status', (globalThis.__h.match(/<input type="checkbox"/g) || []).length, 3);
+check('...opted in to HTML with a title', [globalThis.__o.html, globalThis.__o.title], [true, 'Filters']);
+ok('...and no raw entity would survive as visible text',
+   !/&amp;#39;/.test(globalThis.__h));
+
+console.log('\n'+C+'=== no control promises a filter that has no data behind it ==='+X);
+// MEASURED on the live store: 2,017 segments, 5,062 efforts, zero sport/activity/type fields, and
+// efforts are {d,s,w} with no ride id. A disabled button still reads as a feature that exists.
+ok('the All Sports control is gone, not merely disabled', !/All Sports/.test(codeOnly));
+ok('...and no disabled control is left in the map control row',
+   !/class="sm-ctl"[^>]*\sdisabled/.test(codeOnly));
+ok('the controls that remain are the two that work',
+   /_saMapWhen_\(this\.value\)/.test(src) && /onclick="_saMapFilters_\(\)"/.test(src));
+
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);
