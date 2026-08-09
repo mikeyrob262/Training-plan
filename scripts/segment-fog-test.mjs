@@ -759,6 +759,12 @@ ok('the road-shape grind banks the placements it passes over',
    /_saKomPut_\(it\.key, res\.live\)/.test(src));
 ok('the sweep no longer tells the athlete nothing was stored',
    !/Nothing was stored/.test(bodyOf('_saTgtKomSweep_')) && /Saved\.'\)/.test(bodyOf('_saTgtKomSweep_')));
+// A rule QUOTED IN A COMMENT is not a violation, and this file is CRLF - so strip on CR-aware
+// line ends, not on $ alone.
+const codeOnly = src.split(/\r?\n/).filter(L => !/^\s*\/\//.test(L)).join('\n');
+ok('no surface still tells the athlete placements are never stored', !/never stored/.test(codeOnly));
+ok('...and the legend tooltip says they are dated instead',
+   /stored with the date it was checked/.test(codeOnly));
 ok('placements hydrate on mount like road shapes do',
    /_saKomLoad_\(function\(\)\{ try\{ _saMapMount_/.test(src));
 ok('the check is still xoms-vs-PR, not kom_rank',

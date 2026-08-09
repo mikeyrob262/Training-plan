@@ -25757,8 +25757,10 @@ function _saProbCol_(p){ return (p>=65)?'#22c55e':((p>=45)?'#f59e0b':'#64748b');
 // ROAD GEOMETRY. A segment's real path comes from GET /segments/{id} as map.polyline - the same
 // request that answers the live KOM check, so road shapes cost NOTHING extra against that budget.
 // The two halves of that response get opposite treatment on purpose: the polyline is immutable
-// geometry and is PERSISTED, while the leaderboard half drifts and is never stored (see
-// _segAbsorb_). Same response, different retention.
+// geometry and is PERSISTED unconditionally, while the leaderboard half is persisted WITH THE
+// MOMENT IT WAS MADE and re-verified once it ages past SA_KOM_TTL_MS - because that half drifts and
+// a placement without a date on it cannot be told apart from a current one (see _segAbsorb_).
+// Same response, different retention rules.
 //
 // Until a segment's shape has been fetched it still draws as the straight chord between its stored
 // endpoints, DASHED, because that is a true fact about the endpoints and a false picture of the
@@ -26939,8 +26941,9 @@ function _saMapStats_(){
   days.sort(function(a,b){ return b.n-a.n; });
   var best=days.length?days[0]:null;
   var recent=Object.keys(prByDay).sort().slice(-14).map(function(d){ return prByDay[d]; });
-  // Crowns are LIVE ONLY and never stored, so this is a count of what has been checked this session,
-  // with its own denominator - never a library figure.
+  // Crowns come only from a real xoms-vs-PR check - this session's or a dated one loaded from
+  // /segkom - so this is a count of what has actually been checked, with its own denominator.
+  // Never a library figure, and never inferred from a PR or a stored rank.
   var checked=0, held=0, komable=0;
   Object.keys(store).forEach(function(k){
     var s=store[k]; if(!s) return;
@@ -27319,10 +27322,10 @@ function aiSegTargetsHtml_(ctx){
     +'<div class="sm-row"><div class="sm-leg">'
     +'<span class="sm-leg-i"><span style="color:'+SA_MAP_COL.pb+';font-size:13px">&#9819;</span>'
       +'Personal Best <b style="color:var(--d-head)">('+ms.pb.toLocaleString()+')</b></span>'
-    // CROWNS ARE NOT A LIBRARY FIGURE AND MUST NOT PRINT AS ONE. Placement is never stored, so the
-    // only honest count is what this session has actually checked, with its own denominator. Before
-    // a sweep the truth is "nobody has looked", which is not the same claim as zero.
-    +'<span class="sm-leg-i" title="Placement is fetched live and never stored, so this counts only what has been checked this session."><span style="color:'+SA_MAP_COL.kom+';font-size:13px">&#9819;</span>'
+    // CROWNS ARE NOT A LIBRARY FIGURE AND MUST NOT PRINT AS ONE. The only honest count is what has
+    // actually been checked, with its own denominator. Before any sweep the truth is "nobody has
+    // looked", which is not the same claim as zero.
+    +'<span class="sm-leg-i" title="Placement is verified against the current Strava leaderboard and stored with the date it was checked, so this counts only segments actually checked."><span style="color:'+SA_MAP_COL.kom+';font-size:13px">&#9819;</span>'
       +'KOM / QOM <b style="color:var(--d-head)">'
       +(ms.komChecked>0 ? ('('+ms.komHeld+' of '+ms.komChecked+' checked)') : '(not checked yet)')
       +'</b></span>'
@@ -27371,7 +27374,7 @@ function aiSegTargetsHtml_(ctx){
          +'<div class="sm-s">'+ms.komChecked.toLocaleString()+' checked &middot; '
          +Math.max(0,ms.komable-ms.komChecked).toLocaleString()+' unchecked</div>')
       : ('<div class="sm-v" style="font-size:15px;font-weight:600;color:var(--d-dim)">Not checked</div>'
-         +'<div class="sm-s">'+ms.komable.toLocaleString()+' have a PB to compare &middot; never stored</div>'))
+         +'<div class="sm-s">'+ms.komable.toLocaleString()+' have a PB to compare</div>'))
     +'</div>';
   H+='<div class="sm-cell"><div class="sm-k" style="color:'+SA_MAP_COL.att+'">Attempted</div>'
     +'<div class="sm-v">'+ms.att.toLocaleString()+'</div>'
