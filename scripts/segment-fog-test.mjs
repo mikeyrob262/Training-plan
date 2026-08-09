@@ -713,5 +713,58 @@ ok('...driven by measured per-status time, not a decorative constant',
 ok('...and still refuses the unprovable share of riding time',
    !/% of all riding time/.test(rendSrc));
 
+
+console.log('\n'+C+'=== verified placements survive a reload, with a date on them ==='+X);
+// The sweep used to end its own summary with "Nothing was stored." _saKomLive was a plain var, so
+// every reload threw away every check and the legend read "not checked yet" forever.
+const KOM = new Function('FB_URL',
+  asServed(exv('SA_KOM_TTL_MS')+exv('SA_FOG_E2')+ex('_saKomAge_')+ex('_saKomStale_')+ex('_saKomAgeLabel_')
+    +exv('SA_FOG_STYLE')+ex('_saFogRamp_')+ex('_saFogTierOf_'))
+  +';return {_saKomAge_,_saKomStale_,_saKomAgeLabel_,_saFogTierOf_};')('x');
+const NOW = Date.now(), DAY = 86400000;
+check('a check made today is not stale', KOM._saKomStale_({at:NOW, holds:true}), false);
+check('a 29-day-old check is still good', KOM._saKomStale_({at:NOW-29*DAY, holds:true}), false);
+check('a 31-day-old check is due a re-verify', KOM._saKomStale_({at:NOW-31*DAY, holds:true}), true);
+check('a row with no timestamp is stale, never a fresh crown', KOM._saKomStale_({holds:true}), true);
+check('the age reads in plain words', KOM._saKomAgeLabel_({at:NOW-3*DAY}), 'checked 3 days ago');
+check('...and today says today', KOM._saKomAgeLabel_({at:NOW}), 'checked today');
+
+console.log('\n'+C+'=== a crown still requires a check, never stored state ==='+X);
+const segPR = { prSec:120, effortCount:9 };
+check('a PR alone is tier 2, not a crown', KOM._saFogTierOf_(segPR, null).key, 'pr');
+check('a stored kom_rank cannot promote anything',
+  KOM._saFogTierOf_({ prSec:120, effortCount:9, kom_rank:1, komRank:1 }, null).key, 'pr');
+check('a dated check that came back holding IS a crown',
+  KOM._saFogTierOf_(segPR, { holds:true, at:NOW }).key, 'kom');
+check('a check that came back NOT holding stays tier 2',
+  KOM._saFogTierOf_(segPR, { holds:false, at:NOW }).key, 'pr');
+check('an errored check never draws a crown', KOM._saFogTierOf_(segPR, { err:'rate limit' }).key, 'pr');
+check('an undetermined placement never draws a crown',
+  KOM._saFogTierOf_(segPR, { holds:null, at:NOW }).key, 'pr');
+check('no PR and no check is tier 1', KOM._saFogTierOf_({ effortCount:3 }, null).t, 1);
+
+console.log('\n'+C+'=== the store cannot record what it did not verify ==='+X);
+const putSrc = bodyOf('_saKomPut_'), fetchSrc = bodyOf('_saKomFetch_'), loadSrc = bodyOf('_saKomLoad_');
+ok('an error is never written to the store', /if\(!key \|\| !lv \|\| lv\.err\)/.test(putSrc));
+ok('every stored row carries the moment it was made', /at:\(\+lv\.at>0\?\+lv\.at:Date\.now\(\)\)/.test(putSrc));
+ok('the store is PATCHed, so a concurrent sweep does not lose entries',
+   /method:'PATCH'/.test(putSrc) && !/method:'PUT'/.test(putSrc));
+ok('a row loaded without a timestamp is discarded, not shown as a crown',
+   /!v\.err && \+v\.at>0/.test(loadSrc));
+ok('a failed re-check does not erase a good stored answer',
+   /else if\(!have \|\| have\.err\)/.test(fetchSrc));
+ok('a successful check is persisted as it arrives', /_saKomPut_\(key, v\)/.test(fetchSrc));
+ok('a fresh stored answer costs no request', /!force && !_saKomStale_\(have\)/.test(fetchSrc));
+ok('the road-shape grind banks the placements it passes over',
+   /_saKomPut_\(it\.key, res\.live\)/.test(src));
+ok('the sweep no longer tells the athlete nothing was stored',
+   !/Nothing was stored/.test(bodyOf('_saTgtKomSweep_')) && /Saved\.'\)/.test(bodyOf('_saTgtKomSweep_')));
+ok('placements hydrate on mount like road shapes do',
+   /_saKomLoad_\(function\(\)\{ try\{ _saMapMount_/.test(src));
+ok('the check is still xoms-vs-PR, not kom_rank',
+   /_saXomSec_\(d\.xoms&&d\.xoms\.kom\)/.test(src) && !/kom_rank/.test(bodyOf('_saSegDetail_')));
+ok('expiring checks are re-verified ahead of never-checked ones',
+   /\(x\.age==null\)!==\(y\.age==null\)/.test(bodyOf('_saTgtKomPending_')));
+
 console.log(fails ? '\n'+R+'segment fog: '+fails+' FAILED'+X+'\n' : '\n'+G+'segment fog: all checks passed'+X+'\n');
 process.exit(fails?1:0);

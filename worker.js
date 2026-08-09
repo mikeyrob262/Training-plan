@@ -25841,6 +25841,74 @@ function _saPolyPut_(key, enc){
     return fetch(_saPolyUrl_('', tok), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   }).then(function(r){ return !!(r&&r.ok); }).catch(function(){ return false; });
 }
+// ---- verified placement store ---------------------------------------------------------------
+// A CROWN IS A FACT WITH A DATE ON IT. _saKomLive started as a plain var on purpose, so a placement
+// that had since drifted could never be drawn from stored state. The cost was that every reload
+// threw away every check: the sweep's own completion message ended "Nothing was stored.", the
+// legend read "not checked yet" forever, and ~117 reads of a 100-per-15-minute budget bought
+// nothing that survived closing the tab.
+//
+// Persisting does NOT weaken that guarantee, because what is stored is the comparison AND THE
+// MOMENT IT WAS MADE - never a bare boolean. Every surface that draws a crown has its at stamp in hand and
+// says how old the check is, and anything past SA_KOM_TTL_MS is re-verified ahead of a segment
+// that has never been checked. Two things are deliberately never stored:
+//   - an ERROR. A segment Strava would not answer for stays unchecked; recording it would be
+//     indistinguishable from a checked "not holding", which is a different and much stronger claim.
+//   - kom_rank. Still the wrong source, still stamped at upload time. This store holds the xoms-vs-PR
+//     comparison only, which is why it can carry a date at all.
+var SA_KOM_TTL_MS=30*24*3600*1000;                 // past this, a stored check is re-verified first
+var _saKomLoaded=false, _saKomStoreBusy=false;
+function _saKomUrl_(key, token){
+  return FB_URL.replace('/data.json','') + '/segkom' + (key?('/'+encodeURIComponent(key)):'') + '.json?auth=' + encodeURIComponent(token);
+}
+function _saKomAge_(lv){ return (lv && +lv.at>0) ? (Date.now()-(+lv.at)) : null; }
+function _saKomStale_(lv){ var a=_saKomAge_(lv); return (a==null) || (a>SA_KOM_TTL_MS); }
+// "checked 3 days ago" beats a raw timestamp on a crown, and beats no qualifier at all.
+function _saKomAgeLabel_(lv){
+  var a=_saKomAge_(lv); if(a==null) return '';
+  var d=Math.floor(a/86400000);
+  if(d<=0) return 'checked today';
+  if(d===1) return 'checked yesterday';
+  if(d<30) return 'checked '+d+' days ago';
+  var m=Math.round(d/30);
+  return 'checked '+m+' month'+(m===1?'':'s')+' ago';
+}
+// One read for the whole placement store, once per session, alongside the shape store.
+function _saKomLoad_(cb){
+  cb=cb||function(){};
+  if(_saKomLoaded || _saKomStoreBusy){ cb(); return; }
+  _saKomStoreBusy=true;
+  ensureFbAuth_().then(function(tok){ return fetch(_saKomUrl_('', tok)); })
+    .then(function(r){ return (r&&r.ok)?r.json():null; })
+    .then(function(j){
+      var n=0;
+      if(j && typeof j==='object'){
+        Object.keys(j).forEach(function(k){
+          var v=j[k];
+          // A stored row must carry the moment it was made, or it cannot be aged and is not usable
+          // as evidence. Anything without an at stamp is treated as absent rather than as a crown.
+          if(v && typeof v==='object' && !v.err && +v.at>0){ _saKomLive[k]=v; n++; }
+        });
+      }
+      _saKomLoaded=true; _saKomStoreBusy=false;
+      try{ console.log('[fog] '+n+' verified placements loaded'); }catch(e){}
+      cb();
+    })
+    .catch(function(){ _saKomLoaded=true; _saKomStoreBusy=false; cb(); });
+}
+// PATCH one placement in. Never a PUT over /segkom - a sweep running on another device must not
+// lose its entries, the same reason _saPolyPut_ patches.
+function _saKomPut_(key, lv){
+  if(!key || !lv || lv.err) return Promise.resolve(false);
+  return ensureFbAuth_().then(function(tok){
+    var body={}; body[key]={
+      prSec:(lv.prSec==null?null:+lv.prSec), komSec:(lv.komSec==null?null:+lv.komSec),
+      qomSec:(lv.qomSec==null?null:+lv.qomSec), holds:(lv.holds==null?null:!!lv.holds),
+      gap:(lv.gap==null?null:+lv.gap), athletes:(lv.athletes==null?null:+lv.athletes),
+      at:(+lv.at>0?+lv.at:Date.now()) };
+    return fetch(_saKomUrl_('', tok), {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  }).then(function(r){ return !!(r&&r.ok); }).catch(function(){ return false; });
+}
 // ONE request, BOTH answers. /segments/{id} carries the road shape and the leaderboard state
 // together, so this is the single place either is fetched - and calling it for one purpose warms
 // the other for free rather than spending a second request on it later.
@@ -25899,12 +25967,23 @@ function _saSegDetail_(segId, cb){
 // /segment_efforts - that returns kom_rank, which Strava stamps at upload time and which is
 // provably stale here (see _segAbsorb_). Comparing your PR against today's KOM is a fact about
 // today; a rank recorded in July is not.
-function _saKomFetch_(segId, cb){
+function _saKomFetch_(segId, cb, force){
   var key='s'+segId;
-  if(_saKomLive[key]){ cb(_saKomLive[key]); return; }
+  // A stored answer satisfies the request until it ages out; past the TTL this re-verifies rather
+  // than serving a month-old crown as though it were today's.
+  var have=_saKomLive[key];
+  if(have && !have.err && !force && !_saKomStale_(have)){ cb(have); return; }
   if(_saKomBusy[key]){ cb(null); return; }
   _saKomBusy[key]=true;
-  var done=function(v){ delete _saKomBusy[key]; _saKomLive[key]=v; cb(v); };
+  // A FAILED RE-CHECK MUST NOT ERASE A GOOD STORED ANSWER. Once checks persist, a rate limit or a
+  // dropped connection during a re-sweep would otherwise overwrite a real verified placement with
+  // an error object and the crown would vanish - a network blip reading as "you lost the KOM".
+  var done=function(v){
+    delete _saKomBusy[key];
+    if(v && !v.err){ _saKomLive[key]=v; try{ _saKomPut_(key, v); }catch(e){} }
+    else if(!have || have.err){ _saKomLive[key]=v; }
+    cb(_saKomLive[key] || v);
+  };
   if(typeof withStravaToken_!=='function'){ done({err:'no strava'}); return; }
   // "Holds it" is a comparison of times, not a rank: the PR is at or under the standing leaderboard
   // time, and a tie counts. Computed in _saSegDetail_ so the shape backfill gets the same answer
@@ -26006,7 +26085,9 @@ function _saPolySweep_(litOnly){
         else none++;
         // The leaderboard half of this response is live and free; keep it for the session so a
         // later click on this segment needs no second request.
-        if(res.live) _saKomLive[it.key]=res.live;
+        // The grind's response carries the placement too, so a shape run also banks every crown
+        // it passed over instead of spending those reads twice.
+        if(res.live){ _saKomLive[it.key]=res.live; try{ _saKomPut_(it.key, res.live); }catch(e){} }
       } else none++;
       setTimeout(step, SA_POLY_GAP);
     });
@@ -26104,10 +26185,12 @@ function _saDotStyle_(t){ var v=_saFogStyleOf_(t);
   return {radius:v.dr, color:v.dot, weight:0, fillColor:v.dot, fillOpacity:v.dop}; }
 function _saFogTierOf_(seg, live){
   if(!seg) return null;
-  // Tier 3 is only ever awarded by a LIVE check that came back holding. It cannot be reached from
-  // stored state, which is the point: nothing in st.segments can promote a segment into it, so the
-  // tier can never show a placement that has since drifted. Unchecked and not-holding both stay at
-  // whatever the stored data supports.
+  // Tier 3 is only ever awarded by an xoms-vs-PR CHECK - either one made this session or one loaded
+  // from /segkom, which carries the moment it was made and is re-verified once it ages past
+  // SA_KOM_TTL_MS. Nothing in st.segments can promote a segment into it: not kom_rank, not a PR, not
+  // an effort count. That is the point, and it survives the check being stored - what is persisted
+  // is a dated comparison, not a bare boolean. Unchecked and not-holding both stay at whatever the
+  // stored data supports, which is never a crown.
   var n=(+seg.effortCount>0)?+seg.effortCount:((seg.efforts&&seg.efforts.length)||0);
   var mk=function(t,key,label){
     var ramp=_saFogRamp_({t:t}, n);
@@ -26286,13 +26369,15 @@ function _saKomHtml_(s){
   if(lv.holds===true){
     return '<b style="color:#fc5200">You hold it.</b> Your '+mm(lv.prSec)+' is the standing time'
       +(lv.athletes?(' across '+lv.athletes.toLocaleString()+' athletes'):'')+'.'
-      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">checked just now, not stored</div>';
+      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">'+_saKomAgeLabel_(lv)
+      +(_saKomStale_(lv)?' &middot; due a re-check':'')+'</div>';
   }
   if(lv.holds===false){
     return 'KOM '+mm(lv.komSec)+(lv.qomSec!=null?(' &middot; QOM '+mm(lv.qomSec)):'')
       +'<div style="color:#0d1016;margin-top:2px">You are <b>'+Math.round(lv.gap)+'s</b> off'
       +(lv.athletes?(' &middot; '+lv.athletes.toLocaleString()+' athletes'):'')+'</div>'
-      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">checked just now, not stored</div>';
+      +'<div style="font-size:9.5px;color:#8b95a6;margin-top:2px">'+_saKomAgeLabel_(lv)
+      +(_saKomStale_(lv)?' &middot; due a re-check':'')+'</div>';
   }
   return 'Placement could not be determined from what Strava returned.';
 }
@@ -26510,6 +26595,9 @@ function _saMapMount_(){
   // Road shapes load once per session; the mount re-runs with real geometry once they land, so the
   // first paint is chords and the second is roads.
   if(!_saPolyLoaded && !_saPolyBusy){ _saPolyLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
+  // Verified placements load the same way and on the same schedule; the mount re-runs when they
+  // land, so crowns appear on the second paint exactly as real road shapes do.
+  if(!_saKomLoaded && !_saKomStoreBusy){ _saKomLoad_(function(){ try{ _saMapMount_(); }catch(e){} }); }
   if(_saMap){ try{ _saMap.remove(); }catch(e){} _saMap=null; }
   _saMapById={};
   var data=_saFogList_((typeof st!=='undefined'&&st&&isPlainObj_(st.segments))?st.segments:{}, _saKomLive);
@@ -26979,8 +27067,16 @@ function _saTgtKomPending_(){
   Object.keys(store).forEach(function(k){
     var s=store[k]; if(!s || !_saIsTarget_(s) || !_saKomCandidate_(s)) return;
     var num=_saSegNum_(k)||_saSegNum_(s.id); if(!num) return;
-    if(_saKomLive['s'+num]) return;                    // already answered this session
-    out.push({key:k, num:num, id:s.id});
+    var lv=_saKomLive['s'+num];
+    if(lv && !lv.err && !_saKomStale_(lv)) return;     // a fresh stored check needs no request
+    out.push({key:k, num:num, id:s.id, age:(lv&&!lv.err)?_saKomAge_(lv):null});
+  });
+  // A STALE CROWN IS WORSE THAN A MISSING ONE: it is a claim the app is making on screen that may
+  // no longer be true, where an unchecked segment claims nothing. So expiring checks are re-verified
+  // ahead of segments that have never been checked, oldest first.
+  out.sort(function(x,y){
+    if((x.age==null)!==(y.age==null)) return (x.age==null)?1:-1;
+    return (y.age||0)-(x.age||0);
   });
   return out;
 }
@@ -27014,7 +27110,7 @@ function _saTgtKomSweep_(){
       _saTgtSweeping=false; if(btn) btn.disabled=false;
       say('Checked '+done+' of '+list.length+' unchecked target'+(list.length===1?'':'s')
         +(capped?(' &mdash; capped at '+SA_TGT_SWEEP_CAP+' per press, press again for the next '+Math.min(SA_TGT_SWEEP_CAP, list.length-run.length)):'')
-        +'. '+held+' held'+(errs?(', '+errs+' unavailable'):'')+'. Nothing was stored.');
+        +'. '+held+' held'+(errs?(', '+errs+' unavailable'):'')+'. Saved.');
       try{ if(typeof aiSetTab_==='function') aiSetTab_('segattack'); }catch(e){}
       return;
     }
