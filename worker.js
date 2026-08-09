@@ -36530,7 +36530,9 @@ function dsShowDashboard(){
   // NO PILL. border-radius stays a modest 9px, matching .sm-ctl, and the control is sized to its
   // label instead of to 52% of the card. A capsule (border-radius 999px / 100px / 50%) is not a
   // shape this app uses for buttons - see the standing rule in the header notes.
-  pInner+='<div style="margin-top:12px"><span data-act="plan" style="display:inline-flex;align-items:center;background:'+ACC.orange+';border-radius:9px;padding:5px 12px;font-size:11.5px;font-weight:700;color:var(--d-t1);cursor:pointer">View</span></div>';
+  // Centred via text-align on the wrapper, NOT by giving the control a width. The control stays
+  // inline-flex and sized to its label; a percentage width is what made it loud in the first place.
+  pInner+='<div style="margin-top:12px;text-align:center"><span data-act="plan" style="display:inline-flex;align-items:center;background:'+ACC.orange+';border-radius:9px;padding:5px 12px;font-size:11.5px;font-weight:700;color:var(--d-t1);cursor:pointer">View</span></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --

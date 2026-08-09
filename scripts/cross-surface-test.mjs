@@ -579,6 +579,8 @@ check('...sits with the plan text, not pushed to the card bottom',
       !/margin-top:auto/.test(todayBtn || ''), true);
 check('...is sized to its label, not to a share of the card',
       !/width:\s*\d+%/.test(todayBtn || ''), true);
+// Centred on the wrapper, so the control keeps its label width instead of stretching to fill.
+check('...is centred', /text-align:center/.test(todayBtn || ''), true);
 
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);
