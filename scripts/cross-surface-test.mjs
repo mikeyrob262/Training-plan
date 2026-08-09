@@ -550,5 +550,35 @@ check('recentRides_ sorts through _actSortT_, not on the date string',
   /_actSortT_\(b\)\s*-\s*_actSortT_\(a\)/.test(ex('recentRides_')), true);
 
 console.log('');
+
+// ---- no pill-shaped buttons -------------------------------------------------
+// STANDING RULE (athlete, 2026-08-09): no pill/capsule-shaped buttons anywhere in the app. The
+// house shape for a control is .sm-ctl - a modest 9px radius, flat, sized to its label.
+//
+// This is a RATCHET, not a clean-room assertion: 14 capsule-radius controls already exist and are
+// not retrofitted by this change. The count may only go DOWN. If this fails because you added a
+// control, use border-radius 9px instead of raising the number.
+//
+// KNOWN BLIND SPOT, stated rather than hidden: the match is per line, so a control whose style is
+// concatenated across several lines (the You-vs-You sport picker is one) hides its radius from the
+// line carrying '<button' and is not counted. Tightening this means inspecting the built string,
+// not widening the regex - do NOT "fix" it by counting radius lines alone, which would sweep in
+// every circular avatar and status dot.
+const CAP_RADIUS = /border-radius:\s*(999+px|9999px|100px|20px)/;
+const INTERACTIVE = /onclick=|data-act=|<button|cursor:\s*pointer|-btn\{|\.swap-|\.back-btn/;
+const capsuleCtls = codeLines.filter(L => CAP_RADIUS.test(L) && INTERACTIVE.test(L));
+check('no NEW pill-shaped button was added (ratchet: may only go down)', capsuleCtls.length <= 14, true);
+if (capsuleCtls.length < 14) console.log('  '+D+'   ratchet moved: '+capsuleCtls.length+' left, lower the baseline'+X);
+// The button this rule came from must itself be compliant, sized to its label, and beside its text.
+const todayBtn = codeLines.find(L => /data-act="plan"/.test(L) && /View</.test(L));
+check('the Today\'s Plan control exists', !!todayBtn, true);
+check('...is labelled just "View"', /">View<\/span>/.test(todayBtn || ''), true);
+check('...is not a capsule', !CAP_RADIUS.test(todayBtn || ''), true);
+check('...uses the house 9px radius', /border-radius:9px/.test(todayBtn || ''), true);
+check('...sits with the plan text, not pushed to the card bottom',
+      !/margin-top:auto/.test(todayBtn || ''), true);
+check('...is sized to its label, not to a share of the card',
+      !/width:\s*\d+%/.test(todayBtn || ''), true);
+
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);

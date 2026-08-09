@@ -36523,7 +36523,14 @@ function dsShowDashboard(){
       pInner+='<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--d-edge)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+rw[2]+'"/></svg><span style="font-size:12px;color:var(--d-t4);width:70px">'+rw[0]+'</span><span style="font-size:13px;color:var(--d-t2);font-weight:600">'+rw[1]+'</span></div>';
     });
   }
-  pInner+='<div style="margin-top:auto;padding-top:14px;display:flex;justify-content:center"><div data-act="plan" style="width:52%;text-align:center;background:'+ACC.orange+';border-radius:9px;padding:8px;font-size:12px;font-weight:700;color:var(--d-t1);cursor:pointer">View Workout Details</div></div>';
+  // NOT margin-top:auto. This card is a flex column, so auto pushed the control to the very bottom
+  // and stranded it in whatever empty space the card happened to have - on a rest day, a long way
+  // under "Keep it easy" with nothing between them. It belongs with the text it acts on.
+  //
+  // NO PILL. border-radius stays a modest 9px, matching .sm-ctl, and the control is sized to its
+  // label instead of to 52% of the card. A capsule (border-radius 999px / 100px / 50%) is not a
+  // shape this app uses for buttons - see the standing rule in the header notes.
+  pInner+='<div style="margin-top:12px"><span data-act="plan" style="display:inline-flex;align-items:center;background:'+ACC.orange+';border-radius:9px;padding:5px 12px;font-size:11.5px;font-weight:700;color:var(--d-t1);cursor:pointer">View</span></div>';
   H+=card(pInner);
 
   // -- Right column: mini stats + attention --
