@@ -37660,9 +37660,15 @@ function openDesktopRideDetail(idx, _noFetch){
   },50);
 
   // Satellite map
+  var _imTries=0;
   (function initMap(){
     var mapDiv=document.getElementById('rd-map');
-    if(!mapDiv){setTimeout(initMap,100);return;}
+    // BOUNDED. This retry used to run forever when #rd-map never appeared - a detail opened and
+    // closed again left a poller alive for the life of the page, and the NEXT ride's #rd-map would
+    // satisfy it, so an old ride's track could be mounted into the new ride's container (and the
+    // new ride's own mount then found its inner div replaced and bailed silently, leaving a blank
+    // box). Ten seconds is far longer than the panel ever takes; after that, give up quietly.
+    if(!mapDiv){ if(++_imTries<100) setTimeout(initMap,100); return; }
     var gl=lats&&lats.length>1?lats:null,gn=lons&&lons.length>1?lons:null;
     if(!gl&&r.stravaId){
       var alt=(st.rides||[]).find(function(x){return x.stravaId===r.stravaId&&x.gpsLats&&x.gpsLats.length>1;});
@@ -37673,7 +37679,18 @@ function openDesktopRideDetail(idx, _noFetch){
     var mid='rdmap'+Date.now();
     mapDiv.innerHTML='<div id="'+mid+'" style="width:100%;height:100%"></div>';
     setTimeout(function(){
-      var el=document.getElementById(mid);if(!el)return;
+      // THE ONE SILENT FAILURE PATH. This was a bare if-not-el-return, so when the inner div was replaced
+      // between arming this timer and running it, the athlete got an empty box with no map, no route
+      // and no message, permanently. Every other failure here at least says why. If the outer
+      // container is still on screen, rebuild the inner div and mount into it rather than giving up.
+      var el=document.getElementById(mid);
+      if(!el){
+        var host=document.getElementById('rd-map');
+        if(!host || host.querySelector('.leaflet-container')) return;   // gone for good, or already drawn
+        host.innerHTML='<div id="'+mid+'" style="width:100%;height:100%"></div>';
+        el=document.getElementById(mid);
+        if(!el) return;
+      }
       // normalizeTrack_ (inside renderRideMap_) does the semicircle-convert +
       // IQR corrupt-guard that used to live inline here.
       var hasPwr=r.chartPwr&&r.chartPwr.length>5;
@@ -39027,6 +39044,41 @@ function renderRideMap_(mapId, lats, lons, opts){
   map.fitBounds(L.latLngBounds(pts),{padding:[30,30],maxZoom:opts.maxZoom||15});
   map.invalidateSize();
   setTimeout(function(){ try{ map.invalidateSize(); }catch(e){} },300);
+  // A LEAFLET MAP MOUNTED AT ZERO SIZE STAYS BLANK FOREVER, and nothing above notices.
+  // #rd-map takes its height from aspect-ratio off its own WIDTH, so any moment the container is
+  // measured before layout settles - or while an ancestor is still hidden - it is 0x0. Leaflet then
+  // computes an empty viewport, requests two degenerate tiles and never re-measures. Measured on the
+  // mobile shell: height 0, 2 tiles, 76 route paths present, and nothing visible. That is the blank
+  // dark box, and it is intermittent purely because it is a race with layout.
+  //
+  // The two invalidateSize calls above only help if layout happens to settle inside 300ms, which is
+  // a guess. A ResizeObserver removes the guess: whenever the container actually changes size -
+  // including the 0 -> real transition, whenever that lands, and including coming back from a
+  // display:none tab - the map re-measures. It disconnects with the map so it cannot outlive it.
+  try{
+    if(typeof ResizeObserver==='function'){
+      var _mel=document.getElementById(mapId);
+      if(_mel){
+        var _lw=-1, _lh=-1;
+        var _ro=new ResizeObserver(function(){
+          var rc=_mel.getBoundingClientRect(), w=Math.round(rc.width), h=Math.round(rc.height);
+          if(w===_lw && h===_lh) return;
+          _lw=w; _lh=h;
+          if(w<2 || h<2) return;                        // still collapsed; wait for a real size
+          try{ map.invalidateSize(); }catch(e){}
+          // Re-fit ONLY while the map has never had a real size. Re-fitting on every resize would
+          // yank a pan or zoom the athlete had just done back to the whole route.
+          if(!map.__sizedOnce){
+            map.__sizedOnce=true;
+            try{ map.fitBounds(L.latLngBounds(pts),{padding:[30,30],maxZoom:opts.maxZoom||15}); }catch(e){}
+          }
+        });
+        _ro.observe(_mel);
+        map.on('unload', function(){ try{ _ro.disconnect(); }catch(e){} });
+        if(_mel.getBoundingClientRect().height>2) map.__sizedOnce=true;   // already sized: keep the fit above
+      }
+    }
+  }catch(e){}
   if(typeof opts.onReady==='function'){ try{ opts.onReady(map,pts); }catch(e){} }
   return map;
 }

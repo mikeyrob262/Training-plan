@@ -29,6 +29,27 @@ const fail = (m) => { console.error(`${R}✗ preflight FAILED: ${m}${X}`); clean
 const cleanup = () => { try { rmSync(out, { recursive: true, force: true }); } catch {} };
 
 try {
+  // ---- 0. Stray backtick check. The wrangler build DOES catch this, but it reports it as
+  // "Expected ) but found <token>" pointing at wherever the served template literal then ends,
+  // which reads like a syntax error somewhere else entirely. A backtick written inside a COMMENT
+  // — quoting a snippet of code, the natural thing to do — has now cost two build cycles.
+  //
+  // The app HTML is ONE untagged template literal, so exactly two backticks are legitimate in
+  // hand-written code: the one that opens it and the one that closes it. The bundled vendor blob
+  // is a single ~169 KB minified line carrying ~30 backticks of its own; those are inside separate
+  // worker code, not the template, and are not ours to police. Skipping by line length rather than
+  // by a hardcoded total means the count does not drift every time the bundle is rebuilt.
+  const _wlines = readFileSync('worker.js', 'utf8').split(/\r?\n/);
+  const _hand = _wlines.map((L, i) => ({ L, n: i + 1 })).filter(x => x.L.length < 50000);
+  const _ticks = _hand.reduce((a, x) => a + (x.L.match(/`/g) || []).length, 0);
+  if (_ticks !== 2) {
+    console.error(_hand.filter(x => x.L.includes('`'))
+      .map(x => `    worker.js:${x.n}: ${x.L.trim().slice(0, 110)}`).join('\n'));
+    fail(`${_ticks} backticks in hand-written worker.js, expected 2 (the template's own open/close) — `
+       + `any other backtick closes the served template literal early. Rewrite it in prose.`);
+  }
+  console.log(`${G}✓ no stray backticks${X}`);
+
   // ---- 1. Real build (esbuild via wrangler) -> catches template-literal breaks
   console.log(`${D}· building (wrangler deploy --dry-run)…${X}`);
   try {

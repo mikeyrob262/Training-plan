@@ -599,5 +599,29 @@ check('...is sized to its label, not to a share of the card',
 // Centred on the wrapper, so the control keeps its label width instead of stretching to fill.
 check('...is centred', /text-align:center/.test(todayBtn || ''), true);
 
+
+// ---- the ride map must survive a zero-size mount ----------------------------
+// MEASURED on the live app: on the mobile shell #rd-map mounts at height 0 with 2 tiles and 76
+// route paths - the map is there, sized to nothing, so the athlete sees an empty dark box. The
+// container takes its height from aspect-ratio off its WIDTH, so this is a race with layout, which
+// is exactly why it was intermittent. Two fixed invalidateSize calls at 0ms and 300ms are a guess
+// about when layout settles; a ResizeObserver is not.
+const rrm = ex('renderRideMap_');
+check('the renderer observes its container for size changes', /new ResizeObserver/.test(rrm), true);
+check('...and re-measures the map when a real size arrives', /map\.invalidateSize\(\)/.test(rrm), true);
+check('...ignoring a still-collapsed container', /w<2 \|\| h<2/.test(rrm), true);
+// Re-fitting on EVERY resize would yank back a pan/zoom the athlete just made.
+check('...re-fitting only the first time it is genuinely sized', /__sizedOnce/.test(rrm), true);
+check('...and the observer dies with the map', /map\.on\('unload'[^]*?_ro\.disconnect/.test(rrm), true);
+// A detail opened and closed used to leave this poller alive for the life of the page, so a LATER
+// ride's #rd-map satisfied it and got the old ride's track.
+const initSrc = codeLines.filter(L => /_imTries/.test(L)).join('\n');
+check('the rd-map init poll is bounded', /\+\+_imTries<\d+/.test(initSrc), true);
+// The only path that used to fail with no map, no route and no message.
+check('a replaced map container is rebuilt rather than silently abandoned',
+      /host\.innerHTML='<div id="'\+mid/.test(src), true);
+check('...and does not stomp a map that already drew',
+      /host\.querySelector\('\.leaflet-container'\)/.test(src), true);
+
 if(fails){ console.log(R+'cross-surface: '+fails+' check(s) failed'+X); process.exit(1); }
 console.log(G+'cross-surface: all checks passed'+X);
