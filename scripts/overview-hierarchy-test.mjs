@@ -32,7 +32,9 @@ const ok=(l,c)=>{ if(!c)fails++; console.log('  '+(c?G+'PASS'+X:R+'FAIL'+X)+'  '
 
 const CONSTS = ['OVW_T1_TSB','OVW_T1_RHR_UP','OVW_T1_HRV_DROP','OVW_T1_CONSEC','OVW_T1_MIN_BASE','OVW_T2_DAYS',
   'OVW_T3_CTL_DROP','OVW_T3_VOL_DROP','OVW_T3_FTP_DROP','OVW_T4_GOAL_PCT','OVW_T5_CTL_RISE',
-  'OVW_T5_CLIMB_RISE','OVW_T5_ACTIVE_DAYS','OVW_HIST_MAX','OVW_HIST_COOLDOWN_D','OVW_HIST_MATERIAL'];
+  'OVW_T5_CLIMB_RISE','OVW_T5_ACTIVE_DAYS','OVW_HIST_MAX','OVW_HIST_COOLDOWN_D','OVW_HIST_MATERIAL',
+  // the per-day memo that keeps the hero and the AI Coach card on the same answer
+  '_ovwCache'];
 const FNS = ['_ovwPct_','_ovwDay_','_ovwToday_','_ovwDaysAgo_','_ovwMedian_','_ovwPctile_','_ovwHit_',
   '_ovwActs_','_ovwWindow_','_ovwWellnessSeries_','_ovwWellnessRecent_','_ovwTier1_','_ovwTier2_',
   '_ovwTier3_','_ovwTier4_','_ovwTier5_','_ovwTier6_','ovwHistory_','ovwLastFor_',
@@ -165,7 +167,9 @@ console.log('\n'+C+'=== novelty: stored history, not a decay factor ==='+X);
     [!!W.st.ovwInsights[0].key, W.st.ovwInsights[0].tier === first.tier,
      !!W.st.ovwInsights[0].date, !!W.st.ovwInsights[0].snapshot], [true,true,true,true]);
   const again = api.ovwEvaluate_();
-  ok('the same conclusion does not resurface the same day', again.key !== first.key || again.tier === 6);
+  // Inverted deliberately: this used to assert the conclusion CHANGED on a second call, which was
+  // asserting the bug. A reload on the same day must show the same answer.
+  check('the same conclusion is stable within the day', again.key, first.key);
   check('...and history is not appended twice for one day', W.st.ovwInsights.length, 1);
 }
 {
@@ -184,7 +188,7 @@ console.log('\n'+C+'=== novelty: stored history, not a decay factor ==='+X);
   for (let i=0;i<200;i++) W.st.rides.push({ date: day(i%90), distance: 20, elev: 900 });
   const a = api.ovwEvaluate_();
   check('tier 1 fires first', a.tier, 1);
-  W.st.ovwInsights[0].dismissedAt = Date.now();          // athlete says "not this"
+  api.ovwDismiss_(a.key);                                // athlete says "not this"
   const b = api.ovwEvaluate_({ record:false });
   ok('after dismissal it falls THROUGH to a lower tier, not to blank', b.tier > 1 && b.fired);
   ok('...and the suppressed tier is still reported for provenance',
@@ -196,6 +200,30 @@ console.log('\n'+C+'=== novelty: stored history, not a decay factor ==='+X);
   for (let i=0;i<200;i++) W.st.rides.push({ date: day(i%90), distance: 20, elev: 900 });
   api.ovwEvaluate_();
   ok('history is capped so it cannot grow without bound in st', W.st.ovwInsights.length <= 200);
+}
+
+console.log('\n'+C+'=== one answer per day, stable under reload ==='+X);
+{
+  // Found on the live page: the hero recorded its hit, the AI Coach card then re-evaluated, saw
+  // that record and fell through - so the hero read "Your CTL goal is nearly there" while the
+  // coach asked about climbing. Two computations of one fact, on one screen.
+  const { W, api } = world();
+  for (let i=0;i<200;i++) W.st.rides.push({ date: day(i%90), distance: 20, elev: 900 });
+  const hero = api.ovwEvaluate_();
+  const coach = api.ovwEvaluate_({ record:false });
+  check('a second call on the same render returns the SAME hit', coach.key, hero.key);
+  const reload = api.ovwEvaluate_();
+  check('...and so does a reload', reload.key, hero.key);
+  check('...still only one history row for the day', W.st.ovwInsights.length, 1);
+}
+{
+  const { W, api } = world();
+  for (let i=0;i<200;i++) W.st.rides.push({ date: day(i%90), distance: 20, elev: 900 });
+  const first = api.ovwEvaluate_();
+  W.st.ovwInsights[0].date = day(3);
+  const later = api.ovwEvaluate_({ fresh:true });
+  ok('an unchanged conclusion from 3 days ago IS suppressed', later.key !== first.key);
+  ok('...and the page still says something', !!later.fired);
 }
 
 console.log('\n'+C+'=== the quiet state is a finding, not an empty state ==='+X);

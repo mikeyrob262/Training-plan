@@ -24043,9 +24043,16 @@ function ovwSuppressed_(hit){
   if(!hit || hit.tier===6) return false;      // the quiet state is never suppressed
   var prev=ovwLastFor_(hit.key);
   if(!prev) return false;
+  // TODAY'S ANSWER IS ALREADY DECIDED. Suppression exists to stop the same conclusion returning on
+  // LATER days, not to make the page change under a reload - without this, the first render records
+  // the hit and the second suppresses it, so the athlete refreshes and the hero silently becomes a
+  // different tier. Same day, same answer.
+  // AN EXPLICIT DISMISSAL OUTRANKS EVERYTHING, including the same-day rule below it. The athlete
+  // saying "not this" has to take effect on the next render, not tomorrow.
+  if(prev.dismissedAt) return true;
+  if(String(prev.date)===_ovwToday_()) return false;
   var age=Math.round((Date.parse(_ovwToday_()+'T00:00:00')-Date.parse(String(prev.date)+'T00:00:00'))/86400000);
   if(!(age>=0) || age>=OVW_HIST_COOLDOWN_D) return false;
-  if(prev.dismissedAt) return true;
   return !ovwMateriallyChanged_(prev.snapshot, hit.snapshot);
 }
 function ovwRecord_(hit){
@@ -24060,6 +24067,7 @@ function ovwRecord_(hit){
 function ovwDismiss_(key){
   var prev=ovwLastFor_(key); if(!prev) return;
   prev.dismissedAt=Date.now();
+  _ovwCache=null;                 // the memo would otherwise keep serving what was just dismissed
   try{ sv(); }catch(e){}
 }
 
@@ -24069,8 +24077,16 @@ function ovwDismiss_(key){
 // tier, so the ladder position always means what it says.
 //
 // record:false lets a caller evaluate without writing history (tests, previews, the AI Coach).
+// ONE EVALUATION PER DAY, SHARED. The hero and the AI Coach card both need the answer, and calling
+// this twice produced two DIFFERENT answers on the same screen: the hero's call RECORDS the hit,
+// and the coach's later call then saw its own record and fell through to the next tier - so the
+// hero read "Your CTL goal is nearly there" while the coach asked about climbing. That is the
+// one-fact-two-computations failure this app keeps repeating, so the result is memoised for the
+// day. opts.fresh forces a recompute for tests.
+var _ovwCache=null;
 function ovwEvaluate_(opts){
   opts=opts||{};
+  if(_ovwCache && _ovwCache.day===_ovwToday_() && opts.fresh!==true) return _ovwCache.hit;
   var ladder=[_ovwTier1_,_ovwTier2_,_ovwTier3_,_ovwTier4_,_ovwTier5_];
   var considered=[], hit=null;
   for(var i=0;i<ladder.length;i++){
@@ -24083,6 +24099,7 @@ function ovwEvaluate_(opts){
   if(!hit) hit=_ovwTier6_();
   hit.suppressedAbove=considered;
   if(opts.record!==false) { ovwRecord_(hit); try{ sv(); }catch(e){} }
+  _ovwCache={ day:_ovwToday_(), hit:hit };
   return hit;
 }
 window.ovwEvaluate_=ovwEvaluate_;
