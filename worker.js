@@ -28908,31 +28908,186 @@ function _ovwPerfHTML_(){
   return _ovwCard_(H+'</div>');
 }
 
+// ============================================================================================
+// AI COACH - the generated question.
+//
+// The first version switched on whichever tier the hierarchy had just fired, which meant the card
+// could only ever restate the hero sitting inches away from it. This asks about a CONFLICT instead:
+// two facts that are both true and in tension. That is the shape of the brief's own example, and it
+// is the only shape that adds something the hero has not already said.
+//
+// Every candidate carries the EVIDENCE it fired on, and the card prints it. A question the athlete
+// cannot trace back to two numbers is just a prompt with a question mark on it.
+//
+// NOTHING IS INVENTED. Each condition is a comparison between two stored values. When no conflict
+// is present the card says so rather than reaching for a generic prompt - the same rule the quiet
+// tier follows.
+//
+// Live conflicts measured while writing this (2026-08-10): volume -40.5% against CTL +3.3%;
+// climbing +15.5% against best-20-minute power falling 273 W (2025) to 205 W (2026); a run race in
+// 68 days against 13.9 miles run in the last 28; a weight goal 9 lb down alongside a CTL goal 5 up.
+var OVW_COACH_COOLDOWN_D=7;     // the same question may not return inside a week
+
+function _ovwBest20ByYear_(){
+  var by={};
+  try{
+    (st.rides||[]).forEach(function(r){
+      if(!r || r.deleted || !r.powerCurve || !r.date) return;
+      var y=String(r.date).slice(0,4), v=+r.powerCurve['1200']||0;
+      if(v>0) by[y]=Math.max(by[y]||0, v);
+    });
+  }catch(e){}
+  return by;
+}
+function _ovwRunMi_(fromDaysAgo, toDaysAgo){
+  var runs=[]; try{ runs=(typeof getRuns==='function')?(getRuns()||[]):[]; }catch(e){}
+  var a=_ovwDaysAgo_(fromDaysAgo), b=_ovwDaysAgo_(toDaysAgo);
+  return Math.round(runs.filter(function(r){ var d=_ovwDay_(r&&r.date); return d>=a && d<b; })
+    .reduce(function(s,r){ return s+(parseFloat(r.distance)||0); },0)*10)/10;
+}
+function _ovwCand_(id, rank, cat, q, ev){ return { id:id, rank:rank, cat:cat, q:q, ev:ev||[] }; }
+
+// Each generator returns a candidate or null. Ranked: a conflict against a dated COMMITMENT beats a
+// conflict between two trends, which beats a conflict between two goals - because the first has a
+// deadline attached and the last does not.
+function _ovwCoachCandidates_(){
+  var out=[], acts=[];
+  try{ acts=_ovwActs_(); }catch(e){ acts=[]; }
+
+  // 1. an upcoming race in one sport against the training actually being done for it
+  try{
+    var races=(typeof upcomingRaces_==='function')?(upcomingRaces_()||[]):[];
+    var r0=races.slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); })[0];
+    if(r0 && /run/i.test(String(r0.sport||''))){
+      var days=Math.round((Date.parse(_ovwDay_(r0.date)+'T00:00:00')-Date.parse(_ovwToday_()+'T00:00:00'))/86400000);
+      var mi28=_ovwRunMi_(28,0);
+      if(days>0 && days<=120){
+        out.push(_ovwCand_('coach:race-vs-run-volume', 1, 'Goal readiness',
+          'My next race is a run in '+days+' days and I have run '+mi28+' miles in the last 28. What does the build need to look like?',
+          [ (r0.name||'Race')+' on '+_ovwDay_(r0.date)+' - '+days+' days away',
+            mi28+' miles run in the last 28 days' ]));
+      }
+    }
+  }catch(e){}
+
+  // 2. training volume down while fitness is not - two measured trends disagreeing
+  try{
+    var v0=_ovwWindow_(acts,90,0).length, v1=_ovwWindow_(acts,180,90).length;
+    var vp=_ovwPct_(v0,v1);
+    var ser=(st.fitSeries||[]).slice().sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); });
+    if(vp!=null && vp<=-25 && ser.length>=29){
+      var cp=_ovwPct_(ser[ser.length-1].ctl, ser[ser.length-29].ctl);
+      if(cp!=null && cp>=0){
+        out.push(_ovwCand_('coach:volume-vs-fitness', 2, 'Training strategy',
+          'I am training '+Math.abs(vp)+'% less than I was, but my fitness has not dropped. Is that real, or is it about to catch up with me?',
+          [ v0+' activities in 90 days against '+v1+' in the 90 before',
+            'Fitness (CTL) '+(cp>0?'up ':'level, ')+(cp>0?(cp+'% over 28 days'):'over 28 days') ]));
+      }
+    }
+  }catch(e){}
+
+  // 3. climbing rising while sustained power falls - the brief's own example, and real
+  try{
+    var e0=_ovwWindow_(acts,90,0).reduce(function(s,a){return s+a.elev;},0);
+    var e1=_ovwWindow_(acts,180,90).reduce(function(s,a){return s+a.elev;},0);
+    var ep=_ovwPct_(e0,e1);
+    var by=_ovwBest20ByYear_(), yrs=Object.keys(by).sort();
+    if(ep!=null && ep>=15 && yrs.length>=2){
+      var thisY=by[yrs[yrs.length-1]], prevY=by[yrs[yrs.length-2]];
+      if(thisY>0 && prevY>0 && thisY<prevY){
+        out.push(_ovwCand_('coach:climb-vs-power', 2, 'Performance trends',
+          'Why has my climbing improved while my sustained power has not?',
+          [ 'Climbing up '+ep+'% over 90 days',
+            'Best 20-minute power '+prevY+' W in '+yrs[yrs.length-2]+' against '+thisY+' W in '+yrs[yrs.length-1] ]));
+      }
+    }
+  }catch(e){}
+
+  // 4. two goals that pull in opposite directions
+  try{
+    var g=st.goalTargets||{}, wt=(typeof stWeightLb_==='function')?stWeightLb_():null;
+    var f=(typeof getFitness_==='function')?getFitness_():null;
+    if(g.weightLb>0 && wt!=null && wt>g.weightLb && g.ctl>0 && f && f.loaded && f.ctl<g.ctl){
+      out.push(_ovwCand_('coach:weight-vs-fitness', 3, 'Training strategy',
+        'I am trying to lose '+Math.round(wt-g.weightLb)+' lb and add fitness at the same time. Can I do both?',
+        [ 'Weight '+wt+' lb against a target of '+g.weightLb,
+          'Fitness (CTL) '+f.ctl+' against a target of '+g.ctl ]));
+    }
+  }catch(e){}
+
+  // 5. the FTP being trained off against the power actually produced this year. Deliberately
+  //    conservative: FTP sits near 95% of a 20-minute best by convention, so this only fires when
+  //    the gap is well outside that, not merely when the two numbers differ.
+  try{
+    var by2=_ovwBest20ByYear_(), ys=Object.keys(by2).sort(), cur=ys.length?by2[ys[ys.length-1]]:0;
+    var ftp=parseInt((st&&st.ftp)||0,10)||0;
+    if(cur>0 && ftp>0 && (cur*0.95) > (ftp*1.10)){
+      out.push(_ovwCand_('coach:ftp-vs-power', 2, 'Performance trends',
+        'My best 20-minute power this year is '+cur+' W but my FTP is set to '+ftp+'. Which one should I be training off?',
+        [ 'Best 20-minute power '+cur+' W in '+ys[ys.length-1], 'FTP setting '+ftp+' W' ]));
+    }
+  }catch(e){}
+
+  return out;
+}
+
+// Pick one. Highest rank wins; ties break on the id so the choice is stable rather than dependent on
+// generator order. A question shown inside OVW_COACH_COOLDOWN_D days is skipped, reusing the same
+// insight history the hero uses - the keys are namespaced so the two cannot collide.
+function ovwCoachQuestion_(){
+  var cands=_ovwCoachCandidates_();
+  if(!cands.length) return null;
+  cands.sort(function(a,b){ return (a.rank-b.rank) || a.id.localeCompare(b.id); });
+  var today=_ovwToday_();
+  for(var i=0;i<cands.length;i++){
+    var c=cands[i], prev=null;
+    try{ prev=ovwLastFor_(c.id); }catch(e){}
+    if(prev){
+      var age=Math.round((Date.parse(today+'T00:00:00')-Date.parse(String(prev.date)+'T00:00:00'))/86400000);
+      if(age>=0 && age<OVW_COACH_COOLDOWN_D && String(prev.date)!==today) continue;
+    }
+    return c;
+  }
+  return cands[0];      // everything is on cooldown: repeat the best rather than say nothing
+}
+
 // ---- 5b. AI COACH ----------------------------------------------------------------------------
 // The question is DERIVED from whatever the decision hierarchy just concluded, so it is grounded in
 // a real anomaly rather than being a generic prompt. The topic pills below it are still fixed
 // navigation - whether they become data-driven is an open decision, and they are deliberately not
 // dressed up as generated in the meantime.
 function _ovwCoachHTML_(){
-  var hit=null;
-  try{ hit=ovwEvaluate_({record:false}); }catch(e){}
-  if(!hit) return '';
-  var q;
-  if(hit.tier===6) q='What should I focus on next?';
-  else if(hit.key==='t3:volume') q='I am training less than I was. Is that costing me fitness, or is it recovery I needed?';
-  else if(hit.key==='t3:ctl') q='My fitness is falling. What would it take to turn that around?';
-  else if(hit.key==='t5:climb') q='Why has my climbing improved so much while my power has not?';
-  else if(hit.key==='t1:tsb' || hit.key==='t1:hrv' || hit.key==='t1:rhr') q='My recovery signals are down. How should I adjust this week?';
-  else if(hit.tier===2) q='What should the next two weeks look like before my race?';
-  else if(hit.tier===4) q='How close am I really, and what would close the gap?';
-  else q='What does this mean for my training?';
+  var c=null;
+  try{ c=ovwCoachQuestion_(); }catch(e){ c=null; }
   var pills=['Training strategy','Performance trends','Goal readiness','Recovery','Nutrition','Injury prevention'];
   var H=_ovwLbl_('AI Coach', '<span onclick="dsNav(&#39;aicoach&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">Ask AI Coach</span>');
-  H+='<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-bottom:9px">Something worth asking about?</div>';
-  H+='<div onclick="dsNav(&#39;aicoach&#39;)" style="background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--d-head);cursor:pointer;line-height:1.45">'+aiEsc_(q)+'</div>';
-  H+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  if(!c){
+    // NO CONFLICT FOUND, SO NO QUESTION INVENTED. Same rule as the quiet tier: say the honest thing
+    // rather than fall back to a generic prompt that would look generated but be chosen by nothing.
+    H+='<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-bottom:6px">Nothing stands out to ask about today.</div>';
+    H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5">Your training, goals and recent trends are not pulling against each other right now. Ask anything below.</div>';
+  } else {
+    H+='<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-bottom:9px">Something worth asking about?</div>';
+    H+='<div onclick="dsNav(&#39;aicoach&#39;)" style="background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--d-head);cursor:pointer;line-height:1.45">'+aiEsc_(c.q)+'</div>';
+    // The evidence is shown, not just held. A question the athlete cannot trace to two numbers is a
+    // prompt with a question mark on it.
+    if(c.ev && c.ev.length){
+      H+='<div style="margin-top:8px">';
+      c.ev.forEach(function(e){
+        H+='<div style="font-size:11px;color:var(--d-dim);line-height:1.45">&bull; '+aiEsc_(e)+'</div>';
+      });
+      H+='</div>';
+    }
+  }
+  // The pills stay FIXED NAVIGATION - they are not claims and are not dressed up as generated. The
+  // one exception is honest: the category the generated question belongs to is highlighted, which is
+  // read off the question already produced rather than from a new per-category relevance score.
+  H+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:11px">';
   pills.forEach(function(p){
-    H+='<span onclick="dsNav(&#39;aicoach&#39;)" style="font-size:11px;font-weight:600;color:var(--d-t3);background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:5px 10px;cursor:pointer">'+p+'</span>';
+    var on=(c && c.cat===p);
+    H+='<span onclick="dsNav(&#39;aicoach&#39;)" style="font-size:11px;font-weight:600;cursor:pointer;border-radius:9px;padding:5px 10px;'
+      +(on?('color:#fc5200;background:rgba(252,82,0,.10);border:1px solid rgba(252,82,0,.45)')
+          :('color:var(--d-t3);background:var(--d-inset);border:1px solid var(--d-edge)'))+'">'+p+'</span>';
   });
   H+='</div><div style="font-size:10.5px;color:var(--d-dim);margin-top:9px">AI Coach is powered by your data. Always review and trust your judgment.</div>';
   return _ovwCard_(H);

@@ -11,6 +11,12 @@ const src = fs.readFileSync(path.join(root, 'worker.js'), 'utf8');
 const asServed = (s) => s.replace(/\\([\s\S])/g, (_, c) => (c === '\\' ? '\\' : c));
 function matchBrace(from){ let i=src.indexOf('{',from), d=0; for(;i<src.length;i++){const c=src[i]; if(c==='{')d++; else if(c==='}'){d--; if(!d)return i;}} return -1; }
 function ex(name){ const i=src.indexOf('function '+name+'('); if(i<0) throw new Error('fn not found: '+name); return src.slice(i, matchBrace(i)+1)+'\n'; }
+function exv(name){
+  const i=src.indexOf('var '+name+'='); if(i<0) throw new Error('var not found: '+name);
+  const nl=src.indexOf('\n', i), br=src.indexOf('{', i);
+  if(br<0 || br>nl) return src.slice(i, nl)+'\n';
+  return src.slice(i, matchBrace(br)+2)+'\n';
+}
 
 let fails=0;
 const R='\x1b[31m', G='\x1b[32m', C='\x1b[36m', X='\x1b[0m';
@@ -93,31 +99,76 @@ console.log('\n'+C+'=== performance strip is honest about missing power ==='+X);
   ok('...and says why', /no power curve yet/.test(html));
 }
 
-console.log('\n'+C+'=== the AI Coach question is derived, not generic ==='+X);
-{
-  const a = render({ hit:{ tier:3, key:'t3:volume', title:'', body:'', facts:[] } })._ovwCoachHTML_();
-  ok('a volume drop produces a question about volume', /training less/i.test(a));
-  const b = render({ hit:{ tier:5, key:'t5:climb', title:'', body:'', facts:[] } })._ovwCoachHTML_();
-  ok('a climbing trend produces the climbing question', /climbing/i.test(b));
-  ok('...and they are different questions', a !== b);
-  const c = render({ hit:{ tier:6, key:'t6:quiet', title:'', body:'', facts:[] } })._ovwCoachHTML_();
-  ok('the quiet state still offers something to ask', /focus on next/i.test(c));
+console.log('\n'+C+'=== the AI Coach asks about a CONFLICT, or says nothing ==='+X);
+// The first version switched on whichever tier had fired, so the card could only restate the hero
+// beside it. A conflict is two true facts in tension - the only shape that adds something.
+const CO=['OVW_COACH_COOLDOWN_D'], CF=['_ovwBest20ByYear_','_ovwRunMi_','_ovwCand_','_ovwCoachCandidates_','ovwCoachQuestion_'];
+function coach(W){
+  const body=CO.map(exv).join('')+CF.map(ex).join('');
+  const fn=new Function('st','getFitness_','upcomingRaces_','getRuns','stWeightLb_','_ovwActs_',
+    '_ovwWindow_','_ovwPct_','_ovwDay_','_ovwToday_','_ovwDaysAgo_','ovwLastFor_',
+    asServed(body)+';return {_ovwCoachCandidates_,ovwCoachQuestion_};');
+  const day=(n)=>{const d=new Date();d.setDate(d.getDate()-n);const p=x=>String(x).padStart(2,'0');
+    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+  return fn(W.st, ()=>W.fit, ()=>W.races||[], ()=>W.runs||[], ()=>W.weight,
+    ()=>W.acts||[], (a,f,t)=>(W.acts||[]).slice(0, f===90?(W.n90||0):(W.n180||0)),
+    (n,t)=>(t>0?Math.round((n-t)/t*1000)/10:null),
+    (d)=>String(d==null?'':d).slice(0,10), ()=>day(0), (n)=>day(n), ()=>W.prev||null);
 }
-
-console.log('\n'+C+'=== the six sections are wired, and v2 is not ==='+X);
-const asm = ex('aiRenderTab_');
-['_ovwHeroHTML_','_ovFocusHTML_','_ovwCurrentStateHTML_','_ovwGoalsHTML_','_ovwPerfHTML_',
- '_dnaRadarHTML_','_ovwCoachHTML_','_ovwSignalsHTML_'].forEach(n =>
-  ok('Overview calls '+n, asm.indexOf(n) >= 0));
-// The trim is the point of v3: these still EXIST but Overview must no longer render them.
-['_ovMomentumHTML_','_ovHighlightsHTML_','_ovOpportunityHTML_','_ovLegacyHTML_','aiCardStory_'].forEach(n =>
-  ok('Overview no longer renders '+n, !new RegExp('_aiSafe_\\([^)]*'+n).test(asm)));
-ok('the old hero is no longer called', !/_aiSafe_\('Hero'/.test(asm));
-ok('the hero is driven by the decision hierarchy', /ovwEvaluate_/.test(ex('_ovwHeroHTML_')));
-ok('...and stamps its tier and rule key into the DOM for provenance',
-   /data-ovw-tier=/.test(ex('_ovwHeroHTML_')) && /data-ovw-key=/.test(ex('_ovwHeroHTML_')));
-ok('the DNA card uses the REAL 4-axis radar', /_dnaRadarHTML_/.test(asm));
-ok('...and no invented composite score is rendered', !/The Engine|87\/100|\/100/.test(ex('_ovwHeroHTML_')));
+{
+  // a run race with almost no running behind it
+  const api=coach({ st:{rides:[],fitSeries:[],goalTargets:{}}, fit:{loaded:true,ctl:60},
+    races:[{name:'Half',date:(()=>{const d=new Date();d.setDate(d.getDate()+68);return d.toISOString().slice(0,10);})(),sport:'run'}],
+    runs:[] });
+  const q=api.ovwCoachQuestion_();
+  ok('a run race with no run volume produces a question', !!q);
+  ok('...naming both the race and the mileage', /run in 68 days/.test(q.q) && /0 miles/.test(q.q));
+  ok('...and carrying its evidence', q.ev.length===2);
+  check('...categorised as goal readiness', q.cat, 'Goal readiness');
+}
+{
+  // climbing up while sustained power falls - the brief's own example
+  const acts=new Array(80).fill(0).map(()=>({date:'2026-08-01',sport:'ride',dist:20,elev:1000}));
+  const api=coach({ st:{ fitSeries:[], goalTargets:{},
+      rides:[{date:'2025-06-01',powerCurve:{'1200':273}},{date:'2026-06-01',powerCurve:{'1200':205}}] },
+    fit:{loaded:true,ctl:60}, acts, n90:80, n180:40 });
+  const cands=api._ovwCoachCandidates_();
+  const c=cands.filter(x=>x.id==='coach:climb-vs-power')[0];
+  ok('the climbing-vs-power conflict is found', !!c);
+  ok('...quoting both years', /273 W in 2025/.test(c.ev[1]) && /205 W in 2026/.test(c.ev[1]));
+}
+{
+  // FTP close to 95% of the 20-minute best is NOT a conflict and must stay silent
+  const api=coach({ st:{ ftp:183, fitSeries:[], goalTargets:{},
+      rides:[{date:'2026-06-01',powerCurve:{'1200':205}}] }, fit:{loaded:true,ctl:60} });
+  const has=api._ovwCoachCandidates_().some(x=>x.id==='coach:ftp-vs-power');
+  ok('FTP 183 against a 205 W twenty-minute best does NOT fire', !has);
+}
+{
+  const api=coach({ st:{ ftp:150, fitSeries:[], goalTargets:{},
+      rides:[{date:'2026-06-01',powerCurve:{'1200':260}}] }, fit:{loaded:true,ctl:60} });
+  const has=api._ovwCoachCandidates_().some(x=>x.id==='coach:ftp-vs-power');
+  ok('...but a genuinely wrong FTP does', has);
+}
+{
+  const api=coach({ st:{rides:[],fitSeries:[],goalTargets:{}}, fit:{loaded:true,ctl:60} });
+  check('with no conflicts at all it returns null rather than a generic prompt',
+    api.ovwCoachQuestion_(), null);
+}
+{
+  // ranking: a dated commitment outranks a trend conflict
+  const acts=new Array(80).fill(0).map(()=>({date:'2026-08-01',sport:'ride',dist:20,elev:1000}));
+  const api=coach({ st:{ fitSeries:[], goalTargets:{},
+      rides:[{date:'2025-06-01',powerCurve:{'1200':273}},{date:'2026-06-01',powerCurve:{'1200':205}}] },
+    fit:{loaded:true,ctl:60}, acts, n90:80, n180:40,
+    races:[{name:'Half',date:(()=>{const d=new Date();d.setDate(d.getDate()+40);return d.toISOString().slice(0,10);})(),sport:'run'}] });
+  check('the race conflict outranks the trend conflict', api.ovwCoachQuestion_().id, 'coach:race-vs-run-volume');
+}
+ok('the card prints the evidence, not just the question', /c\.ev\.forEach/.test(ex('_ovwCoachHTML_')));
+ok('no-conflict renders an honest line, not a generic prompt',
+   /Nothing stands out to ask about today/.test(ex('_ovwCoachHTML_')));
+ok('the pills stay fixed navigation', /pills stay FIXED NAVIGATION/.test(src));
+ok('...with only the generated category highlighted', /c && c\.cat===p/.test(ex('_ovwCoachHTML_')));
 
 console.log(fails ? '\n'+R+'overview layout: '+fails+' FAILED'+X+'\n' : '\n'+G+'overview layout: all checks passed'+X+'\n');
 process.exit(fails?1:0);
