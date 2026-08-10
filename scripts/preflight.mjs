@@ -395,6 +395,20 @@ try {
     fail('the distance-PR layer no longer holds (see above).');
   }
 
+
+  // ---- 23c. Food search must prefer a generic ingredient over a branded/restaurant row when the
+  //           match is comparable - but never over an exact branded name - and a fractional portion
+  //           must be enterable, visible on BOTH renderers, and scale every macro both ways.
+  console.log(`${D}· checking food ranking + fractional portions…${X}`);
+  try {
+    const so = execSync('node scripts/nutrition-rank-qty-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('food ranking / fractional portions no longer hold (see above).');
+  }
+
   // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
   //          field straight off it yields undefined silently, which is how Segment Attack showed
   //          "Weather unavailable" on every visit while the Weather page worked fine.

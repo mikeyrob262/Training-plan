@@ -11651,6 +11651,59 @@ function backfillNutrientsFromDB_(){
 }
 // Rescale a logged nutrient from the quantity it was recorded at to a new one. Returns 0 rather
 // than a guess when there is nothing to rescale.
+// ---- food search ranking + fractional quantities --------------------------------------------
+// GENERIC BEFORE BRANDED, BUT NOT BLINDLY. The proxy now returns dataType (Foundation / SR Legacy /
+// Survey = generic ingredients, Branded = retail products, Local = the curated restaurant table) and
+// a derived generic boolean. Sorting purely on that flag would be wrong: searching "quarter
+// pounder" would push a vaguely-matching generic above the exact McDonald's item the athlete
+// actually typed. So relevance is scored first and generic is a THUMB ON THE SCALE, worth about one
+// relevance band - enough to lift "Cheese, cheddar" over a Culver's sandwich when both merely match
+// the word cheese, never enough to beat an exact-name hit.
+//
+// Measured reason this matters: FDC's own ordering puts Branded first, so a search for "cheese"
+// returns 17 USDA rows of which only ONE is generic, and "milk" returns 14 with none.
+var _NL_GENERIC_BONUS=15;
+function _nlNorm_(s){ return String(s==null?'':s).toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+function _nlRelevance_(name, q){
+  var n=_nlNorm_(name), qq=_nlNorm_(q);
+  if(!n || !qq) return 0;
+  if(n===qq) return 100;
+  if(n.indexOf(qq)===0) return 80;
+  var qt=qq.split(' ').filter(Boolean), nt=n.split(' ').filter(Boolean);
+  var hit=qt.filter(function(t){ return nt.some(function(x){ return x===t || x.indexOf(t)===0; }); }).length;
+  if(!hit) return 10;
+  if(hit===qt.length) return (n.indexOf(qq)!==-1) ? 70 : 60;
+  return 20+Math.round(30*hit/qt.length);
+}
+// Stable: equal scores keep the order the source returned them in, so this re-ranks without
+// inventing an ordering the data does not support.
+function _nlRankFoods_(list, q){
+  return (list||[]).map(function(f,i){
+    var score=_nlRelevance_(f.n, q)+(f.generic?_NL_GENERIC_BONUS:0);
+    return { f:f, i:i, s:score };
+  }).sort(function(a,b){ return (b.s-a.s) || (a.i-b.i); }).map(function(x){ return x.f; });
+}
+// A quantity is a MEASUREMENT, not a counter. Half a sandwich is a real thing to log, so quantities
+// are formatted to as many decimals as they actually carry (0.5 stays 0.5, 2 stays 2, never "2.0"),
+// and any quantity other than exactly 1 is shown - the old test was _qty>1, which silently hid
+// every fraction and made a half portion look like a whole one on the plate.
+function _nlQtyStr_(q){
+  var v=parseFloat(q);
+  if(!isFinite(v) || v<=0) return '';
+  return (Math.round(v*100)/100).toString();
+}
+// Same label for the desktop row, which builds an HTML string and uses the &times; entity
+// rather than a literal character. One quantity rule, two renderers - they must not drift.
+function _nlQtyLabelHtml_(name, q){
+  var v=parseFloat(q);
+  if(!isFinite(v) || v<=0 || v===1) return name;
+  return name+' &times;'+_nlQtyStr_(v);
+}
+function _nlQtyLabel_(name, q){
+  var v=parseFloat(q);
+  if(!isFinite(v) || v<=0 || v===1) return name;
+  return name+' ×'+_nlQtyStr_(v);
+}
 function _nlRescale_(val, oldQty, newQty){
   var v=+val; if(!(v>0)) return 0;
   var o=(+oldQty>0)?+oldQty:1, n=(+newQty>0)?+newQty:1;
@@ -11763,13 +11816,18 @@ function nutStepFood_(meal, id, delta){
   var i=nutResolveIdx_(meal,id); if(i<0) return;
   var nd=getNDay(nutrDate);
   var cur=nd.meals[meal][i];
-  var curQty=cur._qty||1;
-  if(delta<0 && curQty<=1){
+  var curQty=parseFloat(cur._qty)||1;
+  // THE STEP IS NOT ALWAYS 1. Stepping down from a whole portion lands on a HALF before it lands on
+  // nothing, because half a portion is a thing people eat and the old stepper could not express it:
+  // it treated qty<=1 as "delete", so a 0.5 entry could not be reduced at all and a 1 could never
+  // become a 0.5. Below one, steps are halves; at or above one, whole units - so 2 -> 1 -> 0.5 -> gone.
+  var step=(delta<0) ? (curQty<=1 ? 0.5 : 1) : (curQty<1 ? 0.5 : 1);
+  var newQty=Math.round((curQty+(delta<0?-step:step))*100)/100;
+  if(newQty<=0){
     if(!cur.id) cur.id=genEntryId_();
     cur.deleted=true; cur.deletedAt=Date.now();
     sv(); nutRefresh(); return;
   }
-  var newQty=curQty+delta;
   // Scale ALL nutrients by the new quantity — including the scanned micros
   // (potassium/calcium/iron/magnesium), which the old rebuild silently dropped.
   var base={cal:(cur.cal||0)/curQty,p:(cur.p||0)/curQty,c:(cur.c||0)/curQty,f:(cur.f||0)/curQty,fiber:(cur.fiber||0)/curQty,satFat:(cur.satFat||0)/curQty,sodium:(cur.sodium||0)/curQty,sugar:(cur.sugar||0)/curQty,potassium:(cur.potassium||0)/curQty,calcium:(cur.calcium||0)/curQty,iron:(cur.iron||0)/curQty,magnesium:(cur.magnesium||0)/curQty};
@@ -12499,7 +12557,7 @@ function renderNutr(){
       info.style.flex='1';info.style.minWidth='0';
       var iName=document.createElement('div');
       iName.style.cssText='font-size:13px;font-weight:500;color:var(--t1)';
-      iName.textContent=item._qty&&item._qty>1 ? item.n+' ×'+item._qty : item.n;
+      iName.textContent=_nlQtyLabel_(item.n, item._qty);
       var iMeta=document.createElement('div');
       iMeta.style.cssText='font-size:11px;color:var(--t3)';
       iMeta.textContent=(item.p||0)+'g P . '+(item.c||0)+'g C . '+(item.f||0)+'g F';
@@ -12892,9 +12950,15 @@ function openFoodForMeal(meal){
                   fiber: Math.round((f.fiber||f.nf_dietary_fiber||0)*10)/10,
                   sodium: Math.round(f.sodium||f.nf_sodium||0),
                   sugar: Math.round((f.sugar||f.nf_sugars||0)*10)/10,
-                  srv: f.srv||f.serving_size||(f.serving_unit?(f.serving_qty||1)+' '+f.serving_unit:'1 serving')
+                  srv: f.srv||f.serving_size||(f.serving_unit?(f.serving_qty||1)+' '+f.serving_unit:'1 serving'),
+                  // Tier metadata from the proxy. Carried through rather than dropped so the sort
+                  // below can prefer a real ingredient over a restaurant item - and so a row can
+                  // say WHICH it is if that is ever surfaced.
+                  dataType: f.dataType||null,
+                  generic: (f.generic===true)
                 };
               });
+              results = _nlRankFoods_(results, q);
             } else if(Array.isArray(d)){
               results = d.map(function(f){
                 return {n:f.n||'Unknown',cal:Math.round(f.cal||0),p:Math.round((f.p||0)*10)/10,c:Math.round((f.c||0)*10)/10,f:Math.round((f.f||0)*10)/10,fiber:Math.round((f.fiber||0)*10)/10,sodium:Math.round(f.sodium||0),sugar:Math.round((f.sugar||0)*10)/10,srv:f.srv||'1 serving'};
@@ -33390,7 +33454,7 @@ function dsShowNutrition(){
       var mc2=items.reduce(function(s,i){return s+(i.cal||0);},0);
       fl+='<div style="padding:8px 0;border-top:1px solid var(--d-edge)">';
       fl+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;font-weight:700;color:'+mealMeta[m][1]+'">'+mealMeta[m][0]+'</span><span style="display:flex;align-items:center;gap:10px"><span style="font-size:11px;color:var(--d-t4)">'+(mc2?Math.round(mc2)+' cal':'—')+'</span><span data-act="mealadd" data-meal="'+m+'" style="font-size:11px;font-weight:700;color:'+C.c+';cursor:pointer">+ Add</span></span></div>';
-      items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+(it._qty>1?(it._baseName||it.n)+' &times;'+it._qty:it.n)+'</span><span style="font-size:11px;color:var(--d-t4);flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
+      items.forEach(function(it,ii){ fl+='<div data-act="fooditem" data-meal="'+m+'" data-idx="'+ii+'" style="display:flex;align-items:center;justify-content:space-between;margin-top:5px;cursor:pointer"><span style="font-size:11px;color:var(--d-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">'+_nlQtyLabelHtml_(it._baseName||it.n, it._qty)+'</span><span style="font-size:11px;color:var(--d-t4);flex-shrink:0;margin-left:8px">P'+Math.round(it.p||0)+' C'+Math.round(it.c||0)+' F'+Math.round(it.f||0)+' &middot; '+Math.round(it.cal||0)+'</span></div>'; });
       fl+='</div>';
     });
     fl+='<div style="display:flex;gap:8px;margin-top:12px"><div data-act="add" style="flex:1;text-align:center;font-size:12px;font-weight:700;color:var(--d-t1);background:'+C.c+';border-radius:9px;padding:9px;cursor:pointer">+ Add Food</div></div>';
