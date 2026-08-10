@@ -23688,6 +23688,407 @@ function _aiSafe_(label, fn){ try{ return fn()||''; }catch(e){ try{ console.erro
 // apology. Month-of-year is deliberately excluded (the Personal Heatmap collapse); day-of-week is in
 // (~300 obs/weekday across the run log). No scoring is invented here: the signature reads off the
 // existing per-sport z-scores (_zsCompute_), never a second normalization.
+// ============================================================================================
+// OVERVIEW DECISION HIERARCHY  (v3)
+//
+// Replaces the rejected Impact x Confidence x Immediacy x Novelty x Actionability score. That
+// formula had five factors and not one of them was derivable from stored data, which is the same
+// fabrication the Athlete IQ Score and the DNA percentile were rejected for.
+//
+// This is a FIXED-ORDER LADDER. Tiers are evaluated 1..6 and the first one that fires wins. There
+// is no weighting and nothing is combined, so the answer to "why is this on my screen" is always a
+// single named rule with a named source and a printed threshold.
+//
+// EVERY sub-rule states: its source accessor, its threshold, and what it does when the source is
+// absent. A rule with no data SKIPS - it never fails open into a guess, and it never counts as
+// evidence that the condition is false.
+//
+// Measured on the live library 2026-08-10 while writing this, so the thresholds are calibrated
+// against real distributions rather than picked to look reasonable:
+//   TSB -1 - CTL 60.1, ATL 61.4 - CTL 7d delta +0.2 - ATL 7d delta -4.2
+//   hrvDaily: 16 days (Jul 25 - Aug 10), every row carries rhr, HRV median 29 / p25 28, today 37
+//   ftpHistory: 8 rows, SEVEN of them source 'manual' - the one non-manual row is a 190 baseline
+//   st.plan: 154 sessions, ZERO of them runs, ZERO scored
+//   rides last 90d 73 vs prior 90d 124 (-41%) - climbing 90d +21% - active days in last 30: 21
+//   the only upcoming race is a RUN, 68 days out
+// ============================================================================================
+var OVW_T1_TSB=-20;            // TSB at or below this is deep fatigue, not ordinary training stress
+var OVW_T1_RHR_UP=7;           // bpm above baseline median
+var OVW_T1_HRV_DROP=0.85;      // fraction of baseline median; at or under this is suppressed
+var OVW_T1_CONSEC=2;           // consecutive days a wellness signal must hold before it counts
+var OVW_T1_MIN_BASE=7;         // days of history required before HRV/RHR may be judged at all
+var OVW_T2_DAYS=21;            // "imminent" - the athlete's call, matched to the block's taper shape
+var OVW_T3_CTL_DROP=-10;       // percent, over 28 days
+var OVW_T3_VOL_DROP=-25;       // percent, 90d vs prior 90d, by activity count
+var OVW_T3_FTP_DROP=-5;        // percent, between consecutive NON-manual FTP records
+var OVW_T4_GOAL_PCT=90;        // a goal this close to done is an opportunity worth acting on
+var OVW_T5_CTL_RISE=5;         // percent, over 28 days
+var OVW_T5_CLIMB_RISE=15;      // percent, 90d vs prior 90d
+var OVW_T5_ACTIVE_DAYS=20;     // active days within the last 30
+
+function _ovwPct_(now, then){ if(!(then>0)) return null; return Math.round((now-then)/then*1000)/10; }
+function _ovwDay_(d){ return String((d==null)?'':d).slice(0,10); }
+function _ovwToday_(){ return (typeof dayKey_==='function')?dayKey_(new Date()):_ovwDay_(new Date().toISOString()); }
+function _ovwDaysAgo_(n){ var d=new Date(); d.setDate(d.getDate()-n); return (typeof dayKey_==='function')?dayKey_(d):_ovwDay_(d.toISOString()); }
+function _ovwMedian_(a){ if(!a || !a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}); return s[Math.floor(s.length/2)]; }
+function _ovwPctile_(a, p){ if(!a || !a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}); return s[Math.floor((s.length-1)*p)]; }
+
+// One shape for every tier result, so the renderer never has to know which rule produced it.
+function _ovwHit_(tier, key, title, body, facts, snapshot){
+  return { tier:tier, key:key, title:title, body:body, facts:facts||[], snapshot:snapshot||{}, fired:true };
+}
+
+// ---- shared inputs ---------------------------------------------------------------------------
+// All activities, both sports. st.rides is cycling-and-more; runs live in getRuns(). Counting only
+// st.rides would call a marathon block "no training".
+function _ovwActs_(){
+  var out=[];
+  try{ (st.rides||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push({date:_ovwDay_(r.date), sport:'ride', dist:parseFloat(r.distance)||0, elev:parseFloat(r.elev)||0}); }); }catch(e){}
+  try{ if(typeof getRuns==='function') (getRuns()||[]).forEach(function(r){ if(r && !r.deleted && r.date) out.push({date:_ovwDay_(r.date), sport:'run', dist:parseFloat(r.distance)||0, elev:parseFloat(r.elev)||0}); }); }catch(e){}
+  return out;
+}
+function _ovwWindow_(acts, fromDaysAgo, toDaysAgo){
+  var a=_ovwDaysAgo_(fromDaysAgo), b=_ovwDaysAgo_(toDaysAgo);
+  return acts.filter(function(x){ return x.date>=a && x.date<b; });
+}
+// hrvDaily rows are {hrv, rhr, at}. Returns the trailing series EXCLUDING today, so today is
+// judged against its own history rather than against itself.
+function _ovwWellnessSeries_(field, days){
+  var h=(typeof st!=='undefined' && st.hrvDaily)?st.hrvDaily:{};
+  var today=_ovwToday_(), from=_ovwDaysAgo_(days||14);
+  return Object.keys(h).filter(function(k){ return k>=from && k<today; })
+    .sort()
+    .map(function(k){ var r=h[k]; return { date:k, v:(r && typeof r==='object')?r[field]:(field==='hrv'?r:null) }; })
+    .filter(function(x){ return x.v!=null && isFinite(x.v); });
+}
+function _ovwWellnessRecent_(field, n){
+  var h=(typeof st!=='undefined' && st.hrvDaily)?st.hrvDaily:{};
+  return Object.keys(h).sort().slice(-n)
+    .map(function(k){ var r=h[k]; return { date:k, v:(r && typeof r==='object')?r[field]:(field==='hrv'?r:null) }; })
+    .filter(function(x){ return x.v!=null && isFinite(x.v); });
+}
+
+// ---- TIER 1 - safety / recovery ---------------------------------------------------------------
+// Three independent sub-rules, ANY of which fires the tier. HRV and RHR both require OVW_T1_CONSEC
+// consecutive days so a single bad night does not cancel a training day - a one-off low reading is
+// noise, two in a row is a signal.
+function _ovwTier1_(){
+  var f=null; try{ f=getFitness_(); }catch(e){}
+  // 1a - TSB. The only sub-rule that works with no wellness feed at all.
+  if(f && f.loaded && f.tsb<=OVW_T1_TSB){
+    return _ovwHit_(1,'t1:tsb','Your form is deeply negative.',
+      'Form (TSB) is '+f.tsb+', at or below '+OVW_T1_TSB+'. That is accumulated fatigue, not ordinary training stress.',
+      [{label:'Form (TSB)', value:f.tsb},{label:'Fitness (CTL)', value:f.ctl},{label:'Fatigue (ATL)', value:f.atl}],
+      { tsb:f.tsb, ctl:f.ctl, atl:f.atl });
+  }
+  // 1b - HRV suppressed. Baseline is the trailing 14 days EXCLUDING today; p25 of the athlete's own
+  // distribution, not a population number. Skips entirely below OVW_T1_MIN_BASE days.
+  // A PERCENTILE CANNOT EXPRESS "LOW" ON A FLAT BASELINE. The first version fired when both recent
+  // days sat at or under the baseline p25 - but on a steady series p25 equals the median, so every
+  // ordinary day satisfied it and any two days in a row tripped a SAFETY rule. Deviation from the
+  // median is both immune to that and closer to what consumer tools actually do: a smoothed
+  // baseline plus a percentage band, rather than a rank within a small sample.
+  var hb=_ovwWellnessSeries_('hrv',14), hr=_ovwWellnessRecent_('hrv',OVW_T1_CONSEC);
+  if(hb.length>=OVW_T1_MIN_BASE && hr.length>=OVW_T1_CONSEC){
+    var hmed=_ovwMedian_(hb.map(function(x){return x.v;}));
+    var floorV=(hmed!=null)?Math.round(hmed*OVW_T1_HRV_DROP*10)/10:null;
+    var lowAll=(floorV!=null) && hr.every(function(x){ return x.v<=floorV; });
+    if(lowAll){
+      return _ovwHit_(1,'t1:hrv','Your HRV has been low for '+OVW_T1_CONSEC+' days.',
+        'HRV has been at or below '+floorV+' ms - '+Math.round((1-OVW_T1_HRV_DROP)*100)+'% under your '+hb.length+'-day median of '+hmed+' ms - for '+OVW_T1_CONSEC+' consecutive days.',
+        [{label:'HRV today', value:hr[hr.length-1].v+' ms'},{label:'Your median', value:hmed+' ms'},{label:'Baseline days', value:hb.length}],
+        { hrv:hr[hr.length-1].v, median:hmed, baselineDays:hb.length });
+    }
+  }
+  // 1c - RHR elevated, same shape.
+  var rb=_ovwWellnessSeries_('rhr',14), rr=_ovwWellnessRecent_('rhr',OVW_T1_CONSEC);
+  if(rb.length>=OVW_T1_MIN_BASE && rr.length>=OVW_T1_CONSEC){
+    var med=_ovwMedian_(rb.map(function(x){return x.v;}));
+    var highAll=rr.every(function(x){ return x.v>=med+OVW_T1_RHR_UP; });
+    if(highAll && med!=null){
+      return _ovwHit_(1,'t1:rhr','Your resting heart rate is elevated.',
+        'Resting HR has been '+OVW_T1_RHR_UP+' bpm or more above your '+rb.length+'-day median of '+med+' for '+OVW_T1_CONSEC+' consecutive days.',
+        [{label:'Resting HR', value:rr[rr.length-1].v+' bpm'},{label:'Your median', value:med+' bpm'},{label:'Baseline days', value:rb.length}],
+        { rhr:rr[rr.length-1].v, median:med, baselineDays:rb.length });
+    }
+  }
+  return null;
+}
+
+// ---- TIER 2 - imminent event ------------------------------------------------------------------
+// SPORT MISMATCH IS A SILENCE RULE, NOT A TRANSLATION RULE. The only upcoming race is a RUN, and
+// CTL / TSB / FTP are bike numbers. They are not converted, caveated or "adapted" - they are simply
+// not shown, because a cycling-derived readiness verdict for a half marathon is a fabricated claim
+// wearing a real number. When no running-specific signal exists, this degrades to the bare fact.
+function _ovwTier2_(){
+  var races=[]; try{ races=(typeof upcomingRaces_==='function')?(upcomingRaces_()||[]):[]; }catch(e){}
+  if(!races.length) return null;
+  var today=_ovwToday_();
+  var soon=races.map(function(e){
+      return { e:e, days:Math.round((Date.parse(_ovwDay_(e.date)+'T00:00:00')-Date.parse(today+'T00:00:00'))/86400000) };
+    }).filter(function(x){ return x.days>=0 && x.days<=OVW_T2_DAYS; })
+    .sort(function(a,b){ return a.days-b.days; })[0];
+  if(!soon) return null;
+  var e=soon.e, sport=String(e.sport||'').toLowerCase();
+  var facts=[{label:'Days out', value:soon.days}];
+  var body='';
+  if(/run/.test(sport)){
+    // Running-specific only. Weekly mileage over the last 4 weeks, and the longest single run.
+    var acts=_ovwActs_().filter(function(a){ return a.sport==='run'; });
+    var wk=[0,1,2,3].map(function(i){ return Math.round(_ovwWindow_(acts,(i+1)*7,i*7).reduce(function(s,a){return s+a.dist;},0)*10)/10; });
+    var longest=_ovwWindow_(acts,28,0).reduce(function(m,a){ return Math.max(m,a.dist); },0);
+    if(wk[0]>0 || wk[1]>0){
+      facts.push({label:'Run miles, last 4 weeks', value:wk[0]+' / '+wk[1]+' / '+wk[2]+' / '+wk[3]});
+      facts.push({label:'Longest run, 28 days', value:(Math.round(longest*10)/10)+' mi'});
+      if(e.distance>0) facts.push({label:'Race distance', value:e.distance+' mi'});
+      body='These are running numbers only. Your cycling fitness figures are not shown here because they do not measure readiness for a run.';
+    } else {
+      // No running signal at all - say the fact and stop.
+      body='No runs logged in the last 28 days, so there is no running-specific readiness signal to report.';
+    }
+  } else {
+    var f=null; try{ f=getFitness_(); }catch(er){}
+    if(f && f.loaded){
+      facts.push({label:'Fitness (CTL)', value:f.ctl});
+      facts.push({label:'Form (TSB)', value:f.tsb});
+    }
+  }
+  return _ovwHit_(2,'t2:'+(e.id||e.name),(e.name||'Your event')+' is in '+soon.days+' day'+(soon.days===1?'':'s')+'.',
+    body, facts, { days:soon.days, id:e.id||null, sport:sport });
+}
+
+// ---- TIER 3 - significant negative change -----------------------------------------------------
+function _ovwTier3_(){
+  // 3a - CTL falling over 28 days.
+  var ser=[]; try{ ser=(st.fitSeries||[]).slice().sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); }); }catch(e){}
+  if(ser.length>=29){
+    var now=ser[ser.length-1], then=ser[ser.length-29];
+    var pct=_ovwPct_(now.ctl, then.ctl);
+    if(pct!=null && pct<=OVW_T3_CTL_DROP){
+      return _ovwHit_(3,'t3:ctl','Your fitness is falling.',
+        'Fitness (CTL) is down '+Math.abs(pct)+'% over 28 days, from '+then.ctl+' to '+now.ctl+'.',
+        [{label:'CTL now', value:now.ctl},{label:'28 days ago', value:then.ctl},{label:'Change', value:pct+'%'}],
+        { ctlNow:now.ctl, ctlThen:then.ctl, pct:pct });
+    }
+  }
+  // 3b - training volume falling, by activity count across BOTH sports.
+  var acts=_ovwActs_();
+  var c0=_ovwWindow_(acts,90,0).length, c1=_ovwWindow_(acts,180,90).length;
+  var vpct=_ovwPct_(c0,c1);
+  if(vpct!=null && vpct<=OVW_T3_VOL_DROP){
+    return _ovwHit_(3,'t3:volume','You are training less than you were.',
+      'You logged '+c0+' activities in the last 90 days against '+c1+' in the 90 before that, down '+Math.abs(vpct)+'%.',
+      [{label:'Last 90 days', value:c0+' activities'},{label:'Prior 90 days', value:c1+' activities'},{label:'Change', value:vpct+'%'}],
+      { last90:c0, prior90:c1, pct:vpct });
+  }
+  // 3c - FTP falling. MANUAL ENTRIES ARE EXCLUDED and this is why: the stored history is
+  // 190(baseline), 183, 230, 230, 183, 190, 183 - all but the first typed by hand. A naive read of
+  // that swings -20% and +26% inside four days and would fire this tier on data entry, not on
+  // detraining. Filtering to non-manual leaves ONE row today, so this rule is INERT by design and
+  // stays silent rather than reporting a trend it cannot see. It starts working the moment a
+  // measured test lands.
+  var fh=[]; try{ fh=(st.ftpHistory||[]).filter(function(x){ return x && !x.deleted && x.ftp>0 && String(x.source||'')!=='manual'; })
+      .sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); }); }catch(e){}
+  if(fh.length>=2){
+    var a2=fh[fh.length-1], b2=fh[fh.length-2];
+    var fpct=_ovwPct_(a2.ftp, b2.ftp);
+    if(fpct!=null && fpct<=OVW_T3_FTP_DROP){
+      return _ovwHit_(3,'t3:ftp','Your FTP has dropped.',
+        'FTP fell from '+b2.ftp+'W to '+a2.ftp+'W, down '+Math.abs(fpct)+'%. Manual entries are excluded from this comparison.',
+        [{label:'FTP now', value:a2.ftp+' W'},{label:'Previous', value:b2.ftp+' W'},{label:'Change', value:fpct+'%'}],
+        { ftpNow:a2.ftp, ftpThen:b2.ftp, pct:fpct });
+    }
+  }
+  // 3d - missed sessions. NOT IMPLEMENTED, and deliberately not faked: st.plan holds 154 sessions
+  // and ZERO of them carry a completion score, so adherence cannot be measured yet. See the
+  // ride-adherence work. No rule here is better than a rule that always reads "0 of 0 completed".
+  return null;
+}
+
+// ---- TIER 4 - high-value opportunity ----------------------------------------------------------
+function _ovwTier4_(){
+  // 4a - a goal within reach.
+  var g=null; try{ g=st.goalTargets||null; }catch(e){}
+  if(g){
+    var cands=[];
+    try{
+      var f=(typeof getFitness_==='function')?getFitness_():null;
+      if(g.ctl>0 && f && f.loaded) cands.push({name:'CTL goal', now:f.ctl, target:g.ctl, unit:''});
+      if(g.ftpW>0 && st.ftp>0) cands.push({name:'FTP goal', now:parseInt(st.ftp,10), target:g.ftpW, unit:' W'});
+    }catch(e){}
+    var best=null;
+    cands.forEach(function(c){
+      var pct=(c.target>0)?Math.round(c.now/c.target*100):null;
+      if(pct!=null && pct>=OVW_T4_GOAL_PCT && pct<100 && (!best || pct>best.pct)) best={c:c, pct:pct};
+    });
+    if(best){
+      return _ovwHit_(4,'t4:goal:'+best.c.name,'Your '+best.c.name+' is nearly there.',
+        'You are at '+best.pct+'% of it: '+best.c.now+best.c.unit+' against a target of '+best.c.target+best.c.unit+'.',
+        [{label:'Now', value:best.c.now+best.c.unit},{label:'Target', value:best.c.target+best.c.unit},{label:'Progress', value:best.pct+'%'}],
+        { goal:best.c.name, now:best.c.now, target:best.c.target, pct:best.pct });
+    }
+  }
+  // 4b - a distance PR set recently. dprBoard_ derives progression at read time; a step dated
+  // within 14 days is a real, recent breakthrough rather than a lifetime best from years ago.
+  try{
+    if(typeof dprBoard_==='function'){
+      var b=dprBoard_(), cut=_ovwDaysAgo_(14), recent=[];
+      (b.markers||[]).forEach(function(m){
+        var last=m.progression && m.progression.length ? m.progression[m.progression.length-1] : null;
+        if(last && last.date>=cut) recent.push({km:m.km, date:last.date, secs:last.secs, name:last.name});
+      });
+      if(recent.length){
+        var r0=recent.sort(function(x,y){ return y.km-x.km; })[0];
+        return _ovwHit_(4,'t4:dpr:'+r0.km,'You set a new '+r0.km+' km best.',
+          'On '+r0.date+' you covered '+r0.km+' km faster than any ride before it.',
+          [{label:'Distance', value:r0.km+' km'},{label:'Set on', value:r0.date},{label:'Ride', value:r0.name||''}],
+          { km:r0.km, date:r0.date, secs:r0.secs });
+      }
+    }
+  }catch(e){}
+  return null;
+}
+
+// ---- TIER 5 - positive trend ------------------------------------------------------------------
+function _ovwTier5_(){
+  var acts=_ovwActs_();
+  // 5a - climbing.
+  var e0=_ovwWindow_(acts,90,0).reduce(function(s,a){return s+a.elev;},0);
+  var e1=_ovwWindow_(acts,180,90).reduce(function(s,a){return s+a.elev;},0);
+  var cpct=_ovwPct_(e0,e1);
+  if(cpct!=null && cpct>=OVW_T5_CLIMB_RISE){
+    return _ovwHit_(5,'t5:climb','You are climbing more.',
+      'You climbed '+Math.round(e0).toLocaleString()+' ft in the last 90 days against '+Math.round(e1).toLocaleString()+' ft in the 90 before, up '+cpct+'%.',
+      [{label:'Last 90 days', value:Math.round(e0).toLocaleString()+' ft'},{label:'Prior 90 days', value:Math.round(e1).toLocaleString()+' ft'},{label:'Change', value:'+'+cpct+'%'}],
+      { last90:Math.round(e0), prior90:Math.round(e1), pct:cpct });
+  }
+  // 5b - CTL rising.
+  var ser=[]; try{ ser=(st.fitSeries||[]).slice().sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); }); }catch(er){}
+  if(ser.length>=29){
+    var now=ser[ser.length-1], then=ser[ser.length-29];
+    var pct=_ovwPct_(now.ctl, then.ctl);
+    if(pct!=null && pct>=OVW_T5_CTL_RISE){
+      return _ovwHit_(5,'t5:ctl','Your fitness is building.',
+        'Fitness (CTL) is up '+pct+'% over 28 days, from '+then.ctl+' to '+now.ctl+'.',
+        [{label:'CTL now', value:now.ctl},{label:'28 days ago', value:then.ctl},{label:'Change', value:'+'+pct+'%'}],
+        { ctlNow:now.ctl, ctlThen:then.ctl, pct:pct });
+    }
+  }
+  // 5c - showing up.
+  var days=new Set(_ovwWindow_(acts,30,0).map(function(a){ return a.date; })).size;
+  if(days>=OVW_T5_ACTIVE_DAYS){
+    return _ovwHit_(5,'t5:consistency','You are showing up.',
+      'You trained on '+days+' of the last 30 days.',
+      [{label:'Active days', value:days+' of 30'}], { activeDays:days });
+  }
+  return null;
+}
+
+// ---- TIER 6 - nothing notable -----------------------------------------------------------------
+// A VALUED STATE, NOT AN EMPTY STATE. Reaching here means five tiers were evaluated against real
+// data and none of them fired, which is a finding in itself and is worded as one.
+function _ovwTier6_(){
+  return _ovwHit_(6,'t6:quiet','Nothing needs your attention today.',
+    'Recovery, upcoming events, training trends and open opportunities were all checked and none of them needs a decision from you today.',
+    [], { checkedAt:_ovwToday_() });
+}
+// ---- NOVELTY: stored history, not a score -----------------------------------------------------
+// The brief is explicit that novelty is STATE, not a formula input. A conclusion does not become
+// less true because it was true yesterday, so suppression cannot be a decay factor multiplied into
+// a score - it has to be a record of what was actually shown and what the numbers were at the time.
+//
+// st.ovwInsights = [{ id, key, tier, date, snapshot, dismissedAt, actedAt }]
+//
+// One row per SURFACING, not one per key, so the history answers "what did this page tell me and
+// when" rather than only "what is current". Capped at OVW_HIST_MAX newest-first: this rides in st,
+// which has a real storage ceiling (see slimForStorage_), and an uncapped append-only log on a
+// synced object is how a quota event starts.
+var OVW_HIST_MAX=200;
+var OVW_HIST_COOLDOWN_D=14;    // a key may not repeat inside this window unless the data moved
+var OVW_HIST_MATERIAL={        // per-field move that counts as "materially changed", by snapshot key
+  tsb:5, ctl:3, atl:3, hrv:5, rhr:3, pct:10, days:7, activeDays:5,
+  last90:10, prior90:10, ctlNow:3, ftpNow:5, km:1, secs:60, now:5
+};
+
+function ovwHistory_(){
+  try{ if(!Array.isArray(st.ovwInsights)) st.ovwInsights=[]; return st.ovwInsights; }catch(e){ return []; }
+}
+function ovwLastFor_(key){
+  var h=ovwHistory_(), best=null;
+  for(var i=0;i<h.length;i++){ var r=h[i]; if(r && r.key===key && (!best || String(r.date)>String(best.date))) best=r; }
+  return best;
+}
+// MATERIALLY CHANGED means a number the athlete would actually notice moved, not that any byte
+// differs. Comparing whole snapshots with JSON.stringify would resurface a tier every single day,
+// because CTL moves 0.1 overnight - which is exactly the "same conclusion every day" this exists to
+// prevent. Unknown fields are IGNORED rather than treated as changed, so adding a field to a
+// snapshot later does not silently reset every cooldown.
+function ovwMateriallyChanged_(prevSnap, nowSnap){
+  if(!prevSnap) return true;
+  var k, seen=false;
+  for(k in nowSnap){
+    if(!Object.prototype.hasOwnProperty.call(nowSnap,k)) continue;
+    var thr=OVW_HIST_MATERIAL[k];
+    if(thr==null) continue;
+    seen=true;
+    var a=parseFloat(prevSnap[k]), b=parseFloat(nowSnap[k]);
+    if(!isFinite(a) || !isFinite(b)) { if(prevSnap[k]!==nowSnap[k]) return true; continue; }
+    if(Math.abs(b-a)>=thr) return true;
+  }
+  return seen ? false : true;   // nothing comparable: treat as new rather than silently suppress
+}
+// Suppressed if it was shown inside the cooldown AND the numbers have not moved. A dismissal makes
+// the cooldown absolute for that window - the athlete has said "not this".
+function ovwSuppressed_(hit){
+  if(!hit || hit.tier===6) return false;      // the quiet state is never suppressed
+  var prev=ovwLastFor_(hit.key);
+  if(!prev) return false;
+  var age=Math.round((Date.parse(_ovwToday_()+'T00:00:00')-Date.parse(String(prev.date)+'T00:00:00'))/86400000);
+  if(!(age>=0) || age>=OVW_HIST_COOLDOWN_D) return false;
+  if(prev.dismissedAt) return true;
+  return !ovwMateriallyChanged_(prev.snapshot, hit.snapshot);
+}
+function ovwRecord_(hit){
+  if(!hit || hit.tier===6) return;
+  var h=ovwHistory_(), today=_ovwToday_();
+  for(var i=0;i<h.length;i++){ if(h[i] && h[i].key===hit.key && h[i].date===today) return; }  // once a day
+  h.unshift({ id:(typeof genEntryId_==='function')?genEntryId_():('ovw'+Date.now()),
+              key:hit.key, tier:hit.tier, date:today, snapshot:hit.snapshot||{},
+              dismissedAt:null, actedAt:null });
+  if(h.length>OVW_HIST_MAX) h.length=OVW_HIST_MAX;
+}
+function ovwDismiss_(key){
+  var prev=ovwLastFor_(key); if(!prev) return;
+  prev.dismissedAt=Date.now();
+  try{ sv(); }catch(e){}
+}
+
+// ---- THE EVALUATOR ---------------------------------------------------------------------------
+// Fixed order, first hit wins, suppression can only push DOWN the ladder - never up. A suppressed
+// tier 1 does not become a tier 5; it falls through and whatever fires next is reported at its own
+// tier, so the ladder position always means what it says.
+//
+// record:false lets a caller evaluate without writing history (tests, previews, the AI Coach).
+function ovwEvaluate_(opts){
+  opts=opts||{};
+  var ladder=[_ovwTier1_,_ovwTier2_,_ovwTier3_,_ovwTier4_,_ovwTier5_];
+  var considered=[], hit=null;
+  for(var i=0;i<ladder.length;i++){
+    var r=null;
+    try{ r=ladder[i](); }catch(e){ r=null; }        // a broken tier must not take the page down
+    if(!r) continue;
+    if(ovwSuppressed_(r)){ considered.push({key:r.key, tier:r.tier, suppressed:true}); continue; }
+    hit=r; break;
+  }
+  if(!hit) hit=_ovwTier6_();
+  hit.suppressedAbove=considered;
+  if(opts.record!==false) { ovwRecord_(hit); try{ sv(); }catch(e){} }
+  return hit;
+}
+window.ovwEvaluate_=ovwEvaluate_;
+window.ovwDismiss_=ovwDismiss_;
+window.ovwHistory_=ovwHistory_;
+
 function _dnaHour_(r){ if(r && r.startTime){ var t=new Date(r.startTime); if(!isNaN(t.getTime())) return t.getHours(); } return null; }
 function _dnaWeekKey_(dateStr){ var d=new Date(dateStr+'T00:00:00'); if(isNaN(d.getTime())) return null; var off=(d.getDay()+6)%7; d.setDate(d.getDate()-off); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function _dnaMedian_(a){ if(!a.length) return null; var s=a.slice().sort(function(x,y){return x-y;}); var m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; }

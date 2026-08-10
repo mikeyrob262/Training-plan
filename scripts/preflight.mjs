@@ -409,6 +409,20 @@ try {
     fail('food ranking / fractional portions no longer hold (see above).');
   }
 
+
+  // ---- 23d. The Overview decision hierarchy. Order is the whole design: a lower tier must never
+  //           outrank a higher one, a rule with no data must SKIP rather than fire or block, and
+  //           novelty suppression must push DOWN the ladder rather than blank the page.
+  console.log(`${D}· checking the Overview decision hierarchy…${X}`);
+  try {
+    const so = execSync('node scripts/overview-hierarchy-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Overview decision hierarchy no longer holds (see above).');
+  }
+
   // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
   //          field straight off it yields undefined silently, which is how Segment Attack showed
   //          "Weather unavailable" on every visit while the Weather page worked fine.
