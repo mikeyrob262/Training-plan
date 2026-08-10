@@ -423,6 +423,19 @@ try {
     fail('the Overview decision hierarchy no longer holds (see above).');
   }
 
+
+  // ---- 23e. Overview v3 layout. Fitness IS CTL - the strip showed 'Fitness (CTL) 181' beside
+  //           'CTL 57' as two metrics, 181 being the FTP. One fitness cell, real goal types only.
+  console.log(`${D}· checking the Overview v3 layout…${X}`);
+  try {
+    const so = execSync('node scripts/overview-layout-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Overview v3 layout no longer holds (see above).');
+  }
+
   // ---- 24. Every wxCache_ consumer must UNWRAP the {data, fetchedAt} slot. Reading a payload
   //          field straight off it yields undefined silently, which is how Segment Attack showed
   //          "Weather unavailable" on every visit while the Weather page worked fine.

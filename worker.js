@@ -28661,13 +28661,28 @@ function aiRenderTab_(tab, ded){
   // Everything here reuses an existing single source — _momData_ for direction, getReadiness_ for
   // readiness, _msCatalog_ for the milestone. Nothing is recomputed, so the hero cannot disagree
   // with the cards below it.
-  var hero=_aiSafe_('Hero', function(){return _ovHeroHTML_();});
+  // ---- OVERVIEW v3: SIX SECTIONS -------------------------------------------------------------
+  // 1 What Matters Right Now (decision hierarchy) + Today/Next
+  // 2 Current State      3 Your Goals      4 Performance
+  // 5 Athlete DNA + AI Coach              6 Recent Signals
+  //
+  // v2's Momentum, Highlights, Opportunity, Legacy and Story builders are intentionally no longer
+  // called from Overview. They were not deleted - Trends, Records and the DNA tab own that content -
+  // but nothing on this page renders them any more, which is the whole point of the trim.
+  var hero=_aiSafe_('OvwHero', function(){return _ovwHeroHTML_();});
   var focus=_aiSafe_('TodaysFocus', function(){return _ovFocusHTML_();});
-  var ovMom=_aiSafe_('OvMomentum', function(){return _ovMomentumHTML_();});
-  var ovHi=_aiSafe_('OvHighlights', function(){return _ovHighlightsHTML_();});
-  var ovOpp=_aiSafe_('OvOpportunity', function(){return _ovOpportunityHTML_();});
-  var ovLeg=_aiSafe_('OvLegacy', function(){return _ovLegacyHTML_();});   // now carries Weight too
-  var story=_aiSafe_('Story', function(){return aiCardStory_(ded);});
+  var cur=_aiSafe_('OvwCurrentState', function(){return _ovwCurrentStateHTML_();});
+  var goals=_aiSafe_('OvwGoals', function(){return _ovwGoalsHTML_();});
+  var perf=_aiSafe_('OvwPerf', function(){return _ovwPerfHTML_();});
+  // The REAL 4-axis power radar, not the mockup's invented 6-axis 0-100 model. This is a
+  // fabrication fix for one card; it is NOT the DNA Insights feature, which is still unbuilt.
+  var dna=_aiSafe_('OvwDNA', function(){
+    var r=(typeof _dnaRadarHTML_==='function')?_dnaRadarHTML_():'';
+    if(!r) return '';
+    return _ovwCard_(_ovwLbl_('Athlete DNA','<span onclick="aiSetTab_(&#39;dna&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">Explore DNA</span>')+r);
+  });
+  var coach=_aiSafe_('OvwCoach', function(){return _ovwCoachHTML_();});
+  var signals=_aiSafe_('OvwSignals', function(){return _ovwSignalsHTML_();});
   // GRID TRIM. The card grid under the hero rows is GONE — Overview is the hero clusters, the three
   // context cards, and Your Athletic Story. Everything that has a home of its own lives there now
   // instead of being duplicated here at equal volume:
@@ -28685,11 +28700,17 @@ function aiRenderTab_(tab, ded){
   //                  is fixed at source in _ytdCycMi_ / _athleteStatsStale_, because the same number
   //                  still feeds the mobile YTD ring and the coach's day state.)
   //   What Changed — redundant with Momentum and Highlights in the hero above.
-  if(!hero && !focus && !ovMom && !ovHi && !ovOpp && !ovLeg && !story) return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Not enough loaded data yet to surface an honest insight.</div>';
-  // LAYOUT, following the reference: a full-width status hero, then Today's Focus beside Momentum
-  // (focus narrow, momentum wide), then Opportunity beside Highlights, then Legacy full width.
-  // Every row collapses to a single column under ~860px, so mobile reads top to bottom in the same
-  // order of importance rather than in whatever order the grid happened to wrap.
+  if(!hero && !focus && !cur && !goals && !perf && !dna && !coach && !signals){
+    return '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Nothing to show yet.</div>';
+  }
+  // LAYOUT - six sections, in the order they should be read.
+  //   1  hero (What Matters Right Now) beside Today/Next
+  //   2  Current State, full width - it is a strip, not a card
+  //   3  Your Goals beside Performance
+  //   4  Athlete DNA beside AI Coach
+  //   5  Recent Signals, full width
+  // Every row collapses to one column under 860px so mobile reads top to bottom in the same order
+  // of importance rather than in whatever order the grid happened to wrap.
   var row=function(cols, tmpl){
     var live=cols.filter(function(c){ return c; });
     if(!live.length) return '';
@@ -28697,19 +28718,241 @@ function aiRenderTab_(tab, ded){
     return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:10px;margin-bottom:10px">'+live.join('')+'</div>';
   };
   var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
-  if(hero) html+=hero;
-  html+=row([focus, ovMom], 'minmax(0,1fr) minmax(0,1.6fr)');
-  // Legacy MOVES into the third row rather than sitting full-bleed underneath it. Goals & Progress
-  // was dropped from v1 (its target fields do not exist), which left Opportunity and Highlights
-  // inheriting a three-card row's width and reading wider than their content. Legacy is a real card
-  // with real numbers, so it fills the slot instead of stretching the other two to cover it.
-  html+=row([ovOpp, ovHi, ovLeg], 'repeat(3, minmax(0,1fr))');
-  if(story) html+='<div style="margin-top:12px">'+story+'</div>';
+  html+=row([hero, focus], 'minmax(0,1.55fr) minmax(0,1fr)');
+  if(cur) html+='<div style="margin-bottom:10px">'+cur+'</div>';
+  html+=row([goals, perf], 'minmax(0,1fr) minmax(0,1.35fr)');
+  html+=row([dna, coach], 'minmax(0,1fr) minmax(0,1.15fr)');
+  if(signals) html+='<div>'+signals+'</div>';
   return html;
 }
 // ---- Athlete Status hero ----------------------------------------------------------------------
 // Direction, readiness and the next milestone — the three things that answer "where am I and what
 // is today". Each comes from the app's single source for that fact, never a local re-derivation.
+// ============================================================================================
+// OVERVIEW v3 - six sections, down from v2's eight.
+//
+// Cut outright and NOT re-added here: the Legacy timeline, Momentum's full CTL/ATL/TSB chart (the
+// values live in Current State; the chart stays on Trends), and the six-tile Training Ecosystem
+// grid. Weather / Nutrition / Recovery / Gear / Plan keep their own pages and feed the decision
+// hierarchy without owning an Overview card.
+//
+// Every section renders an em-dash rather than a number it cannot stand behind.
+// ============================================================================================
+function _ovwCard_(inner, pad){
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:'+(pad||'14px 16px')+';min-width:0">'+inner+'</div>';
+}
+function _ovwLbl_(t, right){
+  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px">'
+    +'<span style="font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--d-dim)">'+t+'</span>'
+    +(right||'')+'</div>';
+}
+function _ovwDash_(){ return '<span style="color:var(--d-dim)">&mdash;</span>'; }
+function _ovwDelta_(v, goodUp){
+  if(v==null || !isFinite(v) || v===0) return '';
+  var up=v>0, good=(goodUp===false)?!up:up;
+  var col=good?'#4ade80':'#f87171';
+  return '<span style="font-size:11px;font-weight:700;color:'+col+';margin-left:5px">'+(up?'+':'')+(Math.round(v*10)/10)+'</span>';
+}
+
+// ---- 1. WHAT MATTERS RIGHT NOW ---------------------------------------------------------------
+// The hero is whatever the decision hierarchy decided, rendered as-is. It carries the tier and the
+// rule key in the DOM so a screenshot can always be traced back to the rule that produced it -
+// this page's whole problem historically was a claim nobody could source.
+function _ovwHeroHTML_(){
+  var hit=null;
+  try{ hit=ovwEvaluate_(); }catch(e){ return ''; }
+  if(!hit) return '';
+  var quiet=(hit.tier===6);
+  var accent=quiet?'#4ade80':(hit.tier<=2?'#f87171':(hit.tier<=3?'#f59e0b':'#4ade80'));
+  var H='<div data-ovw-tier="'+hit.tier+'" data-ovw-key="'+aiEsc_(hit.key)+'" style="background:var(--d-panel);border:1px solid '+accent+'55;border-left:3px solid '+accent+';border-radius:14px;padding:16px 18px">';
+  H+='<div style="font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:'+accent+';margin-bottom:8px">What matters right now</div>';
+  H+='<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.25;letter-spacing:-.01em">'+aiEsc_(hit.title)+'</div>';
+  if(hit.body) H+='<div style="font-size:13px;color:var(--d-t3);margin-top:7px;line-height:1.5">'+aiEsc_(hit.body)+'</div>';
+  if(hit.facts && hit.facts.length){
+    H+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:13px;padding-top:12px;border-top:1px solid var(--d-edge)">';
+    hit.facts.forEach(function(f){
+      H+='<div style="min-width:0"><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em">'+aiEsc_(f.label)+'</div>'
+        +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:2px">'+aiEsc_(String(f.value))+'</div></div>';
+    });
+    H+='</div>';
+  }
+  return H+'</div>';
+}
+
+// ---- 2. CURRENT STATE ------------------------------------------------------------------------
+// FITNESS IS CTL. They are the same number and there is exactly one cell for them. The mockup
+// showed "Fitness (CTL) 181" beside "CTL 57" as two separate metrics on one strip - 181 was the
+// FTP, mislabelled. Every value here comes from getFitness_, the single fitness source, and the
+// 7-day deltas come from the same st.fitSeries the chart on Trends reads.
+function _ovwCurrentStateHTML_(){
+  var f=null; try{ f=getFitness_(); }catch(e){}
+  var ser=[]; try{ ser=(st.fitSeries||[]).slice().sort(function(a,b){ return String(a.date).slice(0,10).localeCompare(String(b.date).slice(0,10)); }); }catch(e){}
+  var wk=(ser.length>=8)?ser[ser.length-8]:null;
+  var ftp=parseInt((typeof st!=='undefined'&&st.ftp)||0,10)||null;
+  var cells=[
+    { k:'Fitness (CTL)', v:(f&&f.loaded)?f.ctl:null, d:(f&&f.loaded&&wk)?(f.ctl-wk.ctl):null, up:true },
+    { k:'Fatigue (ATL)', v:(f&&f.loaded)?f.atl:null, d:(f&&f.loaded&&wk)?(f.atl-wk.atl):null, up:false },
+    { k:'Form (TSB)',    v:(f&&f.loaded)?f.tsb:null, d:(f&&f.loaded&&wk)?(f.tsb-wk.tsb):null, up:true },
+    { k:'FTP',           v:ftp, unit:' W', d:null, up:true }
+  ];
+  var H=_ovwLbl_('Current state', (f&&f.stale)?('<span style="font-size:10px;color:#f59e0b">'+aiEsc_(f.ageLabel||'stale')+'</span>'):'');
+  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">';
+  cells.forEach(function(c){
+    H+='<div style="min-width:0">'
+      +'<div style="font-size:10.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.k+'</div>'
+      +'<div style="display:flex;align-items:baseline;margin-top:3px">'
+      +'<span style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1">'+((c.v==null)?_ovwDash_():(c.v+(c.unit||'')))+'</span>'
+      +_ovwDelta_(c.d, c.up)+'</div>'
+      +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:3px">'+((c.d==null)?'&nbsp;':'vs 7 days ago')+'</div></div>';
+  });
+  return _ovwCard_(H+'</div>');
+}
+
+// ---- 3. YOUR GOALS ---------------------------------------------------------------------------
+// THE REAL GOAL TYPES, which is all of them. Century Ride and Everest Challenge were in the mockup
+// and are not goals this app stores - rendering them would have meant inventing two goal types to
+// match a picture. Each row shows current against target and the percentage between them; a goal
+// with no current reading renders an em-dash rather than 0%.
+function _ovwGoalsHTML_(){
+  var g=null; try{ g=st.goalTargets||{}; }catch(e){ g={}; }
+  var f=null; try{ f=getFitness_(); }catch(e){}
+  var rows=[];
+  var ytd=null; try{ if(typeof _ytdCycMi_==='function') ytd=_ytdCycMi_(); }catch(e){}
+  var wkMi=null;
+  try{
+    var acts=(typeof _ovwActs_==='function')?_ovwActs_():[];
+    wkMi=Math.round(_ovwWindow_(acts,7,0).reduce(function(s,a){ return s+a.dist; },0)*10)/10;
+  }catch(e){}
+  var wt=null; try{ wt=(typeof stWeightLb_==='function')?stWeightLb_():null; }catch(e){}
+  if(g.annualMi>0)  rows.push({ n:'Annual mileage', now:(ytd!=null?Math.round(ytd):null), t:g.annualMi, u:' mi' });
+  if(g.weeklyMi>0)  rows.push({ n:'Weekly mileage', now:wkMi, t:g.weeklyMi, u:' mi' });
+  if(g.ctl>0)       rows.push({ n:'Fitness (CTL)', now:(f&&f.loaded)?f.ctl:null, t:g.ctl, u:'' });
+  if(g.ftpW>0)      rows.push({ n:'FTP', now:parseInt((st&&st.ftp)||0,10)||null, t:g.ftpW, u:' W' });
+  // Weight and W/kg are the two where DOWN is progress or the target is a rate, so neither is a
+  // simple now/target share. Shown as plain current-vs-target without a bar rather than forced into
+  // a percentage that would read backwards.
+  if(g.weightLb>0)  rows.push({ n:'Weight', now:wt, t:g.weightLb, u:' lb', noBar:true });
+  if(g.wkg>0){
+    var wkg=null; try{ if(typeof wkgFromW_==='function' && st.ftp) wkg=wkgFromW_(st.ftp); }catch(e){}
+    rows.push({ n:'W/kg at FTP', now:wkg, t:g.wkg, u:'', noBar:true });
+  }
+  if(!rows.length) return '';
+  var H=_ovwLbl_('Your goals', '<span onclick="dsNav(&#39;settings&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">Edit goals</span>');
+  rows.forEach(function(r){
+    var pct=(r.now!=null && r.t>0)?Math.min(100,Math.round(r.now/r.t*100)):null;
+    H+='<div style="margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">'
+      +'<span style="font-size:12.5px;font-weight:600;color:var(--d-head)">'+r.n+'</span>'
+      +'<span style="font-size:11.5px;color:var(--d-t3)">'+((r.now==null)?_ovwDash_():(r.now+r.u))+' / '+r.t+r.u
+      +(pct!=null&&!r.noBar?('<b style="color:var(--d-head);margin-left:6px">'+pct+'%</b>'):'')+'</span></div>';
+    if(pct!=null && !r.noBar){
+      H+='<div style="height:5px;border-radius:3px;background:var(--d-inset);margin-top:5px;overflow:hidden">'
+        +'<div style="height:100%;width:'+pct+'%;background:#fc5200;border-radius:3px"></div></div>';
+    }
+    H+='</div>';
+  });
+  return _ovwCard_(H);
+}
+
+// ---- 4. PERFORMANCE --------------------------------------------------------------------------
+// ONE horizontal strip, not the six-card grid. Power figures come from r.powerCurve, the same
+// source the DNA power axes read, so the two cannot disagree.
+function _ovwPerfHTML_(){
+  var live=[]; try{ live=(st.rides||[]).filter(function(r){ return r && !r.deleted; }); }catch(e){}
+  var best=function(key){
+    var b=null;
+    live.forEach(function(r){ var pc=r.powerCurve; if(!pc) return; var v=(pc[key]!=null)?+pc[key]:null;
+      if(v>0 && (!b || v>b.w)) b={ w:Math.round(v), date:String(r.date).slice(0,10) }; });
+    return b;
+  };
+  var b5=best('300'), b20=best('1200');
+  var longest=null;
+  live.forEach(function(r){ var d=parseFloat(r.distance)||0; if(!longest || d>longest.mi) longest={ mi:Math.round(d*10)/10, date:String(r.date).slice(0,10) }; });
+  var climb=null;
+  try{
+    var acts=_ovwActs_();
+    var c0=_ovwWindow_(acts,90,0).reduce(function(s,a){return s+a.elev;},0);
+    var c1=_ovwWindow_(acts,180,90).reduce(function(s,a){return s+a.elev;},0);
+    climb=_ovwPct_(c0,c1);
+  }catch(e){}
+  var cells=[
+    { k:'Best 5-min power', v:b5?(b5.w+' W'):null, s:b5?b5.date:'no power curve yet' },
+    { k:'Best 20-min power', v:b20?(b20.w+' W'):null, s:b20?b20.date:'no power curve yet' },
+    { k:'Longest ride', v:longest?(longest.mi+' mi'):null, s:longest?longest.date:'' },
+    { k:'Climbing, 90 days', v:(climb!=null)?((climb>0?'+':'')+climb+'%'):null, s:'vs prior 90 days' }
+  ];
+  var H=_ovwLbl_('Performance', '<span onclick="aiSetTab_(&#39;records&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">View records</span>');
+  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">';
+  cells.forEach(function(c){
+    H+='<div style="min-width:0"><div style="font-size:10.5px;color:var(--d-dim)">'+c.k+'</div>'
+      +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:3px">'+((c.v==null)?_ovwDash_():c.v)+'</div>'
+      +'<div style="font-size:9.5px;color:var(--d-dim);margin-top:2px">'+(c.s||'&nbsp;')+'</div></div>';
+  });
+  return _ovwCard_(H+'</div>');
+}
+
+// ---- 5b. AI COACH ----------------------------------------------------------------------------
+// The question is DERIVED from whatever the decision hierarchy just concluded, so it is grounded in
+// a real anomaly rather than being a generic prompt. The topic pills below it are still fixed
+// navigation - whether they become data-driven is an open decision, and they are deliberately not
+// dressed up as generated in the meantime.
+function _ovwCoachHTML_(){
+  var hit=null;
+  try{ hit=ovwEvaluate_({record:false}); }catch(e){}
+  if(!hit) return '';
+  var q;
+  if(hit.tier===6) q='What should I focus on next?';
+  else if(hit.key==='t3:volume') q='I am training less than I was. Is that costing me fitness, or is it recovery I needed?';
+  else if(hit.key==='t3:ctl') q='My fitness is falling. What would it take to turn that around?';
+  else if(hit.key==='t5:climb') q='Why has my climbing improved so much while my power has not?';
+  else if(hit.key==='t1:tsb' || hit.key==='t1:hrv' || hit.key==='t1:rhr') q='My recovery signals are down. How should I adjust this week?';
+  else if(hit.tier===2) q='What should the next two weeks look like before my race?';
+  else if(hit.tier===4) q='How close am I really, and what would close the gap?';
+  else q='What does this mean for my training?';
+  var pills=['Training strategy','Performance trends','Goal readiness','Recovery','Nutrition','Injury prevention'];
+  var H=_ovwLbl_('AI Coach', '<span onclick="dsNav(&#39;aicoach&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">Ask AI Coach</span>');
+  H+='<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-bottom:9px">Something worth asking about?</div>';
+  H+='<div onclick="dsNav(&#39;aicoach&#39;)" style="background:var(--d-inset);border:1px solid var(--d-edge);border-radius:10px;padding:11px 13px;font-size:13px;color:var(--d-head);cursor:pointer;line-height:1.45">'+aiEsc_(q)+'</div>';
+  H+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+  pills.forEach(function(p){
+    H+='<span onclick="dsNav(&#39;aicoach&#39;)" style="font-size:11px;font-weight:600;color:var(--d-t3);background:var(--d-inset);border:1px solid var(--d-edge);border-radius:9px;padding:5px 10px;cursor:pointer">'+p+'</span>';
+  });
+  H+='</div><div style="font-size:10.5px;color:var(--d-dim);margin-top:9px">AI Coach is powered by your data. Always review and trust your judgment.</div>';
+  return _ovwCard_(H);
+}
+
+// ---- 6. RECENT SIGNALS -----------------------------------------------------------------------
+// Factual recent events only. Sourced from the distance-PR progression, which records WHEN each
+// best was set, so "recent" is a date the athlete can check rather than a vibe.
+function _ovwSignalsHTML_(){
+  var rows=[];
+  try{
+    if(typeof dprBoard_==='function'){
+      var b=dprBoard_();
+      (b.markers||[]).forEach(function(m){
+        var last=(m.progression && m.progression.length)?m.progression[m.progression.length-1]:null;
+        if(last) rows.push({ t:m.km+' km best', s:last.name||'', d:last.date, v:_ovwHMS_(last.secs) });
+      });
+    }
+  }catch(e){}
+  rows.sort(function(a,b){ return String(b.d).localeCompare(String(a.d)); });
+  rows=rows.slice(0,3);
+  if(!rows.length) return '';
+  var H=_ovwLbl_('Recent signals', '<span onclick="aiSetTab_(&#39;records&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">View all</span>');
+  H+='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">';
+  rows.forEach(function(r){
+    H+='<div style="min-width:0"><div style="font-size:12.5px;font-weight:700;color:var(--d-head)">'+aiEsc_(r.t)+'</div>'
+      +'<div style="font-size:11px;color:var(--d-t3);margin-top:2px">'+aiEsc_(r.v)+'</div>'
+      +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+aiEsc_(r.d)+'</div></div>';
+  });
+  return _ovwCard_(H+'</div>');
+}
+function _ovwHMS_(s){
+  s=Math.round(+s||0); if(!(s>0)) return '';
+  var h=Math.floor(s/3600), m=Math.floor((s%3600)/60), x=s%60, p=function(n){return (n<10?'0':'')+n;};
+  return (h?(h+':'+p(m)):String(m))+':'+p(x);
+}
+
 function _ovHeroHTML_(){
   var M=(typeof _momData_==='function')?_momData_():{ok:false};
   var R=(typeof getReadiness_==='function')?getReadiness_():null;
