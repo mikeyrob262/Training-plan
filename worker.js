@@ -11677,9 +11677,20 @@ function _nlRelevance_(name, q){
 }
 // Stable: equal scores keep the order the source returned them in, so this re-ranks without
 // inventing an ordering the data does not support.
+// THE BONUS IS FOR USDA INGREDIENT TIERS, NOT FOR ANYTHING UNBRANDED. The proxy marks a LOCAL row
+// generic whenever the curated table gives it no brand, which is true of prepared items like
+// "Cheese Pizza Slice" and "Milk Chocolate" - they carry no brand but they are not ingredients.
+// Measured on the live response: with the flag taken at face value, a search for "cheese" tied
+// "Cheese Pizza Slice" with "Cheese, cheddar" at 95 apiece and the local row won on source order.
+// Only Foundation, SR Legacy and Survey (FNDDS) describe a generic ingredient, so only they earn it.
+function _nlIsGenericTier_(f){
+  if(!f || f.generic!==true) return false;
+  var dt=String(f.dataType||'');
+  return dt==='Foundation' || dt==='SR Legacy' || dt==='Survey (FNDDS)';
+}
 function _nlRankFoods_(list, q){
   return (list||[]).map(function(f,i){
-    var score=_nlRelevance_(f.n, q)+(f.generic?_NL_GENERIC_BONUS:0);
+    var score=_nlRelevance_(f.n, q)+(_nlIsGenericTier_(f)?_NL_GENERIC_BONUS:0);
     return { f:f, i:i, s:score };
   }).sort(function(a,b){ return (b.s-a.s) || (a.i-b.i); }).map(function(x){ return x.f; });
 }

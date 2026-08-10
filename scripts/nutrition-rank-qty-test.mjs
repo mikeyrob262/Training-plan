@@ -21,9 +21,9 @@ const check=(label,got,want)=>{ const ok=JSON.stringify(got)===JSON.stringify(wa
   console.log('  '+(ok?G+'PASS'+X:R+'FAIL'+X)+'  '+label+(ok?'':'   got '+JSON.stringify(got)+', want '+JSON.stringify(want))); };
 const ok=(label,cond)=>{ if(!cond)fails++; console.log('  '+(cond?G+'PASS'+X:R+'FAIL'+X)+'  '+label); };
 
-const H = new Function(asServed(exv('_NL_GENERIC_BONUS')+ex('_nlNorm_')+ex('_nlRelevance_')+ex('_nlRankFoods_')
+const H = new Function(asServed(exv('_NL_GENERIC_BONUS')+ex('_nlNorm_')+ex('_nlRelevance_')+ex('_nlIsGenericTier_')+ex('_nlRankFoods_')
   +ex('_nlQtyStr_')+ex('_nlQtyLabelHtml_')+ex('_nlQtyLabel_'))
-  +';return {_nlNorm_,_nlRelevance_,_nlRankFoods_,_nlQtyStr_,_nlQtyLabel_,_nlQtyLabelHtml_};')();
+  +';return {_nlNorm_,_nlRelevance_,_nlIsGenericTier_,_nlRankFoods_,_nlQtyStr_,_nlQtyLabel_,_nlQtyLabelHtml_};')();
 
 console.log('\n'+C+'=== generic beats branded when the match is comparable ==='+X);
 const cheeseRows = [
@@ -34,6 +34,19 @@ const cheeseRows = [
 ];
 check('a generic ingredient surfaces above branded rows that merely match',
   H._nlRankFoods_(cheeseRows, 'cheese')[0].n, 'Cheese, cheddar');
+// FOUND ON LIVE DATA, not in a fixture: the proxy marks an unbranded LOCAL row generic, which is
+// true of prepared items like "Cheese Pizza Slice" and "Milk Chocolate". Taking the flag at face
+// value tied them with "Cheese, cheddar" at 95 apiece and the local row won on source order.
+const withLocalPrepared = [
+  { n:'Cheese Pizza Slice', generic:true, dataType:'Local' },
+  { n:'Cheese, cheddar', generic:true, dataType:'SR Legacy' }
+];
+check('an unbranded LOCAL prepared item does not earn the ingredient bonus',
+  H._nlRankFoods_(withLocalPrepared, 'cheese')[0].n, 'Cheese, cheddar');
+check('...because the bonus is tier-based', H._nlIsGenericTier_({generic:true, dataType:'Local'}), false);
+check('Foundation earns it', H._nlIsGenericTier_({generic:true, dataType:'Foundation'}), true);
+check('SR Legacy earns it', H._nlIsGenericTier_({generic:true, dataType:'SR Legacy'}), true);
+check('Branded never earns it', H._nlIsGenericTier_({generic:true, dataType:'Branded'}), false);
 
 console.log('\n'+C+'=== ...but never above an exact branded match the athlete typed ==='+X);
 const qpRows = [
