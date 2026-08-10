@@ -87,7 +87,11 @@ function dkOf(offsetDays){
   const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-offsetDays);
   return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
 }
-const RIDE_DK = dkOf(1);
+// TODAY, not yesterday. Weeks here start on Monday, so a fixture placed on 'yesterday' lands in
+// the PREVIOUS bucket every Monday - and the assertions below read slice(-1), the current week.
+// This test therefore failed one day in seven for reasons that had nothing to do with the code
+// under test. Today is always inside the current week.
+const RIDE_DK = dkOf(0);
 global.st = {
   plan: { [RIDE_DK]: { sessions: [
     // ridden, never tapped: no status, no completedRideKey, no executionScore
