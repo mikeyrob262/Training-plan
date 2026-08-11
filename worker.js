@@ -6210,8 +6210,23 @@ function mergeStateRoot_(local, remote){
 // too - ftpRecord_ same-day-corrects rather than stacking - but raw writes that bypass it can
 // produce two rows on one date, and that actually happened during the repair. Keyed on date alone,
 // tombstoning one of them would have taken the other down with it, so identity here is date+ftp.
+// races joins this list to fix a REAL bug, not for tidiness. mergeState_ resolves two numbers with
+// Math.max, so any numeric field on an array item could be raised but never LOWERED: reverting the
+// Oct 18 race distance from 13.1 to 6.2 wrote cleanly, synced, and came back 13.1 on the next load
+// because the remote's larger value won every merge. Clearing the field does not help either -
+// "if(a == null) return b" hands it straight back.
+//
+// _lwwMergeArray_ takes the WHOLE item from the newer blob rather than merging field by field, so
+// magnitude never enters into it and a correction can travel in either direction. Keyed on id
+// because that is what a race has; tombstones still beat any live copy, so deletions keep working.
+//
+// RIDES ARE DELIBERATELY NOT HERE. mergeItemFast_ gives them special handling that whole-item LWW
+// would throw away - most importantly it keeps the LONGER GPS track when two copies disagree, which
+// is load-bearing for a library assembled from several devices and importers. The same
+// raise-but-never-lower flaw still applies to numeric ride fields and is not fixed by this.
 var _LWW_ARRAYS = { weightLog:{ keys:['date'], val:'weight' },
-                    ftpHistory:{ keys:['date','ftp'], val:'ftp' } };
+                    ftpHistory:{ keys:['date','ftp'], val:'ftp' },
+                    races:{ keys:['id'] } };
 // A tombstone drops its VALUE field (that is what makes it invisible to readers that filter on the
 // value), so it cannot rebuild a composite key from its own fields. It carries the key it is
 // deleting in _k instead. _k is deliberately not one of the value fields any reader looks at.

@@ -28,8 +28,14 @@ function exVar(n){ const i=src.indexOf('var '+n+' ='); const j=(i<0)?src.indexOf
 }
 
 let code = exVar('_LWW_TOP') + exVar('_LWW_SUB') + 'var _lwwShadow_ = null;\nvar st = {};\n';
+// _LWW_ARRAYS and its helpers were NOT in this harness, so the array branch of mergeStateRoot_
+// threw and fell into the catch on every run - the settings-array behaviour was never actually
+// exercised here, only the scalar paths above it.
+code += exVar('_LWW_ARRAYS');
 for (const f of ['_lwwPaths_','_lwwGet_','_lwwSet_','mergeStateRoot_','_lwwSnapshot_','_lwwTouch_',
-                 'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_']) code += ex(f);
+                 'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_',
+                 '_arrKeyOf_','_arrIsDead_','_lwwMergeArray_','mergeItemFast_','lightFingerprint_',
+                 'itemsMatch_','rideKey','_isSession_','normDate']) code += ex(f);
 const M = new Function(code +
   ';return {mergeState_,mergeStateRoot_,_lwwTouch_,_lwwPaths_,setSt:function(v){st=v;},getSt:function(){return st;}};')();
 
@@ -146,6 +152,44 @@ check('the fresh 175 survives the pre-push merge', afterEdit.ftp, 175);
 console.log('  ' + Y + '(without the saveLocal_ stamp this returns 183 - the edit would vanish)' + X);
 const noStamp = M.mergeStateRoot_({ ftp:175, lastUpdate:1000 }, { ftp:183, lastUpdate:3000 });
 check('...confirmed: unstamped, the edit is lost', noStamp.ftp, 183);
+
+console.log('\n'+Y+'=== a number can be LOWERED and survive the round trip ==='+X);
+// THE BUG: mergeState_ resolves two numbers with Math.max, so an item field could be raised but
+// never lowered. Reverting a race distance 13.1 -> 6.2 wrote cleanly, synced, and came back 13.1.
+{
+  const local  = { lastUpdate: 2000, races: [{ id:'r1', name:'Race', date:'2026-10-18', distance:6.2 }] };
+  const remote = { lastUpdate: 1000, races: [{ id:'r1', name:'Race', date:'2026-10-18', distance:13.1 }] };
+  const out = M.mergeStateRoot_(local, remote);
+  check('a LOWER distance from the newer side wins', out.races[0].distance, 6.2);
+}
+{
+  const local  = { lastUpdate: 1000, races: [{ id:'r1', name:'Race', date:'2026-10-18', distance:6.2 }] };
+  const remote = { lastUpdate: 2000, races: [{ id:'r1', name:'Race', date:'2026-10-18', distance:13.1 }] };
+  const out = M.mergeStateRoot_(local, remote);
+  check('...and a HIGHER one still wins when IT is the newer side', out.races[0].distance, 13.1);
+}
+{
+  const local  = { lastUpdate: 2000, races: [{ id:'r1', deleted:true, _k:'r1' }] };
+  const remote = { lastUpdate: 9000, races: [{ id:'r1', name:'Race', date:'2026-10-18', distance:13.1 }] };
+  const out = M.mergeStateRoot_(local, remote);
+  check('a tombstone beats a live copy even from a NEWER blob', !!out.races[0].deleted, true);
+}
+{
+  const local  = { lastUpdate: 2000, races: [{ id:'r1', name:'A', date:'2026-10-18' }] };
+  const remote = { lastUpdate: 1000, races: [{ id:'r2', name:'B', date:'2026-11-07' }] };
+  const out = M.mergeStateRoot_(local, remote);
+  check('a race present on only one side survives', out.races.map(r=>r.id).sort(), ['r1','r2']);
+}
+{
+  // The monotonic fields must NOT have been dragged into this - max IS correct for clocks.
+  const local  = { lastUpdate: 2000, fitSeriesAt: 500, races: [] };
+  const remote = { lastUpdate: 1000, fitSeriesAt: 900, races: [] };
+  const out = M.mergeStateRoot_(local, remote);
+  check('fitSeriesAt is still max-merged', out.fitSeriesAt, 900);
+}
+check('races is on the array allowlist', src.indexOf("races:{ keys:['id'] }") >= 0, true);
+check('rides are deliberately NOT on it', /_LWW_ARRAYS[^;]*rides:/.test(src), false);
+check('...and the reason is recorded', src.indexOf('RIDES ARE DELIBERATELY NOT HERE') >= 0, true);
 
 console.log('\n=== the wiring is actually in place ===');
 check('the 5s poll uses the root merge', /applyFirebaseData[\s\S]{0,1200}?mergeStateRoot_\(st,/.test(src), true);
