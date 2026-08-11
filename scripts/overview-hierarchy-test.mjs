@@ -252,6 +252,28 @@ console.log('\n'+C+'=== one answer per day, stable under reload ==='+X);
   ok('...and the page still says something', !!later.fired);
 }
 
+console.log('\n'+C+'=== the runner-up is a real tier, not filler ==='+X);
+{
+  // The ladder stops at the first hit, but lower tiers are often true too. The hero uses the
+  // space under a short headline to name the runner-up - that has to be a rule that actually
+  // evaluated true and was outranked, never something invented to fill the gap.
+  const { W, api } = world();
+  // Two tiers must genuinely fire: a CTL goal at 92% (tier 4) and 30 active days (tier 5).
+  W.st.goalTargets = { ctl: 65 };
+  for (let i=0;i<200;i++) W.st.rides.push({ date: day(i%90), distance: 20, elev: 900 });
+  const hit = api.ovwEvaluate_({ record:false });
+  check('the higher tier wins', hit.tier, 4);
+  ok('a runner-up is offered when a lower tier also fired', !!hit.also);
+  ok('...and it is a LOWER tier than the winner', !!hit.also && hit.also.tier > hit.tier);
+  ok('...carrying its own title', !!hit.also && typeof hit.also.title === 'string' && hit.also.title.length > 0);
+}
+{
+  // Nothing else true -> no runner-up at all, rather than a filler line.
+  const { api } = world();
+  const hit = api.ovwEvaluate_({ record:false });
+  check('the quiet state has no runner-up', hit.also, undefined);
+}
+
 console.log('\n'+C+'=== the quiet state is a finding, not an empty state ==='+X);
 {
   const { api } = world();

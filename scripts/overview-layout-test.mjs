@@ -187,6 +187,10 @@ const asm = ex('aiRenderTab_');
 ['_ovMomentumHTML_','_ovHighlightsHTML_','_ovOpportunityHTML_','_ovLegacyHTML_','aiCardStory_'].forEach(n =>
   ok('Overview no longer renders '+n, !new RegExp('_aiSafe_\\([^)]*'+n).test(asm)));
 ok('the hero is driven by the decision hierarchy', /ovwEvaluate_/.test(ex('_ovwHeroHTML_')));
+// The hero builds its own div rather than going through _ovwCard_, so it did not inherit the
+// no-stretch fix and its border ran the full height of Today's Focus beside it.
+ok('the hero card does not stretch to its row', /align-self:start/.test(ex('_ovwHeroHTML_')));
+ok('...and shows a runner-up when a lower tier also fired', /hit\.also/.test(ex('_ovwHeroHTML_')));
 ok('...and stamps its tier and rule key into the DOM', /data-ovw-tier=/.test(ex('_ovwHeroHTML_')));
 ok('the DNA card uses the REAL radar', /_dnaRadarHTML_/.test(asm));
 ok('...and no invented composite score is rendered',

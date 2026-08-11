@@ -24122,7 +24122,8 @@ function ovwEvaluate_(opts){
     try{ r=ladder[i](); }catch(e){ r=null; }        // a broken tier must not take the page down
     if(!r) continue;
     if(ovwSuppressed_(r)){ considered.push({key:r.key, tier:r.tier, suppressed:true}); continue; }
-    hit=r; break;
+    if(!hit){ hit=r; continue; }        // winner found - keep going to learn the runner-up
+    if(!hit.also){ hit.also={ tier:r.tier, key:r.key, title:r.title, facts:r.facts }; }
   }
   if(!hit) hit=_ovwTier6_();
   hit.suppressedAbove=considered;
@@ -28833,7 +28834,11 @@ function _ovwHeroHTML_(){
   if(!hit) return '';
   var quiet=(hit.tier===6);
   var accent=quiet?'#4ade80':(hit.tier<=2?'#f87171':(hit.tier<=3?'#f59e0b':'#4ade80'));
-  var H='<div data-ovw-tier="'+hit.tier+'" data-ovw-key="'+aiEsc_(hit.key)+'" style="background:var(--d-panel);border:1px solid '+accent+'55;border-left:3px solid '+accent+';border-radius:14px;padding:16px 18px">';
+  // align-self:start for the same reason _ovwCard_ carries it: this card is usually much shorter
+  // than Today's Focus beside it (a headline, a sentence and a stat row against three bullets), and
+  // a stretched border left a large empty block under the content. The row is still as tall as its
+  // tallest card; this one just stops where it ends.
+  var H='<div data-ovw-tier="'+hit.tier+'" data-ovw-key="'+aiEsc_(hit.key)+'" style="background:var(--d-panel);border:1px solid '+accent+'55;border-left:3px solid '+accent+';border-radius:14px;padding:16px 18px;align-self:start">';
   H+='<div style="font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:'+accent+';margin-bottom:8px">What matters right now</div>';
   H+='<div style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1.25;letter-spacing:-.01em">'+aiEsc_(hit.title)+'</div>';
   if(hit.body) H+='<div style="font-size:13px;color:var(--d-t3);margin-top:7px;line-height:1.5">'+aiEsc_(hit.body)+'</div>';
@@ -28843,6 +28848,20 @@ function _ovwHeroHTML_(){
       H+='<div style="min-width:0"><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em">'+aiEsc_(f.label)+'</div>'
         +'<div style="font-size:15px;font-weight:700;color:var(--d-head);margin-top:2px">'+aiEsc_(String(f.value))+'</div></div>';
     });
+    H+='</div>';
+  }
+  // A SECOND SIGNAL, when there genuinely is one. The ladder stops at the first hit, but lower
+  // tiers are often true as well - today tier 3 wins while tiers 4 and 5 both also fire. Naming the
+  // runner-up uses the space under a short hero without inventing anything: it is a rule that
+  // evaluated true against real data and was outranked, not filler.
+  if(hit.also){
+    H+='<div style="margin-top:13px;padding-top:11px;border-top:1px solid var(--d-edge)">'
+      +'<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim);margin-bottom:4px">Also true today</div>'
+      +'<div style="font-size:13px;font-weight:600;color:var(--d-t3);line-height:1.4">'+aiEsc_(hit.also.title)+'</div>';
+    if(hit.also.facts && hit.also.facts.length){
+      H+='<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'
+        +aiEsc_(hit.also.facts.map(function(f){ return f.label+' '+f.value; }).join('  ·  '))+'</div>';
+    }
     H+='</div>';
   }
   return H+'</div>';
