@@ -11526,8 +11526,33 @@ function fluidGoalOz_(dateKey, wt, workout){
 }
 function calcTrainingAwareTargets_(dateKey){
   var wt=nutrWeightLb_();
+  // READS st.ftp, THE MEASURED CURRENT FTP - deliberately NOT goalTargets.ftpW. The two are not
+  // rival copies of one fact needing a single source: st.ftp is what the athlete can do now
+  // (183, written from Settings and appended to ftpHistory), goalTargets.ftpW is what he is
+  // AIMING at (200, a goal). Fuelling off the goal would over-feed every session by the size of
+  // the ambition - here about 9%.
   var ftp=parseInt(st.ftp||186);
   var workout=getWorkoutForDate_(dateKey);
+  // CROSS-DEVICE DIVERGENCE INSTRUMENT. The budget is a pure function of these three inputs, so
+  // when two devices disagree the cause is one of them differing - not the arithmetic. Logged
+  // once per day-key per session (not per call: this runs on every nutrition repaint) with a
+  // device tag, so the two consoles can be compared directly instead of reasoned about.
+  //
+  // st.weight is deliberately printed RAW as well as resolved: it is stored as a STRING on at
+  // least one device ('159', not 159), and a string weight merges differently from a number.
+  try{
+    if(typeof _nbLogged==='undefined') _nbLogged={};
+    if(!_nbLogged[dateKey]){
+      _nbLogged[dateKey]=1;
+      console.log('[nutr-budget] '+dateKey
+        +' | device='+((typeof isDesktop==='function'&&isDesktop())?'desktop':'mobile')+'/'+(screen.width+'x'+screen.height)
+        +' | st.weight='+JSON.stringify(st.weight)+' ('+(typeof st.weight)+') -> wt='+wt
+        +' | st.ftp='+JSON.stringify(st.ftp)+' -> '+ftp
+        +' | goalTargets.ftpW='+JSON.stringify((st.goalTargets||{}).ftpW)
+        +' | workout='+(workout?(JSON.stringify(workout.name)+' '+workout.minutes+'min rest='+!!workout.isRest+' hard='+!!workout.isHard):'null')
+        +' | planDays='+Object.keys(st.plan||{}).length);
+    }
+  }catch(e){}
   if(!workout || workout.isRest){
     var dt=getDType(dateKey);
     var base=MTGT[dt]||MTGT.MOD;
