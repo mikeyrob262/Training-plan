@@ -14880,7 +14880,7 @@ function gTerm_(text, key){ return '<span onclick="event.stopPropagation();openM
 // Browsable glossary (§3.8, second surface) — reached from Settings, NOT a nav item or an AI-page
 // tab (definitions apply app-wide). Reads the ONE METRIC_TEACH map; every term taps to its panel.
 function showGlossary(){
-  var order=['ctl','atl','tsb','tss','if','np','vi','wkg','vo2max','ftp','zones','1rm','pct1rm','rpe','working-set','progressive-overload','axial-loading','deload','periodization','iq'];
+  var order=['ctl','atl','tsb','tss','if','np','vi','wkg','vo2max','ftp','zones','1rm','pct1rm','rpe','working-set','progressive-overload','axial-loading','deload','periodization'];   // 'iq' removed with the Athlete IQ teaching entry it pointed at
   var desktop=(typeof isDesktop==='function' && isDesktop());
   var old=document.getElementById('glossary-screen'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='glossary-screen';
@@ -36265,7 +36265,7 @@ function dsAttention_(){
   // IS the taper (peaking), not detraining. Defer to the SAME shared verdict the
   // dashboard renders so the attention panel can never contradict "peaking / hold
   // the taper" with "you are detraining, get a ride in" (Jul 18 report #7).
-  var _verdict=(typeof taperVerdict_==='function')?taperVerdict_(fit,null,ramp):{phase:''};
+  var _verdict=(typeof taperVerdict_==='function')?taperVerdict_(fit,ramp):{phase:''};
   var _nextRace=null; try{ var _ur=(typeof upcomingRaces_==='function')?upcomingRaces_():[]; _nextRace=_ur&&_ur.length?_ur[0]:null; }catch(e){}
   var inTaper=(_verdict.phase==='peaking') || (_nextRace && _nextRace.daysOut!=null && _nextRace.daysOut<=10);
   // Weekly TSS this vs last (real).
@@ -36555,7 +36555,10 @@ function _tsbAsPlanned_(tsb, now){
   var c=_tsbBlockCtx_(now);
   return (c && tsb>=c.lo && tsb<=c.hi) ? c : null;
 }
-function taperVerdict_(fit, iq, ctlRamp){
+// Took an Athlete IQ score as its second argument and never read it; the score is gone app-wide
+// now, and leaving the parameter in place is what let a caller keep passing a variable that no
+// longer existed - a ReferenceError that blanked the whole Dashboard.
+function taperVerdict_(fit, ctlRamp){
   var G='#4ade80', B='#60a5fa', A='#f59e0b', R='#e24b4a';
   var tsb=Math.round((fit&&fit.tsb)||0);
   var ramp=(ctlRamp==null)?null:ctlRamp;            // + rising fitness, - falling
@@ -36979,7 +36982,7 @@ function dsShowDashboard(){
   // getFitness_ already documents ramp as taken from the source rather than re-derived, and it
   // already falls back to d7.ctl when Intervals sends none — so there is one answer here.
   var _rampCanon=(fit&&fit.ramp!=null)?fit.ramp:dlt.ctl;
-  var verdict=taperVerdict_(fit, iq, _rampCanon);
+  var verdict=taperVerdict_(fit, _rampCanon);
   var trend=verdict.trend;
   var trendNote=verdict.trendNote;
   var loadState=verdict.load;
