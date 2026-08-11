@@ -198,10 +198,19 @@ ok('...and no invented composite score is rendered',
 
 // COLUMN FLOW: row pairing meant a card waited on the TALLEST card in the row above it, so
 // Performance sat idle below DNA even though Goals had ended hundreds of pixels earlier.
-ok('the two columns are built independently', asm.indexOf("col([goals, perf]") >= 0 && asm.indexOf("col([dna, coach]") >= 0);
+ok('the two columns are built independently', asm.indexOf("col([goals, perf, signals]") >= 0 && asm.indexOf("col([dna, coach]") >= 0);
 ok('...and no longer paired into rows', asm.indexOf('row([goals, dna]') < 0 && asm.indexOf('row([perf, coach]') < 0);
 ok('each column stacks on its own height', /flex-direction:column/.test(asm));
 ok('columns align to the top rather than stretching', /align-items:flex-start/.test(asm));
+// Recent Signals was the next FULL-WIDTH section after the columns, so it could not start until
+// BOTH had finished - the gap Performance left under itself stayed empty while the taller DNA +
+// AI Coach column ran on. In the column it stacks straight after Performance and fills it.
+ok('Recent Signals is IN the left column, after Performance',
+   /col\(\[goals, perf, signals\]/.test(asm));
+ok('...and is no longer emitted as a full-width section below the row',
+   !/if\(signals\) html\+=/.test(asm));
+ok('...so it is rendered exactly once', (asm.match(/signals/g)||[]).filter(function(){return true;}).length >= 1
+   && (asm.match(/\bsignals\b/g)||[]).length <= 3);
 ok('...and collapse to one column on mobile', /\.ov-cols\{flex-direction:column/.test(src));
 // Stretch-and-centre was tried and looked worse - DNA is about twice Goals' height, so centring
 // split one big gap into two empty panels. A card that ends with its content has no hole.

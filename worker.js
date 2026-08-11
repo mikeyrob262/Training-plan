@@ -28905,11 +28905,17 @@ function aiRenderTab_(tab, ded){
   };
   html+=row([hero, focus], 'minmax(0,1.55fr) minmax(0,1fr)');
   if(cur) html+='<div style="margin-bottom:10px">'+cur+'</div>';
-  var colL=col([goals, perf], '1'), colR=col([dna, coach], '1.15');
+  // Recent Signals joins the LEFT column rather than sitting below the row. As a full-width
+  // section it waited on both columns to finish, so the gap Performance left under itself
+  // stayed empty while DNA and AI Coach ran on. In the column it stacks straight after
+  // Performance and fills that space, which is the same barrier removal already applied to
+  // Goals/DNA and Performance/Coach - one level deeper.
+  var colL=col([goals, perf, signals], '1'), colR=col([dna, coach], '1.15');
   if(colL || colR){
     html+='<div class="ov-cols" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">'+colL+colR+'</div>';
   }
-  if(signals) html+='<div>'+signals+'</div>';
+  // Nothing is emitted below the columns now - Signals lives inside colL. If it were left here
+  // as well it would render twice.
   return html;
 }
 // ---- Athlete Status hero ----------------------------------------------------------------------
