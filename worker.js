@@ -28773,11 +28773,16 @@ function aiRenderTab_(tab, ded){
 //
 // Every section renders an em-dash rather than a number it cannot stand behind.
 // ============================================================================================
-// Cards stretch to their row and CENTRE their content vertically. Height pairing gets the two cards
-// close, never identical, and top-aligning the shorter one leaves a ragged gap at its foot that
-// reads as an unfinished card. Centring makes the remainder read as deliberate whitespace.
+// CARDS DO NOT STRETCH. Stretching to the row and centring was tried first and looked worse: DNA is
+// roughly twice the height of Goals, not comparable to it, so centring split one enormous gap into
+// two - blank panel above the content AND below it. The empty region was visible because the CARD
+// BACKGROUND was being stretched behind it.
+//
+// A card that simply ends where its content ends has no hole in it at all. The row is still as tall
+// as its tallest card, but the space beside a short one is page background rather than an empty
+// panel, which reads as layout instead of as an unfinished card.
 function _ovwCard_(inner, pad){
-  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:'+(pad||'14px 16px')+';min-width:0;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center">'+inner+'</div>';
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:'+(pad||'14px 16px')+';min-width:0;align-self:start">'+inner+'</div>';
 }
 function _ovwLbl_(t, right){
   return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px">'

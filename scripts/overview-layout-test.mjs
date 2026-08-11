@@ -195,8 +195,10 @@ ok('...and no invented composite score is rendered',
 // PAIRED BY NATURAL HEIGHT: the two tall cards together, the two short cards together.
 ok('Goals pairs with DNA, not with the short Performance strip', asm.indexOf('row([goals, dna]') >= 0);
 ok('Performance pairs with AI Coach', asm.indexOf('row([perf, coach]') >= 0);
-ok('cards stretch to their row and centre their content',
-   /height:100%/.test(ex('_ovwCard_')) && /justify-content:center/.test(ex('_ovwCard_')));
+// Stretch-and-centre was tried and looked worse - DNA is about twice Goals' height, so centring
+// split one big gap into two empty panels. A card that ends with its content has no hole.
+ok('cards size to their content rather than stretching',
+   ex('_ovwCard_').indexOf('align-self:start') >= 0 && ex('_ovwCard_').indexOf('height:100%') < 0);
 ok('AI Coach can show a second question', /ovwCoachSecond_/.test(ex('_ovwCoachHTML_')));
 ok('...and offers none when only one conflict exists', /return null;/.test(ex('ovwCoachSecond_')));
 
