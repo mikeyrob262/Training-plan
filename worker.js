@@ -25208,12 +25208,15 @@ function aiRenderDNA_(){
               ? _gcTrend_(ax.series, (pos?'#4ade80':'#f59e0b'), {aria:ax.label+' by month', H:30, fill:false,
                   note:ax.series.length+' scored months, each plotted where it fell'})
               : '';
-            if(sp2) return sp2+'</div>';
+            // preserveAspectRatio="none" means this stretches to its container, and in a
+            // full-width card that flattens the line and draws the point markers as ellipses.
+            // Capped, the way the radar caps itself, so the shape stays honest.
+            if(sp2) return '<div style="max-width:430px">'+sp2+'</div></div>';
             return '<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden">'
               +'<div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+'"></div></div></div>';
           })();
     });
-    H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
+    H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Each point is one scored month, plotted where it fell; the number is their mean.</div>';
     H+='</div>';
   }
   // POWER CURVE RADAR. Overview's Athlete DNA card links here with "Explore DNA" and the chart it
