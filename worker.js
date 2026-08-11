@@ -25257,12 +25257,16 @@ function aiRenderDNA_(){
       +'measured against each other.</div>'
       +_rad+'</div>';
   })();
-  // Era, Signature and Power Curve go out as one ordered list and _balCols_ assigns them from
-  // MEASURED heights, exactly as on Overview. Power Curve had been nested inside the Signature
-  // column, which left the Era column short by most of its height.
+  // Era and Signature are balanced by height like Overview. POWER CURVE IS NOT IN THAT SET, and
+  // that is a measurement, not an oversight: Era 165 + Signature 175 = 340, against Power Curve's
+  // 869. One block taller than everything opposite it is the exact condition no two-column
+  // assignment can fix - the best possible split of the three still wastes 529px, and greedy
+  // in-order wastes 859. Full width wastes ~10, because Power Curve is not really one column of
+  // content: it already lays itself out two-up, radar beside its key, and uses the whole row.
   _eraH=_eraH?('<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">'+_eraH+'</div>'):'';
-  var _dnaBal=[_eraH, _sigH, _pcH].filter(function(c){ return c; });
+  var _dnaBal=[_eraH, _sigH].filter(function(c){ return c; });
   if(_dnaBal.length){ H+='<div class="dna-bal" style="margin-bottom:20px">'+_dnaBal.join('')+'</div>'; }
+  if(_pcH) H+='<div style="margin-bottom:20px">'+_pcH+'</div>';
   // UNLOCKED TRAITS
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';

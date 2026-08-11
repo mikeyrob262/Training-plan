@@ -223,8 +223,12 @@ ok('...and the threshold is a named constant', /_BAL_MIN_W/.test(bal));
 // Rebalancing on every resize tick is the masonry behaviour this is meant to avoid.
 ok('it re-runs only when the breakpoint is actually crossed', /matchMedia/.test(src) && /__balWide===wide/.test(bal));
 ok('DNA Insights routes through the SAME balancer', /class="dna-bal"/.test(src) && /'ov-bal','dna-bal'/.test(src));
-ok('...with Power Curve as its own block, not nested in the Signature column',
-   /_dnaBal=\[_eraH, _sigH, _pcH\]/.test(src));
+// Power Curve is deliberately NOT in the balanced set: Era 165 + Signature 175 = 340 against its
+// 869, so no two-column assignment of the three balances (best split still wastes 529, greedy 859).
+// Full width wastes ~10 - it already lays itself out two-up, radar beside key.
+ok('...with Era and Signature balanced', /_dnaBal=\[_eraH, _sigH\]/.test(src));
+ok('...and Power Curve full-width, not nested in the Signature column',
+   /if\(_pcH\) H\+=/.test(src));
 ok('the balance runs after the HTML is in the document', /container\.innerHTML=H;[\s\S]{0,400}_balAll_\(\)/.test(src));
 // Stretch-and-centre was tried and looked worse - DNA is about twice Goals' height, so centring
 // split one big gap into two empty panels. A card that ends with its content has no hole.
