@@ -53,7 +53,11 @@ try {
   // ---- 1. Real build (esbuild via wrangler) -> catches template-literal breaks
   console.log(`${D}· building (wrangler deploy --dry-run)…${X}`);
   try {
-    execSync(`npx --yes wrangler deploy --dry-run --outdir "${out}"`, { stdio: ['ignore', 'ignore', 'pipe'] });
+    // PINNED. Floating on whatever npx resolves means an upstream publish can block every push:
+    // wrangler 4.121.0 depends on miniflare@5.20260804.1-alpha, which is not on the registry, so
+    // "npx wrangler" started failing with ETARGET on a repo whose own code built fine. Bump this
+    // deliberately, not by accident of when a push happens to run.
+    execSync(`npx --yes wrangler@4.120.1 deploy --dry-run --outdir "${out}"`, { stdio: ['ignore', 'ignore', 'pipe'] });
   } catch (e) {
     console.error((e.stderr || e.stdout || '').toString());
     fail('wrangler build failed (see above) — the served template literal is malformed.');
