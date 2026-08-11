@@ -28170,8 +28170,14 @@ function aiRenderTab_(tab, ded){
   var cur=_aiSafe_('OvwCurrentState', function(){return _ovwCurrentStateHTML_();});
   var goals=_aiSafe_('OvwGoals', function(){return _ovwGoalsHTML_();});
   var perf=_aiSafe_('OvwPerf', function(){return _ovwPerfHTML_();});
-  // The REAL 4-axis power radar, not the mockup's invented 6-axis 0-100 model. This is a
-  // fabrication fix for one card; it is NOT the DNA Insights feature, which is still unbuilt.
+  // The REAL power radar, not the mockup's invented 6-axis 0-100 model. This is a fabrication
+  // fix for one card; it is NOT the DNA Insights feature, which is still unbuilt.
+  //
+  // It said "4-axis" until Aug 11 2026 and no longer does: _dnaRadarHTML_ draws the TEN-duration
+  // power curve whenever six or more durations carry data, and falls back to the four ranked
+  // trait bars only below that. Ten spokes is the safer shape anyway - each is scored against
+  // your own best AT THAT DURATION, so a 782 W sprint cannot dwarf a 265 W hour, which is
+  // exactly the flaw that got the four-axis version demoted from a radar to bars.
   var dna=_aiSafe_('OvwDNA', function(){
     var r=(typeof _dnaRadarHTML_==='function')?_dnaRadarHTML_():'';
     if(!r) return '';
