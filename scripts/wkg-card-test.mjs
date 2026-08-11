@@ -45,28 +45,17 @@ function decide(pts, target){
   return { draw:true, onChart:(tp>=0&&tp<=1), top:(1-tp)*100, lo, hi };
 }
 
-console.log('\n=== the pill is gone from the Analytics hero ===');
-const heroRaw = src.slice(src.indexOf('CENTER — W/kg centerpiece'), src.indexOf('RIGHT — compact 2x2 mini-stat grid'));
-// Strip comment lines before asserting on CODE — the first version of this test failed on a
-// comment that said the 215/151 pair was deliberately not copied.
-const hero = heroRaw.split(String.fromCharCode(10)).filter(l => !/^\s*\/\//.test(l)).join(String.fromCharCode(10));
-check('no 0-4.0 gradient bar', /linear-gradient\(90deg,#ef4444,#f59e0b,#22c55e,#4ade80\)/.test(hero), false);
-check('no marker dot positioned by value', /left:'\+_wm/.test(hero), false);
-check('no 0 / 2.0 / 4.0 tick row', /<span>2\.0<\/span>/.test(hero), false);
-check('a trend line is drawn instead', /_gcTrend_\(pts, _GC_WKG/.test(hero), true);
-
+// The 'Analytics hero' section that stood here was removed when the Analytics page
+// was retired (Aug 11 2026). It asserted against a slice of dsShowAnalytics between two
+// comment markers, and that function is gone - the checks had no subject left. What they
+// also covered incidentally (the target coming from _goalTargets_, weigh-ins preferred
+// over the page series) is asserted below against the live functions themselves, which
+// is where it should have been read from in the first place.
 console.log('\n=== the target is the editable goal, not a hardcode ===');
-check('read from _goalTargets_', /_goalTargets_\(\):\{\}\)\.wkg/.test(hero), true);
-check('no 215/151 pair copied from the Chase card', /215|151/.test(hero), false);
 const M0 = mk({ weightLog:[], goalTargets:{} }, () => 190);
 check('and defaults to 3.14 when unset', M0._goalTargets_().wkg, 3.14);
 
 console.log('\n=== series preference: weigh-ins first, page series as fallback ===');
-check('tries _gcWkgPts_ first', /var pts=\(typeof _gcWkgPts_==='function'\)\?_gcWkgPts_\(365\):\[\]/.test(hero), true);
-check('falls back to the page W/kg series', /pts=_wt\.pts\.map/.test(hero), true);
-check('the fallback only fires when the weigh-in series is empty',
-  /if\(!pts\.filter\(function\(p\)\{ return p && p\.v!=null; \}\)\.length && _wt/.test(hero), true);
-check('the caption names which series is drawn', /note:src\+/.test(hero), true);
 
 console.log('\n=== _gcWkgPts_ on the live state (weigh-in log is EMPTY) ===');
 const Mreal = mk({ weightLog:[], goalTargets:{} }, () => 190);
@@ -96,8 +85,6 @@ check('out-of-range caption says it is above the chart', capOff.indexOf('above e
 check('and neither is a bar', /<rect|linear-gradient/.test(capOn+capOff), false);
 
 console.log('\n=== honest degrade when there is nothing at all ===');
-check('no weigh-ins and no page series -> a sentence, not a bar',
-  /Log a few weigh-ins and this becomes a trend line toward/.test(hero), true);
 
 console.log('\n'+(fails? R+fails+' CHECK(S) FAILED'+X : G+'wkg-card: all checks passed'+X));
 process.exit(fails?1:0);

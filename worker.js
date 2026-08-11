@@ -705,7 +705,6 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni on" id="ds-ni-dashboard" onclick="dsNav('dashboard')"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
       <div class="ds-ni" id="ds-ni-activities" onclick="dsNav('activities')"><i class="ti ti-run"></i>Activities</div>
       <div class="ds-ni" onclick="dsNav('calendar')"><i class="ti ti-calendar"></i>Calendar</div>
-      <div class="ds-ni" onclick="dsNav('analytics')"><i class="ti ti-chart-line"></i>Analytics</div>
       <div class="ds-ni" onclick="dsNav('nutrition')"><i class="ti ti-apple"></i>Nutrition</div>
       <div class="ds-ni" onclick="dsNav('weather')"><i class="ti ti-cloud"></i>Weather</div>
       <div class="ds-ni" onclick="dsNav('plan')"><i class="ti ti-target-arrow"></i>Plan</div>
@@ -3396,7 +3395,6 @@ window.AIQ_DESKTOP_MIN=1024;
 <div id="PLANS" style="display:none;padding:0 0 80px 0"></div>
 <div id="NOTES" style="display:none;padding:0 0 80px 0"></div>
 <div id="WEATHER" style="display:none;padding:0 0 80px 0"></div>
-<div id="ANALYTICS" style="display:none;padding:0 0 80px 0"></div>
 <div id="HOME_DASH" style="display:none;padding:0 0 80px 0"></div>
 
 <script>
@@ -5310,7 +5308,7 @@ function runZoneBackfill(){
       _zoneBackfill.running=false;
       try{ sv(); if(typeof fbPush==='function') fbPush(true); }catch(e){}
       var left=zoneBackfillCandidates_().length;
-      say(msg+' — '+got+' rides now have real zone data'+(noStream?(', '+noStream+' had no power stream on Strava'):'')+(err?(', '+err+' errors'):'')+(left?('. '+left+' still to do — run again to continue.'):'. All done!')+' Reopen Analytics to see Power Distribution fill.');
+      say(msg+' — '+got+' rides now have real zone data'+(noStream?(', '+noStream+' had no power stream on Strava'):'')+(err?(', '+err+' errors'):'')+(left?('. '+left+' still to do — run again to continue.'):'. All done!')+' Open Trends to see Power Zone Distribution fill.');
     }
     function step(){
       if(_zoneBackfill.stop) return finish('Stopped');
@@ -6807,7 +6805,6 @@ function runRideCleanup(){
   fbPush(false);   // MERGE push - deleted OR-merges, so the removals stick without a blind overwrite
   toast('Removed '+result.removedCount+' duplicate rides ('+before+' -> '+result.kept.length+')');
   try{ renderPerf(document.getElementById('perf-body')); }catch(e){}
-  try{ if(document.getElementById('ANALYTICS')) showAnalytics(); }catch(e){}
 }
 
 // Nutrition duplicate cleanup - tombstones exact duplicate food entries
@@ -9804,7 +9801,6 @@ function showScreen(id){
   var pln=document.getElementById('PLANS');if(pln)pln.style.display=id==='PLANS'?'block':'none';
   var not=document.getElementById('NOTES');if(not)not.style.display=id==='NOTES'?'block':'none';
   var wxs=document.getElementById('WEATHER');if(wxs)wxs.style.display=id==='WEATHER'?'block':'none';
-  var anl=document.getElementById('ANALYTICS');if(anl)anl.style.display=id==='ANALYTICS'?'block':'none';
   var hd=document.getElementById('HOME_DASH');if(hd)hd.style.display=id==='HOME_DASH'?'block':'none';
   var cal=document.getElementById('CALENDAR');if(cal)cal.style.display=id==='CALENDAR'?'block':'none';
   document.getElementById('SET').style.display=id==='SET'?'block':'none';
@@ -14182,7 +14178,7 @@ function showHomeDash(){
   html+='<div style="margin:0 16px 20px">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
     +'<span style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Recent Activity</span>'
-    +'<span style="font-size:12px;color:#378ADD;cursor:pointer" onclick="showAnalytics()">View all</span></div>';
+    +'<span style="font-size:12px;color:#378ADD;cursor:pointer" onclick="showAthleteIntel()">View all</span></div>';
   if(recent.length===0){
     html+='<div style="font-size:13px;color:var(--t3)">No activities yet.</div>';
   } else {
@@ -14564,22 +14560,6 @@ var METRIC_TEACH={
       return s;
     }
   },
-  iq:{
-    name:"Athlete IQ Score", aka:"Training-quality composite",
-    oneLiner:"A 0-100 read on how smart your training has been lately — built ONLY from real ride data (no FTP, no sleep or HRV). It blends four signals, weighted:",
-    ranges:[
-      {c:"#60a5fa", label:"Fitness trend · 30%", desc:"Is your CTL (42-day fitness) rising vs 4 weeks ago?"},
-      {c:"#4ade80", label:"Consistency · 30%", desc:"How many days you rode in the last 4 weeks (16 = full marks)."},
-      {c:"#f59e0b", label:"Freshness / TSB · 20%", desc:"Productive-training curve: TSB about -20 to +15 is ideal; only genuine overreaching (below -30) or being too fresh (well above +15) docks it."},
-      {c:"#a855f7", label:"Volume vs baseline · 20%", desc:"Last 7 days' miles vs your rolling 12-week average week."}
-    ],
-    forYou:function(ctx){
-      var iq=ctx.iq;
-      if(!iq || iq.score==null) return "Not enough history yet — this needs about 4 weeks of logged rides. Keep riding and it fills in.";
-      var p=iq.parts;
-      return "Yours: "+iq.score+" / 100. Breakdown (each 0-100, then weighted 30/30/20/20): fitness trend "+Math.round(p.trend)+", consistency "+Math.round(p.consist)+", freshness "+Math.round(p.fresh)+", volume "+Math.round(p.volume)+". It rewards building fitness, showing up, and training in a productive TSB zone — so a deep-block TSB like -25 scores WELL here, because this measures training quality, not daily readiness. Nothing in it uses your (stale) FTP.";
-    }
-  },
   // ── Glossary (§3.8) — endurance terms with a live line where data is trustworthy ──────────
   vi:{
     name:"VI — Variability Index", aka:"How even the effort was",
@@ -14651,45 +14631,6 @@ var METRIC_TEACH={
 // FTP-derived, no sleep/HRV. Weights 30/30/20/20 (approved 2026-07-15). Returns
 // {score:null} when there is < 28 days of ride history. Self-contained so the
 // desktop card, the mobile card and the teaching sheet all read the same value.
-function athleteIQ_(){
-  var rides; try{ rides=dedupeRides_(st.rides||[]).kept.filter(function(r){return r&&!r.deleted;}); }catch(e){ rides=(st.rides||[]).filter(function(r){return r&&!r.deleted;}); }
-  var now=new Date(), rode={}, tssBy={}, dates=[];
-  rides.forEach(function(r){ if(!r.date) return; var nd=normDate(r.date); rode[nd]=true; dates.push(nd);
-    var t=(typeof constRideTSS_==="function")?constRideTSS_(r):(parseFloat(r.tss)||0); tssBy[nd]=(tssBy[nd]||0)+(t||0); });
-  if(!dates.length) return {score:null, reason:"no rides"};
-  dates.sort();
-  if(Math.round((now-new Date(dates[0]))/86400000)<28) return {score:null, reason:"<28 days"};
-  // CTL/ATL/TSB come from the ONE source. This used to run its own 90-day EMA off a 0 seed, so
-  // the Athlete IQ score was graded against a different fitness curve from the one every other
-  // surface showed. The score is still computed here; the fitness inputs to it are not.
-  var _fitIQ=(typeof getFitness_==='function')?getFitness_():null;
-  if(!_fitIQ || !_fitIQ.loaded) return {score:null, reason:"fitness not loaded"};
-  var _fs=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
-  var ctlNow=_fitIQ.ctl, atl=_fitIQ.atl, tsbNow=_fitIQ.tsb;
-  // CTL 28 days ago, read off the same series rather than re-derived.
-  var ctl28=ctlNow;
-  if(_fs.length){ var _i28=_fs.length-1-28; ctl28=(_i28>=0)?_fs[_i28].ctl:_fs[0].ctl; }
-  // 1) fitness trend (is CTL rising vs 4 weeks ago)
-  var trend=Math.max(0,Math.min(100, 50+(ctlNow-ctl28)*8));
-  // 2) consistency (distinct ride-days in last 28)
-  var rideDays=0; for(var k=0;k<28;k++){ var dd=new Date(now); dd.setDate(dd.getDate()-k);
-    if(rode[normDate(dd.getFullYear()+"-"+(dd.getMonth()+1)+"-"+dd.getDate())]) rideDays++; }
-  var consist=Math.max(0,Math.min(100, rideDays/16*100));
-  // 3) freshness — PRODUCTIVE-TRAINING curve (approved): TSB -20..+15 = full
-  // marks; below -20 tapers to 0 at -50 (genuine overreaching); above +15
-  // tapers to 0 at +45 (detraining/too fresh). A deep-build -25 still scores well.
-  var fresh = (tsbNow>=-20 && tsbNow<=15) ? 100
-    : (tsbNow<-20) ? Math.max(0, 100-(-tsbNow-20)/30*100)
-    : Math.max(0, 100-(tsbNow-15)/30*100);
-  // 4) volume vs baseline (last 7d miles / 12-week average week)
-  var last7=0,last84=0;
-  rides.forEach(function(r){ if(!r.date) return; var ago=(now-new Date(normDate(r.date)))/86400000, mi=parseFloat(r.distance)||0;
-    if(ago>=0&&ago<=7) last7+=mi; if(ago>=0&&ago<=84) last84+=mi; });
-  var baseWk=last84/12, ratio=baseWk>0?(last7/baseWk):(last7>0?1:0);
-  var volume=Math.max(0,Math.min(100, ratio*60));
-  var score=Math.round(0.30*trend+0.30*consist+0.20*fresh+0.20*volume);
-  return {score:score, parts:{trend:trend,consist:consist,fresh:fresh,volume:volume}, tsbNow:Math.round(tsbNow), rideDays:rideDays};
-}
 // Live context every forYou() reads. Additive readers only — no metric
 // computation touched. np/if/tss anchor to the most recent power ride (the
 // freshest "right now" data point); wkg/ftp come from the same values the
@@ -14708,7 +14649,6 @@ function teachCtx_(){
   var np=lr?(parseInt(lr.np||lr.avgPwr)||0):0;
   var ifv=lr?(lr.ifPct?(Math.round(lr.ifPct)/100):(np&&ftp?(Math.round(np/ftp*100)/100):0)):0;
   var tss=(lr && typeof constRideTSS_==="function")?constRideTSS_(lr):null;
-  var iq=(typeof athleteIQ_==="function")?athleteIQ_():null;
   // Period averages (last 90 days) for the NP/IF/TSS cards' sub-line. Uses
   // SUMMARY power (avgPwr/np/ifPct/tss), which survives storage slimming, so it
   // spans the whole library — not just rides that still hold a per-second stream.
@@ -14724,7 +14664,7 @@ function teachCtx_(){
   }catch(e){}
   function _avg(a){ return a.length?(a.reduce(function(s,x){return s+x;},0)/a.length):null; }
   var avg={days:90, np:_avg(_aN), ifv:_avg(_aI), tss:_avg(_aT)};
-  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss, iq:iq, avg:avg};
+  return {pmc:pmc, race:race, ftp:ftp, wkg:wkg, lr:lr, np:np, ifv:ifv, tss:tss, avg:avg};
 }
 // Shared teaching panel. Reused by every metric now and in later phases.
 function openMetricTeach(metric){
@@ -14808,61 +14748,6 @@ function showGlossary(){
   var b=ov.querySelector('#gl-back'); if(b) b.onclick=function(){ ov.remove(); };
 }
 
-function showAnalytics(){
-  showScreen('ANALYTICS');
-  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
-  var scr=document.getElementById('ANALYTICS');
-  if(!scr) return;
-  // Opening the screen is a FRESH entry, not a refresh of an already-open list, so it starts
-  // at the top. The carried offset exists to stop a background data refresh yanking the list
-  // out from under a finger; letting it survive a deliberate navigation away and back would
-  // silently land the user partway down a list they never scrolled.
-  // (showPerf below is a dead duplicate of this function — nothing calls it — so the reset
-  // lives here, on the path bnavGo actually takes.)
-  _rideListScrollTop_=0;
-  scr.innerHTML='';
-  var hdr=document.createElement('div');
-  hdr.style.cssText='padding:12px 16px 16px;font-size:22px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
-  hdr.textContent='Analytics';
-  var body=document.createElement('div');
-  body.id='perf-body';
-  scr.appendChild(hdr);
-  scr.appendChild(body);
-  renderPerf(body);
-  // Fitness/Fatigue/Form renders from window.__liveWellness if it's fresh,
-  // but that cache is only populated when Home has run its live fetch -
-  // if someone opens Analytics directly (deep link, bookmark, or just
-  // navigates here first) without ever visiting Home, the cache is empty
-  // and FFF falls back to potentially stale CSV numbers. Trigger the same
-  // live fetch here too, and re-render FFF alone (not the whole page) if
-  // it resolves after the fact, so Analytics is correct on its own.
-  if(!window.__liveWellness || (Date.now()-window.__liveWellness.fetchedAt)>=10*60*1000){
-    fetchLiveIntervalsWellness(function(){
-      var b=document.getElementById('perf-body');
-      if(b) renderPerf(b);
-    });
-  }
-}
-
-function showPerf(){
-  showScreen('ANALYTICS');
-  document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
-  var ab=document.getElementById('bnav-analytics');if(ab)ab.classList.add('active');
-  var scr=document.getElementById('ANALYTICS');
-  if(!scr) return;
-  scr.innerHTML='';
-  var hdr=document.createElement('div');
-  hdr.style.cssText='padding:16px 16px 4px;font-size:20px;font-weight:800;letter-spacing:-.3px;color:var(--t1)';
-  hdr.textContent='Analytics';
-  var body=document.createElement('div');
-  body.id='perf-body';
-  scr.appendChild(hdr);
-  scr.appendChild(body);
-  renderPerf(body);
-}
-
-
 function closePerf(){
   document.querySelectorAll('.bnav-btn').forEach(function(b){b.classList.remove('active');});
   var hb=document.getElementById('bnav-home');if(hb)hb.classList.add('active');
@@ -14897,667 +14782,19 @@ function _perfSig_(){
 // every time and whatever the user had scrolled to was gone. Captured here (the last moment
 // the old node exists) and reapplied by renderRideList.
 var _rideListScrollTop_=0;
+// RETIRED with the Analytics page (Aug 11 2026). This rendered the mobile Analytics screen, and
+// that screen is gone: its entry point (showPerf) and its container element were removed, so
+// #perf-body can no longer exist and every one of the 22 remaining callers already resolved to a
+// null container and returned here anyway.
+//
+// The SYMBOL is kept deliberately rather than deleted. Those 22 call sites are sync hooks, poll
+// ticks and post-import repaints scattered across the file; removing a live function out from
+// under them would turn a harmless no-op into a ReferenceError in the handful that are not inside
+// a try/catch, for no gain. The ~600 lines of rendering are what actually needed to go, including
+// the Athlete IQ card - see the note on the readiness ring for why that score was cut.
 function renderPerf(container){
   if(!container) container=document.getElementById('perf-body');
-  if(!container) return;
-  // Scoped to the activity list on purpose: #perf-body holds TWO .aiq-vscroll elements and the
-  // activity list is the SECOND, so an unscoped querySelector captures the wrong scroller's
-  // (always 0) offset and silently defeats the whole restore.
-  try{ var _sc=container.querySelector('#analytics-ride-list .aiq-vscroll'); if(_sc) _rideListScrollTop_=_sc.scrollTop||0; }catch(e){}
-  if(!st.rides) st.rides=[];
-  var rides=st.rides.filter(function(r){return !r.deleted;});
-  var FTP=parseInt(st.ftp||186);
-  var BWT=stWeightLb_();
-  var pmcData=fitnessSeries_();
-  var pcurve=computePowerCurve(rides);
-  var wkg=wkgFromW_(FTP);                 // null when no bodyweight is recorded
-  var targetFTP=215,targetBW=151;
-  var targetWkg=targetFTP/targetBW*2.20462;
-  var wkgPct=(wkg!=null)?Math.min(100,Math.round((wkg/targetWkg)*100)):null;
-
-  // Zone colors & names
-  var zones=[
-    {n:'Z1 Recovery',  pct:'< 56%',  min:0,                    max:Math.round(FTP*.55), c:'#64748b', desc:'Active recovery. Very easy spinning. Use after hard efforts.'},
-    {n:'Z2 Endurance', pct:'56-75%', min:Math.round(FTP*.56),  max:Math.round(FTP*.75), c:'#3b82f6', desc:'All-day pace. Builds aerobic base. Most of your riding should be here.'},
-    {n:'Z3 Tempo',     pct:'76-90%', min:Math.round(FTP*.76),  max:Math.round(FTP*.90), c:'#22c55e', desc:'Comfortably hard. Sustained effort. Group ride pace.'},
-    {n:'Z4 Threshold', pct:'91-105%',min:Math.round(FTP*.91),  max:Math.round(FTP*1.05),c:'#f59e0b', desc:'Race pace. Lactate threshold. Hard to hold conversation.'},
-    {n:'Z5 VO2max',    pct:'106-120%',min:Math.round(FTP*1.06),max:Math.round(FTP*1.20),c:'#ef4444', desc:'Very hard. Intervals 3-8 min. Breathing heavily.'},
-    {n:'Z6 Anaerobic', pct:'> 120%', min:Math.round(FTP*1.21), max:999,                 c:'#a855f7', desc:'Short maximal bursts. Sprints and attacks. Unsustainable.'}
-  ];
-
-  var html='';
-
-  // Import buttons moved to More sheet
-
-  // -- TRAINING LOG / STREAK SECTION
-  var now = new Date();
-  var todayStr = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
-  var yearStr = now.getFullYear()+'-01-01';
-  
-  // Normalize date helper
-  function normDate(d){
-    if(!d) return '';
-    var p=d.split('-');
-    if(p.length!==3) return d;
-    return p[0]+'-'+p[1].padStart(2,'0')+'-'+p[2].padStart(2,'0');
-  }
-  // Cycling classifier off the SHARED sport accessor (rideSport_ = sportType ?? type),
-  // same basis as isRun/swim/strength below — no source-branching. The old version
-  // branched on r.source and dropped legacy/non-Strava VirtualRide rides (type held
-  // the sport, not sportType), which craters Zwift-heavy months in the YTD totals.
-  // Empty sport = untyped legacy ride → treat as cycling (matches prior default).
-  function isCyc(r){ var s=rideSport_(r); return !s || /^(ride|virtualride|ebikeride|gravelride|mountainbikeride|handcycle|cycling|velomobile)$/i.test(s); }
-
-  // Today stats
-  var todayRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)===todayStr;});
-  var todayCycMi = todayRides.filter(isCyc).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  function isRun(r){ return /^(run|trailrun|virtualrun|treadmill)$/i.test(rideSport_(r)); }
-  var todayRunMi = todayRides.filter(isRun).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todaySwimMi = todayRides.filter(function(r){return /swim/i.test(rideSport_(r));}).reduce(function(a,r){return a+(r.distance||0);},0).toFixed(1);
-  var todayStrCt = todayRides.filter(function(r){return /strength|weight/i.test(rideSport_(r));}).length;
-
-  // YTD stats (cycling only)
-  var yearRides = rides.filter(function(r){return r&&r.date&&normDate(r.date)>=yearStr;});
-  // Authoritative YTD cycling miles (Strava-first, else deduped snapshot) — NOT the lossy st.rides
-  // sum, so the ring and the pace line below it match Strava instead of undercounting. Plausibility
-  // guarding still applies inside _appYtdCycMi_ -> _sumRideMi_.
-  var ytdCycMi = (typeof _ytdCycMi_==='function')?_ytdCycMi_():Math.round(_sumRideMi_(yearRides.filter(isCyc)));
-  var yearMi = ytdCycMi;
-  var yearMiGoal = st.yearlyMileageGoal || 5000;
-  var yearMiPct = Math.min(100, Math.round(yearMi/yearMiGoal*100));
-  var ytdRunMi = Math.round(_sumRideMi_(yearRides.filter(isRun)));
-  var sportDefs = [
-    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM5 20l3-8h2l1.5 4 2-6 2 4h2l2-6',label:'Cycling',color:'#FC4C02',
-     todayV:parseFloat(todayCycMi),todayMax:50,todayUnit:'mi',
-     ytdV:ytdCycMi,ytdMax:yearMiGoal,ytdUnit:'mi'},
-    {path:'M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zM7 20l2-6 3 3 1-5 3 8M6 12l2-4h8l2 4',label:'Running',color:'#4D9FFF',
-     todayV:parseFloat(todayRunMi),todayMax:15,todayUnit:'mi',
-     ytdV:ytdRunMi,ytdMax:750,ytdUnit:'mi'},
-    {path:'M6.5 6.5h11M12 6.5V18M4 10h4M16 10h4M5 10v4M19 10v4',label:'Strength',color:'#a855f7',
-     todayV:todayStrCt,todayMax:2,todayUnit:'x',
-     ytdV:yearRides.filter(function(r){return /strength|weight/i.test(rideSport_(r));}).length,ytdMax:100,ytdUnit:'x'}
-  ];
-
-  function makeRings(defs, useYtd, label){
-    var h = '<div style="flex:1">';
-    h += '<div style="font-size:9px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;text-align:center;margin-bottom:6px">'+label+'</div>';
-    h += '<div style="display:flex">';
-    defs.forEach(function(s){
-      var v = useYtd ? s.ytdV : s.todayV;
-      var mx = useYtd ? s.ytdMax : s.todayMax;
-      var unit = useYtd ? s.ytdUnit : s.todayUnit;
-      var pct = Math.min(100, v>0 ? v/mx*100 : 0);
-      var col = s.color;
-      var r2 = 11, circ = 2 * Math.PI * r2;
-      var dash = circ * pct / 100;
-      var dispVal = unit==='x' ? (v+unit) : (v>0 ? (useYtd?v.toLocaleString():parseFloat(v).toFixed(1))+unit : '0'+unit);
-      h += '<div style="flex:1;text-align:center">'
-        +'<div style="position:relative;width:32px;height:32px;margin:0 auto 3px">'
-        +'<svg width="32" height="32" viewBox="0 0 52 52" style="position:absolute;top:0;left:0">'
-        +'<circle cx="26" cy="26" r="'+r2+'" fill="none" stroke="'+col+'" stroke-width="4" opacity=".2"/>'
-        +'<circle cx="26" cy="26" r="'+r2+'" fill="none" stroke="'+col+'" stroke-width="4"'
-        +' stroke-dasharray="'+dash+' '+circ+'" stroke-dashoffset="'+circ*0.25+'"'
-        +' stroke-linecap="round" transform="rotate(-90 26 26)"/>'
-        +'</svg>'
-        +'<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">'
-        +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="'+s.path+'"/></svg>'
-        +'</div>'
-        +'</div>'
-        +'<div style="font-size:8px;color:var(--t3);font-weight:600;text-transform:uppercase">'+s.label+'</div>'
-        +'<div style="font-size:10px;font-weight:800;color:'+col+'">'+dispVal+'</div>'
-        +'</div>';
-    });
-    h += '</div></div>';
-    return h;
-  }
-
-  html += '<div style="margin:0 16px 20px">';
-  html += '<div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Training Log</div>';
-  html += '<div style="display:flex;gap:10px;margin-bottom:6px">';
-  html += makeRings(sportDefs, false, 'Today');
-  html += '<div style="width:1px;background:var(--b1);margin:0 2px"></div>';
-  html += makeRings(sportDefs, true, 'YTD');
-  html += '</div>';
-  // Honest computed pace vs the annual cycling goal — a real "+X ahead / X behind a linear pace"
-  // readout, never a hardcoded figure. Renders only when a goal is set.
-  html += _paceLine_(ytdCycMi, yearMiGoal);
-  html += '</div>';
-
-  // -- W/KG HERO CARD
-  // W/kg category labels
-  // No bodyweight -> no category. Letting the comparisons fall through would print "Recreational",
-  // which is a verdict on the athlete drawn from a number that was never measured.
-  var wkgLabel=(wkg==null)?'Log a weight for W/kg':(wkg>=4.0?'Cat 1 / Elite':wkg>=3.5?'Cat 2 / Strong Amateur':wkg>=3.0?'Cat 3 / Club Racer':wkg>=2.5?'Chase 2 / Trained':'Recreational');
-  var wkgColor=(wkg==null)?'#64748b':(wkg>=3.5?'#00C896':wkg>=3.0?'#FFB938':wkg>=2.5?'#FC4C02':'#64748b');
-  html+='<div style="margin:0 16px 20px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
-    +'<div>'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Current W/kg</div>'
-    +'<div style="font-size:24px;font-weight:800;color:#FC4C02;line-height:1.1;letter-spacing:-0.5px">'+wkgStr_(wkg)+'</div>'
-    +'<div style="font-size:11px;color:'+wkgColor+';font-weight:700">'+wkgLabel+' &middot; '+FTP+'W &middot; '+(BWT==null?String.fromCharCode(0x2014):BWT+'lbs')+'</div>'
-    +'</div>'
-    +'<div style="text-align:right">'
-    +'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3)">Target</div>'
-    +'<div style="font-size:24px;font-weight:800;color:var(--c-gold);line-height:1.1;letter-spacing:-0.5px">'+targetWkg.toFixed(2)+'</div>'
-    +'<div style="font-size:11px;color:var(--c-gold);font-weight:700">Chase 1 &middot; '+targetFTP+'W &middot; '+targetBW+'lbs</div>'
-    +'</div>'
-    +'</div>'
-    // W/kg TRAJECTORY, not a progress bar. "68% of the way to Chase 1" is one ratio and reads the
-    // same whether the athlete has been climbing toward it for six months or drifting away from it.
-    // The line is w/kg at every weigh-in, with the FTP that was in effect on that date — see
-    // _gcWkgPts_ for why today's FTP is not applied backwards. The target sits as a dashed rule so
-    // the gap is still visible as a distance, which is all the bar was ever really saying.
-    +(function(){
-      var pts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
-      // The target rule is only drawn when the target actually falls inside the plotted range.
-      // Decide that FIRST, because the caption must not promise a dashed line that is not there —
-      // a target still far above everything logged simply is not on this chart yet, and saying so
-      // is the honest version.
-      var _v=pts.map(function(p){ return p.v; }).filter(function(v){ return v!=null; });
-      var _lo=_v.length?Math.min.apply(null,_v):0, _hi=_v.length?Math.max.apply(null,_v):0;
-      var _tp=(_hi>_lo)?((targetWkg-_lo)/(_hi-_lo)):-1;
-      var _onChart=(_tp>=0 && _tp<=1);
-      var spark=_gcTrend_(pts, _GC_WKG, { aria:'W per kg by weigh-in', H:44, fill:false,
-        note:'w/kg at each weigh-in &middot; '+(_onChart?('dashed line is Chase 1 at '+targetWkg.toFixed(2))
-                                                       :('Chase 1 at '+targetWkg.toFixed(2)+' is still above everything logged, so it is off the top of this chart')) });
-      if(!spark){
-        // No weigh-in history to draw. Say so rather than falling back to the bar this replaced.
-        return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-          +'<span>Progress to Chase 1</span><span style="color:var(--c-gold);font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
-          +'<div style="font-size:10.5px;color:var(--t3);margin-top:3px">Log a few weigh-ins and this becomes a trend line toward '+targetWkg.toFixed(2)+'.</div>';
-      }
-      var rule=_onChart
-        ? '<div style="position:absolute;left:0;right:0;top:'+((1-_tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
-        : '';
-      return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-top:8px">'
-        +'<span>Progress to Chase 1</span><span style="color:var(--c-gold);font-weight:700">'+(wkgPct==null?String.fromCharCode(0x2014):wkgPct+'%')+'</span></div>'
-        +'<div style="position:relative">'+spark+rule+'</div>';
-    })()
-    +'</div>';
-  // -- PEAK POWER (vertical bar chart)
-  var peakDursList=[
-    {label:'5s',dur:5,c:'#a855f7'},{label:'15s',dur:15,c:'#a855f7'},
-    {label:'30s',dur:30,c:'#ef4444'},{label:'1m',dur:60,c:'#ef4444'},
-    {label:'2m',dur:120,c:'#f59e0b'},{label:'5m',dur:300,c:'#f59e0b'},
-    {label:'10m',dur:600,c:'#22c55e'},{label:'20m',dur:1200,c:'#22c55e'},
-    {label:'30m',dur:1800,c:'#3b82f6'},{label:'60m',dur:3600,c:'#3b82f6'}
-  ];
-  var keyDursList=[5,60,300,1200,3600];
-  var keyPeaksList=[];
-  var peakWattsArr=[];
-  var peakColorsArr=[];
-  var peakLabelsArr=[];
-  peakDursList.forEach(function(d){
-    var watts=0;
-    if(pcurve.length){var m=pcurve.find(function(p){return p.dur===d.dur;});if(m)watts=m.watts;}
-    peakWattsArr.push(watts||0);
-    peakColorsArr.push(d.c);
-    peakLabelsArr.push(d.label);
-    if(keyDursList.indexOf(d.dur)>=0&&watts) keyPeaksList.push({label:d.label,dur:d.dur,watts:watts,c:d.c,pct:Math.round(watts/FTP*100)});
-  });
-
-  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Peak Power</div>';
-  html+='<div style="margin:0 16px 20px">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-    +'<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Best efforts</div>'
-    +'<div style="font-size:11px;color:var(--t3)">All time &middot; FTP '+FTP+'W</div></div></div>';
-  // Flat row list (duration, watts, %FTP) replacing the vertical bar
-  // chart, matching the reference's Best Efforts list style rather than
-  // a chart - same underlying data, no canvas. Capped to a scrollable
-  // ~4-row window (each row ~37px incl. border) to save vertical space,
-  // matching the same pattern used for Activity History.
-  html+='<div class="aiq-vscroll" style="max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--b1);border-radius:14px;padding:0 14px">';
-  var peakRowCount=0;
-  peakDursList.forEach(function(d,i){
-    var watts=peakWattsArr[i];
-    if(!watts) return;
-    var pct=Math.round(watts/FTP*100);
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:'+(peakRowCount>0?'10px 0':'10px 0')+';'+(peakRowCount>0?'border-top:1px solid var(--b1);':'')+'">'
-      +'<span style="font-size:13px;color:var(--t2)">'+d.label+' Power</span>'
-      +'<span style="display:flex;align-items:baseline;gap:8px">'
-      +'<span style="font-size:14px;font-weight:700;color:'+d.c+'">'+watts+'W</span>'
-      +'<span style="font-size:11px;color:var(--t3)">'+pct+'% FTP</span>'
-      +'</span></div>';
-    peakRowCount++;
-  });
-  html+='</div>';
-  html+='</div>';
-
-  // Store peak chart data
-  window._peakChartData={labels:peakLabelsArr,watts:peakWattsArr,colors:peakColorsArr};
-
-  // -- FITNESS FATIGUE FORM (redesigned)
-  html+='<div style="padding:4px 16px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#FC4C02">Your Metrics · tap any to learn</div>';
-
-  // Prefer live Intervals.icu wellness (same cache Home's Readiness card
-  // and the AI Coach prompt already use) over the CSV-derived pmcData,
-  // which can be stale relative to today's actual fitness state - this
-  // was previously the one place still showing old CSV numbers while
-  // Home had already been fixed to use live data.
-  // Single source of truth — identical CTL/ATL/TSB to Dashboard / Coach / teach.
-  var _fitAIQ=getFitness_();
-  var ctl2=_fitAIQ.ctl;
-  var atl2=_fitAIQ.atl;
-  var tsb2=_fitAIQ.tsb;
-  var ctlStatus2=ctl2>=80?'Elite':ctl2>=60?'Chase 1 Zone':ctl2>=40?'Building':ctl2>=20?'Base':'Starting';
-  var ctlC2=ctl2>=60?'#00C896':ctl2>=40?'#4D9FFF':ctl2>=20?'#FC4C02':'var(--t3)';
-  var atlDiff2=atl2-ctl2;
-  var atlStatus2=atlDiff2>15?'Overreaching':atlDiff2>5?'Hard block':atlDiff2>=-5?'Balanced':'Underloaded';
-  var atlC2=atlDiff2>15?'#ef4444':atlDiff2>5?'#FF7A45':atlDiff2>=-5?'#00C896':'#4D9FFF';
-  var tsbStatus2=tsb2>=20?'Peak':tsb2>=0?'Fresh':tsb2>=-20?'Training':'Overreached';
-  var tsbC2=tsb2>=20?'#00C896':tsb2>=0?'#4D9FFF':tsb2>=-20?'#FC4C02':'#ef4444';
-
-  // Plain-language read: translates the three raw numbers into one direct,
-  // actionable sentence instead of leaving it to the reader to interpret
-  // TSB/ATL/CTL jargon themselves. Deterministic (rule-based on the same
-  // thresholds used for the status labels above), not an API call, so it
-  // is instant and never contradicts the numbers sitting right next to it.
-  var interpText, interpColor;
-  if(tsb2 < -20){
-    interpText='Fatigue is elevated. Consider an easy day or full rest before your next hard session.';
-    interpColor='#ef4444';
-  } else if(atlDiff2>15){
-    interpText='You are in a heavy training block. Watch for signs of overreaching over the next few days.';
-    interpColor='#FF7A45';
-  } else if(tsb2 >= 20 && ctl2 < 40){
-    interpText='You are fresh, but fitness is still building. A good day to add quality work.';
-    interpColor='#4D9FFF';
-  } else if(tsb2 >= 20){
-    interpText='Form is strong and you are well rested. Good day to push a hard session or race.';
-    interpColor='#00C896';
-  } else if(tsb2 >= 0){
-    interpText='You are fresh and absorbing training well. On track for your next build.';
-    interpColor='#4D9FFF';
-  } else if(atlDiff2 < -5 && ctl2 >= 20){
-    interpText='Training load has dropped off. Consider adding volume to keep building fitness.';
-    interpColor='#4D9FFF';
-  } else {
-    interpText='Fatigue is building from recent training. A moderate day will help you keep absorbing the load.';
-    interpColor='#FC4C02';
-  }
-  html+='<div style="margin:0 16px 10px;background:var(--s2);border-radius:12px;padding:12px 14px;border-left:3px solid '+interpColor+'">'
-    +'<div style="font-size:13px;color:var(--t1);line-height:1.4">'+interpText+'</div>'
-    +'</div>';
-
-  // Three metric cards - flat, no box background, matching the reference's
-  // plain Fitness/Fatigue/Form number layout
-  // ATHLETE IQ SCORE — live (approved formula), tappable -> teaching sheet.
-  // Mobile parity with the desktop hero card. "—" when < 28 days of history.
-  var _iqM=(typeof athleteIQ_==='function')?athleteIQ_():null;
-  var _iqMnull=(!_iqM||_iqM.score==null);
-  var _iqMc=_iqMnull?'#4b5568':(_iqM.score>=80?'#4ade80':_iqM.score>=60?'#60a5fa':_iqM.score>=40?'#f59e0b':'#94a3b8');
-  html+='<div data-metric-teach="iq" role="button" tabindex="0" aria-label="Learn about the Athlete IQ Score" style="cursor:pointer;background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid var(--d-line2);border-radius:16px;padding:16px;margin:0 16px 14px">'
-    +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:4px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ Score</span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
-    +'<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:40px;font-weight:800;color:'+_iqMc+';line-height:1">'+(_iqMnull?'—':_iqM.score)+'</div><div style="font-size:11px;color:#8b93a5;line-height:1.4">'+(_iqMnull?'Need ~4 weeks of ride history':'out of 100 · tap for the formula')+'</div></div>'
-    +'</div>';
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:0 16px 20px">';
-  // Phase-2 metrics join the same tappable grid. Values from teachCtx_ so cards
-  // and the teaching sheet agree; np/if/tss anchor to the most recent power ride.
-  var _tc=teachCtx_();
-  [
-    // CTL/ATL/TSB carry a 90-day LINE instead of a bar. "CTL is 62% of 100" measured against an
-    // arbitrary ceiling, and TSB — signed, routinely negative — could not have a bar at all, so the
-    // metric whose DIRECTION matters most had nothing. All three now read off st.fitSeries, the
-    // same array getFitness_ takes its headline from, so a card and the number above it cannot
-    // disagree. Small multiples: each sits in its own card, so the three hues never share an axis.
-    {key:'ctl',lbl:'Fitness (CTL)',v:ctl2,sub:ctlStatus2,c:ctlC2,desc:'42-day load',barW:null,spark:_gcFitPts_('ctl',90),sparkC:_gcHue_(0)},
-    {key:'atl',lbl:'Fatigue (ATL)',v:atl2,sub:atlStatus2,c:atlC2,desc:'7-day load',barW:null,spark:_gcFitPts_('atl',90),sparkC:_gcHue_(1)},
-    {key:'tsb',lbl:'Form (TSB)',v:(tsb2>=0?'+':'')+tsb2,sub:tsbStatus2,c:tsbC2,desc:'CTL &minus; ATL',barW:null,spark:_gcFitPts_('tsb',90),sparkC:_gcHue_(2)},
-    {key:'wkg',lbl:'W/kg',v:wkgStr_(_tc.wkg),sub:(_tc.wkg==null?'needs a weight':'FTP-based'),c:'#FC4C02',desc:'watts / kg',barW:null},
-    {key:'ftp',lbl:'FTP',v:_tc.ftp+'W',sub:'Manual',c:'#94a3b8',desc:'may be stale',barW:null},
-    {key:'np',lbl:'NP',v:(_tc.np?_tc.np+'W':'—'),sub:'last ride',c:'#60a5fa',desc:'avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)',barW:null},
-    {key:'if',lbl:'IF',v:(_tc.ifv?_tc.ifv.toFixed(2):'—'),sub:'last ride',c:'#f59e0b',desc:'avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)',barW:null},
-    {key:'tss',lbl:'TSS',v:(_tc.tss!=null?_tc.tss:'—'),sub:'last ride',c:'#4ade80',desc:'avg '+(_tc.avg.tss!=null?Math.round(_tc.avg.tss):'—')+' (90d)',barW:null}
-  ].forEach(function(card){
-    // Tappable -> shared teaching panel (openMetricTeach via the delegated
-    // [data-metric-teach] listener). Info glyph signals it is tappable.
-    html+='<div data-metric-teach="'+card.key+'" role="button" tabindex="0" aria-label="Learn about '+card.lbl+'" style="cursor:pointer;border-radius:8px;margin:-4px -4px 0;padding:4px;transition:background .12s" onmouseover="this.style.background=&#39;rgba(255,255,255,.04)&#39;" onmouseout="this.style.background=&#39;transparent&#39;">'
-      +'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px"><span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--t3)">'+card.lbl+'</span>'
-      +'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7a8290" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div>'
-      +'<div style="font-size:22px;font-weight:800;color:'+card.c+';line-height:1">'+card.v+'</div>'
-      +'<div style="font-size:11px;font-weight:600;color:'+card.c+';margin-top:3px">'+card.sub+'</div>'
-      +'<div style="font-size:10px;color:var(--t3);margin-top:2px">'+card.desc+'</div>'
-      // No bar fallback: every card above sets barW:null, so that branch was dead code left over
-      // from the sparkline conversion. A card without a series simply shows its number.
-      +(card.spark?_gcTrend_(card.spark, card.sparkC||card.c, { aria:card.lbl+' over 90 days', H:26, fill:false, from:'', to:'', note:'90 days' }):'')
-      +'</div>';
-  });
-  html+='</div>';
-
-  // PMC Chart with labeled points
-  html+='<div style="margin:0 16px 20px">';
-  html+='<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:2px">8-week trend</div>';
-  html+='<div style="font-size:10px;color:var(--t3);margin-bottom:6px">8-week performance trend</div>';
-  html+=buildPMCChart(pmcData);
-  html+='<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;font-size:10px;color:var(--t2)">'
-    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#4D9FFF;display:inline-block;border-radius:2px"></span>Fitness (CTL)</span>'
-    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#FF7A45;display:inline-block;border-radius:2px"></span>Fatigue (ATL)</span>'
-    +'<span style="display:flex;align-items:center;gap:4px"><span style="width:12px;height:3px;background:#00C896;display:inline-block;border-radius:2px"></span>Form (TSB)</span>'
-    +'</div>';
-
-  html+='</div>';
-
-  // -- SEASON DASHBOARD
-  // Calculate all stats from rides
-  var totalMiles=0,totalHours=0,totalElev=0,totalCals=0,totalRides=rides.length;
-  var longestRide=0,longestRideName='',highestNP=0,highestTSS=0,fastestSpeed=0;
-  var now=new Date(),yearStart=new Date(now.getFullYear(),0,1);
-  var weekStart2=new Date(now); weekStart2.setDate(now.getDate()-(now.getDay()===0?6:now.getDay()-1)); weekStart2.setHours(0,0,0,0);
-  var monthStart=new Date(now.getFullYear(),now.getMonth(),1);
-  var weekMiles=0,monthMiles=0,runMilesYTD=0;
-  var monthlyMiles={}; var monthlyCounts={};
-  var weeklyTSS=[]; var weekTSSmap={};
-  var npTrend=[];
-
-  rides.forEach(function(r){
-    var d=r.date?new Date(r.date):null;
-    var mi=parseFloat(r.distance)||0;
-    var hrs=r.movingSecs?(r.movingSecs/3600):0;
-    var el=parseFloat(r.elev||r.elevation)||0;
-    var cal=parseFloat(r.calories)||0;
-    if(mi>longestRide){longestRide=mi;longestRideName=actName_(r);}
-    if(r.np&&r.np>highestNP) highestNP=r.np;
-    var _hts=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0); if(_hts&&_hts>highestTSS) highestTSS=_hts;
-    if(r.avgSpeed&&r.avgSpeed>fastestSpeed) fastestSpeed=r.avgSpeed;
-    if(d&&d>=yearStart){
-      totalMiles+=mi;totalHours+=hrs;totalElev+=el;totalCals+=cal;
-      if(d>=weekStart2) weekMiles+=mi;
-      if(d>=monthStart) monthMiles+=mi;
-      var mk=d.getFullYear()+'-'+d.getMonth();
-      monthlyMiles[mk]=(monthlyMiles[mk]||0)+mi;
-      var wk=getWeekKey(d);
-      weekTSSmap[wk]=(weekTSSmap[wk]||0)+(constRideTSS_(r)||0);
-      if(r.np) npTrend.push({d:d,np:r.np});
-    }
-  });
-
-  // Build 12-month labels and data
-  var mLabels=[],mMiles=[];
-  for(var mi2=11;mi2>=0;mi2--){
-    var md=new Date(now.getFullYear(),now.getMonth()-mi2,1);
-    var mk2=md.getFullYear()+'-'+md.getMonth();
-    var mn=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][md.getMonth()];
-    mLabels.push(mn); mMiles.push(Math.round(monthlyMiles[mk2]||0));
-  }
-
-  // Weekly TSS last 8 weeks
-  var wTSSLabels=[],wTSSData=[];
-  for(var wi=7;wi>=0;wi--){
-    var wd=new Date(now); wd.setDate(now.getDate()-wi*7);
-    var wk2=getWeekKey(wd);
-    wTSSLabels.push('W'+(8-wi));
-    wTSSData.push(Math.round(weekTSSmap[wk2]||0));
-  }
-
-  // NP 8-week avg
-  npTrend.sort(function(a,b){return a.d-b.d;});
-  var npWeekly=[],npWLabels=[];
-  for(var ni=7;ni>=0;ni--){
-    var nwd=new Date(now); nwd.setDate(now.getDate()-ni*7);
-    var nwk=getWeekKey(nwd);
-    var wRides=rides.filter(function(r){return r.date&&getWeekKey(new Date(r.date))===nwk&&r.np;});
-    var avgNP=wRides.length?Math.round(wRides.reduce(function(s,r){return s+r.np;},0)/wRides.length):null;
-    npWeekly.push(avgNP);
-    npWLabels.push('W'+(8-ni));
-  }
-
-  // CTL projection. The SEED is the canonical CTL, not the tail of pmcData — the tail is the cached
-  // Intervals series, while getFitness_ prefers today's live poll of the same endpoint, so the two
-  // drift apart by a day. They happen to agree on CTL right now (both 58) but already disagree on
-  // ATL/TSB (tail 59/-1 vs live 58/0), which is the same one-day gap that made Analytics and
-  // Athlete Intelligence print different TSB from the same data on the same screen-refresh. A
-  // number the athlete reads as "Current CTL" must come from the one source.
-  var _fitProj=(typeof getFitness_==='function')?getFitness_():null;
-  var curCTL=(_fitProj&&_fitProj.loaded)?_fitProj.ctl
-            :(pmcData.length?(pmcData[pmcData.length-1].ctl||0):0);
-  // Real next race drives the season projection (falls back to an 8-week
-  // horizon when nothing is scheduled, so the charts still render).
-  var _seasonRace=getNextRace_();
-  var _hasRace=!!_seasonRace;
-  var raceDate=_hasRace?_seasonRace.dateObj:null;
-  var raceName=_hasRace?_seasonRace.name:'your next race';
-  var weeksToRace=_hasRace?_seasonRace.weeksOut:8;
-  var daysToRace=_hasRace?_seasonRace.daysOut:weeksToRace*7;
-  var _monAbbr=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var raceDateLabel=raceDate?(_monAbbr[raceDate.getMonth()]+' '+raceDate.getDate()+', '+raceDate.getFullYear()):'—';
-  var projCTL=Math.round(curCTL+(weeksToRace*2.8)); // ~2.8 CTL/week ramp
-  projCTL=Math.min(projCTL,85);
-
-  html+='<div style="padding:12px 16px 6px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--t3)">Season Dashboard</div>';
-
-  // HERO ROW - 4 stat cards
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;margin:0 16px 20px">';
-  var heroStats=[
-    {l:'Miles YTD',v:Math.round(totalMiles),s:Math.round(weekMiles)+' this week',c:'var(--blue)'},
-    {l:'Hours YTD',v:totalHours.toFixed(1),s:totalRides+' rides',c:'var(--t1)'},
-    {l:'Elevation YTD',v:Math.round(totalElev).toLocaleString(),s:'feet climbed',c:'var(--t1)'},
-    {l:'VO2 Max',v:st.vo2max||'—',s:'ml/kg/min',c:st.vo2max>=50?'#00C896':st.vo2max>=45?'var(--orange)':'var(--t1)'}
-  ];
-  heroStats.forEach(function(s){
-    html+='<div>'
-      +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--t3);margin-bottom:5px">'+s.l+'</div>'
-      +'<div style="font-size:22px;font-weight:800;color:'+s.c+';line-height:1">'+s.v+'</div>'
-      +'<div style="font-size:11px;color:var(--t3);margin-top:3px">'+s.s+'</div>'
-      +'</div>';
-  });
-  html+='</div>';
-
-  // MONTHLY MILEAGE — a growth line, not twelve rectangles.
-  //
-  // This was the clearest violation of the line rule left in the app: a 12-point time series drawn
-  // as 12 horizontal bars, each scaled against the biggest month. Twelve rectangles can say which
-  // month was largest and nothing at all about whether the athlete is building, holding or falling
-  // away, which is the only reason anyone reads a twelve-month strip. The per-month numbers are not
-  // lost — they move into the chart's table view, still reachable without hovering.
-  html+='<div style="margin:0 16px 20px">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--t1)">Monthly Mileage</div>';
-  html+='<div style="font-size:11px;color:var(--t3)">Last 12 months</div></div>';
-  (function(){
-    var pts=mMiles.map(function(v){ return (v==null||!isFinite(+v))?0:+v; });
-    if(pts.length<2){ html+='<div style="font-size:12px;color:var(--t3)">Not enough months logged yet to draw a trend.</div>'; return; }
-    var top=0; pts.forEach(function(v){ if(v>top) top=v; });
-    var ny=_mrNice_(top||1, 4);
-    var spec={
-      series:[{ key:'mi', label:'Miles', color:_GC_MILES, dash:'', pts:pts, v:pts[pts.length-1]||0 }],
-      nx:pts.length, maxY:ny.max, stepY:ny.step, unit:' mi',
-      xlabs:mLabels.slice(),
-      xticks:mLabels.map(function(l,i){ return { d:i+1, lab:l }; })
-                    .filter(function(t,i){ return (mLabels.length<=6) || (i%2===0) || i===mLabels.length-1; }),
-      end:{ i:0, text:Math.round(pts[pts.length-1]||0)+' mi', color:_GC_MILES },
-      fmt:function(v){ return Math.round(v).toLocaleString(); },
-      aria:'Miles per month over the last '+pts.length+' months.'
-    };
-    html+=_MR_CSS+_gcLineChart_(spec,'homemiles')+_gcTable_(spec,'Month');
-  })();
-  html+='</div>';
-
-  // POWER + TSS ROW
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 16px 20px">';
-
-  // Power trend
-  html+='<div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Power Trend</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">8-week avg NP</div>';
-  html+='<div id="perf-np-wrap" style="position:relative;height:60px"><canvas id="perf-np-chart" role="img" aria-label="8 week NP trend">NP trend</canvas></div>';
-  html+='<div style="border-top:1px solid var(--b1);margin-top:10px;padding-top:8px">';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Best NP</span><span style="font-weight:700;color:var(--orange)">'+(highestNP||'&mdash;')+(highestNP?'W':'')+'</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">FTP</span><span style="font-weight:700">'+FTP+'W</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">W/kg</span><span style="font-weight:700;color:var(--blue)">'+wkgStr_(wkg)+'</span></div>';
-  html+='</div></div>';
-
-  // Weekly Load (TSS) - flat stat rows replacing the bar chart, since the
-  // key numbers (highest week/this week/8-week avg) already summarize
-  // the trend without needing a duplicate visual.
-  html+='<div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">Weekly Load</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-bottom:10px">TSS per week</div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">Highest week</span><span style="font-weight:700;color:var(--c-red)">'+(highestTSS||'&mdash;')+'</span></div>';
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">This week</span><span style="font-weight:700;color:var(--blue)">'+(wTSSData[wTSSData.length-1]||0)+'</span></div>';
-  var avgTSS=wTSSData.length?Math.round(wTSSData.reduce(function(s,v){return s+v;},0)/wTSSData.filter(function(v){return v>0;}).length):0;
-  html+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0"><span style="color:var(--t3)">8-week avg</span><span style="font-weight:700">'+avgTSS+'</span></div>';
-  html+='</div>';
-  html+='</div>';
-
-  // CTL PROJECTION
-  html+='<div style="margin:0 16px 20px">';
-  html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">';
-  html+='<div><div style="font-size:13px;font-weight:700;color:var(--t1)">Fitness Projection &rarr; Race Day</div>';
-  html+='<div style="font-size:11px;color:var(--t3);margin-top:2px">Keep current load &rarr; projected CTL by '+raceDateLabel+': <span style="font-weight:700;color:var(--blue)">'+projCTL+'</span></div></div>';
-  html+='<div style="text-align:right"><div style="font-size:11px;color:var(--t3)">'+daysToRace+' days out</div>';
-  html+='<div style="font-size:12px;font-weight:700;color:var(--c-red)">'+raceDateLabel+'</div></div></div>';
-  // Build CTL projection chart data
-  var ctlActual=[],ctlProj=[],ctlLabels2=[];
-  var ctlWeeks=Math.min(pmcData.length,8);
-  for(var ci=Math.max(0,pmcData.length-8);ci<pmcData.length;ci++){
-    ctlActual.push(Math.round(pmcData[ci].ctl));
-    ctlProj.push(null);
-    ctlLabels2.push(pmcData[ci].d||'');
-  }
-  // Add projection weeks
-  var lastCtl=curCTL;
-  for(var pw=1;pw<=Math.min(weeksToRace,8);pw++){
-    ctlActual.push(null);
-    lastCtl=Math.min(lastCtl+2.8,85);
-    ctlProj.push(Math.round(lastCtl));
-    var pd=new Date(now); pd.setDate(now.getDate()+pw*7);
-    ctlLabels2.push(pw===Math.min(weeksToRace,8)?(raceDate?(_monAbbr[raceDate.getMonth()]+' '+raceDate.getDate()):'Race'):pd.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
-  }
-  // Connect actual to proj
-  if(ctlActual.length>0&&ctlProj.length>0){
-    var lastActIdx=ctlActual.map(function(v,i){return v!==null?i:-1;}).filter(function(i){return i>=0;}).pop();
-    if(lastActIdx>=0) ctlProj[lastActIdx]=ctlActual[lastActIdx];
-  }
-  html+='<div id="perf-ctl-wrap" style="position:relative;height:110px"><canvas id="perf-ctl-chart" role="img" aria-label="CTL fitness projection to race day">Current CTL '+curCTL+', projected '+projCTL+' by race day.</canvas></div>';
-  html+='<div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--t3)">';
-  html+='<span><span style="display:inline-block;width:10px;height:3px;background:#4D9FFF;border-radius:2px;vertical-align:middle;margin-right:3px"></span>Actual CTL</span>';
-  html+='<span><span style="display:inline-block;width:10px;height:3px;background:rgba(77,159,255,.4);border-radius:2px;vertical-align:middle;margin-right:3px;border-top:1px dashed #4D9FFF"></span>Projected</span>';
-  html+='<span><span style="display:inline-block;width:8px;height:8px;background:#ef4444;border-radius:50%;vertical-align:middle;margin-right:3px"></span>Race day</span>';
-  html+='</div></div>';
-
-  // RECORDS + STREAKS ROW
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 16px 20px">';
-  html+='<div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Ride Records</div>';
-  var records=[
-    ['Longest ride',longestRide?longestRide.toFixed(1)+' mi':'&mdash;','var(--blue)'],
-    ['Highest TSS',highestTSS||'&mdash;','#ef4444'],
-    ['Best NP',highestNP?(highestNP+'W'):'&mdash;','var(--orange)'],
-    ['Avg distance',totalRides?(Math.round(totalMiles/totalRides)+' mi'):'&mdash;','var(--t1)'],
-    ['Month miles',Math.round(monthMiles)+' mi','var(--t1)']
-  ];
-  records.forEach(function(r){
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1)">';
-    html+='<span style="font-size:11px;color:var(--t3)">'+r[0]+'</span>';
-    html+='<span style="font-size:12px;font-weight:700;color:'+r[2]+'">'+r[1]+'</span></div>';
-  });
-  html+='</div>';
-  html+='<div>';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:10px">Race Countdown</div>';
-  var raceStats=[
-    ['Days to race',_hasRace?daysToRace:'—','#ef4444'],
-    ['Weeks remaining',_hasRace?weeksToRace:'—','var(--t1)'],
-    ['Current CTL',curCTL,'var(--blue)'],
-    ['Projected CTL',projCTL,'var(--blue)'],
-    [raceName,_hasRace?weeksToRace+'w away':'not scheduled','var(--green)']
-  ];
-  raceStats.forEach(function(r){
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--b1)">';
-    html+='<span style="font-size:11px;color:var(--t3)">'+r[0]+'</span>';
-    html+='<span style="font-size:12px;font-weight:700;color:'+r[2]+'">'+r[1]+'</span></div>';
-  });
-  html+='</div></div>';
-
-  // Store chart data for post-render
-  window._perfChartData = {
-    mLabels:mLabels,mMiles:mMiles,
-    npWLabels:npWLabels,npWeekly:npWeekly,
-    wTSSLabels:wTSSLabels,wTSSData:wTSSData,
-    ctlLabels2:ctlLabels2,ctlActual:ctlActual,ctlProj:ctlProj
-  };
-
-
-  container.innerHTML='<div style="overflow-x:hidden;max-width:100%;width:100%">'+html+'<div id="analytics-ride-list"></div></div>';
-
-  // Activities was folded into Analytics rather than kept as its own
-  // bottom-nav destination - the ride list renders right after the
-  // performance dashboard in the same screen instead of a separate tab.
-  var rideListContainer=document.getElementById('analytics-ride-list');
-  if(rideListContainer) renderRideList(rideListContainer, 4);
-  // Stamp AFTER the screen is actually built, not on entry: an early throw then leaves the
-  // signature unchanged and the next poll retries, rather than recording a render that
-  // never happened.
-  try{ _perfLastSig_=_perfSig_(); }catch(e){}
-
-
-  // If no rides, auto-refresh after Firebase syncs
-  if((st.rides||[]).length===0){
-    setTimeout(function(){
-      var pb=document.getElementById('perf-body');
-      if(!pb) return;
-      if((st.rides||[]).length>0){
-        renderPerf(pb);
-      } else {
-        var msg=document.getElementById('perf-sync-msg');
-        if(msg) msg.textContent='No rides found. Import TCX or add manually.';
-      }
-    },7000);
-  }
-
-  // Insert DOM-built zone card if it exists
-  if(window._zoneCard){
-    var zoneTarget=document.getElementById('zone-dist-card');
-    if(zoneTarget){
-      zoneTarget.parentNode.replaceChild(window._zoneCard,zoneTarget);
-    } else {
-      // insert before power zones list
-      var pzList=container.querySelector('[style*="margin:0 16px 16px"]');
-      if(pzList) container.insertBefore(window._zoneCard,pzList);
-    }
-    window._zoneCard=null;
-  }
-
-  // Build Performance dashboard charts
-  function buildPerfCharts(){
-    var cd=window._perfChartData;
-    if(!cd) return;
-    if(typeof Chart==='undefined'){setTimeout(buildPerfCharts,100);return;}
-    var isDarkMode=document.body.classList.contains('dark');
-    var gridC=isDarkMode?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.08)';
-    var textC=isDarkMode?'rgba(255,255,255,0.6)':'rgba(0,0,0,0.5)';
-    var baseOpts={responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
-      scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},
-              y:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}}}};
-
-    var nc=document.getElementById('perf-np-chart');
-    if(nc) new Chart(nc,{type:'line',data:{labels:cd.npWLabels,
-      datasets:[{data:cd.npWeekly,borderColor:'#BA7517',backgroundColor:'rgba(186,117,23,0.08)',borderWidth:2,fill:true,tension:0.4,pointRadius:3,pointBackgroundColor:'#BA7517',spanGaps:true}]},
-      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9}}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9},callback:function(v){return axisNum(v)+'W';}}}}})});
-
-    var cc=document.getElementById('perf-ctl-chart');
-    if(cc) new Chart(cc,{type:'line',data:{labels:cd.ctlLabels2,
-      datasets:[
-        {data:cd.ctlActual,borderColor:'#4D9FFF',backgroundColor:'rgba(77,159,255,0.08)',borderWidth:2.5,fill:true,tension:0.3,pointRadius:3,pointBackgroundColor:'#4D9FFF',spanGaps:false},
-        {data:cd.ctlProj,borderColor:'rgba(77,159,255,0.5)',backgroundColor:'transparent',borderWidth:2,borderDash:[6,4],tension:0.3,pointRadius:3,pointBackgroundColor:'rgba(77,159,255,0.5)',spanGaps:false}
-      ]},
-      options:Object.assign({},baseOpts,{scales:{x:{grid:{color:gridC},ticks:{color:textC,font:{size:9},maxRotation:45,autoSkip:true,maxTicksLimit:8}},y:{grid:{color:gridC},ticks:{color:textC,font:{size:9}},min:0}}})});
-  }
-  setTimeout(buildPerfCharts, 100);
-  // Wire drag and drop zone
-  setTimeout(function(){
-    var dz=document.getElementById('ride-drop-zone');
-    if(!dz) return;
-    dz.addEventListener('dragover',function(e){e.preventDefault();dz.style.borderColor='#FC4C02';dz.style.color='#FC4C02';});
-    dz.addEventListener('dragleave',function(){dz.style.borderColor='';dz.style.color='';});
-    dz.addEventListener('drop',function(e){
-      e.preventDefault();dz.style.borderColor='';dz.style.color='';
-      var files=e.dataTransfer.files;
-      if(!files.length) return;
-      bulkImportTCX({files:files,value:''});
-    });
-    dz.addEventListener('click',function(){showImportFromMore();});
-  }, 200);
+  if(!container) return;               // always true now - the screen no longer exists
 }
 
 var activityYearFilter = activityYearFilter || new Date().getFullYear();
@@ -23566,6 +22803,21 @@ function _trWords_(){
   return d===7?'the last 7 days':(d===28?'the last 4 weeks':(d===84?'the last 12 weeks':(d===182?'the last 6 months':'the last year')));
 }
 function trSetRange_(d){ try{ st.trRange=d; sv(); }catch(e){} try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+function trToggleCompare_(){ try{ st.trCompare=!st.trCompare; sv(); }catch(e){} try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+// Change in CTL across the SELECTED window, off fitnessSeries_ - the same single source the
+// chart beside it draws. Returns '' when the series is too short to span the window rather than
+// comparing against whatever the oldest point happens to be.
+function _trCompareBadge_(){
+  if(!(typeof st!=='undefined' && st && st.trCompare)) return '';
+  var fs=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
+  var d=_trDays_();
+  if(fs.length<2 || fs.length<=d) return '';
+  var a=fs[fs.length-1-d], b=fs[fs.length-1];
+  if(!a || !b || a.ctl==null || b.ctl==null) return '';
+  var dl=Math.round((b.ctl-a.ctl)*10)/10, up=(dl>=0);
+  return '<span style="font-size:10.5px;font-weight:800;color:'+(up?'#22c55e':'#ef4444')+'">'
+    +(up?'\u25b2':'\u25bc')+' '+Math.abs(dl)+' CTL over '+_trLabel_()+'</span>';
+}
 function _trRangeHTML_(){
   var cur=_trDays_();
   return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
@@ -23574,7 +22826,14 @@ function _trRangeHTML_(){
       return '<button onclick="trSetRange_('+r[1]+')" class="sm-ctl" style="background:'+(on?'var(--d-accent,#fc5200)':'transparent')
         +';color:'+(on?'#fff':'var(--d-t3)')+';border:1px solid '+(on?'var(--d-accent,#fc5200)':'var(--d-edge)')
         +';border-radius:9px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">'+r[0]+'</button>';
-    }).join('')+'</div>';
+    }).join('')
+    // Compare, carried over from Analytics: show the change across the window, not just its end state.
+    +(function(){ var on=!!(typeof st!=='undefined'&&st&&st.trCompare);
+      return '<button onclick="trToggleCompare_()" class="sm-ctl" title="Show change over the selected window"'
+        +' style="margin-left:6px;background:'+(on?'var(--d-accent,#fc5200)':'transparent')+';color:'+(on?'#fff':'var(--d-t3)')
+        +';border:1px solid '+(on?'var(--d-accent,#fc5200)':'var(--d-edge)')
+        +';border-radius:9px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'; })()
+    +'</div>';
 }
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
@@ -23639,7 +22898,7 @@ function aiRenderTrends_(ded){
   H+='<div style="display:grid;grid-template-columns:1.9fr 1fr;gap:14px;margin-bottom:14px" class="tr-2col">';
   // -- PMC with context bands + spike explanation --
   H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">How is your body responding?</span><span style="font-size:11px;color:var(--d-dim)">Fitness / Fatigue / Form</span></div>';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">How is your body responding?</span><span style="font-size:11px;color:var(--d-dim)">'+(_trCompareBadge_()||'Fitness / Fatigue / Form')+'</span></div>';
   var pmcHtml=_aiSafe_('TrPMC', function(){
     var s=series.slice(-85); if(s.length<4) return '<div style="color:var(--d-dim);font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
     var W=680,Hh=210, padL=30,padR=76,padT=8,padB=22;
@@ -29920,13 +29179,22 @@ function dsShowAthleteIntel(){
 function showAthleteIntel(){
   var old=document.getElementById('AIQ_PAGE'); if(old) old.remove();
   var ov=document.createElement('div'); ov.id='AIQ_PAGE';
-  ov.style.cssText='position:fixed;inset:0;z-index:3000;background:var(--d-deep);overflow-y:auto;-webkit-overflow-scrolling:touch';
+  // Stops above the bottom nav so the bar it was launched from stays reachable. Desktop
+  // opens this the same way but has no bnav, so the inset only applies when the bar exists.
+  var _bn=document.getElementById('bottom-nav');
+  var _bnH=(_bn && getComputedStyle(_bn).display!=='none')?Math.round(_bn.getBoundingClientRect().height):0;
+  ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:'+_bnH+'px;z-index:3000;'
+    +'background:var(--d-deep);overflow-y:auto;-webkit-overflow-scrolling:touch';
   var close='<div onclick="var e=document.getElementById(&#39;AIQ_PAGE&#39;);if(e)e.remove();" style="position:fixed;top:12px;right:14px;z-index:3001;width:34px;height:34px;border-radius:50%;background:var(--d-inset);border:1px solid var(--d-line2);display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>';
   var body=document.createElement('div');
   ov.appendChild(body);
   ov.insertAdjacentHTML('beforeend', close);
   (document.getElementById('app-shell')||document.body).appendChild(ov);
   _aiTab='overview';
+  try{
+    document.querySelectorAll('.bnav-btn').forEach(function(b){ b.classList.remove('active'); });
+    var _nb=document.getElementById('bnav-ai'); if(_nb) _nb.classList.add('active');
+  }catch(e){}
   aiRenderOverview_(body);
 }
 // ==================== end Athlete Intelligence page ====================
@@ -33556,7 +32824,6 @@ function dsNav(section){
     // Constellation still does not highlight.
     dsShowLegacy();
   } else if(section === 'analytics') {
-    dsShowAnalytics();
   } else if(section === 'nutrition') {
     dsShowNutrition();
   } else if(section === 'weather') {
@@ -33718,7 +32985,6 @@ window.saveGoalTargets_ = function(){
   st.yearlyMileageGoal=g.annualMi;            // keep legacy readers (mobile rings, Miles-YTD) in sync
   sv(); try{ fbPush(true); }catch(e){}
   try{ toast('Goals saved'); }catch(e){}
-  try{ if(typeof isDesktop==='function' && isDesktop() && typeof dsShowAnalytics==='function'){ /* refresh cards if on analytics */ var c=document.getElementById('ds-content'); if(c && /Training Load/.test(c.textContent||'')) dsShowAnalytics(); } }catch(e){}
 };
 
 window.runBackfill = function(){
@@ -35157,538 +34423,6 @@ function reconcileStrava_(){
   var flag=pct>_RECON_PCT;
   try{ console.log('[reconcile] YTD cycling — app='+app+' mi, Strava='+strava+' mi, delta='+(delta>=0?'+':'')+delta+' ('+pct.toFixed(1)+'%) '+(flag?('*** FLAG: over '+_RECON_PCT+'% — investigate ***'):'within tolerance')); }catch(e){}
   return { have:true, app:app, strava:strava, delta:delta, pct:pct, flag:flag };
-}
-
-function dsShowAnalytics(){
-  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
-  var mc=document.getElementById('ds-content'); if(!mc) return;
-
-  // Dedupe like the rest of the app (activities list, dashboard) — raw st.rides
-  // holds duplicate Strava+FIT+TCX imports of the same ride, which was inflating
-  // every analytics sum (e.g. an impossible ~591 mi in one week).
-  var rides;
-  try{ rides=dedupeRides_(st.rides||[]).kept.filter(function(r){return r&&!r.deleted;}); }
-  catch(e){ rides=(st.rides||[]).filter(function(r){return r&&!r.deleted;}); }
-  var FTP=parseInt(st.ftp||186);
-  var BWT=stWeightLb_();
-
-  // ---- Range selector (7D/4W/12W/6M/1Y) drives the time-windowed views -------
-  var RANGE=(st.anRange&&/^(7D|4W|12W|6M|1Y)$/.test(st.anRange))?st.anRange:'12W';
-  var RDAYS={'7D':7,'4W':28,'12W':84,'6M':182,'1Y':365}[RANGE];
-  var RLABEL={'7D':'Last 7 Days','4W':'Last 4 Weeks','12W':'Last 12 Weeks','6M':'Last 6 Months','1Y':'Last Year'}[RANGE];
-  var CMP=!!st.anCompare;
-  var now=new Date();
-
-  // TSS by date — GUARDED by constRideTSS_ (ceiling 600), same as the rest of
-  // the app. Raw r.tss includes garbage import values (thousands/day); the old
-  // 90-day-from-zero window accidentally excluded that older history, but the
-  // range work's longer seed pulled it in and CTL's slow 42-day decay left a
-  // ~20x-inflated residual (CTL 1122, ATL fine, TSB +1070). Guarding caps the
-  // garbage so CTL/ATL read real values (~52) on every range.
-  var tssByDate={};
-  rides.forEach(function(r){
-    if(!r.date) return;
-    var _rt=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
-    if(!(_rt>0)) return;
-    var nd=normDate(r.date);
-    tssByDate[nd]=(tssByDate[nd]||0)+_rt;
-  });
-
-  // CTL/ATL/TSB — seed the EMA over RDAYS+42 days of history, then DISPLAY only
-  // the selected window, so a short range (7D) still shows correctly-seeded
-  // fitness instead of an EMA restarting from zero.
-  // Fixed long seed (>=220d) so the 42-day EMA is fully converged and today's
-  // CTL/ATL/TSB are the SAME regardless of the selected range — only the visible
-  // slice changes, never the values.
-  // The curve comes from Intervals, not from a local EMA. The seed-length comment below used to
-  // explain how this surface kept its own values stable across range changes; it no longer has its
-  // own values. Selecting a range slices the authoritative series, which is all it ever should
-  // have done.
-  var _fsAn=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
-  var ctlAll=_fsAn.map(function(p){return p.ctl;}),
-      atlAll=_fsAn.map(function(p){return p.atl;}),
-      tsbAll=_fsAn.map(function(p){return p.tsb;}),
-      labAll=_fsAn.map(function(p){return String(p.date).slice(5);});
-  var ctlArr=ctlAll.slice(-RDAYS), atlArr=atlAll.slice(-RDAYS), tsbArr=tsbAll.slice(-RDAYS), labels=labAll.slice(-RDAYS);
-
-  // Rides within the selected window — drives Power Distribution.
-  var _rcut=new Date(now); _rcut.setDate(_rcut.getDate()-RDAYS);
-  var rangeRides=rides.filter(function(r){ if(!r||!r.date) return false; var _rd=new Date(normDate(r.date)); return !isNaN(_rd) && _rd>=_rcut; });
-
-  // Weekly distance — number of weeks follows the range (1..52).
-  var _nWk=Math.min(52,Math.max(1,Math.ceil(RDAYS/7)));
-  var weekDist=[], weekLabels=[];
-  for(var w=_nWk-1;w>=0;w--){
-    var wStart=new Date(now); wStart.setDate(wStart.getDate()-w*7-6);
-    var wEnd=new Date(now); wEnd.setDate(wEnd.getDate()-w*7);
-    var wDist=0;
-    rides.forEach(function(r){
-      if(!r.date) return;
-      var rd=new Date(normDate(r.date));
-      if(rd>=wStart&&rd<=wEnd) wDist+=parseFloat(r.distance)||0;
-    });
-    weekDist.push(Math.round(wDist));
-    weekLabels.push('W'+(_nWk-w));
-  }
-
-  // W/kg — the KPI is the category metric FTP ÷ weight (Chase 1 = 3.14), which
-  // is always available; the old per-ride "avg power ÷ weight" showed "--"
-  // whenever rides lacked stored power. The trend chart uses wkgTrend_ (best
-  // 20-min power ÷ kg, or FTP ÷ logged weight as a fallback).
-  var wkgNow=currentWkg_();
-  var _wt=wkgTrend_();
-  var wkgHistory=_wt.pts.map(function(p){return p.wkg;});
-  var wkgLabels=_wt.pts.map(function(p){return String(p.date).slice(5);});
-
-  // HEADLINE CTL/ATL/TSB come from getFitness_, the one canonical source — not from the tail of the
-  // arrays this page builds for its own chart. Those arrays end at the newest CACHED daily point,
-  // while getFitness_ prefers today's live Intervals poll when there is one, so taking the tail put
-  // Analytics a day behind every other surface: 57/53/+4 here against 58/58/0 on the Dashboard and
-  // Athlete Intelligence, from the same data on the same screen-refresh. TSB 0 versus +4 is not
-  // cosmetic — it is "Optimal" against "Fresh" as a readiness verdict on the same day.
-  // This is the Jul-18 single-source rule (P1/P2) drifting back; the arrays stay as the chart's
-  // series, they are just no longer the source of the numbers printed beside it.
-  var _fitAn=(typeof getFitness_==='function')?getFitness_():null;
-  var lastTSB=(_fitAn&&_fitAn.loaded)?_fitAn.tsb:(tsbArr[tsbArr.length-1]||0);
-  var lastCTL=(_fitAn&&_fitAn.loaded)?_fitAn.ctl:(ctlArr[ctlArr.length-1]||0);
-  var lastATL=(_fitAn&&_fitAn.loaded)?_fitAn.atl:(atlArr[atlArr.length-1]||0);
-  var tsbColor=lastTSB>=10?'#4ade80':lastTSB>=-10?'#60a5fa':lastTSB>=-25?'#f59e0b':'#e24b4a';
-  var tsbLabel=lastTSB>=10?'Fresh':lastTSB>=-10?'Optimal':lastTSB>=-25?'Tired':'Very Tired';
-
-  mc.innerHTML='';
-  var wrap=document.createElement('div');
-  wrap.style.cssText='display:flex;flex-direction:column;height:100%;overflow-y:auto;padding:12px 16px;box-sizing:border-box;gap:10px';
-
-  // -- RANGE TOOLBAR (mockup top-right): date-window label + Compare toggle +
-  //    7D/4W/12W/6M/1Y segmented control. Selecting a range persists st.anRange
-  //    and re-renders; the window drives Training Load, Weekly Distance and
-  //    Power Distribution.
-  var _rbtns=['7D','4W','12W','6M','1Y'].map(function(rk){ var on=(rk===RANGE);
-    return '<button onclick="st.anRange=&#39;'+rk+'&#39;;sv();dsShowAnalytics()" style="background:'+(on?'#f97316':'transparent')+';color:'+(on?'#fff':'#94a3b8')+';border:none;border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">'+rk+'</button>';
-  }).join('');
-  var toolbar=document.createElement('div');
-  toolbar.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0';
-  toolbar.innerHTML='<div style="font-size:12px;color:var(--d-t3);font-weight:600">'+RLABEL+'</div>'
-    +'<div style="display:flex;align-items:center;gap:10px">'
-    +'<button onclick="st.anCompare=!st.anCompare;sv();dsShowAnalytics()" title="Show change over the selected window" style="display:flex;align-items:center;gap:5px;background:'+(CMP?'#f97316':'transparent')+';color:'+(CMP?'#fff':'#94a3b8')+';border:1px solid '+(CMP?'#f97316':'#2a3550')+';border-radius:8px;padding:5px 11px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'
-    +'<div style="display:flex;gap:2px;background:var(--d-deep);border:1px solid var(--d-chip);border-radius:9px;padding:2px">'+_rbtns+'</div>'
-    +'</div>';
-  wrap.appendChild(toolbar);
-
-  var _tc=teachCtx_();
-  // Tappable teaching card builder (data-metric-teach -> the document-level
-  // listener; both renderers must carry it).
-  function teachCard_(inner, key, label){
-    var c=document.createElement('div');
-    c.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px'+(key?';cursor:pointer;transition:background .12s,border-color .12s':'');
-    if(key){
-      c.setAttribute('data-metric-teach',key);
-      c.setAttribute('role','button'); c.setAttribute('tabindex','0'); c.setAttribute('aria-label','Learn about '+(label||key));
-      c.onmouseenter=function(){ c.style.background='#161a24'; c.style.borderColor='#2a3550'; };
-      c.onmouseleave=function(){ c.style.background='#111318'; c.style.borderColor='#1a1f2e'; };
-    }
-    c.innerHTML=inner; return c;
-  }
-  var _infoGlyph='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
-
-  // -- HERO STRIP (mockup): compact IQ (~25%) | W/kg centerpiece (~45%) |
-  //    2x2 mini-stat grid FTP·CTL·ATL·TSB (~30%). Layout only; values/caveats
-  //    unchanged, everything stays tappable to its teaching sheet.
-  var hero=document.createElement('div');
-  hero.style.cssText='display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.8fr) minmax(0,1.2fr);gap:10px;flex-shrink:0;align-items:stretch';
-  // LEFT — Athlete IQ (compact). Live (approved formula); "—" when <28 days.
-  var _iq=_tc.iq;
-  var _iqNull=(!_iq || _iq.score==null);
-  var _iqColor=_iqNull?'#4b5568':(_iq.score>=80?'#4ade80':_iq.score>=60?'#60a5fa':_iq.score>=40?'#f59e0b':'#94a3b8');
-  var iqCard=document.createElement('div');
-  iqCard.style.cssText='background:linear-gradient(135deg,#141a2e,#0f1320);border:1px solid var(--d-line2);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:border-color .12s';
-  iqCard.setAttribute('data-metric-teach','iq');
-  iqCard.setAttribute('role','button'); iqCard.setAttribute('tabindex','0'); iqCard.setAttribute('aria-label','Learn about the Athlete IQ Score');
-  iqCard.onmouseenter=function(){ iqCard.style.borderColor='#3a4a70'; };
-  iqCard.onmouseleave=function(){ iqCard.style.borderColor='#2a3550'; };
-  iqCard.innerHTML='<div style="display:flex;align-items:center;gap:5px;margin-bottom:6px"><span style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a8aa8">Athlete IQ</span>'+_infoGlyph+'</div>'
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:'+_iqColor+';line-height:1">'+(_iqNull?'—':_iq.score)+'</div>'
-    +'<div style="font-size:10px;color:#8b93a5;line-height:1.3">'+(_iqNull?'need ~4 wks<br>of history':'out of 100')+'</div></div>'
-    +'<div style="font-size:9px;color:var(--d-t4);margin-top:8px;line-height:1.5">Real inputs only. Tap for the formula.</div>';
-  hero.appendChild(iqCard);
-  // CENTER — W/kg centerpiece: value + 0-4.0 gradient scale with a marker dot,
-  // then the "Top X%" line beneath. Same value, percentile and caveat as shipped.
-  var _wpct=dsPercentileTop_(wkgHistory, wkgNow);
-  // W/kg TRAJECTORY, not a position on a 0-4.0 gradient. The pill said where today's number sits
-  // on an abstract scale; it could not say whether the athlete has been climbing toward the target
-  // for six months or drifting away from it, which is the only question this card is read for.
-  // Same series and same treatment as the Chase 1 chart on the home page (_gcWkgPts_): w/kg at each
-  // weigh-in, priced with the FTP that was in force on THAT date.
-  //
-  // The target comes from the editable goal, not the Chase card's hardcoded 215W/151lb pair — both
-  // are 3.14 today, but only one of them moves when the athlete changes their goal.
-  var _wTgt=parseFloat(((typeof _goalTargets_==='function')?_goalTargets_():{}).wkg);
-  if(!(_wTgt>0)) _wTgt=3.14;
-  var _wkgChart=(function(){
-    // Weigh-in-driven series first — it is the more precise one (FTP as of each weigh-in date,
-    // divided by the weight actually recorded that day). st.weightLog is empty on this athlete,
-    // so fall back to the series this page already computes and already percentile-ranks:
-    // wkgTrend_'s rolling best-20-min power over a 42-day window, sampled weekly. Falling back
-    // rather than showing an empty card, and the caption names which one is drawn — the two are
-    // different measurements and must not be silently interchangeable.
-    var pts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
-    var src='w/kg at each weigh-in';
-    if(!pts.filter(function(p){ return p && p.v!=null; }).length && _wt && _wt.pts && _wt.pts.length>1){
-      pts=_wt.pts.map(function(p){ return { v:p.wkg, lab:String(p.date).slice(5) }; });
-      src='w/kg from '+_wt.source;
-    }
-    // Decide whether the target is actually inside the plotted range BEFORE writing the caption —
-    // a caption must never promise a dashed line that is not drawn.
-    var v=pts.map(function(p){ return p.v; }).filter(function(x){ return x!=null; });
-    var lo=v.length?Math.min.apply(null,v):0, hi=v.length?Math.max.apply(null,v):0;
-    var tp=(hi>lo)?((_wTgt-lo)/(hi-lo)):-1;
-    var onChart=(tp>=0 && tp<=1);
-    var spark=(typeof _gcTrend_==='function')?_gcTrend_(pts, _GC_WKG, { aria:'W per kg by weigh-in', H:44, fill:false,
-      note:src+' &middot; '+(onChart?('dashed line is your '+_wTgt.toFixed(2)+' target')
-                                    :('your '+_wTgt.toFixed(2)+' target is above everything on this chart')) }):'';
-    // No weigh-in history: say so, rather than falling back to the bar this replaced.
-    if(!spark) return '<div style="font-size:10.5px;color:var(--d-t4);margin-top:12px;line-height:1.5">Log a few weigh-ins and this becomes a trend line toward '+_wTgt.toFixed(2)+'.</div>';
-    var rule=onChart
-      ? '<div style="position:absolute;left:0;right:0;top:'+((1-tp)*100).toFixed(1)+'%;height:0;border-top:1.5px dashed #FFB938;opacity:.8;pointer-events:none"></div>'
-      : '';
-    return '<div style="position:relative;margin-top:10px">'+spark+rule+'</div>';
-  })();
-  var wkgHero=teachCard_(
-    '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px"><span style="font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--d-t4)">Power-to-Weight</span>'+_infoGlyph+'</div>'
-    // C2: say what the big number IS. It is FTP / bodyweight, while the line beneath plots a
-    // different measure (best 20-min power / kg when there are no weigh-ins), so the natural
-    // reading — that the line ends at the number above it — is wrong. Measured 2.54 against a
-    // line ending at 2.84. The chart's own caption already names its series; this names the
-    // headline's, so the two are legible as two measurements rather than one that disagrees.
-    +'<div style="display:flex;align-items:baseline;gap:8px"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1">'+wkgStr_(wkgNow)+'</div><div style="font-size:13px;color:var(--d-t4)">W/kg</div>'
-      +'<div style="margin-left:auto;text-align:right"><div style="font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--d-t4)">Target</div>'
-      +'<div style="font-size:15px;font-weight:800;color:var(--c-gold);line-height:1.1">'+_wTgt.toFixed(2)+'</div></div></div>'
-    +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:3px">FTP &divide; bodyweight'+((wkgNow!=null&&_wt&&_wt.pts&&_wt.pts.length>1)?(' &middot; the line below plots '+_wt.source+', a different measure'):'')+'</div>'
-    +_wkgChart
-    +'<div style="font-size:12px;font-weight:700;color:'+(_wpct?'#4ade80':'#64748b')+';margin-top:8px">'+(_wpct?('Top '+_wpct.topPct+'% of your last 12 months'):'Not enough W/kg history yet')+'</div>'
-    +'<div style="font-size:9px;color:var(--d-t4);margin-top:5px">FTP-based figure — only as accurate as your (manual) FTP. Tap to learn.</div>'
-    ,'wkg','W/kg');
-  wkgHero.style.borderRadius='16px'; wkgHero.style.padding='18px 20px';
-  hero.appendChild(wkgHero);
-  // RIGHT — compact 2x2 mini-stat grid (FTP | CTL / ATL | TSB), each tappable.
-  var miniGrid=document.createElement('div');
-  miniGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:10px';
-  [
-    {key:'ftp',label:'FTP',val:_tc.ftp+'W',color:'#94a3b8'},
-    {key:'ctl',label:'CTL',val:''+Math.round(lastCTL),color:'#3b82f6'},
-    {key:'atl',label:'ATL',val:''+Math.round(lastATL),color:'#f97316'},
-    {key:'tsb',label:'TSB',val:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e'}
-  ].forEach(function(m){
-    var mini=document.createElement('div');
-    mini.style.cssText='background:var(--d-panel);border:1px solid var(--d-chip);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;transition:background .12s,border-color .12s';
-    mini.setAttribute('data-metric-teach',m.key);
-    mini.setAttribute('role','button'); mini.setAttribute('tabindex','0'); mini.setAttribute('aria-label','Learn about '+m.label);
-    mini.onmouseenter=function(){ mini.style.background='#161a24'; mini.style.borderColor='#2a3550'; };
-    mini.onmouseleave=function(){ mini.style.background='#111318'; mini.style.borderColor='#1a1f2e'; };
-    mini.innerHTML='<div style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+m.label+'</div>'
-      +'<div style="font-size:20px;font-weight:800;color:'+m.color+';line-height:1">'+m.val+'</div>';
-    miniGrid.appendChild(mini);
-  });
-  hero.appendChild(miniGrid);
-  wrap.appendChild(hero);
-
-  // -- GAUGES: CTL / ATL / TSB / W-kg (tappable)
-  var gaugeRow=document.createElement('div');
-  gaugeRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
-  [
-    {key:'ctl',label:'Fitness (CTL)',sub:'CTL',frac:Math.min(1,lastCTL/80),center:''+Math.round(lastCTL),color:'#3b82f6',cap:'42-day load'},
-    {key:'atl',label:'Fatigue (ATL)',sub:'ATL',frac:Math.min(1,lastATL/80),center:''+Math.round(lastATL),color:'#f97316',cap:'7-day load'},
-    {key:'tsb',label:'Form (TSB)',sub:'TSB',frac:Math.min(1,Math.max(0,(lastTSB+30)/60)),center:(lastTSB>0?'+':'')+Math.round(lastTSB),color:'#22c55e',cap:tsbLabel},
-    {key:'wkg',label:'W/kg',sub:'W/kg',frac:(wkgNow==null?0:Math.min(1,wkgNow/5)),center:wkgStr_(wkgNow),color:'#a855f7',cap:(wkgNow==null?'needs a weight':'vs 3.14 target')}
-  ].forEach(function(g){
-    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center"><span style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.06em">'+g.label+'</span>'+_infoGlyph+'</div>'
-      +'<div style="display:flex;justify-content:center">'+dsGauge_(g.frac,g.color,g.center,g.sub,84)+'</div>'
-      +'<div style="text-align:center;font-size:9px;color:var(--d-t4);margin-top:4px">'+g.cap+'</div>';
-    gaugeRow.appendChild(teachCard_(inner,g.key,g.label));
-  });
-  wrap.appendChild(gaugeRow);
-
-  // -- POWER STAT CARDS: FTP / NP / IF / TSS (tappable)
-  var statRow=document.createElement('div');
-  statRow.style.cssText='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0';
-  [
-    ['FTP',_tc.ftp+'W','#94a3b8','Manual — may be stale','ftp'],
-    ['NP',(_tc.np?_tc.np+'W':'—'),'#60a5fa','last ride · avg '+(_tc.avg.np!=null?Math.round(_tc.avg.np)+'W':'—')+' (90d)','np'],
-    ['IF',(_tc.ifv?_tc.ifv.toFixed(2):'—'),'#f59e0b','last ride · avg '+(_tc.avg.ifv!=null?_tc.avg.ifv.toFixed(2):'—')+' (90d)','if'],
-    ['TSS',(_tc.tss!=null?_tc.tss:'—'),'#4ade80','last ride · avg '+(_tc.avg.tss!=null?Math.round(_tc.avg.tss):'—')+' (90d)','tss']
-  ].forEach(function(x){
-    var inner='<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px"><span style="font-size:9px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">'+x[0]+'</span>'+_infoGlyph+'</div>'
-      +'<div style="font-size:24px;font-weight:800;color:'+x[2]+';letter-spacing:-.02em">'+x[1]+'</div>'
-      +'<div style="font-size:10px;color:var(--d-t4);margin-top:3px">'+x[3]+'</div>';
-    statRow.appendChild(teachCard_(inner,x[4],x[0]));
-  });
-  wrap.appendChild(statRow);
-
-  // ==== LAYOUT BELOW GAUGES — mockup grid (layout only; card contents unchanged) ====
-  // ROW A: Training Load (~60%) + Weekly Distance (~40%), side by side.
-  var fitnessCard=document.createElement('div');
-  fitnessCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  var _ctlDelta=(ctlArr.length?ctlArr[ctlArr.length-1]-ctlArr[0]:0), _up=_ctlDelta>=0;
-  var _cmpBadge=CMP?(' <span style="font-size:10px;font-weight:700;text-transform:none;color:'+(_up?'#22c55e':'#ef4444')+'">'+(_up?'\\u25b2':'\\u25bc')+' '+Math.abs(Math.round(_ctlDelta*10)/10)+' CTL vs start</span>'):'';
-  fitnessCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Training Load — '+RLABEL+_cmpBadge+'</div>'+
-    '<div style="position:relative;height:160px"><canvas id="ds-fitness-chart"></canvas></div>';
-  var distCard=document.createElement('div');
-  distCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  var _thisWk=0,_lastWk=0;
-  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); var ago=(now-d)/86400000;
-    if(ago>=0&&ago<7) _thisWk+=parseFloat(r.distance)||0; else if(ago>=7&&ago<14) _lastWk+=parseFloat(r.distance)||0; });
-  _thisWk=Math.round(_thisWk); _lastWk=Math.round(_lastWk);
-  var _wkD=(_lastWk>0)?Math.round((_thisWk-_lastWk)/_lastWk*100):null;
-  distCard.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px">'
-      +'<span style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">Weekly Distance — Last '+_nWk+' Week'+(_nWk>1?'s':'')+'</span>'
-      +(_wkD!=null?'<span style="font-size:11px;font-weight:700;color:'+(_wkD>=0?'#22c55e':'#ef4444')+';white-space:nowrap">'+(_wkD>=0?'\\u25b2':'\\u25bc')+' '+Math.abs(_wkD)+'% vs last week</span>':'')
-    +'</div>'
-    +'<div style="margin-bottom:4px"><span style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1">'+_thisWk.toLocaleString()+'</span><span style="font-size:13px;color:var(--d-t3);margin-left:4px">mi</span></div>'
-    +'<div style="position:relative;height:118px"><canvas id="ds-dist-chart"></canvas></div>';
-  var rowA=document.createElement('div');
-  rowA.style.cssText='display:grid;grid-template-columns:3fr 2fr;gap:10px;flex-shrink:0';
-  rowA.appendChild(fitnessCard); rowA.appendChild(distCard);
-  wrap.appendChild(rowA);
-
-  // ROW B: W/kg Trend + Power Distribution + Ride Consistency, equal columns.
-  var rowBcards=[];
-  var wkgCard=null;
-  if(wkgHistory.length>2){
-    wkgCard=document.createElement('div');
-    wkgCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-    var _wkgD=(wkgHistory.length>=2)?(Math.round((wkgHistory[wkgHistory.length-1]-wkgHistory[wkgHistory.length-2])*100)/100):0;
-    wkgCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">W/kg Trend</div>'
-      +'<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">'
-        +'<span style="font-size:22px;font-weight:800;color:#c084fc;line-height:1">'+wkgStr_(wkgNow)+'</span><span style="font-size:12px;color:var(--d-t3)">W/kg</span>'
-        +(_wkgD!==0?'<span style="font-size:10px;font-weight:700;color:'+(_wkgD>=0?'#22c55e':'#ef4444')+'">'+(_wkgD>=0?'\\u2191':'\\u2193')+' '+Math.abs(_wkgD).toFixed(2)+' vs last week</span>':'')
-      +'</div>'
-      +'<div style="position:relative;height:104px"><canvas id="ds-wkg-chart"></canvas></div>';
-    rowBcards.push(wkgCard);
-  }
-  // Power Distribution — REAL zone-seconds only (curve estimates excluded, they
-  // can't recover time-in-zone). %FTP zones use the current manual FTP.
-  var _pd=dsPowerDist_(rangeRides, FTP);
-  try{ console.log('[power-dist] real rides='+_pd.nReal+' split='+JSON.stringify(_pd.realPct)+' | curve rides='+_pd.nCurve+' split='+JSON.stringify(_pd.curvePct)+' (curve EXCLUDED — mean-max curve can\\u2019t derive time-in-zone) | FTP='+FTP); }catch(e){}
-  var pdCard=document.createElement('div');
-  pdCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  var pdHead='<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;gap:8px"><span style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em">Power Distribution</span>'
-    +'<span style="font-size:9px;color:var(--d-t4);text-align:right">'+(_pd.hasData?('Based on '+_pd.nReal+' rides with real zone data · zones use your (manual) FTP'):'')+'</span></div>';
-  if(_pd.hasData){
-    var pdBars=_pd.zones.map(function(z){
-      var _zp=z.label.split(' ');
-      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">'
-        +'<span style="font-size:11px;width:96px;flex-shrink:0"><span style="color:'+z.color+';font-weight:700">'+_zp[0]+'</span> <span style="color:#8b97a8">'+_zp.slice(1).join(' ')+'</span></span>'
-        +'<div style="flex:1;height:7px;background:var(--d-deep);border-radius:4px;overflow:hidden"><div style="height:7px;background:'+z.color+';border-radius:4px;width:'+z.pct+'%"></div></div>'
-        +'<span style="font-size:11px;font-weight:700;color:var(--d-t2);width:34px;text-align:right;flex-shrink:0">'+z.pct+'%</span></div>';
-    }).join('');
-    pdCard.innerHTML=pdHead+pdBars;
-  } else {
-    pdCard.innerHTML=pdHead+'<div style="font-size:12px;color:var(--d-t4);padding:6px 0">No rides with real power-zone data yet'+(_pd.nCurve?(' ('+_pd.nCurve+' rides have only a power curve, which can\\u2019t be split into real zone time)'):'')+' — stays empty rather than showing a fabricated split.</div>';
-  }
-  rowBcards.push(pdCard);
-  // Ride Consistency heatmap (real: ride dates, last 26 weeks)
-  var _cells=dsConsistency_(rides, 26*7, now, normDate);
-  var _lead=_cells.length?_cells[0].dow:0;
-  // Shade by each day's ROBUST load (real TSS or moving-time proxy), relative to
-  // the athlete's 85th-percentile active day. Coloring by real TSS alone made it
-  // one flat green — garbage/missing TSS collapsed most ride-days to 0. Using
-  // load (never 0 on a ride-day) + a percentile reference spreads typical days
-  // across the full Less->More gradient regardless of an outlier day.
-  var _tv=_cells.map(function(c){return c.load||0;}).filter(function(t){return t>0;}).sort(function(a,b){return a-b;});
-  var _ref=_tv.length?_tv[Math.min(_tv.length-1,Math.floor(_tv.length*0.85))]:0; if(!(_ref>0)) _ref=1;
-  // Categorical intensity (mockup): None grey, Low red, Moderate amber, High green.
-  function _cellColor(c){ if(!c || c.n===0) return '#30363d'; var r=(c.load||0)/_ref;
-    return r>=0.66?'#26a641':r>=0.33?'#eab308':'#ef4444'; }
-  var cellSquares='';
-  for(var _p=0;_p<_lead;_p++){ cellSquares+='<div style="width:13px;height:13px"></div>'; }
-  _cells.forEach(function(c){ cellSquares+='<div title="'+c.date+(c.n?(' · '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' · '+c.tss+' TSS'):'')):' · rest')+'" style="width:13px;height:13px;border-radius:3px;background:'+_cellColor(c)+'"></div>'; });
-  function _lg(col,lab){ return '<span style="display:flex;align-items:center;gap:4px"><span style="width:11px;height:11px;border-radius:3px;background:'+col+'"></span>'+lab+'</span>'; }
-  var hmCard=document.createElement('div');
-  hmCard.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0';
-  hmCard.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Ride Consistency — Last 26 Weeks</div>'
-    +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,13px);gap:4px;overflow-x:auto">'+cellSquares+'</div>'
-    +'<div style="display:flex;align-items:center;gap:12px;margin-top:12px;font-size:9px;color:var(--d-t3)">'+_lg('#26a641','High')+_lg('#eab308','Moderate')+_lg('#ef4444','Low')+_lg('#30363d','None')+'</div>';
-  rowBcards.push(hmCard);
-  var rowB=document.createElement('div');
-  rowB.style.cssText='display:grid;grid-template-columns:repeat('+rowBcards.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
-  rowBcards.forEach(function(c){ rowB.appendChild(c); });
-  wrap.appendChild(rowB);
-
-  // ROW C: Goals as a horizontal row of cards — real live value vs stored target.
-  var _yr0=new Date(now.getFullYear(),0,1), _ytd=0, _last7=0;
-  rides.forEach(function(r){ if(!r.date) return; var d=new Date(normDate(r.date)); if(d>=_yr0) _ytd+=parseFloat(r.distance)||0;
-    var ago=(now-d)/86400000; if(ago>=0&&ago<7) _last7+=parseFloat(r.distance)||0; });
-  _ytd=Math.round(_ytd); _last7=Math.round(_last7);
-  var _G=_goalTargets_();
-  // Goal cards: label + info glyph, live value + unit, then the metric's TRAJECTORY with the goal
-  // as a dashed rule where it falls in range, and the goal restated as text underneath so it is
-  // readable whether or not the rule draws. These were five pill bars ("92% of goal") - the exact
-  // pattern the standing rule exists to remove, and the last of the untraced sites from the sweep.
-  // A percentage of a goal cannot say whether the athlete is climbing toward it or drifting away,
-  // which is the only question the card is read for.
-  //
-  // Each series is one the app ALREADY computes. Nothing new is derived, and a metric whose log
-  // cannot support a line says so rather than inventing one.
-  var _mon=function(d){ return (typeof _gcMonLab_==='function')?_gcMonLab_(String(d).slice(0,10)):String(d).slice(5,10); };
-  var _ftpPts=((typeof _ftpHistLive_==='function')?_ftpHistLive_():[]).slice()
-    .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; })
-    .map(function(h){ return { v:+h.ftp, lab:_mon(h.date) }; });
-  var _wtPts=((typeof settingsArrLive_==='function')?settingsArrLive_('weightLog'):[])
-    .filter(function(w){ return w && w.date && isFinite(parseFloat(w.weight)); })
-    .sort(function(a,b){ return String(a.date)<String(b.date)?-1:1; })
-    .map(function(w){ return { v:parseFloat(w.weight), lab:_mon(w.date) }; });
-  // Same two-series preference as the Power-to-Weight card: weigh-in-derived first (the precise
-  // one), else the rolling best-20-min series this page already ranks.
-  var _wkgPts=(typeof _gcWkgPts_==='function')?_gcWkgPts_(365):[];
-  if(!_wkgPts.filter(function(p){ return p && p.v!=null; }).length && _wt && _wt.pts && _wt.pts.length>1){
-    _wkgPts=_wt.pts.map(function(p){ return { v:p.wkg, lab:_mon(p.date) }; });
-  }
-  // Weekly distance: Mon-Sun buckets off the same deduped rides the cards above count, last 12.
-  var _wkMiPts=(function(){
-    var by={};
-    (rides||[]).forEach(function(r){
-      if(!r || r.deleted || !r.date) return;
-      var d=new Date(normDate(r.date)); if(isNaN(d.getTime())) return;
-      var dw=d.getDay(), mon=new Date(d); mon.setDate(mon.getDate()-(dw===0?6:dw-1));
-      var k=mon.getFullYear()+'-'+('0'+(mon.getMonth()+1)).slice(-2)+'-'+('0'+mon.getDate()).slice(-2);
-      by[k]=(by[k]||0)+(parseFloat(r.distance)||0);
-    });
-    return Object.keys(by).sort().slice(-12).map(function(k){ return { v:Math.round(by[k]), lab:_mon(k) }; });
-  })();
-  var _ctlPts=(typeof _gcFitPts_==='function')?_gcFitPts_('ctl',90):[];
-  var goals=[
-    {label:'FTP', value:''+FTP, unit:'W', goal:'Goal '+_G.ftpW+'W', color:'#a855f7',
-     pts:_ftpPts, target:_G.ftpW, empty:'Log an FTP change and this becomes a trend.'},
-    {label:'Weight', value:(BWT==null?String.fromCharCode(0x2014):BWT.toFixed(1)), unit:'lbs', goal:'Goal '+_G.weightLb+' lbs', color:'#22c55e',
-     pts:_wtPts, target:_G.weightLb, empty:'Log a few weigh-ins and this becomes a trend.'},
-    {label:'W/kg', value:wkgStr_(wkgNow), unit:'W/kg', goal:'Goal '+_G.wkg.toFixed(2)+' W/kg', color:'#a855f7',
-     pts:_wkgPts, target:_G.wkg, empty:'Needs weigh-ins or 20-min power history.'},
-    {label:'Weekly Distance', value:''+_last7, unit:'mi', goal:'Goal '+_G.weeklyMi+' mi', color:'#3b82f6',
-     pts:_wkMiPts, target:_G.weeklyMi, empty:'Needs a couple of weeks of rides.'},
-    {label:'CTL', value:''+Math.round(lastCTL), unit:'', goal:'Goal '+_G.ctl, color:'#f97316',
-     pts:_ctlPts, target:_G.ctl, empty:'Needs more fitness history.'}
-  ];
-  var rowC=document.createElement('div');
-  rowC.style.cssText='display:grid;grid-template-columns:repeat('+goals.length+',minmax(0,1fr));gap:10px;flex-shrink:0';
-  goals.forEach(function(g){
-    var chart=(typeof _goalSpark_==='function')
-      ? _goalSpark_(g.pts, g.color, g.target, { H:30, aria:g.label+' over time', empty:g.empty })
-      : '';
-    // The goal is stated as text whether or not the dashed rule drew, so a target that sits off
-    // the plotted range is still readable rather than silently absent.
-    var reach=(function(){
-      var real=(g.pts||[]).filter(function(p){ return p && p.v!=null && isFinite(p.v); });
-      if(real.length<2) return '';
-      var vv=real.map(function(p){ return p.v; });
-      var lo=Math.min.apply(null,vv), hi=Math.max.apply(null,vv);
-      return (g.target>=lo && g.target<=hi) ? '' : ' &middot; off chart';
-    })();
-    var gc=document.createElement('div');
-    gc.style.cssText='background:var(--d-panel);border:1px solid rgba(255,255,255,.05);border-radius:16px;padding:13px;min-width:0;display:flex;flex-direction:column;gap:7px';
-    gc.innerHTML='<div style="display:flex;align-items:center;gap:4px"><span style="font-size:10px;font-weight:700;color:var(--d-t4);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+g.label+'</span>'+_infoGlyph+'</div>'
-      +'<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-size:20px;font-weight:800;color:var(--d-head);line-height:1">'+g.value+'</span>'+(g.unit?'<span style="font-size:11px;font-weight:600;color:var(--d-t3);margin-left:3px">'+g.unit+'</span>':'')+'</div>'
-      +chart
-      +'<div style="font-size:10px;color:var(--d-t4)">'+g.goal+reach+'</div>';
-    rowC.appendChild(gc);
-  });
-  wrap.appendChild(rowC);
-
-  mc.appendChild(wrap);
-
-  // Draw charts - wait for Chart.js to load
-  function drawCharts(){
-    if(typeof Chart==='undefined'){ setTimeout(drawCharts,200); return; }
-    var gc=document.getElementById('ds-fitness-chart');
-    if(gc&&typeof Chart!=='undefined'){
-      // Full continuous 90-day lines, gradient area fills, saturated colors,
-      // TSB solid green on its own right axis, a "today" dot on the last point,
-      // and a subtle per-line glow. Presentation only — values unchanged.
-      var _area=function(rgb){ return function(c){ var ch=c.chart, a=ch.chartArea; if(!a) return 'rgba('+rgb+',0.12)'; var g=ch.ctx.createLinearGradient(0,a.top,0,a.bottom); g.addColorStop(0,'rgba('+rgb+',0.42)'); g.addColorStop(1,'rgba('+rgb+',0)'); return g; }; };
-      // PRESENTATION-ONLY line smoothing. At ~90 daily points, Chart.js tension
-      // is visually negligible and the raw 7-day ATL / TSB series genuinely
-      // sawtooth day-to-day — so tension alone (tried 0.3/0.35/0.4) can't make
-      // flowing curves. A centered ~5-day moving average of the PLOTTED line
-      // flattens the daily noise into mockup-style curves. The computed
-      // CTL/ATL/TSB scalars shown in the gauges/cards are NOT touched — this
-      // only reshapes the chart line.
-      var _smooth=function(a,w){ w=w||5; var h=(w-1)/2, out=[]; for(var i=0;i<a.length;i++){ var s=0,n=0; for(var j=Math.max(0,i-h);j<=Math.min(a.length-1,i+h);j++){ s+=a[j]; n++; } out.push(Math.round(s/n*10)/10); } return out; };
-      var _sw=(RDAYS<=14?1:RDAYS<=42?3:7);   // adapt smoothing to the window
-      var ctlS=_smooth(ctlArr,_sw), atlS=_smooth(atlArr,_sw), tsbS=_smooth(tsbArr,_sw);
-      // Destroy any prior chart bound to this canvas id — otherwise Chart.js
-      // throws "Canvas is already in use" on every re-render (nav away + back),
-      // which aborted drawCharts before the smoothed config ever applied.
-      try{ var _exF=Chart.getChart&&Chart.getChart(gc); if(_exF) _exF.destroy(); }catch(e){}
-      try{
-      new Chart(gc,{type:'line',data:{labels:labels,datasets:[
-        {label:'CTL',data:ctlS,borderColor:'#3b82f6',backgroundColor:_area('59,130,246'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#3b82f6',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'ATL',data:atlS,borderColor:'#f97316',backgroundColor:_area('249,115,22'),borderWidth:1.75,fill:true,tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#f97316',pointBorderColor:'#0d1017',yAxisID:'y'},
-        {label:'TSB',data:tsbS,borderColor:'#22c55e',backgroundColor:_area('34,197,94'),borderWidth:1.75,fill:'origin',tension:0.4,pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#22c55e',pointBorderColor:'#0d1017',yAxisID:'y1'}
-      ]},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,labels:{color:'#94a3b8',usePointStyle:true,pointStyle:'circle',boxWidth:8,padding:14,font:{size:10}}}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9},maxTicksLimit:8}},y:{position:'left',grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9}},min:0,title:{display:true,text:'Load',color:'#4b5568',font:{size:9}}},y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#64748b',font:{size:9}},title:{display:true,text:'TSB',color:'#4b5568',font:{size:9}}}}},plugins:[{id:'ldGlow',beforeDatasetDraw:function(ch,args){ var ds=ch.data.datasets[args.index]; if(ds&&typeof ds.borderColor==='string'){ ch.ctx.shadowColor=ds.borderColor; ch.ctx.shadowBlur=4; } },afterDatasetDraw:function(ch){ ch.ctx.shadowBlur=0; ch.ctx.shadowColor='rgba(0,0,0,0)'; }},{id:'todayLine',afterDraw:function(ch){
-        var meta=ch.getDatasetMeta(0); if(!meta||!meta.data||!meta.data.length) return;
-        var pt=meta.data[meta.data.length-1]; if(!pt) return;
-        var x=pt.x, a=ch.chartArea, cx=ch.ctx;
-        cx.save();
-        cx.strokeStyle='rgba(203,213,225,.85)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);
-        cx.beginPath(); cx.moveTo(x, a.top+2); cx.lineTo(x, a.bottom); cx.stroke();
-        cx.setLineDash([]);
-        cx.fillStyle='#e2e8f0';
-        cx.beginPath(); cx.moveTo(x, a.bottom-5); cx.lineTo(x+5, a.bottom); cx.lineTo(x, a.bottom+5); cx.lineTo(x-5, a.bottom); cx.closePath(); cx.fill();
-        cx.fillStyle='#e2e8f0'; cx.font='700 9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-24?'right':'center');
-        cx.fillText('Today', Math.min(x, a.right-1), a.top+8);
-        cx.restore();
-      }}]});
-      }catch(e){ try{ console.error('fitness chart draw failed', e); }catch(_){} }
-    }
-    var dc=document.getElementById('ds-dist-chart');
-    if(dc&&typeof Chart!=='undefined'){
-      try{ var _exD=Chart.getChart&&Chart.getChart(dc); if(_exD) _exD.destroy(); }catch(e){}
-      try{
-      new Chart(dc,{type:'bar',data:{labels:weekLabels,datasets:[{data:weekDist,backgroundColor:weekDist.map(function(_,i){return i===weekDist.length-1?'#f97316':'rgba(59,130,246,.5)';}),borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return v+' mi';}},min:0}}}});
-      }catch(e){ try{ console.error('dist chart draw failed', e); }catch(_){} }
-    }
-    var wc=document.getElementById('ds-wkg-chart');
-    if(wc&&typeof Chart!=='undefined'){
-      try{ var _exW=Chart.getChart&&Chart.getChart(wc); if(_exW) _exW.destroy(); }catch(e){}
-      try{
-      var _wkgBest=Math.max.apply(null, wkgHistory), _wkgGoalV=parseFloat(_goalTargets_().wkg)||0, _wkgCurV=wkgHistory[wkgHistory.length-1];
-      var _wkgChart=new Chart(wc,{type:'line',data:{labels:wkgLabels,datasets:[{data:wkgHistory,borderColor:'#c084fc',backgroundColor:'rgba(168,85,247,.22)',borderWidth:1.75,fill:true,tension:0.4,pointRadius:2,pointHoverRadius:4,pointBackgroundColor:'#c084fc'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,layout:{padding:{right:34}},plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#64748b',font:{size:9}}},y:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#64748b',font:{size:9},callback:function(v){return axisNum(v)+' W/kg';}}}}},plugins:[{id:'wkgRefs',afterDraw:function(ch){ var a=ch.chartArea, cx=ch.ctx, ys=ch.scales.y;
-        function refln(val,col,lab){ if(val==null||isNaN(val)) return; var y=ys.getPixelForValue(val); if(y<a.top-1||y>a.bottom+1) return;
-          cx.save(); cx.strokeStyle=col; cx.setLineDash([4,3]); cx.lineWidth=1; cx.globalAlpha=.85; cx.beginPath(); cx.moveTo(a.left,y); cx.lineTo(a.right,y); cx.stroke();
-          cx.setLineDash([]); cx.globalAlpha=1; cx.fillStyle=col; cx.font='8px -apple-system,sans-serif'; cx.textAlign='right'; cx.fillText(lab, a.right+32, y+3); cx.restore(); }
-        refln(_wkgBest,'#22c55e','Best '+_wkgBest.toFixed(2));
-        refln(_wkgGoalV,'#3b82f6','Goal '+_wkgGoalV.toFixed(2));
-        refln(_wkgCurV,'#c084fc','Current '+_wkgCurV.toFixed(2));
-      }},{id:'wkgMark',afterDraw:function(ch){
-        var dd=ch.data.datasets[0].data, n=dd.length; if(!n) return;
-        var idx=(window._wkgMarkIdx!=null && window._wkgMarkIdx<n && window._wkgMarkIdx>=0)?window._wkgMarkIdx:(n-1);
-        var meta=ch.getDatasetMeta(0), pt=meta&&meta.data&&meta.data[idx]; if(!pt) return;
-        var x=pt.x, a=ch.chartArea, cx=ch.ctx;
-        cx.save();
-        cx.strokeStyle='rgba(203,213,225,.9)'; cx.lineWidth=1.5; cx.setLineDash([5,4]);
-        cx.beginPath(); cx.moveTo(x,a.top+2); cx.lineTo(x,a.bottom); cx.stroke(); cx.setLineDash([]);
-        cx.fillStyle='#e2e8f0';
-        cx.beginPath(); cx.moveTo(x,a.bottom-5); cx.lineTo(x+5,a.bottom); cx.lineTo(x,a.bottom+5); cx.lineTo(x-5,a.bottom); cx.closePath(); cx.fill();
-        cx.beginPath(); cx.arc(x, pt.y, 3.5, 0, 6.2832); cx.fill();
-        var lab=(ch.data.labels[idx]||'')+' \\u00b7 '+(dd[idx]!=null?(+dd[idx]).toFixed(2):'')+' W/kg';
-        cx.font='700 9px -apple-system,sans-serif'; cx.textAlign=(x>a.right-70?'right':'left');
-        cx.fillText(lab, x>a.right-70?x-6:x+6, a.top+8);
-        cx.restore();
-      }}]});
-      // Movable demarcation — drag or click anywhere on the chart to snap the
-      // dashed line to any date; it shows that point's date + W/kg.
-      wc.style.cursor='ew-resize';
-      var _wkgDrag=false;
-      function _wkgSet(ev){ try{ var rc=wc.getBoundingClientRect(), px=((ev.touches&&ev.touches[0])?ev.touches[0].clientX:ev.clientX)-rc.left;
-        var md=_wkgChart.getDatasetMeta(0).data; if(!md||!md.length) return;
-        var best=0,bd=Infinity; for(var k=0;k<md.length;k++){ var dx=Math.abs(md[k].x-px); if(dx<bd){ bd=dx; best=k; } }
-        window._wkgMarkIdx=best; _wkgChart.update('none'); }catch(e){} }
-      wc.addEventListener('pointerdown',function(ev){ _wkgDrag=true; _wkgSet(ev); });
-      wc.addEventListener('pointermove',function(ev){ if(_wkgDrag) _wkgSet(ev); });
-      window.addEventListener('pointerup',function(){ _wkgDrag=false; });
-      }catch(e){ try{ console.error('wkg chart draw failed', e); }catch(_){} }
-    }
-  }
-  setTimeout(drawCharts,100);
 }
 
 // Which sport a PLANNED session actually is. The migrated plan typed every run as a ride -- 11
@@ -37956,7 +36690,6 @@ function dsShowDashboard(){
   // ---------- REAL DATA ----------
   var rides=(st.rides||[]).slice().sort(function(a,b){return normDate(b.date)>normDate(a.date)?1:-1;});
   var recent=recentRides_(3);
-  var iq=(typeof athleteIQ_==='function')?athleteIQ_():{score:null};
   var fit=(typeof getFitness_==='function')?getFitness_():{ctl:0,atl:0,tsb:0,d7:null};
   var rdy=readinessFromTSB_(fit.tsb);
   var wkg=(typeof currentWkg_==='function')?currentWkg_():null;
@@ -38054,7 +36787,7 @@ function dsShowDashboard(){
 
   // ===== ROW 1 =====
   H+='<div style="display:grid;grid-template-columns:1.3fr 0.92fr 1.55fr;gap:10px;min-width:0;align-items:stretch;flex:0.82 0 auto">';
-  // -- Athlete IQ --
+  // -- Readiness --
   // ONE shared taper-aware verdict feeds the IQ trend, the Training-Load pill,
   // and (below) the Recovery card — so they can never read the same TSB three
   // different ways. dlt.ctl is the 7-day CTL delta (the ramp): a falling CTL
@@ -38068,15 +36801,18 @@ function dsShowDashboard(){
   // already falls back to d7.ctl when Intervals sends none — so there is one answer here.
   var _rampCanon=(fit&&fit.ramp!=null)?fit.ramp:dlt.ctl;
   var verdict=taperVerdict_(fit, iq, _rampCanon);
-  var trend=(iq.score==null)?'Building':verdict.trend;
-  var trendNote=(iq.score==null)?'Keep logging — 28 days unlocks your score.':verdict.trendNote;
+  var trend=verdict.trend;
+  var trendNote=verdict.trendNote;
   var loadState=verdict.load;
-  var ringPct=iq.score==null?0:iq.score;
+  // The ring was the Athlete IQ score, cut for being a weighted blend of hand-picked constants
+  // with two of its four parts pinned at their ceiling. Readiness is a real reading off TSB
+  // through getFitness_, the same source every other surface uses.
+  var ringPct=(rdy && rdy.score!=null)?rdy.score:0;
   var ringC=2*Math.PI*32, ringOff=ringC*(1-ringPct/100);
-  var iqInner=lbl('ATHLETE IQ SCORE','<span data-teach="iq" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
+  var iqInner=lbl('READINESS','<span data-teach="tsb" style="cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5b6678" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>');
   iqInner+='<div style="display:flex;gap:22px;align-items:center;flex:1">';
   iqInner+='<div style="position:relative;width:120px;height:120px;flex-shrink:0"><svg width="120" height="120" viewBox="0 0 80 80"><circle cx="40" cy="40" r="32" fill="none" stroke="#1c2130" stroke-width="6"/><circle cx="40" cy="40" r="32" fill="none" stroke="'+ACC.green+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="'+ringC.toFixed(1)+'" stroke-dashoffset="'+ringOff.toFixed(1)+'" transform="rotate(-90 40 40)"/></svg><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:40px;font-weight:800;color:var(--d-t1);line-height:1;letter-spacing:-.02em">'+(iq.score==null?'—':iq.score)+'</div><div style="font-size:12px;color:var(--d-dim);margin-top:2px">/100</div></div></div>';
-  var trendC=(iq.score==null)?ACC.green:verdict.color;
+  var trendC=verdict.color;
   // Arrow points up for building/peaking/fresh, flat-ish (right) for easing/detraining.
   var trendArrow=(verdict.phase==='detraining'||verdict.phase==='overreaching')
     ? '<path d="M3 12h18M21 12l-6-6M21 12l-6 6"/>'
@@ -46646,9 +45382,11 @@ function bnavGo(tab){
     var pm=document.getElementById('perf-modal');
     var am=document.getElementById('activities-modal');
     var rdm=document.getElementById('ride-detail-modal');if(rdm)rdm.remove();
+    // The Intelligence page is an overlay, so leaving its tab has to close it explicitly.
+    if(tab!=='ai'){ var aiq=document.getElementById('AIQ_PAGE'); if(aiq) aiq.remove(); }
     if(tab==='home'){if(pm)pm.remove();if(am)am.remove();showHomeDash();}
     else if(tab==='calendar'){if(pm)pm.remove();if(am)am.remove();showCalendarTab();}
-    else if(tab==='analytics'||tab==='activities'){if(am)am.remove();showAnalytics();}
+    else if(tab==='ai'){if(pm)pm.remove();if(am)am.remove();showAthleteIntel();}
     else if(tab==='nutrition'){if(pm)pm.remove();if(am)am.remove();showNutr();}
     else if(tab==='run'){if(pm)pm.remove();if(am)am.remove();showRun();}
     else if(tab==='more'){if(pm)pm.remove();if(am)am.remove();showMoreSheet();}
@@ -46659,7 +45397,7 @@ function bnavGo(tab){
       document.querySelectorAll('#perf-modal,#activities-modal,#more-sheet,#food-modal,#ride-modal,#ride-detail-modal').forEach(function(el){el.remove();});
       if(tab==='home'){showHomeDash();}
       else if(tab==='calendar'){showCalendarTab();}
-      else if(tab==='analytics'||tab==='activities'){showAnalytics();}
+      else if(tab==='ai'){showAthleteIntel();}
       else if(tab==='nutrition'){showNutr();}
       else if(tab==='run'){showRun();}
       else if(tab==='more'){showMoreSheet();}
@@ -52341,9 +51079,9 @@ window.onload = function(){
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
     Calendar
   </button>
-  <button class="bnav-btn" id="bnav-analytics" onclick="bnavGo('analytics')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-    Analytics
+  <button class="bnav-btn" id="bnav-ai" onclick="bnavGo('ai')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 0V4a3 3 0 0 0-3-1z"/><path d="M15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 0"/></svg>
+    Intelligence
   </button>
   <button class="bnav-btn" id="bnav-nutrition" onclick="bnavGo('nutrition')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>

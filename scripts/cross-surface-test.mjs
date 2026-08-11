@@ -61,13 +61,19 @@ check('dayKey_ handles a year boundary', D1(new Date(2025,11,31,23,59)), '2025-1
 // else — the same fact, a day apart, because getFitness_ prefers today's live poll and the cached
 // daily series does not. This is the Jul-18 single-source rule; it has now regressed once.
 const headlineFit = codeLines.filter(L => /\b(lastCTL|lastATL|lastTSB)\s*=/.test(L));
-check('headline CTL/ATL/TSB are assigned somewhere', headlineFit.length>0, true);
+// No longer required to be non-empty: the page that carried these assignments is retired. The
+// rule is enforced below instead - IF any exist, every one of them consults getFitness_.
+check('no headline CTL/ATL/TSB is assigned from anywhere but getFitness_',
+      headlineFit.filter(L => !/getFitness_|_fitAn/.test(L)).length, 0);
 // INVARIANT: a displayed "Current CTL" is the canonical one too. The projection seeded itself off
 // the tail of the cached series while the headline above it came from getFitness_ (which prefers
 // today's live poll) — the same one-day gap that had Analytics and Athlete Intelligence printing
 // different TSB from the same data on the same screen-refresh.
-check('the CTL projection seeds off getFitness_, not the series tail',
-  /var curCTL=\(_fitProj&&_fitProj\.loaded\)\?_fitProj\.ctl/.test(src), true);
+// The projection this named was on the retired page. What must stay true is that NOTHING
+// re-derives current fitness from a cached series tail - asserted directly on the next line,
+// which is where the actual bug would reappear.
+check('no surface seeds current CTL off a raw series tail',
+  countCode(/var curCTL=\w+\[\w+\.length-1\]/g), 0);
 check('no projection reads the pmcData tail as current fitness',
   countCode(/var last=pmcData\.length\?pmcData\[pmcData\.length-1\]/g), 0);
 check('every headline CTL/ATL/TSB assignment consults getFitness_',

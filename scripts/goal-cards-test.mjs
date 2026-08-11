@@ -34,23 +34,19 @@ const pts = (...v) => v.map((x, i) => ({ v:x, lab:'m'+i }));
 // The card block, isolated so assertions are about THIS surface and not the whole file.
 // Starts at the series builders, not at `var goals=[` — the builders are the half of this change
 // that proves nothing new is being derived, and slicing below them tested the wrong thing.
-const blk = src.slice(src.indexOf('  var _mon=function(d){'), src.indexOf('  wrap.appendChild(rowC);'));
+// The five ANALYTICS goal cards this section read were retired with the Analytics page
+// (Aug 11 2026) - they were the duplicates of Overview's Goals card that motivated the
+// retirement in the first place. Their assertions sliced dsShowAnalytics between two markers and
+// that function is gone, so they had no subject left.
+//
+// The behaviour they guarded did NOT disappear with them: Overview's Goals card draws the same
+// five series through the same _goalSpark_ helper, and scripts/overview-layout-test.mjs asserts
+// that (sparklines not bars, target rule, honest empty states). The _goalSpark_ unit checks below
+// are kept as they were - they read the live function directly rather than any page.
 
 console.log('\n=== the five pill bars are gone ===');
-check('no value-driven width fill left in the block', /width:'\+_pc\+'%/.test(blk), false);
-check('no percent-of-goal badge either', /'%<\/span>'/.test(blk) && /_pc/.test(blk), false);
-check('the frac field that fed them is gone', /frac:Math\.min\(1,/.test(blk), false);
-check('all five now carry a series', (blk.match(/pts:_/g) || []).length, 5);
-check('all five carry a numeric target', (blk.match(/target:_G\./g) || []).length, 5);
-check('and route through the shared helper', /_goalSpark_\(g\.pts, g\.color, g\.target/.test(blk), true);
 
 console.log('\n=== each series is one the app ALREADY computes ===');
-check('FTP  <- the live FTP log', /_ftpHistLive_\(\)/.test(blk), true);
-check('Weight <- the live weigh-in log', /settingsArrLive_\('weightLog'\)/.test(blk), true);
-check('W/kg <- weigh-in series, falling back to the page series', /_gcWkgPts_\(365\)/.test(blk) && /_wt\.pts\.map/.test(blk), true);
-check('Weekly distance <- Mon-Sun buckets off the same rides', /mon\.setDate\(mon\.getDate\(\)-\(dw===0\?6:dw-1\)\)/.test(blk), true);
-check('CTL  <- the fitness series', /_gcFitPts_\('ctl',90\)/.test(blk), true);
-check('nothing new is derived — no fresh maths in the block', /Math\.pow|Math\.sqrt|\/ *0\.\d/.test(blk), false);
 
 console.log('\n=== the dashed goal rule draws ONLY when the goal is in range ===');
 const inRange = M._goalSpark_(pts(170,178,186,195), '#a855f7', 190, {});
@@ -65,16 +61,11 @@ check('a lower goal in range sits further down',
   /top:60\.0%/.test(M._goalSpark_(pts(170,178,186,195), '#a855f7', 180, {})), true);
 
 console.log('\n=== the goal is readable even when the rule is not drawn ===');
-check('goal printed as text on every card', (blk.match(/goal:'Goal /g) || []).length, 5);
-check('and flagged when it sits off the plotted range', /off chart/.test(blk), true);
-check('the off-chart test uses the SAME range check as the rule',
-  /\(g\.target>=lo && g\.target<=hi\) \? '' : ' &middot; off chart'/.test(blk), true);
 
 console.log('\n=== honest degrade ===');
 check('one point is not a trend', /Not enough history yet|Log an FTP change/.test(M._goalSpark_(pts(183), '#fff', 200, {})), true);
 check('no points at all -> a sentence, not an empty box',
   /Log a few weigh-ins/.test(M._goalSpark_([], '#fff', 150, { empty:'Log a few weigh-ins and this becomes a trend.' })), true);
-check('each card supplies its own empty message', (blk.match(/empty:'/g) || []).length, 5);
 check('a flat series still renders rather than dividing by zero', M._goalSpark_(pts(183,183,183), '#fff', 200, {}).indexOf('<svg') >= 0, true);
 check('and draws no rule when there is no range to place it in',
   /border-top:1\.5px dashed/.test(M._goalSpark_(pts(183,183,183), '#fff', 183, {})), false);
@@ -86,11 +77,13 @@ const wt = M._goalSpark_(pts(175,168,162,159), '#22c55e', 150, {});
 check('a falling series renders', wt.indexOf('<svg') >= 0, true);
 check('a goal under the whole series draws no rule', /border-top:1\.5px dashed/.test(wt), false);
 check('a goal inside it does', /border-top:1\.5px dashed/.test(M._goalSpark_(pts(175,168,162,159), '#22c55e', 165, {})), true);
-check('no inverted-fraction special case survives', /_G\.weightLb\/Math\.max/.test(blk), false);
 
 console.log('\n=== the dead bar fallback on the Performance cards is gone ===');
 check('barW branch removed', /card\.barW!==null\?/.test(src), false);
-check('...and it really was dead: every card sets barW:null', (src.match(/barW:null/g) || []).length, 9);
+// The nine barW:null cards lived on the mobile Analytics screen, retired Aug 11 2026. Counting
+// them is meaningless now; what the check was really protecting is that no bar-width machinery
+// survives anywhere, which is a stronger assertion than the count ever was.
+check('...and no barW machinery survives anywhere', /barW:|\.barW/.test(src), false);
 check('no card sets a non-null barW', /barW:[^n]/.test(src), false);
 
 console.log('\n=== the shared helper, not a sixth copy of the pattern ===');
