@@ -112,7 +112,11 @@ check('stepping up from 1 goes to 2, not 1.5', runStep(1, M, [1])._qty, 2);
 
 console.log('\n'+C+'=== wired in, both renderers ==='+X);
 const codeLines = src.split(/\r?\n/).filter(L => !/^\s*\/\//.test(L));
-ok('the search results are ranked before rendering', /results = _nlRankFoods_\(results, q\)/.test(src));
+// Ranking moved from _nlRankFoods_(results) to _nlRankPool_(local, results) when the local-first
+// short circuit was removed: local and USDA are now scored together in ONE pool, so a loose
+// local hit can no longer outrank - or suppress - a better USDA one. See food-search-test.mjs.
+ok('the search results are ranked before rendering', /results = _nlRankPool_\(local, results, q\)/.test(src));
+ok('...and local is ranked too, not just concatenated', /_nlRankPool_\(local, \[\], q\)/.test(src));
 ok('the tier fields are carried through, not dropped',
    /dataType: f\.dataType\|\|null/.test(src) && /generic: \(f\.generic===true\)/.test(src));
 ok('no renderer still hides a fraction behind _qty>1',

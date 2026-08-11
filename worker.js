@@ -11524,6 +11524,35 @@ function fluidGoalOz_(dateKey, wt, workout){
   }catch(e){}
   return Math.round((baselineOz+ridingOz)*mult);
 }
+// Measured calories burned on a date, from the activities actually logged - or null when there is
+// nothing recorded, which is a different thing from zero and must not be treated as a burn of 0.
+//
+// Source order is deliberate, most direct first:
+//   1. r.calories        what the head unit / Strava recorded. A measurement.
+//   2. kJ of work        cycling: 1 kJ of mechanical work is about 1 kcal burned at ~24% gross
+//                        efficiency, the standard field approximation, so kJ passes through 1:1.
+//   3. TSS               last resort. Roughly 10 kcal per TSS point at this athlete's FTP.
+// Anything else is left alone rather than invented - a ride with none of the three contributes
+// nothing and is reported as n so the caller can say how much of the day is actually measured.
+function nutrActualBurn_(dateKey){
+  if(!dateKey) return null;
+  var acts=[];
+  try{ acts=(st.rides||[]).filter(function(r){
+    return r && !r.deleted && String(r.date||'').slice(0,10)===String(dateKey).slice(0,10); }); }catch(e){ return null; }
+  if(!acts.length) return null;
+  var cal=0, n=0, unmeasured=0, src={};
+  acts.forEach(function(r){
+    var c=parseFloat(r.calories)||0;
+    if(c>0){ cal+=c; n++; src.calories=(src.calories||0)+1; return; }
+    var kj=parseFloat(r.kj)||parseFloat(r.work)||0;
+    if(kj>0){ cal+=kj; n++; src.kj=(src.kj||0)+1; return; }
+    var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
+    if(t>0){ cal+=t*10; n++; src.tss=(src.tss||0)+1; return; }
+    unmeasured++;
+  });
+  if(!n) return null;
+  return { cal:Math.round(cal), n:n, unmeasured:unmeasured, src:src, acts:acts.length };
+}
 function calcTrainingAwareTargets_(dateKey){
   var wt=nutrWeightLb_();
   // READS st.ftp, THE MEASURED CURRENT FTP - deliberately NOT goalTargets.ftpW. The two are not
@@ -11556,13 +11585,21 @@ function calcTrainingAwareTargets_(dateKey){
   if(!workout || workout.isRest){
     var dt=getDType(dateKey);
     var base=MTGT[dt]||MTGT.MOD;
+    // An UNPLANNED ride still burned calories. The old rest-day branch returned a flat baseline
+    // and ignored st.rides entirely, so riding on a rest day left the budget unchanged - the
+    // never-burns-calories gap. There is no estimate to replace here, so this one adds.
+    var _rb=nutrActualBurn_(dateKey);
+    var _rbCal=(_rb && _rb.cal>0)?_rb.cal:0;
     return {
-      cal:base.cal, pro:base.pro, carb:base.carb, fat:base.fat,
+      cal:base.cal+_rbCal, pro:base.pro, carb:base.carb, fat:base.fat,
       sodium:2300, fluidOz:fluidGoalOz_(dateKey, wt, workout),
       mag:parseInt(st.magBase||400),   // light/rest-day magnesium baseline (editable)
       workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
-      exerciseCal:0, baseCal:base.cal,
-      isTrainingAware:false
+      exerciseCal:_rbCal, baseCal:base.cal,
+      burnSource:_rbCal?'measured':'planned',
+      plannedCal:0, measuredCal:(_rb?_rb.cal:null),
+      measuredFrom:(_rb?_rb.src:null), unmeasuredActs:(_rb?_rb.unmeasured:0),
+      isTrainingAware:!!_rbCal
     };
   }
   var hours=workout.minutes/60;
@@ -11584,6 +11621,13 @@ function calcTrainingAwareTargets_(dateKey){
   // moment a real activity is logged this estimate must come OUT of the budget — otherwise the
   // day is fuelled for the session twice, once predicted and once measured.
   var exerciseCal=Math.round(workout.minutes*8*(ftp/200));
+  // MEASURED BURN WINS. Once the session has actually been ridden the estimate is superseded,
+  // not supplemented: adding them fuels the day twice, once predicted and once measured, which
+  // is exactly what the note above warns about. The estimate stays the forecast for a day that
+  // has not happened yet.
+  var _burn=nutrActualBurn_(dateKey);
+  var _estCal=exerciseCal;
+  if(_burn && _burn.cal>0){ exerciseCal=_burn.cal; }
   var restingCal=Math.round(wt*12); // baseline non-training-day calories
   var cal=restingCal+exerciseCal;
   var proCal=pro*4, carbCal=carb*4;
@@ -11601,7 +11645,12 @@ function calcTrainingAwareTargets_(dateKey){
   return {
     cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz, mag:mag,
     workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true,
-    exerciseCal:exerciseCal, baseCal:Math.max(0, cal-exerciseCal)
+    exerciseCal:exerciseCal, baseCal:Math.max(0, cal-exerciseCal),
+    // Which of the two the number above actually is, so a surface can say so rather than
+    // presenting a forecast and a measurement as the same kind of thing.
+    burnSource:(_burn && _burn.cal>0)?'measured':'planned',
+    plannedCal:_estCal, measuredCal:(_burn?_burn.cal:null),
+    measuredFrom:(_burn?_burn.src:null), unmeasuredActs:(_burn?_burn.unmeasured:0)
   };
 }
 
@@ -11747,6 +11796,49 @@ function _nlIsGenericTier_(f){
   if(!f || f.generic!==true) return false;
   var dt=String(f.dataType||'');
   return dt==='Foundation' || dt==='SR Legacy' || dt==='Survey (FNDDS)';
+}
+// Search score for ONE candidate, local or USDA, on the same scale so they can be pooled.
+//
+// COVERAGE FIRST (0-60): the share of the query's words the name actually contains. A missing word
+// is the strongest signal of a wrong hit - it is what separates Beef from Pork tenderloin - so it
+// dominates rather than being flattened into a band.
+// THEN SHAPE (0-40): exact name, prefix, or contiguous phrase. Keeps an exact product name on top
+// when the athlete typed one.
+// THEN TIER (+_NL_GENERIC_BONUS): a real USDA ingredient outranks a retail or restaurant row of
+// equal relevance. Unchanged in size and still restricted to the ingredient tiers.
+function _nlSearchScore_(f, q){
+  var n=_nlNorm_(f && f.n), qq=_nlNorm_(q);
+  if(!n || !qq) return 0;
+  var qt=qq.split(' ').filter(Boolean), nt=n.split(' ').filter(Boolean);
+  if(!qt.length) return 0;
+  var hit=qt.filter(function(t){
+    return nt.some(function(x){ return x===t || (t.length>=3 && x.indexOf(t)===0); });
+  }).length;
+  var score=Math.round(60*hit/qt.length);
+  if(n===qq) score+=40;
+  else if(n.indexOf(qq)===0) score+=30;
+  else if(n.indexOf(qq)!==-1) score+=20;
+  else if(hit===qt.length) score+=10;
+  if(_nlIsGenericTier_(f)) score+=_NL_GENERIC_BONUS;
+  return score;
+}
+// Pools local and USDA candidates and ranks them together. Stable within equal scores, and
+// de-duplicated by normalised name so the same food from both sources appears once - preferring
+// the LOCAL copy, which carries the athlete's own serving size.
+function _nlRankPool_(localList, usdaList, q){
+  var out=[], seen={};
+  (localList||[]).concat(usdaList||[]).forEach(function(f,i){
+    if(!f) return;
+    var k=_nlNorm_(f.n);
+    if(!k || seen[k]!==undefined) return;
+    seen[k]=1;
+    out.push({ f:f, i:i, s:_nlSearchScore_(f,q) });
+  });
+  // A candidate that matches NO query word is noise, not a weak hit - the old anyMatch bucket put
+  // those on screen and, worse, let their mere existence suppress the USDA call entirely.
+  return out.filter(function(x){ return x.s>0; })
+            .sort(function(a,b){ return (b.s-a.s) || (a.i-b.i); })
+            .map(function(x){ return x.f; });
 }
 function _nlRankFoods_(list, q){
   return (list||[]).map(function(f,i){
@@ -13000,10 +13092,19 @@ function openFoodForMeal(meal){
         });
         local = starts.concat(wordMatch).concat(anyMatch);
       } else { local = allLocal; }
-      if(local.length || !q){
-        renderFoodRows(foodList, local.slice(0,40));
-      } else {
-        foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
+      // LOCAL RESULTS NO LONGER SUPPRESS THE USDA CALL. This used to read
+      //     if(local.length || !q) { render(local) } else { fetch(usda) }
+      // so a single loose local hit ended the search. 'beef tenderloin' matched the local
+      // 'Pork Tenderloin (3 oz)' on the word tenderloin and USDA was never asked, even though it
+      // returns 'Beef, tenderloin steak, raw' as its FIRST result. Same shape for a restaurant
+      // chain: typing a chain name matched an unrelated item from that chain and stopped there.
+      //
+      // Local still renders IMMEDIATELY so typing stays responsive; the USDA results are pooled
+      // in and the whole list re-ranked when they arrive.
+      if(!q){ renderFoodRows(foodList, local.slice(0,40)); }
+      else {
+        if(local.length) renderFoodRows(foodList, _nlRankPool_(local, [], q).slice(0,40));
+        else foodList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:13px">Searching foods...</div>';
         fetch('https://mikey-food-api2.mgrobinson07.workers.dev/search?q=' + encodeURIComponent(q))
           .then(function(r){ return r.json(); })
           .then(function(d){
@@ -13029,14 +13130,17 @@ function openFoodForMeal(meal){
                   generic: (f.generic===true)
                 };
               });
-              results = _nlRankFoods_(results, q);
+              results = _nlRankPool_(local, results, q);
             } else if(Array.isArray(d)){
               results = d.map(function(f){
                 return {n:f.n||'Unknown',cal:Math.round(f.cal||0),p:Math.round((f.p||0)*10)/10,c:Math.round((f.c||0)*10)/10,f:Math.round((f.f||0)*10)/10,fiber:Math.round((f.fiber||0)*10)/10,sodium:Math.round(f.sodium||0),sugar:Math.round((f.sugar||0)*10)/10,srv:f.srv||'1 serving'};
               });
             }
             if(results.length){
-              renderFoodRows(foodList, results);
+              renderFoodRows(foodList, results.slice(0,40));
+            } else if(local.length){
+              // USDA had nothing to add - keep what local found rather than blanking the list.
+              renderFoodRows(foodList, _nlRankPool_(local, [], q).slice(0,40));
             } else {
               renderFoodRows(foodList, []);
               var none=document.createElement('div');
@@ -13047,6 +13151,7 @@ function openFoodForMeal(meal){
           })
           .catch(function(err){
             console.log('Food search failed:', err);
+            if(local.length){ renderFoodRows(foodList, _nlRankPool_(local, [], q).slice(0,40)); return; }
             renderFoodRows(foodList, []);
             var none=document.createElement('div');
             none.style.cssText='padding:16px 0;color:var(--t3);font-size:13px;text-align:center';

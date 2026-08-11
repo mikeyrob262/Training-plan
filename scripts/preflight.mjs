@@ -513,6 +513,20 @@ try {
     fail('a sparse chart is implying continuity the data does not have (see above).');
   }
 
+  // STEP 28 — the two searches reported wrong ("Beef Tenderloin" returning only the local Pork
+  //           Tenderloin, a chain name returning an unrelated item from that chain). Neither was a
+  //           retrieval problem: a local-first short circuit meant ANY local hit stopped the USDA
+  //           call, and local rows were never scored at all.
+  console.log(`${D}· checking food search matching…${X}`);
+  try {
+    const so = execSync('node scripts/food-search-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('food search matching regressed (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
