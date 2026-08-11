@@ -33,7 +33,7 @@ function extractVar(name){
 }
 
 const code = extractVar('_GC_YOY') + extractVar('_GC_FACTOR') + extractVar('_YOY_ERA_START')
-  + extractVar('_YOY_CUMD') + extractVar('_AL_FACT_WIN')
+  + extractVar('_YOY_CUMD') + extractVar('_AL_FACT_WIN') + extractVar('_GC_SPARSE_MAX')
   + extract('_gcSpark_') + extract('_gcSparkFoot_') + extract('_gcTrend_') + extract('_gcScale_') + extract('_gcWeekPts_')
   + extract('_yoyLeap_') + extract('_yoyDaysInYear_') + extract('_yoyDayOfYear_')
   + extract('_alIndexOfYM_') + extract('_alFactorWindow_')

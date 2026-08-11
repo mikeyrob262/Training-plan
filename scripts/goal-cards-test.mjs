@@ -18,7 +18,7 @@ function ex(n){ const i=src.indexOf('function '+n+'('); if(i<0) throw new Error(
 function exVar(n){ let j=src.indexOf('var '+n+'='); if(j<0) j=src.indexOf('var '+n+' ='); if(j<0) throw new Error('missing var '+n);
   return src.slice(j, src.indexOf('\n', j))+'\n'; }
 
-let code = exVar('_YVY_MON');
+let code = exVar('_YVY_MON') + exVar('_GC_SPARSE_MAX');
 for (const f of ['_gcYMD_','_gcMonLab_','_gcSpark_','_goalSpark_']) code += ex(f);
 const M = new Function(code + ';return {_goalSpark_,_gcSpark_};')();
 

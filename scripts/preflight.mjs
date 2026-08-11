@@ -494,6 +494,21 @@ try {
     fail('the training block drifted from its own milestones (see above).');
   }
 
+  // STEP 27 — the DNA trait sparklines read as manufactured smoothness, and they were: a year with
+  //           no reading was ABSENT rather than null, and _gcSpark_ spaces by array index, so the
+  //           gap closed up instead of opening; and only the last point and the peak were marked,
+  //           so four annual readings drew as one continuous line. Four readings used to produce
+  //           ONE dot. Nothing here may smooth - the path must stay straight M/L segments.
+  console.log(`${D}· checking DNA sparse-series honesty…${X}`);
+  try {
+    const so = execSync('node scripts/dna-sparse-series-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('a sparse chart is implying continuity the data does not have (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

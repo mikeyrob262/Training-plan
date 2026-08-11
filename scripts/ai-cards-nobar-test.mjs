@@ -21,7 +21,9 @@ const src = fs.readFileSync(path.join(root, 'worker.js'), 'utf8');
 function matchBrace(from){ let i=src.indexOf('{',from), depth=0; for(;i<src.length;i++){const c=src[i]; if(c==='{')depth++; else if(c==='}'){depth--; if(depth===0)return i;}} return -1; }
 function extract(name){ const i=src.indexOf('function '+name+'('); if(i<0) throw new Error('fn not found: '+name); return src.slice(i, matchBrace(i)+1)+'\n'; }
 
-let code='';
+// _gcSpark_ reads _GC_SPARSE_MAX, so the constant has to come along with it. Taken from worker.js
+// rather than copied, so the harness cannot drift from the real threshold.
+let code='var _GC_SPARSE_MAX='+src.split('var _GC_SPARSE_MAX=')[1].split(';')[0]+';';
 for(const f of ['_trConf_','_trConfWord_','_trConfNote_','_trTrendLine_','_trValueLine_',
                 '_gcScale_','_gcSpark_','_gcSparkFoot_','_gcTrend_',
                 '_dnaWeekKey_','_dnaMedian_','_dnaDaysBetween_','_dnaTrait_','_dnaLock_','_dnaTraits_']) code+=extract(f);

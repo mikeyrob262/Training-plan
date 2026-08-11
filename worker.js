@@ -19928,6 +19928,12 @@ var _GC_RECOVERY='#0891b2';   // recovery — cyan
 // pts is oldest-first and MAY CONTAIN NULLS. A null is a period with no qualifying activity, and
 // it breaks the line rather than being drawn as zero — a quarter you did not ride is not a
 // quarter you rode nothing in, and joining across it would draw a decline that never happened.
+// Above this many real readings a series is dense enough that the LINE is the shape and dots
+// would just be noise. At or below it, every reading is individually meaningful and drawing only
+// the line implies a continuity the data does not have - four annual ratios joined corner to corner
+// look like a smooth trend rather than four measurements. So on a sparse series every real point is
+// marked, and what the reader sees is how much data there actually is.
+var _GC_SPARSE_MAX=12;
 function _gcSpark_(pts, col, opts){
   opts=opts||{};
   var W=opts.W||160, H=opts.H||36, P=3, iw=W-P*2, ih=H-P*2;
@@ -19961,6 +19967,10 @@ function _gcSpark_(pts, col, opts){
     wash='<path d="M'+f.join('L')+'L'+f[f.length-1].split(' ')[0]+' '+(H-P)+'L'+f[0].split(' ')[0]+' '+(H-P)+'Z" fill="'+col+'" opacity=".12"/>';
   }
   var dots='';
+  // Sparse series: mark every reading, not just the ends. Opt out with markPoints:false.
+  var markAll=(opts.markPoints!=null)?!!opts.markPoints:(real.length<=_GC_SPARSE_MAX);
+  if(markAll){ vals.forEach(function(v,i){ if(v==null) return;
+    dots+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="1.9" fill="'+col+'" opacity=".85"/>'; }); }
   var lastI=-1; for(var i=n-1;i>=0;i--){ if(vals[i]!=null){ lastI=i; break; } }
   if(lastI>=0) dots+='<circle cx="'+X(lastI).toFixed(1)+'" cy="'+Y(vals[lastI]).toFixed(1)+'" r="2.6" fill="'+col+'"/>';
   // The peak gets a ring, because on these cards the peak IS the record being chased and the
@@ -24211,6 +24221,24 @@ function _dnaEras_(acts){
 // number is a single maximum (longest streak), a categorical share (day of week) or a two-group
 // median comparison (pace after rest) has no trajectory behind it and gets none — the standing
 // rule says draw the line where the history is real, not everywhere.
+// A yearly series with the MISSING YEARS PUT BACK as nulls.
+//
+// Each per-year spark was built by mapping over the years that happened to have a reading, so a
+// year with no power-curve ride, no new segment or too few cadence runs was not in the array at
+// all. _gcSpark_ spaces points by array INDEX, so an absent year did not leave a gap - it closed
+// one up, and four readings spread over six years drew as four evenly spaced points and a straight
+// diagonal. A null is a break in the line, which is what "no reading that year" actually looks like.
+function _dnaYearFill_(pts){
+  var real=(pts||[]).filter(function(p){ return p && /^[0-9]{4}$/.test(String(p.lab)); });
+  if(real.length<2) return pts||[];
+  var lo=+real[0].lab, hi=+real[real.length-1].lab;
+  for(var i=1;i<real.length;i++){ var y=+real[i].lab; if(y<lo) lo=y; if(y>hi) hi=y; }
+  if(!(hi>lo) || hi-lo>60) return pts;
+  var by={}; real.forEach(function(p){ by[String(p.lab)]=p; });
+  var out=[];
+  for(var y2=lo;y2<=hi;y2++){ var k=String(y2); out.push(by[k]||{ v:null, lab:k }); }
+  return out;
+}
 function _dnaTrait_(name, headline, detail, deriv, col, spark, sparkNote){ return {name:name, headline:headline, detail:detail, deriv:deriv, col:col, locked:false, spark:spark||null, sparkNote:sparkNote||''}; }
 function _dnaLock_(name, unlock, col){ return {name:name, locked:true, unlock:unlock, col:col}; }
 // ---- POWER AXES: ONE computation, two consumers (the DNA traits below and the radar on the
@@ -24287,10 +24315,10 @@ function _dnaPowerAxes_(){
     var w=best(rows,p[1]);
     return { key:'d'+p[1], label:p[0], secs:p[1], durLabel:_dnaDurLabel_(p[1]), col:p[2], deriv:p[3], blurb:p[4], lean:p[5], icon:p[6],
       watts:w, ratio:(w>0?Math.round(w/anchor*100)/100:0),
-      series:yKeys.map(function(y){
+      series:_dnaYearFill_(yKeys.map(function(y){
         var g=years[y], a=best(g,300), n=best(g,p[1]);
         return { v:(a>0&&n>0&&g.length>=3)?Math.round(n/a*100)/100:null, lab:y };
-      }) };
+      })) };
   });
   return { ok:true, n:rows.length, anchor:anchor, axes:axes };
 }
@@ -25038,7 +25066,7 @@ function _dnaTraits_(acts){
     var c=_dnaRunCadence_();
     if(!c.ok){ T.push(_dnaLock_('Run cadence', 'needs cadence on at least 30 runs &mdash; '+c.n+' carry it so far', '#2dd4bf')); return; }
     var yrs=c.years.filter(function(y){ return y.n>=5; });          // a year of 2 runs is not a reading
-    var sp=yrs.map(function(y){ return { v:y.med, lab:y.year }; });
+    var sp=_dnaYearFill_(yrs.map(function(y){ return { v:y.med, lab:y.year }; }));
     var lastY=yrs.length?yrs[yrs.length-1]:null;
     T.push(_dnaTrait_('Run cadence', c.median+' spm median',
       'Across '+c.n.toLocaleString()+' runs carrying cadence'+(lastY?(', most recently a '+lastY.med+' spm median in '+lastY.year+' from '+lastY.n+' runs'):'')+'.',
@@ -25086,7 +25114,7 @@ function _dnaTraits_(acts){
     var byY={};
     ids.forEach(function(id){ var y=first[id].slice(0,4); byY[y]=(byY[y]||0)+1; });
     var ys=Object.keys(byY).sort();
-    var sp2=ys.map(function(y){ return { v:byY[y], lab:y }; });
+    var sp2=_dnaYearFill_(ys.map(function(y){ return { v:byY[y], lab:y }; }));
     var thisY=String(new Date().getFullYear());
     T.push(_dnaTrait_('Explorer', ids.length.toLocaleString()+' segments ridden',
       'You have ridden '+ids.length.toLocaleString()+' distinct Strava segments, '+(byY[thisY]||0).toLocaleString()+' of them first ridden this year.',
@@ -25163,6 +25191,26 @@ function aiRenderDNA_(){
     H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
     H+='</div>';
   }
+  // POWER CURVE RADAR. Overview's Athlete DNA card links here with "Explore DNA" and the chart it
+  // shows was not on the page it linked to. Same component, called the same way - _dnaRadarHTML_
+  // takes no arguments and returns '' on its own when there is not enough power data, so the
+  // heading is built around its output rather than printed unconditionally over an empty box.
+  //
+  // Not to be confused with the FOUR-AXIS radar that was deliberately replaced by ranked bars (see
+  // the note above _DNA_BANDS). That one compared four traits on one shared scale, where shape was
+  // an artifact of axis order. This is the ten-duration power curve, where each spoke is its own
+  // scale, which is exactly what made it safe where the other was not.
+  (function(){
+    var _rad=(typeof _dnaRadarHTML_==='function')?_aiSafe_('DNAradar', function(){return _dnaRadarHTML_();}):'';
+    if(!_rad) return;
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
+    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;margin-bottom:18px">'
+      +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:4px">'
+      +'Ten durations because ten is what your rides actually store. Every spoke is scored against '
+      +'your own best at that duration, so a sprint cannot dwarf an hour &mdash; they are never '
+      +'measured against each other.</div>'
+      +_rad+'</div>';
+  })();
   // UNLOCKED TRAITS
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';
