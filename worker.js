@@ -23520,8 +23520,65 @@ function _trSpark_(vals, color){ if(!vals||vals.length<2) return ''; var W=300,H
 // Question card: coaching question is the headline; the metric is secondary.
 function _trQCard_(q, bodyHtml){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column">'+'<div style="font-size:13px;font-weight:700;color:var(--d-head);line-height:1.3;margin-bottom:12px">'+q+'</div>'+bodyHtml+'</div>'; }
 
+// Daily consistency grid, as a STRING so any surface can render it. The shading is by each day's
+// robust load (real TSS, or a moving-time proxy) against the athlete's own 85th-percentile active
+// day - colouring by raw TSS alone made it one flat block, because missing or garbage TSS collapses
+// most ride-days to zero. Reads dsConsistency_, the same accessor the consistency card scores from,
+// so the grid and the percentage above it can never disagree.
+function _consHeatHTML_(rides, days){
+  if(typeof dsConsistency_!=='function') return '';
+  var cells=dsConsistency_(rides, days, new Date(), normDate);
+  if(!cells || !cells.length) return '';
+  var tv=cells.map(function(c){ return c.load||0; }).filter(function(t){ return t>0; }).sort(function(a,b){ return a-b; });
+  var ref=tv.length?tv[Math.min(tv.length-1, Math.floor(tv.length*0.85))]:0; if(!(ref>0)) ref=1;
+  var colOf=function(c){ if(!c || c.n===0) return '#30363d'; var r=(c.load||0)/ref;
+    return r>=0.66?'#26a641':(r>=0.33?'#eab308':'#ef4444'); };
+  var sq='';
+  for(var pI=0; pI<(cells[0].dow||0); pI++){ sq+='<div style="width:11px;height:11px"></div>'; }
+  cells.forEach(function(c){
+    var tip=c.date+(c.n?(' \u00b7 '+c.n+' ride'+(c.n>1?'s':'')+(c.tss?(' \u00b7 '+c.tss+' TSS'):'')):' \u00b7 rest');
+    sq+='<div title="'+tip+'" style="width:11px;height:11px;border-radius:2px;background:'+colOf(c)+'"></div>';
+  });
+  var lg=function(col,lab){ return '<span style="display:flex;align-items:center;gap:4px">'
+    +'<span style="width:9px;height:9px;border-radius:2px;background:'+col+'"></span>'+lab+'</span>'; };
+  return '<div style="margin-top:12px">'
+    +'<div style="display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px;overflow-x:auto;padding-bottom:4px">'+sq+'</div>'
+    +'<div style="display:flex;align-items:center;gap:11px;margin-top:9px;font-size:9px;color:var(--d-dim)">'
+    +lg('#26a641','High')+lg('#eab308','Moderate')+lg('#ef4444','Low')+lg('#30363d','Rest')
+    +'<span style="margin-left:auto">one square per day</span></div></div>';
+}
+// ---- TREND RANGE ------------------------------------------------------------------------------
+// Trends was fixed at 90 days with no control anywhere; Analytics owned the only range selector in
+// the app. It moves here. Stored in st so it survives a repaint and a reload.
+var _TR_RANGES=[['7D',7],['4W',28],['12W',84],['6M',182],['1Y',365]];
+function _trDays_(){
+  var v=parseInt((typeof st!=='undefined'&&st)?st.trRange:0)||0;
+  for(var i=0;i<_TR_RANGES.length;i++){ if(_TR_RANGES[i][1]===v) return v; }
+  return 84;                       // 12W - the closest of the offered ranges to the old fixed 90
+}
+function _trLabel_(){
+  var d=_trDays_();
+  for(var i=0;i<_TR_RANGES.length;i++){ if(_TR_RANGES[i][1]===d) return _TR_RANGES[i][0]; }
+  return d+'D';
+}
+function _trWords_(){
+  var d=_trDays_();
+  return d===7?'the last 7 days':(d===28?'the last 4 weeks':(d===84?'the last 12 weeks':(d===182?'the last 6 months':'the last year')));
+}
+function trSetRange_(d){ try{ st.trRange=d; sv(); }catch(e){} try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+function _trRangeHTML_(){
+  var cur=_trDays_();
+  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<span style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em;margin-right:2px">Range</span>'
+    +_TR_RANGES.map(function(r){ var on=(r[1]===cur);
+      return '<button onclick="trSetRange_('+r[1]+')" class="sm-ctl" style="background:'+(on?'var(--d-accent,#fc5200)':'transparent')
+        +';color:'+(on?'#fff':'var(--d-t3)')+';border:1px solid '+(on?'var(--d-accent,#fc5200)':'var(--d-edge)')
+        +';border-radius:9px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">'+r[0]+'</button>';
+    }).join('')+'</div>';
+}
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
+  var _trD=_trDays_(), _trW=_trWords_();
   var GRN='#22c55e', ORG='#FC4C02', BLU='#60a5fa', GOOD='#22c55e', BAD='#ef4444';
   var story=_aiSafe_('TrStory', function(){return _trStory_();});
   var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
@@ -23542,6 +23599,9 @@ function aiRenderTrends_(ded){
   }
   var cov=_trCoverage_();
   var H='<div style="padding:2px 2px 30px">';
+  // The range control Analytics used to own. It lives at the top of the tab because it governs
+  // what every card below it counts.
+  H+=_trRangeHTML_();
   H+='<div style="font-size:13px;color:var(--d-t4);margin:0 2px 14px">Understand what is happening. Learn why. See what is next.</div>';
 
   // ===== HEADLINES STRIP =====
@@ -23661,20 +23721,23 @@ function aiRenderTrends_(ded){
       +_trConfNote_(eff.n, 'HR-paired rides', _trConf_(eff.n,120))); }
   else { H+=_trQCard_('How is your aerobic efficiency?', '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Needs rides with average HR + speed. Sync HR-paired rides to unlock this.</div>'); }
   // How consistent have you been?
-  var consCells=_aiSafe_('TrCons', function(){ return (typeof dsConsistency_==='function')?dsConsistency_(rides,90,new Date(),normDate):null; });
+  var consCells=_aiSafe_('TrCons', function(){ return (typeof dsConsistency_==='function')?dsConsistency_(rides,_trD,new Date(),normDate):null; });
   if(consCells&&consCells.length){ var active=consCells.filter(function(c){return c.n>0;}).length; var consPct=Math.round(active/consCells.length*100);
     // per-week active bars over ~13 weeks
-    var wk=[]; for(var wi=0; wi<13; wi++){ wk.push(0); } consCells.forEach(function(c,i){ var w=Math.floor(i/7); if(w<13&&c.n>0) wk[w]++; });
+    var _nw=Math.max(1, Math.ceil(consCells.length/7));
+    var wk=[]; for(var wi=0; wi<_nw; wi++){ wk.push(0); } consCells.forEach(function(c,i){ var w=Math.floor(i/7); if(w<_nw&&c.n>0) wk[w]++; });
     // Thirteen weekly rectangles side by side ARE a time series — the one shape the standing rule
     // says must be a line. Same weekly counts, drawn as the trajectory they already were.
     var wkPts=wk.map(function(v,i){ return {v:v, lab:'wk '+(i+1)}; });
-    var firstHalf=wk.slice(0,6).reduce(function(a,b){return a+b;},0), lastHalf=wk.slice(-6).reduce(function(a,b){return a+b;},0);
+    var _h=Math.max(1, Math.floor(_nw/2));
+    var firstHalf=wk.slice(0,_h).reduce(function(a,b){return a+b;},0), lastHalf=wk.slice(-_h).reduce(function(a,b){return a+b;},0);
     var trendPct=firstHalf>0?Math.round((lastHalf-firstHalf)/firstHalf*100):(lastHalf>0?100:0);
     H+=_trQCard_('How consistent have you been?',
-      _trValueLine_(consPct+'%', 'of the last 90 days had an activity', active+' active days out of '+consCells.length)
-      +_trTrendLine_(trendPct, 'last 6 weeks vs the first 6')
-      +(_gcTrend_(wkPts, _GC_RECOVERY, {aria:'Active days per week over 13 weeks', H:38, fill:false,
-          from:'13 weeks ago', to:'this week'})||'')); }
+      _trValueLine_(consPct+'%', 'of '+_trW+' had an activity', active+' active days out of '+consCells.length)
+      +_trTrendLine_(trendPct, 'second half of the window vs the first')
+      +(_gcTrend_(wkPts, _GC_RECOVERY, {aria:'Active days per week', H:38, fill:false,
+          from:_trW.replace('the last ','')+' ago', to:'this week'})||'')
+      +(_aiSafe_('TrHeat', function(){ return _consHeatHTML_(rides, _trD); })||'')); }
   else { H+=_trQCard_('How consistent have you been?', '<div style="color:var(--d-dim);font-size:12.5px;padding:6px 0">Not enough recent rides to score consistency.</div>'); }
   H+='</div>';
 
