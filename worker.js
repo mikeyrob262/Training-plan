@@ -25186,7 +25186,7 @@ function aiRenderDNA_(){
   //
   // align-items:flex-start for the same reason the Overview cards use it: the two have different
   // natural heights and stretching the shorter one just moves the empty space inside its border.
-  var _eraH='', _sigH='';
+  var _eraH='', _sigH='', _pcH='';
   // ERA SPINE
   _eraH+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
   _eraH+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px">';
@@ -25249,21 +25249,20 @@ function aiRenderDNA_(){
   (function(){
     var _rad=(typeof _dnaRadarHTML_==='function')?_aiSafe_('DNAradar', function(){return _dnaRadarHTML_();}):'';
     if(!_rad) return;
-    _sigH+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
-    _sigH+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px;margin-bottom:18px">'
+    _pcH+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
+    _pcH+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">'
       +'<div style="font-size:11.5px;color:var(--d-t3,#8b93a7);line-height:1.5;margin-bottom:4px">'
       +'Ten durations because ten is what your rides actually store. Every spoke is scored against '
       +'your own best at that duration, so a sprint cannot dwarf an hour &mdash; they are never '
       +'measured against each other.</div>'
       +_rad+'</div>';
   })();
-  if(_eraH || _sigH){
-    _eraH=_eraH?('<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">'+_eraH+'</div>'):'';
-    H+='<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-bottom:20px">'
-      +(_eraH?('<div style="flex:1.25 1 460px;min-width:0">'+_eraH+'</div>'):'')
-      +(_sigH?('<div style="flex:1 1 400px;min-width:0">'+_sigH+'</div>'):'')
-      +'</div>';
-  }
+  // Era, Signature and Power Curve go out as one ordered list and _balCols_ assigns them from
+  // MEASURED heights, exactly as on Overview. Power Curve had been nested inside the Signature
+  // column, which left the Era column short by most of its height.
+  _eraH=_eraH?('<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">'+_eraH+'</div>'):'';
+  var _dnaBal=[_eraH, _sigH, _pcH].filter(function(c){ return c; });
+  if(_dnaBal.length){ H+='<div class="dna-bal" style="margin-bottom:20px">'+_dnaBal.join('')+'</div>'; }
   // UNLOCKED TRAITS
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';
@@ -28905,14 +28904,12 @@ function aiRenderTab_(tab, ded){
   };
   html+=row([hero, focus], 'minmax(0,1.55fr) minmax(0,1fr)');
   if(cur) html+='<div style="margin-bottom:10px">'+cur+'</div>';
-  // Recent Signals joins the LEFT column rather than sitting below the row. As a full-width
-  // section it waited on both columns to finish, so the gap Performance left under itself
-  // stayed empty while DNA and AI Coach ran on. In the column it stacks straight after
-  // Performance and fills that space, which is the same barrier removal already applied to
-  // Goals/DNA and Performance/Coach - one level deeper.
-  var colL=col([goals, perf, signals], '1'), colR=col([dna, coach], '1.15');
-  if(colL || colR){
-    html+='<div class="ov-cols" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">'+colL+colR+'</div>';
+  // The five cards go out as ONE ordered list and _balCols_ assigns them to columns from their
+  // measured heights after mount. The order here is the page's authored section order - Goals,
+  // DNA, Performance, Coach, Signals - which is what a reader sees top to bottom.
+  var _balCards=[goals, dna, perf, coach, signals].filter(function(c){ return c; });
+  if(_balCards.length){
+    html+='<div class="ov-bal" style="margin-bottom:10px">'+_balCards.join('')+'</div>';
   }
   // Nothing is emitted below the columns now - Signals lives inside colL. If it were left here
   // as well it would render twice.
@@ -29714,6 +29711,70 @@ function _ovFocusHTML_(){
 }
 
 // ---- shared renderer (both surfaces) ----
+// ---- BALANCE BY HEIGHT, NOT BY FIXED GROUPS ---------------------------------------------------
+//
+// Any hard-coded "these cards go left, those go right" split leaves a gap the moment one card is
+// taller than the whole column opposite it. Measured on Overview: Athlete DNA is 764px, taller than
+// Goals (323) + Performance (177) + Recent Signals (96) combined - so NO assignment of names could
+// ever balance those two columns, and trimming DNA would shrink the gap without closing it.
+//
+// So the assignment is made from MEASURED heights instead. Cards are walked in their authored
+// top-to-bottom order and each is placed in whichever column is currently SHORTER.
+//
+// This is deliberately NOT masonry. Each column keeps its cards in authored order, the walk order
+// never changes, and the result does not depend on viewport - below _BAL_MIN_W there is a single
+// column and no split at all, which is also the only way the one-column stack keeps reading order
+// (splitting first and letting flex wrap would show all of column A, then all of column B).
+//
+// Heights MUST be measured inside a real column. Both columns are flex:1 1 0, so each occupies half
+// the row even while empty; measuring in the full-width host would read every card at twice its
+// final width and every wrapped-text card would come out too short.
+var _BAL_MIN_W=860, _BAL_GAP=10;
+function _balCols_(host){
+  if(!host) return;
+  // The authored order is captured ONCE. After the first pass the cards live inside column
+  // elements, so re-reading host.children would return the columns rather than the cards.
+  var cards=host.__balCards;
+  if(!cards){ cards=Array.prototype.slice.call(host.children); host.__balCards=cards; }
+  if(!cards.length) return;
+  var wide=(host.getBoundingClientRect().width>=_BAL_MIN_W);
+  if(host.__balWide===wide && host.__balDone) return;      // nothing structural changed
+  host.__balWide=wide; host.__balDone=true;
+  while(host.firstChild) host.removeChild(host.firstChild);
+  if(!wide){
+    host.setAttribute('style','display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
+    cards.forEach(function(c){ host.appendChild(c); });
+    return;
+  }
+  host.setAttribute('style','display:flex;gap:'+_BAL_GAP+'px;align-items:flex-start');
+  var mk=function(){ var d=document.createElement('div');
+    d.setAttribute('style','flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:'+_BAL_GAP+'px');
+    return d; };
+  var A=mk(), B=mk();
+  host.appendChild(A); host.appendChild(B);
+  cards.forEach(function(c){ A.appendChild(c); });          // measure at COLUMN width
+  var hs=cards.map(function(c){ return c.getBoundingClientRect().height; });
+  var ha=0, hb=0;
+  cards.forEach(function(c,i){
+    if(ha<=hb){ A.appendChild(c); ha+=hs[i]+_BAL_GAP; }
+    else      { B.appendChild(c); hb+=hs[i]+_BAL_GAP; }
+  });
+}
+// Re-run only when the one-column/two-column threshold is actually crossed. Rebalancing on every
+// resize tick would move cards around under the reader's hand, which is the masonry behaviour this
+// is meant to avoid.
+function _balAll_(){
+  ['ov-bal','dna-bal'].forEach(function(cls){
+    Array.prototype.forEach.call(document.getElementsByClassName(cls), function(el){
+      try{ _balCols_(el); }catch(e){}
+    });
+  });
+}
+try{
+  var _balMq=window.matchMedia('(min-width:'+_BAL_MIN_W+'px)');
+  if(_balMq.addEventListener) _balMq.addEventListener('change', _balAll_);
+  else if(_balMq.addListener) _balMq.addListener(_balAll_);
+}catch(e){}
 function aiRenderOverview_(container){
   if(!container) return;
   _aiMount=container;
@@ -29761,6 +29822,9 @@ function aiRenderOverview_(container){
   H+='<div id="ai-tab-body">'+(function(){ try{ return aiRenderTab_(_aiTab, rides); }catch(e){ try{ console.error('[ai] tab render threw: '+(e&&e.message)); }catch(_){} return '<div style="padding:40px;text-align:center;color:var(--c-red);font-size:13px">Overview render error — '+aiEsc_(e&&e.message)+'</div>'; } })()+'</div>';
   H+='</div>';
   container.innerHTML=H;
+  // Heights only exist once the HTML is in the document, so the balance runs here rather than
+  // while the string is being built - there is no way to know a card's height from its markup.
+  try{ _balAll_(); }catch(e){}
   // if the slim cache under-loaded st.rides, swap in the full IDB library and repaint.
   aiEnsureFullLibrary_(function(){ if(_aiMount) aiRenderOverview_(_aiMount); });
 }

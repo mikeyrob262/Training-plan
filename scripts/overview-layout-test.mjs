@@ -196,22 +196,36 @@ ok('the DNA card uses the REAL radar', /_dnaRadarHTML_/.test(asm));
 ok('...and no invented composite score is rendered',
    ex('_ovwHeroHTML_').indexOf('The Engine') < 0 && ex('_ovwHeroHTML_').indexOf('/100') < 0);
 
-// COLUMN FLOW: row pairing meant a card waited on the TALLEST card in the row above it, so
-// Performance sat idle below DNA even though Goals had ended hundreds of pixels earlier.
-ok('the two columns are built independently', asm.indexOf("col([goals, perf, signals]") >= 0 && asm.indexOf("col([dna, coach]") >= 0);
-ok('...and no longer paired into rows', asm.indexOf('row([goals, dna]') < 0 && asm.indexOf('row([perf, coach]') < 0);
-ok('each column stacks on its own height', /flex-direction:column/.test(asm));
-ok('columns align to the top rather than stretching', /align-items:flex-start/.test(asm));
-// Recent Signals was the next FULL-WIDTH section after the columns, so it could not start until
-// BOTH had finished - the gap Performance left under itself stayed empty while the taller DNA +
-// AI Coach column ran on. In the column it stacks straight after Performance and fills it.
-ok('Recent Signals is IN the left column, after Performance',
-   /col\(\[goals, perf, signals\]/.test(asm));
-ok('...and is no longer emitted as a full-width section below the row',
-   !/if\(signals\) html\+=/.test(asm));
-ok('...so it is rendered exactly once', (asm.match(/signals/g)||[]).filter(function(){return true;}).length >= 1
-   && (asm.match(/\bsignals\b/g)||[]).length <= 3);
-ok('...and collapse to one column on mobile', /\.ov-cols\{flex-direction:column/.test(src));
+// BALANCE BY HEIGHT. Fixed groups could never balance these columns: Athlete DNA is 764px, taller
+// than Goals (323) + Performance (177) + Recent Signals (96) put together, so no assignment of
+// NAMES works and trimming DNA would only shrink the gap. Assignment is made from measured heights
+// after mount instead, which is why the markup must emit ONE ordered list rather than two columns.
+ok('Overview emits one ordered list, not pre-split columns', /class="ov-bal"/.test(asm));
+ok('...in the authored section order', /\[goals, dna, perf, coach, signals\]/.test(asm));
+ok('...and no longer hard-codes which cards go in which column',
+   asm.indexOf('col([goals') < 0 && asm.indexOf('col([dna') < 0);
+ok('...and no card is emitted as a full-width section below the row', !/if\(signals\) html\+=/.test(asm));
+
+const bal = ex('_balCols_');
+ok('_balCols_ assigns each card to whichever column is currently shorter', /if\(ha<=hb\)/.test(bal));
+ok('...accumulating the measured height plus the gap', /ha\+=hs\[i\]\+_BAL_GAP/.test(bal) && /hb\+=hs\[i\]\+_BAL_GAP/.test(bal));
+ok('...walking the cards in authored order, so each column stays in order', /cards\.forEach\(function\(c,i\)/.test(bal));
+// A card in the full-width host measures at twice its final width, so every wrapped-text card
+// would come out too short and the balance would be computed from wrong numbers.
+ok('heights are measured inside a real column, not the full-width host',
+   /A\.appendChild\(c\); \}\);\s*\/\/ measure at COLUMN width/.test(bal) && /flex:1 1 0/.test(bal));
+ok('the authored order is captured once, not re-read from the columns', /host\.__balCards/.test(bal));
+ok('columns align to the top rather than stretching', /align-items:flex-start/.test(bal));
+// Below the breakpoint there is no split at all - splitting and letting flex wrap would show all
+// of column A then all of column B, which is not the reading order.
+ok('below the breakpoint it is a single column with no split', /if\(!wide\)\{/.test(bal));
+ok('...and the threshold is a named constant', /_BAL_MIN_W/.test(bal));
+// Rebalancing on every resize tick is the masonry behaviour this is meant to avoid.
+ok('it re-runs only when the breakpoint is actually crossed', /matchMedia/.test(src) && /__balWide===wide/.test(bal));
+ok('DNA Insights routes through the SAME balancer', /class="dna-bal"/.test(src) && /'ov-bal','dna-bal'/.test(src));
+ok('...with Power Curve as its own block, not nested in the Signature column',
+   /_dnaBal=\[_eraH, _sigH, _pcH\]/.test(src));
+ok('the balance runs after the HTML is in the document', /container\.innerHTML=H;[\s\S]{0,400}_balAll_\(\)/.test(src));
 // Stretch-and-centre was tried and looked worse - DNA is about twice Goals' height, so centring
 // split one big gap into two empty panels. A card that ends with its content has no hole.
 ok('cards size to their content rather than stretching',
