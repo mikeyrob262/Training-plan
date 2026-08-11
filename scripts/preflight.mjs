@@ -478,6 +478,22 @@ try {
     fail('two surfaces disagree about the same fact again (see above).');
   }
 
+  // STEP 26 — the training block is a hand-authored calendar and its failure mode is DRIFT: an
+  //           attempt moves and the taper built for it stays behind. A four-day Chalet taper really
+  //           did survive in September after Chalet moved to October, and the block's own `end`
+  //           really did stop three days before the summit it exists for. This asserts structure -
+  //           attempts sit on their milestone dates, nothing tapers into nothing, the phases tile
+  //           the block, running stays off the two hard days - and is mutation-tested.
+  console.log(`${D}· checking training-block structure…${X}`);
+  try {
+    const so = execSync('node scripts/block-structure-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the training block drifted from its own milestones (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
