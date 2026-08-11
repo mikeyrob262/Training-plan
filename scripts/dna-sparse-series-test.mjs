@@ -125,6 +125,31 @@ console.log('\n' + Y + '=== the Era timeline width means duration ===' + X);
   ok('...with a min-width so a short era stays legible', /min-width:150px/.test(dnaTab));
   ok('...and the span is stated in words, not left to be inferred', /year'\+\(_yrs===1/.test(dnaTab));
 }
+console.log('\n' + Y + '=== the Trends range control drives the whole tab, not one card ===' + X);
+{
+  // The range control shipped governing exactly ONE card - the consistency heatmap - while the
+  // story, the drivers and the PMC chart stayed on hardcoded windows and the labels stayed on
+  // literal 90s. That is worse than having no control, because the control asserts it did
+  // something. These assertions are what makes 'wired' checkable instead of claimed.
+  const tr = src.slice(src.indexOf('function aiRenderTrends_'), src.indexOf('function aiRenderTrends_') + 26000);
+  ok('the window is resolved once, at the top', /var _trD=_trDays_\(\), _trW=_trWords_\(\)/.test(tr));
+  ok('the story takes the window', /_trStory_\(_trDays_\(\)\)/.test(tr));
+  ok('the drivers take the window', /_trDrivers_\(_trD\)/.test(tr));
+  ok('the consistency cells take the window', /dsConsistency_\(rides,_trD,/.test(tr));
+  ok('the heatmap takes the window', /_consHeatHTML_\(rides, _trD\)/.test(tr));
+  ok('the PMC chart slices to the window', /series\.slice\(-\(_trD\+1\)\)/.test(tr));
+  // No literal window may survive in the rendered copy - a label saying 90 under a 7D selection is
+  // the exact bug this is guarding.
+  ok('no hardcoded 90-day label survives', !/90 days|Last 90 Days/.test(tr));
+  ok('no hardcoded 60-vs-60 label survives', !/60 vs prior 60/.test(tr));
+
+  const story = exFn('_trStory_'), drivers = exFn('_trDrivers_');
+  ok('_trStory_ is parameterised, not reading the range itself', /function _trStory_\(days\)/.test(story));
+  ok('...and clamps to the series it actually has', /Math\.min\(_w, s\.length-1\)/.test(story));
+  ok('...reporting the span it really used', /span:_span/.test(story));
+  ok('_trDrivers_ is parameterised too', /function _trDrivers_\(days\)/.test(drivers));
+  ok('...comparing the window against the one before it', /now\.getDate\(\)-2\*_w/.test(drivers));
+}
 console.log('\n' + Y + '=== the power-curve radar is on the tab Overview links to ===' + X);
 {
   const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 12000);

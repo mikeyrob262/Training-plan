@@ -22587,10 +22587,17 @@ function _trLongPMC_(){
            start:s[0].date, end:last.date, n:s.length };
 
 }
-// Your Story — Last 90 days: fitness/fatigue/form now vs ~90d ago (authoritative series).
-function _trStory_(){
+// Your Story: fitness/fatigue/form now vs the START OF THE SELECTED RANGE (authoritative series).
+// The days argument is the Trends range. It used to be a hardcoded 84 while the heading above it said 90,
+// and after the range control shipped it still ignored the control entirely - the story read the
+// same at 7D and 1Y. Callers pass _trDays_(); the default keeps any other caller working.
+function _trStory_(days){
   var s=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[]; if(s.length<2) return null;
-  var now=s[s.length-1], then=s[Math.max(0, s.length-1-84)];
+  var _w=(+days>0)?Math.round(days):84;
+  // Never claim a window the series cannot cover - fall back to its full length and let the
+  // caller's label describe what was actually compared.
+  var _span=Math.min(_w, s.length-1);
+  var now=s[s.length-1], then=s[Math.max(0, s.length-1-_span)];
   function tsbOf(p){ return p.tsb!=null?p.tsb:((p.ctl||0)-(p.atl||0)); }
   function pctChg(a,b){ return (b&&Math.abs(b)>0.5)?Math.round((a-b)/Math.abs(b)*100):null; }
   var lp=_trLongPMC_(), isPeak=lp && lp.peakCtl>0 && lp.ctlNow>=lp.peakCtl-1;
@@ -22598,7 +22605,7 @@ function _trStory_(){
     fitness:{now:Math.round(now.ctl), then:Math.round(then.ctl), pct:pctChg(now.ctl,then.ctl)},
     fatigue:{now:Math.round(now.atl), then:Math.round(then.atl), pct:pctChg(now.atl,then.atl)},
     form:{now:Math.round(tsbOf(now)), then:Math.round(tsbOf(then))},
-    peak:isPeak, longPmc:lp
+    peak:isPeak, longPmc:lp, span:_span
   };
 }
 // CTL-relative training-state bands (share of the athlete's own all-time peak CTL). Real, and
@@ -22634,9 +22641,13 @@ function _trSpikes_(series, rides){
 // Ranked fitness drivers — recent 60d vs prior 60d. REAL subset only (threshold work needs zone
 // data; weight/consistency/volume always available). Sleep/HRV + per-ride heat are omitted (no
 // stored data) rather than faked — the caller notes that.
-function _trDrivers_(){
+// Compares the selected window against the window immediately before it. Was a fixed 60-vs-60
+// regardless of the range control. The shape is unchanged - it is still half-and-half, just
+// against the range the athlete picked rather than a constant.
+function _trDrivers_(days){
   var ded=(typeof allRidesDeduped_==='function')?allRidesDeduped_():[]; ded=ded.filter(function(r){return r&&r.date;});
-  var now=new Date(), d60=new Date(now), d120=new Date(now); d60.setDate(now.getDate()-60); d120.setDate(now.getDate()-120);
+  var _w=(+days>0)?Math.round(days):60;
+  var now=new Date(), d60=new Date(now), d120=new Date(now); d60.setDate(now.getDate()-_w); d120.setDate(now.getDate()-2*_w);
   function inR(r,a,b){ var t=new Date(String(r.date).slice(0,10)+'T00:00:00'); return t>=a && t<b; }
   var recent=ded.filter(function(r){return inR(r,d60,now);}), prior=ded.filter(function(r){return inR(r,d120,d60);});
   function pct(a,b){ return b>0?Math.round((a-b)/b*100):(a>0?100:0); }
@@ -22839,7 +22850,7 @@ function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
   var _trD=_trDays_(), _trW=_trWords_();
   var GRN='#22c55e', ORG='#FC4C02', BLU='#60a5fa', GOOD='#22c55e', BAD='#ef4444';
-  var story=_aiSafe_('TrStory', function(){return _trStory_();});
+  var story=_aiSafe_('TrStory', function(){return _trStory_(_trDays_());});
   var series=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[];
   // Cards moved off the Overview grid, where they competed with the hero at equal volume. They are
   // execution and distribution — "did you do the work, and what kind" — which is this tab's question.
@@ -22865,8 +22876,8 @@ function aiRenderTrends_(ded){
 
   // ===== HEADLINES STRIP =====
   var heads=[];
-  if(story && story.fitness.pct!=null) heads.push({t:(story.fitness.pct>=0?'Fitness up ':'Fitness down ')+Math.abs(story.fitness.pct)+'% in 90 days', up:story.fitness.pct>=0});
-  var drv=_aiSafe_('TrDrivers', function(){return _trDrivers_();})||[];
+  if(story && story.fitness.pct!=null) heads.push({t:(story.fitness.pct>=0?'Fitness up ':'Fitness down ')+Math.abs(story.fitness.pct)+'% in '+_trW.replace('the last ',''), up:story.fitness.pct>=0});
+  var drv=_aiSafe_('TrDrivers', function(){return _trDrivers_(_trD);})||[];
   if(drv.length){ var top=drv[0]; var g=top.invert?(top.delta<0):(top.delta>0); heads.push({t:top.key+' '+(top.delta>0?'+':'')+top.delta+'%'+(g?' (helping)':' (watch)'), up:g}); }
   var preds=_aiSafe_('TrPreds', function(){return _trPredictions_(2);})||[];
   if(preds.length) heads.push({t:'Next: '+preds[0].name+' ~'+_msFmtDate_(preds[0].date), up:true});
@@ -22882,7 +22893,7 @@ function aiRenderTrends_(ded){
     var watchDay=_aiSafe_('TrWatch', function(){return _trWatchDay_();});
     function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
     H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:18px 20px;margin-bottom:14px">';
-    H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last 90 Days</div>';
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; '+_trW.replace('the last ','Last ')+'</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:26px 30px;align-items:flex-start">';
     H+=statBlock('Fitness (CTL)', (story.fitness.pct!=null?((story.fitness.pct>=0?'+':'')+story.fitness.pct+'%'):story.fitness.now), story.fitness.then+' &rarr; '+story.fitness.now, story.fitness.pct>=0?GRN:BAD);
     H+=statBlock('Fatigue (ATL)', (story.fatigue.pct!=null?((story.fatigue.pct>=0?'+':'')+story.fatigue.pct+'%'):story.fatigue.now), story.fatigue.then+' &rarr; '+story.fatigue.now, ORG);
@@ -22900,7 +22911,9 @@ function aiRenderTrends_(ded){
   H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
   H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">How is your body responding?</span><span style="font-size:11px;color:var(--d-dim)">'+(_trCompareBadge_()||'Fitness / Fatigue / Form')+'</span></div>';
   var pmcHtml=_aiSafe_('TrPMC', function(){
-    var s=series.slice(-85); if(s.length<4) return '<div style="color:var(--d-dim);font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
+    // Was a fixed 85 points no matter what the range said. +1 so an N-day window shows N days
+    // of change, not N-1.
+    var s=series.slice(-(_trD+1)); if(s.length<4) return '<div style="color:var(--d-dim);font-size:12.5px;padding:20px 0">Building your fitness curve &mdash; keep logging rides.</div>';
     var W=680,Hh=210, padL=30,padR=76,padT=8,padB=22;
     var lp=story&&story.longPmc?story.longPmc:null; var bands=_trBands_(lp?lp.peakCtl:0);
     var all=[]; s.forEach(function(p){ all.push(p.ctl); all.push(p.atl); all.push(p.tsb!=null?p.tsb:(p.ctl-p.atl)); });
@@ -22929,7 +22942,7 @@ function aiRenderTrends_(ded){
   H+='</div>';
   // -- WHAT'S DRIVING YOUR FITNESS --
   H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0">';
-  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">What is driving your fitness?</span><span style="font-size:11px;color:var(--d-dim)">60 vs prior 60 days</span></div>';
+  H+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><span style="font-size:13px;font-weight:700;color:var(--d-head)">What is driving your fitness?</span><span style="font-size:11px;color:var(--d-dim)">'+_trD+' vs prior '+_trD+' days</span></div>';
   if(drv.length){ var mxd=Math.max.apply(null, drv.map(function(x){return Math.abs(x.delta)||1;}))||1;
     drv.forEach(function(x,di){ var g=x.invert?(x.delta<0):(x.delta>0); var c=(x.delta===0)?'#94a3b8':(g?GOOD:BAD); var w=Math.max(6, Math.round(Math.abs(x.delta)/mxd*100));
       H+='<div style="margin-bottom:14px">'
@@ -23043,7 +23056,7 @@ function aiRenderTrends_(ded){
   var oneThing='';
   if(story){
     if(story.peak && story.fitness.pct>0) oneThing='Your fitness is at its highest '+(cov.complete?('in '+cov.years+' years'):'on record')+' and still climbing'+(watchDayGlobal_()?(' — protect recovery after '+watchDayGlobal_()+'s'):'')+'.';
-    else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over 90 days'+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
+    else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over '+_trW.replace('the last ','')+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
     else oneThing='Fitness has dipped '+Math.abs(story.fitness.pct||0)+'% — a productive base phase if it is intentional, a flag if it is not.';
   }
   if(oneThing){ H+='<div style="background:linear-gradient(90deg,rgba(34,197,94,.10),rgba(17,19,24,0));border:1px solid rgba(34,197,94,.25);border-left:4px solid '+GRN+';border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+GRN+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z"/></svg><div><div style="font-size:11px;font-weight:800;color:'+GRN+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">If you only remember one thing</div><div style="font-size:15px;font-weight:700;color:var(--d-head);line-height:1.35">'+aiEsc_(oneThing)+'</div></div></div>'; }
