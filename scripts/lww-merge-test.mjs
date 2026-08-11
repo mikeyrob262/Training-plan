@@ -31,13 +31,13 @@ let code = exVar('_LWW_TOP') + exVar('_LWW_SUB') + 'var _lwwShadow_ = null;\nvar
 // _LWW_ARRAYS and its helpers were NOT in this harness, so the array branch of mergeStateRoot_
 // threw and fell into the catch on every run - the settings-array behaviour was never actually
 // exercised here, only the scalar paths above it.
-code += exVar('_LWW_ARRAYS');
+code += exVar('_LWW_ARRAYS') + exVar('RIDE_LWW_FIELDS_');
 for (const f of ['_lwwPaths_','_lwwGet_','_lwwSet_','mergeStateRoot_','_lwwSnapshot_','_lwwTouch_',
                  'mergeState_','isPlainObj_','arrayToIndexObject_','mergeArrays_',
                  '_arrKeyOf_','_arrIsDead_','_lwwMergeArray_','mergeItemFast_','lightFingerprint_',
                  'itemsMatch_','rideKey','_isSession_','normDate']) code += ex(f);
 const M = new Function(code +
-  ';return {mergeState_,mergeStateRoot_,_lwwTouch_,_lwwPaths_,setSt:function(v){st=v;},getSt:function(){return st;}};')();
+  ';return {mergeState_,mergeStateRoot_,mergeItemFast_,_lwwTouch_,_lwwPaths_,RIDE_LWW_FIELDS_,setSt:function(v){st=v;},getSt:function(){return st;}};')();
 
 let fails = 0;
 const R='\x1b[31m', G='\x1b[32m', Y='\x1b[33m', X='\x1b[0m';
@@ -190,6 +190,48 @@ console.log('\n'+Y+'=== a number can be LOWERED and survive the round trip ==='+
 check('races is on the array allowlist', src.indexOf("races:{ keys:['id'] }") >= 0, true);
 check('rides are deliberately NOT on it', /_LWW_ARRAYS[^;]*rides:/.test(src), false);
 check('...and the reason is recorded', src.indexOf('RIDES ARE DELIBERATELY NOT HERE') >= 0, true);
+
+console.log('\n'+Y+'=== rides: a numeric can be lowered WITHOUT losing the GPS handling ==='+X);
+// The rides half of the same bug. Whole-item replacement (what races use) is not available here:
+// mergeItemFast_ does field-aware work that would be discarded with it, above all keeping the
+// LONGER GPS track when two copies disagree. So the fix is a per-FIELD allowlist instead.
+const gps = (n) => Array.from({length:n}, (_,i) => 40 + i*0.001);
+{
+  const a = { id:'r1', stravaId:'1', date:'2026-06-20', elev:5000, editedAt:2000, _edited:{elev:1} };
+  const b = { id:'r1', stravaId:'1', date:'2026-06-20', elev:9000 };
+  check('a masked, stamped elev of 5000 beats a remote 9000', M.mergeItemFast_(a,b).elev, 5000);
+}
+{
+  const a = { id:'r1', stravaId:'1', date:'2026-06-20', distance:6.2, editedAt:2000 };
+  const b = { id:'r1', stravaId:'1', date:'2026-06-20', distance:13.1 };
+  check('a stamped distance of 6.2 beats a remote 13.1', M.mergeItemFast_(a,b).distance, 6.2);
+}
+{
+  // movingSecs was NOT on the old inline list, so a stamped correction still lost to max.
+  const a = { id:'r1', stravaId:'1', date:'2026-06-20', movingSecs:3000, editedAt:2000 };
+  const b = { id:'r1', stravaId:'1', date:'2026-06-20', movingSecs:7000 };
+  check('a stamped movingSecs of 3000 beats a remote 7000', M.mergeItemFast_(a,b).movingSecs, 3000);
+}
+{
+  // THE THING THAT MUST NOT BREAK: the longer GPS track still wins, alongside a lowered field.
+  const a = { id:'r1', stravaId:'1', date:'2026-06-20', gpsLats:gps(10), gpsLons:gps(10),
+              elev:5000, editedAt:2000, _edited:{elev:1} };
+  const b = { id:'r1', stravaId:'1', date:'2026-06-20', gpsLats:gps(500), gpsLons:gps(500), elev:9000 };
+  const out = M.mergeItemFast_(a,b);
+  check('the LONGER GPS track still wins', out.gpsLats.length, 500);
+  check('...and lats/lons stay the same length', out.gpsLons.length, out.gpsLats.length);
+  check('...while the masked elev is still lowered', out.elev, 5000);
+}
+{
+  // Documented limitation, asserted so it cannot silently change: with NEITHER side stamped there
+  // is no clock to order them by, so max remains the tiebreak and a correction must stamp to travel.
+  const a = { id:'r1', stravaId:'1', date:'2026-06-20', elev:5000 };
+  const b = { id:'r1', stravaId:'1', date:'2026-06-20', elev:9000 };
+  check('with NO edit stamp on either side, max still wins (by design)', M.mergeItemFast_(a,b).elev, 9000);
+}
+check('the ride allowlist is a named constant', Array.isArray(M.RIDE_LWW_FIELDS_), true);
+check('...covering the fields that were stuck on max',
+  ['movingSecs','elevGain','kj','cadence','maxHR'].every(f => M.RIDE_LWW_FIELDS_.indexOf(f) >= 0), true);
 
 console.log('\n=== the wiring is actually in place ===');
 check('the 5s poll uses the root merge', /applyFirebaseData[\s\S]{0,1200}?mergeStateRoot_\(st,/.test(src), true);

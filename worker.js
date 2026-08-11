@@ -6516,6 +6516,30 @@ function mergeSession_(a, b){
   }
   return merged;
 }
+// PER-FIELD ALLOWLIST for a ride, resolved LAST-WRITE-WINS rather than by magnitude.
+//
+// This is the rides half of the Math.max merge bug. mergeState_ resolves two numbers with
+// Math.max, so a numeric ride field could be raised but never LOWERED - a corrected elevation, a
+// trimmed moving time, a recomputed TSS all silently reverted to whichever copy held the bigger
+// number. It cannot be fixed the way races were (whole-item replacement from the newer blob),
+// because mergeItemFast_ does field-aware work that would be thrown away with it - above all
+// keeping the LONGER GPS track when two copies disagree, which is load-bearing for a library
+// assembled from several devices and importers.
+//
+// So the allowlist is per FIELD: when either side carries an editedAt stamp, these come from the
+// later-edited side whatever their magnitude, and everything else still merges as before.
+//
+// It was previously an anonymous literal inline. Named because the list is the contract, and
+// because it was missing fields that are just as correctable as the ones on it: movingSecs,
+// elapsedSecs, elevGain, kj, work, cadence and maxHR were all still stuck on max-merge, which the
+// probe confirmed - a STAMPED movingSecs of 3000 lost to a remote 7000.
+//
+// STILL NOT FIXED, and deliberately: with NEITHER side stamped there is no clock to order them by,
+// so max remains the tiebreak. A downward correction must stamp editedAt (and ideally the _edited
+// mask, which is honoured for ANY field) to travel. That is the documented path, not an oversight.
+var RIDE_LWW_FIELDS_=['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed',
+  'avgHR','hr','calories','sportType','type','deleted','deletedAt',
+  'movingSecs','elapsedSecs','elevGain','kj','work','cadence','maxHR','maxSpeed','temp'];
 function mergeItemFast_(a, b){
   if(a == null) return b;
   if(b == null) return a;
@@ -6618,7 +6642,7 @@ function mergeItemFast_(a, b){
     // 'deleted'/'deletedAt' included: a tombstone and an un-tombstone are both deliberate user
     // state, and whichever happened LAST must win. Leaving them out meant a restore could be
     // reverted by a stale remote, and a delete could be resurrected by one.
-    ['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed','avgHR','hr','calories','sportType','type','deleted','deletedAt'].forEach(function(f){
+    RIDE_LWW_FIELDS_.forEach(function(f){
       if(win[f]!==undefined) merged[f]=win[f];
     });
     _mk.forEach(function(f){ var src=(aM[f]&&bM[f])?win:(aM[f]?a:b); if(src[f]!==undefined) merged[f]=src[f]; });
