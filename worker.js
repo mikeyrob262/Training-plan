@@ -22809,6 +22809,12 @@ function _trLabel_(){
   for(var i=0;i<_TR_RANGES.length;i++){ if(_TR_RANGES[i][1]===d) return _TR_RANGES[i][0]; }
   return d+'D';
 }
+// The window as a bare noun phrase, for sentences that already supply their own preposition:
+// "up 20% in a year". Deriving this by stripping a prefix off _trWords_ gave "in year".
+function _trSpan_(){
+  var d=_trDays_();
+  return d===7?'7 days':(d===28?'4 weeks':(d===84?'12 weeks':(d===182?'6 months':'a year')));
+}
 function _trWords_(){
   var d=_trDays_();
   return d===7?'the last 7 days':(d===28?'the last 4 weeks':(d===84?'the last 12 weeks':(d===182?'the last 6 months':'the last year')));
@@ -22876,7 +22882,7 @@ function aiRenderTrends_(ded){
 
   // ===== HEADLINES STRIP =====
   var heads=[];
-  if(story && story.fitness.pct!=null) heads.push({t:(story.fitness.pct>=0?'Fitness up ':'Fitness down ')+Math.abs(story.fitness.pct)+'% in '+_trW.replace('the last ',''), up:story.fitness.pct>=0});
+  if(story && story.fitness.pct!=null) heads.push({t:(story.fitness.pct>=0?'Fitness up ':'Fitness down ')+Math.abs(story.fitness.pct)+'% in '+_trSpan_(), up:story.fitness.pct>=0});
   var drv=_aiSafe_('TrDrivers', function(){return _trDrivers_(_trD);})||[];
   if(drv.length){ var top=drv[0]; var g=top.invert?(top.delta<0):(top.delta>0); heads.push({t:top.key+' '+(top.delta>0?'+':'')+top.delta+'%'+(g?' (helping)':' (watch)'), up:g}); }
   var preds=_aiSafe_('TrPreds', function(){return _trPredictions_(2);})||[];
@@ -22893,7 +22899,7 @@ function aiRenderTrends_(ded){
     var watchDay=_aiSafe_('TrWatch', function(){return _trWatchDay_();});
     function statBlock(lbl, val, delta, color){ return '<div style="min-width:96px"><div style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">'+lbl+'</div><div style="font-size:27px;font-weight:800;color:'+color+';line-height:1">'+val+'</div>'+(delta?('<div style="font-size:11px;color:var(--d-dim);margin-top:3px">'+delta+'</div>'):'')+'</div>'; }
     H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:18px 20px;margin-bottom:14px">';
-    H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; '+_trW.replace('the last ','Last ')+'</div>';
+    H+='<div style="font-size:11px;font-weight:800;color:var(--d-t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:15px">Your Story &mdash; Last '+_trSpan_().replace('a year','year')+'</div>';
     H+='<div style="display:flex;flex-wrap:wrap;gap:26px 30px;align-items:flex-start">';
     H+=statBlock('Fitness (CTL)', (story.fitness.pct!=null?((story.fitness.pct>=0?'+':'')+story.fitness.pct+'%'):story.fitness.now), story.fitness.then+' &rarr; '+story.fitness.now, story.fitness.pct>=0?GRN:BAD);
     H+=statBlock('Fatigue (ATL)', (story.fatigue.pct!=null?((story.fatigue.pct>=0?'+':'')+story.fatigue.pct+'%'):story.fatigue.now), story.fatigue.then+' &rarr; '+story.fatigue.now, ORG);
@@ -23056,7 +23062,7 @@ function aiRenderTrends_(ded){
   var oneThing='';
   if(story){
     if(story.peak && story.fitness.pct>0) oneThing='Your fitness is at its highest '+(cov.complete?('in '+cov.years+' years'):'on record')+' and still climbing'+(watchDayGlobal_()?(' — protect recovery after '+watchDayGlobal_()+'s'):'')+'.';
-    else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over '+_trW.replace('the last ','')+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
+    else if(story.fitness.pct!=null && story.fitness.pct>=0) oneThing='Fitness is up '+story.fitness.pct+'% over '+_trSpan_()+(drv.length&&(drv[0].invert?drv[0].delta<0:drv[0].delta>0)?(' — '+drv[0].key.toLowerCase()+' is the biggest lever right now'):'')+'.';
     else oneThing='Fitness has dipped '+Math.abs(story.fitness.pct||0)+'% — a productive base phase if it is intentional, a flag if it is not.';
   }
   if(oneThing){ H+='<div style="background:linear-gradient(90deg,rgba(34,197,94,.10),rgba(17,19,24,0));border:1px solid rgba(34,197,94,.25);border-left:4px solid '+GRN+';border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:14px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="'+GRN+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0012 2z"/></svg><div><div style="font-size:11px;font-weight:800;color:'+GRN+';text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">If you only remember one thing</div><div style="font-size:15px;font-weight:700;color:var(--d-head);line-height:1.35">'+aiEsc_(oneThing)+'</div></div></div>'; }
