@@ -99,6 +99,9 @@ console.log('\n'+C+'=== performance strip is honest about missing power ==='+X);
   ok('...and says why', /no power curve yet/.test(html));
 }
 
+const localDay=(plus)=>{const d=new Date();d.setDate(d.getDate()+plus);
+  const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
 console.log('\n'+C+'=== the AI Coach asks about a CONFLICT, or says nothing ==='+X);
 // The first version switched on whichever tier had fired, so the card could only restate the hero
 // beside it. A conflict is two true facts in tension - the only shape that adds something.
@@ -118,7 +121,7 @@ function coach(W){
 {
   // a run race with almost no running behind it
   const api=coach({ st:{rides:[],fitSeries:[],goalTargets:{}}, fit:{loaded:true,ctl:60},
-    races:[{name:'Half',date:(()=>{const d=new Date();d.setDate(d.getDate()+68);return d.toISOString().slice(0,10);})(),sport:'run'}],
+    races:[{name:'Half',date:localDay(68),sport:'run'}],
     runs:[] });
   const q=api.ovwCoachQuestion_();
   ok('a run race with no run volume produces a question', !!q);
@@ -161,7 +164,7 @@ function coach(W){
   const api=coach({ st:{ fitSeries:[], goalTargets:{},
       rides:[{date:'2025-06-01',powerCurve:{'1200':273}},{date:'2026-06-01',powerCurve:{'1200':205}}] },
     fit:{loaded:true,ctl:60}, acts, n90:80, n180:40,
-    races:[{name:'Half',date:(()=>{const d=new Date();d.setDate(d.getDate()+40);return d.toISOString().slice(0,10);})(),sport:'run'}] });
+    races:[{name:'Half',date:localDay(40),sport:'run'}] });
   check('the race conflict outranks the trend conflict', api.ovwCoachQuestion_().id, 'coach:race-vs-run-volume');
 }
 ok('the card prints the evidence, not just the question', /c\.ev\.forEach/.test(ex('_ovwCoachHTML_')));

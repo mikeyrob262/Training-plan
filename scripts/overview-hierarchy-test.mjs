@@ -135,6 +135,32 @@ console.log('\n'+C+'=== a running race never borrows a cycling number ==='+X);
   ok('...showing only the day count', hit.facts.length === 1 && /Days out/.test(hit.facts[0].label));
 }
 
+console.log('\n'+C+'=== tier 2 names the whole cluster, not just the nearest ==='+X);
+{
+  // The autumn benchmark block is several attempts inside a couple of weeks. Surfacing only the
+  // nearest made the window look emptier than it is and hid the thing that makes it a block.
+  const { W, api } = world();
+  W.races = [
+    { id:'a1', name:'Chalet Reynard', date: day(-19), sport:'bike', status:'active' },
+    { id:'a2', name:'Alpe sub-70',    date: day(-16), sport:'bike', status:'active' },
+    { id:'a3', name:'Ven-Top summit', date: day(-13), sport:'bike', status:'active' },
+    { id:'r1', name:'Half Marathon',  date: day(-5),  sport:'run',  status:'active' }
+  ];
+  const hit = api.ovwEvaluate_({ record:false });
+  check('it still LEADS with the nearest', hit.key, 't2:r1');
+  const f = hit.facts.map(x => x.label + '=' + x.value).join(' | ');
+  ok('...names how many are in the window', /Events in this window=4 in the next 19 days/.test(f));
+  ok('...and lists the other three by name and distance out',
+     /Ven-Top summit \(13d\)/.test(f) && /Alpe sub-70 \(16d\)/.test(f) && /Chalet Reynard \(19d\)/.test(f));
+}
+{
+  const { W, api } = world();
+  W.races = [{ id:'r1', name:'Half Marathon', date: day(-5), sport:'run', status:'active' }];
+  const hit = api.ovwEvaluate_({ record:false });
+  const labels = hit.facts.map(x => x.label);
+  ok('a lone event does NOT get a cluster line', labels.indexOf('Events in this window') < 0);
+}
+
 console.log('\n'+C+'=== tier 3 excludes manual FTP entries ==='+X);
 {
   const { W, api } = world();

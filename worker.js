@@ -23824,13 +23824,26 @@ function _ovwTier2_(){
   var races=[]; try{ races=(typeof upcomingRaces_==='function')?(upcomingRaces_()||[]):[]; }catch(e){}
   if(!races.length) return null;
   var today=_ovwToday_();
-  var soon=races.map(function(e){
+  // THE WHOLE CLUSTER, NOT JUST THE NEAREST. Dropping three of four events inside the window and
+  // saying nothing about them made the window look emptier than it is - and the autumn benchmark
+  // block is deliberately several attempts inside a couple of weeks, so silence there would hide
+  // the thing that makes it a block. It still LEADS with the nearest, because that is the one that
+  // needs a decision first; the rest are named so the athlete can see what is behind it.
+  var inWindow=races.map(function(e){
       return { e:e, days:Math.round((Date.parse(_ovwDay_(e.date)+'T00:00:00')-Date.parse(today+'T00:00:00'))/86400000) };
     }).filter(function(x){ return x.days>=0 && x.days<=OVW_T2_DAYS; })
-    .sort(function(a,b){ return a.days-b.days; })[0];
+    .sort(function(a,b){ return a.days-b.days; });
+  var soon=inWindow[0];
   if(!soon) return null;
   var e=soon.e, sport=String(e.sport||'').toLowerCase();
   var facts=[{label:'Days out', value:soon.days}];
+  if(inWindow.length>1){
+    var lastD=inWindow[inWindow.length-1].days;
+    facts.push({ label:'Events in this window',
+                 value:inWindow.length+' in the next '+lastD+' day'+(lastD===1?'':'s') });
+    facts.push({ label:'Then', value:inWindow.slice(1).map(function(x){
+                   return (x.e.name||'Event')+' ('+x.days+'d)'; }).join(', ') });
+  }
   var body='';
   if(/run/.test(sport)){
     // Running-specific only. Weekly mileage over the last 4 weeks, and the longest single run.
@@ -29537,8 +29550,12 @@ var _BLOCK_MILESTONES=[
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
   {slug:'alpe', date:'2026-10-13', label:'Alpe sub-70', note:'', road:true,
    icon:'M2 20l7-14 5 9 3-5 5 10z', sTitle:'Alpe sub-70', sSub:'Sub-70-minute goal', benefit:'Confidence boost'},
-  {slug:'tenk', date:'2026-10-18', label:'10k run', note:'', road:false,
-   icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'10k run', sSub:'The running variable', benefit:'Base transferred'},
+  // Oct 18 is the Grand Rapids HALF MARATHON, 13.1 mi - the 10k was an earlier downgrade decision
+  // that was reversed, and the stale label sat here contradicting the calendar event for the same
+  // day. The slug stays 'tenk' deliberately: 13 stored plan days reference it, and renaming it in
+  // code without migrating them would orphan every one. The block rebuild renames it properly.
+  {slug:'tenk', date:'2026-10-18', label:'Grand Rapids Half Marathon', note:'13.1 mi - the goal race', road:true,
+   icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'Half marathon', sSub:'13.1 mi, the goal race', benefit:'Race day'},
   {slug:'ventop', date:'2026-11-10', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
    icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
@@ -29623,11 +29640,11 @@ function _trainingBlock_(){
         '2026-10-13':[S('alpe','primary — or Oct 14')],
         '2026-10-14':[S('optional','alternate Alpe day if Oct 13 is a no-go')],
         '2026-10-15':[S('rest'),S('mobility')],
-        '2026-10-16':[S('easyRun','20 min easy + 4x30 sec at 10k pace')],
+        '2026-10-16':[S('easyRun','20 min easy + 4x30 sec at race pace')],
         '2026-10-17':[S('rest')],
         '2026-10-18':[S('tenk')] } },
       { id:'P6', label:'Final build', start:'2026-10-19', end:'2026-11-07', week:[
-        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-10k')],
+        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-race')],
         [S('z2','60-90 min')], [S('threshold','3x20 min'),S('strengthA')], [S('long','building to 2.5-3 hrs with sustained tempo blocks')], [S('optional')] ] },
       { id:'P7', label:'Ven-Top taper + summit', start:'2026-11-08', end:'2026-11-11', dates:{
         '2026-11-08':[S('recovery','Easy spin + mobility only'),S('mobility')],
@@ -29942,7 +29959,7 @@ var _CV_EXPECT={
   recovery:'Barely a workout, and that is correct. If you finish tired you rode it too hard and cost yourself the session it was protecting.',
   chalet:'A long steady burn: boredom, then discomfort, then the summit. Pace it and the top comes to you. Send the bottom and it does not.',
   alpe:'Sustained and lonely. The clock is the opponent, not the rider ahead. Even effort, no heroics until the final ramps.',
-  tenk:'Comfortable-hard early, genuinely hard from halfway. The race is won in the last 3k by whoever paced the first 7.',
+  tenk:'Comfortable-hard early, genuinely hard from halfway. A half is won in the last 5k by whoever paced the first 10.',
   ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top. You get one attempt at this.',
   ftpTest:'The 5-minute effort hurts and then it is over. The 20 is different — minutes 1 to 8 feel deceptively fine, which is exactly when you overcook it, and from 12 it is a grind you hold by decision rather than by feel. Finishing it certain you could not have gone one watt harder is the test working.'
 };
@@ -30150,7 +30167,7 @@ function _cvFuel_(dateKey, intent, done){
 }
 // Which sport answers a prescribed session, or '' when nothing does (strength/mobility/rest).
 // Mostly derivable from SESSION_DEFS.type; the exception is the ATTEMPT type, which covers both the
-// cycling attempts and the 10k race, so those are named explicitly rather than guessed at.
+// cycling attempts and the half marathon, so those are named explicitly rather than guessed at.
 var _CV_RUN_ATTEMPTS={ tenk:1 };
 function _cvWantSport_(intent, def){
   if(!intent || !def) return '';
@@ -43567,7 +43584,7 @@ var SESSION_DEFS={
   // JUDGE the effort — the group-ride note it replaces was telling the model to assess bunch tactics
   // on a ride with no bunch in it.
   fuhgeddaboudit:{ type:'attempt', name:'Fuhgeddaboudit attempt',      note:'Hard solo route attempt in New York. Ridden on its own terms as a sustained time-trial effort — there is no group to sit in on and no wheels to follow, so judge sustained output and pacing across the effort, not bunch tactics and not a steady-state ideal.' },
-  tenk:     { type:'attempt', name:'10k race',                         note:'Race day. Warm up properly, then run your race.' },
+  tenk:     { type:'attempt', name:'Grand Rapids Half Marathon',       note:'Race day, 13.1 mi. Warm up properly, then run your race.' },
   ventop:   { type:'attempt', name:'Ven-Top summit',                   note:'The full summit attempt — everything the block was built for.' }
 };
 var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','rest'];
