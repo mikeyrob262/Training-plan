@@ -19959,7 +19959,8 @@ function _gcSpark_(pts, col, opts){
   close();
   var path=segs.map(function(s){ return 'M'+s.join('L'); }).join(' ');
   var loneDots=lone.map(function(p){ var xy=p.split(' ');
-    return '<circle cx="'+xy[0]+'" cy="'+xy[1]+'" r="2" fill="'+col+'"/>'; }).join('');
+    return '<line x1="'+xy[0]+'" y1="'+xy[1]+'" x2="'+xy[0]+'" y2="'+xy[1]+'" stroke="'+col+'"'
+      +' stroke-width="4" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'; }).join('');
   // Area wash under the line only where the line is continuous, at the 10% the mark spec allows.
   var wash='';
   if(opts.fill!==false && segs.length===1){
@@ -19967,17 +19968,26 @@ function _gcSpark_(pts, col, opts){
     wash='<path d="M'+f.join('L')+'L'+f[f.length-1].split(' ')[0]+' '+(H-P)+'L'+f[0].split(' ')[0]+' '+(H-P)+'Z" fill="'+col+'" opacity=".12"/>';
   }
   var dots='';
+  // A marker has to survive preserveAspectRatio="none", which scales x and y independently and
+  // draws <circle r> as an ellipse (measured 10.2 x 3.8 px, ratio 2.69, on the Signature card).
+  // A zero-length segment with a ROUND linecap and a NON-SCALING stroke paints a true circle
+  // whose diameter is the stroke width in screen pixels, so it stays round at any stretch.
+  var _dot=function(x,y,d,o){
+    return '<line x1="'+x+'" y1="'+y+'" x2="'+x+'" y2="'+y+'" stroke="'+col+'" stroke-width="'+d+'"'
+      +' stroke-linecap="round" vector-effect="non-scaling-stroke"'+(o?(' opacity="'+o+'"'):'')+'/>';
+  };
   // Sparse series: mark every reading, not just the ends. Opt out with markPoints:false.
   var markAll=(opts.markPoints!=null)?!!opts.markPoints:(real.length<=_GC_SPARSE_MAX);
   if(markAll){ vals.forEach(function(v,i){ if(v==null) return;
-    dots+='<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(v).toFixed(1)+'" r="1.9" fill="'+col+'" opacity=".85"/>'; }); }
+    dots+=_dot(X(i).toFixed(1), Y(v).toFixed(1), 3.8, '.85'); }); }
   var lastI=-1; for(var i=n-1;i>=0;i--){ if(vals[i]!=null){ lastI=i; break; } }
-  if(lastI>=0) dots+='<circle cx="'+X(lastI).toFixed(1)+'" cy="'+Y(vals[lastI]).toFixed(1)+'" r="2.6" fill="'+col+'"/>';
-  // The peak gets a ring, because on these cards the peak IS the record being chased and the
-  // reader's eye should find it without reading a label.
+  if(lastI>=0) dots+=_dot(X(lastI).toFixed(1), Y(vals[lastI]).toFixed(1), 5.2, 0);
+  // The peak still gets its own mark, because on these cards the peak IS the record being chased
+  // and the reader's eye should find it without reading a label. It was a stroke-only RING, which
+  // the round-cap trick cannot draw - so it is a wider, softer halo instead: same job, and round.
   if(opts.markPeak!==false && !flat){
     var pi=vals.indexOf(hi);
-    if(pi>=0 && pi!==lastI) dots+='<circle cx="'+X(pi).toFixed(1)+'" cy="'+Y(hi).toFixed(1)+'" r="2.8" fill="none" stroke="'+col+'" stroke-width="1.5"/>';
+    if(pi>=0 && pi!==lastI) dots=_dot(X(pi).toFixed(1), Y(hi).toFixed(1), 8.2, '.32')+dots;
   }
   return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="'+(opts.aria||'trend')
     +'" style="width:100%;height:'+H+'px;display:block;overflow:visible">'
@@ -25169,9 +25179,17 @@ function aiRenderDNA_(){
   H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:18px">Read off the four fields every activity carries — date, sport, distance, duration — plus temperature and start time where they exist. '
     +nRun.toLocaleString()+' runs and '+nRide.toLocaleString()+' rides, '+span+'. Every trait states its derivation; a trait without enough observations to be honest is locked, with what would unlock it.</div>';
   H+=_dnaCardHTML;
+  // ERA TIMELINE and SIGNATURE ARE BOTH SPARSE - two era summaries and six monthly readings.
+  // Laid out full width they were mostly empty: the signature chart is capped at 430px inside a
+  // 1120px card, so roughly two thirds of that row was blank. They pair naturally instead, and
+  // each is capped, so the space a card takes matches the content it actually has.
+  //
+  // align-items:flex-start for the same reason the Overview cards use it: the two have different
+  // natural heights and stretching the shorter one just moves the empty space inside its border.
+  var _eraH='', _sigH='';
   // ERA SPINE
-  H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
-  H+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-bottom:22px">';
+  _eraH+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
+  _eraH+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px">';
   // Width is PROPORTIONAL TO SPAN. It was flex:1 0 auto, so every era got the same width and a
   // 14-year era read as equal to a 2-year one - on a timeline, where width is the one thing the
   // reader takes as duration. min-width still protects the label from being crushed.
@@ -25180,7 +25198,7 @@ function aiRenderDNA_(){
   eras.forEach(function(e){
     var col=_dnaEraColor_(e.dom), yl=(e.startY===e.endY)?(''+e.startY):(e.startY+'–'+e.endY);
     var _yrs=_eraSpan(e);
-    H+='<div style="flex:'+_yrs+' 1 0;min-width:150px;position:relative;padding:0 10px">'
+    _eraH+='<div style="flex:'+_yrs+' 1 0;min-width:150px;position:relative;padding:0 10px">'
       +'<div style="height:4px;background:'+col+';border-radius:2px;margin-bottom:9px"></div>'
       +'<div style="font-size:10.5px;font-weight:800;color:'+col+';letter-spacing:.03em">'+yl+'</div>'
       +'<div style="font-size:15px;font-weight:800;color:var(--d-head);margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
@@ -25188,14 +25206,14 @@ function aiRenderDNA_(){
       +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+e.acts.toLocaleString()+' activities &middot; '+_yrs+' year'+(_yrs===1?'':'s')+'</div>'
       +'</div>';
   });
-  H+='</div>';
+  _eraH+='</div>';
   // SIGNATURE — reads off _zsCompute_ z. Floored at 0 for display; the z is printed as the honest value.
   if(sig){
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;margin-bottom:18px">';
-    H+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:var(--d-dim)">z vs your own average month</span>');
+    _sigH+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">';
+    _sigH+=aiLbl_('Signature &middot; last '+sig.months+' scored months','<span style="font-size:11px;color:var(--d-dim)">z vs your own average month</span>');
     sig.axes.forEach(function(ax){
       var w=Math.max(3,Math.round(ax.mag*100)), pos=ax.z>=0;
-      H+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
+      _sigH+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
         +'<span style="font-size:12.5px;font-weight:700;color:var(--d-soft)">'+aiEsc_(ax.label)+'</span>'
         +'<span style="font-size:12.5px;font-weight:800;color:'+(pos?'#4ade80':'#f59e0b')+'">'+(pos?'+':'')+ax.z.toFixed(2)+' z</span></div>'
         +(function(){
@@ -25216,8 +25234,8 @@ function aiRenderDNA_(){
               +'<div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+'"></div></div></div>';
           })();
     });
-    H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Each point is one scored month, plotted where it fell; the number is their mean.</div>';
-    H+='</div>';
+    _sigH+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Each point is one scored month, plotted where it fell; the number is their mean.</div>';
+    _sigH+='</div>';
   }
   // POWER CURVE RADAR. Overview's Athlete DNA card links here with "Explore DNA" and the chart it
   // shows was not on the page it linked to. Same component, called the same way - _dnaRadarHTML_
@@ -25231,14 +25249,21 @@ function aiRenderDNA_(){
   (function(){
     var _rad=(typeof _dnaRadarHTML_==='function')?_aiSafe_('DNAradar', function(){return _dnaRadarHTML_();}):'';
     if(!_rad) return;
-    H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
-    H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px;margin-bottom:18px">'
+    _sigH+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
+    _sigH+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px;margin-bottom:18px">'
       +'<div style="font-size:11.5px;color:var(--d-t3,#8b93a7);line-height:1.5;margin-bottom:4px">'
       +'Ten durations because ten is what your rides actually store. Every spoke is scored against '
       +'your own best at that duration, so a sprint cannot dwarf an hour &mdash; they are never '
       +'measured against each other.</div>'
       +_rad+'</div>';
   })();
+  if(_eraH || _sigH){
+    _eraH=_eraH?('<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px">'+_eraH+'</div>'):'';
+    H+='<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;margin-bottom:20px">'
+      +(_eraH?('<div style="flex:1.25 1 460px;min-width:0">'+_eraH+'</div>'):'')
+      +(_sigH?('<div style="flex:1 1 400px;min-width:0">'+_sigH+'</div>'):'')
+      +'</div>';
+  }
   // UNLOCKED TRAITS
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Your traits <span style="color:#3a4150">&middot; '+unlocked.length+' read</span></div>';
   H+='<div style="display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));margin-bottom:20px">';

@@ -48,6 +48,11 @@ function check(name, got, want){
 }
 const paths = svg => [...String(svg).matchAll(/ d="([^"]+)"/g)].map(m => m[1]);
 const circles = svg => [...String(svg).matchAll(/<circle[^>]*>/g)].map(m => m[0]);
+// Markers are no longer <circle r>: preserveAspectRatio="none" scales x and y independently, so
+// a circle draws as an ellipse (measured 10.2 x 3.8 px on a 430px card). They are zero-length
+// segments with a round linecap and a non-scaling stroke, which stay round at any stretch.
+const marks = svg => [...String(svg).matchAll(/<line[^>]*stroke-linecap="round"[^>]*>/g)].map(m => m[0]);
+const markAt = (m) => { const g = /x1="([\d.]+)" y1="([\d.]+)"/.exec(m); return g ? { x:+g[1], y:+g[2] } : null; };
 
 // ---- sparkline contract -----------------------------------------------------------------------
 check('a single point is not a trajectory', _gcSpark_([{v:5}], '#0891b2'), '');
@@ -62,7 +67,7 @@ check('a null is never plotted as a zero', gapped.indexOf('NaN') < 0, true);
 // An isolated value cannot be a line segment, but it must still be ON the chart — dropping it
 // would silently delete a real measurement, which a sparkline has no axis to reveal.
 const lonely = _gcSpark_([{v:10},{v:null},{v:30},{v:20}], '#0891b2', {fill:false});
-check('an isolated value survives as a dot', circles(lonely).length >= 2, true);
+check('an isolated value survives as a dot', marks(lonely).length >= 2, true);
 // ...and the surrounding points keep their own positions, so the gap is not silently closed up.
 check('gapped and ungapped are different drawings', lonely === _gcSpark_([{v:10},{v:30},{v:20}], '#0891b2', {fill:false}), false);
 
@@ -71,14 +76,14 @@ const flat = _gcSpark_([{v:5},{v:5},{v:5}], '#0891b2', {fill:false});
 const flatYs = [...paths(flat)[0].matchAll(/[ML](\d+\.?\d*) (\d+\.?\d*)/g)].map(m => +m[2]);
 check('a flat series is drawn level', new Set(flatYs).size, 1);
 check('...and centred, not pinned to the baseline', flatYs[0] > 5 && flatYs[0] < 33, true);
-check('a flat series gets no peak ring', circles(flat).filter(c => c.indexOf('fill="none"') >= 0).length, 0);
+check('a flat series gets no peak halo', marks(flat).filter(c => c.indexOf('opacity=".32"') >= 0).length, 0);
 
-// The peak ring lands on the peak.
+// The peak halo lands on the peak.
 const peaked = _gcSpark_([{v:1},{v:9},{v:2},{v:3}], '#0891b2');
-const ring = circles(peaked).filter(c => c.indexOf('fill="none"') >= 0);
-check('the peak gets exactly one ring', ring.length, 1);
-const ringX = +(/cx="([\d.]+)"/.exec(ring[0])||[])[1];
-check('the ring sits on the peak, not the last point', ringX > 50 && ringX < 60, true);
+const ring = marks(peaked).filter(c => c.indexOf('opacity=".32"') >= 0);
+check('the peak gets exactly one halo', ring.length, 1);
+const ringX = +(/x1="([\d.]+)"/.exec(ring[0])||[])[1];
+check('the halo sits on the peak, not the last point', ringX > 50 && ringX < 60, true);
 // When the peak IS the last point the end dot already marks it — no double mark.
 check('no duplicate ring when the peak is last', circles(_gcSpark_([{v:1},{v:2},{v:9}], '#0891b2')).filter(c => c.indexOf('fill="none"') >= 0).length, 0);
 check('fill:false suppresses the wash', _gcSpark_([{v:1},{v:5}], '#0891b2', {fill:false}).indexOf('opacity=".12"') < 0, true);

@@ -40,7 +40,9 @@ const eq = (label, got, want) => { const good = JSON.stringify(got) === JSON.str
 // Every continuous run goes into ONE d attribute separated by spaces (M..L.. M..L..), so counting
 // <path> elements always returns 1. The number of RUNS is the number of M commands.
 const segs = (svg) => (svg.match(/ d="([^"]*)"/g) || []).join(' ').split('M').length - 1;
-const dots = (svg) => (svg.match(/<circle /g) || []).length;
+// A marker is a zero-length round-capped segment, not a <circle> - a circle would be drawn as an
+// ellipse under preserveAspectRatio="none". Count those, and assert they are genuinely round.
+const dots = (svg) => (svg.match(/<line[^>]*stroke-linecap="round"/g) || []).length;
 
 console.log('\n' + Y + '=== a year with no reading is a GAP, not a closed-up axis ===' + X);
 {
@@ -69,7 +71,8 @@ console.log('\n' + Y + '=== sparse readings are drawn as readings, not as a line
   const svg = M._gcSpark_(four, '#fff', { fill: false });
   // 4 readings marked; the last point and the peak coincide here on a rising series.
   ok('all four readings carry a mark (' + dots(svg) + ' circles)', dots(svg) >= 4);
-  ok('the marks sit ON the plotted values', /r="1\.9"/.test(svg));
+  ok('the marks are round at any stretch, not ellipses', /stroke-width="3.8" stroke-linecap="round" vector-effect="non-scaling-stroke"/.test(svg));
+  ok('...and no <circle> marker survives, which would distort', !/<circle/.test(svg));
   ok('markPoints:false still opts out', dots(M._gcSpark_(four, '#fff', { fill: false, markPoints: false })) < 4);
 }
 {
