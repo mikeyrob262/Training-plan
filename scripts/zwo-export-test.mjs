@@ -124,5 +124,37 @@ check('...and wires a download handler', /_zwoCoachV_\(&#39;'\+dk\+'&#39;\)/.tes
 check('the handler is reachable from the DOM', /window\._zwoCoachV_\s*=/.test(src), true);
 check('the fallback link targets the card that was pressed', /_zwoFallback_\(z, url, sid==='cv'\?'cv-zwo':'sd-zwo'\)/.test(src), true);
 
+
+// this file's helper is check(label, got, want); ok() is the boolean shorthand used below
+const ok = (label, cond) => check(label, !!cond, true);
+console.log('\n' + (typeof C !== 'undefined' ? C : '') + '=== VO2 is prescribed in the VO2 zone, not threshold ===' + (typeof X !== 'undefined' ? X : ''));
+{
+  // Reported live: the VO2 block generated 174-192 W at FTP 183 - 95-105%, which is threshold.
+  // Zwift's own 210 W was the correct figure. The band feeds the on-screen watts, the step card AND
+  // the .zwo export from one place, so this is the single thing that was wrong.
+  const defs = src.slice(src.indexOf('  z2:       { type:'), src.indexOf('  rest:     { type:'));
+  const vo2 = /vo2:\s*\{[^}]*pctFtp:\[(\d+),(\d+)\]/.exec(defs);
+  check('the VO2 def carries a band', !!(!!vo2), true);
+  const lo = vo2 ? +vo2[1] : 0, hi = vo2 ? +vo2[2] : 0;
+  check('VO2 low end is above threshold (' + lo + '% >= 106%)', !!(lo >= 106), true);
+  check('VO2 high end is a real ceiling (' + hi + '% <= 125%)', !!(hi <= 125 && hi > lo), true);
+  // The reported numbers, at the FTP that produced them.
+  ok('at FTP 183 the band is ~201-220 W, not 174-192 (' + Math.round(183*lo/100) + '-' + Math.round(183*hi/100) + 'W)',
+     Math.round(183*lo/100) >= 195 && Math.round(183*hi/100) <= 225);
+  check("...and contains Zwift's 210 W", !!(183*lo/100 <= 210 && 210 <= 183*hi/100), true);
+
+  // THE INVARIANT THAT WAS ACTUALLY BROKEN: the prescription and the grader must agree. The app
+  // grades a ride as VO2 only at ratio >= 1.06, so a session ridden exactly to a 95-105% band came
+  // back graded THRESHOLD - prescribed as one thing, scored as another.
+  const gate = /if\(ratio>=([\d.]+)\) return 'vo2';/.exec(src);
+  check('the grader has a VO2 ratio gate', !!(!!gate), true);
+  const gateVal = gate ? +gate[1] : 0;
+  ok('a ride at the BOTTOM of the prescribed band still grades as VO2 (' + (lo/100) + ' >= ' + gateVal + ')',
+     lo/100 >= gateVal);
+
+  // And it must not collide with the threshold prescription below it.
+  const thr = /threshold:\s*\{[^}]*pctFtp:\[(\d+),(\d+)\]/.exec(defs);
+  check('VO2 sits entirely above the threshold band', !!(!!thr && lo > +thr[2]), true);
+}
 console.log('\n'+(fails? R+fails+' CHECK(S) FAILED'+X : G+'zwo-export: all checks passed'+X));
 process.exit(fails?1:0);

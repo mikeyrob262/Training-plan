@@ -42928,7 +42928,15 @@ var SESSION_DEFS={
   mobilityD:{ type:'mobility', name:'Mobility D',  exGroup:'mobility-d', durationMin:15, note:'15 min. Prescribed, not optional — undoes what riding does to your body.' },
   z2:       { type:'ride', name:'Z2 Endurance',    zone:'Z2',    pctFtp:[60,80],  hr:[120,135], hrCap:140, durationMin:90,  note:'True Z2, strict ceiling. Back off above 140 bpm even if the legs feel good.' },
   threshold:{ type:'ride', name:'Threshold',       zone:'Z4',    pctFtp:[85,95],  durationMin:60,  note:'Sustained threshold — the quality bike work of the week. Hold the band.' },
-  vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[95,105], durationMin:45,  note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
+  // VO2 WAS PRESCRIBED AT 95-105% OF FTP, WHICH IS THRESHOLD, NOT VO2max. At FTP 183 that is
+  // 174-192 W; the session wants roughly 201-220 W. The standard Z5 band is 106-120% and this
+  // now sits at 110-120%, squarely inside it.
+  //
+  // The app already disagreed with itself about this: _blockIntervalIntent_ grades a ride as VO2
+  // only at ratio >= 1.06, so a session ridden EXACTLY to the old prescription could never be
+  // graded as the thing it was prescribed as - it came back threshold every time. One band feeds
+  // the on-screen watts, the step-by-step card and the .zwo export, so this fixes all three.
+  vo2:      { type:'ride', name:'VO2',             zone:'Z5',    pctFtp:[110,120], durationMin:45,  note:'Short, hard efforts. Hit the band, then stop — no junk volume after.' },
   // The retest. Deliberately carries NO pctFtp: a test has no prescribed band, and printing one
   // would invite pacing to the old number — which is the whole failure mode. Duration is the full
   // protocol (10 warmup + 5 max + 10 easy + 20 test + 5 cooldown).
