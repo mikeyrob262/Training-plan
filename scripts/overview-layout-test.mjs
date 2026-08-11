@@ -192,9 +192,13 @@ ok('the DNA card uses the REAL radar', /_dnaRadarHTML_/.test(asm));
 ok('...and no invented composite score is rendered',
    ex('_ovwHeroHTML_').indexOf('The Engine') < 0 && ex('_ovwHeroHTML_').indexOf('/100') < 0);
 
-// PAIRED BY NATURAL HEIGHT: the two tall cards together, the two short cards together.
-ok('Goals pairs with DNA, not with the short Performance strip', asm.indexOf('row([goals, dna]') >= 0);
-ok('Performance pairs with AI Coach', asm.indexOf('row([perf, coach]') >= 0);
+// COLUMN FLOW: row pairing meant a card waited on the TALLEST card in the row above it, so
+// Performance sat idle below DNA even though Goals had ended hundreds of pixels earlier.
+ok('the two columns are built independently', asm.indexOf("col([goals, perf]") >= 0 && asm.indexOf("col([dna, coach]") >= 0);
+ok('...and no longer paired into rows', asm.indexOf('row([goals, dna]') < 0 && asm.indexOf('row([perf, coach]') < 0);
+ok('each column stacks on its own height', /flex-direction:column/.test(asm));
+ok('columns align to the top rather than stretching', /align-items:flex-start/.test(asm));
+ok('...and collapse to one column on mobile', /\.ov-cols\{flex-direction:column/.test(src));
 // Stretch-and-centre was tried and looked worse - DNA is about twice Goals' height, so centring
 // split one big gap into two empty panels. A card that ends with its content has no hole.
 ok('cards size to their content rather than stretching',

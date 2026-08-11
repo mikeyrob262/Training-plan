@@ -28762,16 +28762,27 @@ function aiRenderTab_(tab, ded){
     var t=(live.length===cols.length)?tmpl:('repeat('+live.length+', minmax(0,1fr))');
     return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:10px;margin-bottom:10px">'+live.join('')+'</div>';
   };
-  var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
-  // PAIRED BY NATURAL HEIGHT, not by the order the spec lists them. Performance was a short strip
-  // sitting beside Goals, a six-row sparkline stack, so most of its grid cell was empty - and DNA
-  // (radar plus several paragraphs) was beside AI Coach, which has nowhere near that much to say.
-  // Goals and DNA are the two genuinely tall cards, so they pair with each other; Performance and
-  // AI Coach are the two short ones and pair with each other.
+  var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}.ov-cols{flex-direction:column !important}}</style>';
+  // COLUMN FLOW, NOT ROWS. Pairing by row meant a card could not start until the TALLEST card in
+  // the row above it had finished: Performance sat waiting on DNA even though Goals, directly above
+  // it, had ended hundreds of pixels earlier. Two independent columns remove the barrier - each one
+  // stacks on its own height, so Performance slides straight up under Goals and AI Coach does the
+  // same under DNA.
+  //
+  // Deliberately two flex COLUMNS rather than CSS multi-column or a masonry grid: those reflow by
+  // available space and would reorder the cards on a width change, and the reading order here is
+  // meaningful. This keeps each card in a named column.
+  var col=function(cards, grow){
+    var live=cards.filter(function(c){ return c; });
+    if(!live.length) return '';
+    return '<div style="flex:'+grow+' 1 0;min-width:0;display:flex;flex-direction:column;gap:10px">'+live.join('')+'</div>';
+  };
   html+=row([hero, focus], 'minmax(0,1.55fr) minmax(0,1fr)');
   if(cur) html+='<div style="margin-bottom:10px">'+cur+'</div>';
-  html+=row([goals, dna], 'minmax(0,1fr) minmax(0,1.15fr)');
-  html+=row([perf, coach], 'minmax(0,1.15fr) minmax(0,1fr)');
+  var colL=col([goals, perf], '1'), colR=col([dna, coach], '1.15');
+  if(colL || colR){
+    html+='<div class="ov-cols" style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">'+colL+colR+'</div>';
+  }
   if(signals) html+='<div>'+signals+'</div>';
   return html;
 }
