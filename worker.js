@@ -44051,9 +44051,19 @@ function recomputeGearMileage(){
 // 401'd, which is why st.stravaGearMap never populated. This centralizes the
 // refresh so every path gets a live token. onToken(token) runs the actual
 // call; onNoToken() fires only when there is neither a refresh nor an access
-// token. NOTE: client_secret is still inline here (matches the other sync
-// paths) — B2 rotates it and moves this exchange behind the Worker; keeping it
-// in one place is deliberate setup for that.
+// token.
+//
+// The client_secret is NOT here and has not been since 4bf3657 (2026-07-18): every refresh
+// in the app posts to /api/strava/token and the secret lives only in the Worker env. This
+// comment used to say the opposite, describing the pre-Jul-18 state, and it survived the fix
+// long enough to be read as evidence that the exposure was still open - it was the single
+// remaining occurrence of the string client_secret in the served bundle.
+//
+// Verified 2026-08-11: the old secret, still readable in this repo's public git history,
+// now returns resource:"Application" from Strava (dead), while the Worker's returns
+// resource:"RefreshToken" (valid creds, bad token). That pair is the discriminator - an
+// Application error means the client credentials are wrong, a RefreshToken error means they
+// are right and only the token was bad.
 function withFreshStravaToken(onToken, onNoToken){
   var noToken = onNoToken || function(){};
   if(st.stravaRefreshToken){
