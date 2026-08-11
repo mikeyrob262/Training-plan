@@ -13163,6 +13163,28 @@ function openFoodForMeal(meal){
   });
 }
 
+// ADD-FOOD TRACE. The reported failure (laptop: Add does not persist) did not reproduce in a
+// headless desktop - an entry survived a cold reload whether written after state settled or
+// deliberately before it loaded. The three candidate failure modes are: the handler never fires,
+// it fires and the write is lost, or the write lands and the READ-BACK misses it. This logs all
+// three at each of the add sites, including a re-read of the store AFTER sv() returns, so the next
+// occurrence says which one it was.
+//
+// Cheap by construction: one line per add, not per render.
+function _nlTraceAdd_(where, dateKey, entry){
+  try{
+    var nd=getNDay(dateKey), bucket=(nd&&nd.meals)?nd.meals[curMeal]:null;
+    var found=bucket?bucket.filter(function(x){ return x && x.id===entry.id; }).length:0;
+    console.log('[add-food] '+where
+      +' | device='+((typeof isDesktop==='function'&&isDesktop())?'desktop':'mobile')
+      +' | date='+dateKey+' meal='+curMeal
+      +' | name='+JSON.stringify(String(entry.n||'').slice(0,32))
+      +' | readBack='+found+(found?'':'  <-- WRITE DID NOT LAND')
+      +' | bucket='+(bucket?bucket.length:'no-bucket')
+      +' | nlDays='+Object.keys(st.nl||{}).length
+      +' | stLoaded='+(!!st.ftp && Object.keys(st.plan||{}).length>0));
+  }catch(e){ try{ console.log('[add-food] '+where+' TRACE FAILED: '+(e&&e.message)); }catch(_){} }
+}
 function renderFoodRows(container, list){
   container.innerHTML = '';
   list.forEach(function(food, fi){
@@ -13239,6 +13261,7 @@ function renderFoodRows(container, list){
           if(!st.recentFoods.find(function(r){return r.n===f.n;})) st.recentFoods.unshift(f);
           if(st.recentFoods.length>10) st.recentFoods=st.recentFoods.slice(0,10);
           sv();
+          _nlTraceAdd_('search-modal', nutrDate, nd.meals[curMeal][nd.meals[curMeal].length-1]);
           var modal = document.getElementById('food-modal');
           if(modal) modal.remove();
           renderNutr();
@@ -13287,6 +13310,7 @@ function renderFoodRows(container, list){
     nutDayGuard_();
     getNDay(nutrDate).meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
     sv();
+      try{ var _tl=getNDay(nutrDate).meals[curMeal]; _nlTraceAdd_('search-row', nutrDate, _tl[_tl.length-1]); }catch(e){}
     document.getElementById('food-modal').remove();
     nutRefresh();
   };
@@ -43992,6 +44016,7 @@ function renderMyFoods(container){
         var nd=getNDay(nutrDate);
         nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
         sv();
+      try{ var _tl=getNDay(nutrDate).meals[curMeal]; _nlTraceAdd_('my-foods', nutrDate, _tl[_tl.length-1]); }catch(e){}
         renderNutr();
         showScreen('NUTR');
         toast('Added to '+curMeal);
@@ -44047,6 +44072,7 @@ function renderMyMeals(container){
           nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(f.n),cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
         });
         sv();
+      try{ var _tl=getNDay(nutrDate).meals[curMeal]; _nlTraceAdd_('my-meals', nutrDate, _tl[_tl.length-1]); }catch(e){}
         renderNutr();
         showScreen('NUTR');
         toast('Added '+m.name+' to '+curMeal);
