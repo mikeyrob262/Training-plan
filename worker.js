@@ -28748,10 +28748,15 @@ function aiRenderTab_(tab, ded){
     return '<div class="ov-row" style="display:grid;grid-template-columns:'+t+';gap:10px;margin-bottom:10px">'+live.join('')+'</div>';
   };
   var html='<style>@media(max-width:860px){.ov-row{grid-template-columns:1fr !important}}</style>';
+  // PAIRED BY NATURAL HEIGHT, not by the order the spec lists them. Performance was a short strip
+  // sitting beside Goals, a six-row sparkline stack, so most of its grid cell was empty - and DNA
+  // (radar plus several paragraphs) was beside AI Coach, which has nowhere near that much to say.
+  // Goals and DNA are the two genuinely tall cards, so they pair with each other; Performance and
+  // AI Coach are the two short ones and pair with each other.
   html+=row([hero, focus], 'minmax(0,1.55fr) minmax(0,1fr)');
   if(cur) html+='<div style="margin-bottom:10px">'+cur+'</div>';
-  html+=row([goals, perf], 'minmax(0,1fr) minmax(0,1.35fr)');
-  html+=row([dna, coach], 'minmax(0,1fr) minmax(0,1.15fr)');
+  html+=row([goals, dna], 'minmax(0,1fr) minmax(0,1.15fr)');
+  html+=row([perf, coach], 'minmax(0,1.15fr) minmax(0,1fr)');
   if(signals) html+='<div>'+signals+'</div>';
   return html;
 }
@@ -28768,8 +28773,11 @@ function aiRenderTab_(tab, ded){
 //
 // Every section renders an em-dash rather than a number it cannot stand behind.
 // ============================================================================================
+// Cards stretch to their row and CENTRE their content vertically. Height pairing gets the two cards
+// close, never identical, and top-aligning the shorter one leaves a ragged gap at its foot that
+// reads as an unfinished card. Centring makes the remainder read as deliberate whitespace.
 function _ovwCard_(inner, pad){
-  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:'+(pad||'14px 16px')+';min-width:0">'+inner+'</div>';
+  return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:'+(pad||'14px 16px')+';min-width:0;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center">'+inner+'</div>';
 }
 function _ovwLbl_(t, right){
   return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px">'
@@ -28956,14 +28964,34 @@ function _ovwPerfHTML_(){
     var c1=_ovwWindow_(acts,180,90).reduce(function(s,a){return s+a.elev;},0);
     climb=_ovwPct_(c0,c1);
   }catch(e){}
+  // The FIFTH stat the spec asked for and the records-improving COUNT, both missing until now.
+  // Distance PRs are the honest source for "improving": dprBoard_ records WHEN each best was set,
+  // so a count of markers improved inside 90 days is a date the athlete can check rather than a
+  // vibe. It renders an em-dash, not a zero, when the board has not been built.
+  var b60=best('3600');
+  var improving=null, improvingSub='';
+  try{
+    if(typeof dprBoard_==='function'){
+      var bd=dprBoard_(), cut=_ovwDaysAgo_(90), n=0, total=0;
+      (bd.markers||[]).forEach(function(m){
+        if(!m.best) return;
+        total++;
+        var lastStep=(m.progression && m.progression.length)?m.progression[m.progression.length-1]:null;
+        if(lastStep && lastStep.date>=cut) n++;
+      });
+      if(total>0){ improving=n; improvingSub=n+' of '+total+' distance bests, last 90 days'; }
+    }
+  }catch(e){}
   var cells=[
     { k:'Best 5-min power', v:b5?(b5.w+' W'):null, s:b5?b5.date:'no power curve yet' },
     { k:'Best 20-min power', v:b20?(b20.w+' W'):null, s:b20?b20.date:'no power curve yet' },
+    { k:'Best 1-hour power', v:b60?(b60.w+' W'):null, s:b60?b60.date:'no power curve yet' },
     { k:'Longest ride', v:longest?(longest.mi+' mi'):null, s:longest?longest.date:'' },
-    { k:'Climbing, 90 days', v:(climb!=null)?((climb>0?'+':'')+climb+'%'):null, s:'vs prior 90 days' }
+    { k:'Climbing, 90 days', v:(climb!=null)?((climb>0?'+':'')+climb+'%'):null, s:'vs prior 90 days' },
+    { k:'Records improving', v:(improving!=null)?String(improving):null, s:improvingSub||'no distance bests yet' }
   ];
   var H=_ovwLbl_('Performance', '<span onclick="aiSetTab_(&#39;records&#39;)" style="font-size:11px;color:var(--d-accent,#fc5200);cursor:pointer">View records</span>');
-  H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">';
+  H+='<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 10px">';
   cells.forEach(function(c){
     H+='<div style="min-width:0"><div style="font-size:10.5px;color:var(--d-dim)">'+c.k+'</div>'
       +'<div style="font-size:19px;font-weight:800;color:var(--d-head);margin-top:3px">'+((c.v==null)?_ovwDash_():c.v)+'</div>'
@@ -29114,6 +29142,16 @@ function ovwCoachQuestion_(){
   }
   return cands[0];      // everything is on cooldown: repeat the best rather than say nothing
 }
+// The SECOND question, so the card carries real content instead of being padded to match whatever
+// tall card it happens to sit beside. Returns nothing when only one conflict exists - a filler
+// question chosen by nothing would be exactly the generic prompt this card refuses to show.
+function ovwCoachSecond_(primary){
+  if(!primary) return null;
+  var cands=_ovwCoachCandidates_();
+  cands.sort(function(a,b){ return (a.rank-b.rank) || a.id.localeCompare(b.id); });
+  for(var i=0;i<cands.length;i++){ if(cands[i].id!==primary.id) return cands[i]; }
+  return null;
+}
 
 // ---- 5b. AI COACH ----------------------------------------------------------------------------
 // The question is DERIVED from whatever the decision hierarchy just concluded, so it is grounded in
@@ -29140,6 +29178,16 @@ function _ovwCoachHTML_(){
       c.ev.forEach(function(e){
         H+='<div style="font-size:11px;color:var(--d-dim);line-height:1.45">&bull; '+aiEsc_(e)+'</div>';
       });
+      H+='</div>';
+    }
+    var c2=null; try{ c2=ovwCoachSecond_(c); }catch(e){}
+    if(c2){
+      H+='<div style="margin-top:12px;padding-top:11px;border-top:1px solid var(--d-edge)">'
+        +'<div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--d-dim);margin-bottom:6px">Also worth asking</div>'
+        +'<div onclick="dsNav(&#39;aicoach&#39;)" style="font-size:12.5px;color:var(--d-t3);cursor:pointer;line-height:1.45">'+aiEsc_(c2.q)+'</div>';
+      if(c2.ev && c2.ev.length){
+        H+='<div style="font-size:10.5px;color:var(--d-dim);margin-top:5px;line-height:1.4">&bull; '+aiEsc_(c2.ev[0])+'</div>';
+      }
       H+='</div>';
     }
   }
@@ -29597,9 +29645,9 @@ var _BLOCK_MILESTONES=[
    icon:'M20 6L9 17l-5-5', sTitle:'Consistent week', sSub:'All 4 sessions, on 3 separate days', benefit:'Unlocks the retest'},
   {slug:'ftp-retest', date:_FTP_RETEST_DATE, label:'FTP retest', note:'a discontinuity — power and zone history mean two different things across it', road:true, slidable:true,
    icon:'M3 17l6-6 4 4 8-8 M15 7h6v6', sTitle:'FTP retest', sSub:'Establish a new baseline', benefit:'Targets updated'},
-  {slug:'chalet', date:'2026-09-13', label:'Chalet Reynard', note:'', road:true,
+  {slug:'chalet', date:'2026-10-31', label:'Chalet Reynard', note:'', road:true,
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
-  {slug:'alpe', date:'2026-10-13', label:'Alpe sub-70', note:'', road:true,
+  {slug:'alpe', date:'2026-11-07', label:'Alpe sub-70', note:'', road:true,
    icon:'M2 20l7-14 5 9 3-5 5 10z', sTitle:'Alpe sub-70', sSub:'Sub-70-minute goal', benefit:'Confidence boost'},
   // Oct 18 is the 10k, 6.2 mi. It was briefly relabelled as the half marathon and is reverted: a
   // recurring shin issue put a 10-week half-marathon long-run build directly in harm's way, so the
@@ -29607,7 +29655,7 @@ var _BLOCK_MILESTONES=[
   // timeline. The slug is 'tenk' and now matches what it says again.
   {slug:'tenk', date:'2026-10-18', label:'10k run', note:'6.2 mi - the goal race', road:true,
    icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'10k run', sSub:'6.2 mi, the goal race', benefit:'Race day'},
-  {slug:'ventop', date:'2026-11-10', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
+  {slug:'ventop', date:'2026-11-14', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
    icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
 var _BLOCK_RETEST_YM='2026-08';                // the FTP-retest month — the TSS/zone discontinuity
@@ -29663,13 +29711,16 @@ var _TB_VERSION='ventop-2026-3';   // bumped: P1 Sunday true rest, P1 Monday gai
 function _trainingBlock_(){
   if(typeof st==='undefined') return null;
   if(st.trainingBlock && st.trainingBlock.v===_TB_VERSION) return st.trainingBlock;
-  var S=function(i,s){ return s?{i:i,s:s}:{i:i}; };
+  // Third argument is TIME OF DAY, and it is a real field rather than words inside the subtitle:
+  // Tuesday now carries two hard efforts and "which one is the morning" is scheduling information,
+  // not a description. Optional everywhere else, so every existing S() call is unchanged.
+  var S=function(i,s,t){ var o={i:i}; if(s) o.s=s; if(t) o.t=t; return o; };
   st.trainingBlock={
     v:_TB_VERSION, start:'2026-07-24', end:'2026-11-11',
     phases:[
       // Mon: mobility + easy run (was rest + mobility) · Sun: true rest (was optional).
       { id:'P1', label:'Base build', start:'2026-07-24', end:'2026-08-21', week:[
-        [S('mobility'),S('easyRun','20-25 min')], [S('vo2','4x4 min, 3 min recovery, flat')], [S('easyRun','20-25 min')],
+        [S('mobility'),S('easyRun','20-25 min')], [S('strengthB',null,'AM'),S('vo2','4x4 min, 3 min recovery, flat','PM')], [S('easyRun','20-25 min')],
         [S('z2','60-90 min')], [S('threshold','2x20 min'),S('strengthA')], [S('group','120 min, no HR ceiling')], [S('rest')] ] },
       // The retest date overrides whatever weekday slot it lands on (blockPlanFor_ reads p.dates
       // first). Keyed off _FTP_RETEST_DATE so the prescribed session, the milestone flag and the
@@ -29677,7 +29728,7 @@ function _trainingBlock_(){
       { id:'P2', label:'Base build 2', start:'2026-08-22', end:'2026-09-10',
         dates:(function(){ var o={}; o[_FTP_RETEST_DATE]=[S('ftpTest','10 warmup / 5 max / 10 easy / 20 test / 5 cooldown')]; return o; })(),
         week:[
-        [S('rest'),S('mobility')], [S('vo2','4x4 progressing to 5x4')], [S('easyRun','25-30 min, 3x/week')],
+        [S('rest'),S('mobility')], [S('strengthB',null,'AM'),S('vo2','4x4 progressing to 5x4','PM')], [S('easyRun','25-30 min, 3x/week')],
         [S('z2','60-90 min')], [S('threshold','2x20 to 3x15'),S('strengthA')], [S('group')], [S('optional')] ] },
       { id:'P3', label:'Chalet taper + attempt', start:'2026-09-11', end:'2026-09-14', dates:{
         '2026-09-11':[S('recovery','Easy spin + mobility only, no strength'),S('mobility')],
@@ -29685,7 +29736,7 @@ function _trainingBlock_(){
         '2026-09-13':[S('chalet','primary — or Sep 14')],
         '2026-09-14':[S('optional','alternate Chalet day if Sep 13 is a no-go')] } },
       { id:'P4', label:'Build to Alpe', start:'2026-09-15', end:'2026-10-12', week:[
-        [S('rest'),S('mobility')], [S('vo2','5x4 min')], [S('run10k','easy + one 10k-pace session (4x3 min)')],
+        [S('rest'),S('mobility')], [S('strengthB',null,'AM'),S('vo2','5x4 min','PM')], [S('run10k','easy + one 10k-pace session (4x3 min)')],
         [S('z2','60 min')], [S('threshold','2x25 min'),S('strengthA')], [S('group')], [S('optional')] ] },
       { id:'P5', label:'Alpe + 10k week', start:'2026-10-13', end:'2026-10-18', dates:{
         '2026-10-13':[S('alpe','primary — or Oct 14')],
@@ -29695,13 +29746,19 @@ function _trainingBlock_(){
         '2026-10-17':[S('rest')],
         '2026-10-18':[S('tenk')] } },
       { id:'P6', label:'Final build', start:'2026-10-19', end:'2026-11-07', week:[
-        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-10k')],
+        [S('rest'),S('mobility')], [S('strengthB',null,'AM'),S('vo2','4x5 min','PM')], [S('easyRun','optional post-10k')],
         [S('z2','60-90 min')], [S('threshold','3x20 min'),S('strengthA')], [S('long','building to 2.5-3 hrs with sustained tempo blocks')], [S('optional')] ] },
-      { id:'P7', label:'Ven-Top taper + summit', start:'2026-11-08', end:'2026-11-11', dates:{
-        '2026-11-08':[S('recovery','Easy spin + mobility only'),S('mobility')],
-        '2026-11-09':[S('recovery','Easy spin + mobility only'),S('mobility')],
-        '2026-11-10':[S('ventop','primary — or Nov 11')],
-        '2026-11-11':[S('optional','alternate summit day if Nov 10 is a no-go')] } }
+      // Ven-Top moved to Nov 14 when the three attempts were clustered, so the plan horizon had to
+      // follow it - it previously stopped on Nov 11, three days short of the event it exists for.
+      { id:'P7', label:'Ven-Top taper + summit', start:'2026-11-08', end:'2026-11-15', dates:{
+        '2026-11-08':[S('z2','60-75 min easy')],
+        '2026-11-09':[S('rest'),S('mobility')],
+        '2026-11-10':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-11-11':[S('easyRun','20 min easy')],
+        '2026-11-12':[S('recovery','Easy spin + mobility only'),S('mobility')],
+        '2026-11-13':[S('rest'),S('mobility')],
+        '2026-11-14':[S('ventop','primary — or Nov 15')],
+        '2026-11-15':[S('optional','alternate summit day if Nov 14 is a no-go')] } }
     ]
   };
   return st.trainingBlock;
@@ -29729,7 +29786,7 @@ function blockPlanFor_(dateKey){
   var weekInPhase=Math.floor(Math.max(0,_blockDaysBetween_(_blockDay_(p.start), d))/7)+1;
   var sessions=(slots||[]).map(function(sl){
     var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(sl.i, weekInPhase):null;
-    return { intent:sl.i, struct:sl.s||'', rx:rx };
+    return { intent:sl.i, struct:sl.s||'', when:sl.t||null, rx:rx };
   });
   // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
   // template for that date.

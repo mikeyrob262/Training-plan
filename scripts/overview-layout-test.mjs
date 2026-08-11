@@ -178,5 +178,27 @@ ok('no-conflict renders an honest line, not a generic prompt',
 ok('the pills stay fixed navigation', /pills stay FIXED NAVIGATION/.test(src));
 ok('...with only the generated category highlighted', /c && c\.cat===p/.test(ex('_ovwCoachHTML_')));
 
+console.log('\n'+C+'=== the six sections are wired, and v2 is not ==='+X);
+const asm = ex('aiRenderTab_');
+['_ovwHeroHTML_','_ovFocusHTML_','_ovwCurrentStateHTML_','_ovwGoalsHTML_','_ovwPerfHTML_',
+ '_dnaRadarHTML_','_ovwCoachHTML_','_ovwSignalsHTML_'].forEach(n =>
+  ok('Overview calls '+n, asm.indexOf(n) >= 0));
+// The trim is the point of v3: these still EXIST but Overview must no longer render them.
+['_ovMomentumHTML_','_ovHighlightsHTML_','_ovOpportunityHTML_','_ovLegacyHTML_','aiCardStory_'].forEach(n =>
+  ok('Overview no longer renders '+n, !new RegExp('_aiSafe_\\([^)]*'+n).test(asm)));
+ok('the hero is driven by the decision hierarchy', /ovwEvaluate_/.test(ex('_ovwHeroHTML_')));
+ok('...and stamps its tier and rule key into the DOM', /data-ovw-tier=/.test(ex('_ovwHeroHTML_')));
+ok('the DNA card uses the REAL radar', /_dnaRadarHTML_/.test(asm));
+ok('...and no invented composite score is rendered',
+   ex('_ovwHeroHTML_').indexOf('The Engine') < 0 && ex('_ovwHeroHTML_').indexOf('/100') < 0);
+
+// PAIRED BY NATURAL HEIGHT: the two tall cards together, the two short cards together.
+ok('Goals pairs with DNA, not with the short Performance strip', asm.indexOf('row([goals, dna]') >= 0);
+ok('Performance pairs with AI Coach', asm.indexOf('row([perf, coach]') >= 0);
+ok('cards stretch to their row and centre their content',
+   /height:100%/.test(ex('_ovwCard_')) && /justify-content:center/.test(ex('_ovwCard_')));
+ok('AI Coach can show a second question', /ovwCoachSecond_/.test(ex('_ovwCoachHTML_')));
+ok('...and offers none when only one conflict exists', /return null;/.test(ex('ovwCoachSecond_')));
+
 console.log(fails ? '\n'+R+'overview layout: '+fails+' FAILED'+X+'\n' : '\n'+G+'overview layout: all checks passed'+X+'\n');
 process.exit(fails?1:0);
