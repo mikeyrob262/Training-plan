@@ -25138,7 +25138,13 @@ function _dnaSignature_(){
     var zs=recent.filter(function(r){ return r.mi && r.mi[sp]!=null; }).map(function(r){ return r.score; });
     if(!zs.length) return;
     var mean=zs.reduce(function(a,b){return a+b;},0)/zs.length;
-    axes.push({label:sp.charAt(0).toUpperCase()+sp.slice(1)+' form', z:mean, mag:Math.max(0,Math.min(1,(mean+2)/4))});
+    // The mean is a fair headline, but SIX readings went into it and only the mean survived -
+    // the card says "last 6 scored months" while drawing one flat bar. Carry the months out
+    // too, oldest-first, so the variance behind the number can be drawn rather than asserted.
+    var ser=recent.filter(function(r){ return r.mi && r.mi[sp]!=null; })
+      .map(function(r){ return { v:Math.round(r.score*100)/100, lab:String(r.ym) }; })
+      .sort(function(a,b){ return a.lab<b.lab?-1:1; });
+    axes.push({label:sp.charAt(0).toUpperCase()+sp.slice(1)+' form', z:mean, mag:Math.max(0,Math.min(1,(mean+2)/4)), series:ser});
   });
   return axes.length?{axes:axes, months:recent.length}:null;
 }
@@ -25166,14 +25172,20 @@ function aiRenderDNA_(){
   // ERA SPINE
   H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Era timeline</div>';
   H+='<div style="display:flex;gap:0;overflow-x:auto;padding-bottom:6px;margin-bottom:22px">';
+  // Width is PROPORTIONAL TO SPAN. It was flex:1 0 auto, so every era got the same width and a
+  // 14-year era read as equal to a 2-year one - on a timeline, where width is the one thing the
+  // reader takes as duration. min-width still protects the label from being crushed.
+  var _eraSpan=function(e){ return Math.max(1, (+e.endY||0)-(+e.startY||0)+1); };
+  var _eraTot=eras.reduce(function(t,e){ return t+_eraSpan(e); },0)||1;
   eras.forEach(function(e){
     var col=_dnaEraColor_(e.dom), yl=(e.startY===e.endY)?(''+e.startY):(e.startY+'–'+e.endY);
-    H+='<div style="flex:1 0 auto;min-width:150px;position:relative;padding:0 10px">'
+    var _yrs=_eraSpan(e);
+    H+='<div style="flex:'+_yrs+' 1 0;min-width:150px;position:relative;padding:0 10px">'
       +'<div style="height:4px;background:'+col+';border-radius:2px;margin-bottom:9px"></div>'
       +'<div style="font-size:10.5px;font-weight:800;color:'+col+';letter-spacing:.03em">'+yl+'</div>'
       +'<div style="font-size:15px;font-weight:800;color:var(--d-head);margin-top:2px;line-height:1.2">'+aiEsc_(e.archetype)+'</div>'
       +'<div style="font-size:11px;color:var(--d-t3);margin-top:3px;line-height:1.4">'+aiEsc_(e.archWhy)+'</div>'
-      +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+e.acts.toLocaleString()+' activities</div>'
+      +'<div style="font-size:10px;color:var(--d-dim);margin-top:2px">'+e.acts.toLocaleString()+' activities &middot; '+_yrs+' year'+(_yrs===1?'':'s')+'</div>'
       +'</div>';
   });
   H+='</div>';
@@ -25186,7 +25198,20 @@ function aiRenderDNA_(){
       H+='<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
         +'<span style="font-size:12.5px;font-weight:700;color:var(--d-soft)">'+aiEsc_(ax.label)+'</span>'
         +'<span style="font-size:12.5px;font-weight:800;color:'+(pos?'#4ade80':'#f59e0b')+'">'+(pos?'+':'')+ax.z.toFixed(2)+' z</span></div>'
-        +'<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden"><div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+';border-radius:4px"></div></div></div>';
+        +(function(){
+            // A flat bar for six months of readings is the same fabrication the trait sparklines
+            // carried: one aggregate drawn as if it were the whole story. The months are real and
+            // individually meaningful, so they are drawn as points on a line - and _gcSpark_ marks
+            // every one of them at this length. The bar comes back only when there is genuinely
+            // ONE reading, where a line would be the invention.
+            var sp2=(ax.series&&ax.series.length>1&&typeof _gcTrend_==='function')
+              ? _gcTrend_(ax.series, (pos?'#4ade80':'#f59e0b'), {aria:ax.label+' by month', H:30, fill:false,
+                  note:ax.series.length+' scored months, each plotted where it fell'})
+              : '';
+            if(sp2) return sp2+'</div>';
+            return '<div style="height:7px;border-radius:4px;background:var(--d-inset);overflow:hidden">'
+              +'<div style="height:100%;width:'+w+'%;background:'+(pos?'#4ade80':'#f59e0b')+'"></div></div></div>';
+          })();
     });
     H+='<div style="font-size:10px;color:var(--d-dim);margin-top:2px">Same per-sport z-score the Athletic Life board ranks on — no second scoring. Bar length is the z mapped to a fixed display range.</div>';
     H+='</div>';
@@ -25204,8 +25229,8 @@ function aiRenderDNA_(){
     var _rad=(typeof _dnaRadarHTML_==='function')?_aiSafe_('DNAradar', function(){return _dnaRadarHTML_();}):'';
     if(!_rad) return;
     H+='<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Power curve</div>';
-    H+='<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;margin-bottom:18px">'
-      +'<div style="font-size:11.5px;color:var(--d-t3);line-height:1.5;margin-bottom:4px">'
+    H+='<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:16px 18px;margin-bottom:18px">'
+      +'<div style="font-size:11.5px;color:var(--d-t3,#8b93a7);line-height:1.5;margin-bottom:4px">'
       +'Ten durations because ten is what your rides actually store. Every spoke is scored against '
       +'your own best at that duration, so a sprint cannot dwarf an hour &mdash; they are never '
       +'measured against each other.</div>'

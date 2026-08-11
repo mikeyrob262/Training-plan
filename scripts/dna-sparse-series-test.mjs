@@ -97,6 +97,31 @@ console.log('\n' + Y + '=== the three DNA per-year series all route through the 
   ok('Explorer series is gap-filled', /var sp2=_dnaYearFill_\(ys\.map/.test(body));
 }
 
+console.log('\n' + Y + '=== the Signature keeps its six months instead of averaging them away ===' + X);
+{
+  // _dnaSignature_ read six scored months, took the mean, and drew ONE flat bar under a heading
+  // that said 'last 6 scored months'. Same fabrication as the trait sparklines: an aggregate
+  // presented as if it were the whole story. The months are individually meaningful, so they are
+  // carried out on the axis and drawn as points.
+  const sig = src.slice(src.indexOf('function _dnaSignature_'), src.indexOf('function aiRenderDNA_'));
+  ok('the per-month series is carried out of _dnaSignature_', /series:ser/.test(sig));
+  ok('...built from the recent rows, oldest-first', /\.sort\(function\(a,b\)\{ return a\.lab<b\.lab\?-1:1; \}\)/.test(sig));
+  ok('...and the mean is still reported as the headline', /z:mean/.test(sig));
+  const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 14000);
+  ok('the Signature draws the months as a line', /_gcTrend_\(ax\.series/.test(dnaTab));
+  ok('...falling back to a bar ONLY when there is a single reading', /ax\.series\.length>1/.test(dnaTab));
+}
+
+console.log('\n' + Y + '=== the Era timeline width means duration ===' + X);
+{
+  // flex:1 0 auto gave every era the same width, so a 14-year era read as equal to a 2-year one
+  // on a chart where width is the one thing a reader takes as duration.
+  const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 14000);
+  ok('era width is proportional to its span', /flex:'\+_yrs\+' 1 0/.test(dnaTab));
+  ok('...no era is still hardcoded to equal width', !/flex:1 0 auto;min-width:150px/.test(dnaTab));
+  ok('...with a min-width so a short era stays legible', /min-width:150px/.test(dnaTab));
+  ok('...and the span is stated in words, not left to be inferred', /year'\+\(_yrs===1/.test(dnaTab));
+}
 console.log('\n' + Y + '=== the power-curve radar is on the tab Overview links to ===' + X);
 {
   const dnaTab = src.slice(src.indexOf('function aiRenderDNA_'), src.indexOf('function aiRenderDNA_') + 12000);
