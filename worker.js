@@ -11544,7 +11544,12 @@ function nutrActualBurn_(dateKey){
   acts.forEach(function(r){
     var c=parseFloat(r.calories)||0;
     if(c>0){ cal+=c; n++; src.calories=(src.calories||0)+1; return; }
-    var kj=parseFloat(r.kj)||parseFloat(r.work)||0;
+    // THE FIELD IS workKj. I guessed r.kj / r.work from memory and neither exists on a single
+    // ride in the library - measured: calories on 693, workKj on 397, kj/work on ZERO. So this
+    // tier was dead and every ride without a calories value fell straight through to the TSS
+    // estimate, even when it carried a real measurement. Today's VO2 ride read 480 (48 TSS x 10)
+    // instead of its actual 335 kJ. kj/work are kept as harmless aliases for a future importer.
+    var kj=parseFloat(r.workKj)||parseFloat(r.kj)||parseFloat(r.work)||0;
     if(kj>0){ cal+=kj; n++; src.kj=(src.kj||0)+1; return; }
     var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
     if(t>0){ cal+=t*10; n++; src.tss=(src.tss||0)+1; return; }

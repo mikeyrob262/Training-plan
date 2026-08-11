@@ -527,6 +527,20 @@ try {
     fail('food search matching regressed (see above).');
   }
 
+  // STEP 29 — nutrActualBurn_ reads the fields a ride ACTUALLY carries. It shipped reading r.kj /
+  //           r.work, which exist on ZERO rides in the library (calories 693, workKj 397), so that
+  //           tier was dead and rides fell silently to the TSS estimate. Pins the FIELD NAMES, not
+  //           just the arithmetic — a tier reading a field nothing writes is invisible.
+  console.log(`${D}· checking nutrition burn sources…${X}`);
+  try {
+    const so = execSync('node scripts/nutr-burn-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the burn is reading a field the library does not write (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
