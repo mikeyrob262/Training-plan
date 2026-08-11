@@ -28838,6 +28838,54 @@ function _ovwCurrentStateHTML_(){
   return _ovwCard_(H+'</div>');
 }
 
+// Goal TRAJECTORIES. A bar says where you are; a line says whether you are pacing ahead or behind,
+// which is the useful question for a goal that accumulates over time. This is also the app's own
+// standing rule - progress is a line, never a bar - which the first version of this card broke.
+//
+// EVERY SERIES COMES FROM THE EXISTING SOURCE, never a parallel computation. CTL is st.fitSeries
+// (what Trends charts), FTP is st.ftpHistory (what the FTP surfaces read). The two mileage series
+// are derived from the same deduped ride library the rest of the page counts, and the test asserts
+// the LAST point of each equals the current value already shown beside it - so the line and the
+// number cannot drift apart, which is the exact failure this page kept producing today.
+function _ovwGoalSeries_(kind){
+  try{
+    if(kind==='ctl'){
+      return (st.fitSeries||[]).slice()
+        .sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); })
+        .slice(-60).map(function(x){ return { v:+x.ctl }; })
+        .filter(function(x){ return isFinite(x.v); });
+    }
+    if(kind==='ftp'){
+      // The real record of what FTP has been set to, unsmoothed. It oscillates because most rows
+      // are hand-typed - see the tier-3 note - and a smoothed line would be a nicer lie.
+      return (st.ftpHistory||[]).filter(function(x){ return x && !x.deleted && +x.ftp>0; })
+        .sort(function(a,b){ return _ovwDay_(a.date).localeCompare(_ovwDay_(b.date)); })
+        .map(function(x){ return { v:+x.ftp }; });
+    }
+    var acts=_ovwActs_();
+    if(kind==='weekly'){
+      var out=[];
+      for(var w=11; w>=0; w--){
+        out.push({ v:Math.round(_ovwWindow_(acts,(w+1)*7,w*7).reduce(function(s2,a){ return s2+a.dist; },0)*10)/10 });
+      }
+      return out;
+    }
+    if(kind==='annual'){
+      // Cumulative miles this calendar year, month by month. Ends at the same figure the row shows.
+      var yr=_ovwToday_().slice(0,4), by={}, i;
+      acts.forEach(function(a){
+        if(String(a.date).slice(0,4)!==yr) return;
+        var m=String(a.date).slice(5,7); by[m]=(by[m]||0)+a.dist;
+      });
+      var run=0, res=[], thisM=parseInt(_ovwToday_().slice(5,7),10);
+      for(i=1;i<=thisM;i++){
+        var k=(i<10?'0':'')+i; run+=(by[k]||0); res.push({ v:Math.round(run) });
+      }
+      return res;
+    }
+  }catch(e){}
+  return [];
+}
 // ---- 3. YOUR GOALS ---------------------------------------------------------------------------
 // THE REAL GOAL TYPES, which is all of them. Century Ride and Everest Challenge were in the mockup
 // and are not goals this app stores - rendering them would have meant inventing two goal types to
@@ -28854,10 +28902,10 @@ function _ovwGoalsHTML_(){
     wkMi=Math.round(_ovwWindow_(acts,7,0).reduce(function(s,a){ return s+a.dist; },0)*10)/10;
   }catch(e){}
   var wt=null; try{ wt=(typeof stWeightLb_==='function')?stWeightLb_():null; }catch(e){}
-  if(g.annualMi>0)  rows.push({ n:'Annual mileage', now:(ytd!=null?Math.round(ytd):null), t:g.annualMi, u:' mi' });
-  if(g.weeklyMi>0)  rows.push({ n:'Weekly mileage', now:wkMi, t:g.weeklyMi, u:' mi' });
-  if(g.ctl>0)       rows.push({ n:'Fitness (CTL)', now:(f&&f.loaded)?f.ctl:null, t:g.ctl, u:'' });
-  if(g.ftpW>0)      rows.push({ n:'FTP', now:parseInt((st&&st.ftp)||0,10)||null, t:g.ftpW, u:' W' });
+  if(g.annualMi>0)  rows.push({ n:'Annual mileage', now:(ytd!=null?Math.round(ytd):null), t:g.annualMi, u:' mi', series:'annual' });
+  if(g.weeklyMi>0)  rows.push({ n:'Weekly mileage', now:wkMi, t:g.weeklyMi, u:' mi', series:'weekly' });
+  if(g.ctl>0)       rows.push({ n:'Fitness (CTL)', now:(f&&f.loaded)?f.ctl:null, t:g.ctl, u:'', series:'ctl' });
+  if(g.ftpW>0)      rows.push({ n:'FTP', now:parseInt((st&&st.ftp)||0,10)||null, t:g.ftpW, u:' W', series:'ftp' });
   // Weight and W/kg are the two where DOWN is progress or the target is a rate, so neither is a
   // simple now/target share. Shown as plain current-vs-target without a bar rather than forced into
   // a percentage that would read backwards.
@@ -28875,9 +28923,12 @@ function _ovwGoalsHTML_(){
       +'<span style="font-size:12.5px;font-weight:600;color:var(--d-head)">'+r.n+'</span>'
       +'<span style="font-size:11.5px;color:var(--d-t3)">'+((r.now==null)?_ovwDash_():(r.now+r.u))+' / '+r.t+r.u
       +(pct!=null&&!r.noBar?('<b style="color:var(--d-head);margin-left:6px">'+pct+'%</b>'):'')+'</span></div>';
-    if(pct!=null && !r.noBar){
-      H+='<div style="height:5px;border-radius:3px;background:var(--d-inset);margin-top:5px;overflow:hidden">'
-        +'<div style="height:100%;width:'+pct+'%;background:#fc5200;border-radius:3px"></div></div>';
+    // A SPARKLINE, NOT A BAR. _gcSpark_ is the shared renderer used everywhere else that shows a
+    // trajectory; it returns nothing at all on fewer than two real points, and the row then falls
+    // back to the plain number rather than drawing a line through a single reading.
+    if(r.series && !r.noBar && typeof _gcSpark_==='function'){
+      var sp=_gcSpark_(_ovwGoalSeries_(r.series), '#fc5200', {W:150,H:26});
+      if(sp) H+='<div style="margin-top:5px;line-height:0">'+sp+'</div>';
     }
     H+='</div>';
   });
@@ -29550,12 +29601,12 @@ var _BLOCK_MILESTONES=[
    icon:'M3 20l6-12 4 6 2-3 6 9z', sTitle:'Chalet Reynard', sSub:'Long-climb endurance test', benefit:'Fuelling validated'},
   {slug:'alpe', date:'2026-10-13', label:'Alpe sub-70', note:'', road:true,
    icon:'M2 20l7-14 5 9 3-5 5 10z', sTitle:'Alpe sub-70', sSub:'Sub-70-minute goal', benefit:'Confidence boost'},
-  // Oct 18 is the Grand Rapids HALF MARATHON, 13.1 mi - the 10k was an earlier downgrade decision
-  // that was reversed, and the stale label sat here contradicting the calendar event for the same
-  // day. The slug stays 'tenk' deliberately: 13 stored plan days reference it, and renaming it in
-  // code without migrating them would orphan every one. The block rebuild renames it properly.
-  {slug:'tenk', date:'2026-10-18', label:'Grand Rapids Half Marathon', note:'13.1 mi - the goal race', road:true,
-   icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'Half marathon', sSub:'13.1 mi, the goal race', benefit:'Race day'},
+  // Oct 18 is the 10k, 6.2 mi. It was briefly relabelled as the half marathon and is reverted: a
+  // recurring shin issue put a 10-week half-marathon long-run build directly in harm's way, so the
+  // conservative distance is the goal race and the half / 25k / marathon stay on the longer 2027
+  // timeline. The slug is 'tenk' and now matches what it says again.
+  {slug:'tenk', date:'2026-10-18', label:'10k run', note:'6.2 mi - the goal race', road:true,
+   icon:'M13 4a1 1 0 1 0 2 0 M7.5 17l2-7 3 3 2-4.5', sTitle:'10k run', sSub:'6.2 mi, the goal race', benefit:'Race day'},
   {slug:'ventop', date:'2026-11-10', label:'Ven-Top summit', note:'the attempt the whole block points at', road:true,
    icon:'M6 21V4 M6 4h11l-2 3.5 2 3.5H6', sTitle:'Ven-Top summit', sSub:'The main event', benefit:'Mission complete'}
 ];
@@ -29640,11 +29691,11 @@ function _trainingBlock_(){
         '2026-10-13':[S('alpe','primary — or Oct 14')],
         '2026-10-14':[S('optional','alternate Alpe day if Oct 13 is a no-go')],
         '2026-10-15':[S('rest'),S('mobility')],
-        '2026-10-16':[S('easyRun','20 min easy + 4x30 sec at race pace')],
+        '2026-10-16':[S('easyRun','20 min easy + 4x30 sec at 10k pace')],
         '2026-10-17':[S('rest')],
         '2026-10-18':[S('tenk')] } },
       { id:'P6', label:'Final build', start:'2026-10-19', end:'2026-11-07', week:[
-        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-race')],
+        [S('rest'),S('mobility')], [S('vo2','4x5 min')], [S('easyRun','optional post-10k')],
         [S('z2','60-90 min')], [S('threshold','3x20 min'),S('strengthA')], [S('long','building to 2.5-3 hrs with sustained tempo blocks')], [S('optional')] ] },
       { id:'P7', label:'Ven-Top taper + summit', start:'2026-11-08', end:'2026-11-11', dates:{
         '2026-11-08':[S('recovery','Easy spin + mobility only'),S('mobility')],
@@ -29959,7 +30010,7 @@ var _CV_EXPECT={
   recovery:'Barely a workout, and that is correct. If you finish tired you rode it too hard and cost yourself the session it was protecting.',
   chalet:'A long steady burn: boredom, then discomfort, then the summit. Pace it and the top comes to you. Send the bottom and it does not.',
   alpe:'Sustained and lonely. The clock is the opponent, not the rider ahead. Even effort, no heroics until the final ramps.',
-  tenk:'Comfortable-hard early, genuinely hard from halfway. A half is won in the last 5k by whoever paced the first 10.',
+  tenk:'Comfortable-hard early, genuinely hard from halfway. The race is won in the last 3k by whoever paced the first 7.',
   ventop:'The whole mountain in your legs. Patience low down, then everything you saved up top. You get one attempt at this.',
   ftpTest:'The 5-minute effort hurts and then it is over. The 20 is different — minutes 1 to 8 feel deceptively fine, which is exactly when you overcook it, and from 12 it is a grind you hold by decision rather than by feel. Finishing it certain you could not have gone one watt harder is the test working.'
 };
@@ -30167,7 +30218,7 @@ function _cvFuel_(dateKey, intent, done){
 }
 // Which sport answers a prescribed session, or '' when nothing does (strength/mobility/rest).
 // Mostly derivable from SESSION_DEFS.type; the exception is the ATTEMPT type, which covers both the
-// cycling attempts and the half marathon, so those are named explicitly rather than guessed at.
+// cycling attempts and the 10k race, so those are named explicitly rather than guessed at.
 var _CV_RUN_ATTEMPTS={ tenk:1 };
 function _cvWantSport_(intent, def){
   if(!intent || !def) return '';
@@ -43584,7 +43635,7 @@ var SESSION_DEFS={
   // JUDGE the effort — the group-ride note it replaces was telling the model to assess bunch tactics
   // on a ride with no bunch in it.
   fuhgeddaboudit:{ type:'attempt', name:'Fuhgeddaboudit attempt',      note:'Hard solo route attempt in New York. Ridden on its own terms as a sustained time-trial effort — there is no group to sit in on and no wheels to follow, so judge sustained output and pacing across the effort, not bunch tactics and not a steady-state ideal.' },
-  tenk:     { type:'attempt', name:'Grand Rapids Half Marathon',       note:'Race day, 13.1 mi. Warm up properly, then run your race.' },
+  tenk:     { type:'attempt', name:'10k race',                         note:'Race day, 6.2 mi. Warm up properly, then run your race.' },
   ventop:   { type:'attempt', name:'Ven-Top summit',                   note:'The full summit attempt — everything the block was built for.' }
 };
 var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','rest'];

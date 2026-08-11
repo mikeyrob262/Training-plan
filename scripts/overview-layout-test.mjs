@@ -31,13 +31,15 @@ function render(over){
     fitness: { ctl: 60, atl: 61, tsb: -1, loaded: true, stale: false }
   }, over||{});
   const fn = new Function('st','getFitness_','aiEsc_','_ovwActs_','_ovwWindow_','_ovwPct_','stWeightLb_',
-    'wkgFromW_','dprBoard_','ovwEvaluate_','_ytdCycMi_',
+    'wkgFromW_','dprBoard_','ovwEvaluate_','_ytdCycMi_','_gcSpark_','_ovwGoalSeries_',
     asServed(UI.map(ex).join('')) + ';return {' + UI.join(',') + '};');
   return fn(W.st, () => W.fitness, (s)=>String(s==null?'':s),
     () => W.acts||[], (a,f,t)=>(W.acts||[]), (n,t)=>(t>0?Math.round((n-t)/t*1000)/10:null),
     () => W.st.weight, () => 2.54, () => ({markers:[]}),
     () => W.hit || {tier:6,key:'t6:quiet',title:'q',body:'',facts:[]},
-    () => W.ytd==null?null:W.ytd);
+    () => W.ytd==null?null:W.ytd,
+    (pts)=>((pts||[]).length>=2 ? '<svg data-spark="1"></svg>' : ''),
+    (kind)=>(W.series && W.series[kind]) || [{v:1},{v:2},{v:3}]);
 }
 
 console.log('\n'+C+'=== Fitness IS CTL - one cell, and FTP is not it ==='+X);
@@ -73,8 +75,11 @@ console.log('\n'+C+'=== goals are the REAL goal types ==='+X);
   ok('does NOT invent Century Ride', !/Century/i.test(html));
   ok('does NOT invent Everest Challenge', !/Everest/i.test(html));
   ok('shows the real FTP target of 200', /200/.test(html));
-  ok('weight has no progress bar (down is progress there)',
-     html.indexOf('Weight') > 0 && (html.match(/width:\d+%/g)||[]).length <= 4);
+  // STANDING RULE: progress is a line, never a bar. The first version of this card broke it.
+  ok('no progress BARS survive anywhere in the card', !/width:\d+%/.test(html));
+  ok('the four accumulating goals draw a sparkline', (html.match(/<svg/g)||[]).length === 4);
+  ok('...via the SHARED renderer, not a local one', /_gcSpark_/.test(ex('_ovwGoalsHTML_')));
+  ok('Weight and W/kg stay plain numbers', html.indexOf('Weight') > 0);
 }
 {
   const api = render({ st:{ ftp:183, fitSeries:[], goalTargets:{}, rides:[], weight:159 } });
