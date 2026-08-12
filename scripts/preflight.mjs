@@ -671,6 +671,20 @@ try {
     fail('saved meals are copying food data again (see above).');
   }
 
+  // STEP 39 - run HR zones + the power-curve monotonicity invariant. The zone bands were
+  //           hardcoded in two places while st.maxHR sat wired to nothing, so correcting the
+  //           setting changed nothing. The power curve cannot rise with duration; the parser
+  //           already guarantees that, and this keeps it guaranteed.
+  console.log(`${D}. checking run HR zones + power-curve monotonicity...${X}`);
+  try {
+    const so = execSync('node scripts/hr-zones-power-curve-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('run zones or the power curve are misreporting (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

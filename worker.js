@@ -479,6 +479,50 @@ input:focus,.ci-in:focus,.wof-in:focus,.ci-ta:focus{outline:none;border-bottom-c
 
 <script>
 
+// ===================== RUN HR ZONES: one reference, wired to the setting ====================
+//
+// The bands were HARDCODED as [113,121,141,158] in TWO places - the FIT parser and the TCX run
+// import - with a comment reading "max HR 172". st.maxHR and st.lthr existed in Settings and were
+// wired to NOTHING, so correcting them changed nothing at all. That is why this presented as
+// "the reference values are set too low": the values were never read.
+//
+// Measured consequence: the median run averages 151 bpm, and the old Z4 floor of 142 put that at
+// threshold. Across 1,169 runs carrying zones, 78% of all recorded running time landed in Z4+,
+// which no one trains through for eleven years.
+//
+// Standard 5-zone split as a percentage of max HR. Against the 11 runs that still carry an HR
+// stream, the old bands read z4 36% / z5 12%; these read z4 15% / z5 4%.
+var RUN_HR_PCTS = [0.65, 0.75, 0.85, 0.92];
+var RUN_HR_MAX_DEFAULT = 180;   // p95 of this athlete's observed run maxima is 182
+function runHrMax_(){
+  var v = 0;
+  try{ v = parseInt((typeof st!=='undefined' && st && st.maxHR) || 0, 10); }catch(e){ v = 0; }
+  return (v > 120 && v < 230) ? v : RUN_HR_MAX_DEFAULT;
+}
+function runHrBands_(mx){
+  var m = (mx > 0) ? mx : runHrMax_();
+  return RUN_HR_PCTS.map(function(q){ return Math.round(m * q); });
+}
+function runHrZoneOf_(hr, bands){
+  var b = bands || runHrBands_(), v = +hr;
+  if(!(v > 30 && v < 240)) return 0;                 // a dropout or a strap spike is not a zone
+  return (v < b[0]) ? 1 : (v <= b[1] ? 2 : (v <= b[2] ? 3 : (v <= b[3] ? 4 : 5)));
+}
+// Null when there is nothing to read. An all-zero distribution is a claim that the run happened
+// below Z1, which is not the same statement as 'no heart-rate data'.
+function runHrZonePcts_(hrList, mx){
+  var m = (mx > 0) ? mx : runHrMax_();
+  var b = runHrBands_(m), c = [0,0,0,0,0,0], n = 0;
+  (hrList || []).forEach(function(h){ var z = runHrZoneOf_(h, b); if(z){ c[z]++; n++; } });
+  if(!n) return null;
+  return { z1pct:Math.round(c[1]/n*100), z2pct:Math.round(c[2]/n*100), z3pct:Math.round(c[3]/n*100),
+           z4pct:Math.round(c[4]/n*100), z5pct:Math.round(c[5]/n*100), zSrc:'maxhr:'+m };
+}
+try{ if(typeof window!=='undefined'){
+  window.runHrBands_=runHrBands_; window.runHrZoneOf_=runHrZoneOf_;
+  window.runHrZonePcts_=runHrZonePcts_; window.runHrMax_=runHrMax_;
+} }catch(e){}
+
 // Minimal FIT file parser for Athlete IQ
 window.parseFitFile = function(arrayBuffer, callback) {
   try {
@@ -599,18 +643,11 @@ window.parseFitFile = function(arrayBuffer, callback) {
         result.chartPwr = dsChart(result.pwrStream, 200);
         result.chartHR  = dsChart(hrStream, 200);
 
-        // Run HR-zone distribution from record HR (same fixed thresholds as the
-        // TCX run path). Used only when this activity routes to st.runs.
+        // Run HR-zone distribution from record HR. Bands come from runHrZonePcts_ - the ONE
+        // reference both import paths read - rather than from numbers written into this file.
         if (hrStream.length) {
-          var hz1=0,hz2=0,hz3=0,hz4=0,hz5=0;
-          hrStream.forEach(function(hr){
-            if(hr<113) hz1++; else if(hr<=121) hz2++; else if(hr<=141) hz3++; else if(hr<=158) hz4++; else hz5++;
-          });
-          var hzn = hrStream.length;
-          result.hrZones = {
-            z1pct:Math.round(hz1/hzn*100), z2pct:Math.round(hz2/hzn*100), z3pct:Math.round(hz3/hzn*100),
-            z4pct:Math.round(hz4/hzn*100), z5pct:Math.round(hz5/hzn*100)
-          };
+          var _hz = (typeof runHrZonePcts_==='function') ? runHrZonePcts_(hrStream) : null;
+          if (_hz) result.hrZones = _hz;
         }
 
         // Lap splits — the FitParser exposes lap messages the wrapper used to
@@ -15936,20 +15973,12 @@ function bulkImportTCX(input){
           // Running cadence is typically doubled in TCX (per foot vs per min)
           var runCad = avgCad > 0 ? (avgCad < 100 ? avgCad*2 : avgCad) : 0;
 
-          // Calculate HR zones from trackpoint HR data (max HR 172)
-          var z1=0,z2=0,z3=0,z4=0,z5=0,totalHRpts=hrVals.length;
-          hrVals.forEach(function(hr){
-            if(hr<113) z1++;
-            else if(hr<=121) z2++;
-            else if(hr<=141) z3++;
-            else if(hr<=158) z4++;
-            else z5++;
-          });
-          var z1pct=totalHRpts?Math.round(z1/totalHRpts*100):0;
-          var z2pct=totalHRpts?Math.round(z2/totalHRpts*100):0;
-          var z3pct=totalHRpts?Math.round(z3/totalHRpts*100):0;
-          var z4pct=totalHRpts?Math.round(z4/totalHRpts*100):0;
-          var z5pct=totalHRpts?Math.round(z5/totalHRpts*100):0;
+          // HR zones from trackpoint HR. Bands come from the ONE reference (runHrZonePcts_,
+          // derived from st.maxHR); the '(max HR 172)' constants that used to live here were
+          // the second copy, and neither copy read the setting.
+          var _rz=(typeof runHrZonePcts_==='function')?runHrZonePcts_(hrVals):null;
+          var z1pct=_rz?_rz.z1pct:0, z2pct=_rz?_rz.z2pct:0, z3pct=_rz?_rz.z3pct:0;
+          var z4pct=_rz?_rz.z4pct:0, z5pct=_rz?_rz.z5pct:0;
 
           // Determine run type from zone distribution
           var autoType='Easy Run';
@@ -15972,6 +16001,7 @@ function bulkImportTCX(input){
             elevation: elevGain,
             stride: strideFt?strideFt+' ft':0,
             z1pct: z1pct, z2pct: z2pct, z3pct: z3pct, z4pct: z4pct, z5pct: z5pct,
+            zSrc: _rz?_rz.zSrc:null,          // which HR reference produced these
             rss: tss2||0,
             source: 'garmin'
           };
@@ -45045,6 +45075,53 @@ function mfEnsureClean_(){
   _mfCleanMemo={ f:st.myFoods, m:st.myMeals, fl:(st.myFoods||[]).length, ml:(st.myMeals||[]).length };
   return n;
 }
+// Recomputes run HR zones against the current reference, and marks what CANNOT be recomputed.
+//
+// The honest limit: of 1,290 records in st.runs, 1,169 carry zone percentages and ZERO carry an HR
+// stream. Only 11 run records anywhere still have the samples the percentages were derived from.
+// So the recompute reaches 11 rows and no more.
+//
+// The other 1,169 are NOT rescaled and NOT blanked.
+//   - Rescaling would be arithmetic on a summary, not a measurement: the stored percentages have
+//     already collapsed every sample into five buckets, so shifting a boundary cannot move a
+//     sample from one bucket to another. It would produce different wrong numbers.
+//   - Blanking would destroy rows that are hand-entered on the run card - z1pct..z5pct are listed
+//     in STORE_V2_MANUAL_RUN_F as manual fields, so some of these were typed, not imported.
+// They get a provenance stamp instead, so any reader can tell which model produced a number.
+function migrateRunHrZones_(){
+  try{
+    if(typeof runHrZonePcts_!=='function') return 0;
+    var mx=runHrMax_(), tag='maxhr:'+mx, recomputed=0, stamped=0, noStream=0;
+    var lists=[];
+    try{ if(st && st.runs) lists.push(st.runs); }catch(e){}
+    try{ if(st && st.rides) lists.push(st.rides); }catch(e){}
+    lists.forEach(function(list){
+      list.forEach(function(r){
+        if(!r || r.deleted) return;
+        var hasZ=((+r.z1pct||0)+(+r.z2pct||0)+(+r.z3pct||0)+(+r.z4pct||0)+(+r.z5pct||0))>0;
+        var hr=(r.chartHR && r.chartHR.length>=20)?r.chartHR:null;
+        if(hr){
+          var z=runHrZonePcts_(hr, mx);
+          if(z && (r.zSrc!==tag || !hasZ)){
+            r.z1pct=z.z1pct; r.z2pct=z.z2pct; r.z3pct=z.z3pct; r.z4pct=z.z4pct; r.z5pct=z.z5pct;
+            r.zSrc=tag; r.editedAt=Date.now(); recomputed++;
+          }
+          return;
+        }
+        if(hasZ && !r.zSrc){ r.zSrc='legacy-172'; stamped++; noStream++; }
+        else if(hasZ && r.zSrc!==tag) noStream++;
+      });
+    });
+    if(recomputed || stamped){
+      try{ console.log('[runZones] reference '+tag+' - recomputed '+recomputed+' run(s) from their HR stream; '
+        +noStream+' carry zones with no stream to recompute from and are marked legacy-172 ' 
+        +'(NOT rescaled: the stored percentages have already collapsed the samples, so moving a ' 
+        +'boundary cannot re-bucket them).'); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return recomputed+stamped;
+  }catch(e){ try{ console.warn('[runZones] failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function migrateMyFoodsMeals_(){
   try{
     var changed=0;
@@ -52619,6 +52696,7 @@ window.onload = function(){
         // reason the others do: before it, st is whatever IndexedDB had, and a migration that
         // measures an empty store measures nothing.
         try{ if(typeof migrateMyFoodsMeals_==='function') migrateMyFoodsMeals_(); }catch(e){}
+        try{ if(typeof migrateRunHrZones_==='function') migrateRunHrZones_(); }catch(e){}
         // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
         // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
         // Order matters: clear the invalid power-derived values first, THEN score runs on heart rate.
