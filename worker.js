@@ -33789,6 +33789,53 @@ function wxFetch_(url, slot, ttl){
 function getWeather_(){ return wxFetch_('https://api.open-meteo.com/v1/forecast?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=temperature_2m,apparent_temperature,weathercode,windspeed_10m,winddirection_10m,windgusts_10m,relativehumidity_2m,precipitation_probability,uv_index&hourly=temperature_2m,apparent_temperature,weathercode,precipitation_probability,windspeed_10m,winddirection_10m,windgusts_10m&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max,windspeed_10m_max,winddirection_10m_dominant,windgusts_10m_max,sunrise,sunset,uv_index_max&temperature_unit=fahrenheit&windspeed_unit=mph&timezone='+WX_TZ+'&forecast_days=7', 'weather', WX_TTL); }
 function getAQI_(){ return wxFetch_('https://air-quality-api.open-meteo.com/v1/air-quality?latitude='+WX_LAT+'&longitude='+WX_LON+'&current=us_aqi&hourly=us_aqi&timezone='+WX_TZ+'&forecast_days=7', 'aqi', AQI_TTL); }
 
+// Opens the mobile Weather Coach over the desktop layout. Returns early on a surface where the
+// Coach is already reachable, so this can never double up with the mobile entry points.
+function dsShowWeatherCoach(){
+  try{
+    if(typeof isDesktop==='function' && !isDesktop()){ if(typeof showWeather==='function') showWeather(); return; }
+    var scr=document.getElementById('WEATHER');
+    if(!scr || typeof showWeather!=='function') return;
+    var old=document.getElementById('WXC_PAGE'); if(old) _dsCloseWeatherCoach_();
+    // Remember where the element belongs so it can be restored exactly, not appended somewhere
+    // plausible - #mobile-content ordering matters to the mobile screen switcher.
+    scr.__wxHome=scr.parentNode;
+    scr.__wxNext=scr.nextSibling;
+    scr.__wxStyle=scr.getAttribute('style')||'';
+    var ov=document.createElement('div');
+    ov.id='WXC_PAGE';
+    var bn=document.getElementById('bottom-nav');
+    var bnH=(bn && getComputedStyle(bn).display!=='none')?Math.round(bn.getBoundingClientRect().height):0;
+    ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:'+bnH+'px;z-index:3000;'
+      +'background:var(--d-deep,#0b0d12);overflow-y:auto;-webkit-overflow-scrolling:touch';
+    var close=document.createElement('div');
+    close.textContent='\u2715';
+    close.setAttribute('role','button'); close.setAttribute('aria-label','Close Weather Coach');
+    close.style.cssText='position:sticky;top:0;float:right;margin:10px 14px 0 0;width:30px;height:30px;'
+      +'display:flex;align-items:center;justify-content:center;border-radius:9px;cursor:pointer;'
+      +'background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));'
+      +'color:var(--d-soft,#cbd5e1);font-size:14px;z-index:1';
+    close.onclick=function(){ _dsCloseWeatherCoach_(); };
+    ov.appendChild(close);
+    ov.appendChild(scr);
+    (document.getElementById('app-shell')||document.body).appendChild(ov);
+    // The screen was hidden by its old parent, not by itself; make sure it can draw here.
+    scr.style.display='block';
+    showWeather();
+  }catch(e){ try{ console.error('[wx] coach open failed: '+(e&&e.message)); }catch(_){} }
+}
+function _dsCloseWeatherCoach_(){
+  try{
+    var ov=document.getElementById('WXC_PAGE'); if(!ov) return;
+    var scr=document.getElementById('WEATHER');
+    if(scr && scr.__wxHome){
+      scr.setAttribute('style', scr.__wxStyle||'');
+      scr.__wxHome.insertBefore(scr, scr.__wxNext||null);
+      scr.__wxHome=null; scr.__wxNext=null;
+    }
+    ov.remove();
+  }catch(e){}
+}
 function dsShowWeather(){
   var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
   var mc=document.getElementById('ds-content'); if(!mc) return;
@@ -33845,6 +33892,9 @@ function dsShowWeather(){
     H+='<div><div style="font-size:22px;font-weight:800;color:var(--d-head);letter-spacing:-.02em">Weather</div><div style="font-size:12px;color:'+(wxOk?'#64748b':'#f59e0b')+';margin-top:1px">'+(wxOk?'Updated '+wxClock_(wxTs)+' ET':'Live weather unavailable &middot; showing last seen '+wxClock_(wxTs))+'</div></div>';
     H+='<div style="display:flex;align-items:center;gap:10px">';
     H+='<div style="display:flex;align-items:center;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;overflow:hidden"><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8249;</div><div style="padding:8px 8px;font-size:13px;font-weight:700;color:var(--d-head);min-width:150px;text-align:center">'+dateLabel+'</div><div style="padding:8px 10px;color:#3a4256;font-size:15px">&#8250;</div></div>';
+    // Weather Coach was reachable only by knowing the URL on this surface. Same control shape as
+    // Refresh beside it, accented so it reads as a destination rather than another toggle.
+    H+='<div data-act="coach" role="button" tabindex="0" title="Overview, Map, Ride Planner, Alerts, History" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-accent,#fc5200);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2v1a7 7 0 0 1-4 6.32V13h2l-2 4-2-4h2v-1.68A7 7 0 0 1 10 5V4a2 2 0 0 1 2-2z"/></svg>Weather Coach</div>';
     H+='<div data-act="refresh" style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft);cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Refresh</div>';
     H+='<div style="display:flex;align-items:center;gap:6px;background:var(--d-panel);border:1px solid var(--d-edge);border-radius:10px;padding:8px 13px;font-size:13px;font-weight:600;color:var(--d-soft)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Grand Rapids, MI</div>';
     H+='</div></div>';
@@ -33973,6 +34023,7 @@ function dsShowWeather(){
     wrap.innerHTML=H;
     wrap.addEventListener('click',function(e){ var t=e.target.closest('[data-act]'); if(!t) return; var a=t.getAttribute('data-act');
       if(a==='refresh') dsShowWeather();
+      else if(a==='coach') dsShowWeatherCoach();
       else if(a==='details') dsNav('aicoach');
     });
   }).catch(function(){ wrap.innerHTML='<div style="padding:60px;text-align:center;color:var(--d-t4)">Weather unavailable</div>'; });
