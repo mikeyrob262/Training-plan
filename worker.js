@@ -42790,11 +42790,15 @@ function renderRunInto_(scr, surface){
 
 
 
-  var title=document.createElement('div');
-  title.style.cssText='padding:0 16px 14px';
-  title.innerHTML='<div style="font-size:22px;font-weight:800;color:var(--t1)">Run Training</div>'
-    +'<div style="font-size:13px;color:var(--t3);margin-top:2px">Coach Parry · Zone 2 base build</div>';
-  scr.appendChild(title);
+  // Desktop supplies its own header in the page chrome, so the shared renderer must not draw a
+  // second one. Mobile has no chrome above this, so it still needs it.
+  if(surface!=='desktop'){
+    var title=document.createElement('div');
+    title.style.cssText='padding:0 16px 14px';
+    title.innerHTML='<div style="font-size:22px;font-weight:800;color:var(--t1)">Run Training</div>'
+      +'<div style="font-size:13px;color:var(--t3);margin-top:2px">Coach Parry · Zone 2 base build</div>';
+    scr.appendChild(title);
+  }
 
   // History exhibit, above the live stats. Renders nothing when the snapshot is unprimed or run
   // cannot be ranked — the same do-not-claim contract _covFor_ returns.
