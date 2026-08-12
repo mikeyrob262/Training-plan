@@ -9774,7 +9774,8 @@ function showScreen(id){
   // Destroy all Leaflet map instances before removing screens
   try{Object.keys(window).filter(function(k){return k.indexOf('_wxmap_')===0;}).forEach(function(k){try{window[k].remove();}catch(e){}delete window[k];});}catch(e){}
   // Remove all fixed overlay screens
-  ['WX-DETAIL','CAL-SCREEN','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
+  // CAL-SCREEN dropped with showCal - nothing creates it now. The rest are still live screens.
+  ['WX-DETAIL','CORE-SCREEN','COND-SCREEN','RUN-SCREEN'].forEach(function(sid){var el=document.getElementById(sid);if(el)el.remove();});
   // Remove any stray leaflet containers.
   //
   // SCOPED, because this sweep is global and showScreen only owns the fixed overlay screens above.
@@ -32924,13 +32925,6 @@ function buildLayoutToggle_(){
 syncLayoutClass_();
 var _layoutRz;
 window.addEventListener('resize', function(){ clearTimeout(_layoutRz); _layoutRz=setTimeout(applyLayout_, 150); });
-function dsShowActivities(){
-  var mc = document.getElementById('ds-content');
-  if(mc) mc.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:13px">Select a ride to view details</div>';
-  var rp = document.getElementById('ds-right-panel');
-  if(rp) rp.innerHTML='<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--d-t4);font-size:12px;padding:20px;text-align:center">Open a ride to see conditions, insights and laps</div>';
-}
-
 // -- Delegated "View" link dispatch -----------------------------------------
 // Previously-dead link-styled affordances are tagged with data-view (+ optional
 // data-arg). One document-level listener routes them to a whitelisted action,
@@ -49607,176 +49601,6 @@ function calYScaleStep_(d){
   try{ localStorage.setItem('aiq_cal_yscale_year', String(calYScaleGetYear_()+(d<0?-1:1))); }catch(e){}
   try{ showCalendarTab(); }catch(e){}
 }
-
-function showCal(){
-  var old=document.getElementById('CAL-SCREEN');if(old)old.remove();
-  var scr=document.createElement('div');
-  scr.id='CAL-SCREEN';
-  scr.style.cssText='position:fixed;top:0;left:0;right:0;bottom:60px;background:var(--bg);z-index:200;overflow:hidden;display:flex;flex-direction:column;padding:12px;box-sizing:border-box;gap:10px';
-
-  var now=new Date();
-  var calYear=now.getFullYear();
-  var calMonth=now.getMonth();
-  var calView='month';
-
-  // Toggle buttons
-  var toggleBar=document.createElement('div');
-  toggleBar.style.cssText='display:flex;justify-content:center;gap:8px;flex-shrink:0';
-
-  var mbtn=document.createElement('button');
-  mbtn.textContent='Month';
-  mbtn.style.cssText='padding:7px 20px;border-radius:9px;border:1px solid var(--b1);background:#FC4C02;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
-
-  var ybtn=document.createElement('button');
-  ybtn.textContent='Year';
-  ybtn.style.cssText='padding:7px 20px;border-radius:9px;border:1px solid var(--b1);background:var(--s2);color:var(--t2);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
-
-  mbtn.onclick=function(){calView='month';monthPanel.style.display='flex';yearPanel.style.display='none';mbtn.style.background='#FC4C02';mbtn.style.color='#fff';ybtn.style.background='var(--s2)';ybtn.style.color='var(--t2)';};
-  ybtn.onclick=function(){calView='year';monthPanel.style.display='none';yearPanel.style.display='block';ybtn.style.background='#FC4C02';ybtn.style.color='#fff';mbtn.style.background='var(--s2)';mbtn.style.color='var(--t2)';renderYear();};
-
-  toggleBar.appendChild(mbtn);
-  toggleBar.appendChild(ybtn);
-  scr.appendChild(toggleBar);
-
-  // Month panel
-  var monthPanel=document.createElement('div');
-  monthPanel.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:12px;display:flex;flex-direction:column;overflow:hidden;min-height:0';
-  scr.appendChild(monthPanel);
-
-  // Year panel
-  var yearPanel=document.createElement('div');
-  yearPanel.style.cssText='flex:1;background:var(--s2);border-radius:14px;border:1px solid var(--b1);padding:16px;overflow-y:auto;display:none;min-height:0';
-  scr.appendChild(yearPanel);
-
-  var colors={Ride:'#FC4C02',VirtualRide:'#1D9E75',EBikeRide:'#1D9E75',GravelRide:'#FC4C02',MountainBikeRide:'#FC4C02',Run:'#185FA5',VirtualRun:'#185FA5',TrailRun:'#185FA5',WeightTraining:'#7F77DD',Strength:'#7F77DD',Workout:'#7F77DD',Crossfit:'#7F77DD'};
-  var months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  var days=['Mo','Tu','We','Th','Fr','Sa','Su'];
-
-  function renderMonth(){
-    monthPanel.innerHTML='';
-
-    // Header
-    var hd=document.createElement('div');
-    hd.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0';
-    var prev=document.createElement('button');
-    prev.innerHTML='&#8249;';
-    prev.style.cssText='background:none;border:none;font-size:24px;cursor:pointer;color:var(--t2);padding:0 8px';
-    prev.onclick=function(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderMonth();};
-    var nxt=document.createElement('button');
-    nxt.innerHTML='&#8250;';
-    nxt.style.cssText='background:none;border:none;font-size:24px;cursor:pointer;color:var(--t2);padding:0 8px';
-    nxt.onclick=function(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderMonth();};
-    var title=document.createElement('div');
-    title.style.cssText='font-size:15px;font-weight:700;color:var(--t1)';
-    title.textContent=months[calMonth]+' '+calYear;
-    hd.appendChild(prev);hd.appendChild(title);hd.appendChild(nxt);
-    monthPanel.appendChild(hd);
-
-    // Day headers
-    var dRow=document.createElement('div');
-    dRow.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:3px;flex-shrink:0';
-    days.forEach(function(d){var dd=document.createElement('div');dd.style.cssText='font-size:10px;color:var(--t3);text-align:center';dd.textContent=d;dRow.appendChild(dd);});
-    monthPanel.appendChild(dRow);
-
-    // Grid
-    var grid=document.createElement('div');
-    grid.style.cssText='display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:2px;flex:1;overflow:hidden';
-    var offset=(new Date(calYear,calMonth,1).getDay()+6)%7;
-    var daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-    for(var i=0;i<offset;i++) grid.appendChild(document.createElement('div'));
-    for(var d=1;d<=daysInMonth;d++){
-      var ds=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-      var dayRides=(st.rides||[]).filter(function(r){return r.date===ds;});
-      var isToday=d===now.getDate()&&calMonth===now.getMonth()&&calYear===now.getFullYear();
-      var cell=document.createElement('div');
-      cell.style.cssText='background:'+(isToday?'rgba(252,76,2,0.06)':'var(--s1)')+';border-radius:4px;border:0.5px solid '+(isToday?'#FC4C02':'var(--b1)')+';padding:3px;overflow:hidden;'+(dayRides.length?'cursor:pointer':'');
-      var dNum=document.createElement('div');
-      dNum.style.cssText='font-size:10px;color:'+(isToday?'#FC4C02':'var(--t3)')+';font-weight:'+(isToday?700:400)+';margin-bottom:2px';
-      dNum.textContent=d;
-      cell.appendChild(dNum);
-      dayRides.slice(0,2).forEach(function(r){
-        var sport=(typeof rideSport_==='function'?rideSport_(r):(r.sportType||r.type||''))||'Ride';
-        var c=colors[sport]||'#FC4C02';
-        var tile=document.createElement('div');
-        tile.style.cssText='background:'+c+';border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
-        var nm=document.createElement('div');
-        nm.style.cssText='font-size:9px;color:var(--d-t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
-        nm.textContent=r.name||sport;
-        tile.appendChild(nm);
-        if(r.distance){var dist=document.createElement('div');dist.style.cssText='font-size:8px;color:rgba(255,255,255,0.8)';dist.textContent=r.distance+'mi'+(r.duration?' · '+r.duration:'');tile.appendChild(dist);}
-        cell.appendChild(tile);
-      });
-      if(dayRides.length>2){var more=document.createElement('div');more.style.cssText='font-size:7px;color:var(--t3)';more.textContent='+'+(dayRides.length-2)+' more';cell.appendChild(more);}
-      if(dayRides.length===1){
-        (function(ride){cell.onclick=function(){var idx=rideRefOf_(ride);if(rideRefOk_(idx)){scr.remove();openRideDetail(idx);}};})(dayRides[0]);
-      } else if(dayRides.length>1){
-        (function(rides,ds2){cell.onclick=function(){
-          var pick=document.createElement('div');
-          pick.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;display:flex;align-items:center;justify-content:center';
-          var box=document.createElement('div');box.style.cssText='background:var(--s1);border-radius:16px;padding:16px;width:280px';
-          box.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px">'+ds2+'</div>';
-          rides.forEach(function(r){var idx=rideRefOf_(r);var btn=document.createElement('button');btn.style.cssText='display:block;width:100%;text-align:left;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit';btn.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t1)">'+(r.name||r.sportType||'Activity')+'</div><div style="font-size:11px;color:var(--t3)">'+(r.distance?r.distance+'mi · ':'')+( r.duration||'')+'</div>';btn.onclick=function(){pick.remove();scr.remove();if(idx>=0)openRideDetail(idx);};box.appendChild(btn);});
-          var cancel=document.createElement('button');cancel.style.cssText='display:block;width:100%;text-align:center;background:none;border:none;color:var(--t3);font-size:13px;cursor:pointer;margin-top:4px;font-family:inherit';cancel.textContent='Cancel';cancel.onclick=function(){pick.remove();};box.appendChild(cancel);
-          pick.appendChild(box);document.body.appendChild(pick);
-        };})(dayRides,ds);
-      } else {
-        // No completed ride logged for this day - show the planned workout
-        // (if any) as an outlined tile, distinct from the filled/solid
-        // tiles used for actual completed activities. Tapping opens the
-        // real Training week view where swap/edit already works, rather
-        // than duplicating that logic here.
-        var planned = getPlannedWorkoutForDate(ds);
-        if(planned && planned.name.toLowerCase().indexOf('rest')<0){
-          var pTile=document.createElement('div');
-          pTile.style.cssText='border:1px dashed var(--b2);border-radius:3px;padding:2px 4px;margin-bottom:1px;overflow:hidden';
-          var pNm=document.createElement('div');
-          pNm.style.cssText='font-size:9px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600';
-          pNm.textContent=planned.name;
-          pTile.appendChild(pNm);
-          cell.appendChild(pTile);
-          cell.style.cursor='pointer';
-          (function(wk){cell.onclick=function(){scr.remove();GW(wk, true);};})(planned.week);
-        }
-      }
-      grid.appendChild(cell);
-    }
-    monthPanel.appendChild(grid);
-
-    // Legend
-    var leg=document.createElement('div');
-    leg.style.cssText='margin-top:8px;display:flex;gap:10px;flex-wrap:wrap;flex-shrink:0';
-    [{l:'Ride',c:'#FC4C02'},{l:'Virtual',c:'#1D9E75'},{l:'Run',c:'#185FA5'},{l:'Strength',c:'#7F77DD'}].forEach(function(x){
-      leg.innerHTML+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><div style="width:8px;height:8px;border-radius:2px;background:'+x.c+'"></div>'+x.l+'</div>';
-    });
-    leg.innerHTML+='<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><div style="width:8px;height:8px;border-radius:2px;border:1px dashed var(--b2)"></div>Planned</div>';
-    monthPanel.appendChild(leg);
-  }
-
-  function renderYear(){
-    // THE SAME renderer the desktop Year view mounts. This used to be a second, independent month
-    // aggregator built off raw st.rides with its own per-sport regex filters — two numbers for one
-    // fact, and the exact shape this app keeps getting bitten by. One renderer, one aggregate.
-    try{
-      var _by=_calByDate_((typeof allRidesLegacy_==='function')?allRidesLegacy_():((st&&st.rides)||[]));
-      yearPanel.innerHTML=calYearHTML_(calYear, _by, new Date());
-      // A chapter card opens its month, same drill-down as desktop.
-      yearPanel.onclick=function(ev){
-        var t=ev.target&&ev.target.closest?ev.target.closest('[data-cal="ymonth"]'):null;
-        if(!t) return;
-        var ym=String(t.getAttribute('data-ym')||'').split('-');
-        if(ym.length!==2) return;
-        calYear=parseInt(ym[0],10); calMonth=parseInt(ym[1],10)-1;
-        mbtn.onclick(); renderMonth();
-      };
-    }catch(e){
-      yearPanel.innerHTML='<div style="padding:30px 16px;text-align:center;color:var(--t3);font-size:13px">Year view unavailable.</div>';
-    }
-  }
-
-  renderMonth();
-  document.body.appendChild(scr);
-}
-
 
 // ===== One-time restore of tombstoned rides from the 8.8MB backup file ==============
 // The full ride library (3,686) was mass-tombstoned down to ~1,187 live under
