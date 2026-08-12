@@ -44972,11 +44972,13 @@ function mfSrvText_(f){
 }
 // Name match for the legacy migration only. Lowercase, punctuation dropped, runs of space folded.
 function mfNorm_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\\s+/g,' ').trim(); }
-function getMyFoods(){
+// The RAW array, tombstones included. Writers use this; readers use getMyFoods().
+function getMyFoodsRaw_(){
   if(!st.myFoods||st.myFoods.length===0) st.myFoods=DEFAULT_MY_FOODS.map(function(f){ var c={}; for(var k in f) c[k]=f[k]; return c; });
   return st.myFoods;
 }
-function getMyMeals(){
+function getMyFoods(){ return getMyFoodsRaw_().filter(function(f){ return f && !f.deleted; }); }
+function getMyMealsRaw_(){
   if(!st.myMeals||st.myMeals.length===0) st.myMeals=DEFAULT_MY_MEALS.map(function(m){
     var c={}; for(var k in m) c[k]=m[k];
     if(m.items) c.items=m.items.map(function(i){ var d={}; for(var k in i) d[k]=i[k]; return d; });
@@ -44984,6 +44986,7 @@ function getMyMeals(){
   });
   return st.myMeals;
 }
+function getMyMeals(){ return getMyMealsRaw_().filter(function(m){ return m && !m.deleted; }); }
 function mfById_(id){
   if(!id) return null;
   var list=getMyFoods();
@@ -45045,9 +45048,9 @@ function mfEnsureClean_(){
 function migrateMyFoodsMeals_(){
   try{
     var changed=0;
-    var foods=getMyFoods();
+    var foods=getMyFoodsRaw_();
     foods.forEach(function(f){
-      if(!f) return;
+      if(!f || f.deleted) return;
       if(!f.id){ f.id=mfNewId_(); changed++; }
       if(f.srvQty==null && f.srv){
         var m=/^\\s*([0-9]*\\.?[0-9]+)\\s*(.*)$/.exec(String(f.srv));
@@ -45062,18 +45065,19 @@ function migrateMyFoodsMeals_(){
     // twice is qty 2, which is the whole reason items carry a quantity. First occurrence wins;
     // summing would double a meal that had merely been synced twice.
     var seenF={}, sigF={}, remap={}, dropF=0;
-    st.myFoods=foods.filter(function(f){
-      if(!f || !f.id) return true;
-      if(seenF[f.id]) { dropF++; return false; }
+    foods.forEach(function(f){
+      if(!f || !f.id || f.deleted) return;
       var sig=mfNorm_(f.n)+'|'+(f.srvQty!=null?f.srvQty:'')+(f.srvUnit||'')+'|'+f.cal;
-      if(sigF[sig]){ remap[f.id]=sigF[sig]; dropF++; return false; }
-      sigF[sig]=f.id; seenF[f.id]=1; return true;
+      if(seenF[f.id] || sigF[sig]){
+        if(sigF[sig]) remap[f.id]=sigF[sig];
+        f.deleted=true; f.editedAt=Date.now(); dropF++; return;   // tombstone, so the removal travels
+      }
+      sigF[sig]=f.id; seenF[f.id]=1;
     });
-    foods=st.myFoods;
     if(dropF) changed+=dropF;
     var byName={};
-    foods.forEach(function(f){ if(f&&f.n) byName[mfNorm_(f.n)]=f; });
-    var meals=getMyMeals();
+    foods.forEach(function(f){ if(f&&f.n&&!f.deleted) byName[mfNorm_(f.n)]=f; });
+    var meals=getMyMealsRaw_();
     // Repoint items through the food remap BEFORE the meal signatures are computed. Two meals
     // that differ only by which duplicate food they referenced are the SAME meal, and they only
     // look that way once the remap has been applied.
@@ -45082,18 +45086,16 @@ function migrateMyFoodsMeals_(){
       m.items.forEach(function(it){ if(it && remap[it.fid]){ it.fid=remap[it.fid]; changed++; } });
     });
     var seenM={}, sigM={}, dropM=0;
-    st.myMeals=meals.filter(function(m){
-      if(!m || !m.id) return true;
-      if(seenM[m.id]) { dropM++; return false; }
+    meals.forEach(function(m){
+      if(!m || !m.id || m.deleted) return;
       var body=(m.items||m.foods||[]).map(function(x){ return (x.fid||mfNorm_(x.n||''))+'@'+(x.qty||1); }).sort().join(',');
       var sig=mfNorm_(m.name)+'|'+(m.meal||'')+'|'+body;
-      if(sigM[sig]){ dropM++; return false; }
-      sigM[sig]=1; seenM[m.id]=1; return true;
+      if(seenM[m.id] || sigM[sig]){ m.deleted=true; m.editedAt=Date.now(); dropM++; return; }
+      sigM[sig]=1; seenM[m.id]=1;
     });
-    meals=st.myMeals;
     if(dropM) changed+=dropM;
     meals.forEach(function(meal){
-      if(!meal) return;
+      if(!meal || meal.deleted) return;
       if(!meal.id){ meal.id=mmNewId_(); changed++; }
       if(!meal.meal){ meal.meal='breakfast'; changed++; }
       if(meal.items){
@@ -45125,7 +45127,7 @@ function migrateMyFoodsMeals_(){
                 fiber:Math.round(((old.fiber||0)/qty)*10)/10,
                 sodium:Math.round((old.sodium||0)/qty),
                 fromMeal:true };
-          foods.push(hit);
+          getMyFoodsRaw_().push(hit);
           byName[mfNorm_(base)]=hit;
         }
         return { fid:hit.id, qty:qty, nameAtSave:hit.n };
@@ -45260,7 +45262,7 @@ function openMyFoodEditor_(existing, onSaved){
                            :('Delete "'+existing.n+'"?');
         uiConfirm(msg,{title:'Delete food',okText:'Delete'}).then(function(yes){
           if(!yes) return;
-          st.myFoods=getMyFoods().filter(function(x){ return x!==existing; });
+          existing.deleted=true; existing.editedAt=Date.now();   // tombstone, not a splice
           sv(); close(); if(onSaved) onSaved();
         });
       };
@@ -45282,7 +45284,7 @@ function openMyFoodEditor_(existing, onSaved){
       rec.brand=String(br.value||'').trim()||null;
       rec.meal=dm.value||null;
       rec.editedAt=Date.now();
-      if(!existing) getMyFoods().push(rec);
+      if(!existing) getMyFoodsRaw_().push(rec);
       sv(); close(); if(onSaved) onSaved();
       toast(existing?'Updated':'Added to My Foods');
     };
@@ -45418,7 +45420,7 @@ function openMyMealEditor_(existing, onSaved){
       del.onclick=function(){
         uiConfirm('Delete "'+existing.name+'"? The foods it references are not affected.',{title:'Delete meal',okText:'Delete'}).then(function(yes){
           if(!yes) return;
-          st.myMeals=getMyMeals().filter(function(x){ return x!==existing; });
+          existing.deleted=true; existing.editedAt=Date.now();
           sv(); close(); if(onSaved) onSaved();
         });
       };
@@ -45439,7 +45441,7 @@ function openMyMealEditor_(existing, onSaved){
         return { fid:it.fid, qty:it.qty, nameAtSave:food?food.n:null };
       });
       rec.editedAt=Date.now();
-      if(!existing) getMyMeals().push(rec);
+      if(!existing) getMyMealsRaw_().push(rec);
       sv(); close(); if(onSaved) onSaved();
       toast(existing?'Updated':'Saved meal');
     };
@@ -45580,7 +45582,7 @@ function mfSaveCurrentMeal_(container){
     if(name===null) return;
     name=String(name).trim();
     if(!name) return;
-    var foods=getMyFoods(), items=[];
+    var foods=getMyFoods(), raw=getMyFoodsRaw_(), items=[];
     logged.forEach(function(e){
       var hit=e.srcFid?mfById_(e.srcFid):null;
       if(!hit){
@@ -45592,11 +45594,11 @@ function mfSaveCurrentMeal_(container){
               cal:Math.round(e.cal||0), p:Math.round((e.p||0)*10)/10, c:Math.round((e.c||0)*10)/10,
               f:Math.round((e.f||0)*10)/10, fiber:Math.round((e.fiber||0)*10)/10,
               sodium:Math.round(e.sodium||0), fromLog:true, editedAt:Date.now() };
-        foods.push(hit);
+        raw.push(hit);
       }
       items.push({ fid:hit.id, qty:1, nameAtSave:hit.n });
     });
-    getMyMeals().push({ id:mmNewId_(), name:name, emoji:'\ud83c\udf7d\ufe0f', meal:curMeal, items:items, editedAt:Date.now() });
+    getMyMealsRaw_().push({ id:mmNewId_(), name:name, emoji:'\ud83c\udf7d\ufe0f', meal:curMeal, items:items, editedAt:Date.now() });
     sv();
     renderMyMeals(container);
     toast('Saved: '+name);

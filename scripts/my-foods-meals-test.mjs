@@ -27,10 +27,11 @@ const DEFAULT_MY_MEALS = [];
 let idn = 0;
 const M = new Function('st', 'DEFAULT_MY_FOODS', 'DEFAULT_MY_MEALS', 'genEntryId_', 'sv', asServed(
   exFn('mfNewId_') + exFn('mmNewId_') + exFn('mfSrvText_') + exFn('mfNorm_') +
-  exFn('getMyFoods') + exFn('getMyMeals') + exFn('mfById_') +
+  exFn('getMyFoodsRaw_') + exFn('getMyFoods') + exFn('getMyMealsRaw_') + exFn('getMyMeals') + exFn('mfById_') +
   exFn('mealItems_') + exFn('mealTotals_') + exFn('migrateMyFoodsMeals_') + NL +
-  'return { mfNewId_, mfSrvText_, mfNorm_, getMyFoods, getMyMeals, mfById_, mealItems_, mealTotals_, migrateMyFoodsMeals_ };'
+  'return { mfNewId_, mfSrvText_, mfNorm_, getMyFoods, getMyMeals, getMyFoodsRaw_, getMyMealsRaw_, mfById_, mealItems_, mealTotals_, migrateMyFoodsMeals_ };'
 ))(st, DEFAULT_MY_FOODS, DEFAULT_MY_MEALS, () => 'id' + (++idn), () => {});
+const live = (a) => (a || []).filter((x) => x && !x.deleted);
 
 const R = '\x1b[31m', G = '\x1b[32m', Y = '\x1b[33m', X = '\x1b[0m';
 let fails = 0;
@@ -94,11 +95,11 @@ console.log('\n' + Y + '=== the legacy migration converts copies into references
   ok('...pointing at the base food', M.mfById_(meal.items[0].fid).n === 'Egg Whole');
   ok('...and the pre-multiplied copy was DISCARDED', M.mfById_(meal.items[0].fid).cal === 70);
   eq('the meal still totals the same', M.mealTotals_(meal).cal, 140 + 180 + 200);
-  ok('every food gained an id', st.myFoods.every((f) => /^mf:/.test(f.id)));
+  ok('every food gained an id', live(st.myFoods).every((f) => /^mf:/.test(f.id)));
   ok('the meal gained an id', /^mm:/.test(meal.id));
   eq('...and a category', meal.meal, 'breakfast');
   // The unmatched item must not be lost, and must land PER SERVING.
-  const mystery = st.myFoods.filter((f) => f.n === 'Mystery Bar')[0];
+  const mystery = live(st.myFoods).filter((f) => f.n === 'Mystery Bar')[0];
   ok('an unknown food is promoted into My Foods', !!mystery);
   eq('...at per-serving values', mystery.cal, 200);
   eq('re-running the migration is a no-op', M.migrateMyFoodsMeals_(), 0);
@@ -109,7 +110,7 @@ console.log('\n' + Y + '=== an unmatched item with a quantity is divided back do
   st.myFoods = [];
   st.myMeals = [{ name: 'M', foods: [{ n: 'Rice Cake x4', cal: 140, p: 4, c: 28, f: 1.2 }] }];
   M.migrateMyFoodsMeals_();
-  const rc = st.myFoods.filter((f) => f.n === 'Rice Cake')[0];
+  const rc = live(st.myFoods).filter((f) => f.n === 'Rice Cake')[0];
   ok('the base food is created without the multiplier in its name', !!rc);
   eq('...per serving, not per four', rc.cal, 35);
   eq('...carbs too', rc.c, 7);
@@ -154,11 +155,11 @@ console.log('\n' + Y + '=== sync must not UNION these arrays ===' + X);
     { id: 'mm:a', name: 'M', meal: 'lunch', items: [{ fid: 'mf:a', qty: 1 }] }
   ];
   M.migrateMyFoodsMeals_();
-  eq('a duplicated food is collapsed', st.myFoods.length, 1);
-  eq('a duplicated meal is collapsed', st.myMeals.length, 1);
-  eq('a duplicated item inside a meal is collapsed', st.myMeals[0].items.length, 1);
-  eq('...and the totals stop being doubled', M.mealTotals_(st.myMeals[0]).cal, 100);
-  ok('quantities are NOT summed - that would double a merely-synced meal', st.myMeals[0].items[0].qty === 1);
+  eq('a duplicated food is collapsed', live(st.myFoods).length, 1);
+  eq('a duplicated meal is collapsed', live(st.myMeals).length, 1);
+  eq('a duplicated item inside a meal is collapsed', live(st.myMeals)[0].items.length, 1);
+  eq('...and the totals stop being doubled', M.mealTotals_(live(st.myMeals)[0]).cal, 100);
+  ok('quantities are NOT summed - that would double a merely-synced meal', live(st.myMeals)[0].items[0].qty === 1);
   eq('running it again changes nothing', M.migrateMyFoodsMeals_(), 0);
 }
 
@@ -179,11 +180,11 @@ console.log('\n' + Y + '=== same content, different id: the pre-stable-seed resi
     { id: 'mm:x2', name: 'Typical Breakfast', meal: 'breakfast', items: [{ fid: 'mf:x2', qty: 2 }] }
   ];
   M.migrateMyFoodsMeals_();
-  eq('the duplicate food collapses on content', st.myFoods.length, 1);
-  eq('the duplicate meal collapses too', st.myMeals.length, 1);
+  eq('the duplicate food collapses on content', live(st.myFoods).length, 1);
+  eq('the duplicate meal collapses too', live(st.myMeals).length, 1);
   // The dropped food's id must not be left dangling in the surviving meal.
-  eq('the survivor references a food that still exists', M.mealItems_(st.myMeals[0])[0].missing, false);
-  eq('...and still totals correctly', M.mealTotals_(st.myMeals[0]).cal, 140);
+  eq('the survivor references a food that still exists', M.mealItems_(live(st.myMeals)[0])[0].missing, false);
+  eq('...and still totals correctly', M.mealTotals_(live(st.myMeals)[0]).cal, 140);
 
   // Different content with the same name must NOT be collapsed - that is a real distinction.
   st.myFoods = [
@@ -192,7 +193,7 @@ console.log('\n' + Y + '=== same content, different id: the pre-stable-seed resi
   ];
   st.myMeals = [];
   M.migrateMyFoodsMeals_();
-  eq('a 20g and a 32g variant both survive', st.myFoods.length, 2);
+  eq('a 20g and a 32g variant both survive', live(st.myFoods).length, 2);
 }
 
 console.log('\n' + Y + '=== the forms collect what the spec requires ===' + X);
@@ -231,7 +232,12 @@ console.log('\n' + Y + '=== the forms collect what the spec requires ===' + X);
 
   // Saving a logged meal must create real food records, not embed macros again.
   const sc = exFn('mfSaveCurrentMeal_');
-  ok('saving a logged meal promotes entries into My Foods', /foods\.push\(hit\)/.test(sc));
+  ok('saving a logged meal promotes entries into My Foods', /raw\.push\(hit\)/.test(sc));
+  // getMyFoods() returns a FILTERED copy, so a push into it is silently lost. Writers must
+  // target the raw array.
+  ok('...onto the raw array, not the filtered view', /getMyFoodsRaw_\(\)/.test(sc));
+  ok('no writer pushes into the filtered view', !/getMyFoods\(\)\.push|getMyMeals\(\)\.push/.test(src));
+  ok('deleting tombstones rather than splicing, so the removal travels', /existing\.deleted=true/.test(src));
   ok('...and references them', /items\.push\(\{ fid:hit\.id/.test(sc));
   ok('...reusing the source food when the entry came from one', /e\.srcFid\?mfById_\(e\.srcFid\)/.test(sc));
 }
