@@ -541,6 +541,20 @@ try {
     fail('the burn is reading a field the library does not write (see above).');
   }
 
+  // STEP 30 — voice notes. The assertions that matter are the NEGATIVE ones: no Blob, no
+  //           MediaRecorder, no base64, nothing audio-shaped written to a ride. st is ~13.5 MB
+  //           against a ~5 MB localStorage quota that has silently failed saves before, so
+  //           "transcript only" is a storage constraint, not a preference.
+  console.log(`${D}· checking voice notes…${X}`);
+  try {
+    const so = execSync('node scripts/voice-note-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('voice notes regressed — check nothing started storing audio (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

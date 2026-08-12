@@ -6535,7 +6535,7 @@ function mergeSession_(a, b){
 // STILL NOT FIXED, and deliberately: with NEITHER side stamped there is no clock to order them by,
 // so max remains the tiebreak. A downward correction must stamp editedAt (and ideally the _edited
 // mask, which is honoured for ANY field) to travel. That is the documented path, not an oversight.
-var RIDE_LWW_FIELDS_=['name','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed',
+var RIDE_LWW_FIELDS_=['name','note','distance','duration','tss','np','avgPwr','avgPower','elev','avgSpeed',
   'avgHR','hr','calories','sportType','type','deleted','deletedAt',
   'movingSecs','elapsedSecs','elevGain','kj','work','cadence','maxHR','maxSpeed','temp'];
 function mergeItemFast_(a, b){
@@ -31975,6 +31975,17 @@ function _smurkelFacts_(C){
       +(_tmp>=78?' This is warm enough that heat is a real load on HR — you may say so.':'')
       +(_tmp<=40?' This is cold enough to matter for warm-up and pacing — you may say so.':''));
   }
+  // THE ATHLETE'S OWN WORDS. A voice note is the one input here the numbers cannot produce, and it
+  // outranks them on anything subjective - if he says the legs were heavy, they were heavy, whatever
+  // the power file says. Quoted verbatim and fenced hard: the model may REFERENCE it, never rewrite
+  // it, and never infer a symptom he did not describe.
+  var _vn=(C.ride && C.ride.note)?String(C.ride.note).trim():'';
+  if(_vn){
+    L.push('ATHLETE NOTE, recorded by him after this ride: "'+_vn.replace(/"/g,"'")+'"');
+    L.push('  This is his own account and it OUTRANKS the numbers on anything subjective - how it felt, '
+      +'what hurt, who he rode with. You may quote or paraphrase it. Do NOT contradict it, do NOT '
+      +'invent detail it does not contain, and do NOT diagnose from it.');
+  }
   L.push('  distance '+n(a.miles,' mi',1)+', time '+(a.duration||'not recorded')+', TSS '+n(a.tss)+'.');
   if(C.cyclingPower){
     L.push('  NP '+n(a.np,'W')+', average power '+n(a.avg,'W')+', FTP '+n(a.ftp,'W')
@@ -38438,6 +38449,131 @@ window.addEventListener('load', function(){
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ==================== VOICE-NOTE RIDE TAGS ====================
+//
+// One tap after a ride, speak a sentence, it lands on the ride as text. The point is the texture
+// the numbers cannot carry - legs felt heavy, great group, knee twinged on the climb - and Dr
+// Smurkel gets to reference it in the next debrief.
+//
+// TRANSCRIPT ONLY. NO AUDIO IS EVER STORED. Not a privacy nicety, a hard constraint: st already
+// serialises to about 13.5 MB and localStorage sits near 3.55 MB of a ~5 MB quota, which has
+// silently failed saves in this app before. A minute of audio would blow it. Web Speech transcribes
+// ON DEVICE, so the audio never leaves the phone, there is no API key and no per-minute cost.
+//
+// Feature-detected, never assumed: Web Speech is Chrome/Safari, and on an unsupported browser the
+// control offers typing instead of failing at the moment of tapping.
+var _vnRec=null, _vnTarget=null;
+function _vnSupported_(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+// The note lives on the ride under a per-field edit stamp, which is what lets a note written on the
+// phone survive the merge with a laptop copy that has none - see RIDE_LWW_FIELDS_.
+function _vnSave_(ride, text){
+  if(!ride) return;
+  var t=String(text||'').trim();
+  if(t) ride.note=t; else delete ride.note;
+  ride.editedAt=Date.now();
+  if(!ride._edited || typeof ride._edited!=='object') ride._edited={};
+  ride._edited.note=1;
+  try{ sv(); }catch(e){}
+}
+function _vnRideByKey_(key){
+  try{ return (st.rides||[]).filter(function(r){ return r && !r.deleted && rideKey(r)===key; })[0]||null; }catch(e){ return null; }
+}
+function _vnStop_(){
+  try{ if(_vnRec) _vnRec.stop(); }catch(e){}
+  _vnRec=null; _vnTarget=null;
+}
+// Records into the row's own live area so the athlete can see the words appear - a recorder with no
+// feedback feels broken even when it is working.
+function _vnStart_(key){
+  if(!_vnSupported_()){ _vnType_(key); return; }
+  var ride=_vnRideByKey_(key); if(!ride) return;
+  if(_vnRec){ _vnStop_(); return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var rec=new SR();
+  rec.lang='en-US'; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
+  var finalTxt='';
+  var live=document.getElementById('vn-live-'+key);
+  var btn=document.getElementById('vn-btn-'+key);
+  if(btn){ btn.textContent='Stop'; btn.setAttribute('data-recording','1'); }
+  if(live){ live.style.display='block'; live.textContent='Listening...'; }
+  rec.onresult=function(e){
+    var interim='';
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      var chunk=e.results[i][0].transcript;
+      if(e.results[i].isFinal) finalTxt+=chunk; else interim+=chunk;
+    }
+    if(live) live.textContent=(finalTxt+interim).trim()||'Listening...';
+  };
+  rec.onerror=function(ev){
+    // not-allowed is a denied mic permission, which is a decision, not a fault - say so plainly.
+    var msg=(ev&&ev.error==='not-allowed')?'Microphone blocked - allow it in the browser, or type instead.'
+      :('Could not hear that ('+((ev&&ev.error)||'unknown')+'). Try again, or type instead.');
+    if(live) live.textContent=msg;
+    _vnFinish_(key, finalTxt);
+  };
+  rec.onend=function(){ _vnFinish_(key, finalTxt); };
+  _vnRec=rec; _vnTarget=key;
+  try{ rec.start(); }catch(e){ _vnFinish_(key, ''); }
+}
+function _vnFinish_(key, text){
+  var btn=document.getElementById('vn-btn-'+key);
+  if(btn){ btn.textContent='Voice note'; btn.removeAttribute('data-recording'); }
+  var ride=_vnRideByKey_(key);
+  var t=String(text||'').trim();
+  if(ride && t){ _vnSave_(ride, t); }
+  _vnRec=null; _vnTarget=null;
+  try{ _vnRender_(key); }catch(e){}
+}
+// Typing fallback, and the edit path for a transcript that came out wrong - speech recognition on a
+// windy road is not reliable enough to be the only way in.
+function _vnType_(key){
+  var ride=_vnRideByKey_(key); if(!ride) return;
+  var cur=String(ride.note||'');
+  // uiPrompt(msg, default, opts) -> Promise<string|null>, null on cancel.
+  if(typeof uiPrompt==='function'){
+    uiPrompt('Ride note', cur, { title:'Ride note', okText:'Save', placeholder:'Legs felt heavy today' })
+      .then(function(v){ if(v===null||v===undefined) return; _vnSave_(ride, v); _vnRender_(key); });
+    return;
+  }
+  var v=window.prompt('Ride note', cur);
+  if(v===null) return;
+  _vnSave_(ride, v); _vnRender_(key);
+}
+function _vnClear_(key){
+  var ride=_vnRideByKey_(key); if(!ride) return;
+  _vnSave_(ride, '');
+  _vnRender_(key);
+}
+// The row: existing note if there is one, plus the controls. Rendered as a string so both the
+// mobile ride detail and any future surface can drop it in.
+function _vnRowHTML_(ride){
+  if(!ride) return '';
+  var key='';
+  try{ key=rideKey(ride); }catch(e){ return ''; }
+  var note=String(ride.note||'').trim();
+  var esc=(typeof aiEsc_==='function')?aiEsc_:function(x){ return String(x); };
+  var h='<div id="vn-row-'+key+'" style="margin:10px 16px 0;padding:11px 13px;background:var(--s2);border-radius:12px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">';
+  h+='<span style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--t3)">Ride note</span>';
+  h+='<span style="display:flex;gap:6px">';
+  h+='<button id="vn-btn-'+key+'" onclick="_vnStart_(\\''+key+'\\')" class="sm-ctl" style="background:transparent;border:1px solid var(--b1);border-radius:9px;padding:4px 10px;font-size:11.5px;font-weight:700;color:#FC4C02;cursor:pointer">'
+    +(_vnSupported_()?'Voice note':'Add note')+'</button>';
+  h+='<button onclick="_vnType_(\\''+key+'\\')" class="sm-ctl" style="background:transparent;border:1px solid var(--b1);border-radius:9px;padding:4px 10px;font-size:11.5px;font-weight:700;color:var(--t3);cursor:pointer">Type</button>';
+  if(note) h+='<button onclick="_vnClear_(\\''+key+'\\')" class="sm-ctl" style="background:transparent;border:1px solid var(--b1);border-radius:9px;padding:4px 10px;font-size:11.5px;font-weight:700;color:var(--t3);cursor:pointer">Clear</button>';
+  h+='</span></div>';
+  h+='<div id="vn-live-'+key+'" style="display:none;font-size:12.5px;color:var(--t3);margin-top:7px;font-style:italic"></div>';
+  h+='<div id="vn-text-'+key+'" style="font-size:13.5px;color:var(--t1);line-height:1.45;margin-top:'+(note?'7px':'0')+'">'+(note?esc(note):'')+'</div>';
+  h+='</div>';
+  return h;
+}
+function _vnRender_(key){
+  var row=document.getElementById('vn-row-'+key);
+  var ride=_vnRideByKey_(key);
+  if(!row || !ride) return;
+  var tmp=document.createElement('div');
+  tmp.innerHTML=_vnRowHTML_(ride);
+  if(tmp.firstChild) row.parentNode.replaceChild(tmp.firstChild, row);
+}
 function openRideDetail(idx, _noFetch){
   idx = rideResolveIdx_(idx);   // accepts a position OR a durable handle
   var r = st.rides[idx];
@@ -38514,6 +38650,13 @@ function openRideDetail(idx, _noFetch){
 
   hdr.appendChild(topRow);
   hdr.appendChild(titleWrap);
+  // Voice note sits directly under the ride's name - the thing you want to annotate is right
+  // there, and it is above the fold on a phone without pushing the stats down.
+  try{
+    var _vnWrap=document.createElement('div');
+    _vnWrap.innerHTML=_vnRowHTML_(r);
+    if(_vnWrap.firstChild) hdr.appendChild(_vnWrap.firstChild);
+  }catch(e){}
   try{ if(typeof favStarWire_==='function') favStarWire_(r,'mb-fav-star'); }catch(e){}
 
   // Hero stat row - generous 2x3 grid (matching the reference's Time/
