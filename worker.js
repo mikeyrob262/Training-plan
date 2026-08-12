@@ -45088,6 +45088,36 @@ function mfEnsureClean_(){
 //   - Blanking would destroy rows that are hand-entered on the run card - z1pct..z5pct are listed
 //     in STORE_V2_MANUAL_RUN_F as manual fields, so some of these were typed, not imported.
 // They get a provenance stamp instead, so any reader can tell which model produced a number.
+// Repairs a planned duration that was written as clock time read as a number. The editor's
+// Completed Duration field prefilled o.duration ("0:44:13") into a box parsed with _num, which
+// strips non-digits - so a save wrote 4413, and "44:33" wrote exactly 4433. One live session
+// carried 4433 and its calorie target read 34,356 against a real 2,360.
+//
+// A prescribed session is minutes, and nothing anyone prescribes runs longer than a day. Above
+// the ceiling the value is clock time that lost its colons; it is re-read as seconds, which is
+// the only interpretation that reproduces it (4433 -> 73.9 min). Below it, nothing is touched.
+var PLAN_DUR_MAX_MIN = 600;   // 10 hours - longer than any session this athlete prescribes
+function migratePlanDurations_(){
+  try{
+    if(!st || !st.plan) return 0;
+    var fixed=0;
+    Object.keys(st.plan).forEach(function(dk){
+      var day=st.plan[dk]; if(!day || !day.sessions) return;
+      day.sessions.forEach(function(x){
+        if(!x || x.deleted || !x.targets) return;
+        var d=+x.targets.durationMin;
+        if(!(d>PLAN_DUR_MAX_MIN)) return;
+        x.targets.durationMin=Math.round(d/60);   // it was seconds wearing a minutes label
+        x.editedAt=Date.now();
+        fixed++;
+        try{ console.log('[planDur] '+dk+': durationMin '+d+' -> '+x.targets.durationMin
+          +' (clock time had been read as a plain number)'); }catch(e){}
+      });
+    });
+    if(fixed){ try{ if(typeof sv==='function') sv(); }catch(e){} }
+    return fixed;
+  }catch(e){ try{ console.warn('[planDur] failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function migrateRunHrZones_(){
   try{
     if(typeof runHrZonePcts_!=='function') return 0;
@@ -50823,6 +50853,19 @@ function openDayEditor(dateKey, targetId){
   function _sect(t){ var d=document.createElement('div'); d.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:14px 0 8px'; d.textContent=t; bodyEl.appendChild(d); }
   function _fr(label,input){ var r=document.createElement('div'); r.style.cssText='display:grid;grid-template-columns:92px 1fr;gap:8px;align-items:center;margin-bottom:8px'; var l=document.createElement('div'); l.style.cssText='font-size:12px;color:var(--t2);font-weight:600'; l.textContent=label; r.appendChild(l); r.appendChild(input); bodyEl.appendChild(r); return input; }
   function _num(v){ v=(v||'').toString().replace(/[^0-9.\-]/g,''); return v===''?null:parseFloat(v); }
+  // Minutes from whatever the field holds. o.duration is a FORMATTED string ("0:44:13"), and
+  // _num strips non-digits, so it came back as 4413 - and "44:33" as exactly 4433, which is the
+  // value found on one live session driving its calorie target to 34,356 against a real 2,360.
+  // H:MM:SS and MM:SS are read as clock time; a bare number is already minutes.
+  function _durMin(v){
+    var t=String(v==null?'':v).trim();
+    if(!t) return null;
+    var parts=t.split(':');
+    if(parts.length===3) return Math.round((+parts[0]*3600 + +parts[1]*60 + (+parts[2]||0))/60);
+    if(parts.length===2) return Math.round((+parts[0]*60 + (+parts[1]||0))/60);
+    var n=parseFloat(t.replace(/[^0-9.\-]/g,''));
+    return isFinite(n)?n:null;
+  }
   var getData=function(){ return {}; };
   // Exercise name field: a <select> from EX_LIBRARY (+ Other free-text). Picking a
   // library exercise prefills its default sets/reps/%1RM. Keeps names consistent so
@@ -50907,12 +50950,12 @@ function openDayEditor(dateKey, targetId){
       // 'completed' + sv), but the form only ever read them back from o, so they looked like they vanished.
       var _c=(sess && sess.completed) || {};
       var cD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:(_c.distance!=null?_c.distance:''),'mi'));
-      var cU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_c.duration!=null?_c.duration:''),'min'));
+      var cU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_c.duration!=null?_c.duration:''),'min or h:mm:ss'));
       var cP=_fr('Pace/Spd',_mkI(o&&o.avgSpeed!=null?o.avgSpeed:(_c.avgSpeed!=null?_c.avgSpeed:''),'mph'));
       var cT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:(_c.tss!=null?_c.tss:''),'-'));
       var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:(_c.np!=null?_c.np:'')),'W'));
       var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:(_c.elev!=null?_c.elev:''),'ft'));
-      getData=function(){ return { type:'ride', intent:iSel.value, name:_selName, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
+      getData=function(){ return { type:'ride', intent:iSel.value, name:_selName, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_durMin(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_durMin(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
     } else if(type==='run'){
       // Runs get pace and heart rate, because that is what a run is prescribed and judged on.
       // Deliberately NOT a zone dropdown: the stored run zone model puts 78% of all running
@@ -50932,7 +50975,7 @@ function openDayEditor(dateKey, targetId){
       _sect('Completed');
       var _rc=(sess && sess.completed) || {};
       var rcD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:(_rc.distance!=null?_rc.distance:''),'mi'));
-      var rcU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_rc.duration!=null?_rc.duration:''),'min'));
+      var rcU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_rc.duration!=null?_rc.duration:''),'min or h:mm:ss'));
       // r.pace is already a mm:ss string on a recorded run - show it as-is rather than through
       // the ride form's mph field, which reads r.avgSpeed and would print 2.4 for an 11-min mile.
       var rcP=_fr('Pace',_mkI(o&&o.pace!=null?o.pace:(_rc.pace!=null?_rc.pace:''),'mm:ss /mi'));
@@ -50941,8 +50984,8 @@ function openDayEditor(dateKey, targetId){
       var rcE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:(_rc.elev!=null?_rc.elev:''),'ft'));
       getData=function(){ return { type:'run', intent:rSel.value, name:_selName,
         targets:{ paceLo:_paceSec_(qLo.value), paceHi:_paceSec_(qHi.value), hrCap:_num(rhc.value),
-                  durationMin:_num(rdu.value), distanceMi:_num(rdi.value), tssTarget:_num(rts.value) },
-        completed:{ distance:_num(rcD.value), duration:_num(rcU.value), pace:(String(rcP.value||'').trim()||null),
+                  durationMin:_durMin(rdu.value), distanceMi:_num(rdi.value), tssTarget:_num(rts.value) },
+        completed:{ distance:_num(rcD.value), duration:_durMin(rcU.value), pace:(String(rcP.value||'').trim()||null),
                     avgHR:_num(rcH.value), tss:_num(rcT.value), elev:_num(rcE.value) } }; };
     } else if(type==='strength'){
       _sect('Planned — exercises (sets x reps @ %1RM)');
@@ -50976,7 +51019,7 @@ function openDayEditor(dateKey, targetId){
       var mDone=document.createElement('input'); mDone.type='checkbox'; mDone.checked=(sess&&sess.status==='completed'); mDone.style.cssText='width:18px;height:18px';
       _fr('Completed',mDone);
       var mA=_fr('Actual dur',_mkI((sess&&sess.actualDurationMin)||'','min'));
-      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_num(mD.value) }, exercises:(eff.exercises||[]), completed:mDone.checked, actualDurationMin:_num(mA.value) }; };
+      getData=function(){ return { type:'mobility', name:_selName||'Mobility', targets:{ durationMin:_durMin(mD.value) }, exercises:(eff.exercises||[]), completed:mDone.checked, actualDurationMin:_durMin(mA.value) }; };
     }
   }
   function applyPreset(){
@@ -52697,6 +52740,7 @@ window.onload = function(){
         // measures an empty store measures nothing.
         try{ if(typeof migrateMyFoodsMeals_==='function') migrateMyFoodsMeals_(); }catch(e){}
         try{ if(typeof migrateRunHrZones_==='function') migrateRunHrZones_(); }catch(e){}
+        try{ if(typeof migratePlanDurations_==='function') migratePlanDurations_(); }catch(e){}
         // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
         // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
         // Order matters: clear the invalid power-derived values first, THEN score runs on heart rate.

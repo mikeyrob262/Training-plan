@@ -150,5 +150,25 @@ console.log('\n' + Y + '=== the 173 stale sessions are repaired, and only those 
   ok('targets are not invented', st.plan['2026-08-05'].sessions[0].targets === undefined);
 }
 
+console.log('\n' + Y + '=== a formatted duration is not read as a number ===' + X);
+{
+  // The Completed Duration field is prefilled from o.duration, a FORMATTED "H:MM:SS" string, and
+  // was read back through _num, which strips every non-digit. "0:44:13" came back as 4413 and
+  // "44:33" as exactly 4433 - the value found on one live session, which drove its calorie target
+  // to 34,356 against a real 2,360. Opening the editor and pressing Save was enough to write it.
+  const i = src.indexOf('function _durMin(');
+  ok('a duration parser exists', i > 0);
+  const D = new Function(asServed(src.slice(i, matchBrace(i) + 1) + NL + 'return _durMin;'))();
+  eq('h:mm:ss becomes minutes', D('0:44:13'), 44);
+  eq('...and a long one', D('1:13:53'), 74);
+  eq('mm:ss becomes minutes', D('44:33'), 45);
+  ok('...NOT 4433', D('44:33') !== 4433);
+  eq('a bare number is already minutes', D('25'), 25);
+  eq('a decimal survives', D('12.5'), 12.5);
+  eq('blank is null', D(''), null);
+  eq('null is null', D(null), null);
+  ok('no duration field is read with _num any more', !/duration:_num\(|durationMin:_num\(/.test(src));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'run session editor: all checks passed' + X));
 process.exit(fails ? 1 : 0);
