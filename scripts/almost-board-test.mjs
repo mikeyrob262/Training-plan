@@ -23,7 +23,8 @@ const NL = String.fromCharCode(10);
 
 const st = { segments: {}, rides: [] };
 const M = new Function('st', asServed(
-  exVar('ALMOST_NEAR_PCT') + exVar('ALMOST_NEAR_MAX_SEC') + exVar('ALMOST_RECENT_DAYS') + exVar('ALMOST_DPR_MAX_SEC') +
+  exVar('ALMOST_ATTEMPT_MAX') + exVar('ALMOST_NEAR_PCT') + exVar('ALMOST_NEAR_MAX_SEC') +
+  exVar('ALMOST_RECENT_DAYS') + exVar('ALMOST_DPR_MAX_SEC') +
   exFn('_segEffortNorm_') + exFn('_segEfforts_') + exFn('_segProgression_') +
   exFn('_almostDaysAgo_') + exFn('_almostDistance_') + exFn('almostBoard_') +
   exFn('_almostTime_') + exFn('_almostAgo_') +
@@ -67,6 +68,22 @@ console.log('\n' + Y + '=== Closing in: movement, measured ===' + X);
   // Old movement is history, not a live target.
   st.segments = { a: { name: 'Ancient', efforts: [ { d: '2019-01-01', s: 400 }, { d: '2019-06-01', s: 350 } ] } };
   eq('an improvement from years ago is not a target', M.almostBoard_().closing.length, 0);
+}
+
+console.log('\n' + Y + '=== a ride that CROSSED the segment is not an attempt ===' + X);
+{
+  // The live board's top entry was 'minus 2,241 seconds' - thirty-seven minutes off a segment,
+  // which is a ride he stopped on being read as the baseline, not a training gain.
+  st.segments = { a: { name: 'Stopped for coffee', efforts: [
+    { d: daysAgo(60), s: 2600 }, { d: daysAgo(30), s: 360 }, { d: daysAgo(5), s: 352 } ] } };
+  const B = M.almostBoard_();
+  eq('the absurd baseline is discarded, not celebrated', B.closing.length ? B.closing[0].tookSec : 0, 8);
+  ok('...so no entry claims an implausible gain', !B.closing.some(function(x){ return x.tookSec > 600; }));
+}
+{
+  // A real gain of a sensible size must still survive the gate.
+  st.segments = { a: { name: 'Real gain', efforts: [ { d: daysAgo(60), s: 400 }, { d: daysAgo(5), s: 360 } ] } };
+  eq('a 10% improvement is kept', M.almostBoard_().closing[0].tookSec, 40);
 }
 
 console.log('\n' + Y + '=== Almost a PB: only the LAST go counts ===' + X);

@@ -21932,10 +21932,19 @@ function _segEffortNorm_(e){
   return { sec:sec, date:String(date).slice(0,10), w:(+e.w>0?+e.w:null) };
 }
 // Efforts for one segment, oldest first, both shapes, junk dropped.
+//
+// GENUINE ATTEMPTS ONLY. Anything slower than ALMOST_ATTEMPT_MAX times his own best on that
+// segment is discarded: it is a ride that crossed the segment, not a go at it. Without this the
+// board reads a stop-and-chat as the baseline and reports the next normal ride as a breakthrough.
 function _segEfforts_(seg){
   if(!seg || !Array.isArray(seg.efforts)) return [];
-  return seg.efforts.map(_segEffortNorm_).filter(Boolean)
+  var all=seg.efforts.map(_segEffortNorm_).filter(Boolean)
     .sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(all.length<2) return all;
+  var best=Infinity;
+  all.forEach(function(e){ if(e.sec<best) best=e.sec; });
+  if(!(best>0)) return all;
+  return all.filter(function(e){ return e.sec <= best*ALMOST_ATTEMPT_MAX; });
 }
 // Improvements only: each effort that beat everything before it. Two entries means one drop.
 function _segProgression_(eff){
@@ -21943,6 +21952,12 @@ function _segProgression_(eff){
   (eff||[]).forEach(function(e){ if(e.sec<best){ best=e.sec; out.push(e); } });
   return out;
 }
+// An effort slower than this multiple of his own best on that segment was not an attempt - it
+// was a ride that happened to cross it. Counting those as a baseline turns a coffee stop into a
+// personal breakthrough. Measured on the live library, the un-gated board led with a 2,241-second
+// 'improvement'; the cap removes that class entirely without touching real gains, which on a
+// cycling segment are single-digit to low-double-digit percentages.
+var ALMOST_ATTEMPT_MAX=1.5;
 var ALMOST_NEAR_PCT=0.03;      // within 3% of his own best counts as 'almost'
 var ALMOST_NEAR_MAX_SEC=20;    // ...but never call a 40-second gap 'almost' on a long segment
 var ALMOST_RECENT_DAYS=365;    // a gap he has not visited in a year is not a live target
