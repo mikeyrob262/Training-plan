@@ -9031,12 +9031,45 @@ var _RDY_BANDS=[
   { min:-25,       key:'loaded',   label:'Loaded',   head:'Fatigue is building',sub:'Consider an easier day or shorter intervals',        col:'#EF9F27', fill:0.50 },
   { min:-Infinity, key:'fatigued', label:'Fatigued', head:'Fatigue is high',    sub:'Recent training load is heavy — prioritize recovery', col:'#E24B4A', fill:0.25 }
 ];
+// The ring is drawn as a fraction and read as a percentage, so it has to move like one.
+//
+// It did not. fill was a per-band constant - 1.00 / 0.75 / 0.50 / 0.25 - so every TSB from -10 to
+// +10 rendered as exactly 75. A twenty-point range presented as one precise-looking number, and a
+// week of accumulating fatigue that moved the ring not at all. Four states wearing a percentage's
+// clothes.
+//
+// _RDY_BANDS still owns the VERDICT: the label, the colour and the coaching line all come from the
+// band the TSB lands in, unchanged. Only the fill is now continuous, and it is derived from those
+// same numbers rather than a second table - each band's fill is its value at the band FLOOR, rising
+// linearly to the next band's value at its ceiling. The four anchors are therefore exactly what
+// they always were: 1.00 at TSB +10, 0.75 at -10, 0.50 at -25, 0.25 at -40.
+//
+// The bottom is a floor, not a zero. TSB -60 is not '0% ready' - there is no further resolution
+// down there, and running the ring to empty would be the same overclaim pointing the other way.
+var _RDY_FLOOR_TSB=-40;
+function _rdyFill_(tsb){
+  // +null and +'' are both 0, which is a perfectly ordinary TSB - an absent reading would have
+  // come out as 88% "nearly fresh" rather than as nothing. Refuse the blanks before coercing.
+  if(tsb===null || tsb===undefined || tsb==='') return 0;
+  var t=+tsb;
+  if(!isFinite(t)) return 0;
+  for(var i=0;i<_RDY_BANDS.length;i++){
+    if(t<_RDY_BANDS[i].min) continue;
+    if(i===0) return _RDY_BANDS[0].fill;             // above the top anchor the ring is simply full
+    var lo=isFinite(_RDY_BANDS[i].min)?_RDY_BANDS[i].min:_RDY_FLOOR_TSB;
+    var hi=_RDY_BANDS[i-1].min;
+    var loF=_RDY_BANDS[i].fill, hiF=_RDY_BANDS[i-1].fill;
+    if(t<=lo || !(hi>lo)) return loF;                // at or under the bottom band's floor
+    return Math.round((loF+(t-lo)/(hi-lo)*(hiF-loF))*1000)/1000;
+  }
+  return _RDY_BANDS[_RDY_BANDS.length-1].fill;
+}
 function getReadiness_(){
   var f=null; try{ f=(typeof getFitness_==='function')?getFitness_():null; }catch(e){ f=null; }
   if(!f || !f.loaded) return { loaded:false, tsb:null, band:null, label:'—', head:'—', sub:'Not enough logged training yet.', col:'#94a3b8', fill:0 };
   var tsb=+f.tsb||0, b=_RDY_BANDS[_RDY_BANDS.length-1];
   for(var i=0;i<_RDY_BANDS.length;i++){ if(tsb>=_RDY_BANDS[i].min){ b=_RDY_BANDS[i]; break; } }
-  return { loaded:true, tsb:tsb, ctl:f.ctl, atl:f.atl, band:b.key, label:b.label, head:b.head, sub:b.sub, col:b.col, fill:b.fill };
+  return { loaded:true, tsb:tsb, ctl:f.ctl, atl:f.atl, band:b.key, label:b.label, head:b.head, sub:b.sub, col:b.col, fill:_rdyFill_(tsb) };
 }
 try{ if(typeof window!=='undefined'){ window.getReadiness_=getReadiness_; } }catch(e){}
 function readinessCardHTML(){
@@ -16926,6 +16959,9 @@ var _storeV2Snap = null;
 // Identity+length of the pool the current arming was computed from, so a library that grows
 // after priming re-folds instead of serving a stale tail. Same memo shape as _dedupeCache.
 var _storeV2Armed = null;
+// Last enrichment count logged, so a re-arm that changes nothing stays quiet. Re-arming is
+// cheap and frequent; the log is for the moment the number MOVES.
+var _storeV2EnrichLast = null;
 // The snapshot is schema-slim. /store_v2 records carry avgHr, date, elapsedSec, movingSec, name,
 // trainingLoad, type and a few ids - and nothing any later backfill computed. Measured live:
 //
@@ -16996,6 +17032,14 @@ function storeV2Arm_(){
   // Enrich BEFORE the tail is appended: tail records come straight off st.rides and already
   // carry every backfilled field. Only the snapshot rows are missing them.
   var en=storeV2Enrich_(s.rides, pool);
+  if(en.stats.enriched!==_storeV2EnrichLast){
+    _storeV2EnrichLast=en.stats.enriched;
+    var ef=en.stats.fields, ek=Object.keys(ef);
+    try{ console.log('[store_v2] enriched ' + en.stats.enriched + ' of ' + en.stats.matched
+      + ' matched snapshot rows from live st.rides'
+      + (ek.length ? (' - ' + ek.map(function(k){ return k + ' +' + ef[k]; }).join(', ')) : ' - nothing to add yet')
+      + '. Snapshot decides WHICH rides; st.rides decides what is on them.'); }catch(e){}
+  }
   _storeV2Rides = tr.add.length ? en.rides.concat(tr.add) : en.rides;
   // Run cards read .time (a FORMATTED duration) and .elevation; storeV2Normalize_ puts those
   // on snapshot records, and getRunsLegacy_ maps them onto st.rides records. Tail records get
@@ -17042,13 +17086,6 @@ function primeStoreV2_(){
     // The tail is the part of the library the snapshot cannot see, so it is stated every boot
     // next to the horizon it was measured from. A silent fold is how the 117 mi gap survived:
     // the count looked plausible and nothing on the page said what date it stopped at.
-    if(t.enrich){
-      var ef=t.enrich.fields, ek=Object.keys(ef);
-      console.log('[store_v2] enriched ' + t.enrich.enriched + ' of ' + t.enrich.matched
-        + ' matched snapshot rows from live st.rides'
-        + (ek.length ? (' - ' + ek.map(function(k){ return k + ' +' + ef[k]; }).join(', ')) : ' - nothing to add')
-        + '. Snapshot decides WHICH rides; st.rides decides what is on them.');
-    }
     [['ride',t.ride],['run',t.run]].forEach(function(p){
       var k=p[0], x=p[1];
       if(!x.horizon){ console.warn('[store_v2] ' + k + ' bucket is empty — no horizon, nothing folded.'); return; }

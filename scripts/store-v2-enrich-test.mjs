@@ -125,7 +125,13 @@ console.log('\n' + Y + '=== the field list is the one that was measured ===' + X
      /storeV2Enrich_\(s\.rides, pool\)/.test(arm));
   ok('...and the tail is appended to the ENRICHED rows',
      /en\.rides\.concat\(tr\.add\)\s*:\s*en\.rides/.test(arm));
-  ok('the enrichment is reported, not silent', /enriched \' \+ t\.enrich\.enriched|enriched '/.test(src));
+  // The count MUST be reported from the re-arm, not from prime. /store_v2 primes on the _idbReady
+  // chain while the library arrives on the Firebase one, so at prime st.rides is empty (measured:
+  // "st.rides live was 0") and prime always enriches nothing. Logging only there printed
+  // "enriched 0" forever - the same looks-broken-but-is-fine reading the overlay exists to end.
+  ok('the enrichment count is reported', /enriched \' \+ en\.stats\.enriched/.test(arm));
+  ok('...from the re-arm, where the library actually exists', arm.indexOf('_storeV2EnrichLast') > 0);
+  ok('...and only when the number moves', /enriched!==_storeV2EnrichLast/.test(arm));
 }
 
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'store_v2 enrichment: all checks passed' + X));

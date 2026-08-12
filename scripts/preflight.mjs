@@ -613,6 +613,20 @@ try {
     fail('the snapshot overlay is dropping or inventing ride data (see above).');
   }
 
+  // STEP 35 - the readiness ring. It is drawn as a fraction and read as a percentage, so it has
+  //           to behave like one. fill was a per-band constant, which rendered every TSB from
+  //           -10 to +10 as exactly 75 - a twenty-point range shown as one exact figure. The
+  //           test pins continuity, monotonicity, and that the four anchors are unchanged.
+  console.log(`${D}. checking the readiness ring...${X}`);
+  try {
+    const so = execSync('node scripts/readiness-fill-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the readiness ring is misreporting form (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
