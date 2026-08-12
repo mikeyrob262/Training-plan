@@ -109,6 +109,55 @@ console.log('\n' + Y + '=== every surface gets voice; only the right ones get sh
      /No section headings and no asterisk-bolding/.test(reply) && !/Plain text, no markdown asterisks/.test(reply));
 }
 
+console.log('\n' + Y + '=== the panel can actually DRAW what the prompt asks for ===' + X);
+{
+  // Asking for a table is worthless if the renderer prints pipes. This runs the SERVED
+  // _smurkelHTML_ over a real generated debrief - captured from the deployed app - rather than a
+  // fixture written to pass.
+  const i = html.indexOf('function _smurkelHTML_(');
+  let d = 0, k = html.indexOf('{', i), end = k;
+  for (; end < html.length; end++) { const c = html[end]; if (c === '{') d++; else if (c === '}') { d--; if (!d) break; } }
+  // eslint-disable-next-line no-new-func
+  const render = new Function('_cvEsc_', 'return ' + html.slice(i, end + 1) + '; ')(
+    (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+
+  const real = [
+    '## Morning Run — easy miles banked',
+    '',
+    '**The Verdict**',
+    '',
+    'This was a well-executed easy run.',
+    '',
+    '---',
+    '',
+    '**What Moved**',
+    '',
+    '| Metric | Aug 10 | Aug 12 | Change |',
+    '|---|---|---|---|',
+    '| Avg HR | 143 bpm | 140 bpm | −3 bpm |',
+    '| TSS | 52 | 50 | −2 |',
+    '',
+    '✅ HR down, pace steady — that is adaptation showing up.',
+    '⚠️ Duration was roughly double what was prescribed.',
+    '- a bullet still renders as a bullet'
+  ].join('\n');
+  const out = render(real);
+
+  ok('a markdown table becomes a real table', /<table[\s>]/.test(out));
+  ok('...with a header row', /<th[\s>]/.test(out) && />Metric</.test(out));
+  ok('...and one row per data line', (out.match(/<tr>/g) || []).length === 3);
+  ok('...the |---| separator is dropped, not drawn', !/---/.test(out));
+  ok('...and no literal pipes survive', out.indexOf('|') < 0);
+  ok('...it scrolls rather than widening the panel', /overflow-x:auto/.test(out));
+  ok('a horizontal rule becomes a divider, not an empty bullet', /height:1px/.test(out));
+  ok('a title-case "**What Moved**" is drawn as a heading', /text-transform:uppercase[^>]*>What Moved</.test(out));
+  ok('...as is a "## " heading', /text-transform:uppercase[^>]*>Morning Run/.test(out));
+  ok('the check flag is styled', /&#10003;/.test(out));
+  ok('the warning flag is styled too', /&#9888;/.test(out));
+  ok('bullets still render as bullets', /&middot;/.test(out));
+  ok('prose is still prose', />This was a well-executed easy run\.</.test(out));
+}
+
 try { fs.rmSync(OUT, { recursive: true, force: true }); } catch (e) {}
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'Dr. Smurkel persona: all checks passed' + X));
 process.exit(fails ? 1 : 0);

@@ -32852,16 +32852,58 @@ function _smurkelHTML_(text){
   var lines=String(text||'').split(NL);
   var esc=(typeof _cvEsc_==='function')?_cvEsc_:function(s){ return String(s); };
   var out=[], P='#a855f7';
-  lines.forEach(function(raw){
-    var ln=String(raw||'').replace(/^[*# ]+|[*]+$/g,'').trim();
-    if(!ln){ return; }
-    var isBullet=(ln.charAt(0)==='-' || ln.charAt(0)==='•');
-    if(isBullet) ln=ln.replace(/^[-•]+ ?/,'');
-    var body=esc(ln)
-      .replace(/&amp;#10003;|✓|✅/g,'<span style="color:var(--c-green)">&#10003;</span>')
-      .replace(/❌|✗/g,'<span style="color:var(--c-red)">&#10007;</span>');
-    // A short line with no sentence-ending punctuation, in caps or title case, is a section heading.
-    var isHeading=!isBullet && ln.length<52 && ln.indexOf('.')<0 && (ln===ln.toUpperCase()) && /[A-Z]/.test(ln);
+  var fmt=function(s){
+    return esc(s)
+      .replace(/&amp;#10003;|\u2713|\u2705/g,'<span style="color:var(--c-green)">&#10003;</span>')
+      .replace(/\u274C|\u2717/g,'<span style="color:var(--c-red)">&#10007;</span>')
+      .replace(/\u26A0\uFE0F|\u26A0/g,'<span style="color:var(--c-amber)">&#9888;</span>');
+  };
+  // A markdown table is the one thing the debrief prompt asks for that this renderer could not
+  // draw. Before this, "| Metric | Aug 10 | Aug 12 |" reached the panel as a literal row of pipes
+  // and the |---|---| separator as a line of dashes.
+  var isRow=function(s){ return /^\\s*\\|.*\\|\\s*$/.test(String(s||'')); };
+  var isSep=function(s){ return /^\\s*\\|[\\s:|-]+\\|\\s*$/.test(String(s||'')); };
+  var cells=function(s){
+    return String(s).trim().replace(/^\\|/,'').replace(/\\|$/,'').split('|').map(function(c){ return c.trim(); });
+  };
+  var TD='padding:4px 8px;font-size:12px;color:var(--d-t2);border-top:1px solid var(--d-line);text-align:left';
+  var TH='padding:4px 8px;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--d-t3);text-align:left';
+  for(var i=0;i<lines.length;i++){
+    var raw=String(lines[i]||'');
+    if(isRow(raw)){
+      var rows=[];
+      while(i<lines.length && isRow(lines[i])){
+        if(!isSep(lines[i])) rows.push(cells(lines[i]));
+        i++;
+      }
+      i--;
+      if(rows.length){
+        var head=rows.shift();
+        // Wrapped in its own scroller: a four-column comparison must never widen the panel.
+        out.push('<div style="overflow-x:auto;margin:8px 0"><table style="border-collapse:collapse;width:100%">'
+          +'<thead><tr>'+head.map(function(c){ return '<th style="'+TH+'">'+fmt(c)+'</th>'; }).join('')+'</tr></thead>'
+          +'<tbody>'+rows.map(function(r){
+              return '<tr>'+r.map(function(c){ return '<td style="'+TD+'">'+fmt(c)+'</td>'; }).join('')+'</tr>';
+            }).join('')+'</tbody></table></div>');
+      }
+      continue;
+    }
+    // A rule between sections is structure, not text - it used to fall through as an empty bullet.
+    if(/^\\s*(-{3,}|_{3,}|\\*{3,})\\s*$/.test(raw)){
+      out.push('<div style="height:1px;background:var(--d-line);margin:12px 0"></div>');
+      continue;
+    }
+    // Whether the line was MARKED as a heading has to be read before the markers are stripped.
+    // The old test was "short and entirely upper case", so "## The Verdict" and "**What Moved**"
+    // both landed as ordinary paragraphs - the debrief prompt names six sections in title case
+    // and not one of them was being drawn as a heading.
+    var marked=/^\\s*#{1,6}\\s+\\S/.test(raw) || /^\\s*\\*\\*[^*]+\\*\\*\\s*$/.test(raw);
+    var ln=raw.replace(/^[*# ]+|[*]+$/g,'').trim();
+    if(!ln){ continue; }
+    var isBullet=(ln.charAt(0)==='-' || ln.charAt(0)==='\u2022');
+    if(isBullet) ln=ln.replace(/^[-\u2022]+ ?/,'');
+    var body=fmt(ln);
+    var isHeading=!isBullet && (marked || (ln.length<52 && ln.indexOf('.')<0 && (ln===ln.toUpperCase()) && /[A-Z]/.test(ln)));
     if(isHeading){
       out.push('<div style="font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:'+P+';margin:13px 0 5px">'+body+'</div>');
     } else if(isBullet){
@@ -32870,7 +32912,7 @@ function _smurkelHTML_(text){
     } else {
       out.push('<div style="font-size:12.5px;color:var(--d-t2);line-height:1.6;margin:6px 0;overflow-wrap:anywhere">'+body+'</div>');
     }
-  });
+  }
   return out.join('');
 }
 // Mounted after the panel paints (same pattern as the .zwo export row), so the card is never held
