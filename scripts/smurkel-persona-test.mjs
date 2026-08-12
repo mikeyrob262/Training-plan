@@ -78,7 +78,12 @@ console.log('\n' + Y + '=== voice carries NO formatting - that was the self-cont
 
 console.log('\n' + Y + '=== format layers say what the brief asked, where there is room for it ===' + X);
 {
-  ok('long form asks for light structure', /light structure/.test(LONG));
+  ok('long form asks for room to breathe', /let it breathe/.test(LONG) && /short sections/.test(LONG));
+  // The layer must not name sections of its own. The debrief call site already names six, in order,
+  // with what each must contain - a second list one layer up is the same self-contradiction the
+  // voice/format split exists to remove.
+  ok('...and defers the section list to the call site', /do not invent your own/.test(LONG));
+  ok('...proposing no headings of its own', !/The Bigger Picture|What Stood Out/.test(LONG));
   ok('...tables for direct comparisons', /markdown table whenever you are comparing things/.test(LONG));
   ok('...and says WHY, so it is a rule not a decoration', /reads in one glance/.test(LONG));
   ok('the check and warning flags survived as real characters',
