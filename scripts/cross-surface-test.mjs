@@ -375,7 +375,15 @@ check('the shared calendar helpers are defined OUTSIDE dsShowCalendar',
   ['calYearHTML_','_favKey_','favStarHTML_','_calByDate_','_yearMonthAgg_','_chapterLabel_']
     .filter(n => { const at = lineOf('function ' + n + '('); return at < 0 || at > calStart; }), []);
 check('ONE date-bucket builder for both calendar surfaces', countCode(/function _calByDate_/g), 1);
-check('mobile mounts the SAME year renderer as desktop', /yearPanel\.innerHTML=calYearHTML_\(calYear/.test(src), true);
+// Retargeted 2026-08-11. This pinned `yearPanel.innerHTML=calYearHTML_(calYear`, which lived in
+// showCal - a superseded calendar with ZERO references, deleted as unreachable. So the invariant
+// was being satisfied by code that could never run, and the check passed on dead markup.
+// It now reads the LIVE mobile mount in showCalendarTab, which is the thing that has to keep
+// using the shared renderer.
+check('mobile mounts the SAME year renderer as desktop', /calYearHTML_\(_qy,_qby,_qNow,true\)/.test(src), true);
+check('...and the SAME quarter renderer', /calQuarterHTML_\(_qy,_qby,_qNow,true\)/.test(src), true);
+check('...from inside showCalendarTab, not a dead screen',
+  src.indexOf('calYearHTML_(_qy,_qby,_qNow,true)') > src.indexOf('function showCalendarTab('), true);
 check('the old independent mobile year aggregator is gone', countCode(/var maxMi=Math\.max\.apply\(null,moMiles\)/g), 0);
 // INVARIANT: the avatar upload cannot fail silently. iOS Safari does not reliably fire change on a
 // DETACHED file input, and an input held only in a local variable can be collected while the native
