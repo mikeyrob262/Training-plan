@@ -584,6 +584,20 @@ try {
     fail('the spoken debrief would not read correctly aloud (see above).');
   }
 
+  // STEP 33 — Ghost Rival. The assertions that matter are the two REFUSALS: no FTP axis (the log
+  //           is seven entries inside one ten-day window, data entry rather than a trajectory) and
+  //           no opponent from a year that was not a cycling season (2019 was 132 cycling miles
+  //           against 220 runs - a runner, not a rival).
+  console.log(`${D}· checking Ghost Rival…${X}`);
+  try {
+    const so = execSync('node scripts/ghost-rival-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('Ghost Rival is racing something it should not (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

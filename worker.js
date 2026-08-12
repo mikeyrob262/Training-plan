@@ -18120,7 +18120,7 @@ function aiReviveNulls_(execute){
 // Overview grid as redundant with Momentum + Highlights in the hero, which left the tab pointing at
 // a destination holding one card and nothing else. aiCardWhatChanged_ is deliberately kept (see the
 // note on it) — the nav entry and the tab dispatch are what went.
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['almost','Almost Board'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['almost','Almost Board'],['ghost','Ghost Rival'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
 function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -23198,6 +23198,200 @@ function aiRenderAlmost_(){
     +'KOM proximity is not a section here. All 142 checked segments came back with no crown held and '
     +'the closest gap was 4 seconds, so a KOM list would be a list of one &mdash; see Segment Attack '
     +'for the crown check itself.</div>';
+  return H+'</div>';
+}
+// ==================== GHOST RIVAL ====================
+//
+// Race a past version of yourself, day by day through the season. Not a spreadsheet of last year -
+// a rival whose position updates as the year runs.
+//
+// TWO AXES, AND ONLY TWO. Both are measured the same way for both riders, on the same day-of-year:
+//   CTL      from st.fitSeries, which goes back to 2015-05-21 - the same series Trends charts.
+//   MILES    cumulative cycling miles to that point in the season, from the ride library.
+//
+// THERE IS NO FTP AXIS, deliberately. st.ftpHistory holds SEVEN entries and every one of them falls
+// inside a ten-day window in 2026 - 190, 183, 230, 230, 183, 190, 183. That is data-entry churn, not
+// a trajectory, and there is no historical FTP to race against at all. An axis drawn from it would
+// be invented.
+//
+// THE OPPONENT IS 2025, NOT 2019. Measured: 2019 was 132 cycling miles and 220 RUNS - a runner, not
+// a cycling rival, and a ghost he would beat by February on a sport he was not training. 2025 is
+// 7,050 cycling miles and a real CTL curve. That is a race.
+var GHOST_MIN_MILES=500;   // a year below this was not a cycling season and is not offered
+function _ghostDoy_(dateStr){
+  var d=String(dateStr||'').slice(0,10).split('-');
+  if(d.length<3) return null;
+  var y=+d[0], m=+d[1], day=+d[2];
+  if(!(y>0&&m>0&&day>0)) return null;
+  var start=Date.UTC(y,0,1), here=Date.UTC(y,m-1,day);
+  return Math.round((here-start)/86400000)+1;   // 1..366
+}
+// Cycling years with enough riding to be a rival, newest first.
+function ghostYears_(){
+  var by={};
+  try{
+    (st.rides||[]).forEach(function(r){
+      if(!r || r.deleted || !r.date) return;
+      var sp=(typeof rideSport_==='function')?String(rideSport_(r)||''):'';
+      if(sp && !/ride|cycl|bike|handcycle/i.test(sp)) return;
+      var y=String(r.date).slice(0,4);
+      by[y]=(by[y]||0)+(parseFloat(r.distance)||0);
+    });
+  }catch(e){ return []; }
+  return Object.keys(by).filter(function(y){ return by[y]>=GHOST_MIN_MILES; })
+    .sort().reverse().map(function(y){ return { year:y, miles:Math.round(by[y]) }; });
+}
+// Cumulative cycling miles by day-of-year for one year. Index 0 is unused so doy maps directly.
+function _ghostMiles_(year){
+  var out=new Array(367); var i;
+  for(i=0;i<367;i++) out[i]=0;
+  try{
+    (st.rides||[]).forEach(function(r){
+      if(!r || r.deleted || !r.date) return;
+      if(String(r.date).slice(0,4)!==String(year)) return;
+      var sp=(typeof rideSport_==='function')?String(rideSport_(r)||''):'';
+      if(sp && !/ride|cycl|bike|handcycle/i.test(sp)) return;
+      var doy=_ghostDoy_(r.date); if(!doy) return;
+      out[doy]+=(parseFloat(r.distance)||0);
+    });
+  }catch(e){}
+  var run=0;
+  for(i=1;i<367;i++){ run+=out[i]; out[i]=Math.round(run); }
+  return out;
+}
+// CTL by day-of-year for one year, from the ONE fitness series. Days with no entry hold the last
+// known value rather than dropping to zero - CTL is a rolling load, it does not vanish on a rest day.
+function _ghostCtl_(year){
+  var out=new Array(367); var i;
+  for(i=0;i<367;i++) out[i]=null;
+  var ser=[];
+  try{ ser=(typeof fitnessSeries_==='function')?(fitnessSeries_()||[]):[]; }catch(e){ return out; }
+  ser.forEach(function(pt){
+    var d=pt&&(pt.date||pt.d); if(!d) return;
+    if(String(d).slice(0,4)!==String(year)) return;
+    var doy=_ghostDoy_(d); if(!doy) return;
+    if(pt.ctl!=null && isFinite(pt.ctl)) out[doy]=Math.round(pt.ctl*10)/10;
+  });
+  var last=null;
+  for(i=1;i<367;i++){ if(out[i]==null) out[i]=last; else last=out[i]; }
+  return out;
+}
+// The race as of today. Returns nulls rather than zeros where a rider has no reading, so a missing
+// value is never rendered as a defeat.
+function ghostRival_(rivalYear){
+  var years=ghostYears_();
+  if(!years.length) return null;
+  var nowY=String(new Date().getFullYear());
+  var rival=String(rivalYear||'');
+  if(!rival || rival===nowY){
+    var other=years.filter(function(y){ return y.year!==nowY; });
+    rival=other.length?other[0].year:'';
+  }
+  if(!rival) return null;
+  // LOCAL calendar parts, never toISOString - that is UTC and rolls the day over in the evening,
+  // which would put the whole race on the wrong day of the season. The cross-surface guard
+  // catches this, and caught it here.
+  var _gt=null;
+  try{ _gt=(typeof getTodayKey==='function')?getTodayKey():((typeof dayKey_==='function')?dayKey_(new Date()):null); }catch(e){ _gt=null; }
+  if(!_gt){ var _n=new Date();
+    _gt=_n.getFullYear()+'-'+String(_n.getMonth()+1).padStart(2,'0')+'-'+String(_n.getDate()).padStart(2,'0'); }
+  var doy=_ghostDoy_(_gt);
+  if(!doy) return null;
+  var meM=_ghostMiles_(nowY), riM=_ghostMiles_(rival);
+  var meC=_ghostCtl_(nowY), riC=_ghostCtl_(rival);
+  var mMi=meM[doy], rMi=riM[doy];
+  var mCtl=meC[doy], rCtl=riC[doy];
+  return {
+    rivalYear:rival, meYear:nowY, doy:doy,
+    availableYears:years,
+    miles:{ me:mMi, rival:rMi, delta:(mMi!=null&&rMi!=null)?(mMi-rMi):null },
+    ctl:{ me:mCtl, rival:rCtl, delta:(mCtl!=null&&rCtl!=null)?(Math.round((mCtl-rCtl)*10)/10):null },
+    series:{ meMiles:meM, rivalMiles:riM, meCtl:meC, rivalCtl:riC }
+  };
+}
+function ghostSetRival_(y){ try{ st.ghostRival=String(y); sv(); }catch(e){} try{ if(_aiMount) aiRenderOverview_(_aiMount); }catch(e){} }
+// Ghost Rival, rendered: two head-to-heads and the season shape behind each.
+function aiRenderGhost_(){
+  var g=null;
+  try{ g=ghostRival_((typeof st!=='undefined'&&st)?st.ghostRival:null); }catch(e){ g=null; }
+  var H='<div style="max-width:1120px;margin:0 auto">';
+  if(!g){
+    return H+'<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">'
+      +'No past season with enough riding to race against yet.</div></div>';
+  }
+  var esc=(typeof aiEsc_==='function')?aiEsc_:function(x){ return String(x); };
+  // Year picker - every season with a real cycling volume behind it.
+  H+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
+    +'<span style="font-size:10.5px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em;margin-right:2px">Rival</span>';
+  g.availableYears.forEach(function(y){
+    if(y.year===g.meYear) return;
+    var on=(y.year===g.rivalYear);
+    H+='<button onclick="ghostSetRival_('+y.year+')" class="sm-ctl" title="'+y.miles.toLocaleString()+' miles that year" style="background:'
+      +(on?'var(--d-accent,#fc5200)':'transparent')+';color:'+(on?'#fff':'var(--d-t3)')
+      +';border:1px solid '+(on?'var(--d-accent,#fc5200)':'var(--d-edge)')
+      +';border-radius:9px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">'+y.year+' Mikey</button>';
+  });
+  H+='</div>';
+
+  var head=function(t){ return '<div style="font-size:11px;font-weight:800;color:var(--d-dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px">'+t+'</div>'; };
+  var race=function(label, me, rival, unit, dp){
+    var fmt=function(v){ if(v==null) return '&mdash;'; return (dp?(Math.round(v*10)/10):Math.round(v)).toLocaleString()+(unit||''); };
+    var lead=(me!=null&&rival!=null)?(me-rival):null;
+    var ahead=(lead!=null&&lead>=0);
+    var col=(lead==null)?'var(--d-dim)':(ahead?'#4ade80':'var(--d-accent,#fc5200)');
+    var verdict=(lead==null)?'not comparable yet'
+      :(Math.abs(lead)<0.05?'dead level':((ahead?'ahead by ':'behind by ')+fmt(Math.abs(lead))));
+    return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 16px;margin-bottom:10px">'
+      +head(label)
+      +'<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:14px">'
+      +'<div><div style="font-size:10.5px;color:var(--d-dim)">You, '+g.meYear+'</div>'
+      +'<div style="font-size:26px;font-weight:800;color:var(--d-head);line-height:1.1">'+fmt(me)+'</div></div>'
+      +'<div style="font-size:12px;font-weight:800;color:'+col+';padding-bottom:4px">'+verdict+'</div>'
+      +'<div style="text-align:right"><div style="font-size:10.5px;color:var(--d-dim)">'+g.rivalYear+' Mikey</div>'
+      +'<div style="font-size:26px;font-weight:800;color:var(--d-t3);line-height:1.1">'+fmt(rival)+'</div></div></div>';
+  };
+
+  // Two lines on one chart: him and the ghost, to the same day of the year.
+  var chart=function(mine, theirs){
+    var pts=[], i;
+    for(i=1;i<=g.doy;i++){
+      var a=mine[i], b=theirs[i];
+      if(a==null && b==null) continue;
+      pts.push({ a:a, b:b });
+    }
+    if(pts.length<2) return '<div style="font-size:11px;color:var(--d-dim);margin-top:10px">Not enough of the season yet to draw the race.</div>';
+    var vals=[]; pts.forEach(function(x){ if(x.a!=null) vals.push(x.a); if(x.b!=null) vals.push(x.b); });
+    var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals);
+    if(!(hi>lo)) hi=lo+1;
+    var W=460, Hh=90, P=4;
+    var X=function(i){ return P+(i/(pts.length-1))*(W-P*2); };
+    var Y=function(v){ return P+(Hh-P*2)-((v-lo)/(hi-lo))*(Hh-P*2); };
+    var path=function(k){
+      var d='', started=false;
+      pts.forEach(function(x,i){
+        var v=x[k]; if(v==null){ started=false; return; }
+        d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1); started=true;
+      });
+      return d;
+    };
+    var svg='<svg viewBox="0 0 '+W+' '+Hh+'" preserveAspectRatio="none" role="img" aria-label="You against '+g.rivalYear+', to this day of the season" style="width:100%;height:'+Hh+'px;display:block;margin-top:12px">';
+    svg+='<path d="'+path('b')+'" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="4,3" vector-effect="non-scaling-stroke"/>';
+    svg+='<path d="'+path('a')+'" fill="none" stroke="#fc5200" stroke-width="2.4" vector-effect="non-scaling-stroke"/>';
+    svg+='</svg>';
+    return svg+'<div style="display:flex;gap:14px;margin-top:6px;font-size:10px;color:var(--d-dim)">'
+      +'<span><span style="display:inline-block;width:14px;height:2px;background:#fc5200;vertical-align:middle;margin-right:5px"></span>you</span>'
+      +'<span><span style="display:inline-block;width:14px;height:2px;background:#64748b;vertical-align:middle;margin-right:5px"></span>'+g.rivalYear+'</span>'
+      +'<span style="margin-left:auto">to day '+g.doy+' of the season</span></div>';
+  };
+
+  H+=race('Miles this season', g.miles.me, g.miles.rival, ' mi', false)+chart(g.series.meMiles, g.series.rivalMiles)+'</div>';
+  H+=race('Fitness (CTL) today', g.ctl.me, g.ctl.rival, '', true)+chart(g.series.meCtl, g.series.rivalCtl)+'</div>';
+
+  H+='<div style="font-size:10.5px;color:var(--d-dim);line-height:1.55;margin-top:6px">'
+    +'Both riders measured the same way on the same day of the year &mdash; miles from the ride '
+    +'library, CTL from the one fitness series. There is no FTP axis: the FTP log holds seven '
+    +'entries and all of them fall inside a single ten-day window, which is data entry, not a '
+    +'trajectory to race.</div>';
   return H+'</div>';
 }
 function aiRenderTrends_(ded){
@@ -28507,6 +28701,7 @@ function aiRenderTab_(tab, ded){
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Records — render error.</div>';
+  if(tab==='ghost') return _aiSafe_('GhostTab', function(){return aiRenderGhost_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Ghost Rival \u2014 render error.</div>';
   if(tab==='almost') return _aiSafe_('AlmostTab', function(){return aiRenderAlmost_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Almost Board \u2014 render error.</div>';
   if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">DNA — render error.</div>';
   if(tab==='trajectory') return _aiSafe_('Trajectory', function(){return aiRenderTrajectory_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Trajectory — render error.</div>';
