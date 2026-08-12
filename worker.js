@@ -42738,7 +42738,9 @@ function dsShowRun(){
   var old=document.getElementById('DS-RUN'); if(old) old.remove();
   var scr=document.createElement('div');
   scr.id='DS-RUN';
-  scr.style.cssText='position:fixed;inset:0;left:var(--ds-nav-w,232px);background:var(--d-bg,var(--bg));z-index:180;overflow-y:auto;padding:22px 26px 40px';
+  // z-index 2400: above the desktop dashboard, below the 3000-tier modals. At 180 the dashboard
+  // painted straight over it - the page rendered correctly and was simply not visible.
+  scr.style.cssText='position:fixed;inset:0;left:var(--ds-nav-w,232px);background:var(--bg);z-index:2400;overflow-y:auto;padding:22px 26px 40px';
   var hdr=document.createElement('div');
   hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px';
   hdr.innerHTML='<div><div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
