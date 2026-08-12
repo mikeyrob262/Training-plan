@@ -23,7 +23,7 @@ const NL = String.fromCharCode(10);
 
 const st = { segments: {}, rides: [] };
 const M = new Function('st', asServed(
-  exVar('ALMOST_ATTEMPT_MAX') + exVar('ALMOST_NEAR_PCT') + exVar('ALMOST_NEAR_MAX_SEC') +
+  exVar('ALMOST_ATTEMPT_MAX') + exVar('ALMOST_MAX_GAIN_SEC') + exVar('ALMOST_NEAR_PCT') + exVar('ALMOST_NEAR_MAX_SEC') +
   exVar('ALMOST_RECENT_DAYS') + exVar('ALMOST_DPR_MAX_SEC') +
   exFn('_segEffortNorm_') + exFn('_segEfforts_') + exFn('_segProgression_') +
   exFn('_almostDaysAgo_') + exFn('_almostDistance_') + exFn('almostBoard_') +
@@ -85,6 +85,12 @@ console.log('\n' + Y + '=== a ride that CROSSED the segment is not an attempt ==
   // is exactly what the first, looser version let through on live data.
   st.segments = { a: { name: 'Hour long', efforts: [ { d: daysAgo(60), s: 5424 }, { d: daysAgo(5), s: 3616 } ] } };
   eq('a 30-minute gain on an hour segment is rejected', M.almostBoard_().closing.length, 0);
+}
+{
+  // And a percentage gate alone cannot bound it: 25% of a two-hour segment is 29 minutes, which
+  // is what the live board still led with after the ratio had been tightened twice.
+  st.segments = { a: { name: 'Two hours', efforts: [ { d: daysAgo(60), s: 8700 }, { d: daysAgo(5), s: 7000 } ] } };
+  eq('a 28-minute gain on a two-hour segment is rejected', M.almostBoard_().closing.length, 0);
 }
 {
   // A real gain of a sensible size must still survive the gate.

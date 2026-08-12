@@ -21962,6 +21962,11 @@ function _segProgression_(eff){
 // the largest gain the surviving set can produce is 25% of his own best, which is already an
 // exceptional improvement on a cycling segment and comfortably above any real one in the library.
 var ALMOST_ATTEMPT_MAX=1.25;
+// A PERCENTAGE ALONE CANNOT BOUND THIS. On a two-hour segment 25% is twenty-nine minutes, and the
+// live board still led with -1736s after the ratio was tightened twice. The near-best section
+// already carries an absolute ceiling for exactly this reason; 'closing in' needs one too. Three
+// minutes is a large but believable amount of time to take off a segment you ride regularly.
+var ALMOST_MAX_GAIN_SEC=180;
 var ALMOST_NEAR_PCT=0.03;      // within 3% of his own best counts as 'almost'
 var ALMOST_NEAR_MAX_SEC=20;    // ...but never call a 40-second gap 'almost' on a long segment
 var ALMOST_RECENT_DAYS=365;    // a gap he has not visited in a year is not a live target
@@ -21985,7 +21990,7 @@ function almostBoard_(){
     if(prog.length>=2){
       var took=Math.round(prog[0].sec-best.sec);
       var ageD=_almostDaysAgo_(best.date);
-      if(took>0 && ageD<=ALMOST_RECENT_DAYS){
+      if(took>0 && took<=ALMOST_MAX_GAIN_SEC && ageD<=ALMOST_RECENT_DAYS){
         closing.push({ id:k, name:name, tookSec:took, drops:prog.length-1,
           rides:eff.length, bestSec:best.sec, bestDate:best.date, daysAgo:ageD });
       }
