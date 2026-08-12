@@ -81,6 +81,12 @@ console.log('\n' + Y + '=== a ride that CROSSED the segment is not an attempt ==
   ok('...so no entry claims an implausible gain', !B.closing.some(function(x){ return x.tookSec > 600; }));
 }
 {
+  // The gate must not scale away on a LONG segment. An hour-long segment with a 30-minute 'gain'
+  // is exactly what the first, looser version let through on live data.
+  st.segments = { a: { name: 'Hour long', efforts: [ { d: daysAgo(60), s: 5424 }, { d: daysAgo(5), s: 3616 } ] } };
+  eq('a 30-minute gain on an hour segment is rejected', M.almostBoard_().closing.length, 0);
+}
+{
   // A real gain of a sensible size must still survive the gate.
   st.segments = { a: { name: 'Real gain', efforts: [ { d: daysAgo(60), s: 400 }, { d: daysAgo(5), s: 360 } ] } };
   eq('a 10% improvement is kept', M.almostBoard_().closing[0].tookSec, 40);

@@ -21957,7 +21957,11 @@ function _segProgression_(eff){
 // personal breakthrough. Measured on the live library, the un-gated board led with a 2,241-second
 // 'improvement'; the cap removes that class entirely without touching real gains, which on a
 // cycling segment are single-digit to low-double-digit percentages.
-var ALMOST_ATTEMPT_MAX=1.5;
+// 1.5 was still too loose: it SCALES with segment length, so on an hour-long segment it happily
+// admitted a thirty-minute 'gain' - the live board led with -1808s after the first pass. At 1.25
+// the largest gain the surviving set can produce is 25% of his own best, which is already an
+// exceptional improvement on a cycling segment and comfortably above any real one in the library.
+var ALMOST_ATTEMPT_MAX=1.25;
 var ALMOST_NEAR_PCT=0.03;      // within 3% of his own best counts as 'almost'
 var ALMOST_NEAR_MAX_SEC=20;    // ...but never call a 40-second gap 'almost' on a long segment
 var ALMOST_RECENT_DAYS=365;    // a gap he has not visited in a year is not a live target
