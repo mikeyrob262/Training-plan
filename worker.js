@@ -7540,6 +7540,12 @@ function applyFirebaseData(data){
   try{ if(typeof _lwwTouch_==='function') _lwwTouch_(); }catch(e){}
   // Persist the merged+deduped result — this poll path was the ONE normalizeState_ caller that
   // never did, so an in-memory duplicate-collapse (and any merged remote change) was dropped on
+  // Normalise My Foods / My Meals HERE, not only at boot. This is the one chokepoint every
+  // remote payload passes through, and the arrays arrive dirty from devices that synced before
+  // the seeds had stable ids. Running it only at boot cleaned a store the remote had not landed
+  // in yet: measured across three reloads, state returned to 41 foods / 10 meals every time and
+  // the migration reported the same 69 records on each load, never settling.
+  try{ if(typeof mfEnsureClean_==='function') mfEnsureClean_(); }catch(e){}
   // the next reload and never reached the cloud. fbPull/fbPush both saveLocal_ here; so must this.
   try{ if(typeof saveLocal_==='function') saveLocal_(); }catch(e){}
   // If the collapse soft-deleted duplicates, push ONCE so remote converges instead of re-sending
@@ -45020,6 +45026,22 @@ function mealTotals_(meal){
 // point of the migration, not a side effect of it. An item matching no known food becomes a NEW
 // My Food built from its own macros divided by that quantity, so nothing is lost and the meal
 // still ends up holding a reference rather than a copy.
+var _mfCleanMemo=null, _mfCleanBusy=false;
+// Re-runs the normalisation when the arrays have MOVED since the last pass. Cheap on a settled
+// store (identity + length compare), and re-entrancy-guarded because the migration itself reads
+// through getMyFoods/getMyMeals.
+function mfEnsureClean_(){
+  if(_mfCleanBusy) return 0;
+  var F=(typeof st!=='undefined'&&st)?st.myFoods:null, M=(typeof st!=='undefined'&&st)?st.myMeals:null;
+  if(_mfCleanMemo && _mfCleanMemo.f===F && _mfCleanMemo.m===M
+     && _mfCleanMemo.fl===(F?F.length:-1) && _mfCleanMemo.ml===(M?M.length:-1)) return 0;
+  _mfCleanBusy=true;
+  var n=0;
+  try{ n=migrateMyFoodsMeals_(); }catch(e){}
+  _mfCleanBusy=false;
+  _mfCleanMemo={ f:st.myFoods, m:st.myMeals, fl:(st.myFoods||[]).length, ml:(st.myMeals||[]).length };
+  return n;
+}
 function migrateMyFoodsMeals_(){
   try{
     var changed=0;
