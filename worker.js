@@ -23226,11 +23226,20 @@ function _ghostDoy_(dateStr){
   var start=Date.UTC(y,0,1), here=Date.UTC(y,m-1,day);
   return Math.round((here-start)/86400000)+1;   // 1..366
 }
+// The one ride list this feature counts from. allRidesDeduped_ is what every other mileage
+// surface reads; reading st.rides directly double-counts a FIT import and its Strava twin,
+// which is what put 2025 at 7,050 miles against Strava's own 5,484.
+function _ghostRides_(){
+  try{
+    if(typeof allRidesDeduped_==='function') return allRidesDeduped_()||[];
+  }catch(e){}
+  return ((typeof st!=='undefined'&&st&&st.rides)||[]).filter(function(r){ return r && !r.deleted; });
+}
 // Cycling years with enough riding to be a rival, newest first.
 function ghostYears_(){
   var by={};
   try{
-    (st.rides||[]).forEach(function(r){
+    _ghostRides_().forEach(function(r){
       if(!r || r.deleted || !r.date) return;
       var sp=(typeof rideSport_==='function')?String(rideSport_(r)||''):'';
       if(sp && !/ride|cycl|bike|handcycle/i.test(sp)) return;
@@ -23246,7 +23255,7 @@ function _ghostMiles_(year){
   var out=new Array(367); var i;
   for(i=0;i<367;i++) out[i]=0;
   try{
-    (st.rides||[]).forEach(function(r){
+    _ghostRides_().forEach(function(r){
       if(!r || r.deleted || !r.date) return;
       if(String(r.date).slice(0,4)!==String(year)) return;
       var sp=(typeof rideSport_==='function')?String(rideSport_(r)||''):'';

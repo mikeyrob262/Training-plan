@@ -22,11 +22,15 @@ const THIS_YEAR = String(new Date().getFullYear());
 const st = { rides: [], fitSeries: [] };
 let SERIES = [];
 const M = new Function('st', 'SERIES', asServed(
+  // Ghost Rival counts from allRidesDeduped_, not st.rides - reading the raw library
+  // double-counted a FIT import and its Strava twin and put 2025 at 7,050 miles against
+  // Strava's own 5,484. The harness supplies a dedupe so the fixtures exercise the real path.
+  'function allRidesDeduped_(){ var seen={}, out=[]; (st.rides||[]).forEach(function(r){ if(!r||r.deleted) return; var k=String(r.date).slice(0,10)+"|"+Math.round((parseFloat(r.distance)||0)*10); if(seen[k]) return; seen[k]=1; out.push(r); }); return out; }' + NL +
   'function rideSport_(r){ return r.sportType||r.type||"Ride"; }' + NL +
   'function getTodayKey(){ return new Date().toISOString().slice(0,10); }' + NL +
   'function fitnessSeries_(){ return SERIES; }' + NL +
   exVar('GHOST_MIN_MILES') +
-  exFn('_ghostDoy_') + exFn('ghostYears_') + exFn('_ghostMiles_') + exFn('_ghostCtl_') + exFn('ghostRival_') +
+  exFn('_ghostRides_') + exFn('_ghostDoy_') + exFn('ghostYears_') + exFn('_ghostMiles_') + exFn('_ghostCtl_') + exFn('ghostRival_') +
   ';return { _ghostDoy_, ghostYears_, _ghostMiles_, _ghostCtl_, ghostRival_, GHOST_MIN_MILES };'
 ))(st, SERIES);
 
@@ -59,6 +63,37 @@ console.log('\n' + Y + '=== a year that was not a cycling season is not a rival 
   st.rides.length = 0;
   for (let i = 0; i < 60; i++) st.rides.push({ date: '2024-05-' + String((i % 28) + 1).padStart(2, '0'), sportType: 'Run', distance: 20 });
   eq('a year of running is not a cycling season', M.ghostYears_().filter((y) => y.year === '2024').length, 0);
+}
+
+console.log('\n' + Y + '=== a ride imported twice is counted ONCE ===' + X);
+{
+  // The reported bug, in miniature. Ghost Rival read st.rides RAW and reported 7,050 miles for
+  // 2025 where Strava's own Training Calendar says 5,484.1. Measured against the same library:
+  //     raw st.rides        234 rides   7,050 mi
+  //     allRidesDeduped_()  197 rides   5,480 mi
+  // The extra 1,570 miles are the same rides counted twice. They do NOT share a rideKey - 46 of
+  // the 2025 rides carry no stravaId at all - so a FIT import and its Strava twin both survive a
+  // naive filter.
+  st.rides.length = 0;
+  st.rides.push({ date: '2025-06-01', sportType: 'Ride', distance: 40, stravaId: '1', source: 'strava' });
+  st.rides.push({ date: '2025-06-01', sportType: 'Ride', distance: 40, source: 'fit' });
+  st.rides.push({ date: '2025-06-02', sportType: 'Ride', distance: 30, stravaId: '2', source: 'strava' });
+  for (let i = 3; i < 30; i++) st.rides.push({ date: '2025-06-' + String(i).padStart(2, '0'), sportType: 'Ride', distance: 20, stravaId: 's' + i });
+  const expected = 40 + 30 + (27 * 20);
+  const m = M._ghostMiles_('2025');
+  eq('the duplicated ride is counted once', m[366], expected);
+  ok('...not twice', m[366] !== expected + 40);
+  eq('the year list agrees with the mileage series',
+     M.ghostYears_().filter(function(y){ return y.year === '2025'; })[0].miles, expected);
+}
+{
+  const yrs = exFn('ghostYears_'), mil = exFn('_ghostMiles_');
+  ok('neither ghost function reads st.rides directly',
+     yrs.indexOf('st.rides') < 0 && mil.indexOf('st.rides') < 0);
+  ok('...both go through the deduped accessor',
+     yrs.indexOf('_ghostRides_()') >= 0 && mil.indexOf('_ghostRides_()') >= 0);
+  ok('...which is allRidesDeduped_, the same source every other mileage surface reads',
+     /allRidesDeduped_/.test(exFn('_ghostRides_')));
 }
 
 console.log('\n' + Y + '=== day-of-year is the comparison basis ===' + X);
