@@ -43875,7 +43875,10 @@ var SESSION_DEFS={
   tenk:     { type:'attempt', name:'10k race',                         note:'Race day, 6.2 mi. Warm up properly, then run your race.' },
   ventop:   { type:'attempt', name:'Ven-Top summit',                   note:'The full summit attempt — everything the block was built for.' }
 };
-var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','rest'];
+// easyRun and run10k were defined in SESSION_DEFS but missing from this list, and this list is
+// what SESSION_PRESETS - the editor's Session dropdown - is built from. So the two run sessions
+// the block actually prescribes could not be picked by name on any day.
+var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','easyRun','run10k','rest'];
 // The rotation order Swap cycles through, A -> B -> C -> D -> A.
 var MOBILITY_POOL_=['mobility','mobilityB','mobilityC','mobilityD'];
 // Strength-first weekly layout (§3.1), index 0=Mon .. 6=Sun, as SESSION_DEFS keys. Two loaded +

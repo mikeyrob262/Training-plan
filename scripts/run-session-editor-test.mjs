@@ -49,7 +49,15 @@ console.log('\n' + Y + '=== a run session is no longer rewritten into a ride ===
   ok('the editor allowlist exists', !!m);
   ok('...and admits run', !!m && m[1].split('|').includes('run'));
   ok('...alongside the other three', !!m && ['ride', 'strength', 'mobility'].every((t) => m[1].split('|').includes(t)));
-  ok('the Session dropdown can offer Run', /\['run','Run'\]/.test(src));
+  ok('the Session TYPE dropdown can offer Run', /\['run','Run'\]/.test(src));
+  // SESSION_PRESETS - the named-session picker - is built from SESSION_DEF_ORDER. easyRun and
+  // run10k were defined in SESSION_DEFS but absent from that list, so the two run sessions the
+  // block actually prescribes could not be picked by name on any day.
+  const order = src.match(/var SESSION_DEF_ORDER=\[([^\]]+)\]/);
+  ok('the preset order list exists', !!order);
+  ok('...and offers the easy run', !!order && order[1].includes("'easyRun'"));
+  ok('...and the 10k-pace run', !!order && order[1].includes("'run10k'"));
+  ok('...with rest still last', !!order && /'rest'\s*$/.test(order[1].trim()));
 }
 
 console.log('\n' + Y + '=== a DERIVED block session resolves by intent, not by guessing ===' + X);
