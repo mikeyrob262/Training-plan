@@ -44938,133 +44938,601 @@ var DEFAULT_MY_MEALS = [
   },
 ];
 
+// ===================== My Foods / My Meals: one record, referenced everywhere ================
+//
+// THE RULE: a saved meal stores a REFERENCE and a QUANTITY. It never stores macros.
+//
+// It used to store both. A meal item read {n:'Egg Whole x2', cal:140, p:12} - the quantity baked
+// into the name and the numbers pre-multiplied - so correcting Egg Whole from 70 to 72 cal fixed
+// nothing that used it, and the "x2" copy silently disagreed with its own base food forever. That
+// is the same duplicate-source failure as the food search, one layer down.
+//
+// Every macro a meal displays is now computed at read time from My Foods x qty. Correct a food
+// once and every meal containing it is correct immediately, with no migration and no re-save.
+var MY_FOOD_UNITS = ['bottle','scoop','cup','g','oz','ml','slice','piece','link','strip','large','tbsp','tsp','serving','bar','packet'];
+function mfNewId_(){ return 'mf:' + genEntryId_(); }
+function mmNewId_(){ return 'mm:' + genEntryId_(); }
+// Serving text is DERIVED, never stored twice. srvQty+srvUnit is the record; this renders it.
+function mfSrvText_(f){
+  if(!f) return '';
+  if(f.srvQty!=null && f.srvUnit) return (Math.round(f.srvQty*100)/100) + ' ' + f.srvUnit;
+  return f.srv || '';
+}
+// Name match for the legacy migration only. Lowercase, punctuation dropped, runs of space folded.
+function mfNorm_(n){ return String(n==null?'':n).toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\\s+/g,' ').trim(); }
 function getMyFoods(){
-  if(!st.myFoods||st.myFoods.length===0) st.myFoods=DEFAULT_MY_FOODS.slice();
+  if(!st.myFoods||st.myFoods.length===0) st.myFoods=DEFAULT_MY_FOODS.map(function(f){ var c={}; for(var k in f) c[k]=f[k]; return c; });
   return st.myFoods;
 }
-
 function getMyMeals(){
-  if(!st.myMeals||st.myMeals.length===0) st.myMeals=DEFAULT_MY_MEALS.slice();
+  if(!st.myMeals||st.myMeals.length===0) st.myMeals=DEFAULT_MY_MEALS.map(function(m){
+    var c={}; for(var k in m) c[k]=m[k];
+    if(m.items) c.items=m.items.map(function(i){ var d={}; for(var k in i) d[k]=i[k]; return d; });
+    return c;
+  });
   return st.myMeals;
 }
+function mfById_(id){
+  if(!id) return null;
+  var list=getMyFoods();
+  for(var i=0;i<list.length;i++){ if(list[i] && list[i].id===id) return list[i]; }
+  return null;
+}
+// Resolve a saved meal against the CURRENT My Foods. A referenced food that no longer exists comes
+// back flagged rather than as zeros - a silently-zero row would quietly shrink the day's totals,
+// which is the one failure mode a nutrition log must never have.
+function mealItems_(meal){
+  if(!meal) return [];
+  return (meal.items||[]).map(function(it){
+    var food=mfById_(it.fid);
+    var qty=(+it.qty>0)?+it.qty:1;
+    return { fid:it.fid, qty:qty, food:food, missing:!food,
+             name:food?food.n:(it.nameAtSave||'(deleted food)'),
+             cal:food?food.cal*qty:null, p:food?(food.p||0)*qty:null,
+             c:food?(food.c||0)*qty:null, f:food?(food.f||0)*qty:null,
+             fiber:food?(food.fiber||0)*qty:null, sodium:food?(food.sodium||0)*qty:null };
+  });
+}
+function mealTotals_(meal){
+  var t={cal:0,p:0,c:0,f:0,fiber:0,sodium:0,missing:0};
+  mealItems_(meal).forEach(function(r){
+    if(r.missing){ t.missing++; return; }
+    t.cal+=r.cal; t.p+=r.p; t.c+=r.c; t.f+=r.f; t.fiber+=r.fiber; t.sodium+=r.sodium;
+  });
+  t.cal=Math.round(t.cal);
+  ['p','c','f','fiber'].forEach(function(k){ t[k]=Math.round(t[k]*10)/10; });
+  t.sodium=Math.round(t.sodium);
+  return t;
+}
+// One-time repair of records written before this shape existed. Idempotent.
+//
+//   foods  - gain an id, and srv "1 bottle" is split into srvQty 1 + srvUnit 'bottle'
+//   meals  - foods:[{n,cal,p,c,f}] becomes items:[{fid,qty}]
+//
+// A legacy item named "Egg Whole x2" carries DOUBLED macros. The trailing xN is read as the
+// quantity and the stored macros are discarded in favour of base x qty - that discard is the
+// point of the migration, not a side effect of it. An item matching no known food becomes a NEW
+// My Food built from its own macros divided by that quantity, so nothing is lost and the meal
+// still ends up holding a reference rather than a copy.
+function migrateMyFoodsMeals_(){
+  try{
+    var changed=0;
+    var foods=getMyFoods();
+    foods.forEach(function(f){
+      if(!f) return;
+      if(!f.id){ f.id=mfNewId_(); changed++; }
+      if(f.srvQty==null && f.srv){
+        var m=/^\\s*([0-9]*\\.?[0-9]+)\\s*(.*)$/.exec(String(f.srv));
+        if(m){ f.srvQty=parseFloat(m[1]); f.srvUnit=(m[2]||'serving').trim(); }
+        else { f.srvQty=1; f.srvUnit=String(f.srv).trim()||'serving'; }
+        changed++;
+      }
+      if(f.srvQty==null){ f.srvQty=1; f.srvUnit=f.srvUnit||'serving'; changed++; }
+    });
+    var byName={};
+    foods.forEach(function(f){ if(f&&f.n) byName[mfNorm_(f.n)]=f; });
+    var meals=getMyMeals();
+    meals.forEach(function(meal){
+      if(!meal) return;
+      if(!meal.id){ meal.id=mmNewId_(); changed++; }
+      if(!meal.meal){ meal.meal='breakfast'; changed++; }
+      if(meal.items || !meal.foods) return;
+      meal.items=meal.foods.map(function(old){
+        var raw=String(old.n||'');
+        var qm=/\\s*[x\\u00d7]\\s*([0-9]*\\.?[0-9]+)\\s*$/i.exec(raw);
+        var qty=qm?parseFloat(qm[1]):1;
+        var base=qm?raw.slice(0,qm.index).trim():raw.trim();
+        var hit=byName[mfNorm_(base)];
+        if(!hit){
+          // Unknown food: reconstruct it PER SERVING from the copy the meal was carrying.
+          hit={ id:mfNewId_(), n:base||'Food',
+                srvQty:1, srvUnit:'serving',
+                cal:Math.round((old.cal||0)/qty),
+                p:Math.round(((old.p||0)/qty)*10)/10,
+                c:Math.round(((old.c||0)/qty)*10)/10,
+                f:Math.round(((old.f||0)/qty)*10)/10,
+                fiber:Math.round(((old.fiber||0)/qty)*10)/10,
+                sodium:Math.round((old.sodium||0)/qty),
+                fromMeal:true };
+          foods.push(hit);
+          byName[mfNorm_(base)]=hit;
+        }
+        return { fid:hit.id, qty:qty, nameAtSave:hit.n };
+      });
+      delete meal.foods;
+      changed++;
+    });
+    if(changed){
+      try{ console.log('[myFoods] normalised '+changed+' record(s): meals now reference My Foods by id instead of copying macros.'); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return changed;
+  }catch(e){ try{ console.warn('[myFoods] migration failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 
+// ---- shared sheet ------------------------------------------------------------------------------
+// Both editors are forms over a record, so they share one shell. Buttons are .sm-ctl-shaped
+// (radius 9px, sized to the label) rather than capsules, per the house rule.
+function mfSheet_(title, build){
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:5000;display:flex;align-items:flex-end;justify-content:center';
+  var sh=document.createElement('div');
+  sh.style.cssText='background:var(--s1);width:100%;max-width:560px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;padding:18px 16px 22px';
+  var hd=document.createElement('div');
+  hd.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px';
+  hd.innerHTML='<div style="font-size:17px;font-weight:800;color:var(--t1)">'+title+'</div>';
+  var x=document.createElement('button');
+  x.textContent='\u00d7';
+  x.style.cssText='background:none;border:none;color:var(--t3);font-size:26px;line-height:1;cursor:pointer;font-family:inherit;padding:0 4px';
+  x.onclick=function(){ try{ document.body.removeChild(ov); }catch(e){} };
+  hd.appendChild(x);
+  sh.appendChild(hd);
+  var body=document.createElement('div');
+  sh.appendChild(body);
+  ov.appendChild(sh);
+  ov.onclick=function(e){ if(e.target===ov) x.onclick(); };
+  document.body.appendChild(ov);
+  build(body, function(){ try{ document.body.removeChild(ov); }catch(e){} });
+  return ov;
+}
+function mfField_(label, el){
+  var r=document.createElement('div');
+  r.style.cssText='display:grid;grid-template-columns:104px 1fr;gap:9px;align-items:center;margin-bottom:9px';
+  var l=document.createElement('div');
+  l.style.cssText='font-size:12.5px;font-weight:600;color:var(--t3)';
+  l.textContent=label;
+  r.appendChild(l); r.appendChild(el);
+  return r;
+}
+function mfInput_(val, ph, type){
+  var i=document.createElement('input');
+  i.type=type||'text'; i.placeholder=ph||'';
+  if(val!=null && val!=='') i.value=val;
+  i.style.cssText='width:100%;padding:9px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  return i;
+}
+function mfSelect_(opts, val){
+  var sl=document.createElement('select');
+  sl.style.cssText='width:100%;padding:9px 10px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:14px;font-family:inherit;box-sizing:border-box';
+  opts.forEach(function(o){
+    var op=document.createElement('option');
+    op.value=(o.v!==undefined)?o.v:o; op.textContent=(o.t!==undefined)?o.t:o;
+    if(op.value===String(val)) op.selected=true;
+    sl.appendChild(op);
+  });
+  return sl;
+}
+function mfBtn_(label, primary){
+  var b=document.createElement('button');
+  b.textContent=label;
+  b.style.cssText='padding:10px 14px;border-radius:9px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid '
+    +(primary?'rgba(252,76,2,.25);background:rgba(252,76,2,.12);color:var(--orange)':'var(--b1);background:var(--s2);color:var(--t2)');
+  return b;
+}
+function mfMealOpts_(){
+  return MEAL_BUCKETS.map(function(m){ return { v:m, t:m.charAt(0).toUpperCase()+m.slice(1) }; });
+}
+function mfNum_(v){ var t=String(v==null?'':v).replace(/[^0-9.\-]/g,''); return t===''?null:parseFloat(t); }
+
+// ---- My Foods: the record that has to be right ONCE ---------------------------------------------
+// Name, serving and the four tracked macros are required. Everything below the line is optional but
+// worth capturing while the record is open: fiber and sodium already have tiles on the Nutrition
+// page reading them, and a brand note is what tells "OWYN Dark Chocolate 20g" from "OWYN Elite 32g"
+// in a list.
+function openMyFoodEditor_(existing, onSaved){
+  var f=existing||{};
+  mfSheet_(existing?'Edit food':'Add food', function(body, close){
+    var n=mfInput_(f.n||'', 'e.g. OWYN Elite Protein Shake, Chocolate, 32g');
+    body.appendChild(mfField_('Name', n));
+    var qw=document.createElement('div');
+    qw.style.cssText='display:grid;grid-template-columns:82px 1fr;gap:7px';
+    var sq=mfInput_(f.srvQty!=null?f.srvQty:1, 'qty');
+    var su=mfSelect_(MY_FOOD_UNITS, f.srvUnit||'serving');
+    qw.appendChild(sq); qw.appendChild(su);
+    body.appendChild(mfField_('Serving', qw));
+    var hint=document.createElement('div');
+    hint.style.cssText='font-size:11px;color:var(--t3);margin:-3px 0 11px 113px;line-height:1.45';
+    hint.textContent='Everything below is PER THIS SERVING. Copy it off the label, not off a search result.';
+    body.appendChild(hint);
+    var cal=mfInput_(f.cal!=null?f.cal:'', 'kcal');
+    body.appendChild(mfField_('Calories', cal));
+    var mw=document.createElement('div');
+    mw.style.cssText='display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px';
+    var pr=mfInput_(f.p!=null?f.p:'', 'protein g'), cb=mfInput_(f.c!=null?f.c:'', 'carbs g'), ft=mfInput_(f.f!=null?f.f:'', 'fat g');
+    mw.appendChild(pr); mw.appendChild(cb); mw.appendChild(ft);
+    body.appendChild(mfField_('P / C / F', mw));
+    var sep=document.createElement('div');
+    sep.style.cssText='height:1px;background:var(--b1);margin:13px 0';
+    body.appendChild(sep);
+    var fw=document.createElement('div');
+    fw.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:7px';
+    var fib=mfInput_(f.fiber!=null?f.fiber:'', 'fiber g'), sod=mfInput_(f.sodium!=null?f.sodium:'', 'sodium mg');
+    fw.appendChild(fib); fw.appendChild(sod);
+    body.appendChild(mfField_('Fiber / Sodium', fw));
+    var br=mfInput_(f.brand||'', 'optional - brand or source');
+    body.appendChild(mfField_('Brand', br));
+    var dm=mfSelect_([{v:'',t:'None'}].concat(mfMealOpts_()), f.meal||'');
+    body.appendChild(mfField_('Usual meal', dm));
+    var err=document.createElement('div');
+    err.style.cssText='font-size:12px;color:var(--c-red);margin:6px 0 0;display:none';
+    body.appendChild(err);
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;gap:8px;margin-top:16px';
+    var save=mfBtn_('Save', true); save.style.flex='1';
+    row.appendChild(save);
+    if(existing && existing.id){
+      var del=mfBtn_('Delete');
+      del.style.color='var(--c-red)';
+      del.onclick=function(){
+        var used=(getMyMeals()||[]).filter(function(m){ return (m.items||[]).some(function(it){ return it.fid===existing.id; }); });
+        var msg=used.length?('Delete "'+existing.n+'"? '+used.length+' saved meal'+(used.length===1?'':'s')+' reference it and will show it as missing.')
+                           :('Delete "'+existing.n+'"?');
+        uiConfirm(msg,{title:'Delete food',okText:'Delete'}).then(function(yes){
+          if(!yes) return;
+          st.myFoods=getMyFoods().filter(function(x){ return x!==existing; });
+          sv(); close(); if(onSaved) onSaved();
+        });
+      };
+      row.appendChild(del);
+    }
+    body.appendChild(row);
+    save.onclick=function(){
+      var nm=String(n.value||'').trim();
+      var vc=mfNum_(cal.value), vq=mfNum_(sq.value);
+      if(!nm){ err.textContent='Give it a name specific enough to tell from a similar product.'; err.style.display='block'; return; }
+      if(!(vq>0)){ err.textContent='Serving quantity must be a number greater than zero.'; err.style.display='block'; return; }
+      if(vc==null){ err.textContent='Calories are required - this record exists so the number is right once.'; err.style.display='block'; return; }
+      var rec=existing||{ id:mfNewId_() };
+      if(!rec.id) rec.id=mfNewId_();
+      rec.n=nm; rec.srvQty=vq; rec.srvUnit=su.value;
+      rec.cal=vc;
+      rec.p=mfNum_(pr.value)||0; rec.c=mfNum_(cb.value)||0; rec.f=mfNum_(ft.value)||0;
+      rec.fiber=mfNum_(fib.value)||0; rec.sodium=mfNum_(sod.value)||0;
+      rec.brand=String(br.value||'').trim()||null;
+      rec.meal=dm.value||null;
+      rec.editedAt=Date.now();
+      if(!existing) getMyFoods().push(rec);
+      sv(); close(); if(onSaved) onSaved();
+      toast(existing?'Updated':'Added to My Foods');
+    };
+  });
+}
 function renderMyFoods(container){
   container.innerHTML='';
+  migrateMyFoodsMeals_();
   var foods=getMyFoods();
   var hdr=document.createElement('div');
   hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
-  hdr.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">My Foods</div>'
-    +'<button id="add-myfood-btn" style="font-size:11px;color:var(--orange);background:none;border:none;cursor:pointer;font-weight:700;font-family:inherit">+ Add Food</button>';
+  hdr.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">My Foods</div>';
+  var add=document.createElement('button');
+  add.textContent='+ Add Food';
+  add.style.cssText='font-size:11px;color:var(--orange);background:none;border:none;cursor:pointer;font-weight:700;font-family:inherit';
+  add.onclick=function(){ openMyFoodEditor_(null, function(){ renderMyFoods(container); }); };
+  hdr.appendChild(add);
   container.appendChild(hdr);
-
-  foods.forEach(function(f, fi){
+  if(!foods.length){
+    var em=document.createElement('div');
+    em.style.cssText='font-size:12.5px;color:var(--t3);padding:10px 2px;line-height:1.5';
+    em.textContent='Nothing saved yet. Add a food once, correctly, and every meal that uses it stays correct.';
+    container.appendChild(em);
+    return;
+  }
+  foods.forEach(function(f){
     var card=document.createElement('div');
     card.style.cssText='background:var(--s2);border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;border:1px solid var(--b1)';
     var info=document.createElement('div');
     info.style.cssText='flex:1;min-width:0';
-    info.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+f.n+'</div>'
-      +'<div style="font-size:11px;color:var(--t3)">'+f.cal+' cal · '+f.p+'g P · '+f.c+'g C · '+f.f+'g F'+(f.srv?' · '+f.srv:'')+'</div>';
+    var sub=f.cal+' cal \u00b7 '+f.p+'g P \u00b7 '+f.c+'g C \u00b7 '+f.f+'g F';
+    var srv=mfSrvText_(f);
+    if(srv) sub+=' \u00b7 per '+srv;
+    var meta=[];
+    if(f.brand) meta.push(f.brand);
+    if(f.fiber) meta.push(f.fiber+'g fiber');
+    if(f.sodium) meta.push(f.sodium+'mg sodium');
+    info.innerHTML='<div style="font-size:13px;font-weight:700;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+_esc2_(f.n)+'</div>'
+      +'<div style="font-size:11px;color:var(--t3)">'+_esc2_(sub)+'</div>'
+      +(meta.length?('<div style="font-size:10.5px;color:var(--t3);opacity:.85;margin-top:1px">'+_esc2_(meta.join(' \u00b7 '))+'</div>'):'');
+    var edit=document.createElement('button');
+    edit.textContent='Edit';
+    edit.style.cssText='background:none;border:1px solid var(--b1);color:var(--t3);font-size:11.5px;font-weight:700;padding:6px 10px;border-radius:9px;cursor:pointer;font-family:inherit';
+    edit.onclick=function(){ openMyFoodEditor_(f, function(){ renderMyFoods(container); }); };
     var addBtn=document.createElement('button');
-    addBtn.style.cssText='background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0';
+    addBtn.style.cssText='background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:12px;font-weight:700;padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit';
     addBtn.textContent='Add';
-    (function(food){
-      addBtn.onclick=function(){
-        if(addBtn.disabled) return;
-        addBtn.disabled=true;
-        nutDayGuard_();
-        var nd=getNDay(nutrDate);
-        nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(food.n),cal:food.cal,p:food.p,c:food.c,f:food.f,fiber:food.fiber||0,satFat:food.satFat||0,sodium:food.sodium||0,sugar:food.sugar||0,potassium:food.potassium||0,calcium:food.calcium||0,iron:food.iron||0,magnesium:food.magnesium||0});
-        sv();
-      try{ var _tl=getNDay(nutrDate).meals[curMeal]; _nlTraceAdd_('my-foods', nutrDate, _tl[_tl.length-1]); }catch(e){}
-        renderNutr();
-        showScreen('NUTR');
-        toast('Added to '+curMeal);
-      };
-    })(f);
-    card.appendChild(info);
-    card.appendChild(addBtn);
+    addBtn.onclick=function(){
+      if(addBtn.disabled) return;
+      addBtn.disabled=true;
+      var bucket=f.meal||curMeal;
+      nutDayGuard_();
+      var nd=getNDay(nutrDate);
+      nd.meals[bucket].push({id:genEntryId_(),n:_nlName_(f.n),cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,srv:mfSrvText_(f),srcFid:f.id});
+      sv();
+      try{ var _tl=getNDay(nutrDate).meals[bucket]; _nlTraceAdd_('my-foods', nutrDate, _tl[_tl.length-1]); }catch(e){}
+      renderNutr(); showScreen('NUTR');
+      toast('Added to '+bucket);
+    };
+    card.appendChild(info); card.appendChild(edit); card.appendChild(addBtn);
     container.appendChild(card);
   });
-
-  // Add food to My Foods from main food list
-  var afb=container.querySelector('#add-myfood-btn');
-  if(afb) afb.onclick=function(){
-    openFoodForMeal(curMeal, true);
-  };
 }
 
+// ---- My Meals: references, never copies ---------------------------------------------------------
+function openMyMealEditor_(existing, onSaved){
+  var m=existing||{ name:'', meal:curMeal, items:[] };
+  var items=(m.items||[]).map(function(it){ return { fid:it.fid, qty:it.qty }; });
+  mfSheet_(existing?'Edit meal':'New meal', function(body, close){
+    var nm=mfInput_(m.name||'', 'e.g. Standard Breakfast');
+    body.appendChild(mfField_('Name', nm));
+    var cat=mfSelect_(mfMealOpts_(), m.meal||curMeal);
+    body.appendChild(mfField_('Category', cat));
+    var hint=document.createElement('div');
+    hint.style.cssText='font-size:11px;color:var(--t3);margin:2px 0 12px 113px;line-height:1.45';
+    hint.textContent='Add All drops the meal straight into this bucket.';
+    body.appendChild(hint);
+    var listWrap=document.createElement('div');
+    body.appendChild(listWrap);
+    function paint(){
+      listWrap.innerHTML='';
+      var lbl=document.createElement('div');
+      lbl.style.cssText='font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 7px';
+      lbl.textContent='Foods';
+      listWrap.appendChild(lbl);
+      if(!items.length){
+        var e0=document.createElement('div');
+        e0.style.cssText='font-size:12px;color:var(--t3);padding:2px 0 8px';
+        e0.textContent='No foods yet - add them from My Foods below.';
+        listWrap.appendChild(e0);
+      }
+      items.forEach(function(it, idx){
+        var food=mfById_(it.fid);
+        var row=document.createElement('div');
+        row.style.cssText='display:grid;grid-template-columns:1fr 62px 34px;gap:7px;align-items:center;margin-bottom:6px';
+        var nmEl=document.createElement('div');
+        nmEl.style.cssText='font-size:12.5px;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        nmEl.textContent=food?food.n:'(deleted food)';
+        if(!food) nmEl.style.color='var(--c-red)';
+        var q=mfInput_(it.qty, 'qty');
+        q.style.padding='7px 8px'; q.style.fontSize='13px';
+        q.oninput=function(){ var v=mfNum_(q.value); items[idx].qty=(v>0)?v:1; };
+        var rm=document.createElement('button');
+        rm.textContent='\u00d7';
+        rm.style.cssText='background:none;border:1px solid var(--b1);color:var(--t3);border-radius:9px;font-size:16px;line-height:1;cursor:pointer;font-family:inherit;padding:5px 0';
+        rm.onclick=function(){ items.splice(idx,1); paint(); };
+        row.appendChild(nmEl); row.appendChild(q); row.appendChild(rm);
+        listWrap.appendChild(row);
+      });
+      var pickRow=document.createElement('div');
+      pickRow.style.cssText='display:grid;grid-template-columns:1fr auto;gap:7px;margin-top:8px';
+      var pick=mfSelect_(getMyFoods().map(function(f){ return { v:f.id, t:f.n }; }), '');
+      var addB=mfBtn_('Add');
+      addB.onclick=function(){
+        if(!pick.value) return;
+        items.push({ fid:pick.value, qty:1 });
+        paint();
+      };
+      pickRow.appendChild(pick); pickRow.appendChild(addB);
+      listWrap.appendChild(pickRow);
+    }
+    paint();
+    var err=document.createElement('div');
+    err.style.cssText='font-size:12px;color:var(--c-red);margin:8px 0 0;display:none';
+    body.appendChild(err);
+    var row2=document.createElement('div');
+    row2.style.cssText='display:flex;gap:8px;margin-top:16px';
+    var save=mfBtn_('Save', true); save.style.flex='1';
+    row2.appendChild(save);
+    if(existing && existing.id){
+      var del=mfBtn_('Delete');
+      del.style.color='var(--c-red)';
+      del.onclick=function(){
+        uiConfirm('Delete "'+existing.name+'"? The foods it references are not affected.',{title:'Delete meal',okText:'Delete'}).then(function(yes){
+          if(!yes) return;
+          st.myMeals=getMyMeals().filter(function(x){ return x!==existing; });
+          sv(); close(); if(onSaved) onSaved();
+        });
+      };
+      row2.appendChild(del);
+    }
+    body.appendChild(row2);
+    save.onclick=function(){
+      var v=String(nm.value||'').trim();
+      if(!v){ err.textContent='Give the meal a name.'; err.style.display='block'; return; }
+      if(!items.length){ err.textContent='A meal needs at least one food.'; err.style.display='block'; return; }
+      var rec=existing||{ id:mmNewId_(), emoji:'\ud83c\udf7d\ufe0f' };
+      if(!rec.id) rec.id=mmNewId_();
+      rec.name=v; rec.meal=cat.value;
+      // Reference + quantity ONLY. Storing macros here is what made a corrected food fail to
+      // reach the meals using it.
+      rec.items=items.map(function(it){
+        var food=mfById_(it.fid);
+        return { fid:it.fid, qty:it.qty, nameAtSave:food?food.n:null };
+      });
+      rec.editedAt=Date.now();
+      if(!existing) getMyMeals().push(rec);
+      sv(); close(); if(onSaved) onSaved();
+      toast(existing?'Updated':'Saved meal');
+    };
+  });
+}
+// Review before it lands. "Usual breakfast minus the banana" has to be one tap, not a rebuild.
+function openMealAddSheet_(meal, onDone){
+  var rows=mealItems_(meal).map(function(r){ return { fid:r.fid, qty:r.qty, on:!r.missing, missing:r.missing, name:r.name }; });
+  mfSheet_('Add '+meal.name, function(body, close){
+    var cat=mfSelect_(mfMealOpts_(), meal.meal||curMeal);
+    body.appendChild(mfField_('Into', cat));
+    var sep=document.createElement('div');
+    sep.style.cssText='height:1px;background:var(--b1);margin:11px 0';
+    body.appendChild(sep);
+    var wrap=document.createElement('div');
+    body.appendChild(wrap);
+    var tot=document.createElement('div');
+    tot.style.cssText='font-size:12.5px;font-weight:700;color:var(--t2);margin-top:11px';
+    function paint(){
+      wrap.innerHTML='';
+      rows.forEach(function(r, idx){
+        var food=mfById_(r.fid);
+        var line=document.createElement('div');
+        line.style.cssText='display:grid;grid-template-columns:26px 1fr 62px;gap:8px;align-items:center;margin-bottom:7px';
+        var cb=document.createElement('input');
+        cb.type='checkbox'; cb.checked=r.on && !r.missing; cb.disabled=!!r.missing;
+        cb.style.cssText='width:17px;height:17px;accent-color:var(--orange)';
+        cb.onchange=function(){ rows[idx].on=cb.checked; paint(); };
+        var nm=document.createElement('div');
+        nm.style.cssText='font-size:12.5px;color:'+(r.missing?'var(--c-red)':'var(--t1)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+        nm.textContent=r.name+(r.missing?' - no longer in My Foods':(food?(' \u00b7 '+Math.round(food.cal*r.qty)+' cal'):''));
+        var q=mfInput_(r.qty,'qty');
+        q.style.padding='6px 8px'; q.style.fontSize='13px';
+        q.disabled=!!r.missing;
+        q.oninput=function(){ var v=mfNum_(q.value); rows[idx].qty=(v>0)?v:1; paint(); };
+        line.appendChild(cb); line.appendChild(nm); line.appendChild(q);
+        wrap.appendChild(line);
+      });
+      var t={cal:0,p:0};
+      rows.forEach(function(r){
+        if(!r.on||r.missing) return;
+        var food=mfById_(r.fid); if(!food) return;
+        t.cal+=food.cal*r.qty; t.p+=(food.p||0)*r.qty;
+      });
+      tot.textContent=Math.round(t.cal)+' cal \u00b7 '+(Math.round(t.p*10)/10)+'g protein';
+    }
+    paint();
+    body.appendChild(tot);
+    var go=mfBtn_('Add to log', true);
+    go.style.cssText+=';width:100%;margin-top:15px';
+    go.onclick=function(){
+      var chosen=rows.filter(function(r){ return r.on && !r.missing; });
+      if(!chosen.length){ toast('Nothing selected'); return; }
+      var bucket=cat.value;
+      nutDayGuard_();
+      var nd=getNDay(nutrDate);
+      chosen.forEach(function(r){
+        var f=mfById_(r.fid); if(!f) return;
+        nd.meals[bucket].push({id:genEntryId_(),n:_nlName_(f.n+(r.qty!==1?(' \u00d7'+r.qty):'')),
+          cal:Math.round(f.cal*r.qty),p:Math.round((f.p||0)*r.qty*10)/10,c:Math.round((f.c||0)*r.qty*10)/10,
+          f:Math.round((f.f||0)*r.qty*10)/10,fiber:Math.round((f.fiber||0)*r.qty*10)/10,satFat:0,
+          sodium:Math.round((f.sodium||0)*r.qty),sugar:0,srv:mfSrvText_(f),srcFid:f.id});
+      });
+      sv();
+      try{ var _tl=getNDay(nutrDate).meals[bucket]; _nlTraceAdd_('my-meals', nutrDate, _tl[_tl.length-1]); }catch(e){}
+      close();
+      renderNutr(); showScreen('NUTR');
+      toast('Added '+meal.name+' to '+bucket);
+      if(onDone) onDone();
+    };
+    body.appendChild(go);
+  });
+}
 function renderMyMeals(container){
   container.innerHTML='';
+  migrateMyFoodsMeals_();
   var meals=getMyMeals();
   var hdr=document.createElement('div');
   hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:8px';
-  hdr.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">My Meals</div>'
-    +'<button id="add-mymeal-btn" style="font-size:11px;color:var(--orange);background:none;border:none;cursor:pointer;font-weight:700;font-family:inherit">+ Save Current Meal</button>';
+  hdr.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.5px">My Meals</div>';
+  var nb=document.createElement('button');
+  nb.textContent='+ New Meal';
+  nb.style.cssText='font-size:11px;color:var(--orange);background:none;border:none;cursor:pointer;font-weight:700;font-family:inherit';
+  nb.onclick=function(){ openMyMealEditor_(null, function(){ renderMyMeals(container); }); };
+  hdr.appendChild(nb);
   container.appendChild(hdr);
-
-  meals.forEach(function(meal, mi){
-    var totalCal=meal.foods.reduce(function(s,f){return s+(f.cal||0);},0);
-    var totalP=meal.foods.reduce(function(s,f){return s+(f.p||0);},0);
+  meals.forEach(function(meal){
+    var t=mealTotals_(meal);
     var card=document.createElement('div');
     card.style.cssText='background:var(--s2);border-radius:12px;padding:12px;margin-bottom:8px;border:1px solid var(--b1)';
-    var topRow=document.createElement('div');
-    topRow.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px';
-    topRow.innerHTML='<div><span style="font-size:16px;margin-right:6px">'+(meal.emoji||'🍽️')+'</span><span style="font-size:14px;font-weight:700;color:var(--t1)">'+meal.name+'</span></div>'
-      +'<div style="font-size:11px;color:var(--t3)">'+totalCal+' cal · '+totalP+'g P</div>';
-    var foodList=document.createElement('div');
-    meal.foods.forEach(function(f){
+    var top=document.createElement('div');
+    top.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px';
+    var ttl=document.createElement('div');
+    ttl.innerHTML='<div><span style="font-size:16px;margin-right:6px">'+(meal.emoji||'\ud83c\udf7d\ufe0f')+'</span>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--t1)">'+_esc2_(meal.name)+'</span></div>'
+      +'<div style="font-size:11px;color:var(--t3)">'+t.cal+' cal \u00b7 '+t.p+'g P \u00b7 '+(meal.meal||'-')+'</div>';
+    var ed=document.createElement('button');
+    ed.textContent='Edit';
+    ed.style.cssText='background:none;border:1px solid var(--b1);color:var(--t3);font-size:11.5px;font-weight:700;padding:5px 10px;border-radius:9px;cursor:pointer;font-family:inherit;flex-shrink:0';
+    ed.onclick=function(){ openMyMealEditor_(meal, function(){ renderMyMeals(container); }); };
+    top.appendChild(ttl); top.appendChild(ed);
+    var list=document.createElement('div');
+    mealItems_(meal).forEach(function(r){
       var fl=document.createElement('div');
-      fl.style.cssText='font-size:11px;color:var(--t3);padding:2px 0';
-      fl.textContent='· '+f.n+' ('+f.cal+' cal)';
-      foodList.appendChild(fl);
+      fl.style.cssText='font-size:11px;color:'+(r.missing?'var(--c-red)':'var(--t3)')+';padding:2px 0';
+      fl.textContent='\u00b7 '+r.name+(r.qty!==1?(' \u00d7'+r.qty):'')+(r.missing?' - no longer in My Foods':(' ('+Math.round(r.cal)+' cal)'));
+      list.appendChild(fl);
     });
-    var addAllBtn=document.createElement('button');
-    addAllBtn.style.cssText='width:100%;margin-top:10px;background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:13px;font-weight:700;padding:9px;border-radius:10px;cursor:pointer;font-family:inherit';
-    addAllBtn.textContent='Add to '+curMeal.charAt(0).toUpperCase()+curMeal.slice(1);
-    (function(m){
-      addAllBtn.onclick=function(){
-        if(addAllBtn.disabled) return;
-        addAllBtn.disabled=true;
-        nutDayGuard_();
-        var nd=getNDay(nutrDate);
-        m.foods.forEach(function(f){
-          nd.meals[curMeal].push({id:genEntryId_(),n:_nlName_(f.n),cal:f.cal,p:f.p,c:f.c,f:f.f,fiber:f.fiber||0,satFat:f.satFat||0,sodium:f.sodium||0,sugar:f.sugar||0,potassium:f.potassium||0,calcium:f.calcium||0,iron:f.iron||0,magnesium:f.magnesium||0});
-        });
-        sv();
-      try{ var _tl=getNDay(nutrDate).meals[curMeal]; _nlTraceAdd_('my-meals', nutrDate, _tl[_tl.length-1]); }catch(e){}
-        renderNutr();
-        showScreen('NUTR');
-        toast('Added '+m.name+' to '+curMeal);
-      };
-    })(meal);
-    card.appendChild(topRow);
-    card.appendChild(foodList);
-    card.appendChild(addAllBtn);
+    if(t.missing){
+      var warn=document.createElement('div');
+      warn.style.cssText='font-size:11px;color:var(--c-red);margin-top:5px';
+      warn.textContent=t.missing+' item'+(t.missing===1?'':'s')+' missing - totals above exclude '+(t.missing===1?'it':'them')+'.';
+      list.appendChild(warn);
+    }
+    var go=document.createElement('button');
+    go.style.cssText='width:100%;margin-top:10px;background:rgba(252,76,2,.1);border:1px solid rgba(252,76,2,.2);color:var(--orange);font-size:13px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit';
+    var b=meal.meal||curMeal;
+    go.textContent='Add to '+b.charAt(0).toUpperCase()+b.slice(1);
+    go.onclick=function(){ openMealAddSheet_(meal, function(){ renderMyMeals(container); }); };
+    card.appendChild(top); card.appendChild(list); card.appendChild(go);
     container.appendChild(card);
   });
-
-  // Save current meal as a My Meal
-  var amb=container.querySelector('#add-mymeal-btn');
-  if(amb) amb.onclick=function(){
-    nutDayGuard_();
-    var nd=getNDay(nutrDate);
-    var foods=nd.meals[curMeal]||[];
-    if(foods.length===0){toast('No foods logged in '+curMeal+' yet');return;}
-    var _defName=curMeal.charAt(0).toUpperCase()+curMeal.slice(1)+' '+new Date().toLocaleDateString();
-    uiPrompt('Name this meal', _defName, {title:'Save meal', okText:'Save', placeholder:'Meal name'}).then(function(name){
-      if(name===null) return;
-      name=String(name).trim();
-      if(!name) return;
-      if(!st.myMeals) st.myMeals=getMyMeals();
-      st.myMeals.push({name:name,emoji:'🍽️',foods:foods.map(function(f){return{n:f.n,cal:f.cal,p:f.p||0,c:f.c||0,f:f.f||0};})});
-      sv();
-      renderMyMeals(container);
-      toast('Saved: '+name);
-    });
-  };
+  var save=document.createElement('button');
+  save.textContent='Save current '+curMeal+' as a meal';
+  save.style.cssText='width:100%;margin-top:4px;background:none;border:1px solid var(--b1);color:var(--t3);font-size:12.5px;font-weight:700;padding:9px;border-radius:9px;cursor:pointer;font-family:inherit';
+  save.onclick=function(){ mfSaveCurrentMeal_(container); };
+  container.appendChild(save);
 }
+// Saving what is already logged. Each logged entry has to become a My Food first, otherwise the
+// meal would be storing macros again - which is the exact thing this design removes.
+function mfSaveCurrentMeal_(container){
+  nutDayGuard_();
+  var nd=getNDay(nutrDate);
+  var logged=(nd.meals[curMeal]||[]).filter(function(x){ return x && !x.deleted; });
+  if(!logged.length){ toast('No foods logged in '+curMeal+' yet'); return; }
+  var def=curMeal.charAt(0).toUpperCase()+curMeal.slice(1);
+  uiPrompt('Name this meal', def, {title:'Save meal', okText:'Save', placeholder:'Meal name'}).then(function(name){
+    if(name===null) return;
+    name=String(name).trim();
+    if(!name) return;
+    var foods=getMyFoods(), items=[];
+    logged.forEach(function(e){
+      var hit=e.srcFid?mfById_(e.srcFid):null;
+      if(!hit){
+        var norm=mfNorm_(e.n);
+        for(var i=0;i<foods.length;i++){ if(mfNorm_(foods[i].n)===norm){ hit=foods[i]; break; } }
+      }
+      if(!hit){
+        hit={ id:mfNewId_(), n:_nlName_(e.n), srvQty:1, srvUnit:'serving',
+              cal:Math.round(e.cal||0), p:Math.round((e.p||0)*10)/10, c:Math.round((e.c||0)*10)/10,
+              f:Math.round((e.f||0)*10)/10, fiber:Math.round((e.fiber||0)*10)/10,
+              sodium:Math.round(e.sodium||0), fromLog:true, editedAt:Date.now() };
+        foods.push(hit);
+      }
+      items.push({ fid:hit.id, qty:1, nameAtSave:hit.n });
+    });
+    getMyMeals().push({ id:mmNewId_(), name:name, emoji:'\ud83c\udf7d\ufe0f', meal:curMeal, items:items, editedAt:Date.now() });
+    sv();
+    renderMyMeals(container);
+    toast('Saved: '+name);
+  });
+}
+function _esc2_(x){ return String(x==null?'':x).replace(/[&<>]/g,function(c){ return c==='&'?'&amp;':(c==='<'?'&lt;':'&gt;'); }); }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // ── MOBILITY MODULE ──────────────────────────────────────────────────────────
 
 var MOB_EX = [
@@ -52074,6 +52542,10 @@ window.onload = function(){
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
         try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
+        // Meals stop carrying copies of macros here. Runs after the remote pull for the same
+        // reason the others do: before it, st is whatever IndexedDB had, and a migration that
+        // measures an empty store measures nothing.
+        try{ if(typeof migrateMyFoodsMeals_==='function') migrateMyFoodsMeals_(); }catch(e){}
         // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
         // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
         // Order matters: clear the invalid power-derived values first, THEN score runs on heart rate.

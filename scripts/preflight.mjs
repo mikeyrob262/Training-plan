@@ -657,6 +657,20 @@ try {
     fail('runs are being prescribed as rides (see above).');
   }
 
+  // STEP 38 - My Foods / My Meals. The property is that a saved meal stores a REFERENCE and a
+  //           QUANTITY, never macros. It used to store both - {n:'Egg Whole x2', cal:140} - so
+  //           correcting a food fixed nothing that used it. Also pins the required fields and
+  //           the legacy migration that turns the old copies into references.
+  console.log(`${D}. checking My Foods / My Meals...${X}`);
+  try {
+    const so = execSync('node scripts/my-foods-meals-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('saved meals are copying food data again (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
