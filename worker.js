@@ -43673,10 +43673,30 @@ function sid_(){ try{ if(typeof crypto!=='undefined' && crypto.randomUUID) retur
 // Coarse Phase-0 session type (ride|strength|mobility) from a name, reusing the
 // SAME classification as activityIcon_ so the calendar glyph/colour and the plan
 // type never disagree. Runs/rides/groups all bucket to 'ride' in this enum.
+// Pace in and out of the editor. Stored as seconds per mile - an integer with no ambiguity -
+// and rendered mm:ss. Recorded runs carry r.pace as a "10:58" STRING and r.avgSpeed in m/s,
+// which is why the ride editor's 'mph' speed field is meaningless on a run.
+function _paceStr_(sec){
+  var n=+sec; if(!(n>0)) return '';
+  var m=Math.floor(n/60), r=Math.round(n%60);
+  if(r===60){ m++; r=0; }
+  return m+':'+('0'+r).slice(-2);
+}
+function _paceSec_(v){
+  var t=String(v==null?'':v).trim(); if(!t) return null;
+  var m=/^([0-9]{1,2}):([0-5][0-9])$/.exec(t);
+  if(m) return (+m[1])*60+(+m[2]);
+  if(t.indexOf(':')>=0) return null;         // it meant to be mm:ss and was not - do not guess
+  var n=parseFloat(t);                       // a bare number is minutes, so 10.5 is 10:30
+  return (isFinite(n)&&n>0)?Math.round(n*60):null;
+}
+// A run session is a run whatever its name says. Without this branch every run name fell
+// through to 'ride'.
 function sessionTypeFromName_(name){
   var s=String(name||'').toLowerCase();
   if(/weight|strength|lift/.test(s)) return 'strength';
   if(/mobility|yoga|stretch/.test(s)) return 'mobility';
+  if(/\\brun\\b|jog|10k|5k|half marathon|marathon/.test(s)) return 'run';
   return 'ride';
 }
 function sessionIntentFromName_(name, type){
@@ -44188,6 +44208,41 @@ function planUpsertSession_(dateKey, sess, editedFields, source){
 // ONLY what is honestly present — type (classified), name, planned duration — never
 // fabricated power/%1RM/TSS (those come from the Phase 1 generator). Rest -> no
 // session. Overrides win; st.plannedWorkouts is then retired.
+// Repairs sessions whose stored type disagrees with the library definition of their intent.
+//
+// Measured on the live plan: 173 sessions carry intent 'easyRun' or 'run10k' with type 'ride',
+// running through 2026-11-11. All three writers set type from def.type and a fresh build of
+// easyRun returns type 'run' - so these are stale rows written before the library gained the
+// run types, and nothing regenerates a block that is already generated. They are the reason the
+// run editor drew the bike template even after the editor learned about runs.
+//
+// TYPE ONLY. Empty targets are correct and deliberate: sessions store identity, and the
+// prescription derives from SESSION_DEFS at read. A session whose type the athlete set by hand
+// is left alone - the mask is the record of that decision.
+function migrateSessionTypes_(){
+  try{
+    if(typeof SESSION_DEFS==='undefined' || !st || !st.plan) return 0;
+    var fixed=0, byIntent={};
+    Object.keys(st.plan).forEach(function(dk){
+      var day=st.plan[dk]; if(!day || !day.sessions) return;
+      day.sessions.forEach(function(x){
+        if(!x || x.deleted || !x.intent) return;
+        var def=SESSION_DEFS[x.intent]; if(!def || !def.type) return;
+        if(x.type===def.type) return;
+        if(x._edited && x._edited.type) return;            // the athlete set this by hand
+        x.type=def.type;
+        x.editedAt=Date.now();                             // stamped so the correction travels
+        fixed++; byIntent[x.intent]=(byIntent[x.intent]||0)+1;
+      });
+    });
+    if(fixed){
+      try{ console.log('[planTypes] corrected '+fixed+' session type(s) to match the library: '
+        +Object.keys(byIntent).map(function(k){ return k+' x'+byIntent[k]; }).join(', ')); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return fixed;
+  }catch(e){ try{ console.warn('[planTypes] migration failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 function migratePlanToStPlan_(){
   try{
     if(st._planMig) return;
@@ -50108,7 +50163,10 @@ function openDayEditor(dateKey, targetId){
     sheet.appendChild(sbBtn);
   }
   var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
-  if(!/^(ride|strength|mobility)$/.test(curType)) curType='ride';
+  // 'run' belongs here. Without it a run session's type failed this test and was rewritten to
+  // 'ride', so the editor drew the bike template - Intent, Power lo W/hi W, HR cap - with the
+  // watts fields permanently blank because a run has no watts to put in them.
+  if(!/^(ride|run|strength|mobility)$/.test(curType)) curType='ride';
   // Current preset: match the session's intent (or type) to a named preset; unknown -> Other.
   var _curP=(function(){
     if(sess){ var bi=SESSION_PRESETS.filter(function(p){return p.intent&&p.intent===sess.intent;})[0]; if(bi) return bi.v; var bt=SESSION_PRESETS.filter(function(p){return p.type===sess.type;})[0]; if(bt) return bt.v; }
@@ -50128,7 +50186,7 @@ function openDayEditor(dateKey, targetId){
   var otherName=document.createElement('input'); otherName.type='text'; otherName.placeholder='Custom session name'; if(_curP==='other') otherName.value=_selName||'';
   otherName.style.cssText='width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:6px';
   var otherType=document.createElement('select'); otherType.style.cssText='width:100%;padding:9px 11px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
-  [['ride','Ride'],['strength','Strength'],['mobility','Mobility']].forEach(function(tt){ var op=document.createElement('option'); op.value=tt[0]; op.textContent=tt[1]; if(tt[0]===_selType) op.selected=true; otherType.appendChild(op); });
+  [['ride','Ride'],['run','Run'],['strength','Strength'],['mobility','Mobility']].forEach(function(tt){ var op=document.createElement('option'); op.value=tt[0]; op.textContent=tt[1]; if(tt[0]===_selType) op.selected=true; otherType.appendChild(op); });
   otherWrap.appendChild(otherName); otherWrap.appendChild(otherType); sheet.appendChild(otherWrap);
   var bodyEl=document.createElement('div'); sheet.appendChild(bodyEl);
   function _mkI(val, ph){ var i=document.createElement('input'); i.type='text'; i.placeholder=ph||'-'; if(val!=null&&val!=='') i.value=val; i.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box'; return i; }
@@ -50225,6 +50283,37 @@ function openDayEditor(dateKey, targetId){
       var cW=_fr('Power',_mkI(o&&o.np!=null?o.np:(o&&o.avgPwr!=null?o.avgPwr:(_c.np!=null?_c.np:'')),'W'));
       var cE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:(_c.elev!=null?_c.elev:''),'ft'));
       getData=function(){ return { type:'ride', intent:iSel.value, name:_selName, targets:{ powerLo:_num(pLo.value), powerHi:_num(pHi.value), hrCap:_num(hrc.value), durationMin:_num(du.value), tssTarget:_num(ts.value) }, completed:{ distance:_num(cD.value), duration:_num(cU.value), avgSpeed:_num(cP.value), tss:_num(cT.value), np:_num(cW.value), elev:_num(cE.value) } }; };
+    } else if(type==='run'){
+      // Runs get pace and heart rate, because that is what a run is prescribed and judged on.
+      // Deliberately NOT a zone dropdown: the stored run zone model puts 78% of all running
+      // time at Z4+ across 1,181 runs, which is not physiologically possible, so a zone picker
+      // here would hand over a prescription built on a reference that is known to be wrong.
+      // A bpm ceiling is a raw measurement and carries none of that error.
+      _sect('Planned');
+      var rSel=document.createElement('select'); rSel.style.cssText='width:100%;padding:8px 9px;background:var(--s2);border:1px solid var(--b1);border-radius:9px;color:var(--t1);font-size:13px;font-family:inherit;box-sizing:border-box';
+      [['easyRun','Easy run'],['run10k','10k-pace run'],['long','Long run'],['recovery','Recovery run']].forEach(function(x){ var op=document.createElement('option'); op.value=x[0]; op.textContent=x[1]; if(x[0]===_selIntent) op.selected=true; rSel.appendChild(op); });
+      _fr('Intent',rSel);
+      var qLo=_mkI(_paceStr_(t.paceLo),'mm:ss'), qHi=_mkI(_paceStr_(t.paceHi),'mm:ss');
+      var qw=document.createElement('div'); qw.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:6px'; qw.appendChild(qLo); qw.appendChild(qHi); _fr('Pace /mi',qw);
+      var rhc=_fr('HR cap',_mkI(t.hrCap!=null?t.hrCap:'','bpm'));
+      var rdu=_fr('Duration',_mkI(t.durationMin!=null?t.durationMin:'','min'));
+      var rdi=_fr('Distance',_mkI(t.distanceMi!=null?t.distanceMi:'','mi'));
+      var rts=_fr('Target TSS',_mkI(t.tssTarget!=null?t.tssTarget:'','TSS'));
+      _sect('Completed');
+      var _rc=(sess && sess.completed) || {};
+      var rcD=_fr('Distance',_mkI(o&&o.distance!=null?o.distance:(_rc.distance!=null?_rc.distance:''),'mi'));
+      var rcU=_fr('Duration',_mkI(o&&o.duration!=null?o.duration:(_rc.duration!=null?_rc.duration:''),'min'));
+      // r.pace is already a mm:ss string on a recorded run - show it as-is rather than through
+      // the ride form's mph field, which reads r.avgSpeed and would print 2.4 for an 11-min mile.
+      var rcP=_fr('Pace',_mkI(o&&o.pace!=null?o.pace:(_rc.pace!=null?_rc.pace:''),'mm:ss /mi'));
+      var rcH=_fr('Avg HR',_mkI(o&&o.avgHR!=null?o.avgHR:(_rc.avgHR!=null?_rc.avgHR:''),'bpm'));
+      var rcT=_fr('TSS',_mkI(o&&o.tss!=null?o.tss:(_rc.tss!=null?_rc.tss:''),'-'));
+      var rcE=_fr('Elevation',_mkI(o&&o.elev!=null?o.elev:(_rc.elev!=null?_rc.elev:''),'ft'));
+      getData=function(){ return { type:'run', intent:rSel.value, name:_selName,
+        targets:{ paceLo:_paceSec_(qLo.value), paceHi:_paceSec_(qHi.value), hrCap:_num(rhc.value),
+                  durationMin:_num(rdu.value), distanceMi:_num(rdi.value), tssTarget:_num(rts.value) },
+        completed:{ distance:_num(rcD.value), duration:_num(rcU.value), pace:(String(rcP.value||'').trim()||null),
+                    avgHR:_num(rcH.value), tss:_num(rcT.value), elev:_num(rcE.value) } }; };
     } else if(type==='strength'){
       _sect('Planned — exercises (sets x reps @ %1RM)');
       var exWrap=document.createElement('div'); var exRows=[];
@@ -50325,6 +50414,25 @@ function openDayEditor(dateKey, targetId){
             // merge-tracked like every other session field), so nothing entered is lost.
             var c0=d.completed, hasC=c0 && (c0.distance!=null||c0.duration!=null||c0.avgSpeed!=null||c0.tss!=null||c0.np!=null||c0.elev!=null);
             if(hasC){ s2.completed=c0; s2.status='completed'; }
+          }
+        } else if(type==='run'){
+          s2.targets=d.targets;
+          if(o){
+            // Write actuals onto the linked run. pace is a string field on a run record and
+            // avgSpeed is m/s, so pace is written directly and no mph is derived from it.
+            var rf=[], rc=d.completed||{};
+            if(rc.distance!=null){ o.distance=rc.distance; rf.push('distance'); }
+            if(rc.duration!=null){ o.duration=rc.duration; rf.push('duration'); }
+            if(rc.pace!=null){ o.pace=rc.pace; rf.push('pace'); }
+            if(rc.avgHR!=null){ o.avgHR=rc.avgHR; rf.push('avgHR'); }
+            if(rc.tss!=null){ o.tss=rc.tss; rf.push('tss'); }
+            if(rc.elev!=null){ o.elev=rc.elev; rf.push('elev'); }
+            if(rf.length){ markRideEdited_(o, rf); s2.status='completed';
+              s2.completedRideKey=(typeof rideKey==='function'?rideKey(o):(o.id||null));
+              s2.executionScore=computeRideExecutionScore_(s2, o); }
+          } else {
+            var rc0=d.completed, hasR=rc0 && (rc0.distance!=null||rc0.duration!=null||rc0.pace!=null||rc0.avgHR!=null||rc0.tss!=null||rc0.elev!=null);
+            if(hasR){ s2.completed=rc0; s2.status='completed'; }
           }
         } else if(type==='strength'){
           s2.name=d.name; s2.exercises=d.exercises;
@@ -51953,6 +52061,7 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
         // AFTER the remote pull, so a stale device's max-merged tss=109 is cleared on the way in
         // rather than being re-pushed. Runs every boot on purpose; it is idempotent and cheap.
         // Order matters: clear the invalid power-derived values first, THEN score runs on heart rate.

@@ -642,6 +642,21 @@ try {
     fail('Dr. Smurkel is off-voice (see above).');
   }
 
+  // STEP 37 - the run session editor. A run session's type is 'run', which failed a three-name
+  //           allowlist and was rewritten to 'ride', so the editor drew the bike template with
+  //           the watts fields permanently blank. Also pins the pace round-trip, the run-name
+  //           branch (whose word boundary must survive the served template), and the migration
+  //           that repairs the 173 sessions stored with the wrong type.
+  console.log(`${D}. checking the run session editor...${X}`);
+  try {
+    const so = execSync('node scripts/run-session-editor-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('runs are being prescribed as rides (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
