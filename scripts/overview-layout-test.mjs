@@ -216,6 +216,20 @@ ok('heights are measured inside a real column, not the full-width host',
    /A\.appendChild\(c\); \}\);\s*\/\/ measure at COLUMN width/.test(bal) && /flex:1 1 0/.test(bal));
 ok('the authored order is captured once, not re-read from the columns', /host\.__balCards/.test(bal));
 ok('columns align to the top rather than stretching', /align-items:flex-start/.test(bal));
+// TAP TO LEARN on Current State. The METRIC_TEACH entries and the document-level
+// [data-metric-teach] listener both survived the v3 rebuild; the CARD stopped emitting the
+// attribute, so the explanations vanished with nothing broken enough to notice.
+const cs = ex('_ovwCurrentStateHTML_');
+['ctl','atl','tsb','ftp'].forEach((k) => {
+  ok('Current State names the ' + k.toUpperCase() + ' teaching entry', new RegExp("teach:'" + k + "'").test(cs));
+});
+ok('...and emits the attribute the shared listener matches', /data-metric-teach=/.test(cs));
+ok('...on a keyboard-reachable target', cs.indexOf('role=') >= 0 && cs.indexOf('tabindex=') >= 0);
+ok('...with a visible affordance, not an invisible hit area', /border-bottom:1px dotted/.test(cs));
+// The entries themselves must exist, or the attribute opens an empty panel.
+['ctl','atl','tsb','ftp'].forEach((k) => {
+  ok('METRIC_TEACH still defines ' + k, new RegExp('^  ' + k + ':\\{', 'm').test(src));
+});
 // Below the breakpoint there is no split at all - splitting and letting flex wrap would show all
 // of column A then all of column B, which is not the reading order.
 ok('below the breakpoint it is a single column with no split', /if\(!wide\)\{/.test(bal));

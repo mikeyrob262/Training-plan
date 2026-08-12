@@ -28492,17 +28492,26 @@ function _ovwCurrentStateHTML_(){
   var ser=[]; try{ ser=(st.fitSeries||[]).slice().sort(function(a,b){ return String(a.date).slice(0,10).localeCompare(String(b.date).slice(0,10)); }); }catch(e){}
   var wk=(ser.length>=8)?ser[ser.length-8]:null;
   var ftp=parseInt((typeof st!=='undefined'&&st.ftp)||0,10)||null;
+  // TAP TO LEARN. Each cell names the METRIC_TEACH entry it explains. Both halves of this
+  // already existed - the entries (ctl/atl/tsb/ftp, with their aka, one-liner, ranges and note)
+  // and the document-level [data-metric-teach] listener that opens the shared panel. The v3
+  // rebuild simply stopped emitting the attribute, so there was nothing for the listener to
+  // match and the explanations silently disappeared with the old layout.
   var cells=[
-    { k:'Fitness (CTL)', v:(f&&f.loaded)?f.ctl:null, d:(f&&f.loaded&&wk)?(f.ctl-wk.ctl):null, up:true },
-    { k:'Fatigue (ATL)', v:(f&&f.loaded)?f.atl:null, d:(f&&f.loaded&&wk)?(f.atl-wk.atl):null, up:false },
-    { k:'Form (TSB)',    v:(f&&f.loaded)?f.tsb:null, d:(f&&f.loaded&&wk)?(f.tsb-wk.tsb):null, up:true },
-    { k:'FTP',           v:ftp, unit:' W', d:null, up:true }
+    { k:'Fitness (CTL)', teach:'ctl', v:(f&&f.loaded)?f.ctl:null, d:(f&&f.loaded&&wk)?(f.ctl-wk.ctl):null, up:true },
+    { k:'Fatigue (ATL)', teach:'atl', v:(f&&f.loaded)?f.atl:null, d:(f&&f.loaded&&wk)?(f.atl-wk.atl):null, up:false },
+    { k:'Form (TSB)',    teach:'tsb', v:(f&&f.loaded)?f.tsb:null, d:(f&&f.loaded&&wk)?(f.tsb-wk.tsb):null, up:true },
+    { k:'FTP',           teach:'ftp', v:ftp, unit:' W', d:null, up:true }
   ];
   var H=_ovwLbl_('Current state', (f&&f.stale)?('<span style="font-size:10px;color:#f59e0b">'+aiEsc_(f.ageLabel||'stale')+'</span>'):'');
   H+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">';
   cells.forEach(function(c){
-    H+='<div style="min-width:0">'
-      +'<div style="font-size:10.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+c.k+'</div>'
+    // A dotted underline on the LABEL is the app's existing 'this explains itself' affordance
+    // (see the inline glossary term); the whole tile is the target so it is tappable on a phone.
+    var _tk=c.teach?(' data-metric-teach="'+c.teach+'" role="button" tabindex="0" title="Tap to learn what this means" style="min-width:0;cursor:pointer"'):' style="min-width:0"';
+    H+='<div'+_tk+'>'
+      +'<div style="font-size:10.5px;color:var(--d-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+        +(c.teach?';border-bottom:1px dotted var(--d-edge3,rgba(255,255,255,.25));display:inline-block':'')+'">'+c.k+'</div>'
       +'<div style="display:flex;align-items:baseline;margin-top:3px">'
       +'<span style="font-size:22px;font-weight:800;color:var(--d-head);line-height:1">'+((c.v==null)?_ovwDash_():(c.v+(c.unit||'')))+'</span>'
       +_ovwDelta_(c.d, c.up)+'</div>'
