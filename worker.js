@@ -44445,8 +44445,10 @@ function migrateSessionIntents_(){
       var day=st.plan[dk]; if(!day || !day.sessions) return;
       day.sessions.forEach(function(x){
         if(!x || x.deleted || !x.intent || !x.name) return;
-        if(x._edited && x._edited.intent) return;         // the athlete chose this intent
-        if(x.swap===true) return;                          // an explicit swap is a decision
+        // ONLY an explicit swap counts as the athlete's choice. _edited.intent was tried as the
+        // gate and skipped today's session: that mask is RESIDUE on most block days - it once
+        // overrode 24 of 41 of them - which is the whole reason swap:true exists.
+        if(x.swap===true) return;
         var want=byName[String(x.name).toLowerCase()];
         if(!want || want===x.intent) return;
         var wd=SESSION_DEFS[want], cd=SESSION_DEFS[x.intent];
