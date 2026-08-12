@@ -598,6 +598,21 @@ try {
     fail('Ghost Rival is racing something it should not (see above).');
   }
 
+  // STEP 34 - the frozen-snapshot overlay. /store_v2 is hand-uploaded and schema-slim, so every
+  //           field a later backfill computed was invisible through allRidesDeduped_ (dpr 392
+  //           stored / 13 visible, powerCurve 325 / 0). The overlay fills them from st.rides.
+  //           The rule under test is the DIRECTION: a live blank must never clear a snapshot
+  //           value, and enrichment must never change WHICH rides exist.
+  console.log(`${D}. checking the store_v2 enrichment overlay...${X}`);
+  try {
+    const so = execSync('node scripts/store-v2-enrich-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the snapshot overlay is dropping or inventing ride data (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

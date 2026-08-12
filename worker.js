@@ -16926,6 +16926,60 @@ var _storeV2Snap = null;
 // Identity+length of the pool the current arming was computed from, so a library that grows
 // after priming re-folds instead of serving a stale tail. Same memo shape as _dedupeCache.
 var _storeV2Armed = null;
+// The snapshot is schema-slim. /store_v2 records carry avgHr, date, elapsedSec, movingSec, name,
+// trainingLoad, type and a few ids - and nothing any later backfill computed. Measured live:
+//
+//     field         on st.rides    visible via allRidesDeduped_
+//     dpr               392              13
+//     gearId            230              14
+//     powerCurve        325               0
+//     zoneTime           32              13
+//
+// Both backfills had in fact COMPLETED. They were invisible, which on screen is indistinguishable
+// from broken, and cost three re-runs of the distance-PR backfill before anyone measured the
+// ACCESSOR rather than the writer. _saCapability_ had already been forced to opt out of
+// allRidesDeduped_ entirely over the same hole.
+//
+// So the fold enriches as well as appends. The snapshot keeps deciding which rides exist - its
+// dedupe is doing real work, 401 of 824 live rows are duplicates it correctly suppresses, and
+// reading st.rides raw is exactly what put Ghost Rival at 7,050 miles against Strava's 5,484.
+// st.rides decides what those rides carry.
+//
+// Overlay rules, in order:
+//   - a live value that is undefined or null NEVER lands, so nothing can be cleared by the fold;
+//   - a live value equal to what the snapshot already holds is skipped, so unchanged rows keep
+//     their identity and the common case allocates nothing;
+//   - otherwise live wins, because these four fields only ever move forward.
+// Snapshot records are copied before being written to. _storeV2Snap is the PURE snapshot that the
+// probes and the PUT validator measure; mutating it in place would make 'did the PUT land' answer
+// yes for data that only ever existed in this tab.
+var STORE_V2_ENRICH_=['dpr','gearId','powerCurve','zoneTime'];
+function storeV2Enrich_(snapRides, pool){
+  var by={}, st_={ matched:0, enriched:0, fields:{} };
+  (pool||[]).forEach(function(r){
+    if(!r || r.deleted) return;
+    var k=rideKey(r);
+    if(k && !by[k]) by[k]=r;              // first wins, same as every other rideKey index here
+  });
+  var out=(snapRides||[]).map(function(a){
+    var live=by[rideKey(a)];
+    if(!live) return a;
+    st_.matched++;
+    var copy=null;
+    STORE_V2_ENRICH_.forEach(function(f){
+      var v=live[f];
+      if(v===undefined || v===null) return;      // a live blank never clears a snapshot value
+      if(a[f]===v) return;                       // already identical - do not copy the row
+      if(!copy){ copy={}; for(var kk in a){ if(Object.prototype.hasOwnProperty.call(a,kk)) copy[kk]=a[kk]; } }
+      copy[f]=v;
+      st_.fields[f]=(st_.fields[f]||0)+1;
+    });
+    if(!copy) return a;
+    st_.enriched++;
+    return copy;
+  });
+  return { rides:out, stats:st_ };
+}
 // Folds the live tail onto each snapshot bucket and (re)arms the sync caches.
 //
 // Called at prime AND again whenever the library has moved, because prime runs on the
@@ -16939,7 +16993,10 @@ function storeV2Arm_(){
   var runs=(typeof st!=='undefined' && st && st.runs) ? st.runs : [];
   var tr=storeV2Tail_(s.rides, STORE_V2_RIDE_RE, pool);
   var tu=storeV2Tail_(s.runs,  STORE_V2_RUN_RE,  pool.concat(runs));
-  _storeV2Rides = tr.add.length ? s.rides.concat(tr.add) : s.rides;
+  // Enrich BEFORE the tail is appended: tail records come straight off st.rides and already
+  // carry every backfilled field. Only the snapshot rows are missing them.
+  var en=storeV2Enrich_(s.rides, pool);
+  _storeV2Rides = tr.add.length ? en.rides.concat(tr.add) : en.rides;
   // Run cards read .time (a FORMATTED duration) and .elevation; storeV2Normalize_ puts those
   // on snapshot records, and getRunsLegacy_ maps them onto st.rides records. Tail records get
   // the same aliases here, on a COPY — folding must never mutate a record st.rides owns.
@@ -16952,7 +17009,7 @@ function storeV2Arm_(){
       }))
     : s.runs;
   _storeV2Armed = { arr:pool, len:pool.length, rlen:runs.length };
-  return { ride:tr, run:tu };
+  return { ride:tr, run:tu, enrich:en.stats };
 }
 // Re-folds when the library has changed since the last arming. Cheap (one O(n) pass over
 // st.rides) and only ever runs when identity or length moved, so the render-inline callers
@@ -16976,7 +17033,7 @@ function primeStoreV2_(){
     // about to serve for the rest of the session. It gets the stamp first.
     console.log('[store_v2] ' + storeV2Stamp_(s.builtAt));
     _storeV2Snap = s;
-    var t=storeV2Arm_() || { ride:{horizon:'',add:[],skipped:0}, run:{horizon:'',add:[],skipped:0} };
+    var t=storeV2Arm_() || { ride:{horizon:'',add:[],skipped:0}, run:{horizon:'',add:[],skipped:0}, enrich:null };
     var was=(st.rides||[]).filter(function(r){ return r && !r.deleted; }).length;
     console.log('[store_v2] reads ARMED — allRidesDeduped_ now serves ' + _storeV2Rides.length
       + ' ride-typed records (' + s.rides.length + ' snapshot + ' + t.ride.add.length
@@ -16985,6 +17042,13 @@ function primeStoreV2_(){
     // The tail is the part of the library the snapshot cannot see, so it is stated every boot
     // next to the horizon it was measured from. A silent fold is how the 117 mi gap survived:
     // the count looked plausible and nothing on the page said what date it stopped at.
+    if(t.enrich){
+      var ef=t.enrich.fields, ek=Object.keys(ef);
+      console.log('[store_v2] enriched ' + t.enrich.enriched + ' of ' + t.enrich.matched
+        + ' matched snapshot rows from live st.rides'
+        + (ek.length ? (' - ' + ek.map(function(k){ return k + ' +' + ef[k]; }).join(', ')) : ' - nothing to add')
+        + '. Snapshot decides WHICH rides; st.rides decides what is on them.');
+    }
     [['ride',t.ride],['run',t.run]].forEach(function(p){
       var k=p[0], x=p[1];
       if(!x.horizon){ console.warn('[store_v2] ' + k + ' bucket is empty — no horizon, nothing folded.'); return; }
