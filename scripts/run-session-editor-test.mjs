@@ -52,6 +52,21 @@ console.log('\n' + Y + '=== a run session is no longer rewritten into a ride ===
   ok('the Session dropdown can offer Run', /\['run','Run'\]/.test(src));
 }
 
+console.log('\n' + Y + '=== a DERIVED block session resolves by intent, not by guessing ===' + X);
+{
+  // blockPlanFor_ builds its sessions from the block table and returns them carrying an intent and
+  // nothing else - measured live: {date, intent} with type and name both undefined. The old chain
+  // ended at sessionTypeFromName_(undefined) -> 'ride', so every derived run day in the block drew
+  // the bike editor even once the allowlist admitted runs.
+  const i = src.indexOf('var _tSrc=sess||plan||null;');
+  ok('the resolver exists', i > 0);
+  const chain = src.slice(i - 700, i + 700);
+  ok('a stored type still wins', /var curType=\(sess&&sess\.type\)\|\|\(\(plan&&plan\.type\)\|\|''\)/.test(chain));
+  ok('...then intent decides via the library', /SESSION_DEFS\[_tSrc\.intent\]/.test(chain));
+  ok('...and only then does it fall back to the name', chain.indexOf('SESSION_DEFS[_tSrc.intent]') < chain.indexOf('sessionTypeFromName_(plan.name)'));
+  ok('...with the reason recorded', /returns them carrying an intent and nothing else/.test(chain));
+}
+
 console.log('\n' + Y + '=== the editor draws run fields, not watts ===' + X);
 {
   const i = src.indexOf("} else if(type==='run'){");

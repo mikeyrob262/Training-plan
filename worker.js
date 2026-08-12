@@ -50162,7 +50162,16 @@ function openDayEditor(dateKey, targetId){
     sbBtn.onclick=function(){ modal.remove(); showSessionDetail_(dateKey, sess.id); };
     sheet.appendChild(sbBtn);
   }
-  var curType=sess?sess.type:((plan&&plan.type)?plan.type:(plan?sessionTypeFromName_(plan.name):'ride'));
+  // INTENT is the authority when a type is absent. blockPlanFor_ derives its sessions from the
+  // block table and returns them carrying an intent and nothing else - no type, no name - so the
+  // old chain fell through to sessionTypeFromName_(undefined) and every derived run day in the
+  // block resolved to 'ride'. A stored type still wins: it is the athlete's decision on record.
+  var _tSrc=sess||plan||null;
+  var curType=(sess&&sess.type)||((plan&&plan.type)||'');
+  if(!curType && _tSrc && _tSrc.intent && typeof SESSION_DEFS!=='undefined'){
+    var _td=SESSION_DEFS[_tSrc.intent]; if(_td&&_td.type) curType=_td.type;
+  }
+  if(!curType) curType=(plan?sessionTypeFromName_(plan.name):'ride');
   // 'run' belongs here. Without it a run session's type failed this test and was rewritten to
   // 'ride', so the editor drew the bike template - Intent, Power lo W/hi W, HR cap - with the
   // watts fields permanently blank because a run has no watts to put in them.
