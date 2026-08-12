@@ -32393,6 +32393,123 @@ try{ if(typeof window!=='undefined'){ window.fetchSmurkelDebrief_=fetchSmurkelDe
 // Render the debrief's plain text. Deliberately tolerant: the model is asked for headings, bullets
 // and short paragraphs, and this styles whatever of that actually arrives rather than failing on a
 // format it did not expect. Escapes first — this is model output going into innerHTML.
+// ==================== AUDIO DEBRIEF ====================
+//
+// Dr Smurkel already writes a six-part verdict after every ride. This speaks it, so it can be heard
+// in the car or while stretching. Built-in speechSynthesis only - no paid voice, no key, no audio
+// leaving the device, and nothing stored (see the voice-note note on the storage ceiling).
+//
+// TEXT WRITTEN TO BE READ DOES NOT SPEAK WELL. 'TSB -4' read literally comes out as 'tee ess bee
+// four' or 'tee ess bee dash four', and an all-caps heading is shouted letter by letter by some
+// engines. The formatter below is not decoration - without it the feature is unusable.
+function _ttsAvailable_(){ return (typeof window!=='undefined') && ('speechSynthesis' in window) && (typeof SpeechSynthesisUtterance!=='undefined'); }
+// An English voice, preferring the ones that actually sound like a person. Names are checked in
+// order across the platforms this app runs on: Daniel is the iOS/macOS en-GB male, George and Hazel
+// ship on Windows. Falls back to any en-GB, then any English, then whatever the platform gives -
+// never refuses to speak because the preferred voice is absent.
+var TTS_VOICE_ORDER=['Daniel','George','Arthur','Oliver','Hazel','Serena','Kate','Google UK English Male','Google UK English Female'];
+function _ttsPickVoice_(){
+  var vs=[]; try{ vs=speechSynthesis.getVoices()||[]; }catch(e){ return null; }
+  if(!vs.length) return null;
+  for(var i=0;i<TTS_VOICE_ORDER.length;i++){
+    var want=TTS_VOICE_ORDER[i];
+    for(var j=0;j<vs.length;j++){ if(String(vs[j].name||'').indexOf(want)>=0) return vs[j]; }
+  }
+  var gb=vs.filter(function(v){ return /en[-_]GB/i.test(v.lang||''); });
+  if(gb.length) return gb[0];
+  var en=vs.filter(function(v){ return /^en/i.test(v.lang||''); });
+  return en.length?en[0]:vs[0];
+}
+// Numbers and jargon, rendered the way a person would say them out loud.
+var TTS_ABBR=[
+  ['TSB','T S B'], ['CTL','C T L'], ['ATL','A T L'], ['FTP','F T P'], ['NP','N P'],
+  ['IF','intensity factor'], ['TSS','T S S'], ['VI','variability index'], ['HR','heart rate'],
+  ['PR','personal record'], ['KOM','K O M'], ['W/kg','watts per kilo'], ['bpm','beats per minute'],
+  ['rpm','revs per minute'], ['VO2','V O 2']
+];
+function _ttsSpeechText_(text){
+  var NL=String.fromCharCode(10);
+  var lines=String(text||'').split(NL);
+  var out=[];
+  lines.forEach(function(raw){
+    var ln=String(raw||'').replace(/^[*# ]+|[*]+$/g,'').trim();
+    if(!ln) return;
+    ln=ln.replace(/^[-\\u2022]+ ?/,'');
+    // A heading is short, punctuation-free and shouted. Spoken, it becomes a sentence and a pause
+    // rather than a run of letters.
+    // No digits: a line with a number in it is data, not a section title. Without this,
+    // 'FTP 183W' passes every other heading test and gets title-cased into 'Ftp 183w'.
+    var isHeading=(ln.length<52 && ln.indexOf('.')<0 && ln===ln.toUpperCase()
+      && /[A-Z]/.test(ln) && !/[0-9]/.test(ln));
+    if(isHeading){
+      out.push(ln.charAt(0)+ln.slice(1).toLowerCase()+'.');
+      return;
+    }
+    out.push(ln);
+  });
+  var t=out.join(' ');
+  // Tick and cross marks read as nothing useful.
+  t=t.replace(/[\\u2713\\u2705]/g,' yes,').replace(/[\\u274c\\u2717]/g,' no,');
+  // A MINUS SIGN IS NOT A HYPHEN. 'TSB -4' must not become 'TSB dash 4' or 'TSB 4'; a negative
+  // number in a debrief is the whole point of the sentence it sits in.
+  t=t.replace(/(^|[\\s(])-(\\d)/g, '$1minus $2');
+  t=t.replace(/(\\d)\\u2013(\\d)/g, '$1 to $2');
+  // Units, spoken.
+  t=t.replace(/(\\d)\\s*%/g, '$1 percent');
+  // W/kg first - the generic W rule would otherwise turn it into 'watts per kilo' never
+  // matching, because 'W' followed by a slash still ends a word.
+  t=t.replace(/(\\d(?:\\.\\d+)?)\\s*W\\/kg\\b/g, '$1 watts per kilo');
+  t=t.replace(/(\\d)\\s*W\\b(?!\\/)/g, '$1 watts');
+  t=t.replace(/(\\d)\\s*mi\\b/g, '$1 miles');
+  t=t.replace(/(\\d)\\s*ft\\b/g, '$1 feet');
+  t=t.replace(/(\\d)\\s*km\\b/g, '$1 kilometres');
+  // Abbreviations, longest first so W/kg is not eaten by W.
+  TTS_ABBR.forEach(function(pair){
+    var re=new RegExp('\\\\b'+pair[0].replace(/[/]/g,'\\\\/')+'\\\\b','g');
+    t=t.replace(re, pair[1]);
+  });
+  return t.replace(/\\s+/g,' ').trim();
+}
+var _ttsUtter=null;
+function _ttsSpeaking_(){ try{ return !!(speechSynthesis && (speechSynthesis.speaking||speechSynthesis.pending)); }catch(e){ return false; } }
+function _ttsStop_(){ try{ speechSynthesis.cancel(); }catch(e){} _ttsUtter=null; _ttsBtnState_(false); }
+function _ttsBtnState_(on){
+  var b=document.getElementById('sm-listen');
+  if(b) b.textContent=on?'Stop':'Listen';
+}
+function _ttsSpeakDebrief_(){
+  if(!_ttsAvailable_()) return;
+  if(_ttsSpeaking_()){ _ttsStop_(); return; }
+  var host=document.getElementById('sm-debrief');
+  var raw=host?(host.getAttribute('data-raw')||''):'';
+  var spoken=_ttsSpeechText_(raw);
+  if(!spoken){ return; }
+  var u=new SpeechSynthesisUtterance(spoken);
+  var v=_ttsPickVoice_();
+  if(v){ u.voice=v; u.lang=v.lang||'en-GB'; } else { u.lang='en-GB'; }
+  u.rate=0.98; u.pitch=0.92;   // a shade slow and low - it is a verdict, not an announcement
+  u.onend=function(){ _ttsUtter=null; _ttsBtnState_(false); };
+  u.onerror=function(){ _ttsUtter=null; _ttsBtnState_(false); };
+  _ttsUtter=u;
+  _ttsBtnState_(true);
+  try{ speechSynthesis.speak(u); }catch(e){ _ttsBtnState_(false); }
+}
+// Voices load asynchronously on some platforms; warming the list means the first tap does not fall
+// back to a default voice purely because nothing had been enumerated yet.
+try{ if(_ttsAvailable_() && typeof speechSynthesis.getVoices==='function'){ speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged=function(){}; } }catch(e){}
+// The control row. Separate from the button so the debrief can gain siblings later without the
+// speaker needing to know about them.
+function _ttsListenBtnRow_(){
+  var b=_ttsListenBtnHTML_();
+  if(!b) return '';
+  return '<div style="display:flex;justify-content:flex-end;margin-top:10px">'+b+'</div>';
+}
+function _ttsListenBtnHTML_(){
+  if(!_ttsAvailable_()) return '';
+  return '<button id="sm-listen" onclick="_ttsSpeakDebrief_()" class="sm-ctl" title="Hear the debrief read aloud"'
+    +' style="background:transparent;border:1px solid var(--d-edge);border-radius:9px;padding:4px 11px;'
+    +'font-size:11.5px;font-weight:700;color:var(--d-accent,#fc5200);cursor:pointer">Listen</button>';
+}
 function _smurkelHTML_(text){
   var NL=String.fromCharCode(10);
   var lines=String(text||'').split(NL);
@@ -32439,7 +32556,10 @@ function _smurkelMount_(dk){
     fetchSmurkelDebrief_(dk, todays[0], function(err, text){
       var h=document.getElementById('sm-debrief'); if(!h) return;
       if(err || !text){ h.innerHTML='<div style="font-size:12px;color:var(--d-dim)">'+((typeof _cvEsc_==='function')?_cvEsc_(err||'Debrief unavailable.'):'Debrief unavailable.')+'</div>'; return; }
-      h.innerHTML=_smurkelHTML_(text)+_smurkelReplyUI_();
+      // The spoken version reads the RAW debrief, not the rendered DOM - scraping the panel
+      // would pick up tick glyphs, bullets and the reply UI's own labels.
+      try{ h.setAttribute('data-raw', String(text||'')); }catch(e){}
+      h.innerHTML=_smurkelHTML_(text)+_ttsListenBtnRow_()+_smurkelReplyUI_();
       _SM_CONVO={ dk:dk, ride:todays[0], debrief:text, turns:[] };
       _smurkelBindReply_();
     });

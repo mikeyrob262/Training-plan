@@ -569,6 +569,21 @@ try {
     fail('the Almost Board is listing things that are not almost (see above).');
   }
 
+  // STEP 32 — the audio debrief. Almost every assertion here is about the speech FORMATTER,
+  //           because a verdict written to be read is gibberish when spoken: "TSB -4" as
+  //           "tee ess bee four", an all-caps heading shouted letter by letter. The escapes in it
+  //           are doubled deliberately — served singly they become bare letters and [✓]
+  //           turns into a class matching digits.
+  console.log(`${D}· checking the audio debrief…${X}`);
+  try {
+    const so = execSync('node scripts/audio-debrief-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the spoken debrief would not read correctly aloud (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
