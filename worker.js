@@ -44905,19 +44905,22 @@ function renderCore(){
 // ── MY FOODS & MY MEALS ──────────────────────────────────────────────────────
 
 // Default My Foods - Mikey's regulars
+// Fixed ids. A seeded default must be the SAME record on every device, or the id-keyed merge
+// has nothing to match on and each device's copy survives as a separate row.
 var DEFAULT_MY_FOODS = [
-  {n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, fiber:5, srv:'1 bottle'},
-  {n:'Transparent Labs Whey Protein Isolate', cal:130, p:28, c:3, f:1, srv:'1 scoop'},
-  {n:'Greek Yogurt Plain (Fage 0%)', cal:120, p:22, c:9, f:0, srv:'1 cup'},
-  {n:'Egg Whole', cal:70, p:6, c:0, f:5, srv:'1 large'},
-  {n:'Egg White', cal:17, p:4, c:0, f:0, srv:'1 large'},
-  {n:'Turkey Sausage Link', cal:90, p:9, c:1, f:5, srv:'2 links'},
-  {n:'Bacon Strip', cal:43, p:3, c:0, f:3, srv:'1 strip'},
+  {id:'mf:d-owyn-dark', n:'OWYN Dark Chocolate Protein Shake', cal:180, p:26, c:7, f:5, fiber:5, srv:'1 bottle'},
+  {id:'mf:d-tl-whey', n:'Transparent Labs Whey Protein Isolate', cal:130, p:28, c:3, f:1, srv:'1 scoop'},
+  {id:'mf:d-fage', n:'Greek Yogurt Plain (Fage 0%)', cal:120, p:22, c:9, f:0, srv:'1 cup'},
+  {id:'mf:d-egg', n:'Egg Whole', cal:70, p:6, c:0, f:5, srv:'1 large'},
+  {id:'mf:d-eggwhite', n:'Egg White', cal:17, p:4, c:0, f:0, srv:'1 large'},
+  {id:'mf:d-turkey', n:'Turkey Sausage Link', cal:90, p:9, c:1, f:5, srv:'2 links'},
+  {id:'mf:d-bacon', n:'Bacon Strip', cal:43, p:3, c:0, f:3, srv:'1 strip'},
 ];
 
 // Default My Meals
 var DEFAULT_MY_MEALS = [
   {
+    id: 'mm:d-typical-breakfast',
     name: 'Typical Breakfast',
     emoji: '🍳',
     foods: [
@@ -44928,6 +44931,7 @@ var DEFAULT_MY_MEALS = [
     ]
   },
   {
+    id: 'mm:d-high-protein-breakfast',
     name: 'High Protein Breakfast',
     emoji: '💪',
     foods: [
@@ -45035,22 +45039,34 @@ function migrateMyFoodsMeals_(){
     // same fid twice inside one meal, is always merge residue rather than intent: a food eaten
     // twice is qty 2, which is the whole reason items carry a quantity. First occurrence wins;
     // summing would double a meal that had merely been synced twice.
-    var seenF={}, dropF=0;
+    var seenF={}, sigF={}, remap={}, dropF=0;
     st.myFoods=foods.filter(function(f){
       if(!f || !f.id) return true;
       if(seenF[f.id]) { dropF++; return false; }
-      seenF[f.id]=1; return true;
+      var sig=mfNorm_(f.n)+'|'+(f.srvQty!=null?f.srvQty:'')+(f.srvUnit||'')+'|'+f.cal;
+      if(sigF[sig]){ remap[f.id]=sigF[sig]; dropF++; return false; }
+      sigF[sig]=f.id; seenF[f.id]=1; return true;
     });
     foods=st.myFoods;
     if(dropF) changed+=dropF;
     var byName={};
     foods.forEach(function(f){ if(f&&f.n) byName[mfNorm_(f.n)]=f; });
     var meals=getMyMeals();
-    var seenM={}, dropM=0;
+    // Repoint items through the food remap BEFORE the meal signatures are computed. Two meals
+    // that differ only by which duplicate food they referenced are the SAME meal, and they only
+    // look that way once the remap has been applied.
+    meals.forEach(function(m){
+      if(!m || !m.items) return;
+      m.items.forEach(function(it){ if(it && remap[it.fid]){ it.fid=remap[it.fid]; changed++; } });
+    });
+    var seenM={}, sigM={}, dropM=0;
     st.myMeals=meals.filter(function(m){
       if(!m || !m.id) return true;
       if(seenM[m.id]) { dropM++; return false; }
-      seenM[m.id]=1; return true;
+      var body=(m.items||m.foods||[]).map(function(x){ return (x.fid||mfNorm_(x.n||''))+'@'+(x.qty||1); }).sort().join(',');
+      var sig=mfNorm_(m.name)+'|'+(m.meal||'')+'|'+body;
+      if(sigM[sig]){ dropM++; return false; }
+      sigM[sig]=1; seenM[m.id]=1; return true;
     });
     meals=st.myMeals;
     if(dropM) changed+=dropM;
@@ -45060,6 +45076,7 @@ function migrateMyFoodsMeals_(){
       if(!meal.meal){ meal.meal='breakfast'; changed++; }
       if(meal.items){
         var seenI={}, before=meal.items.length;
+        meal.items.forEach(function(it){ if(it && remap[it.fid]){ it.fid=remap[it.fid]; changed++; } });
         meal.items=meal.items.filter(function(it){
           if(!it || !it.fid) return true;
           if(seenI[it.fid]) return false;

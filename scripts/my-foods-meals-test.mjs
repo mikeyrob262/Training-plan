@@ -162,6 +162,39 @@ console.log('\n' + Y + '=== sync must not UNION these arrays ===' + X);
   eq('running it again changes nothing', M.migrateMyFoodsMeals_(), 0);
 }
 
+console.log('\n' + Y + '=== same content, different id: the pre-stable-seed residue ===' + X);
+{
+  // Before the seeds carried fixed ids, every device that seeded them minted its own. Two devices
+  // seeding the same default breakfast produced records identical in content and different in id,
+  // which id-keyed LWW cannot collapse - measured live as two meals repeated four times.
+  ok('the seeded foods carry fixed ids', /id:'mf:d-owyn-dark'/.test(src) && /id:'mf:d-egg'/.test(src));
+  ok('the seeded meals do too', /id: 'mm:d-typical-breakfast'/.test(src));
+
+  st.myFoods = [
+    { id: 'mf:x1', n: 'Egg Whole', srvQty: 1, srvUnit: 'large', cal: 70, p: 6, c: 0, f: 5 },
+    { id: 'mf:x2', n: 'Egg Whole', srvQty: 1, srvUnit: 'large', cal: 70, p: 6, c: 0, f: 5 }
+  ];
+  st.myMeals = [
+    { id: 'mm:x1', name: 'Typical Breakfast', meal: 'breakfast', items: [{ fid: 'mf:x1', qty: 2 }] },
+    { id: 'mm:x2', name: 'Typical Breakfast', meal: 'breakfast', items: [{ fid: 'mf:x2', qty: 2 }] }
+  ];
+  M.migrateMyFoodsMeals_();
+  eq('the duplicate food collapses on content', st.myFoods.length, 1);
+  eq('the duplicate meal collapses too', st.myMeals.length, 1);
+  // The dropped food's id must not be left dangling in the surviving meal.
+  eq('the survivor references a food that still exists', M.mealItems_(st.myMeals[0])[0].missing, false);
+  eq('...and still totals correctly', M.mealTotals_(st.myMeals[0]).cal, 140);
+
+  // Different content with the same name must NOT be collapsed - that is a real distinction.
+  st.myFoods = [
+    { id: 'mf:a', n: 'OWYN Shake', srvQty: 1, srvUnit: 'bottle', cal: 180, p: 20, c: 7, f: 5 },
+    { id: 'mf:b', n: 'OWYN Shake', srvQty: 1, srvUnit: 'bottle', cal: 300, p: 32, c: 12, f: 9 }
+  ];
+  st.myMeals = [];
+  M.migrateMyFoodsMeals_();
+  eq('a 20g and a 32g variant both survive', st.myFoods.length, 2);
+}
+
 console.log('\n' + Y + '=== the forms collect what the spec requires ===' + X);
 {
   const ed = exFn('openMyFoodEditor_');
