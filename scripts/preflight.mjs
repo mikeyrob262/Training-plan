@@ -627,6 +627,21 @@ try {
     fail('the readiness ring is misreporting form (see above).');
   }
 
+  // STEP 36 - Dr. Smurkel's voice, asserted on the SERVED text. Two failure modes: the clinical
+  //           register coming back (the old prompt told him the athlete 'is Type A' and to name
+  //           the tendency, and he wrote 'you are a person who reads a ceiling as a target...'(),
+  //           and formatting leaking back into the voice core, which is what had four call sites
+  //           banning the section headings the persona was demanding.
+  console.log(`${D}. checking Dr. Smurkel's voice...${X}`);
+  try {
+    const so = execSync('node scripts/smurkel-persona-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('Dr. Smurkel is off-voice (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {
