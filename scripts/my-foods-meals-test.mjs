@@ -134,6 +134,34 @@ console.log('\n' + Y + '=== name matching for the migration only ===' + X);
   ok('the \\s escape survived the served template', !/replace\(\/s\+\/g/.test(asServed(exFn('mfNorm_'))));
 }
 
+console.log('\n' + Y + '=== sync must not UNION these arrays ===' + X);
+{
+  // mergeState_ resolves an unlisted array by union. myFoods/myMeals were unlisted, so every sync
+  // concatenated them with the remote copy - measured live, a 5-item meal came back with 10 items
+  // and 1,460 cal. Keyed whole-item LWW, the same treatment races get.
+  const m = src.match(/var _LWW_ARRAYS = \{[\s\S]{0,400}?\};/);
+  ok('the LWW array map exists', !!m);
+  ok('myFoods is keyed by id', !!m && /myFoods:\{ keys:\['id'\] \}/.test(m[0]));
+  ok('myMeals is keyed by id', !!m && /myMeals:\{ keys:\['id'\] \}/.test(m[0]));
+
+  // And the damage already done is repaired, first-occurrence-wins.
+  st.myFoods = [
+    { id: 'mf:a', n: 'A', srvQty: 1, srvUnit: 'g', cal: 100, p: 1, c: 1, f: 1 },
+    { id: 'mf:a', n: 'A', srvQty: 1, srvUnit: 'g', cal: 100, p: 1, c: 1, f: 1 }
+  ];
+  st.myMeals = [
+    { id: 'mm:a', name: 'M', meal: 'lunch', items: [{ fid: 'mf:a', qty: 1 }, { fid: 'mf:a', qty: 1 }] },
+    { id: 'mm:a', name: 'M', meal: 'lunch', items: [{ fid: 'mf:a', qty: 1 }] }
+  ];
+  M.migrateMyFoodsMeals_();
+  eq('a duplicated food is collapsed', st.myFoods.length, 1);
+  eq('a duplicated meal is collapsed', st.myMeals.length, 1);
+  eq('a duplicated item inside a meal is collapsed', st.myMeals[0].items.length, 1);
+  eq('...and the totals stop being doubled', M.mealTotals_(st.myMeals[0]).cal, 100);
+  ok('quantities are NOT summed - that would double a merely-synced meal', st.myMeals[0].items[0].qty === 1);
+  eq('running it again changes nothing', M.migrateMyFoodsMeals_(), 0);
+}
+
 console.log('\n' + Y + '=== the forms collect what the spec requires ===' + X);
 {
   const ed = exFn('openMyFoodEditor_');

@@ -6224,7 +6224,9 @@ function mergeStateRoot_(local, remote){
 // raise-but-never-lower flaw still applies to numeric ride fields and is not fixed by this.
 var _LWW_ARRAYS = { weightLog:{ keys:['date'], val:'weight' },
                     ftpHistory:{ keys:['date','ftp'], val:'ftp' },
-                    races:{ keys:['id'] } };
+                    races:{ keys:['id'] },
+                    myFoods:{ keys:['id'] },
+                    myMeals:{ keys:['id'] } };
 // A tombstone drops its VALUE field (that is what makes it invisible to readers that filter on the
 // value), so it cannot rebuild a composite key from its own fields. It carries the key it is
 // deleting in _k instead. _k is deliberately not one of the value fields any reader looks at.
@@ -45029,14 +45031,44 @@ function migrateMyFoodsMeals_(){
       }
       if(f.srvQty==null){ f.srvQty=1; f.srvUnit=f.srvUnit||'serving'; changed++; }
     });
+    // REPAIR the union damage before anything reads these. A duplicate id in myFoods, or the
+    // same fid twice inside one meal, is always merge residue rather than intent: a food eaten
+    // twice is qty 2, which is the whole reason items carry a quantity. First occurrence wins;
+    // summing would double a meal that had merely been synced twice.
+    var seenF={}, dropF=0;
+    st.myFoods=foods.filter(function(f){
+      if(!f || !f.id) return true;
+      if(seenF[f.id]) { dropF++; return false; }
+      seenF[f.id]=1; return true;
+    });
+    foods=st.myFoods;
+    if(dropF) changed+=dropF;
     var byName={};
     foods.forEach(function(f){ if(f&&f.n) byName[mfNorm_(f.n)]=f; });
     var meals=getMyMeals();
+    var seenM={}, dropM=0;
+    st.myMeals=meals.filter(function(m){
+      if(!m || !m.id) return true;
+      if(seenM[m.id]) { dropM++; return false; }
+      seenM[m.id]=1; return true;
+    });
+    meals=st.myMeals;
+    if(dropM) changed+=dropM;
     meals.forEach(function(meal){
       if(!meal) return;
       if(!meal.id){ meal.id=mmNewId_(); changed++; }
       if(!meal.meal){ meal.meal='breakfast'; changed++; }
-      if(meal.items || !meal.foods) return;
+      if(meal.items){
+        var seenI={}, before=meal.items.length;
+        meal.items=meal.items.filter(function(it){
+          if(!it || !it.fid) return true;
+          if(seenI[it.fid]) return false;
+          seenI[it.fid]=1; return true;
+        });
+        if(meal.items.length!==before) changed+=(before-meal.items.length);
+        return;
+      }
+      if(!meal.foods) return;
       meal.items=meal.foods.map(function(old){
         var raw=String(old.n||'');
         var qm=/\\s*[x\\u00d7]\\s*([0-9]*\\.?[0-9]+)\\s*$/i.exec(raw);
