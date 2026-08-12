@@ -189,6 +189,10 @@ console.log('\n' + Y + '=== calendar quick-add: a new entry point, not a new edi
   ok('the control is unobtrusive on already-dense days',
      ds.indexOf('opacity:.45') > 0 && mob.indexOf('opacity:.45') > 0);
   ok('no second editor was built', !/function openAddSessionEditor|function newSessionEditor/.test(src));
+  // Mobile opens on WEEK by default, so a month-grid-only + would be invisible where the athlete
+  // actually lands. Measured: 42 controls in the month grid, 0 in the week strip, before this.
+  ok('mobile has it on the week strip as well as the month grid',
+     (mob.match(/__new__/g)||[]).length >= 2);
 }
 
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'strength rotation + quick-add: all checks passed' + X));

@@ -50303,6 +50303,9 @@ function showCalendarTab(){
     });
     if(entries.length>2){ h+='<span style="font-size:8px;color:var(--t3);font-weight:600">+'+(entries.length-2)+'</span>'; }
     h+='</div>';
+    // Quick-add on the WEEK strip too. Mobile opens on Week by default, so putting this only in the
+    // month grid would leave the feature invisible on the view the athlete actually lands on.
+    h+='<div onclick="event.stopPropagation();openDayEditor(\\''+dKey+'\\',\\'__new__\\')" title="Add a session" style="margin-top:2px;font-size:12px;line-height:1;color:var(--t3);opacity:.45;cursor:pointer">+</div>';
     h+='</div>';
   }
   h+='</div>';
