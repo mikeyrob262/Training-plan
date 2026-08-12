@@ -749,7 +749,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
       <div class="ds-ni" onclick="dsNav('legacy')"><i class="ti ti-trophy"></i>Legacy</div>
-      <div class="ds-ni" onclick="dsShowRun()"><i class="ti ti-run"></i>Run Training</div>
+      <div class="ds-ni" onclick="dsNav('run')"><i class="ti ti-run"></i>Run Training</div>
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
@@ -33788,6 +33788,8 @@ function dsNav(section){
     dsShowRidesList();
   } else if(section === 'home' || section === 'dashboard') {
     dsShowDashboard();
+  } else if(section === 'run') {
+    dsShowRun();
   } else if(section === 'calendar') {
     dsShowCalendar();
   } else if(section === 'legacy') {
@@ -42735,28 +42737,24 @@ function _prSection_(){
 // Its own nav item by decision, not a tab under Athlete Intelligence: that screen already carries
 // seven tabs and is itself a consolidation candidate.
 function dsShowRun(){
-  var old=document.getElementById('DS-RUN'); if(old) old.remove();
-  var scr=document.createElement('div');
-  scr.id='DS-RUN';
-  // z-index 2400: above the desktop dashboard, below the 3000-tier modals. At 180 the dashboard
-  // painted straight over it - the page rendered correctly and was simply not visible.
-  scr.style.cssText='position:fixed;inset:0;left:var(--ds-nav-w,232px);background:var(--bg);z-index:2400;overflow-y:auto;padding:22px 26px 40px';
+  // A PAGE, not an overlay. It renders into #ds-content like every other section, so the previous
+  // page is replaced rather than covered - Legacy was visibly bleeding through behind it - and the
+  // sidebar highlight comes from dsNav's matcher rather than being left on the prior item.
+  var mc=document.getElementById('ds-content'); if(!mc) return;
+  var rp=document.getElementById('ds-right-panel'); if(rp) rp.style.display='none';
+  mc.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.id='DS-RUN';
+  wrap.style.cssText='padding:4px 2px 40px';
   var hdr=document.createElement('div');
-  hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px';
-  hdr.innerHTML='<div><div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
-    +'<div style="font-size:12.5px;color:var(--d-t3,var(--t3));margin-top:3px">Coach Parry &middot; Zone 2 base build</div></div>';
-  var x=document.createElement('button');
-  x.textContent='\u00d7';
-  x.style.cssText='background:none;border:none;color:var(--d-t3,var(--t3));font-size:26px;line-height:1;cursor:pointer;font-family:inherit;padding:0 4px';
-  x.onclick=function(){ try{ scr.remove(); }catch(e){} };
-  hdr.appendChild(x);
-  scr.appendChild(hdr);
-  // The cards are built into a plain host, then balanced by MEASURED height - the same mechanism
-  // Overview uses, so a tall card cannot leave one column half empty.
+  hdr.style.cssText='margin-bottom:16px';
+  hdr.innerHTML='<div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3,var(--t3));margin-top:3px">Coach Parry &middot; Zone 2 base build</div>';
+  wrap.appendChild(hdr);
   var host=document.createElement('div');
   host.id='DS-RUN-BODY';
-  scr.appendChild(host);
-  document.body.appendChild(scr);
+  wrap.appendChild(host);
+  mc.appendChild(wrap);
   try{ renderRunInto_(host, 'desktop'); }
   catch(e){
     host.innerHTML='<div style="font-size:13px;color:var(--d-t3,var(--t3));padding:10px 2px">Run Training could not render: '
@@ -42764,9 +42762,8 @@ function dsShowRun(){
     try{ console.error('[ds-run]', e && e.message); }catch(_e){}
     return;
   }
-  // The mobile page is a single narrow column, so its cards carry mobile side margins. Strip those
-  // on desktop rather than forking the renderer - the card CONTENT is identical, only the gutter
-  // differs, and a fork is exactly the drift this shares a renderer to avoid.
+  // The mobile page is one narrow column, so its cards carry mobile side margins. Stripped here
+  // rather than forking the renderer - the card CONTENT is identical, only the gutter differs.
   try{
     [].slice.call(host.children).forEach(function(el){
       if(el && el.style){ el.style.marginLeft='0'; el.style.marginRight='0'; }
@@ -44385,9 +44382,32 @@ function validateSession_(s){
 // bug: we WARN loudly (so it surfaces immediately) and fall to 'user' — the safe direction
 // (unreplaceable, never wrongly deleted), but no longer SILENT. This closes the hole where an
 // undeclared write minted a permanently-unreplaceable session with no trace.
+// TYPE FOLLOWS INTENT. One chokepoint, because every writer goes through planUpsertSession_.
+//
+// The failure this closes: a session stored as type 'ride' with intent 'recovery' and name
+// 'Easy Run'. Nothing was inconsistent from the renderer's point of view - the def for 'recovery'
+// IS a ride, so the day editor correctly drew Intent / Power / Target TSS for it. The RECORD was
+// wrong, and it reached the athlete as a cycling prescription on a running day.
+//
+// The library definition is the authority: if a session names an intent, its type is that intent's
+// type. A caller cannot declare otherwise, because there is no case where it should.
+function _planCoherce_(s){
+  try{
+    if(!s || !s.intent || s.type==='rest') return s;
+    if(typeof SESSION_DEFS==='undefined') return s;
+    var def=SESSION_DEFS[s.intent];
+    if(!def || !def.type) return s;
+    if(s.type!==def.type){
+      try{ console.warn('[planUpsert] type/intent mismatch on '+(s.id||'?')+': type "'+s.type
+        +'" but intent "'+s.intent+'" is a '+def.type+'. Type corrected.'); }catch(e){}
+      s.type=def.type;
+    }
+  }catch(e){}
+  return s;
+}
 function planUpsertSession_(dateKey, sess, editedFields, source){
   var key=(typeof normDate==='function')?normDate(dateKey):dateKey;   // canonical padded bucket
-  var s=normalizeSession_(sess, key);
+  var s=_planCoherce_(normalizeSession_(sess, key));
   var day=planDay_(key, true);
   if(s.id==null || s.id===''){ s.id='plan-'+key+'-'+day.sessions.length; }
   if(source==='gen' || source==='migrated' || source==='user'){ s.source=source; }
@@ -44405,6 +44425,46 @@ function planUpsertSession_(dateKey, sess, editedFields, source){
 // ONLY what is honestly present — type (classified), name, planned duration — never
 // fabricated power/%1RM/TSS (those come from the Phase 1 generator). Rest -> no
 // session. Overrides win; st.plannedWorkouts is then retired.
+// Repairs sessions whose NAME claims one sport and whose intent says another - 'Easy Run' stored
+// with intent 'z2' or 'recovery'. Measured live: 52 such sessions, and today's was one of them,
+// which is why a running day rendered Intent / Power / Target TSS.
+//
+// The name is the authority here, and only here: it is what the block wrote and what the athlete
+// reads on the card. Matching is EXACT against a library def name, so a hand-typed title cannot
+// silently re-point a session. A session the athlete has edited the intent of is left alone.
+function migrateSessionIntents_(){
+  try{
+    if(typeof SESSION_DEFS==='undefined' || !st || !st.plan) return 0;
+    var byName={};
+    Object.keys(SESSION_DEFS).forEach(function(k){
+      var d=SESSION_DEFS[k];
+      if(d && d.name && d.type) byName[String(d.name).toLowerCase()]=k;
+    });
+    var fixed=0, detail={};
+    Object.keys(st.plan).forEach(function(dk){
+      var day=st.plan[dk]; if(!day || !day.sessions) return;
+      day.sessions.forEach(function(x){
+        if(!x || x.deleted || !x.intent || !x.name) return;
+        if(x._edited && x._edited.intent) return;         // the athlete chose this intent
+        if(x.swap===true) return;                          // an explicit swap is a decision
+        var want=byName[String(x.name).toLowerCase()];
+        if(!want || want===x.intent) return;
+        var wd=SESSION_DEFS[want], cd=SESSION_DEFS[x.intent];
+        if(!wd || !cd) return;
+        if(wd.type===cd.type) return;                      // same sport - not this defect
+        var was=x.intent;
+        x.intent=want; x.type=wd.type; x.editedAt=Date.now();
+        fixed++; detail[was+'->'+want]=(detail[was+'->'+want]||0)+1;
+      });
+    });
+    if(fixed){
+      try{ console.log('[planIntent] corrected '+fixed+' session(s) whose name and intent named different sports: '
+        +Object.keys(detail).map(function(k){ return k+' x'+detail[k]; }).join(', ')); }catch(e){}
+      try{ if(typeof sv==='function') sv(); }catch(e){}
+    }
+    return fixed;
+  }catch(e){ try{ console.warn('[planIntent] failed: '+((e&&e.message)||e)); }catch(_e){} return 0; }
+}
 // Repairs sessions whose stored type disagrees with the library definition of their intent.
 //
 // Measured on the live plan: 173 sessions carry intent 'easyRun' or 'run10k' with type 'ride',
@@ -52892,6 +52952,9 @@ window.onload = function(){
         // initial remote pull, so a device that already migrated (st._planMig synced)
         // short-circuits here and we never double-create sessions with fresh ids.
         try{ if(typeof migratePlanToStPlan_==='function') migratePlanToStPlan_(); }catch(e){}
+        // Intent BEFORE type: correcting the intent moves the type with it, so running the
+        // type repair afterwards has nothing left to disagree about.
+        try{ if(typeof migrateSessionIntents_==='function') migrateSessionIntents_(); }catch(e){}
         try{ if(typeof migrateSessionTypes_==='function') migrateSessionTypes_(); }catch(e){}
         // Meals stop carrying copies of macros here. Runs after the remote pull for the same
         // reason the others do: before it, st is whatever IndexedDB had, and a migration that
