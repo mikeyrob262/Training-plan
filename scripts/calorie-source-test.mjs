@@ -97,11 +97,21 @@ check('...from one activity', after.n, 1);
 check('...named in the breakdown', (after.sources[0]||{}).name, 'Gaines - PHT Trail Run');
 check('a different day is unaffected', B1.burnedCalsForDate_('2026-07-28').cal, 0);
 
-console.log('\n=== burnedCalsForDate_ still refuses estimates ===');
-// The estimate is a display affordance only. A fuelling decision must not be driven by a number
-// derived from a power meter — that was the whole reason the flat 250-per-strength was removed.
+console.log('\n=== a derived CYCLING burn counts, and says that it is derived ===');
+// REVERSED 2026-08-11, deliberately. This used to contribute 0, on the rule that fuelling must
+// not follow a power-derived number. But 131 rides in the library carry workKj and no calories
+// field, so every one of those days told the athlete nothing was burned after a real ride -
+// which is its own way of being wrong about what to eat. It counts now and is MARKED: est is
+// carried per source and both rendered lines print a tilde.
+//
+// What has NOT changed: a flat per-session guess (the old 250-per-strength) is still refused,
+// and a RUN is still excluded - rideCalories_ derives from kJ for cycling only, because a
+// running power meter's 529 kJ is not 529 kcal. Strava reports 376 for that exact activity.
 const B2 = mk({ rides:[RIDE], runs:[] });
-check('an estimate-only ride contributes 0 to the fuel budget', B2.burnedCalsForDate_('2026-07-25').cal, 0);
+check('a derived cycling burn now counts', B2.burnedCalsForDate_('2026-07-25').cal, 781);
+check('...and is flagged as derived', (B2.burnedCalsForDate_('2026-07-25').sources[0]||{}).est, true);
+check('a RUN with kJ but no calories still contributes nothing',
+      mk({ rides:[RUN], runs:[] }).burnedCalsForDate_('2026-07-29').cal, 0);
 check('...even though the card shows ~781', A.rideCalText_(RIDE), '~781 Cal');
 
 console.log('\n=== source guard: no surface prints kJ as Cal ===');

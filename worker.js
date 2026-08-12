@@ -11469,10 +11469,20 @@ function burnedCalsForDate_(dateKey){
     if(!r || r.deleted || !r.date) return;
     var d=(typeof normDate==='function')?normDate(r.date):r.date;
     if(d!==key) return;
-    var c=parseFloat(r.calories);
+    // DELEGATES TO rideCalories_, which already owns this decision: recorded calories first,
+    // else kJ of work but ONLY for cycling, else nothing. Reimplementing the ladder here is how
+    // this went wrong - a first pass added workKj unconditionally and started counting 529 kJ
+    // from a RUN as 529 kcal, where Strava reports 376 for that same activity. A running power
+    // meter's kJ is not cycling mechanical work and does not convert 1:1.
+    //
+    // This is what fixes the reported bug: 131 rides carry workKj with NO calories field, and
+    // every one of them read as zero burned.
+    var rc=(typeof rideCalories_==='function')?rideCalories_(r):null;
+    var c=rc?rc.cal:parseFloat(r.calories);
     if(!(c>0)) return;                       // missing or zero: contributes nothing, by design
     out.cal+=Math.round(c); out.n++;
     out.sources.push({name:(r.name||label||'Activity'), cal:Math.round(c),
+                      est:!!(rc&&rc.est),
                       sport:(typeof _actSport_==='function')?_actSport_(r,label):label});
   };
   try{ (st.rides||[]).forEach(function(r){ take(r,'ride'); }); }catch(e){}
@@ -11491,8 +11501,20 @@ function fuelBudgetForDate_(dateKey){
   var burn=(typeof burnedCalsForDate_==='function')?burnedCalsForDate_(dateKey):{cal:0,n:0,sources:[]};
   var estimated=(tgt.exerciseCal!=null)?tgt.exerciseCal:0;
   var base=(burn.cal>0 && tgt.baseCal!=null) ? tgt.baseCal : tgt.cal;
+  // POLICY CHANGE, stated here because it reverses a deliberate one: a kJ-derived cycling burn
+  // now COUNTS toward fuelling. It used to contribute zero, on the rule that a fuelling decision
+  // must not be driven by a power-derived number. In practice 131 rides in this library carry
+  // workKj and NO calories field, and every one of them reported nothing burned on a day the
+  // athlete had ridden - which is its own way of being wrong about what to eat.
+  //
+  // The safeguard is that it is never PRESENTED as measured: est is carried through per source
+  // and the surfaces mark the total with a tilde. Runs are still excluded entirely - rideCalories_
+  // only derives from kJ for cycling, because a running power meter's 529 kJ is not 529 kcal
+  // (Strava says 376 for that exact activity).
+  var anyEst=(burn.sources||[]).some(function(x){ return x && x.est; });
   return { base:Math.round(base), burned:burn.cal, total:Math.round(base+burn.cal),
-           n:burn.n, sources:burn.sources, replacedEstimate:(burn.cal>0?estimated:0), tgt:tgt };
+           n:burn.n, sources:burn.sources, est:anyEst,
+           replacedEstimate:(burn.cal>0?estimated:0), tgt:tgt };
 }
 // Training-aware daily targets, replacing the fixed HIGH/MOD/LOW weekly
 // pattern with real numbers derived from today's actual scheduled ride
@@ -11523,40 +11545,6 @@ function fluidGoalOz_(dateKey, wt, workout){
     }
   }catch(e){}
   return Math.round((baselineOz+ridingOz)*mult);
-}
-// Measured calories burned on a date, from the activities actually logged - or null when there is
-// nothing recorded, which is a different thing from zero and must not be treated as a burn of 0.
-//
-// Source order is deliberate, most direct first:
-//   1. r.calories        what the head unit / Strava recorded. A measurement.
-//   2. kJ of work        cycling: 1 kJ of mechanical work is about 1 kcal burned at ~24% gross
-//                        efficiency, the standard field approximation, so kJ passes through 1:1.
-//   3. TSS               last resort. Roughly 10 kcal per TSS point at this athlete's FTP.
-// Anything else is left alone rather than invented - a ride with none of the three contributes
-// nothing and is reported as n so the caller can say how much of the day is actually measured.
-function nutrActualBurn_(dateKey){
-  if(!dateKey) return null;
-  var acts=[];
-  try{ acts=(st.rides||[]).filter(function(r){
-    return r && !r.deleted && String(r.date||'').slice(0,10)===String(dateKey).slice(0,10); }); }catch(e){ return null; }
-  if(!acts.length) return null;
-  var cal=0, n=0, unmeasured=0, src={};
-  acts.forEach(function(r){
-    var c=parseFloat(r.calories)||0;
-    if(c>0){ cal+=c; n++; src.calories=(src.calories||0)+1; return; }
-    // THE FIELD IS workKj. I guessed r.kj / r.work from memory and neither exists on a single
-    // ride in the library - measured: calories on 693, workKj on 397, kj/work on ZERO. So this
-    // tier was dead and every ride without a calories value fell straight through to the TSS
-    // estimate, even when it carried a real measurement. Today's VO2 ride read 480 (48 TSS x 10)
-    // instead of its actual 335 kJ. kj/work are kept as harmless aliases for a future importer.
-    var kj=parseFloat(r.workKj)||parseFloat(r.kj)||parseFloat(r.work)||0;
-    if(kj>0){ cal+=kj; n++; src.kj=(src.kj||0)+1; return; }
-    var t=(typeof constRideTSS_==='function')?constRideTSS_(r):(parseFloat(r.tss)||0);
-    if(t>0){ cal+=t*10; n++; src.tss=(src.tss||0)+1; return; }
-    unmeasured++;
-  });
-  if(!n) return null;
-  return { cal:Math.round(cal), n:n, unmeasured:unmeasured, src:src, acts:acts.length };
 }
 function calcTrainingAwareTargets_(dateKey){
   var wt=nutrWeightLb_();
@@ -11590,21 +11578,16 @@ function calcTrainingAwareTargets_(dateKey){
   if(!workout || workout.isRest){
     var dt=getDType(dateKey);
     var base=MTGT[dt]||MTGT.MOD;
-    // An UNPLANNED ride still burned calories. The old rest-day branch returned a flat baseline
-    // and ignored st.rides entirely, so riding on a rest day left the budget unchanged - the
-    // never-burns-calories gap. There is no estimate to replace here, so this one adds.
-    var _rb=nutrActualBurn_(dateKey);
-    var _rbCal=(_rb && _rb.cal>0)?_rb.cal:0;
+    // An unplanned ride is added by fuelBudgetForDate_, which is the ONE place a real burn is
+    // applied - it adds burnedCalsForDate_ on top of this baseline. Adding it here too would
+    // count it twice.
     return {
-      cal:base.cal+_rbCal, pro:base.pro, carb:base.carb, fat:base.fat,
+      cal:base.cal, pro:base.pro, carb:base.carb, fat:base.fat,
       sodium:2300, fluidOz:fluidGoalOz_(dateKey, wt, workout),
       mag:parseInt(st.magBase||400),   // light/rest-day magnesium baseline (editable)
       workoutName:workout?workout.name:'Rest day', workoutMinutes:0,
-      exerciseCal:_rbCal, baseCal:base.cal,
-      burnSource:_rbCal?'measured':'planned',
-      plannedCal:0, measuredCal:(_rb?_rb.cal:null),
-      measuredFrom:(_rb?_rb.src:null), unmeasuredActs:(_rb?_rb.unmeasured:0),
-      isTrainingAware:!!_rbCal
+      exerciseCal:0, baseCal:base.cal,
+      isTrainingAware:false
     };
   }
   var hours=workout.minutes/60;
@@ -11626,13 +11609,11 @@ function calcTrainingAwareTargets_(dateKey){
   // moment a real activity is logged this estimate must come OUT of the budget — otherwise the
   // day is fuelled for the session twice, once predicted and once measured.
   var exerciseCal=Math.round(workout.minutes*8*(ftp/200));
-  // MEASURED BURN WINS. Once the session has actually been ridden the estimate is superseded,
-  // not supplemented: adding them fuels the day twice, once predicted and once measured, which
-  // is exactly what the note above warns about. The estimate stays the forecast for a day that
-  // has not happened yet.
-  var _burn=nutrActualBurn_(dateKey);
-  var _estCal=exerciseCal;
-  if(_burn && _burn.cal>0){ exerciseCal=_burn.cal; }
+  // The measured burn is NOT applied here. fuelBudgetForDate_ owns that: when a real burn
+  // exists it takes baseCal (this total minus the estimate below) and adds the measurement,
+  // so the estimate is superseded exactly once. Replacing it here as well double-counted the
+  // subtraction and left the header printing a total that already contained a burn it then
+  // reported as zero.
   var restingCal=Math.round(wt*12); // baseline non-training-day calories
   var cal=restingCal+exerciseCal;
   var proCal=pro*4, carbCal=carb*4;
@@ -11650,12 +11631,7 @@ function calcTrainingAwareTargets_(dateKey){
   return {
     cal:cal, pro:pro, carb:carb, fat:fat, sodium:sodium, fluidOz:fluidOz, mag:mag,
     workoutName:workout.name, workoutMinutes:workout.minutes, isTrainingAware:true,
-    exerciseCal:exerciseCal, baseCal:Math.max(0, cal-exerciseCal),
-    // Which of the two the number above actually is, so a surface can say so rather than
-    // presenting a forecast and a measurement as the same kind of thing.
-    burnSource:(_burn && _burn.cal>0)?'measured':'planned',
-    plannedCal:_estCal, measuredCal:(_burn?_burn.cal:null),
-    measuredFrom:(_burn?_burn.src:null), unmeasuredActs:(_burn?_burn.unmeasured:0)
+    exerciseCal:exerciseCal, baseCal:Math.max(0, cal-exerciseCal)
   };
 }
 
@@ -12138,7 +12114,7 @@ function renderNutr(){
   // because an absent line is indistinguishable from a broken one.
   var _fuelLine = _hdrFuel
     ? (_hdrFuel.burned>0
-        ? ('Base '+_hdrFuel.base.toLocaleString()+' + Burned '+_hdrFuel.burned.toLocaleString()+' = '+_hdrFuel.total.toLocaleString()+' cal')
+        ? ('Base '+_hdrFuel.base.toLocaleString()+' + Burned '+(_hdrFuel.est?'~':'')+_hdrFuel.burned.toLocaleString()+' = '+_hdrFuel.total.toLocaleString()+' cal')
         : ('Base '+_hdrFuel.base.toLocaleString()+' cal + nothing burned yet'))
     : '';
   var dayLabel = trainingTgt.isTrainingAware
@@ -34099,7 +34075,7 @@ function dsShowNutrition(){
       // faith; the parts are what make it checkable, and an absent line reads as broken.
       +(_dfuel?('<div style="font-size:10.5px;color:var(--d-dim);text-align:center;line-height:1.45;max-width:200px">'
         +(_dfuel.burned>0
-            ? ('Base '+_dfuel.base.toLocaleString()+' + Burned '+_dfuel.burned.toLocaleString()+' = '+_dfuel.total.toLocaleString())
+            ? ('Base '+_dfuel.base.toLocaleString()+' + Burned '+(_dfuel.est?'~':'')+_dfuel.burned.toLocaleString()+' = '+_dfuel.total.toLocaleString())
             : ('Base '+_dfuel.base.toLocaleString()+' + nothing burned yet'))
         +'</div>'):'')
       +'</div>';
