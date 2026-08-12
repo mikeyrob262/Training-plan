@@ -749,6 +749,7 @@ window.AIQ_DESKTOP_MIN=1024;
       <div class="ds-ni" onclick="dsNav('gear')"><i class="ti ti-bike"></i>Gear</div>
       <div class="ds-ni" onclick="dsNav('aicoach')"><i class="ti ti-message-circle"></i>AI Coach</div>
       <div class="ds-ni" onclick="dsNav('legacy')"><i class="ti ti-trophy"></i>Legacy</div>
+      <div class="ds-ni" onclick="dsShowRun()"><i class="ti ti-run"></i>Run Training</div>
       <div class="ds-ni" onclick="showConstellation()"><i class="ti ti-stars"></i>Constellation</div>
     </div>
     <div class="ds-foot">
@@ -42727,12 +42728,63 @@ function _prSection_(){
     +'</div>';
 }
 
+// Desktop Run Training. Every card comes from renderRunInto_ - the SAME function the mobile page
+// calls - so the two surfaces cannot drift the way the rest of this app has had to be repaired
+// for. This function owns the desktop chrome and nothing else.
+//
+// Its own nav item by decision, not a tab under Athlete Intelligence: that screen already carries
+// seven tabs and is itself a consolidation candidate.
+function dsShowRun(){
+  var old=document.getElementById('DS-RUN'); if(old) old.remove();
+  var scr=document.createElement('div');
+  scr.id='DS-RUN';
+  scr.style.cssText='position:fixed;inset:0;left:var(--ds-nav-w,232px);background:var(--d-bg,var(--bg));z-index:180;overflow-y:auto;padding:22px 26px 40px';
+  var hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px';
+  hdr.innerHTML='<div><div style="font-size:21px;font-weight:800;letter-spacing:.02em;color:var(--d-t1,var(--t1))">Run Training</div>'
+    +'<div style="font-size:12.5px;color:var(--d-t3,var(--t3));margin-top:3px">Coach Parry &middot; Zone 2 base build</div></div>';
+  var x=document.createElement('button');
+  x.textContent='\u00d7';
+  x.style.cssText='background:none;border:none;color:var(--d-t3,var(--t3));font-size:26px;line-height:1;cursor:pointer;font-family:inherit;padding:0 4px';
+  x.onclick=function(){ try{ scr.remove(); }catch(e){} };
+  hdr.appendChild(x);
+  scr.appendChild(hdr);
+  // The cards are built into a plain host, then balanced by MEASURED height - the same mechanism
+  // Overview uses, so a tall card cannot leave one column half empty.
+  var host=document.createElement('div');
+  host.id='DS-RUN-BODY';
+  scr.appendChild(host);
+  document.body.appendChild(scr);
+  try{ renderRunInto_(host, 'desktop'); }
+  catch(e){
+    host.innerHTML='<div style="font-size:13px;color:var(--d-t3,var(--t3));padding:10px 2px">Run Training could not render: '
+      +String((e&&e.message)||e).replace(/[&<>]/g,'')+'</div>';
+    try{ console.error('[ds-run]', e && e.message); }catch(_e){}
+    return;
+  }
+  // The mobile page is a single narrow column, so its cards carry mobile side margins. Strip those
+  // on desktop rather than forking the renderer - the card CONTENT is identical, only the gutter
+  // differs, and a fork is exactly the drift this shares a renderer to avoid.
+  try{
+    [].slice.call(host.children).forEach(function(el){
+      if(el && el.style){ el.style.marginLeft='0'; el.style.marginRight='0'; }
+    });
+  }catch(e){}
+  try{ if(typeof _balCols_==='function') _balCols_(host); }catch(e){}
+}
+try{ if(typeof window!=='undefined'){ window.dsShowRun=dsShowRun; window.renderRunInto_=renderRunInto_; } }catch(e){}
+// Mobile entry point. Owns only its own chrome; every card comes from renderRunInto_.
 function renderRun(){
   var existing=document.getElementById('RUN-SCREEN');
   if(existing) existing.remove();
   var scr=document.createElement('div');
   scr.id='RUN-SCREEN';
   scr.style.cssText='position:fixed;inset:0;bottom:60px;background:var(--bg);z-index:200;overflow-y:auto;padding-bottom:20px';
+  renderRunInto_(scr, 'mobile');
+  document.body.appendChild(scr);
+}
+// THE run page. Every card on both surfaces is built here.
+function renderRunInto_(scr, surface){
 
 
 
@@ -43117,7 +43169,8 @@ function renderRun(){
 
   // No auto-seeded demo race — an empty list stays empty until the user adds one.
 
-  document.body.appendChild(scr);
+  // Mounting belongs to the CALLER: mobile drops this on the body as a full-screen overlay,
+  // desktop nests it inside the desktop shell. The shared renderer only fills the container.
 
   // Build chart
   setTimeout(function(){
