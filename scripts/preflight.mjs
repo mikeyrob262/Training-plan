@@ -555,6 +555,20 @@ try {
     fail('voice notes regressed — check nothing started storing audio (see above).');
   }
 
+  // STEP 31 — the Almost Board. Its promise is that everything listed is genuinely within reach,
+  //           so most of these assert what must NOT appear. Also pins the effort-shape fix: efforts
+  //           are stored as {d,s,w} (4,855) AND {date,sec} (207), and reading only the latter drew
+  //           every progression line in the app from four percent of the library.
+  console.log(`${D}· checking the Almost Board…${X}`);
+  try {
+    const so = execSync('node scripts/almost-board-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the Almost Board is listing things that are not almost (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

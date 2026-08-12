@@ -18120,7 +18120,7 @@ function aiReviveNulls_(execute){
 // Overview grid as redundant with Momentum + Highlights in the hero, which left the tab pointing at
 // a destination holding one card and nothing else. aiCardWhatChanged_ is deliberately kept (see the
 // note on it) — the nav entry and the tab dispatch are what went.
-var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
+var AI_TABS=[['overview','Overview'],['racing','You vs. You'],['dna','DNA Insights'],['almost','Almost Board'],['trends','Trends'],['milestones','Milestones'],['records','Records'],['trajectory','Trajectory'],['segattack','Segment Attack'],['seglib','Segment Library']];
 function aiCard_(inner, extra){ return '<div style="background:var(--d-panel);border:1px solid var(--d-edge);border-radius:14px;padding:16px 18px;min-width:0;display:flex;flex-direction:column;overflow:hidden;'+(extra||'')+'">'+inner+'</div>'; }
 function aiLbl_(t, right){ return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px"><span style="font-size:11px;font-weight:700;color:var(--d-dim);text-transform:uppercase;letter-spacing:.08em">'+t+'</span>'+(right||'')+'</div>'; }
 function aiEsc_(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -21910,17 +21910,133 @@ function _saEvaluate_(seg, ctx){
 }
 // PURE + testable. store = st.segments (object keyed by id). Returns records sorted most-ridden first.
 // NO window cap (all-time is honest here). A segment with no PR time is skipped.
+// ==================== THE ALMOST BOARD ====================
+//
+// The things that are nearly his. Not a leaderboard - a list of gaps small enough to be worth one
+// more go, ranked by how close and how recently he moved them.
+//
+// ---- ONE EFFORT SHAPE, READ PROPERLY --------------------------------------------------------
+// Segment efforts are stored in TWO shapes and only one of them was ever being read. The harvester
+// writes {d, s, w} - date, seconds, watts - and that is 4,855 of the 5,062 efforts in the library.
+// The Strava PR sync writes {date, sec}, which is the other 207. segmentRecordsCompute_ read only
+// the second shape, so every progression line in the app has been drawn from FOUR PERCENT of the
+// data, and 1,178 segments with multiple efforts looked like 12.
+//
+// This normaliser is now the single reader for both, used by the records view and by this board, so
+// they cannot disagree about what an effort is.
+function _segEffortNorm_(e){
+  if(!e || typeof e!=='object') return null;
+  var sec=(+e.sec>0)?+e.sec:((+e.s>0)?+e.s:0);
+  var date=e.date||e.d||null;
+  if(!(sec>0) || !date) return null;
+  return { sec:sec, date:String(date).slice(0,10), w:(+e.w>0?+e.w:null) };
+}
+// Efforts for one segment, oldest first, both shapes, junk dropped.
+function _segEfforts_(seg){
+  if(!seg || !Array.isArray(seg.efforts)) return [];
+  return seg.efforts.map(_segEffortNorm_).filter(Boolean)
+    .sort(function(a,b){ return a.date.localeCompare(b.date); });
+}
+// Improvements only: each effort that beat everything before it. Two entries means one drop.
+function _segProgression_(eff){
+  var out=[], best=Infinity;
+  (eff||[]).forEach(function(e){ if(e.sec<best){ best=e.sec; out.push(e); } });
+  return out;
+}
+var ALMOST_NEAR_PCT=0.03;      // within 3% of his own best counts as 'almost'
+var ALMOST_NEAR_MAX_SEC=20;    // ...but never call a 40-second gap 'almost' on a long segment
+var ALMOST_RECENT_DAYS=365;    // a gap he has not visited in a year is not a live target
+function _almostDaysAgo_(dateStr){
+  try{ var d=new Date(String(dateStr)+'T00:00:00'); return Math.round((Date.now()-d.getTime())/86400000); }catch(e){ return 9999; }
+}
+// The board. Three categories, each independently honest about having nothing.
+function almostBoard_(){
+  var segs=(typeof st!=='undefined' && st && st.segments)?st.segments:{};
+  var closing=[], nearBest=[];
+  Object.keys(segs).forEach(function(k){
+    var sg=segs[k]; if(!sg) return;
+    var eff=_segEfforts_(sg);
+    if(eff.length<2) return;
+    var prog=_segProgression_(eff);
+    var best=prog.length?prog[prog.length-1]:null;
+    var last=eff[eff.length-1];
+    var name=sg.name||'Segment';
+    // 1. CLOSING IN - time actually removed, and over how many rides. This is the category the
+    //    board leads with: it is movement, not a static gap.
+    if(prog.length>=2){
+      var took=Math.round(prog[0].sec-best.sec);
+      var ageD=_almostDaysAgo_(best.date);
+      if(took>0 && ageD<=ALMOST_RECENT_DAYS){
+        closing.push({ id:k, name:name, tookSec:took, drops:prog.length-1,
+          rides:eff.length, bestSec:best.sec, bestDate:best.date, daysAgo:ageD });
+      }
+    }
+    // 2. ALMOST A PB - his most recent go came close to his own best without taking it. Only
+    //    counts when the LAST effort is the near one; an old near-miss is history, not a target.
+    if(best && last && last.sec>best.sec){
+      var gap=last.sec-best.sec;
+      var pct=gap/best.sec;
+      var ageL=_almostDaysAgo_(last.date);
+      if(gap<=ALMOST_NEAR_MAX_SEC && pct<=ALMOST_NEAR_PCT && ageL<=ALMOST_RECENT_DAYS){
+        nearBest.push({ id:k, name:name, gapSec:Math.round(gap*10)/10, bestSec:best.sec,
+          lastSec:last.sec, lastDate:last.date, daysAgo:ageL, rides:eff.length });
+      }
+    }
+  });
+  closing.sort(function(a,b){ return (b.tookSec-a.tookSec) || (a.daysAgo-b.daysAgo); });
+  nearBest.sort(function(a,b){ return (a.gapSec-b.gapSec) || (a.daysAgo-b.daysAgo); });
+  return { closing:closing, nearBest:nearBest, distance:_almostDistance_() };
+}
+// 3. DISTANCE PRs - r.dpr.m maps a km marker to the seconds taken to reach it, measured from the
+//    full-resolution stream. A ride whose split at a distance came within a whisker of the best
+//    split ever recorded at that distance is a near miss worth naming.
+var ALMOST_DPR_MAX_SEC=30;
+function _almostDistance_(){
+  var rides=[];
+  try{ rides=(st.rides||[]).filter(function(r){ return r && !r.deleted && r.dpr && r.dpr.m; }); }catch(e){ return []; }
+  if(!rides.length) return [];
+  var best={}, bestRide={};
+  rides.forEach(function(r){
+    Object.keys(r.dpr.m||{}).forEach(function(km){
+      var sec=+r.dpr.m[km]; if(!(sec>0)) return;
+      if(best[km]==null || sec<best[km]){ best[km]=sec; bestRide[km]=r; }
+    });
+  });
+  var out=[];
+  Object.keys(best).forEach(function(km){
+    var second=null, secondRide=null;
+    rides.forEach(function(r){
+      var sec=+((r.dpr.m||{})[km]); if(!(sec>0)) return;
+      if(r===bestRide[km]) return;
+      if(second==null || sec<second){ second=sec; secondRide=r; }
+    });
+    if(second==null) return;
+    var gap=second-best[km];
+    if(gap>0 && gap<=ALMOST_DPR_MAX_SEC){
+      out.push({ km:+km, gapSec:Math.round(gap*10)/10, bestSec:best[km],
+        bestDate:String(bestRide[km].date||'').slice(0,10),
+        nearDate:String((secondRide&&secondRide.date)||'').slice(0,10),
+        nearName:(typeof actName_==='function'&&secondRide)?actName_(secondRide):'' });
+    }
+  });
+  out.sort(function(a,b){ return a.gapSec-b.gapSec; });
+  return out;
+}
+function _almostTime_(sec){
+  var v=Math.round(+sec||0);
+  var m=Math.floor(v/60), ss=v%60;
+  return m?(m+':'+(ss<10?'0':'')+ss):(ss+'s');
+}
+function _almostAgo_(d){ return d<=1?'today':(d<7?(d+' days ago'):(d<60?(Math.round(d/7)+' weeks ago'):(Math.round(d/30)+' months ago'))); }
 function segmentRecordsCompute_(store){
   var arr=[], keys=isPlainObj_(store)?Object.keys(store):[];
   keys.forEach(function(k){
     var s=store[k]; if(!s) return;
     var prSec=+s.prSec||0; if(!(prSec>0)) return;
-    var prog=[];
-    if(Array.isArray(s.efforts) && s.efforts.length){
-      var byDate=s.efforts.filter(function(e){ return e && (+e.sec)>0 && e.date; }).slice().sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
-      var bestSoFar=Infinity;
-      byDate.forEach(function(e){ if(+e.sec<bestSoFar){ bestSoFar=+e.sec; prog.push({sec:+e.sec,date:String(e.date).slice(0,10)}); } });
-    }
+    // Was filtering on e.sec && e.date, the SYNC shape - which is 207 of 5,062 stored efforts.
+    // The harvester writes {d,s,w} and those were all being discarded, so these progression
+    // lines were drawn from four percent of the library. _segEfforts_ reads both shapes.
+    var prog=_segProgression_(_segEfforts_(s)).map(function(e){ return { sec:e.sec, date:e.date }; });
     arr.push({ id:k, name:s.name||'Segment', distMi:(+s.distMi||0)||null, grade:(s.grade!=null?+s.grade:null),
       prSec:prSec, prDate:s.prDate?String(s.prDate).slice(0,10):null, effortCount:(+s.effortCount||prog.length||0),
       starred:!!s.starred, progression:prog });
@@ -22987,6 +23103,78 @@ function _trRangeHTML_(){
         +';border:1px solid '+(on?'var(--d-accent,#fc5200)':'var(--d-edge)')
         +';border-radius:9px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Compare</button>'; })()
     +'</div>';
+}
+// The Almost Board, rendered. Three sections, each of which says plainly when it is empty rather
+// than padding itself - an 'almost' list that invents entries is worthless, because the whole
+// promise is that everything on it is genuinely within reach.
+function aiRenderAlmost_(){
+  var B=null;
+  try{ B=almostBoard_(); }catch(e){ B=null; }
+  var H='<div style="max-width:1120px;margin:0 auto">';
+  H+='<div style="font-size:12.5px;color:var(--d-t3);line-height:1.5;margin-bottom:18px">'
+    +'Everything here is already nearly yours. Ranked by how close you are and how recently you '
+    +'moved it &mdash; nothing on this board is padding.</div>';
+  if(!B){ return H+'<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">No segment history loaded yet.</div></div>'; }
+
+  var card=function(inner){ return '<div style="background:var(--d-panel,#14161c);border:1px solid var(--d-edge,rgba(255,255,255,.08));border-radius:14px;padding:14px 16px;margin-bottom:10px">'+inner+'</div>'; };
+  var head=function(t, n, sub){ return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">'
+    +'<span style="font-size:13px;font-weight:800;color:var(--d-head)">'+t+'</span>'
+    +'<span style="font-size:11px;color:var(--d-dim)">'+(n===0?'nothing yet':(n+(n===1?' entry':' entries')))+'</span></div>'
+    +'<div style="font-size:11px;color:var(--d-dim);line-height:1.5;margin-bottom:10px">'+sub+'</div>'; };
+  var empty=function(msg){ return '<div style="font-size:12.5px;color:var(--d-dim);padding:4px 0 2px;line-height:1.5">'+msg+'</div>'; };
+  var esc=(typeof aiEsc_==='function')?aiEsc_:function(x){ return String(x); };
+
+  // ---- CLOSING IN: the lead section. Movement, not a static gap. ----------------------------
+  var c=B.closing||[];
+  var h1=head('Closing in', c.length, 'Segments where you have actually taken time off &mdash; how much, and over how many rides.');
+  if(!c.length){ h1+=empty('No segment has two timed improvements yet. Ride one of your regulars twice more and it will appear here.'); }
+  else {
+    c.slice(0,12).forEach(function(x){
+      h1+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'
+        +'<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+'</div>'
+        +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">best '+_almostTime_(x.bestSec)+' &middot; '+x.rides+' rides &middot; '+_almostAgo_(x.daysAgo)+'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800;color:#4ade80">&minus;'+x.tookSec+'s</div>'
+        +'<div style="font-size:10px;color:var(--d-dim)">over '+x.drops+(x.drops===1?' improvement':' improvements')+'</div></div></div>';
+    });
+  }
+  H+=card(h1);
+
+  // ---- ALMOST A PB: last go came close without taking it -------------------------------------
+  var nb=B.nearBest||[];
+  var h2=head('Almost a personal best', nb.length, 'Your most recent go on these came within touching distance of your own best.');
+  if(!nb.length){ h2+=empty('Nothing within '+Math.round(ALMOST_NEAR_PCT*100)+'% of a personal best on a recent ride.'); }
+  else {
+    nb.slice(0,12).forEach(function(x){
+      h2+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'
+        +'<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.name)+'</div>'
+        +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">best '+_almostTime_(x.bestSec)+' &middot; last '+_almostTime_(x.lastSec)+' &middot; '+_almostAgo_(x.daysAgo)+'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800;color:var(--d-accent,#fc5200)">'+x.gapSec+'s</div>'
+        +'<div style="font-size:10px;color:var(--d-dim)">off your best</div></div></div>';
+    });
+  }
+  H+=card(h2);
+
+  // ---- DISTANCE PRs --------------------------------------------------------------------------
+  var d=B.distance||[];
+  var h3=head('Distance splits', d.length, 'Measured from the full-resolution ride streams &mdash; a real in-ride split, not a whole-ride average.');
+  if(!d.length){ h3+=empty('No distance split within '+ALMOST_DPR_MAX_SEC+' seconds of your best at that distance.'); }
+  else {
+    d.slice(0,8).forEach(function(x){
+      h3+='<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--d-edge,rgba(255,255,255,.06))">'
+        +'<div style="min-width:0"><div style="font-size:13px;font-weight:700;color:var(--d-head)">'+x.km+' km</div>'
+        +'<div style="font-size:10.5px;color:var(--d-dim);margin-top:2px">best '+_almostTime_(x.bestSec)+' on '+x.bestDate+'</div></div>'
+        +'<div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:800;color:var(--d-accent,#fc5200)">'+x.gapSec+'s</div>'
+        +'<div style="font-size:10px;color:var(--d-dim)">'+esc(String(x.nearName).slice(0,22))+'</div></div></div>';
+    });
+  }
+  H+=card(h3);
+
+  // The one thing this board deliberately does NOT lead with, and why.
+  H+='<div style="font-size:10.5px;color:var(--d-dim);line-height:1.55;margin-top:6px">'
+    +'KOM proximity is not a section here. All 142 checked segments came back with no crown held and '
+    +'the closest gap was 4 seconds, so a KOM list would be a list of one &mdash; see Segment Attack '
+    +'for the crown check itself.</div>';
+  return H+'</div>';
 }
 function aiRenderTrends_(ded){
   var rides=ded||allRidesDeduped_();
@@ -28295,6 +28483,7 @@ function aiRenderTab_(tab, ded){
   if(tab==='racing') return _aiSafe_('Racing', function(){return aiRenderRacing_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">You vs. You — render error.</div>';
   if(tab==='milestones') return _aiSafe_('Milestones', function(){return aiRenderMilestones_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Milestones — render error.</div>';
   if(tab==='records') return _aiSafe_('Records', function(){return aiRenderRecords_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Records — render error.</div>';
+  if(tab==='almost') return _aiSafe_('AlmostTab', function(){return aiRenderAlmost_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Almost Board \u2014 render error.</div>';
   if(tab==='dna') return _aiSafe_('DNAtab', function(){return aiRenderDNA_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">DNA — render error.</div>';
   if(tab==='trajectory') return _aiSafe_('Trajectory', function(){return aiRenderTrajectory_();}) || '<div style="padding:60px 20px;text-align:center;color:var(--d-dim);font-size:14px">Trajectory — render error.</div>';
   if(tab!=='overview'){
