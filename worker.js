@@ -32643,9 +32643,10 @@ var _SM_PERSONA='You are Dr. Smurkel, the endurance coach who has followed this 
 // LONG-FORM ONLY: the Plan-page debrief, the one surface with room to breathe. Tables earn their
 // place where numbers are being compared directly - prescribed against actual reads in one glance,
 // the same numbers in prose do not.
-var _SM_FORMAT_LONG='FORMAT. This is the long debrief, so give it light structure and let it '
-  +'breathe. Short named sections with plain headers ("The Data", "What Stood Out", "The Bigger '
-  +'Picture"), a few lines each. Use a small markdown table whenever you are comparing things '
+var _SM_FORMAT_LONG='FORMAT. This is the long debrief, so let it breathe: short sections of a '
+  +'few lines each rather than dense paragraphs. The prompt below names the sections and their '
+  +'order - follow those, do not invent your own. Use a small markdown table whenever you are '
+  +'comparing things '
   +'directly - prescribed against actual, this week against last - because a table reads in one glance '
   +'and the same numbers in a paragraph do not. Use ✅ on a short line for something that went right '
   +'and ⚠️ for something to watch, as quick visual flags, not on every line. 🎯 or 😄 where one '
@@ -32693,7 +32694,9 @@ function fetchSmurkelDebrief_(dateKey, ride, callback){
     +'hole and you must not imply tomorrow is compromised. Only say a following session is at risk when '
     +'Form and the load figures above actually support it, and quote the figure you are reasoning from. '
     +'A small overrun on an easy day is a correction to make, not a setback to recover from.'+NL+NL
-    +'Plain text, no markdown asterisks. Up to 600 words - use them where the reasoning earns it and stop '
+    +'No asterisk-bolding. A compact markdown table is right for the comparison in What Moved, and for '
+    +'any other place two sets of numbers sit side by side. Up to 600 words - use them where the '
+    +'reasoning earns it and stop '
     +'when it does not. Depth on the one thing that matters beats a paragraph on each of six.';
   var key=_ciHash_(prompt);
   var hit=_ciGet_(key);
