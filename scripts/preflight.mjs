@@ -685,6 +685,21 @@ try {
     fail('run zones or the power curve are misreporting (see above).');
   }
 
+  // STEP 40 - strength A/B/C/D rotation + the calendar quick-add. The rotation property is the
+  //           SEQUENCE: both weekly slots were already scheduled (16 strengthB, 13 strengthA)
+  //           but the intent never advanced, so C and D never appeared. Also pins that a claimed
+  //           swap still beats the rotation, and that the '+' is an entry point rather than a
+  //           second editor.
+  console.log(`${D}. checking the strength rotation + calendar quick-add...${X}`);
+  try {
+    const so = execSync('node scripts/strength-rotation-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('the strength rotation or the calendar quick-add is broken (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

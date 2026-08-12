@@ -8890,9 +8890,13 @@ function planCardHTML_(s, dateKey){
     +'<div style="flex:1;min-width:0;font-size:15px;font-weight:800;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.name)+'</div>'
     // Swap cycles the routine. stopPropagation is essential: the whole card already carries
     // an openDayEditor onclick, so without it a tap would swap AND open the editor.
+    // Strength cycles its OWN pool A->B->C->D through the same control. Same mechanism, separate
+    // pool - not a second Swap button and not a shared list.
     +((type==='mobility' && dateKey && !done)
         ? ('<span onclick="event.stopPropagation();swapMobility_(\\''+dateKey+'\\',\\''+(r.id||'')+'\\')" title="Swap routine" style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--t3);border:1px solid var(--b1);border-radius:7px;padding:3px 8px;cursor:pointer">Swap</span>')
-        : '')
+        : ((type==='strength' && dateKey && !done)
+        ? ('<span onclick="event.stopPropagation();swapStrength_(\\''+dateKey+'\\',\\''+(r.id||'')+'\\')" title="Swap strength group" style="flex-shrink:0;font-size:11px;font-weight:700;color:var(--t3);border:1px solid var(--b1);border-radius:7px;padding:3px 8px;cursor:pointer">Swap</span>')
+        : ''))
     +(done?'<span style="font-size:14px;color:#1D9E75;flex-shrink:0">✓</span>':'')
     +'</div>'+lines.join('')+'</div>';
 }
@@ -8903,6 +8907,37 @@ function planCardHTML_(s, dateKey){
 // session does not move to Sunday, the week fails its own rule and starts clean Monday — so quietly
 // relocating Strength B would contradict the one thing the block is strict about. Dr. Smurkel states
 // the cost in the recommendation instead of hiding it here.
+// Cycle the strength group A -> B -> C -> D -> A. Same mechanism as swapMobility_ on a SEPARATE
+// pool, and the same user-owned write path, so the swap claims the day.
+//
+// swap:true is stamped and carried in the edited-field list because that flag is the ONLY thing
+// blockPlanFor_ accepts as a deliberate choice - source metadata loses a cross-device merge, and
+// the _edited.intent mask is residue on most block days.
+function swapStrength_(dateKey, sessId){
+  try{
+    if(typeof planSessionsForDate_!=='function' || typeof planUpsertSession_!=='function') return;
+    var list=planSessionsForDate_(dateKey)||[], sess=null;
+    for(var i=0;i<list.length;i++){ if(String(list[i].id||'')===String(sessId||'')){ sess=list[i]; break; } }
+    if(!sess && list.length) sess=list.filter(function(x){ return x && x.type==='strength'; })[0]||null;
+    if(!sess || sess.type!=='strength') return;
+    var pool=(typeof STRENGTH_POOL_!=='undefined')?STRENGTH_POOL_:['strengthA'];
+    // Start from what is ON SCREEN. A derived day has no stored intent, so fall back to the
+    // rotation's answer for that date - otherwise the first tap would jump to whatever the stored
+    // residue said rather than advancing from what the athlete is looking at.
+    var cur=sess.intent;
+    if(pool.indexOf(cur)<0 && typeof strengthForSlot_==='function') cur=strengthForSlot_(dateKey);
+    var at=pool.indexOf(cur);
+    var next=pool[(at<0?0:(at+1))%pool.length];
+    var def=(typeof SESSION_DEFS!=='undefined')?SESSION_DEFS[next]:null;
+    if(!def) return;
+    var patch={ id:sess.id, type:'strength', intent:next, name:def.name, swap:true,
+                status:(sess.status==='completed'?sess.status:'planned') };
+    planUpsertSession_(dateKey, patch, ['type','intent','name','status','swap'], 'user');
+    try{ sv(); }catch(e){}
+    try{ if(typeof showHomeDash==='function') showHomeDash(); }catch(e){}
+    try{ if(typeof toast==='function') toast('Swapped to '+def.name); }catch(e){}
+  }catch(e){ try{ console.error('[strength-swap]', e && e.message); }catch(_e){} }
+}
 function swapToStrengthC_(dateKey, sessId){
   try{
     if(typeof planSessionsForDate_!=='function' || typeof planUpsertSession_!=='function') return;
@@ -30123,8 +30158,14 @@ function blockPlanFor_(dateKey){
   else slots=[];
   var weekInPhase=Math.floor(Math.max(0,_blockDaysBetween_(_blockDay_(p.start), d))/7)+1;
   var sessions=(slots||[]).map(function(sl){
-    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(sl.i, weekInPhase):null;
-    return { intent:sl.i, struct:sl.s||'', when:sl.t||null, rx:rx };
+    // The phase tables pin each strength slot to one group - every Tuesday strengthB, every
+    // Friday strengthA - so C and D never appeared. The ROTATION decides which of the four a
+    // strength slot actually is. Resolved HERE, at the derive, so no phase table needs editing
+    // and the sequence cannot drift when a phase boundary moves.
+    var _int=sl.i;
+    if(typeof strengthForSlot_==='function' && /^strength/.test(String(sl.i||''))) _int=strengthForSlot_(dateKey);
+    var rx=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(_int, weekInPhase):null;
+    return { intent:_int, struct:sl.s||'', when:sl.t||null, rx:rx };
   });
   // A session the athlete has CLAIMED (source 'user' — a swap or a day-editor change) overrides the
   // template for that date.
@@ -30139,7 +30180,9 @@ function blockPlanFor_(dateKey){
   // coach grades. Strength and mobility swaps already have their own readers off st.plan directly.
   try{
     if(typeof planSessionsForDate_==='function' && typeof SESSION_DEFS!=='undefined'){
-      var _isRide=function(intent){ var d2=SESSION_DEFS[intent]; return !!d2 && (d2.type==='ride'||d2.type==='attempt'); };
+      var _typeOf=function(intent){ var d2=SESSION_DEFS[intent]; return d2?d2.type:''; };
+      var _isRide=function(intent){ var t=_typeOf(intent); return t==='ride'||t==='attempt'; };
+      var _isStr=function(intent){ return _typeOf(intent)==='strength'; };
       // A DELIBERATE SWAP CARRIES AN EXPLICIT FLAG. Two weaker gates were tried and both were wrong:
       //   source==='user'      — source is metadata, not a masked field, so a cross-device merge
       //                          lets the remote 'gen' copy win and the swap silently reverts.
@@ -30151,11 +30194,16 @@ function blockPlanFor_(dateKey){
       // edited-field list so it survives a merge, and only that flag overrides the block.
       var _claimed=function(s){ return !!s && s.swap===true; };
       (planSessionsForDate_(dateKey)||[]).forEach(function(s){
-        if(!s || !_claimed(s) || !s.intent || !_isRide(s.intent)) return;
+        if(!s || !_claimed(s) || !s.intent) return;
+        // Replace LIKE WITH LIKE: a claimed ride displaces the ride slot, a claimed strength
+        // group displaces the strength slot. Matching on type keeps a strength swap from
+        // overwriting the day's ride, which sharing one matcher would have done.
+        var match=_isRide(s.intent)?_isRide:(_isStr(s.intent)?_isStr:null);
+        if(!match) return;
         var rx2=(typeof _planSessionFromDef_==='function')?_planSessionFromDef_(s.intent, weekInPhase):null;
         var repl={ intent:s.intent, struct:(s.block&&s.block.struct)||'', rx:rx2 };
         var at=-1;
-        for(var i2=0;i2<sessions.length;i2++){ if(_isRide(sessions[i2].intent)){ at=i2; break; } }
+        for(var i2=0;i2<sessions.length;i2++){ if(match(sessions[i2].intent)){ at=i2; break; } }
         if(at>=0) sessions[at]=repl; else sessions.push(repl);
         via='user';
       });
@@ -36778,6 +36826,10 @@ function dsShowCalendar(){
               }
             }
           }
+          // Quick-add. Last child of the cell so it sits under the chips, and deliberately
+          // low-contrast: a dense day already stacks two sessions and two PLAN chips, and this
+          // must not compete with them. Delegated like every other cell action.
+          H+='<div data-cal="addsess" data-date="'+c.date+'" style="margin-top:4px;text-align:center;font-size:13px;line-height:1;color:var(--t3);opacity:.45;cursor:pointer;padding:2px 0;border-radius:6px" title="Add a session">+</div>';
           H+='</div>';
         });
       });
@@ -36875,6 +36927,13 @@ function dsShowCalendar(){
       }
       // The cell background, the day number, or "+N more" — resolve by DATE, not by a
       // baked-in handle, so a day with several activities offers all of them.
+      else if(a==='addsess'){
+        // '__new__' is the editor's own ADD-mode flag, so this opens a blank session on a day
+        // that may already hold several - not an edit of whichever one happens to be first.
+        calFilterOpen=false;
+        var ad=t.getAttribute('data-date');
+        if(ad && typeof openDayEditor==='function') openDayEditor(ad, '__new__');
+      }
       else if(a==='cell'||a==='more'){ calFilterOpen=false;
         var dt=t.getAttribute('data-date'); if(!dt) return;
         var dayl=ridesByDate[dt]||[];
@@ -43859,17 +43918,17 @@ function planClearDay_(dateKey){
 // power is % of FTP (watts computed at read time from st.ftp, shown with the FTP inline per the
 // §3.8 Z-fix). Blank pct1RM weights stay blank (no 1RM data); blank prescription is filled here.
 var SESSION_DEFS={
-  strengthA:{ type:'strength', name:'Strength A',  exGroup:'strengthA', note:'Lower & axial load — the bone and structural stimulus cycling never provides.' },
-  strengthB:{ type:'strength', name:'Strength B',  exGroup:'strengthB', note:'Posterior chain, single-leg and core — opposes the flexed riding position.' },
+  strengthA:{ type:'strength', name:'Strength A — Squat/Push',  exGroup:'strengthA', note:'Squat and press, plus calf, shin and hip-flexor work. The axial load cycling never provides.' },
+  strengthB:{ type:'strength', name:'Strength B — Hinge/Pull',  exGroup:'strengthB', note:'Hinge and pull, plus calf and groin work. Opposes the flexed riding position.' },
   // Strength C — the leg-light option. NOT part of the weekly template or the block phases: it exists
   // to be SWAPPED IN when the legs need protecting (two hard days behind, a group ride tomorrow), so
   // adding it to the rotation would defeat its own purpose. Upper- and trunk-dominant by design;
   // power is expressed through the trunk (slams, throws) rather than through loaded legs.
-  strengthC:{ type:'strength', name:'Strength C — Upper & Power', exGroup:'strengthC', note:'Upper body and trunk power. Legs stay fresh — this is the session to take when tomorrow needs your legs.' },
+  strengthC:{ type:'strength', name:'Strength C — Single-leg/Stability', exGroup:'strengthC', note:'Single-leg strength and stability, plus eccentric heel drops. Balance and control rather than load.' },
   // Strength D — the opposite case. Five compound barbell lifts and a power lift, for a day the legs
   // are FRESH and general strength is the point. Explicitly not a fatigue-protection swap, and not a
   // session to take the day before a group ride.
-  strengthD:{ type:'strength', name:'Strength D — Full Body Power', exGroup:'strengthD', note:'Heavy, general, whole-body. Take this when the legs are fresh — it is the opposite of a leg-protection day.' },
+  strengthD:{ type:'strength', name:'Strength D — Power/Posterior', exGroup:'strengthD', note:'Power and posterior chain, plus shin work and a quad opener. Take this when the legs are fresh.' },
   // Mobility pool. Four fixed routines that ROTATE BY SWAP, not by periodization — see the
   // deload exemption in _planExercises_. 'mobility' stays the key for A so every session
   // already stored with intent:'mobility' keeps resolving; B/C/D are additive.
@@ -43917,6 +43976,44 @@ var SESSION_DEFS={
 // what SESSION_PRESETS - the editor's Session dropdown - is built from. So the two run sessions
 // the block actually prescribes could not be picked by name on any day.
 var SESSION_DEF_ORDER=['strengthA','strengthB','mobility','mobilityB','mobilityC','mobilityD','z2','threshold','vo2','group','long','recovery','easyRun','run10k','rest'];
+// The strength rotation. SEPARATE pool from mobility's, same mechanism.
+//
+// The phase tables schedule two strength slots a week - Tuesday AM and Friday - and both were
+// pinned: every Tuesday resolved strengthB and every Friday strengthA, measured across the block
+// as 16 B and 13 A with C and D never appearing at all. The slots were scheduled correctly; it
+// was the INTENT that never advanced.
+//
+// Two slots against four groups, advancing by one each slot, gives:
+//     wk1  Tue A  Fri B      wk3  Tue A  Fri B
+//     wk2  Tue C  Fri D      wk4  Tue C  Fri D
+// so each group lands every second week in its slot, and no group is ever back-to-back.
+//
+// Keyed on an ABSOLUTE week number rather than an offset into the block, so the sequence does not
+// shift when a block's start date moves - the drift trap that stranded a taper once already.
+var STRENGTH_POOL_ = ['strengthA','strengthB','strengthC','strengthD'];
+var STRENGTH_SLOTS_ = 2;                       // Tuesday AM, Friday
+var _STR_EPOCH_ = Date.UTC(2026, 6, 20);       // Mon 2026-07-20, the Monday on or before the block start
+function _strWeekIndex_(dateKey){
+  var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(dateKey || ''));
+  if (!m) return 0;
+  var t = Date.UTC(+m[1], (+m[2]) - 1, +m[3]);
+  var wk = Math.floor((t - _STR_EPOCH_) / 604800000);   // 7 * 24 * 3600 * 1000
+  return wk;
+}
+// slotIdx: 0 for the earlier slot in the week (Tuesday), 1 for the later (Friday). Derived from
+// the weekday rather than passed in, so any caller that knows only the date gets the right answer.
+function _strSlotIndex_(dateKey){
+  var m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(String(dateKey || ''));
+  if (!m) return 0;
+  var wd = new Date(Date.UTC(+m[1], (+m[2]) - 1, +m[3])).getUTCDay();   // 0=Sun
+  return (wd >= 5 || wd === 0) ? 1 : 0;        // Fri/Sat/Sun -> second slot; Mon-Thu -> first
+}
+function strengthForSlot_(dateKey){
+  var wk = _strWeekIndex_(dateKey), slot = _strSlotIndex_(dateKey);
+  var n = STRENGTH_POOL_.length;
+  var idx = ((wk * STRENGTH_SLOTS_ + slot) % n + n) % n;   // negative weeks stay in range
+  return STRENGTH_POOL_[idx];
+}
 // The rotation order Swap cycles through, A -> B -> C -> D -> A.
 var MOBILITY_POOL_=['mobility','mobilityB','mobilityC','mobilityD'];
 // Strength-first weekly layout (§3.1), index 0=Mon .. 6=Sun, as SESSION_DEFS keys. Two loaded +
@@ -50299,6 +50396,9 @@ function showCalendarTab(){
           h+='</div>';
         } else if(mRestSess){ h+='<div style="margin-top:2px;display:flex;align-items:center;justify-content:center;line-height:0">'+actIcon('rest',13,'#8E8E93')+'</div>'; }
         if(mDone){ h+='<div style="position:absolute;top:2px;right:3px;width:10px;height:10px;border-radius:50%;background:#5DCAA5;display:flex;align-items:center;justify-content:center;color:#fff;font-size:7px;font-weight:900">&#10003;</div>'; }
+        // Quick-add, same control as desktop. stopPropagation is required: the cell itself
+        // already carries an openDayEditor onclick, so without it a tap would fire both.
+        h+='<div onclick="event.stopPropagation();openDayEditor(\\''+mKey+'\\',\\'__new__\\')" title="Add a session" style="margin-top:3px;font-size:12px;line-height:1;color:var(--t3);opacity:.45;cursor:pointer">+</div>';
         h+='</div>';
       });
       // Week summary cell — actual Miles + TSS, load-bar keyed to TSS intensity.
@@ -50656,56 +50756,54 @@ var SESSION_PRESETS=(function(){
 })();
 // Exercise library (spec 3.2-3.4) with default sets/reps/%1RM. The per-row exercise
 // dropdown prefills from here (reps: carries=meters, mobility=reps or seconds).
+// Exercise library. The four strength groups rotate A -> B -> C -> D across the two weekly slots;
+// see STRENGTH_POOL_ and strengthForSlot_. Every group carries calf/shin work (calf raise, toe
+// raises, banded dorsiflexion, heel drops) and a hip-flexor or quad opener, because those are the
+// areas cycling never loads and the rotation must not let a fortnight pass without them.
+//
+// reps doubles as SECONDS for a hold and METRES for a carry - the convention this library already
+// used for loaded carries. pct1RM is blank on anything not barbell/dumbbell loaded: strengthRx_
+// prices a working weight off a stored 1RM, and a movement with no 1RM on file must render blank
+// rather than invent a number.
+//
+// Toe yoga and towel scrunches are deliberately ABSENT. They are a daily one-to-two-minute
+// practice, not gym line items, and listing them here would put them in a scored session.
 var EX_LIBRARY=[
-  {name:'Trap-bar deadlift', sets:3, reps:8, pct1RM:70, group:'strengthA'},
-  {name:'Front squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
-  {name:'Goblet squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
-  {name:'Loaded carry (farmer)', sets:3, reps:40, pct1RM:'', group:'strengthA'},
-  {name:'Suitcase carry', sets:3, reps:40, pct1RM:'', group:'strengthA'},
+  {name:'Back squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Bench press', sets:3, reps:10, pct1RM:70, group:'strengthA'},
+  {name:'Bulgarian split squat', sets:3, reps:10, pct1RM:70, group:'strengthA'},
   {name:'Standing calf raise', sets:3, reps:12, pct1RM:'', group:'strengthA'},
-  {name:'Pallof press', sets:3, reps:10, pct1RM:'', group:'strengthA'},
-  {name:'Romanian deadlift', sets:3, reps:10, pct1RM:70, group:'strengthB'},
-  {name:'Bulgarian split squat', sets:3, reps:10, pct1RM:70, group:'strengthB'},
-  {name:'Hip thrust', sets:3, reps:12, pct1RM:70, group:'strengthB'},
-  {name:'Single-leg RDL', sets:2, reps:8, pct1RM:'', group:'strengthB'},
-  {name:'Dead bug', sets:2, reps:10, pct1RM:'', group:'strengthB'},
-  {name:'Bird dog', sets:2, reps:10, pct1RM:'', group:'strengthB'},
-  // ---- Strength C (upper & power, leg-light) — built on the equipment actually owned:
-  // slam ball, bands, ab wheel, dumbbells, barbell, pull-up bar. Ordered power-first, then the
-  // heavy compounds, then accessories: the explosive work needs a fresh nervous system, and the
-  // pulling volume is deliberately >= the pressing volume (a cyclist's posture needs it, and so
-  // does a swim catch).
-  {name:'Slam ball overhead slam', sets:4, reps:6, pct1RM:'', group:'strengthC'},
-  {name:'Pull-up', sets:4, reps:8, pct1RM:'', group:'strengthC'},
-  {name:'Barbell bench press', sets:4, reps:6, pct1RM:75, group:'strengthC'},
-  {name:'Barbell overhead press', sets:3, reps:8, pct1RM:65, group:'strengthC'},
-  {name:'Dumbbell row', sets:3, reps:10, pct1RM:'', group:'strengthC', perSide:true},
-  {name:'Slam ball rotational throw', sets:3, reps:8, pct1RM:'', group:'strengthC', perSide:true},
-  {name:'Ab wheel rollout', sets:3, reps:8, pct1RM:'', group:'strengthC'},
-  {name:'Band pull-apart / face pull', sets:3, reps:15, pct1RM:'', group:'strengthC'},
-  {name:'Pallof press', sets:3, reps:10, pct1RM:'', group:'strengthC', perSide:true},
-  // ---- Strength D (full body strength & power, fresh legs) — power lift first while the nervous
-  // system is fresh, then the heavy compounds, then carries and trunk. Shares trap-bar deadlift
-  // with A and the slam/rollout with C on purpose: a shared movement vocabulary means logged history
-  // and 1RM data carry across sessions instead of fragmenting.
-  {name:'Barbell push press', sets:5, reps:3, pct1RM:70, group:'strengthD'},
-  {name:'Back squat', sets:4, reps:5, pct1RM:80, group:'strengthD'},
-  {name:'Trap-bar deadlift', sets:3, reps:5, pct1RM:80, group:'strengthD'},
-  {name:'Pull-up', sets:4, reps:6, pct1RM:'', group:'strengthD'},
-  {name:'Barbell bench press', sets:3, reps:6, pct1RM:75, group:'strengthD'},
-  {name:'Dumbbell row', sets:3, reps:10, pct1RM:'', group:'strengthD', perSide:true},
-  {name:'Slam ball overhead slam', sets:3, reps:6, pct1RM:'', group:'strengthD'},
-  {name:'Loaded carry (farmer)', sets:3, reps:40, pct1RM:'', group:'strengthD'},
-  {name:'Ab wheel rollout', sets:3, reps:8, pct1RM:'', group:'strengthD'},
-  // Mobility A (hip / ankle) — the original routine. sets/reps values are UNCHANGED; the
-  // perSide/secs flags are presentation only, so the card reads "2×45s /side" instead of
-  // the ambiguous "2×45". Group stays 'mobility' so every stored session keeps resolving.
+  {name:'Toe raises', sets:3, reps:15, pct1RM:'', group:'strengthA'},
+  {name:'Banded dorsiflexion', sets:3, reps:15, pct1RM:'', group:'strengthA'},
+  {name:'Plank', sets:3, reps:45, pct1RM:'', group:'strengthA'},
+  {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'strengthA'},
+  {name:'Deadlift', sets:3, reps:10, pct1RM:70, group:'strengthB'},
+  {name:'Pull-ups (or assisted)', sets:3, reps:8, pct1RM:'', group:'strengthB'},
+  {name:'Walking lunges', sets:3, reps:12, pct1RM:'', group:'strengthB'},
+  {name:'Seated calf raise', sets:3, reps:12, pct1RM:'', group:'strengthB'},
+  {name:'Deep squat hold', sets:2, reps:60, pct1RM:'', group:'strengthB'},
+  {name:'Groin/adductor stretch', sets:2, reps:45, pct1RM:'', group:'strengthB'},
+  {name:'Bird-dog', sets:3, reps:10, pct1RM:'', group:'strengthB'},
+  {name:'Front squat', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Dumbbell row', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Single-leg RDL', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Weighted step-ups', sets:3, reps:10, pct1RM:70, group:'strengthC'},
+  {name:'Eccentric heel drops', sets:3, reps:15, pct1RM:'', group:'strengthC'},
+  {name:'90/90-to-stand', sets:3, reps:8, pct1RM:'', group:'strengthC'},
+  {name:'Side plank', sets:3, reps:40, pct1RM:'', group:'strengthC'},
+  {name:'Trap-bar deadlift', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Overhead press', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Box jumps', sets:4, reps:5, pct1RM:'', group:'strengthD'},
+  {name:'Reverse lunge', sets:3, reps:10, pct1RM:70, group:'strengthD'},
+  {name:'Toe raises', sets:3, reps:15, pct1RM:'', group:'strengthD'},
+  {name:'Banded dorsiflexion', sets:3, reps:15, pct1RM:'', group:'strengthD'},
+  {name:'T-spine open-book rotation', sets:2, reps:8, pct1RM:'', group:'strengthD'},
+  {name:'Couch stretch', sets:2, reps:45, pct1RM:'', group:'strengthD'},
   {name:'Thoracic rotation (open-book)', sets:2, reps:8, pct1RM:'', group:'mobility', perSide:true},
   {name:'Half-kneeling hip flexor stretch', sets:2, reps:45, pct1RM:'', group:'mobility', secs:true, perSide:true},
   {name:'90/90 hip rotations', sets:2, reps:8, pct1RM:'', group:'mobility', perSide:true},
   {name:'Wall ankle dorsiflexion', sets:2, reps:10, pct1RM:'', group:'mobility', perSide:true},
   {name:'Adductor rock-back', sets:2, reps:8, pct1RM:'', group:'mobility'},
-  // Mobility B (T-spine / posterior chain / shoulders)
   {name:'Cat-cow', sets:2, reps:8, pct1RM:'', group:'mobility-b'},
   {name:"World's greatest stretch", sets:2, reps:5, pct1RM:'', group:'mobility-b', perSide:true},
   {name:'Thread-the-needle (T-spine rotation)', sets:2, reps:6, pct1RM:'', group:'mobility-b', perSide:true},
@@ -50713,14 +50811,12 @@ var EX_LIBRARY=[
   {name:'Glute bridge', sets:2, reps:10, pct1RM:'', group:'mobility-b'},
   {name:'Standing hamstring / toe-touch flow', sets:2, reps:8, pct1RM:'', group:'mobility-b'},
   {name:'Doorway pec + shoulder stretch', sets:2, reps:30, pct1RM:'', group:'mobility-b', secs:true},
-  // Mobility C (lower body / hips deep dive)
   {name:'Couch stretch (quad + hip flexor)', sets:2, reps:45, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
   {name:'Pigeon pose', sets:2, reps:45, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
   {name:'Frog stretch', sets:2, reps:30, pct1RM:'', group:'mobility-c', secs:true},
   {name:'Cossack squat', sets:2, reps:6, pct1RM:'', group:'mobility-c', perSide:true},
   {name:'Hamstring floss (supine, band or towel)', sets:2, reps:8, pct1RM:'', group:'mobility-c', perSide:true},
   {name:'Calf + soleus wall stretch', sets:2, reps:30, pct1RM:'', group:'mobility-c', secs:true, perSide:true},
-  // Mobility D (spine / core / shoulders)
   {name:'Cat-cow', sets:2, reps:8, pct1RM:'', group:'mobility-d'},
   {name:'Bird-dog', sets:2, reps:8, pct1RM:'', group:'mobility-d', perSide:true},
   {name:'Dead bug', sets:2, reps:8, pct1RM:'', group:'mobility-d', perSide:true},

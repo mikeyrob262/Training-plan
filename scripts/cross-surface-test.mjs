@@ -295,8 +295,19 @@ check('...via an explicit swap flag, not inferred metadata', /s\.swap===true/.te
 check('the swap writes that flag', /intent:defKey, name:def\.name, swap:true/.test(src), true);
 check('...and protects it through a merge', /\['type','intent','name','status','swap'\]/.test(src), true);
 check('ownership is NOT inferred from the edit mask', countCode(/s\._edited && s\._edited\.intent/g), 0);
-check('...and the override is scoped to ride/attempt intents',
-  /d2\.type==='ride'\|\|d2\.type==='attempt'/.test(src), true);
+// The override was ride/attempt-only while the block never chose between strength groups. The
+// A/B/C/D rotation made blockPlanFor_ decide WHICH strength group a slot is, so a claimed strength
+// swap has to override there too or it is shadowed on every surface reading the derive.
+//
+// It is still type-matched, and that is the load-bearing part: a claimed session replaces the slot
+// of its OWN type. Sharing one matcher across types would let a strength swap displace the day's
+// ride, which is a worse failure than the one being fixed.
+check('...and the ride/attempt matcher still exists',
+  /t==='ride'\|\|t==='attempt'/.test(src), true);
+check('...alongside a strength matcher',
+  /_isStr=function\(intent\)\{ return _typeOf\(intent\)==='strength'; \}/.test(src), true);
+check('...and a claimed session replaces the slot of its OWN type',
+  /var match=_isRide\(s\.intent\)\?_isRide:\(_isStr\(s\.intent\)\?_isStr:null\)/.test(src), true);
 check('...and reports that it came from the athlete, not the template', /via='user'/.test(src), true);
 // INVARIANT: every coach surface speaks as Dr. Smurkel, in second person, and none of them asserts
 // a missing elevation as zero. (r.elev||0) is the construct that made the model report "flat
