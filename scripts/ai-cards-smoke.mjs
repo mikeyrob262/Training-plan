@@ -29,7 +29,7 @@ function extract(name){
 // (an actually-ridden session that was never tapped "complete" used to count as a miss forever).
 // _planSessionFromDef_ and SESSION_DEFS are deliberately NOT pulled in — they drag the whole
 // generator in — so _sessEffTargets_ falls through to stored targets here, which the fixture sets.
-const CLOSURE = ['aiCard_','aiLbl_','aiEsc_','_adhLbl_','_adherenceTrend_','strengthAdherenceTrend_','rideAdherenceTrend_','_adhCardInner_','aiCardStrengthAdherence_','aiCardRideAdherence_',
+const CLOSURE = ['aiCard_','aiLbl_','aiEsc_','_adhLbl_','_adhDone_','_adherenceTrend_','strengthAdherenceTrend_','rideAdherenceTrend_','_adhCardInner_','aiCardStrengthAdherence_','aiCardRideAdherence_',
   '_sessSport_','_adhKind_','_sessActivityMatch_','_sessEffTargets_','computeRideExecutionScore_',
   '_durSec_','activitiesForDate_','_actSameDay_','_actSport_','parseDayKey','normDate','rideKey'];
 let code=''; for(const f of CLOSURE) code+=extract(f);

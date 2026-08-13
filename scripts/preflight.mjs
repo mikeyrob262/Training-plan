@@ -854,6 +854,19 @@ try {
     fail('the flat proxy is length-biased again, or the climb rehearsal does not reach 90 (see above).');
   }
 
+  // STEP 52 - adherence completion vs execution. The card labels its bars "Completion" but computed
+  //           them from SCORED, so a session genuinely done that simply could not be scored read as
+  //           a no-show. That was most of the strength series: 9 done, 3 scorable, card said 3.
+  console.log(`${D}. checking adherence completion...${X}`);
+  try {
+    const so = execSync('node scripts/adherence-completion-test.mjs', { stdio: ['ignore', 'pipe', 'pipe'] });
+    process.stdout.write(so.toString());
+  } catch (e) {
+    console.error((e.stdout || '').toString());
+    console.error((e.stderr || '').toString());
+    fail('adherence is reporting attendance from scores again (see above).');
+  }
+
   console.log(`${G}preflight passed — safe to push.${X}`);
   cleanup();
 } catch (e) {

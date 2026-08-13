@@ -18698,7 +18698,7 @@ function _adherenceTrend_(st, weeks, types, _todayRef){
   var today=_todayRef?new Date(_todayRef):new Date(); today.setHours(0,0,0,0);
   var curWk=_wk(today);
   var order=[], byKey={};
-  for(var i=weeks-1;i>=0;i--){ var ws=new Date(curWk); ws.setDate(curWk.getDate()-i*7); var k=_key(ws); order.push(k); byKey[k]={scored:0,planned:0,_sum:0}; }
+  for(var i=weeks-1;i>=0;i--){ var ws=new Date(curWk); ws.setDate(curWk.getDate()-i*7); var k=_key(ws); order.push(k); byKey[k]={scored:0,done:0,planned:0,_sum:0}; }
   var plan=(st&&st.plan)?st.plan:{};
   Object.keys(plan).forEach(function(dk){
     var day=plan[dk]; if(!day||!Array.isArray(day.sessions)) return;
@@ -18717,16 +18717,36 @@ function _adherenceTrend_(st, weeks, types, _todayRef){
       // the 14.1 mi ride that answered it. The Calendar never made this match either: its PLAN chip
       // is date co-location, it just draws the day's planned sessions next to the day's activities.
       // So the match is MADE here, once, in _sessActivityMatch_, and both surfaces can read it.
+      var matched=null;
       if(sc==null && _adhKind_(x)==='ride' && typeof _sessActivityMatch_==='function'){
         try{
-          var act=_sessActivityMatch_(dk, x);
-          if(act && typeof computeRideExecutionScore_==='function') sc=computeRideExecutionScore_(x, act);
+          matched=_sessActivityMatch_(dk, x);
+          if(matched && typeof computeRideExecutionScore_==='function') sc=computeRideExecutionScore_(x, matched);
         }catch(e){}
       }
       if(sc!=null){ b.scored++; b._sum+=(+sc||0); }
+      // COMPLETION AND EXECUTION ARE DIFFERENT QUESTIONS, and this counted both with one number.
+      //
+      // The card has always LABELLED its bars "Completion" (did you show up) against a separate
+      // "Mean execution" line (how well) — that split is in the card's own header comment. But both
+      // were computed off scored, so a session that was genuinely DONE and simply could not be
+      // SCORED counted as a no-show.
+      //
+      // That is most of the strength series. Strength is deliberately outside _sessActivityMatch_ —
+      // it is scored off logged sets, not off "whatever was recorded that morning" — so a strength
+      // session only scores when a set log exists. Measured live: of 22 past strength/mobility
+      // sessions, 9 are marked completed, 3 carry a score and exactly 1 carries a log. The card
+      // therefore read 3/20 for work that was 9/20 done, and reported the athlete as absent.
+      //
+      // done counts the session as DONE on any honest evidence: a score, an explicit completed
+      // status, or (rides) an activity that actually answered it. The execution mean still comes
+      // from scored alone, so quality is never inferred from attendance.
+      var doneFlag=(sc!=null) || x.status==='completed' || !!matched
+        || (_adhKind_(x)!=='ride' && !!(x.strengthLog && Object.keys(x.strengthLog).length));
+      if(doneFlag) b.done++;
     });
   });
-  return order.map(function(k){ var b=byKey[k]; return { weekStart:k, mean:(b.scored>0?Math.round(b._sum/b.scored):null), scored:b.scored, planned:b.planned }; });
+  return order.map(function(k){ var b=byKey[k]; return { weekStart:k, mean:(b.scored>0?Math.round(b._sum/b.scored):null), scored:b.scored, done:b.done, planned:b.planned }; });
 }
 // Public series (strengthAdherenceTrend_ keeps its spec signature) — strength/mobility, and the
 // parallel ride series. Two behaviors, reported separately.
@@ -18738,17 +18758,22 @@ function _adhLbl_(k){ var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Se
 // Zero-planned weeks are gaps, not zero bars. Two numbers, not one — a declining completion rate is
 // the earlier adherence-failure signal. Honest at low n: under 3 scored total it shows raw counts,
 // a dot not a line, and no trend language. Returns '' when the plan has no sessions of this kind.
+// Back-compat read of the completion count. A series produced before done existed carries only
+// scored, and falling back to it keeps an old cached shape rendering the number it always did
+// rather than a row of empty bars.
+function _adhDone_(w){ return (w && w.done!=null) ? w.done : ((w&&w.scored)||0); }
 function _adhCardInner_(title, wk){
   if(!wk||!wk.length) return '';
   var totalPlanned=wk.reduce(function(a,w){return a+w.planned;},0);
   if(totalPlanned===0) return '';                       // no plan of this kind -> nothing to show
   var totalScored=wk.reduce(function(a,w){return a+w.scored;},0);
+  var totalDone=wk.reduce(function(a,w){return a+_adhDone_(w);},0);
   var cur=wk[wk.length-1];
   var lowN=totalScored<3;
   var inner=aiLbl_(title,'<span style="font-size:11px;color:var(--d-dim)">'+(lowN?(totalScored+' scored'):'8&#8209;week')+'</span>');
   // Two headline numbers for the current week: Completion (show up) + Execution (quality).
   inner+='<div style="display:flex;gap:24px;margin-bottom:12px">';
-  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:var(--c-blue);line-height:1.1">'+(cur.planned>0?(cur.scored+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">this week</div></div>';
+  inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Completion</div><div style="font-size:22px;font-weight:800;color:var(--c-blue);line-height:1.1">'+(cur.planned>0?(_adhDone_(cur)+'/'+cur.planned):'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">this week</div></div>';
   inner+='<div><div style="font-size:10px;color:var(--d-dim);text-transform:uppercase;letter-spacing:.04em">Execution</div><div style="font-size:22px;font-weight:800;color:var(--c-amber);line-height:1.1">'+(cur.mean!=null?cur.mean:'&mdash;')+'</div><div style="font-size:10px;color:var(--d-dim)">'+(cur.mean!=null?'mean score':'no score yet')+'</div></div>';
   inner+='</div>';
   // Bars = completion rate/week (gap when planned==0); faint bar when planned>0 but scored==0.
@@ -18757,9 +18782,11 @@ function _adhCardInner_(title, wk){
   svg+='<line x1="0" y1="'+(H-1)+'" x2="'+W+'" y2="'+(H-1)+'" stroke="#1c2130" stroke-width="1" vector-effect="non-scaling-stroke"/>';
   wk.forEach(function(w,i){
     if(w.planned<=0) return;                            // gap, not a zero bar
-    var rate=w.scored/w.planned;
+    // The bar is COMPLETION, so it is driven by done — not by how many we managed to score.
+    var _d=_adhDone_(w);
+    var rate=_d/w.planned;
     var bh=Math.max(2, rate*(H-6)), x=i*bw+bw*0.22, bwid=bw*0.56, y=H-bh-1;
-    svg+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" fill="#60a5fa" fill-opacity="'+(w.scored>0?'0.9':'0.28')+'"/>';
+    svg+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bwid.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="1.5" fill="#60a5fa" fill-opacity="'+(_d>0?'0.9':'0.28')+'"/>';
   });
   // Secondary: mean execution (0..100). SEGMENTED — a null (unscored) week BREAKS the line rather
   // than being bridged across, so the line never implies scores in weeks that have none. A run of
@@ -18782,7 +18809,13 @@ function _adhCardInner_(title, wk){
   inner+='<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--d-dim)"><span>'+_adhLbl_(wk[0].weekStart)+'</span><span>'+_adhLbl_(cur.weekStart)+'</span></div>';
   inner+='<div style="display:flex;gap:14px;margin-top:8px;font-size:11px;color:var(--d-t3)"><span style="display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;background:#60a5fa;border-radius:2px"></span>Completion</span><span style="display:flex;align-items:center;gap:5px"><span style="width:11px;height:2px;background:#f59e0b"></span>Mean execution</span></div>';
   if(lowN){
-    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);font-size:11.5px;color:var(--d-t3);line-height:1.4">'+totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.</div>';
+    // Says BOTH numbers when they disagree, because "3 scored of 20" reads as absence when 9 were
+    // actually done — the gap is a scoring gap, and the line must not let it look like a training one.
+    inner+='<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--d-edge);font-size:11.5px;color:var(--d-t3);line-height:1.4">'
+      +(totalDone>totalScored
+        ? (totalDone+' of '+totalPlanned+' completed, '+totalScored+' with a score. The execution line needs a score, so it is thinner than the record of showing up.')
+        : (totalScored+' scored session'+(totalScored===1?'':'s')+' across '+totalPlanned+' planned in the window. Building a baseline &mdash; a trend appears once 3+ sessions are scored.'))
+      +'</div>';
   }
   return aiCard_(inner);
 }
