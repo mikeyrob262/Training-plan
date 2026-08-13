@@ -206,5 +206,47 @@ console.log('\n' + Y + '=== the reset copy no longer promises a move it will not
   ok('...and still reports the slid gate', /The gate has slid to/.test(copy));
 }
 
+// A RUNG THAT LANDS ON NO SESSION IS NOT A PRESCRIPTION. The climb rehearsal is keyed on the
+// absolute block week, but only a Saturday carrying a group/long session can hold one — and week 13
+// is the 10k race week, whose dated overrides leave that Saturday empty. The first version of the
+// ladder put the 90 there: the table contained a 90, every unit check passed, and the athlete would
+// never have ridden it. This asserts where the ladder LANDS against the real block.
+console.log('\n' + Y + '=== every climb-rehearsal rung lands on a real Saturday ===' + X);
+{
+  const i = src.indexOf('var _CLIMB_REHEARSAL=');
+  const table = new Function('return ' + src.slice(src.indexOf('{', i), src.indexOf('}', i) + 1))();
+  const start = D(tb.start);
+  // Absolute block week -> the Saturday inside it.
+  const satOf = (wk) => {
+    const d = new Date(start); d.setDate(d.getDate() + (wk - 1) * 7);
+    while (d.getDay() !== 6) d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  };
+  // Which intents does the block actually prescribe on that date?
+  const intentsOn = (dk) => {
+    const d = D(dk);
+    for (const p of tb.phases) {
+      if (!(D(p.start) <= d && d <= D(p.end))) continue;
+      if (p.dates && p.dates[dk]) return p.dates[dk].map((x) => x.i);
+      if (p.week) return (p.week[(d.getDay() + 6) % 7] || []).map((x) => x.i);
+      return [];
+    }
+    return [];
+  };
+  const rungs = Object.keys(table).map(Number).sort((a, b) => a - b);
+  let landed = 0;
+  rungs.forEach((wk) => {
+    const dk = satOf(wk);
+    const holds = intentsOn(dk).some((i2) => i2 === 'group' || i2 === 'long');
+    if (holds) landed++;
+    ok('week ' + wk + ' (' + table[wk] + ' min, Sat ' + dk + ') has a session that can hold it', holds);
+  });
+  ok('every rung lands', landed === rungs.length);
+  const top = rungs[rungs.length - 1];
+  ok('the 90-min rung is the last one', table[top] === 90);
+  ok('...and it lands before the first attempt (Chalet Oct 31)', satOf(top) < '2026-10-31');
+  ok('...on a long-form Saturday', intentsOn(satOf(top)).some((i2) => i2 === 'group' || i2 === 'long'));
+}
+
 console.log(fails ? ('\n' + R + fails + ' failed' + X) : ('\n' + G + 'block structure: all checks passed' + X));
 process.exit(fails ? 1 : 0);

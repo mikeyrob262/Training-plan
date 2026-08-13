@@ -45002,14 +45002,24 @@ var _BLOCK_PROG={
 // does — a microcycle repeats, a rehearsal accumulates.
 //
 // The ladder: nothing for the first four weeks (the base is not the place), then 30 -> 40 -> 50
-// with a cut-back, then 60 -> 70 -> 80 with a cut-back, then the full 90 in the last week before
-// the attempt cluster. Cut-back weeks are ABSENT rather than zero so the Saturday ride simply
-// reverts to what the phase table says it is.
+// with a cut-back, then 60 -> 70 -> 80 with a cut-back, then the full 90. Cut-back weeks are ABSENT
+// rather than zero so the Saturday ride simply reverts to what the phase table says it is.
+//
+// THE 90 SITS ON WEEK 14, AND THE WEEK MATTERS. Week 13 is the 10k race week (P5), whose dated
+// overrides leave no group or long session on that Saturday at all — a rung placed there is
+// silently never applied, which is exactly what the first version of this did: the build topped out
+// at 80 on Oct 3 and the rehearsal it exists for never happened. Week 14 is P6's long Saturday
+// ("building to 2.5-3 hrs with sustained tempo blocks"), the last long ride before Chalet on
+// Oct 31, and the only Saturday left that can actually hold 90 minutes.
+//
+// A RUNG THAT LANDS ON NO SESSION IS NOT A PRESCRIPTION. The test asserts where the ladder LANDS
+// against the real block, not merely that the table contains a 90 — the table did, and the athlete
+// would still never have ridden it.
 //
 // THESE NUMBERS ARE A STARTING LADDER, not a derived truth — the mechanism is the durable part and
 // the rungs are meant to be adjusted. What is NOT adjustable is the shape: it has to reach 90
 // before the first attempt, and it has to arrive there by building rather than by jumping.
-var _CLIMB_REHEARSAL={ 5:30, 6:40, 7:50, 9:60, 10:70, 11:80, 13:90 };
+var _CLIMB_REHEARSAL={ 5:30, 6:40, 7:50, 9:60, 10:70, 11:80, 14:90 };
 // Absolute week of the block, 1-based. _BLOCK_START is a Friday, so this counts from the block's
 // own first day rather than from a Monday - the rehearsal is a Saturday feature and only ever asks
 // "how deep into the block is this".
