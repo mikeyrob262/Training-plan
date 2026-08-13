@@ -42817,6 +42817,11 @@ function _runZonePct_(r){
 var SHIN_MIN_SAMPLE = 4;    // fewer than this is noise, and the card says so rather than guessing
 var SHIN_DRIFT_PCT  = 50;   // more than half the run above conversational = it was not an easy run
 var SHIN_LOOKBACK   = 8;    // most recent qualifying runs considered
+// ...and a TIME bound, because a count alone is not recency. Only ~5 recent runs carry a zone
+// breakdown, so a count-only lookback reached back to 2019 and 2021 to fill eight - and those old
+// runs, at 99%/93%/91% above easy, were what made it flag. "Your last 8 easy runs" spanning seven
+// years is not a current signal, and those zones were computed on the mis-calibrated model anyway.
+var SHIN_LOOKBACK_DAYS = 120;
 function _runPlannedEasy_(dateKey){
   try{
     var sess=[];
@@ -42835,8 +42840,16 @@ function _runPlannedEasy_(dateKey){
 }
 function _runShinWatch_(){
   var runs=_runAll_(), rows=[];
+  var cut=null;
+  // Local date parts, never toISOString: activity dates parse LOCAL, so a UTC key is off by one
+  // for anyone west of Greenwich and the bound would silently include or drop a day.
+  try{
+    var c0=new Date(); c0.setDate(c0.getDate()-SHIN_LOOKBACK_DAYS);
+    cut=c0.getFullYear()+'-'+('0'+(c0.getMonth()+1)).slice(-2)+'-'+('0'+c0.getDate()).slice(-2);
+  }catch(e){}
   for(var i=0;i<runs.length && rows.length<SHIN_LOOKBACK;i++){
     var r=runs[i];
+    if(cut && String(r.date).slice(0,10)<cut) break;   // runs are newest-first, so stop at the bound
     var above=_runZonePct_(r);
     if(above==null) continue;                       // no breakdown, nothing to judge
     var dk=(typeof normDate==='function')?normDate(r.date):String(r.date).slice(0,10);

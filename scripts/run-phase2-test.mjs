@@ -25,10 +25,10 @@ const st = { rides: [], plan: {} };
 let PR = { rows: [] };
 const M = new Function('st', 'getRuns', '_prCompute_', 'rideSport_', 'actName_', 'normDate', 'getTodayKey', '_durSec_',
   'planSessionsForDate_', 'blockPlanFor_', asServed(
-    exVar('SHIN_MIN_SAMPLE') + exVar('SHIN_DRIFT_PCT') + exVar('SHIN_LOOKBACK') + exVar('RUN_RACE') +
+    exVar('SHIN_MIN_SAMPLE') + exVar('SHIN_DRIFT_PCT') + exVar('SHIN_LOOKBACK') + exVar('SHIN_LOOKBACK_DAYS') + exVar('RUN_RACE') +
     exFn('_runAll_') + exFn('_runZonePct_') + exFn('_runPlannedEasy_') + exFn('_runShinWatch_') +
     exFn('_runPaceStr_') + exFn('_runCurrentPace_') + exFn('_run10kPlan_') + exFn('_runWhy_') + NL +
-    'return { _runAll_, _runZonePct_, _runShinWatch_, _runPaceStr_, _runCurrentPace_, _run10kPlan_, _runWhy_, SHIN_MIN_SAMPLE, SHIN_DRIFT_PCT };'
+    'return { _runAll_, _runZonePct_, _runShinWatch_, _runPaceStr_, _runCurrentPace_, _run10kPlan_, _runWhy_, SHIN_MIN_SAMPLE, SHIN_DRIFT_PCT, SHIN_LOOKBACK_DAYS };'
   ))(st, () => [], () => PR, (r) => r.sportType || r.type || 'Run', (r) => r.name || 'Run',
      (d) => String(d).slice(0, 10), () => '2026-08-12', (r) => +r.movingSecs || 0,
      () => [], () => null);
@@ -79,6 +79,19 @@ console.log('\n' + Y + '=== a run with no zone breakdown is not counted as easy 
   ok('...rather than counted as clean', !w.flag && !w.enough);
   eq('the drift measure is null with no zones', M._runZonePct_({ z1pct: 0 }), null);
   eq('...and a real breakdown returns the share above easy', M._runZonePct_({ z1pct: 10, z2pct: 40, z3pct: 50 }), 50);
+}
+
+console.log('\n' + Y + '=== the lookback is bounded by TIME, not just by count ===' + X);
+{
+  // A count-only lookback reached back to 2019 and 2021 to fill eight runs, and those old runs at
+  // 99% / 93% / 91% above easy were what made the card flag. Recency has to be real, and those
+  // zones were computed on the mis-calibrated model anyway.
+  st.rides = [easy('2026-08-10'), easy('2026-08-08'),
+              drift('2021-06-12'), drift('2019-09-29'), drift('2019-08-04')];
+  const w = M._runShinWatch_();
+  eq('only the recent runs enter the sample', w.sample, 2);
+  ok('...so seven-year-old runs cannot create a flag', !w.flag);
+  ok('the bound is a named constant', typeof M.SHIN_LOOKBACK_DAYS === 'number' && M.SHIN_LOOKBACK_DAYS <= 180);
 }
 
 console.log('\n' + Y + '=== a hard run is never counted as a drifted easy run ===' + X);
